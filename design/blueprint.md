@@ -60,24 +60,43 @@ Everything must remain portable to PostgreSQL. No SQLite-only SQL in repositorie
 ```
 <data_root>/                     default ~/.bookflow, override with BOOKFLOW_DATA_ROOT
   hub.db                         users, credentials, tokens, company registry, memberships, hub audit
-  config.toml                    saved default company, client display name
+  hub.db.lock                    held for the lifetime of every writable open of hub.db
+  config.toml                    per-OS-user mapping to a Bookflow user and that user's default company
   companies/
     <Company Name>/              one folder per company, named after the company
-      bookflow-company.toml      company id, display name, schema version; identifies the folder
+      bookflow-company.toml      cache of company id, display name, schema version, state, demo flag
       company.db                 every table for one company (SQLite adds company.db-wal and company.db-shm while open)
+      company.db.lock            held for the lifetime of every writable open of company.db
       attachments/
         <first two hex of sha256>/<sha256>      content-addressed file bodies
       backups/
-        <YYYY-MM-DD-HHMMSS>.db   full copies of company.db, taken before migrations and by `company backup`
+        <YYYY-MM-DD-HHMMSS>.db   copies of company.db taken with the SQLite backup API, before migrations and by `company backup`
       exports/                   files written by report `--csv` and by `company export`; safe to empty
+  trash/
+    <Company Name>-<YYYY-MM-DD-HHMMSS>/   whole company folders removed by `demo reset` or `company delete`; `trash empty` deletes them
 ```
 
-- The folder name is the company display name with path separators, control characters, and leading or trailing dots and spaces removed. If the name is already taken, ` (2)`, ` (3)`, and so on is appended. The hub registry maps company id to folder path; the folder name is never used to identify a company after creation.
-- `company rename --move` renames the folder to match a new display name; without `--move` only the display name changes.
-- Every company is exactly one folder. Nothing about a company is written outside it, and nothing that is not about that company is written inside it. Temporary files go to the operating system temporary directory.
-- A company folder is self-contained. Copying it into another data root and registering it with `bookflow company attach <path>` opens it with nothing lost; `attach` reads `bookflow-company.toml` for the id.
-- A company database is opened by exactly one process at a time for writing. In host mode, the host is that process. Opening a company database that lives on a network share is refused; the core checks the filesystem type and refuses with error `E_NETWORK_SHARE`.
-- Every database records its schema version. Opening a database with an older version takes a backup into `backups/` and runs pending migrations. Opening a database with a newer version than the code knows is refused with `E_SCHEMA_TOO_NEW`.
+### 3.1 Company folders
+
+- The folder name is derived from the display name: Unicode NFC normalization; `/ \ : * ? " < > |` and characters below U+0020 replaced by a space; runs of whitespace collapsed; leading and trailing spaces and dots removed; truncated to 90 bytes of UTF-8 at a character boundary and then stripped again; `Company` if empty; if the part before the first dot is, case-insensitively, a Windows reserved device name (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`), ` Co` is appended. If a folder with that name exists, compared after NFC and case folding, ` (2)`, ` (3)`, and so on is appended. Reservation is the atomic directory creation itself; a creator that loses the race takes the next suffix. A company's own folder is excluded from the collision check when it is renamed.
+- Display names are unique across the hub, compared after NFC and case folding; `E_NAME_TAKEN` otherwise.
+- The hub registry stores the folder path relative to the data root, so a whole data root can be moved or copied.
+- The company database is the source of truth for everything in `bookflow-company.toml`; the file is a cache rewritten whenever the display name or schema version changes, and repaired from the database on open if missing or stale. `state` is `creating` until rollout completes and `ready` afterwards; a folder in `creating` state with no hub registration is an incomplete rollout and is ignored by every command except `attach`, which refuses it.
+- The company id is `company_info.id`, the single row's primary key. `attach` reads the marker, opens the database read-only, and refuses on any mismatch.
+- Every company is exactly one folder under `companies/`. Nothing about a company is written outside it, and nothing that is not about that company is written inside it. Temporary files go to the operating system temporary directory.
+- `company attach <path>` registers a folder that is already under `companies/`; a folder elsewhere is refused with `E_NOT_IN_COMPANIES_DIR` and the message names where to move it. Before registering, `attach` verifies: the path resolves, after symlinks, to a directory under `companies/`; the filesystem is local; the marker and database exist and agree on the company id; the database schema revision is known to this version; the id is not already registered (`E_ALREADY_ATTACHED`); the display name is not taken (`E_NAME_TAKEN`). Any failure leaves the hub unchanged. `company detach <company>` removes the registry row and memberships and leaves the folder in place. Restoring from a copy on the same machine is detach the live company, move the copy into `companies/`, attach it.
+- Company folders that carry `demo = true` in the marker and `is_demo` in the registry are the ones `demo reset` may remove.
+
+### 3.2 Locality and locking
+
+- Before opening `hub.db`, `company.db`, or an `attach` path, the core resolves symlinks and determines the filesystem type. Local types are an allowlist: `ext2`, `ext3`, `ext4`, `xfs`, `btrfs`, `f2fs`, `zfs`, `tmpfs`, `overlay`, `apfs`, `hfs`, `ntfs`, `exfat`, `vfat`, `fat32`, `refs`. On Linux the type comes from the mount table; on macOS from `statfs`; on Windows a UNC path or a drive whose type is remote is refused. Any other type, and any failure to determine the type, is refused: `E_NETWORK_SHARE` when the type is known and not local, `E_FS_UNKNOWN` when it cannot be determined.
+- Every writable open of a database takes an exclusive lock on its `.lock` file for the lifetime of the open. A second process that cannot take the lock within 5 seconds fails with `E_DB_BUSY` naming the holder's hostname and pid from the lock file. Read-only opens take no lock. The host process holds the lock for as long as it runs, which is what makes it the single writer.
+- On closing a writable open, the WAL is checkpointed and truncated, so a folder no process has open is safe to copy with ordinary file tools.
+- Migrations run inside the write lock. Before migrating an existing database, a backup is written with the SQLite backup API to `backups/`.
+
+### 3.3 Schema versions
+
+Both databases carry Alembic's `alembic_version` table, which is authoritative. Opening a database whose revision is not in this version's migration chain returns `E_SCHEMA_UNKNOWN` with the revision in the details and a message saying to upgrade Bookflow; the database is not modified. A database behind the head is migrated on writable open.
 
 ## 4. Identity
 
@@ -93,10 +112,15 @@ Table `users` in hub.db.
 | display_name | text | |
 | owner_user_id | ULID, nullable | for `agent` kind: the human that owns this agent. Required for agents. |
 | password_hash | text, nullable | humans only |
+| hub_admin | bool | may create, attach, detach, rename, delete, and list every company on this data root, and manage users |
 | active | bool | |
 | created_at, updated_at, version | | see section 6 |
 
-There is exactly one `system` user per data root, created by `bookflow init`. Scheduled jobs and migrations act as it.
+There is exactly one `system` user per data root, created by `bookflow init`. Scheduled jobs and migrations act as it. Its `created_by` is its own id; it is the only self-referencing row. The first human user, created by `init`, is a hub admin. Hub admins are the operators of the data root: they see every company in the registry and its folder path. Every other user sees only their memberships and never a path.
+
+### 4.1a Principals mirror
+
+Table `principals` in company.db: `user_id`, `username`, `display_name`, `kind`, `first_seen_at`, `last_seen_at`. Every write to a company upserts the acting user and, when present, the `on_behalf_of` user. It is the company-local copy of who the ids in `created_by`, `updated_by`, and the audit log refer to, so a copied folder renders its own provenance without the hub it came from. `show` outputs resolve `*_by` fields to names through this table.
 
 ### 4.2 Tokens
 
@@ -151,6 +175,10 @@ Every operation is a command. A command has a name, an input model, an output mo
 
 Verbs used across lists: `create`, `update`, `show`, `list`, `activate`, `deactivate`. Verbs used on transactions: `post`, `show`, `list`, `void`. Reports use `report <name>`.
 
+Every command has a scope. **Hub** commands act on the data root and take no company: `init`, `company new`, `company list`, `company use`, `company attach`, `company detach`, `company delete`, `demo reset`, `user *`, `token *`. **Company** commands act on the selected company (section 5.3): everything else, including `company show`, `company update`, `company rename`, `company backup`. A hub command that names a company takes it as a positional argument accepting an id or a display name.
+
+Positional arguments are declared per command in the registry; everything else is an option. The CLI accepts global options (`--json`, `--dry-run`, `--company`, `--data-root`, and the context options of 5.2) both before and after the noun and verb, and `--help` on every command lists them.
+
 ### 5.2 Context
 
 Every command receives a context that the adapter builds. No field of the context is accepted from command input; an adapter that receives a context field in the input rejects the call with `E_CONTEXT_IN_INPUT`.
@@ -182,7 +210,7 @@ For company-scoped commands, the company is resolved in this order, first match 
 2. Environment variable `BOOKFLOW_COMPANY`.
 3. `default_company` in `config.toml`, set by `bookflow company use <id>`.
 
-If the resolved company is not among the actor's memberships, the error is `E_COMPANY_NOT_FOUND`. The same error is returned whether the company does not exist or the actor lacks membership.
+A value is tried as an id first, then as a display name compared after NFC and case folding. `company use` stores the id. If the resolved company is not among the actor's memberships and the actor is not a hub admin, the error is `E_COMPANY_NOT_FOUND`. The same error is returned whether the company does not exist or the actor lacks membership.
 
 ### 5.4 Output
 
@@ -193,7 +221,9 @@ Every command returns a structured result. On the CLI:
 - Warnings and progress go to stderr.
 - Exit code 0 on success, 1 on a rejected command with a named error, 2 on invalid usage, 3 on internal failure.
 
-Errors are JSON documents on stderr with `code`, `message`, and `details`. Error codes are stable strings prefixed `E_`. Every command's documentation lists the codes it can return.
+Every `list` output is `{"items": [...], "count": n}`. Every output model for a write includes the identifying fields of what it wrote.
+
+Errors are always JSON documents on stderr with `code`, `message`, and `details`, whether or not `--json` was given; without `--json` a one-line message precedes the JSON. Usage errors from the CLI parser are emitted the same way with code `E_USAGE`. Input validation failures are `E_VALIDATION` with `details.fields` listing each field and its problem. Error codes are stable strings prefixed `E_`. Every command's documentation lists the codes it can return. An option that a command does not support in the current version is not defined on that command; nothing is accepted and ignored.
 
 ### 5.5 Dry run
 
@@ -364,17 +394,17 @@ Table `company_info` in company.db, exactly one row.
 
 ### 9.2 Rollout
 
-`bookflow company new` takes every field above as flags, or `--interactive` to prompt for each. It creates the directory, the database, the `company_info` row, the seeded chart of accounts named by `--chart`, the standard terms, payment methods, and sales tax codes listed in section 11, and grants the creating user the owner role. Output is the company id and display name.
+`bookflow company new` takes every field above as options, or `--interactive` to prompt for each. Required: `legal_name`, `home_currency`. Defaults: `display_name` = `legal_name`; `fiscal_year_start_month` = 1; `timezone` = the machine's zone; `country` = `US`; `entity_type` and `income_tax_form` = `other`; everything else empty. `closing_date` is not accepted at rollout; it is set with `company update`. FEIN, when given, must match `NN-NNNNNNN`; email must contain one `@`; timezone must be an IANA name; the month must be 1 to 12. It creates the directory, the database, the `company_info` row, the seeded chart of accounts named by `--chart`, the standard terms, payment methods, and sales tax codes listed in section 11, and grants the creating user the owner role. Output is the company id and display name.
 
 Seeded charts, chosen by `--chart`: `general`, `service`, `construction_trades`, `retail`, `nonprofit`. Each is a data file in the package. `general` is the default.
 
 ### 9.3 Demo company
 
-`bookflow demo reset` creates, or deletes and recreates, a company named `Demo Plumbing Co` from a seed file in the package, and grants the local owner the owner role. The seed holds sample data for every table that exists: company info, accounts, customers and jobs, vendors, employees, items, terms, notes, attachments, directives, and, once the ledger exists, a year of transactions. The seed grows in the same change that adds a table or command, so the demo always exercises everything that exists. `bookflow demo reset --name <other>` seeds under a different name. The demo company is an ordinary company: it appears in the workbench picker and every command works on it.
+`bookflow demo reset`, a hub-admin command, creates, or moves to `trash/` and recreates, a company named `Demo Plumbing Co` from a seed file in the package, and grants the local owner the owner role. The seed holds sample data for every table that exists: company info, accounts, customers and jobs, vendors, employees, items, terms, notes, attachments, directives, and, once the ledger exists, a year of transactions. The seed grows in the same change that adds a table or command, so the demo always exercises everything that exists. `bookflow demo reset --name <other>` seeds under a different name. The demo company is an ordinary company: it appears in the workbench picker and every command works on it.
 
 ### 9.4 Other company commands
 
-`company list`, `company show`, `company update`, `company rename`, `company use`, `company attach <path>`, `company backup`, `company compact`, `company delete`.
+`company list`, `company show`, `company update`, `company rename [--move]`, `company use <company>`, `company attach <path>`, `company detach <company>`, `company backup`, `company compact`, `company delete <company> --confirm <id>`. `delete` moves the folder to `trash/` and removes the registry rows; `trash list` and `trash empty` manage the folder. `company show` includes `path` only for hub admins.
 
 ## 10. The general ledger
 
@@ -609,6 +639,23 @@ Table `time_entries`: `employee_id`, `customer_id`, `item_id` (service), `date`,
 ### 13.3 Scheduler
 
 Table `schedules` in company.db: `name`, `owner_user_id`, `command`, `input` (JSON), `run_at` (one-off, nullable), `rrule` (RFC 5545 recurrence, nullable), `next_run_at`, `last_run_at`, `last_result`, `enabled`. The host process runs due schedules as the `system` user with `on_behalf_of` the owner and `interface` `system`. First uses: memorized transactions (`invoice memorize`, `bill memorize`) and reminders (`reminder add`), which surface through `reminder list` and through the HTTP host as a notification endpoint the GUI polls.
+
+### 13.4 Deliveries and email
+
+Sending anything out of Bookflow, such as an invoice, a statement, a report, or a reminder, is a delivery. Table `deliveries`: `record_type`, `record_id` (what was sent, or null for a report run), `document` (rendered PDF or CSV as an attachment id), `channel`, `to`, `subject`, `body`, `status` (`queued`, `handed_off`, `sent`, `failed`), `provider_message_id`, `error`, `requested_by`, `requested_at`, `sent_at`. Every form and report command accepts `--deliver <channel>:<address>`; the scheduler schedules the same command, so a scheduled report that emails itself is one schedule row.
+
+Channels are providers behind one interface with `send(delivery) -> provider_message_id`:
+
+| Channel | Provider | Where the code lives |
+|---|---|---|
+| `event` | Writes the delivery with status `handed_off` and emits it on the event feed (7.1). An agent harness subscribed to the feed sends it through whatever mail access it has and calls `delivery mark-sent <id> --provider-message-id`. This is the default channel and needs no configuration. | core |
+| `smtp` | Standard SMTP with STARTTLS or TLS and password or app-password authentication. Works with any mail host. | core, standard library only |
+| `gmail` | Gmail API with OAuth, for accounts where SMTP app passwords are unavailable. | separate optional package `bookflow-gmail`, pinned to the vendor client library, dependency updates automated |
+| `file` | Writes the rendered document to `exports/`. | core |
+
+Inbound email is not read by Bookflow. An agent harness reads mail and calls commands, such as attaching a receipt or posting a bill. Company settings hold the configured channel per purpose (`invoices`, `statements`, `reports`, `reminders`) and the sender address; provider credentials live in the hub, encrypted with a key held outside the data root, never in a company folder.
+
+Dependency updates for the whole project, including the optional email package, run through the repository's automated dependency update service; an update that passes the test suite merges.
 
 ## 14. Reports
 
