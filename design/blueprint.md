@@ -4,7 +4,7 @@ This document states what Bookflow is and how every part of it works. It is writ
 
 ## 1. What it is
 
-Bookflow is a multi-company double-entry accounting system modeled on QuickBooks Desktop. It is a Python library first. A CLI, an HTTP host, and an MCP server are thin adapters over the library. Graphical clients, on desktop, web, or mobile, are built later against the HTTP host or the library directly.
+Bookflow is a multi-company double-entry accounting system for small businesses, built on the conventions of desktop bookkeeping software. It is a Python library first. A CLI, an HTTP host, and an MCP server are thin adapters over the library. Graphical clients, on desktop, web, or mobile, are built later against the HTTP host or the library directly.
 
 Pillars, in rank order:
 
@@ -29,7 +29,7 @@ core         command registry  ->  services  ->  repositories  ->  SQLite (hub.d
 - **Adapters** parse their protocol into a command input plus a context, call the core, and render the command output. They contain no business logic.
 - **Clients** never touch the database.
 
-The graphical interface is a web application served by the HTTP host. Run locally, the host binds to loopback and the browser opens `http://127.0.0.1:8123`, which is the QuickBooks Desktop shape. Run on a server with `--allow-network` behind TLS, the same application with the same login serves many people, which is the hosted shape. Nothing in the interface changes between the two. A desktop wrapper that launches the host and opens a window is a packaging step, not a different client. Any machine other than the host talks to it over HTTP; the host is the only process that opens a company database on behalf of remote clients.
+The graphical interface is a web application served by the HTTP host. Run locally, the host binds to loopback and the browser opens `http://127.0.0.1:8123`, which is the desktop-application shape. Run on a server with `--allow-network` behind TLS, the same application with the same login serves many people, which is the hosted shape. Nothing in the interface changes between the two. A desktop wrapper that launches the host and opens a window is a packaging step, not a different client. Any machine other than the host talks to it over HTTP; the host is the only process that opens a company database on behalf of remote clients.
 
 ### 2.0 The command registry
 
@@ -147,7 +147,7 @@ Every operation is a command. A command has a name, an input model, an output mo
 
 ### 5.1 Names
 
-`<noun> <verb>`, nouns singular: `company new`, `customer create`, `invoice post`, `audit list`. Nouns are QuickBooks Desktop names.
+`<noun> <verb>`, nouns singular: `company new`, `customer create`, `invoice post`, `audit list`. Nouns are conventional bookkeeping names.
 
 Verbs used across lists: `create`, `update`, `show`, `list`, `activate`, `deactivate`. Verbs used on transactions: `post`, `show`, `list`, `void`. Reports use `report <name>`.
 
@@ -386,7 +386,7 @@ Table `accounts`.
 |---|---|
 | name | unique among siblings |
 | number | text, optional, unique within the company when present |
-| type | one of the QuickBooks account types below |
+| type | one of the account types below |
 | parent_id | nullable; sub-accounts must share the parent's type |
 | description | |
 | active | |
@@ -489,7 +489,7 @@ Each transaction type has a sequence in `sequences` (`type`, `next_number`, `pre
 
 ## 11. Lists
 
-All lists share the common fields of section 6.1, `active`, and the five verbs `create`, `update`, `show`, `list`, `activate`, `deactivate`. Names are unique within a list, case-insensitively. Hierarchical lists have `parent_id` and a computed `full_name` of the form `Parent:Child:Grandchild`, matching QuickBooks. Hierarchy depth is limited to 5.
+All lists share the common fields of section 6.1, `active`, and the five verbs `create`, `update`, `show`, `list`, `activate`, `deactivate`. Names are unique within a list, case-insensitively. Hierarchical lists have `parent_id` and a computed `full_name` of the form `Parent:Child:Grandchild`. Hierarchy depth is limited to 5.
 
 ### 11.1 Customers and jobs
 
@@ -511,7 +511,7 @@ Table `employees`. Fields: `name`, `first_name`, `middle_name`, `last_name`, `ad
 
 ### 11.5 Other names
 
-Table `other_names`. Fields: `name`, `company_name`, `address`, `phone`, `email`, `contact`, `account_number`, `notes`. Used for owners, partners, and payees that are neither customers nor vendors. QuickBooks lets an other name be converted to a customer or vendor once; Bookflow provides `other-name convert --to customer|vendor`, which creates the target, deactivates the other name, and rewrites `name_type` on its transactions in one audited event.
+Table `other_names`. Fields: `name`, `company_name`, `address`, `phone`, `email`, `contact`, `account_number`, `notes`. Used for owners, partners, and payees that are neither customers nor vendors. Bookflow provides `other-name convert --to customer|vendor`, which creates the target, deactivates the other name, and rewrites `name_type` on its transactions in one audited event.
 
 ### 11.6 Items
 
@@ -599,7 +599,7 @@ Trial balance and general ledger ship with the ledger in release 1.
 
 ### 14.1 Import and export
 
-`import <noun> <file.csv>` reads one row per record, maps columns to the noun's `create` input model by header name, and runs one `create` command per row through the registry, so every row is validated, audited, and idempotent (the idempotency key is the file hash plus row number). The output reports created, replayed, and rejected rows with their errors. `--dry-run` validates every row and writes nothing. Import of transactions uses the same mechanism with one file per transaction type. Export is `list --csv` on any noun and `report <name> --csv`. QuickBooks IIF import is a later addition that maps IIF sections onto the same imports. Import and export are release 2.
+`import <noun> <file.csv>` reads one row per record, maps columns to the noun's `create` input model by header name, and runs one `create` command per row through the registry, so every row is validated, audited, and idempotent (the idempotency key is the file hash plus row number). The output reports created, replayed, and rejected rows with their errors. `--dry-run` validates every row and writes nothing. Import of transactions uses the same mechanism with one file per transaction type. Export is `list --csv` on any noun and `report <name> --csv`. IIF import is a later addition that maps IIF sections onto the same imports. Import and export are release 2.
 
 ## 15. Adapters
 
@@ -659,7 +659,7 @@ When two good things conflict, the earlier line wins.
 4. Correct output beats fast output. Fast beats pretty.
 5. Explicit beats inferred. An ambiguous name, account, or date is rejected with a named error rather than guessed. The one exception is section 6.2's disjoint-field merge, which is reported, never silent.
 6. Machine-readable on stdout beats friendly on stdout. Friendly on stderr beats machine-readable on stderr.
-7. QuickBooks' name for a thing beats a better name.
+7. The conventional bookkeeping name for a thing beats a better name.
 8. When a rule is ambiguous, the interpretation that gives the human more information wins.
 
 ## 18. Budgets
