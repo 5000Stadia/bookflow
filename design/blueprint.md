@@ -681,6 +681,8 @@ Not in release 1: transaction forms other than journal entries, reports beyond t
 
 Never in scope without a new design pass: payroll, multi-currency ledgers, non-US tax regimes.
 
+Later releases, each designed as its own pass against this blueprint: purchase orders and receiving, inventory assemblies and build orders, shipping with printable labels, customer letters and statements, marketing lists and mailings, payroll. Each is a set of lists, transaction types, and reports registered through the same command registry.
+
 ## 20. Risks
 
 | Risk | What it would look like |
