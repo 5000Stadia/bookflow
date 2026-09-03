@@ -20,7 +20,7 @@ class _Noun:
         if registry.get(name) is None:
             if any(c.name.startswith(name + " ") for c in registry.all_commands()):
                 return _Noun(self._client, name)
-            raise AttributeError(name)
+            raise BookflowError("E_USAGE", message=f"unknown command {name!r}")
 
         def call(**kwargs: Any) -> dict[str, Any]:
             dry_run = kwargs.pop("dry_run", False)
@@ -66,7 +66,7 @@ class Client:
                 table = cfg.user_table(self._login or os_login()) or {}
                 if table.get("default_company"):
                     selector, source = table["default_company"], "default"
-        return dispatch_run(cmd, input or {}, ctx, data_root=self.data_root, company_selector=selector, company_source=source, dry_run=dry_run, login=self._login)
+        return dispatch_run(cmd, input or {}, ctx, data_root=self.data_root, company_selector=selector, company_source=source, dry_run=dry_run, _login=self._login)
 
     def __getattr__(self, noun: str):
         if noun.startswith("_"):

@@ -89,7 +89,7 @@ def _load_actor(s: Session) -> None:
         raise BookflowError("E_NO_ACTOR")
     row = s.hub.conn.execute(sa.select(h.users).where(h.users.c.id == table["user_id"], h.users.c.active.is_(True))).mappings().first()
     if row is None:
-        raise BookflowError("E_NO_ACTOR")
+        raise BookflowError("E_NO_ACTOR", message="This login is mapped to a user that no longer exists; a hub admin can re-map it, or `bookflow init` repairs it when the hub has one human user.", details={"mapped_user_id": table["user_id"]})
     s.actor = Actor(id=row["id"], kind=row["kind"], username=row["username"], display_name=row["display_name"], hub_admin=bool(row["hub_admin"]), timezone=row["timezone"])
     access.load_memberships(s)
 
@@ -97,7 +97,7 @@ def _load_actor(s: Session) -> None:
 def resolve_company(s: Session, selector: str | None, source: str) -> dict[str, Any]:
     """Blueprint 5.3. Returns the hub company row or raises E_COMPANY_NOT_FOUND / E_COMPANY_AMBIGUOUS."""
     if selector is None:
-        raise BookflowError("E_COMPANY_NOT_FOUND", details={"source": "none"})
+        raise BookflowError("E_COMPANY_NOT_FOUND", message="No company selected; give --company, set BOOKFLOW_COMPANY, or run `bookflow company use <company>`.", details={"source": "none"})
     vis = access.visible_company_filter(s)
     q = sa.select(h.companies).where(vis)
     if is_ulid(selector):
@@ -115,9 +115,23 @@ def resolve_company(s: Session, selector: str | None, source: str) -> dict[str, 
     rows = s.hub.conn.execute(q.where(h.companies.c.name_key == name_key(selector))).mappings().all()
     if len(rows) == 1:
         return dict(rows[0])
+    visible = s.hub.conn.execute(sa.select(h.companies.c.display_name, h.organizations.c.display_name.label("org")).join(h.organizations, h.organizations.c.id == h.companies.c.organization_id).where(vis)).all()
     if len(rows) > 1:
-        raise BookflowError("E_COMPANY_AMBIGUOUS", details={"selector": selector})
-    raise BookflowError("E_COMPANY_NOT_FOUND", details={"source": source})
+        raise BookflowError("E_COMPANY_AMBIGUOUS", details={"selector": selector, "suggestions": [f"{r.org}/{r.display_name}" for r in visible if name_key(r.display_name) == name_key(selector)][:3]})
+    raise BookflowError("E_COMPANY_NOT_FOUND", details={"source": source, "suggestions": _suggest(selector, [r.display_name for r in visible])})
+
+
+def _suggest(value: str, candidates: list[str]) -> list[str]:
+    """Up to three close matches from what the caller can see (blueprint 5.4)."""
+    import difflib
+    needle = value.lower()
+    subs = [c for c in candidates if needle in c.lower() or c.lower() in needle]
+    close = difflib.get_close_matches(value, candidates, n=3, cutoff=0.5)
+    out: list[str] = []
+    for c in subs + close:
+        if c not in out:
+            out.append(c)
+    return out[:3]
 
 
 def resolve_organization(s: Session, selector: str) -> dict[str, Any]:
@@ -132,7 +146,8 @@ def resolve_organization(s: Session, selector: str) -> dict[str, Any]:
     row = s.hub.conn.execute(q.where(h.organizations.c.name_key == name_key(selector))).mappings().first()
     if row:
         return dict(row)
-    raise BookflowError("E_ORGANIZATION_NOT_FOUND")
+    names = [r[0] for r in s.hub.conn.execute(q.with_only_columns(h.organizations.c.display_name)).all()]
+    raise BookflowError("E_ORGANIZATION_NOT_FOUND", details={"suggestions": _suggest(selector, names)})
 
 
 def _open_hub(s: Session, writable: bool, ctx: Context, skip_head_check: bool = False) -> None:
@@ -147,6 +162,18 @@ def _open_hub(s: Session, writable: bool, ctx: Context, skip_head_check: bool = 
         raise BookflowError("E_SCHEMA_BEHIND", details={"revision": rev, "head": HEADS["hub"], "path": str(path)}, message="The hub database schema is behind this version of Bookflow; run `bookflow upgrade`, or ask a user with write access to.")
     s._hub_cm = open_database(path, writable)  # type: ignore[attr-defined]
     s.hub = s._hub_cm.__enter__()  # type: ignore[attr-defined]
+
+
+def _complete_pending_organizations(s: Session, ctx: Context) -> None:
+    """Every writable hub open finishes pending organization moves (blueprint 3.1), so hub commands never see a stale path."""
+    from bookflow.hub.moves import complete_org_move
+    rows = s.hub.conn.execute(sa.select(h.organizations).where(h.organizations.c.pending_path.isnot(None))).mappings().all()
+    for org in rows:
+        org = dict(org)
+        if org["pending_path"].startswith("trash/"):
+            continue
+        complete_org_move(s, ctx, org, ctx.interface.value)
+        s.completed_moves.append(org["id"])
 
 
 def _migrate_hub(s: Session, ctx: Context) -> None:
@@ -273,7 +300,7 @@ def _close(s: Session) -> None:
 
 def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str | None = None,
         company_selector: str | None = None, company_source: str = "option", dry_run: bool = False,
-        login: str | None = None) -> dict[str, Any]:
+        _login: str | None = None) -> dict[str, Any]:
     """Execute a command and return its output as a dict (redacted for the actor)."""
     if dry_run and not cmd.is_write:
         raise BookflowError("E_USAGE", message=f"`{cmd.name}` does not write; --dry-run does not apply.")
@@ -285,7 +312,7 @@ def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str
     try:
         root = resolve_data_root(data_root)
         check_local(root)
-        s = Session(data_root=root, os_login=login or os_login(), config=Config(root / "config.toml"), dry_run=dry_run)
+        s = Session(data_root=root, os_login=_login or os_login(), config=Config(root / "config.toml"), dry_run=dry_run)
         if cmd.bootstrap:
             return _run_bootstrap(cmd, inp, ctx, s)
         if not (root / "hub.db").exists():
@@ -294,24 +321,27 @@ def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str
         raise redact_error(e, allowed)
     except (OSError, sqlite3.Error) as e:
         raise redact_error(io_error("command", e), allowed)
+    except sa.exc.DBAPIError as e:
+        raise redact_error(io_error("command", e.orig if isinstance(e.orig, sqlite3.Error) else e), allowed)
     try:
         with private_umask(), RootLock(root, cmd.name):
             try:
                 s.config = Config.load(root / "config.toml")
-                needs_hub_write = bool(cmd.writes & {"hub", "config"}) or cmd.kind == "advisory" or (cmd.scope == "company" and "company" in cmd.writes)
-                _open_hub(s, needs_hub_write and not (dry_run and cmd.name == "upgrade"), ctx, skip_head_check=(dry_run and cmd.name == "upgrade"))
+                needs_hub_write = (bool(cmd.writes & {"hub", "config"}) or cmd.kind == "advisory" or (cmd.scope == "company" and "company" in cmd.writes)) and not dry_run
+                _open_hub(s, needs_hub_write, ctx, skip_head_check=(dry_run and cmd.name == "upgrade"))
                 _load_actor(s)
                 allowed = s.is_hub_admin
                 ctx = ctx.model_copy(update={"actor_id": s.actor.id, "actor_kind": ActorKind(s.actor.kind)})
-                if s.hub.writable and not (dry_run and cmd.name == "upgrade"):
+                if s.hub.writable:
                     _migrate_hub(s, ctx)
+                    _complete_pending_organizations(s, ctx)
                 return run_in_session(cmd, inp, ctx, s, company_selector=company_selector, company_source=company_source, dry_run=dry_run)
             finally:
                 _close(s)
     except BookflowError as e:
         raise redact_error(e, allowed)
     except (OSError, sqlite3.Error) as e:
-        raise redact_error(io_error("command", e), allowed)
+        raise redact_error(io_error("command", e, getattr(e, "filename", None)), allowed)
     except sa.exc.DBAPIError as e:
         raise redact_error(io_error("command", e.orig if isinstance(e.orig, sqlite3.Error) else e), allowed)
 
@@ -333,7 +363,7 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
             raise BookflowError("E_PERMISSION")
         ctx = ctx.model_copy(update={"company_id": s.company_row["id"]})
         if s.company is None:
-            open_company(s, ctx, "company" in cmd.writes)
+            open_company(s, ctx, "company" in cmd.writes and not dry_run)
     elif cmd.required_role == "hub_admin" and not s.is_hub_admin:
         raise BookflowError("E_PERMISSION")
     # directive resolution and the reason gate (blueprint 5.8)
@@ -418,7 +448,7 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
         s.hub.raw.execute("BEGIN IMMEDIATE")
     if co_tx:
         s.company.raw.execute("BEGIN IMMEDIATE")
-        _upsert_principals(s, ctx)
+        _upsert_principals(s, ctx)  # inside the transaction: a no-op command rolls it back with everything else
     try:
         applied = cmd.apply(plan, ctx, s)
         if cmd.kind == "advisory":
@@ -429,8 +459,13 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
             return applied
         hub_entries = [t for t in applied.touched if t.db == "hub"] + list(s.hub_touched)
         co_entries = [t for t in applied.touched if t.db == "company"]
-        changed = bool(applied.touched) or applied.audited or bool(s.hub_touched)
+        changed = bool(applied.touched) or applied.audited or bool(s.hub_touched) or s.pending_config
         output = applied.output.model_dump(mode="json")
+        if not changed:
+            for db in (s.company, s.hub):
+                if db is not None and db.raw.in_transaction:
+                    db.raw.execute("ROLLBACK")
+            return applied
         if s.company is not None and cmd.truth == "company":
             if co_entries and not applied.audited and s.company.raw.in_transaction:
                 write_event_to(s.company, ctx, cmd.name, applied.summary, co_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)

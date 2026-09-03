@@ -11,7 +11,7 @@ uv run bookflow demo reset
 uv run bookflow company list
 ```
 
-Every command takes `--json`; `uv run bookflow --help` lists the rest. Activate the environment (`source .venv/bin/activate`) to drop the `uv run` prefix.
+Data lives in `~/.bookflow` unless `BOOKFLOW_DATA_ROOT` or `--data-root` says otherwise. Every command takes `--json`; `uv run bookflow --help` lists the rest. Activate the environment (`source .venv/bin/activate`) to drop the `uv run` prefix.
 
 ## Layout
 

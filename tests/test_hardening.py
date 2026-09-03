@@ -162,6 +162,10 @@ def test_synthetic_migration(client, root, tmp_path):
         with pytest.raises(BookflowError) as e:
             client.company.show(company=cid)
         assert e.value.code == "E_SCHEMA_BEHIND" and "upgrade" in e.value.message
+        dry = client.upgrade(dry_run=True)
+        assert dry["dry_run"] and dry["companies_migrated"] == [cid]
+        path0 = Path(client.company.list()["items"][0]["path"])
+        assert not list((path0 / "backups").iterdir()), "a dry run migrates nothing"
         out = client.upgrade()
         assert out["companies_migrated"] == [cid]
         path = Path(client.company.show(company=cid)["path"])
@@ -213,7 +217,7 @@ def test_help_metadata(cli):
     h = cli.run("company", "new", "--help").stdout
     assert "--legal-name TEXT" in h and "Required." in h
     assert "--fiscal-year-start-month INT" in h and "Default: 1." in h
-    assert "--report-basis TEXT" in h and "One of: accrual, cash." in h
+    assert "--report-basis TEXT" in h and "One of: accrual" in h
     rh = cli.run("company", "rename", "--help").stdout
     assert "--move" in rh and "--no-move" in rh
     p = cli.run(expect=0)

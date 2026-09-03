@@ -77,29 +77,29 @@ def run_init(cmd, inp: InitInput, ctx: Context, s: Session) -> dict[str, Any]:
         out = InitOutput(dry_run=True, data_root=str(root), created=True, user_id=new_id(), hub_admin=True, username=username, display_name=display_name, system_user_id=new_id())
         return out.model_dump(mode="json")
     with private_umask():
-        root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        for sub in ("organizations", "backups", "trash"):
-            (root / sub).mkdir(mode=0o700, exist_ok=True)
+        if not s.dry_run:
+            root.mkdir(mode=0o700, parents=True, exist_ok=True)
+            for sub in ("organizations", "backups", "trash"):
+                (root / sub).mkdir(mode=0o700, exist_ok=True)
         with RootLock(root, "init"):
             from bookflow.core.config import Config
             cfg_path = root / "config.toml"
             s.config = Config.load(cfg_path) if cfg_path.exists() else Config(cfg_path)
-            with engine.open_database(root / "hub.db", writable=True, create=True) as hub:
+            with engine.open_database(root / "hub.db", writable=not s.dry_run or not (root / "hub.db").exists(), create=not s.dry_run) as hub:
                 s.hub = hub
-                migrate.migrate_to_head(hub, "hub", root / "backups")
+                if hub.writable:
+                    migrate.migrate_to_head(hub, "hub", root / "backups")
                 system = users.find_user(s, kind="system")
                 humans = [dict(r) for r in hub.conn.execute(sa.select(h.users).where(h.users.c.kind == "human")).mappings().all()]
                 mapped = s.config.user_table(s.os_login)
                 if system and humans:
-                    if mapped and mapped.get("user_id"):
-                        me = next((u for u in humans if u["id"] == mapped["user_id"]), None)
-                        if me is None:
-                            raise BookflowError("E_NO_ACTOR")
+                    me = next((u for u in humans if mapped and u["id"] == mapped.get("user_id")), None)
+                    if me is not None:
                         if inp.username and inp.username != me["username"]:
                             raise BookflowError("E_INIT_CONFLICT", details={"username": me["username"]})
-                        out = InitOutput(data_root=str(root), created=False, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
+                        out = InitOutput(dry_run=s.dry_run, data_root=str(root), created=False, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
                         return redact_paths(out.model_dump(mode="json"), me["hub_admin"])
-                    if not cfg_path.exists() and len(humans) == 1:
+                    if (not cfg_path.exists() or (mapped and not any(u["id"] == mapped.get("user_id") for u in humans))) and len(humans) == 1:
                         me = humans[0]
                         if s.dry_run:
                             out = InitOutput(dry_run=True, data_root=str(root), created=False, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
@@ -273,7 +273,7 @@ def plan_org_rename(inp: OrgRenameInput, ctx: Context, s: Session) -> Plan:
     current_folder = Path(row["path"]).name
     target = choose_folder_name(s.organizations_dir, name, exclude=current_folder) if inp.move else current_folder
     pending = row.get("pending_path")
-    will_move = inp.move and (target != current_folder or pending is not None)
+    will_move = inp.move and (target != current_folder or pending is not None or row["id"] in s.completed_moves)
     preview = OrgRenameOutput(organization_id=row["id"], display_name=name, previous_display_name=row["display_name"], path=str(s.abs_path(f"organizations/{target}" if inp.move else row["path"])), moved=will_move)
     return Plan(preview=preview, data={"row": row, "name": name, "target": f"organizations/{target}", "move": inp.move, "will_move": will_move})
 
@@ -287,13 +287,13 @@ def apply_org_rename(plan: Plan, ctx: Context, s: Session) -> Applied:
     if plan.data["will_move"] and target != row["path"]:
         changes["pending_path"] = target
     if not changes and not row.get("pending_path"):
-        return Applied(OrgRenameOutput(organization_id=row["id"], display_name=row["display_name"], previous_display_name=row["display_name"], path=str(s.abs_path(row["path"])), moved=False), [], "no change", audited=True)
+        return Applied(OrgRenameOutput(organization_id=row["id"], display_name=row["display_name"], previous_display_name=row["display_name"], path=str(s.abs_path(row["path"])), moved=row["id"] in s.completed_moves), [], "no change", audited=True)
     new = org.bump(row, s.actor.id, VIA(ctx), **changes) if changes else row
     if changes:
         s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == row["id"]).values(**{k: new[k] for k in changes} | {"version": new["version"], "updated_at": new["updated_at"], "updated_by": new["updated_by"], "updated_via": new["updated_via"]}))
         audit.write_event(s, ctx, "organization rename", f"renamed organization {row['display_name']} to {name}" if name != row["display_name"] else f"move requested for organization {name}", [Touched("organization", row["id"], "update", row["version"], new["version"], new)])
     s.hub.raw.execute("COMMIT")
-    moved = False
+    moved = row["id"] in s.completed_moves
     if plan.data["will_move"] and new.get("pending_path"):
         from bookflow.hub.moves import complete_org_move
         new = complete_org_move(s, ctx, dict(new), VIA(ctx))
@@ -303,14 +303,23 @@ def apply_org_rename(plan: Plan, ctx: Context, s: Session) -> Applied:
 
 # ---------------------------------------------------------------- company new
 
+def _empty_to_none(v):
+    return None if isinstance(v, str) and v.strip() == "" else v
+
+
 class Address(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    line1: str | None = Field(None, max_length=200)
-    line2: str | None = Field(None, max_length=200)
-    city: str | None = Field(None, max_length=200)
-    state: str | None = Field(None, max_length=200)
-    postal_code: str | None = Field(None, max_length=200)
-    country: str | None = Field(None, max_length=200)
+    line1: str | None = Field(None, max_length=200, description="Street line 1")
+    line2: str | None = Field(None, max_length=200, description="Street line 2")
+    city: str | None = Field(None, max_length=200, description="City")
+    state: str | None = Field(None, max_length=200, description="State or province")
+    postal_code: str | None = Field(None, max_length=200, description="Postal code")
+    country: str | None = Field(None, max_length=200, description="Country; defaults to US")
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _blank(cls, v):
+        return _empty_to_none(v)
 
 
 _TAX_SHAPES = {"ein": re.compile(r"^\d{2}-\d{7}$"), "ssn": re.compile(r"^\d{3}-\d{2}-\d{4}$")}
@@ -327,20 +336,25 @@ class CompanyNewInput(BaseModel):
     tax_id: str | None = Field(None, description="NN-NNNNNNN for ein, NNN-NN-NNNN for ssn")
     entity_type: Literal["sole_proprietor", "partnership", "llc", "s_corp", "c_corp", "nonprofit", "other"] = "other"
     income_tax_form: Literal["1040_schedule_c", "1065", "1120", "1120s", "990", "other"] = "other"
-    industry: str | None = Field(None, max_length=128)
-    contact_name: str | None = Field(None, max_length=128)
+    industry: str | None = Field(None, max_length=128, description="Line of business; selects the default chart later")
+    contact_name: str | None = Field(None, max_length=128, description="Primary contact person")
     address: Address = Field(default_factory=Address, description="Company address shown on forms")
-    legal_address: Address | None = Field(None, description="Address on tax forms; defaults to address")
-    ship_address: Address | None = Field(None, description="Where goods are received; defaults to address")
-    phone: str | None = Field(None, max_length=64)
-    fax: str | None = Field(None, max_length=64)
-    email: str | None = Field(None, max_length=254)
-    website: str | None = Field(None, max_length=254)
-    fiscal_year_start_month: int = Field(1, ge=1, le=12)
-    tax_year_start_month: int | None = Field(None, ge=1, le=12, description="Defaults to fiscal_year_start_month")
-    report_basis: Literal["accrual", "cash"] = "accrual"
+    legal_address: Address | None = Field(None, description="Address on tax forms; defaults to the company address")
+    ship_address: Address | None = Field(None, description="Where goods are received; defaults to the company address")
+    phone: str | None = Field(None, max_length=64, description="Main phone")
+    fax: str | None = Field(None, max_length=64, description="Fax")
+    email: str | None = Field(None, max_length=254, description="Main email; exactly one @")
+    website: str | None = Field(None, max_length=254, description="Website")
+    fiscal_year_start_month: int = Field(1, ge=1, le=12, description="First month of the fiscal year, 1 to 12")
+    tax_year_start_month: int | None = Field(None, ge=1, le=12, description="First month of the tax year; defaults to fiscal_year_start_month")
+    report_basis: Literal["accrual", "cash"] = Field("accrual", description="Default basis for reports")
     timezone: str | None = Field(None, description="IANA zone; defaults to the machine's zone")
-    recent_activity_window_seconds: int = Field(60, ge=0)
+    recent_activity_window_seconds: int = Field(60, ge=0, description="Window for the recent-activity warning on blind writes")
+
+    @field_validator("display_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "organization", mode="before")
+    @classmethod
+    def _blank(cls, v):
+        return _empty_to_none(v)
 
     @field_validator("home_currency")
     @classmethod
@@ -665,7 +679,10 @@ def plan_demo_reset(inp: Empty, ctx: Context, s: Session) -> Plan:
         raise BookflowError("E_NAME_TAKEN", details={"name": seed["organization"]["display_name"]})
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M%S")
     trash_rel = f"trash/{Path(existing['path']).name}-{stamp}" if existing else None
-    preview = DemoResetOutput(organization_id=new_id(), company_id=new_id(), display_name=seed["company"]["display_name"], path=str(s.organizations_dir / choose_folder_name(s.organizations_dir, seed["organization"]["display_name"]) / seed["company"]["display_name"]), trashed_path=str(s.abs_path(trash_rel)) if trash_rel else None)
+    org_folder = choose_folder_name(s.organizations_dir, seed["organization"]["display_name"], exclude=Path(existing["path"]).name if existing else None)
+    from bookflow.storage.paths import derive_folder_name
+    company_folder = derive_folder_name(seed["company"]["display_name"]) if existing else choose_folder_name(s.organizations_dir / org_folder, seed["company"]["display_name"])
+    preview = DemoResetOutput(organization_id=new_id(), company_id=new_id(), display_name=seed["company"]["display_name"], path=str(s.organizations_dir / org_folder / company_folder), trashed_path=str(s.abs_path(trash_rel)) if trash_rel else None)
     return Plan(preview=preview, data={"seed": seed, "existing": existing, "trash_rel": trash_rel})
 
 
@@ -674,8 +691,8 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
     seed, existing, trash_rel = plan.data["seed"], plan.data["existing"], plan.data["trash_rel"]
     trashed = None
     if existing:
-        pending = existing.get("pending_path") or trash_rel
-        if not existing.get("pending_path"):
+        pending = existing.get("pending_path") if (existing.get("pending_path") or "").startswith("trash/") else trash_rel
+        if existing.get("pending_path") != pending:
             s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == existing["id"]).values(pending_path=pending))
             audit.write_event(s, ctx, "demo reset", "moving the previous demo organization to trash", [Touched("organization", existing["id"], "update", existing["version"], existing["version"], {**existing, "pending_path": pending})])
         s.hub.raw.execute("COMMIT")
@@ -705,145 +722,3 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
     return Applied(DemoResetOutput(organization_id=orow["id"], company_id=cid, display_name=display, path=str(folder), trashed_path=trashed), [t_org, *t_co], f"reset demo: {orow['display_name']} / {display}")
 
 
-# ---------------------------------------------------------------- audit list / show
-
-class AuditListInput(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    since: str | None = Field(None, description="ISO timestamp or date; events at or after")
-    until: str | None = Field(None, description="ISO timestamp or date; events before")
-    actor: str | None = Field(None, description="Actor user id or username")
-    kind: Literal["human", "agent", "system"] | None = Field(None, description="Actor kind")
-    via: Literal["cli", "http", "mcp", "gui", "python", "system"] | None = Field(None, description="Interface the write came through")
-    principal: str | None = Field(None, description="On-behalf-of user id")
-    command: str | None = Field(None, description="Command name, e.g. 'company new'")
-    record_type: str | None = None
-    record_id: str | None = None
-    limit: int = Field(50, ge=1, le=1000)
-    after: str | None = Field(None, description="Cursor: the last event id from a previous page")
-
-
-class AuditEntryOut(BaseModel):
-    id: str
-    record_type: str
-    record_id: str
-    action: str
-    version_before: int | None
-    version_after: int | None
-    before: dict[str, Any] | None
-    after: dict[str, Any] | None
-    diff: dict[str, Any] | None = None
-
-
-class AuditEventOut(BaseModel):
-    id: str
-    at: str
-    command: str
-    actor_id: str | None
-    actor_name: str | None
-    actor_kind: str | None
-    on_behalf_of: str | None
-    interface: str
-    client_name: str
-    client_version: str
-    client_host: str
-    session_id: str
-    request_id: str
-    reason: str | None
-    directive_id: str | None
-    source_ref: str | None
-    summary: str
-    entry_count: int
-    entries: list[AuditEntryOut] | None = None
-
-
-class AuditListOutput(BaseModel):
-    items: list[AuditEventOut]
-    count: int
-    next_cursor: str | None
-
-
-def _event_out(s: Session, e: dict[str, Any], names: dict[str, str], with_entries: bool) -> AuditEventOut:
-    visible = audit.visible_record_ids(s)
-    entry_q = sa.select(h.audit_entries).where(h.audit_entries.c.event_id == e["id"])
-    if visible is not None:
-        entry_q = entry_q.where(h.audit_entries.c.record_id.in_(visible))
-    rows = s.hub.conn.execute(entry_q).mappings().all()
-    count = len(rows)
-    entries = None
-    if with_entries:
-        entries = []
-        for r in rows:
-            before, after = audit.decode_snapshot(r["before"]), audit.decode_snapshot(r["after"])
-            if before is None and r["action"] == "update" and r["version_before"] is not None:
-                prev = s.hub.conn.execute(sa.select(h.audit_entries.c.after).where(h.audit_entries.c.record_type == r["record_type"], h.audit_entries.c.record_id == r["record_id"], h.audit_entries.c.version_after == r["version_before"])).first()
-                before = audit.decode_snapshot(prev[0]) if prev else None
-            diff = None
-            if before is not None and after is not None:
-                diff = {k: {"before": before.get(k), "after": after.get(k)} for k in sorted(set(before) | set(after)) if before.get(k) != after.get(k)}
-            before, after = redact_paths(before, s.is_hub_admin), redact_paths(after, s.is_hub_admin)
-            if diff is not None:
-                diff = {k: v for k, v in diff.items() if not (k == "path" or k.endswith("_path")) or s.is_hub_admin}
-            entries.append(AuditEntryOut(id=r["id"], record_type=r["record_type"], record_id=r["record_id"], action=r["action"], version_before=r["version_before"], version_after=r["version_after"], before=before, after=after, diff=diff))
-    fields = {k: e[k] for k in AuditEventOut.model_fields if k in e and k not in ("at",)}
-    if not s.is_hub_admin:
-        import re as _re
-        fields["summary"] = _re.sub(r"(organizations|trash)/\S+", "<path>", fields["summary"])
-    return AuditEventOut(**fields, at=localize(s, e["at"]), actor_name=names.get(e["actor_id"]), entry_count=count, entries=entries)
-
-
-audit_list = command("hub audit list", scope="hub", description="List hub audit events the acting user may see, newest first.", input_model=AuditListInput, output_model=AuditListOutput)
-
-
-@audit_list
-def plan_audit_list(inp: AuditListInput, ctx: Context, s: Session) -> Plan:
-    q = sa.select(h.audit_events).where(audit.visible_event_ids_filter(s)).order_by(h.audit_events.c.id.desc()).limit(inp.limit + 1)
-    from bookflow.core.dispatch import parse_when
-    zone = (s.actor.timezone if s.actor else None) or s.company_tz
-    if inp.since:
-        q = q.where(h.audit_events.c.at >= parse_when(inp.since, zone))
-    if inp.until:
-        q = q.where(h.audit_events.c.at < parse_when(inp.until, zone, end=True))
-    if inp.actor:
-        actor_row = users.find_user(s, username=inp.actor) if not is_ulid(inp.actor) else None
-        q = q.where(h.audit_events.c.actor_id == (actor_row["id"] if actor_row else inp.actor.upper()))
-    if inp.kind:
-        q = q.where(h.audit_events.c.actor_kind == inp.kind)
-    if inp.via:
-        q = q.where(h.audit_events.c.interface == inp.via)
-    if inp.principal:
-        q = q.where(h.audit_events.c.on_behalf_of == inp.principal.upper())
-    if inp.command:
-        q = q.where(h.audit_events.c.command == inp.command)
-    if inp.record_type or inp.record_id:
-        sub = sa.select(h.audit_entries.c.event_id)
-        if inp.record_type:
-            sub = sub.where(h.audit_entries.c.record_type == inp.record_type)
-        if inp.record_id:
-            sub = sub.where(h.audit_entries.c.record_id == inp.record_id)
-        q = q.where(h.audit_events.c.id.in_(sub))
-    if inp.after:
-        q = q.where(h.audit_events.c.id < inp.after)
-    rows = [dict(r) for r in s.hub.conn.execute(q).mappings().all()]
-    more = len(rows) > inp.limit
-    rows = rows[:inp.limit]
-    names = users.user_names(s, {r["actor_id"] for r in rows if r["actor_id"]})
-    items = [_event_out(s, r, names, False) for r in rows]
-    return Plan(preview=AuditListOutput(items=items, count=len(items), next_cursor=rows[-1]["id"] if more and rows else None))
-
-
-class EventSelector(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    event: str = Field(description="Audit event id")
-
-
-audit_show = command("hub audit show", scope="hub", description="Show one hub audit event with its entries and field diffs.", input_model=EventSelector, output_model=AuditEventOut, positional=["event"], error_codes=["E_EVENT_NOT_FOUND"])
-
-
-@audit_show
-def plan_audit_show(inp: EventSelector, ctx: Context, s: Session) -> Plan:
-    row = s.hub.conn.execute(sa.select(h.audit_events).where(h.audit_events.c.id == inp.event.upper(), audit.visible_event_ids_filter(s))).mappings().first()
-    if row is None:
-        raise BookflowError("E_EVENT_NOT_FOUND")
-    e = dict(row)
-    names = users.user_names(s, {e["actor_id"]} if e["actor_id"] else set())
-    return Plan(preview=_event_out(s, e, names, True))

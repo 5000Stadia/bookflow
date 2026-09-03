@@ -95,17 +95,21 @@ def apply_company_rename(plan: Plan, ctx: Context, s: Session) -> Applied:
     if will_move and target_rel != row["path"] and not row.get("pending_path"):
         changes["pending_path"] = target_rel
     if not changes and not row.get("pending_path"):
-        s.company.raw.execute("COMMIT")
+        s.company.raw.execute("ROLLBACK")
         return Applied(RenameOutput(company_id=row["id"], display_name=row["display_name"], previous_display_name=row["display_name"], path=str(s.abs_path(row["path"])), moved=row["id"] in s.completed_moves), [], "no change", audited=True)
     new = row
     if changes:
         new, t = co.update(s, row, via, **changes)
         audit.write_event(s, ctx, "company rename", f"renamed company {row['display_name']} to {name}" if name != row["display_name"] else f"move requested for company {name}", [t])
     s.hub.raw.execute("COMMIT")
-    cinfo.write_display_name_copy(s.company, name)
-    s.company.raw.execute("COMMIT")
-    folder = s.abs_path(new["path"])
-    write_company_marker(folder, company_id=row["id"], state="ready", display_name=name, schema_revision=new["schema_revision"])
+    try:
+        cinfo.write_display_name_copy(s.company, name)
+        s.company.raw.execute("COMMIT")
+        write_company_marker(s.abs_path(new["path"]), company_id=row["id"], state="ready", display_name=name, schema_revision=new["schema_revision"])
+    except (BookflowError, OSError) as e:  # informational copies; the next writable open rewrites them (blueprint 3.1)
+        if s.company.raw.in_transaction:
+            s.company.raw.execute("ROLLBACK")
+        s.warnings.append(f"renamed, but the folder's display-name copy was not updated ({getattr(e, 'code', 'E_IO')}); it will be on the next write")
     moved = row["id"] in s.completed_moves
     if will_move and new.get("pending_path"):
         from bookflow.hub.moves import complete_company_move

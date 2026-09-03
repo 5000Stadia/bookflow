@@ -88,12 +88,29 @@ def complete_org_move(s: Session, ctx: Context, org: dict[str, Any], via: str) -
     touched = [Touched("organization", org["id"], "update", org["version"], new["version"], {k: v for k, v in new.items() if k in h.organizations.c})]
     for crow in s.hub.conn.execute(sa.select(h.companies).where(h.companies.c.organization_id == org["id"])).mappings().all():
         crow = dict(crow)
-        if crow["path"].startswith(old_prefix):
-            cnew = {**crow, "path": pending.rstrip("/") + "/" + crow["path"][len(old_prefix):], "version": crow["version"] + 1,
+        if crow["path"].startswith(old_prefix) or (crow.get("pending_path") or "").startswith(old_prefix):
+            rebase = lambda p: (pending.rstrip("/") + "/" + p[len(old_prefix):]) if p and p.startswith(old_prefix) else p
+            cnew = {**crow, "path": rebase(crow["path"]), "pending_path": rebase(crow.get("pending_path")), "version": crow["version"] + 1,
                     "updated_at": new["updated_at"], "updated_by": new["updated_by"], "updated_via": via}
-            s.hub.conn.execute(h.companies.update().where(h.companies.c.id == crow["id"]).values(path=cnew["path"], version=cnew["version"], updated_at=cnew["updated_at"], updated_by=cnew["updated_by"], updated_via=via))
+            s.hub.conn.execute(h.companies.update().where(h.companies.c.id == crow["id"]).values(path=cnew["path"], pending_path=cnew["pending_path"], version=cnew["version"], updated_at=cnew["updated_at"], updated_by=cnew["updated_by"], updated_via=via))
             touched.append(Touched("company", crow["id"], "update", crow["version"], cnew["version"], cnew))
     write_event(s, ctx, "organization move", f"moved the folder of organization {org['display_name']}", touched)
     s.hub.raw.execute("COMMIT")
     org.update(new)
     return org
+
+
+def display_path(s: Session, row: dict[str, Any], org: dict[str, Any] | None = None) -> Path:
+    """The folder a company can be found in right now, for read outputs (pending moves considered, nothing written)."""
+    import sqlalchemy as _sa
+    if org is None:
+        r = s.hub.conn.execute(_sa.select(h.organizations).where(h.organizations.c.id == row["organization_id"])).mappings().first()
+        org = dict(r) if r else None
+    rel = row["path"]
+    if org and org.get("pending_path") and not org["pending_path"].startswith("trash/"):
+        old_prefix = org["path"].rstrip("/") + "/"
+        moved = effective_path(s, org["path"], org["pending_path"], org["id"])
+        if moved is not None and rel.startswith(old_prefix) and not s.abs_path(rel).exists():
+            rel = str(moved.relative_to(s.data_root)).rstrip("/") + "/" + rel[len(old_prefix):]
+    found = effective_path(s, rel, row.get("pending_path") if not (row.get("pending_path") or "").startswith("trash/") else None, row["id"])
+    return found if found is not None else s.abs_path(rel)

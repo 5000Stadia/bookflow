@@ -12,6 +12,7 @@ from bookflow.core.lazy import lazy
 
 access = lazy("bookflow.hub.access")
 users = lazy("bookflow.hub.users")
+moves = lazy("bookflow.hub.moves")
 
 
 class CommonOut(BaseModel):
@@ -46,7 +47,11 @@ def organization_output(s: Session, row: dict[str, Any]) -> OrganizationOutput:
         acc = "organization"
     else:
         acc = "company"
-    return OrganizationOutput(**common_out(s, row), organization_id=row["id"], display_name=row["display_name"], access=acc, role=role, path=str(s.abs_path(row["path"])), is_demo=bool(row["is_demo"]))
+    rel = row["path"]
+    if row.get("pending_path") and not row["pending_path"].startswith("trash/"):
+        found = moves.effective_path(s, rel, row["pending_path"], row["id"])
+        rel = str(found.relative_to(s.data_root)) if found is not None else rel
+    return OrganizationOutput(**common_out(s, row), organization_id=row["id"], display_name=row["display_name"], access=acc, role=role, path=str(s.abs_path(rel)), is_demo=bool(row["is_demo"]))
 
 
 class CompanySummary(CommonOut):
@@ -70,7 +75,7 @@ def company_summary(s: Session, row: dict[str, Any], organization_name: str, nam
     return CompanySummary(**common_out(s, row), company_id=row["id"], organization_id=row["organization_id"], organization_name=organization_name,
                           display_name=row["display_name"], legal_name=row["legal_name"], home_currency=row["home_currency"],
                           schema_revision=row["schema_revision"], is_demo=bool(row["is_demo"]), access=acc, role=role,
-                          path=str(s.abs_path(row["path"])), registered_by_name=names.get(row["created_by"]))
+                          path=str(moves.display_path(s, row)), registered_by_name=names.get(row["created_by"]))
 
 
 class Empty(BaseModel):

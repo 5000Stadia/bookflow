@@ -142,3 +142,4 @@ def load_all() -> None:
     """Import every command module so the registry is complete."""
     import bookflow.commands.hub_cmds  # noqa: F401
     import bookflow.commands.company_cmds  # noqa: F401
+    import bookflow.commands.audit_cmds  # noqa: F401

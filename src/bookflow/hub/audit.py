@@ -19,6 +19,9 @@ def visible_record_ids(s: Session) -> set[str] | None:
     if org_ids:
         rows = s.hub.conn.execute(sa.select(h.companies.c.id).where(h.companies.c.organization_id.in_(org_ids))).all()
         company_ids |= {r[0] for r in rows}
+    if company_ids:
+        rows = s.hub.conn.execute(sa.select(h.companies.c.organization_id).where(h.companies.c.id.in_(company_ids))).all()
+        org_ids |= {r[0] for r in rows}
     return org_ids | company_ids | {s.actor.id}
 
 

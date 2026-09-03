@@ -62,7 +62,7 @@ def _flatten(model: type[BaseModel], prefix: str = "") -> list[tuple[str, str, A
 
 
 def _help_text(help_: str, py_t: type, choices: list[str] | None, required: bool, default: Any) -> str:
-    parts = [help_] if help_ else []
+    parts = [help_.rstrip(".") + "."] if help_ else []
     if choices:
         parts.append("One of: " + ", ".join(choices) + ".")
     if required:
@@ -101,14 +101,14 @@ def _build_command(cmd: registry.Command):
             annotation = str | None
         params.append(inspect.Parameter(pname, inspect.Parameter.KEYWORD_ONLY, default=default, annotation=annotation))
     params.append(inspect.Parameter("json_", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--json", help="Print the output as one JSON object"), annotation=bool))
-    params.append(inspect.Parameter("data_root", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--data-root", help="Data root; else BOOKFLOW_DATA_ROOT, else ~/.bookflow"), annotation=str | None))
+    params.append(inspect.Parameter("data_root", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--data-root", help="Data root; else BOOKFLOW_DATA_ROOT, else ~/.bookflow", metavar="TEXT"), annotation=str | None))
     if cmd.is_write:
         params.append(inspect.Parameter("dry_run", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--dry-run", help="Validate and preview; write nothing"), annotation=bool))
-        params.append(inspect.Parameter("reason", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--reason", help="Why, in one short phrase (at most 140 characters)"), annotation=str | None))
-        params.append(inspect.Parameter("source_ref", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--source-ref", help="What triggered this write, e.g. an email or attachment id"), annotation=str | None))
+        params.append(inspect.Parameter("reason", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--reason", help="Why, in one short phrase (at most 140 characters)", metavar="TEXT"), annotation=str | None))
+        params.append(inspect.Parameter("source_ref", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--source-ref", help="What triggered this write, e.g. an email or attachment id", metavar="TEXT"), annotation=str | None))
         params.append(inspect.Parameter("interactive", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--interactive", help="Prompt for fields not given as options"), annotation=bool))
     if cmd.scope == "company":
-        params.append(inspect.Parameter("company", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--company", help="Company id, Organization/Company, or display name; else BOOKFLOW_COMPANY, else the saved default"), annotation=str | None))
+        params.append(inspect.Parameter("company", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--company", help="Company id, Organization/Company, or display name; else BOOKFLOW_COMPANY, else the saved default", metavar="TEXT"), annotation=str | None))
 
     def run(**kw: Any) -> None:
         ctx_obj = click_globals.get_current_context().obj or {}
@@ -178,7 +178,20 @@ def _build_command(cmd: registry.Command):
     return run
 
 
-def build_app() -> typer.Typer:
+def _target_noun(argv: list[str]) -> str | None:
+    """The noun path the invocation names (words before the first option after the program name), or None for the root."""
+    words = []
+    for tok in argv[1:]:
+        if tok.startswith("-"):
+            if words:
+                break
+            continue
+        words.append(tok)
+    return " ".join(words) if words else None
+
+
+def build_app(target: str | None = None) -> typer.Typer:
+    """Build the CLI. With ``target``, only that noun's commands are built; other groups are registered empty so help still lists them."""
     registry.load_all()
     app = typer.Typer(add_completion=False, no_args_is_help=True, help="Bookflow: multi-company double-entry accounting.", rich_markup_mode=None)
 
@@ -205,16 +218,21 @@ def build_app() -> typer.Typer:
         return sub
 
     for cmd in registry.all_commands():
-        fn = _build_command(cmd)
         if not cmd.verb:
-            app.command(cmd.noun, help=cmd.description)(fn)
+            if target is None or target == cmd.noun:
+                app.command(cmd.noun, help=cmd.description)(_build_command(cmd))
             continue
-        group_for(cmd.noun).command(cmd.verb, help=cmd.description)(fn)
+        group = group_for(cmd.noun)
+        if target is None or target == cmd.noun or target.startswith(cmd.noun + " ") or cmd.noun.startswith(target + " "):
+            group.command(cmd.verb, help=cmd.description)(_build_command(cmd))
     return app
 
 
 def main() -> None:
-    app = build_app()
+    target = _target_noun(sys.argv)
+    registry.load_all()
+    known = target is not None and any(c.noun == target or c.noun.startswith(target + " ") or target.startswith(c.noun + " ") for c in registry.all_commands())
+    app = build_app(target if known else None)
     as_json = "--json" in sys.argv
     try:
         app(standalone_mode=False)

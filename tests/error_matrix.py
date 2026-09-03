@@ -17,6 +17,10 @@ MATRIX = {
     "demo reset": {"E_DEMO_RESET_INCOMPLETE": "trash move failed", "E_NAME_TAKEN": "non-demo organization holds the seed name", "E_PERMISSION": "non hub admin"},
     "hub audit list": {"E_VALIDATION": "bad since/until"},
     "hub audit show": {"E_EVENT_NOT_FOUND": "absent or invisible event"},
+    "hub audit tail": {"E_VALIDATION": "bad since/until"},
+    "audit list": {"E_VALIDATION": "bad since/until"},
+    "audit show": {"E_EVENT_NOT_FOUND": "absent event"},
+    "audit tail": {"E_VALIDATION": "bad since/until"},
 }
 
 INFRASTRUCTURE = ["E_USAGE", "E_VALIDATION", "E_CONTEXT_IN_INPUT", "E_NOT_INITIALIZED", "E_NO_ACTOR", "E_PERMISSION", "E_COMPANY_NOT_FOUND",
