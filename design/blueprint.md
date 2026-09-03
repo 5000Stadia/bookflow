@@ -57,18 +57,22 @@ Everything must remain portable to PostgreSQL. No SQLite-only SQL in repositorie
   hub.db                         users, credentials, tokens, company registry, memberships, hub audit
   config.toml                    saved default company, client display name
   companies/
-    <company_id>/
-      company.db                 every table for one company
+    <Company Name>/              one folder per company, named after the company
+      bookflow-company.toml      company id, display name, schema version; identifies the folder
+      company.db                 every table for one company (SQLite adds company.db-wal and company.db-shm while open)
       attachments/
         <first two hex of sha256>/<sha256>      content-addressed file bodies
       backups/
-        <company_id>-<timestamp>.db
+        <YYYY-MM-DD-HHMMSS>.db   full copies of company.db, taken before migrations and by `company backup`
+      exports/                   files written by report `--csv` and by `company export`; safe to empty
 ```
 
-- `company_id` is a ULID. Paths are never derived from the company name.
-- A company directory is self-contained. Copying it into another data root and registering it with `bookflow company attach <path>` opens it with nothing lost.
+- The folder name is the company display name with path separators, control characters, and leading or trailing dots and spaces removed. If the name is already taken, ` (2)`, ` (3)`, and so on is appended. The hub registry maps company id to folder path; the folder name is never used to identify a company after creation.
+- `company rename --move` renames the folder to match a new display name; without `--move` only the display name changes.
+- Every company is exactly one folder. Nothing about a company is written outside it, and nothing that is not about that company is written inside it. Temporary files go to the operating system temporary directory.
+- A company folder is self-contained. Copying it into another data root and registering it with `bookflow company attach <path>` opens it with nothing lost; `attach` reads `bookflow-company.toml` for the id.
 - A company database is opened by exactly one process at a time for writing. In host mode, the host is that process. Opening a company database that lives on a network share is refused; the core checks the filesystem type and refuses with error `E_NETWORK_SHARE`.
-- Every database records its schema version. Opening a database with an older version runs pending migrations after taking a backup into `backups/`. Opening a database with a newer version than the code knows is refused with `E_SCHEMA_TOO_NEW`.
+- Every database records its schema version. Opening a database with an older version takes a backup into `backups/` and runs pending migrations. Opening a database with a newer version than the code knows is refused with `E_SCHEMA_TOO_NEW`.
 
 ## 4. Identity
 
@@ -96,12 +100,15 @@ Table `api_tokens` in hub.db. Tokens are for agents and for GUI or HTTP sessions
 | Field | Meaning |
 |---|---|
 | id | ULID |
-| user_id | owner of the token |
+| user_id | the user this token authenticates |
+| on_behalf_of | for agent users: the human principal this token acts for; issued by that human or by an admin; null for human users |
 | token_hash | sha256 of the secret; the secret is shown once at creation and never stored |
 | label | free text |
 | expires_at | nullable |
 | last_used_at | |
 | revoked_at | nullable |
+
+An agent acting for several people holds one token per person. The principal is fixed by the token, never chosen per call. `token issue --for-agent <agent> --on-behalf-of <human>` is run by that human or by an admin of a company they share.
 
 ### 4.3 Companies and memberships
 
@@ -147,7 +154,7 @@ Every command receives a context that the adapter builds. No field of the contex
 |---|---|---|
 | actor_id | ULID | authenticated user |
 | actor_kind | enum | from the user record |
-| on_behalf_of | ULID, nullable | for agent actors, the owner user; for system, the schedule owner; null for humans |
+| on_behalf_of | ULID, nullable | for agent actors, the principal bound to the token; for system, the schedule owner; null for humans |
 | interface | enum | `cli`, `http`, `mcp`, `gui`, `system` |
 | client_name | text | e.g. `bookflow-cli`, `bookflow-desktop` |
 | client_version | text | |
@@ -155,11 +162,12 @@ Every command receives a context that the adapter builds. No field of the contex
 | session_id | ULID | one per CLI invocation, HTTP session, MCP server process, or GUI login |
 | request_id | ULID | one per command call |
 | idempotency_key | text, nullable | caller supplied; see 6.5 |
-| reason | text, nullable | caller supplied; required for `agent` and `system` actors on any command that posts to the ledger, else `E_REASON_REQUIRED` |
+| reason | text, at most 140 characters, nullable | caller supplied; see 5.8 |
+| directive_id | ULID, nullable | caller supplied; a standing instruction from section 5.8 |
 | source_ref | text, nullable | caller supplied; an identifier for what triggered the write, such as an email id or attachment id |
 | company_id | ULID, nullable | the company the command runs against; null for hub commands |
 
-`reason`, `source_ref`, and `idempotency_key` are set by the caller through global flags on the CLI (`--reason`, `--source-ref`, `--idempotency-key`), request headers on HTTP (`X-Bookflow-Reason`, `X-Bookflow-Source-Ref`, `Idempotency-Key`), and named tool arguments on MCP.
+`reason`, `directive_id`, `source_ref`, and `idempotency_key` are set by the caller through global flags on the CLI (`--reason`, `--directive`, `--source-ref`, `--idempotency-key`), request headers on HTTP (`X-Bookflow-Reason`, `X-Bookflow-Directive`, `X-Bookflow-Source-Ref`, `Idempotency-Key`), and named tool arguments on MCP.
 
 ### 5.3 Company selection
 
@@ -193,6 +201,26 @@ Amounts on input are decimal strings, never floats: `"123.45"`. An optional curr
 ### 5.7 Dates
 
 Dates are ISO 8601 `YYYY-MM-DD`. Timestamps are ISO 8601 with timezone, stored as UTC. The company has a timezone setting used to interpret dates without times.
+
+### 5.8 Reasons and directives
+
+A write by an `agent` or `system` actor to any command that posts to the ledger must carry a `reason`, a `directive_id`, or both; otherwise `E_REASON_REQUIRED`. Human actors may supply either and are never required to.
+
+`reason` is one short phrase, at most 140 characters. The MCP tool description says: one phrase, under ten words, what triggered this.
+
+A directive is a standing instruction recorded once and cited many times. Table `directives` in company.db:
+
+| Field | Meaning |
+|---|---|
+| id | ULID |
+| code | short display code, `SI-` plus a per-company sequence, e.g. `SI-3` |
+| text | the instruction, as the principal gave it, at most 1000 characters |
+| given_by | the human whose instruction it is |
+| recorded_by | the actor that recorded it, human or agent |
+| active | |
+
+Commands: `directive add --text`, `directive list`, `directive show`, `directive deactivate`. An agent that is told "when I finish a job and tell you the amount, post it and invoice it to the email on file" records that once and then posts with `--directive SI-3 --reason "job done, 1,250"`. `audit list` and `audit show` render the directive code and text beside the reason. A deactivated directive can no longer be cited.
+
 
 ## 6. Records, versions, and concurrency
 
@@ -256,7 +284,7 @@ Two tables in company.db, plus the same pair in hub.db for hub commands.
 | actor_id, actor_kind, on_behalf_of | from context |
 | interface, client_name, client_version, client_host | from context |
 | session_id, request_id, idempotency_key | from context |
-| reason, source_ref | from context |
+| reason, directive_id, source_ref | from context |
 | summary | one line, generated by the command, e.g. `posted invoice 1043 to Acme Plumbing for 1,250.00` |
 
 `audit_entries`: one row per record touched by the event.
@@ -268,8 +296,9 @@ Two tables in company.db, plus the same pair in hub.db for hub commands.
 | record_type, record_id | |
 | action | `create`, `update`, `deactivate`, `activate`, `post`, `void`, `link`, `unlink` |
 | version_before, version_after | |
-| before | JSON snapshot of the record before, null on create |
-| after | JSON snapshot after |
+| after | JSON snapshot of the record after the write; on `deactivate` and `void`, the record as it stands after |
+
+The snapshot before a write is not stored. It is the `after` of the previous entry for the same record, found by `(record_type, record_id, version_before)`, and is null on create. `audit show` returns both and the field diff. Snapshots hold only stored fields, never derived ones such as `full_name`, `quantity_on_hand`, or `open_balance`. A transaction snapshot includes its lines, so posting a 20-line transaction writes one entry. Snapshots over 512 bytes are stored zlib-compressed; the column is a blob with a one-byte prefix marking raw or compressed.
 
 Rules:
 
@@ -332,7 +361,7 @@ Seeded charts, chosen by `--chart`: `general`, `service`, `construction_trades`,
 
 ### 9.3 Other company commands
 
-`company list`, `company show`, `company update`, `company use`, `company attach <path>`, `company backup`, `company delete`.
+`company list`, `company show`, `company update`, `company rename`, `company use`, `company attach <path>`, `company backup`, `company compact`, `company delete`.
 
 ## 10. The general ledger
 
@@ -604,6 +633,8 @@ When two good things conflict, the earlier line wins.
 | Posting a 20-line transaction completes in under 50 ms | same |
 | Trial balance over 100,000 lines returns in under 2 s | same |
 | A company database with 100,000 transactions stays under 500 MB excluding attachments | |
+| Audit tables occupy at most 1.5 times the live data they describe | measured on the test fixture after 10,000 writes, half of them updates |
+| Installed package with dependencies under 60 MB; no service other than SQLite required | |
 | CLI cold start under 300 ms | Python 3.12, warm disk cache |
 | Full test suite under 60 s | |
 
