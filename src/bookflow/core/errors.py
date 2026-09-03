@@ -25,6 +25,7 @@ INFRASTRUCTURE_CODES: dict[str, str] = {
     "E_SCHEMA_BEHIND": "The database schema is behind this version of Bookflow; run `bookflow upgrade`.",
     "E_CONFIG_INVALID": "The configuration file could not be read.",
     "E_IO": "A filesystem operation failed.",
+    "E_REASON_REQUIRED": "Writes by an agent need --reason or --directive.",
     "E_INTERNAL": "Internal failure.",
 }
 
@@ -42,6 +43,12 @@ COMMAND_CODES: dict[str, str] = {
     "E_AMOUNT_PRECISION": "The amount has more decimal places than the currency allows.",
     "E_EVENT_NOT_FOUND": "No such audit event.",
     "E_INIT_CONFLICT": "The data root is already initialized for a different user.",
+    "E_VERSION_CONFLICT": "The record changed since the version you read.",
+    "E_DIRECTIVE_NOT_FOUND": "No such directive.",
+    "E_DIRECTIVE_INACTIVE": "That directive has been deactivated.",
+    "E_IDEMPOTENCY_MISMATCH": "That idempotency key was used for a different command or input.",
+    "E_RECORD_NOT_FOUND": "No such record.",
+    "E_PARTIAL_WRITE": "The write completed in one database but not the other.",
 }
 
 ALL_CODES: dict[str, str] = {**INFRASTRUCTURE_CODES, **COMMAND_CODES}

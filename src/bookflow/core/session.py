@@ -16,7 +16,8 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    from bookflow.core import clock
+    return clock.now_iso()
 
 
 @dataclass
