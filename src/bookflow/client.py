@@ -18,6 +18,8 @@ class _Noun:
     def __getattr__(self, verb: str):
         name = f"{self._noun} {verb.replace('_', '-')}"
         if registry.get(name) is None:
+            if any(c.name.startswith(name + " ") for c in registry.all_commands()):
+                return _Noun(self._client, name)
             raise AttributeError(name)
 
         def call(**kwargs: Any) -> dict[str, Any]:

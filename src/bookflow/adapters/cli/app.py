@@ -154,18 +154,24 @@ def build_app() -> typer.Typer:
              data_root: Annotated[str | None, typer.Option("--data-root", help="Data root; else BOOKFLOW_DATA_ROOT, else ~/.bookflow")] = None) -> None:
         ctx.obj = {"json": json_, "data_root": data_root, "session_id": new_id()}
 
-    nouns: dict[str, typer.Typer] = {}
+    groups: dict[str, typer.Typer] = {}
+
+    def group_for(path: str) -> typer.Typer:
+        if path in groups:
+            return groups[path]
+        parent_path, _, leaf = path.rpartition(" ")
+        parent = group_for(parent_path) if parent_path else app
+        sub = typer.Typer(no_args_is_help=True, help=f"{path} commands", rich_markup_mode=None)
+        groups[path] = sub
+        parent.add_typer(sub, name=leaf)
+        return sub
+
     for cmd in registry.all_commands():
         fn = _build_command(cmd)
         if not cmd.verb:
             app.command(cmd.noun, help=cmd.description)(fn)
             continue
-        sub = nouns.get(cmd.noun)
-        if sub is None:
-            sub = typer.Typer(no_args_is_help=True, help=f"{cmd.noun} commands", rich_markup_mode=None)
-            nouns[cmd.noun] = sub
-            app.add_typer(sub, name=cmd.noun)
-        sub.command(cmd.verb, help=cmd.description)(fn)
+        group_for(cmd.noun).command(cmd.verb, help=cmd.description)(fn)
     return app
 
 

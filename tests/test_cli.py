@@ -46,7 +46,7 @@ def test_help_lists_only_applicable_options(cli):
 
 def test_reason_recorded(cli):
     cli.json("organization", "new", "--name", "Reasoned", "--reason", "testing reasons", "--source-ref", "ticket-1")
-    ev = cli.json("audit", "list", "--command-name", "organization new")["items"][0]
+    ev = cli.json("hub", "audit", "list", "--command-name", "organization new")["items"][0]
     assert ev["reason"] == "testing reasons" and ev["source_ref"] == "ticket-1" and ev["interface"] == "cli"
 
 

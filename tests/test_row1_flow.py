@@ -185,29 +185,29 @@ def test_isolation(client, root):
         am.organization.new(name="Mine")
     assert e.value.code == "E_PERMISSION"
     # audit visibility
-    events = am.audit.list()["items"]
+    events = am.hub.audit.list()["items"]
     assert events and all("B Co" not in e["summary"] and "Org B" not in e["summary"] for e in events)
-    b_event = [e for e in client.audit.list()["items"] if "B Co" in e["summary"]][0]["id"]
+    b_event = [e for e in client.hub.audit.list()["items"] if "B Co" in e["summary"]][0]["id"]
     with pytest.raises(BookflowError) as e:
-        am.audit.show(event=b_event)
+        am.hub.audit.show(event=b_event)
     assert e.value.code == "E_EVENT_NOT_FOUND"
     with pytest.raises(BookflowError) as e:
-        am.audit.show(event="01ARZ3NDEKTSV4RRFFQ69G5FAV")
+        am.hub.audit.show(event="01ARZ3NDEKTSV4RRFFQ69G5FAV")
     assert e.value.code == "E_EVENT_NOT_FOUND"
-    shown = am.audit.show(event=am.audit.list()["items"][0]["id"])
+    shown = am.hub.audit.show(event=am.hub.audit.list()["items"][0]["id"])
     assert all(("path" not in (en["after"] or {}) or (en["after"] or {}).get("path") is None) for en in shown["entries"])
 
 
 def test_audit_diff_and_delete_snapshots(client):
     client.company.rename(name="Renamed Demo", company="Demo Plumbing Co")
-    ev = [e for e in client.audit.list()["items"] if e["command"] == "company rename"][0]
-    shown = client.audit.show(event=ev["id"])
+    ev = [e for e in client.hub.audit.list()["items"] if e["command"] == "company rename"][0]
+    shown = client.hub.audit.show(event=ev["id"])
     entry = shown["entries"][0]
     assert entry["action"] == "update" and entry["diff"]["display_name"] == {"before": "Demo Plumbing Co", "after": "Renamed Demo"}
     cid = client.company.list()["items"][0]["company_id"]
     client.company.detach(company=cid)
-    ev = client.audit.list(command_name="company detach")["items"][0]
-    entries = client.audit.show(event=ev["id"])["entries"]
+    ev = client.hub.audit.list(command_name="company detach")["items"][0]
+    entries = client.hub.audit.show(event=ev["id"])["entries"]
     assert any(e["action"] == "delete" and e["record_type"] == "company" and e["before"]["id"] == cid for e in entries)
     assert any(e["action"] == "delete" and e["record_type"] == "membership" for e in entries)
 
@@ -289,7 +289,7 @@ def test_init_edges(tmp_path, monkeypatch):
     with pytest.raises(BookflowError) as e:
         c.init(username="other")
     assert e.value.code == "E_INIT_CONFLICT"
-    ev = c.audit.list(command_name="init")["items"][0]
+    ev = c.hub.audit.list(command_name="init")["items"][0]
     assert ev["actor_id"] == first["hub_admin_user_id"] and ev["interface"] == "python"
     (r / "config.toml").unlink()
     assert c.init()["created"] is False and (r / "config.toml").exists()

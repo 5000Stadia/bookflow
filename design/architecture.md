@@ -42,12 +42,14 @@ src/bookflow/
     rollout.py           create_company_folder(): stages 2-4 with cleanup
   commands/
     common.py            OrganizationOutput, CompanySummary builders, Empty/ListInput/NameInput
-    hub_cmds.py          init (bootstrap path run_init), upgrade, organization new/list/show/rename, company new/list/use/attach/detach, demo reset, audit list/show
+    hub_cmds.py          init (bootstrap path run_init), upgrade, organization new/list/show/rename, company new/list/use/attach/detach, demo reset, hub audit list/show
     company_cmds.py      company show, company rename
   demo/seed.toml         Demo Holdings LLC / Demo Plumbing Co
   adapters/cli/app.py    Typer app generated from the registry; nested fields -> --a-b flags; global options per scope; --interactive; error rendering
   adapters/cli/render.py tables, field views, JSON, errors on stderr
 ```
+
+Multi-word nouns (`hub audit`) become nested CLI groups and attribute chains on the client (`client.hub.audit.list()`).
 
 ## Runtime facts
 

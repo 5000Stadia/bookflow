@@ -782,7 +782,7 @@ def _event_out(s: Session, e: dict[str, Any], names: dict[str, str], with_entrie
     return AuditEventOut(**{k: e[k] for k in AuditEventOut.model_fields if k in e and k not in ("at",)}, at=localize(s, e["at"]), actor_name=names.get(e["actor_id"]), entry_count=count, entries=entries)
 
 
-audit_list = command("audit list", scope="hub", description="List hub audit events the acting user may see, newest first.", input_model=AuditListInput, output_model=AuditListOutput)
+audit_list = command("hub audit list", scope="hub", description="List hub audit events the acting user may see, newest first.", input_model=AuditListInput, output_model=AuditListOutput)
 
 
 @audit_list
@@ -818,7 +818,7 @@ class EventSelector(BaseModel):
     event: str = Field(description="Audit event id")
 
 
-audit_show = command("audit show", scope="hub", description="Show one hub audit event with its entries and field diffs.", input_model=EventSelector, output_model=AuditEventOut, positional=["event"], error_codes=["E_EVENT_NOT_FOUND"])
+audit_show = command("hub audit show", scope="hub", description="Show one hub audit event with its entries and field diffs.", input_model=EventSelector, output_model=AuditEventOut, positional=["event"], error_codes=["E_EVENT_NOT_FOUND"])
 
 
 @audit_show

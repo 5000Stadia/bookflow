@@ -8,7 +8,7 @@ def test_every_command_is_complete():
     cmds = registry.all_commands()
     assert {c.name for c in cmds} >= {"init", "upgrade", "organization new", "organization list", "organization show", "organization rename",
                                      "company new", "company list", "company use", "company attach", "company detach", "company show",
-                                     "company rename", "demo reset", "audit list", "audit show"}
+                                     "company rename", "demo reset", "hub audit list", "hub audit show"}
     for c in cmds:
         assert c.description.endswith(".")
         assert c.scope in ("hub", "company")

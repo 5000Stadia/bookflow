@@ -61,12 +61,14 @@ class Command:
 
     @property
     def noun(self) -> str:
-        return self.name.split(" ", 1)[0]
+        """Everything but the last word: `company`, or `hub audit`."""
+        parts = self.name.split(" ")
+        return " ".join(parts[:-1]) if len(parts) > 1 else parts[0]
 
     @property
     def verb(self) -> str:
-        parts = self.name.split(" ", 1)
-        return parts[1] if len(parts) > 1 else ""
+        parts = self.name.split(" ")
+        return parts[-1] if len(parts) > 1 else ""
 
 
 REGISTRY: dict[str, Command] = {}
