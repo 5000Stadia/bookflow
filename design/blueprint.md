@@ -12,7 +12,7 @@ Pillars, in rank order:
 2. **Agent-usable.** An AI agent with only the documentation can operate every command.
 3. **One contract, many surfaces.** CLI, HTTP, MCP, and GUI call the same commands and get the same results.
 4. **Accountable.** Every write records actor, interface, principal, and reason.
-5. **Isolated.** One company's data is invisible to anyone without membership.
+5. **Isolated.** An organization and its companies are invisible to anyone without membership.
 
 ## 2. Layering
 
@@ -62,29 +62,38 @@ Everything must remain portable to PostgreSQL. No SQLite-only SQL in repositorie
   hub.db                         users, credentials, tokens, company registry, memberships, hub audit
   hub.db.lock                    held for the lifetime of every writable open of hub.db
   config.toml                    per-OS-user mapping to a Bookflow user and that user's default company
-  companies/
-    <Company Name>/              one folder per company, named after the company
-      bookflow-company.toml      cache of company id, display name, schema version, state, demo flag
-      company.db                 every table for one company (SQLite adds company.db-wal and company.db-shm while open)
-      company.db.lock            held for the lifetime of every writable open of company.db
-      attachments/
-        <first two hex of sha256>/<sha256>      content-addressed file bodies
-      backups/
-        <YYYY-MM-DD-HHMMSS>.db   copies of company.db taken with the SQLite backup API, before migrations and by `company backup`
-      exports/                   files written by report `--csv` and by `company export`; safe to empty
+  organizations/
+    <Organization Name>/         one folder per organization: the business entity that holds one or more companies
+      bookflow-organization.toml cache of organization id and display name
+      <Company Name>/            one folder per company, named after the company
+        bookflow-company.toml    cache of company id, organization id, display name, schema version, state, demo flag
+        company.db               every table for one company (SQLite adds company.db-wal and company.db-shm while open)
+        company.db.lock          held for the lifetime of every writable open of company.db
+        attachments/
+          <first two hex of sha256>/<sha256>    content-addressed file bodies
+        backups/
+          <YYYY-MM-DD-HHMMSS>.db copies of company.db taken with the SQLite backup API, before migrations and by `company backup`
+        exports/                 files written by report `--csv` and by `company export`; safe to empty
   trash/
-    <Company Name>-<YYYY-MM-DD-HHMMSS>/   whole company folders removed by `demo reset` or `company delete`; `trash empty` deletes them
+    <Organization Name>/<Company Name>-<YYYY-MM-DD-HHMMSS>/   whole company folders removed by `demo reset` or `company delete`; `trash empty` deletes them
 ```
+
+### 3.0 Organizations
+
+An organization is the business entity that holds one or more companies: a single business with one set of books, or a holding or accounting firm keeping books for many. Access is granted at the organization or at the company. A member of an organization sees every company in it, including ones created later; a member of one company sees only that company. Nobody sees an organization they have no membership in. A hub admin (4.1) sees every organization. Two organizations on one data root are invisible to each other, which is the hosted-service shape: the operator is hub admin, each client is an organization, and each client's people and agents are members of it.
+
+Table `organizations` in hub.db: `id`, `display_name` (unique across the hub after NFC and case folding), `path` relative to the data root, `created_at`, `active`, common fields. Every company belongs to exactly one organization. `organization new`, `organization list`, `organization show`, `organization rename [--move]`. When a hub has exactly one organization, `company new` defaults to it; otherwise `--organization` is required.
 
 ### 3.1 Company folders
 
+- The company folder lives inside its organization's folder. Organization folder names follow the same derivation rule as company folder names. Company display names are unique within their organization.
 - The folder name is derived from the display name: Unicode NFC normalization; `/ \ : * ? " < > |` and characters below U+0020 replaced by a space; runs of whitespace collapsed; leading and trailing spaces and dots removed; truncated to 90 bytes of UTF-8 at a character boundary and then stripped again; `Company` if empty; if the part before the first dot is, case-insensitively, a Windows reserved device name (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`), ` Co` is appended. If a folder with that name exists, compared after NFC and case folding, ` (2)`, ` (3)`, and so on is appended. Reservation is the atomic directory creation itself; a creator that loses the race takes the next suffix. A company's own folder is excluded from the collision check when it is renamed.
-- Display names are unique across the hub, compared after NFC and case folding; `E_NAME_TAKEN` otherwise.
+- Display names are unique within the organization, compared after NFC and case folding; `E_NAME_TAKEN` otherwise.
 - The hub registry stores the folder path relative to the data root, so a whole data root can be moved or copied.
 - The company database is the source of truth for everything in `bookflow-company.toml`; the file is a cache rewritten whenever the display name or schema version changes, and repaired from the database on open if missing or stale. `state` is `creating` until rollout completes and `ready` afterwards; a folder in `creating` state with no hub registration is an incomplete rollout and is ignored by every command except `attach`, which refuses it.
 - The company id is `company_info.id`, the single row's primary key. `attach` reads the marker, opens the database read-only, and refuses on any mismatch.
-- Every company is exactly one folder under `companies/`. Nothing about a company is written outside it, and nothing that is not about that company is written inside it. Temporary files go to the operating system temporary directory.
-- `company attach <path>` registers a folder that is already under `companies/`; a folder elsewhere is refused with `E_NOT_IN_COMPANIES_DIR` and the message names where to move it. Before registering, `attach` verifies: the path resolves, after symlinks, to a directory under `companies/`; the filesystem is local; the marker and database exist and agree on the company id; the database schema revision is known to this version; the id is not already registered (`E_ALREADY_ATTACHED`); the display name is not taken (`E_NAME_TAKEN`). Any failure leaves the hub unchanged. `company detach <company>` removes the registry row and memberships and leaves the folder in place. Restoring from a copy on the same machine is detach the live company, move the copy into `companies/`, attach it.
+- Every company is exactly one folder under its organization's folder. Nothing about a company is written outside it, and nothing that is not about that company is written inside it. Temporary files go to the operating system temporary directory.
+- `company attach <path>` registers a folder that is already under an organization's folder; a folder elsewhere is refused with `E_NOT_IN_ORGANIZATION_DIR` and the message names where to move it. The organization is the one whose folder contains the path. Before registering, `attach` verifies: the path resolves, after symlinks, to a directory directly under a registered organization's folder; the filesystem is local; the marker and database exist and agree on the company id; the database schema revision is known to this version; the id is not already registered (`E_ALREADY_ATTACHED`); the display name is not taken (`E_NAME_TAKEN`). Any failure leaves the hub unchanged. `company detach <company>` removes the registry row and memberships and leaves the folder in place. Restoring from a copy on the same machine is detach the live company, move the copy into the organization's folder, attach it.
 - Company folders that carry `demo = true` in the marker and `is_demo` in the registry are the ones `demo reset` may remove.
 
 ### 3.2 Locality and locking
@@ -112,11 +121,11 @@ Table `users` in hub.db.
 | display_name | text | |
 | owner_user_id | ULID, nullable | for `agent` kind: the human that owns this agent. Required for agents. |
 | password_hash | text, nullable | humans only |
-| hub_admin | bool | may create, attach, detach, rename, delete, and list every company on this data root, and manage users |
+| hub_admin | bool | operator of the data root: sees and manages every organization and company, and manages users |
 | active | bool | |
 | created_at, updated_at, version | | see section 6 |
 
-There is exactly one `system` user per data root, created by `bookflow init`. Scheduled jobs and migrations act as it. Its `created_by` is its own id; it is the only self-referencing row. The first human user, created by `init`, is a hub admin. Hub admins are the operators of the data root: they see every company in the registry and its folder path. Every other user sees only their memberships and never a path.
+There is exactly one `system` user per data root, created by `bookflow init`. Scheduled jobs and migrations act as it. Its `created_by` is its own id; it is the only self-referencing row. The first human user, created by `init`, is a hub admin. Hub admins are the operators of the data root: they see every organization and company and their folder paths, and they create organizations. Every other user sees only what their memberships grant and never a path.
 
 ### 4.1a Principals mirror
 
@@ -143,7 +152,7 @@ An agent acting for several people holds one token per person. The principal is 
 
 Table `companies` in hub.db: `id`, `display_name`, `path`, `created_at`, `active`.
 
-Table `memberships` in hub.db: `user_id`, `company_id`, `role`, `granted_by`, `granted_at`, `revoked_at`.
+Table `memberships` in hub.db: `user_id`, `scope_type` (`organization` or `company`), `scope_id`, `role`, `granted_by`, `granted_at`, `revoked_at`. An organization membership applies to every company in the organization; a company membership applies to that company only. When both apply, the higher role wins. Creating a company requires the admin or owner role on its organization or hub admin.
 
 Roles and what they may do:
 
@@ -154,7 +163,7 @@ Roles and what they may do:
 | admin | yes | yes | yes | yes | yes except delete |
 | owner | yes | yes | yes | yes | yes |
 
-An agent's memberships are granted by a human with admin or owner role on that company. An agent never inherits its owner's memberships.
+An agent's memberships are granted by a human with admin or owner role on that organization or company. An agent never inherits its owner's memberships.
 
 ### 4.4 Authentication per interface
 
@@ -175,7 +184,7 @@ Every operation is a command. A command has a name, an input model, an output mo
 
 Verbs used across lists: `create`, `update`, `show`, `list`, `activate`, `deactivate`. Verbs used on transactions: `post`, `show`, `list`, `void`. Reports use `report <name>`.
 
-Every command has a scope. **Hub** commands act on the data root and take no company: `init`, `company new`, `company list`, `company use`, `company attach`, `company detach`, `company delete`, `demo reset`, `user *`, `token *`. **Company** commands act on the selected company (section 5.3): everything else, including `company show`, `company update`, `company rename`, `company backup`. A hub command that names a company takes it as a positional argument accepting an id or a display name.
+Every command has a scope. **Hub** commands act on the data root and take no company: `init`, `organization *`, `company new`, `company list`, `company use`, `company attach`, `company detach`, `company delete`, `demo reset`, `user *`, `token *`. **Company** commands act on the selected company (section 5.3): everything else, including `company show`, `company update`, `company rename`, `company backup`. A hub command that names a company takes it as a positional argument accepting an id or a display name.
 
 Positional arguments are declared per command in the registry; everything else is an option. The CLI accepts global options (`--json`, `--dry-run`, `--company`, `--data-root`, and the context options of 5.2) both before and after the noun and verb, and `--help` on every command lists them.
 
@@ -210,7 +219,7 @@ For company-scoped commands, the company is resolved in this order, first match 
 2. Environment variable `BOOKFLOW_COMPANY`.
 3. `default_company` in `config.toml`, set by `bookflow company use <id>`.
 
-A value is tried as an id first, then as a display name compared after NFC and case folding. `company use` stores the id. If the resolved company is not among the actor's memberships and the actor is not a hub admin, the error is `E_COMPANY_NOT_FOUND`. The same error is returned whether the company does not exist or the actor lacks membership.
+A value is tried as an id first, then as `Organization/Company`, then as a company display name compared after NFC and case folding among the companies the actor can see; a bare name matching companies in more than one organization is `E_COMPANY_AMBIGUOUS`. `company use` stores the id. If the resolved company is not among the actor's memberships and the actor is not a hub admin, the error is `E_COMPANY_NOT_FOUND`. The same error is returned whether the company does not exist or the actor lacks membership.
 
 ### 5.4 Output
 
@@ -394,13 +403,13 @@ Table `company_info` in company.db, exactly one row.
 
 ### 9.2 Rollout
 
-`bookflow company new` takes every field above as options, or `--interactive` to prompt for each. Required: `legal_name`, `home_currency`. Defaults: `display_name` = `legal_name`; `fiscal_year_start_month` = 1; `timezone` = the machine's zone; `country` = `US`; `entity_type` and `income_tax_form` = `other`; everything else empty. `closing_date` is not accepted at rollout; it is set with `company update`. FEIN, when given, must match `NN-NNNNNNN`; email must contain one `@`; timezone must be an IANA name; the month must be 1 to 12. It creates the directory, the database, the `company_info` row, the seeded chart of accounts named by `--chart`, the standard terms, payment methods, and sales tax codes listed in section 11, and grants the creating user the owner role. Output is the company id and display name.
+`bookflow company new` takes every field above as options, or `--interactive` to prompt for each, plus `--organization` (id or name; defaulted when the actor can see exactly one). Required: `legal_name`, `home_currency`. Defaults: `display_name` = `legal_name`; `fiscal_year_start_month` = 1; `timezone` = the machine's zone; `country` = `US`; `entity_type` and `income_tax_form` = `other`; everything else empty. `closing_date` is not accepted at rollout; it is set with `company update`. FEIN, when given, must match `NN-NNNNNNN`; email must contain one `@`; timezone must be an IANA name; the month must be 1 to 12. It creates the directory, the database, the `company_info` row, the seeded chart of accounts named by `--chart`, the standard terms, payment methods, and sales tax codes listed in section 11, and grants the creating user the owner role. Output is the company id and display name.
 
 Seeded charts, chosen by `--chart`: `general`, `service`, `construction_trades`, `retail`, `nonprofit`. Each is a data file in the package. `general` is the default.
 
 ### 9.3 Demo company
 
-`bookflow demo reset`, a hub-admin command, creates, or moves to `trash/` and recreates, a company named `Demo Plumbing Co` from a seed file in the package, and grants the local owner the owner role. The seed holds sample data for every table that exists: company info, accounts, customers and jobs, vendors, employees, items, terms, notes, attachments, directives, and, once the ledger exists, a year of transactions. The seed grows in the same change that adds a table or command, so the demo always exercises everything that exists. `bookflow demo reset --name <other>` seeds under a different name. The demo company is an ordinary company: it appears in the workbench picker and every command works on it.
+`bookflow demo reset`, a hub-admin command, creates, or moves to `trash/` and recreates, an organization `Demo Holdings LLC` holding a company `Demo Plumbing Co` from a seed file in the package, and grants the local owner the owner role. The seed holds sample data for every table that exists: company info, accounts, customers and jobs, vendors, employees, items, terms, notes, attachments, directives, and, once the ledger exists, a year of transactions. The seed grows in the same change that adds a table or command, so the demo always exercises everything that exists. `bookflow demo reset --name <other>` seeds under a different name. The demo company is an ordinary company: it appears in the workbench picker and every command works on it.
 
 ### 9.4 Other company commands
 
