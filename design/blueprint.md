@@ -17,19 +17,23 @@ Pillars, in rank order:
 ## 2. Layering
 
 ```
-clients      GUI (desktop / web / mobile)      AI agent      shell / scripts
-                 |                                |               |
-adapters     HTTP host (bookflow serve)      MCP server        CLI (bookflow ...)
-                 \________________________________|_______________/
-                                            |
-core         commands  ->  services  ->  repositories  ->  SQLite (hub.db, company.db)
+clients      browser (workbench, later the GUI)   AI agent      shell / scripts    Python programs
+                 |                                   |               |                  |
+adapters     HTTP host (bookflow serve)          MCP server        CLI (bookflow ...)   |
+                 \___________________________________|_______________|__________________/
+                                                 |
+core         command registry  ->  services  ->  repositories  ->  SQLite (hub.db, company.db)
 ```
 
 - **Core** contains all logic. It has no knowledge of terminals, HTTP, or MCP.
 - **Adapters** parse their protocol into a command input plus a context, call the core, and render the command output. They contain no business logic.
 - **Clients** never touch the database.
 
-A desktop GUI on the same machine as the data may import the core directly. Any other machine talks to the HTTP host. The host is the only process that opens a company database on behalf of remote clients.
+The graphical interface is a web application served by the HTTP host. Run locally, the host binds to loopback and the browser opens `http://127.0.0.1:8123`, which is the QuickBooks Desktop shape. Run on a server with `--allow-network` behind TLS, the same application with the same login serves many people, which is the hosted shape. Nothing in the interface changes between the two. A desktop wrapper that launches the host and opens a window is a packaging step, not a different client. Any machine other than the host talks to it over HTTP; the host is the only process that opens a company database on behalf of remote clients.
+
+### 2.0 The command registry
+
+A command is a function plus an input model and an output model. The registry maps the command name, such as `customer create`, to those three things and to the command's error codes and one-sentence description. The CLI, the HTTP routes, the MCP tools, the documentation pages, and the workbench forms are all generated from the registry. Nothing is written per command in any adapter.
 
 ### 2.1 Technology
 
@@ -44,6 +48,7 @@ A desktop GUI on the same machine as the data may import the core directly. Any 
 | Storage | SQLite in WAL mode |
 | Password hashing | argon2id |
 | HTTP host | FastAPI over uvicorn |
+| Workbench | Jinja2 templates plus HTMX served by the host; no JavaScript build step, no Node |
 | MCP | Official Python MCP SDK, tool schemas generated from command models |
 | Tests | pytest |
 | Identifiers | ULID strings, generated in the core |
@@ -592,7 +597,26 @@ Trial balance and general ledger ship with the ledger in release 1.
 
 ### 15.2 HTTP host
 
-`bookflow serve --bind 127.0.0.1:8123`. Routes are `POST /companies/{company_id}/commands/{command_name}` with the input model as the JSON body and the output model as the response. Hub commands are `POST /commands/{command_name}`. Errors return status 400 for named errors with the error JSON as body, 401 for missing or bad token, 404 for `E_COMPANY_NOT_FOUND`, 409 for `E_VERSION_CONFLICT`, 500 for internal failure. `GET /openapi.json` is generated. Binding to a non-loopback address requires `--allow-network`, and the docs state that TLS termination is the deployer's job.
+`bookflow serve --bind 127.0.0.1:8123`. Routes are `POST /companies/{company_id}/commands/{command_name}` with the input model as the JSON body and the output model as the response. Hub commands are `POST /commands/{command_name}`. Errors return status 400 for named errors with the error JSON as body, 401 for missing or bad token, 404 for `E_COMPANY_NOT_FOUND`, 409 for `E_VERSION_CONFLICT`, 500 for internal failure. `GET /openapi.json` is generated. Binding to a non-loopback address requires `--allow-network`, and the docs state that TLS termination is the deployer's job. The host also serves the workbench at `/` and static assets under `/static/`.
+
+Browser sessions: `POST /login` with username and password sets an HTTP-only session cookie that maps to a session token in `api_tokens` with kind `session`, expiring after 12 hours of inactivity. API calls from the browser send the cookie; API calls from programs send a bearer token. Both resolve to the same context.
+
+### 15.2a Workbench
+
+The workbench is the browser interface used to exercise every command. It is generated from the registry and is complete by construction: when a command is registered, its page exists.
+
+| Page | Content |
+|---|---|
+| `/login` | username and password |
+| `/` | company picker listing the session user's memberships; selecting one sets the working company |
+| `/c/<company_id>/` | the noun index: one link per noun that has commands |
+| `/c/<company_id>/<noun>` | the `list` output as a table with `--include-inactive` toggle; one row link to `show` |
+| `/c/<company_id>/<noun>/<id>` | the `show` output as a field table, the record's activity feed, its notes and attachments, and buttons for each verb the role permits |
+| `/c/<company_id>/<noun>/<verb>` | a form generated from the input model: one input per field, typed, with the field description, and a `reason` and `directive` field where 5.8 requires them; submit runs the command and renders the output model and any error with its code |
+| `/c/<company_id>/audit` | `audit list` with its filters, each event expanding to its entries and diffs |
+| `/c/<company_id>/reports/<name>` | report parameters form, then the report as a table with a CSV link |
+
+The workbench has no styling beyond a readable default stylesheet. It exists so that a person can verify every function works. The product interface built later is a separate application against the same HTTP routes, and it may keep the generated forms for rarely used commands.
 
 ### 15.3 MCP server
 
@@ -640,7 +664,7 @@ When two good things conflict, the earlier line wins.
 
 ## 19. Out of scope for release 1, and beyond
 
-Not in release 1: transaction forms other than journal entries, reports beyond trial balance and general ledger, work orders, time entries, scheduler, price levels, ship methods, inventory assemblies, GUI of any kind, rate fetching, email, bank feeds, encryption at rest.
+Not in release 1: transaction forms other than journal entries, reports beyond trial balance and general ledger, work orders, time entries, scheduler, price levels, ship methods, inventory assemblies, the product interface beyond the workbench, a desktop wrapper, rate fetching, email, bank feeds, encryption at rest.
 
 Never in scope without a new design pass: payroll, multi-currency ledgers, non-US tax regimes.
 
@@ -658,8 +682,8 @@ Never in scope without a new design pass: payroll, multi-currency ledgers, non-U
 
 ## 21. Build order and the final checklist
 
-The build order is the spec list in `design/intention.md`, rows 1 to 8. That list is release 1.
+The build order is the spec list in `design/intention.md`, rows 1 to 9. That list is release 1.
 
-Release 1 is done when a stranger, given a fresh machine and the README, can: initialize a data root, create a company, add accounts and customers, attach a receipt image to a customer, post a balanced journal entry from the CLI, post another over HTTP from a second process, list accounts from an MCP client, see all of it in the audit log with correct actors and interfaces, and reproduce all of it on a second copy of the company directory.
+Release 1 is done when a stranger, given a fresh machine and the README, can: initialize a data root, create a company, log in to the workbench in a browser, add accounts and customers there, attach a receipt image to a customer, post a balanced journal entry from the workbench and another from the CLI, post a third over HTTP from a second process, list accounts from an MCP client, see all of it in the audit page with correct actors and interfaces, and reproduce all of it on a second copy of the company folder.
 
-Release 2 is forms (section 10.3) and reports (section 14). Release 3 is work orders, time, and the scheduler (section 13). The GUI is designed after release 2 against the HTTP host.
+Release 2 is forms (section 10.3) and reports (section 14). Release 3 is work orders, time, and the scheduler (section 13). The product interface is designed after release 2 against the HTTP host.
