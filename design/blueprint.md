@@ -270,7 +270,7 @@ Dates are ISO 8601 `YYYY-MM-DD`. Timestamps are stored as UTC and rendered in ev
 
 ### 5.8 Reasons and directives
 
-A write by an `agent` or `system` actor to any command that posts to the ledger must carry a `reason`, a `directive_id`, or both; otherwise `E_REASON_REQUIRED`. Human actors may supply either and are never required to.
+Any write by an `agent` or `system` actor must carry a `reason`, a `directive_id`, or both; otherwise `E_REASON_REQUIRED`. Human actors may supply either and are never required to.
 
 `reason` is one short phrase, at most 140 characters. The MCP tool description says: one phrase, under ten words, what triggered this.
 
@@ -345,6 +345,7 @@ Two tables in company.db, plus the same pair in hub.db for hub commands. Hub com
 | Field | Meaning |
 |---|---|
 | id | ULID |
+| seq | integer assigned in insertion order; the feed cursor |
 | at | timestamp |
 | command | command name |
 | actor_id, actor_kind, on_behalf_of | from context |
@@ -378,7 +379,7 @@ Rules:
 
 ### 7.1 Event feed
 
-The audit log is the event stream. `audit tail --after <cursor> --limit <n>` returns events after the cursor in commit order with a new cursor; the cursor is the last event id, and event ids are ULIDs generated under the data-root lock, so id order is commit order. `tail` accepts every `list` filter. `--follow` on the CLI keeps polling. The host exposes `GET /companies/{company_id}/events?after=<cursor>` as server-sent events, one event per message, with the same filters as `audit list`. A subscriber that stores its last cursor resumes with nothing missed. Webhooks are a later addition on top of this feed and are not in release 1.
+The audit log is the event stream. `audit tail --after <cursor> --limit <n>` returns events after the cursor in commit order with a new cursor; the cursor is the event's `seq`, an integer assigned in insertion order under the data-root lock, so no two events share a position and a restart never reorders the feed. `tail` accepts every `list` filter. `--follow` on the CLI keeps polling. The host exposes `GET /companies/{company_id}/events?after=<cursor>` as server-sent events, one event per message, with the same filters as `audit list`. A subscriber that stores its last cursor resumes with nothing missed. Webhooks are a later addition on top of this feed and are not in release 1.
 
 ## 8. Money and currency
 
