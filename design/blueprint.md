@@ -198,7 +198,7 @@ Every operation is a command. A command has a name, an input model, an output mo
 
 Verbs used across lists: `create`, `update`, `show`, `list`, `activate`, `deactivate`. Verbs used on transactions: `post`, `show`, `list`, `void`. Reports use `report <name>`.
 
-Every command has a scope. **Hub** commands act on the data root and take no company: `init`, `organization *`, `company new`, `company list`, `company use`, `company attach`, `company detach`, `company delete`, `demo reset`, `user *`, `token *`. **Company** commands act on the selected company (section 5.3): everything else, including `company show`, `company update`, `company rename`, `company backup`. A hub command that names a company takes it as a positional argument accepting an id or a display name.
+Every command has a kind: `read`, `write`, or `advisory` (presence: opens the company writable, records no event, takes no context options). Every command has a scope. **Hub** commands act on the data root and take no company: `init`, `organization *`, `company new`, `company list`, `company use`, `company attach`, `company detach`, `company delete`, `demo reset`, `user *`, `token *`. **Company** commands act on the selected company (section 5.3): everything else, including `company show`, `company update`, `company rename`, `company backup`. A hub command that names a company takes it as a positional argument accepting an id or a display name.
 
 Positional arguments are declared per command in the registry; everything else is an option. `--json` and `--data-root` exist on every command; `--dry-run` only on commands that write; `--company` only on company-scope commands; the context options of 5.2 only on commands whose scope and version support them. The CLI accepts these options both before and after the noun and verb; the same option in both positions with different values is `E_USAGE`, and an option given to a command that does not define it is `E_USAGE`. `--help` on every command lists exactly the options it accepts.
 
@@ -254,7 +254,7 @@ Every command returns a structured result. On the CLI:
 
 Every `list` output is `{"items": [...], "count": n}`, and every item carries the common fields of 6.1 plus `access` (`hub_admin`, `organization`, or `company`) and `role` (null for hub admins without membership). Every output model for a write includes the identifying fields of what it wrote, `dry_run`, and `warnings`, a list of strings for work the command finished without, such as a schema migration left for `upgrade`. Fields that hold filesystem paths are null, never absent, in every output and error detail unless the actor is a hub admin, and error messages are built from templates whose path arguments pass through the same rule; dispatch applies it, not individual commands.
 
-Errors are always JSON documents on stderr with `code`, `message`, and `details`, whether or not `--json` was given; without `--json` a one-line message precedes the JSON. Usage errors from the CLI parser are emitted the same way with code `E_USAGE`. Input validation failures are `E_VALIDATION` with `details.fields`, a list of `{"field", "problem"}`. Unknown input keys are `E_VALIDATION`; input keys named like context fields are `E_CONTEXT_IN_INPUT` on every surface. Every command may return the infrastructure codes, listed once in the documentation: `E_USAGE`, `E_VALIDATION`, `E_CONTEXT_IN_INPUT`, `E_NOT_INITIALIZED`, `E_NO_ACTOR`, `E_PERMISSION`, `E_COMPANY_NOT_FOUND`, `E_COMPANY_AMBIGUOUS`, `E_ORGANIZATION_NOT_FOUND`, `E_DB_BUSY`, `E_NETWORK_SHARE`, `E_FS_UNKNOWN`, `E_SCHEMA_UNKNOWN`, `E_SCHEMA_BEHIND`, `E_CONFIG_INVALID`, `E_IO`, `E_INTERNAL`. `E_IO` carries `details.operation` and `details.errno`; `E_INTERNAL` is the only code for exit 3. An unknown command name is `E_USAGE` on every surface. `E_ORGANIZATION_NOT_FOUND` and `E_COMPANY_NOT_FOUND` are returned identically for absent and for inaccessible targets. Every not-found or ambiguous error for a named record carries `details.suggestions`, up to three close matches drawn only from what the caller can see, so an agent that misspelled a name can correct it without a second lookup. Command-specific codes are listed per command. Error codes are stable strings prefixed `E_`. Every command's documentation lists the codes it can return. An option that a command does not support in the current version is not defined on that command; nothing is accepted and ignored.
+Errors are always JSON documents on stderr with `code`, `message`, and `details`, whether or not `--json` was given; without `--json` a one-line message precedes the JSON. Usage errors from the CLI parser are emitted the same way with code `E_USAGE`. Input validation failures are `E_VALIDATION` with `details.fields`, a list of `{"field", "problem"}`. Unknown input keys are `E_VALIDATION`; input keys named like context fields are `E_CONTEXT_IN_INPUT` on every surface. Every command may return the infrastructure codes, listed once in the documentation: `E_USAGE`, `E_VALIDATION`, `E_CONTEXT_IN_INPUT`, `E_NOT_INITIALIZED`, `E_NO_ACTOR`, `E_PERMISSION`, `E_COMPANY_NOT_FOUND`, `E_COMPANY_AMBIGUOUS`, `E_ORGANIZATION_NOT_FOUND`, `E_REASON_REQUIRED`, `E_DB_BUSY`, `E_NETWORK_SHARE`, `E_FS_UNKNOWN`, `E_SCHEMA_UNKNOWN`, `E_SCHEMA_BEHIND`, `E_CONFIG_INVALID`, `E_IO`, `E_INTERNAL`. `E_IO` carries `details.operation` and `details.errno`; `E_INTERNAL` is the only code for exit 3. An unknown command name is `E_USAGE` on every surface. `E_ORGANIZATION_NOT_FOUND` and `E_COMPANY_NOT_FOUND` are returned identically for absent and for inaccessible targets. Every not-found or ambiguous error for a named record carries `details.suggestions`, up to three close matches drawn only from what the caller can see, so an agent that misspelled a name can correct it without a second lookup. Command-specific codes are listed per command. Error codes are stable strings prefixed `E_`. Every command's documentation lists the codes it can return. An option that a command does not support in the current version is not defined on that command; nothing is accepted and ignored.
 
 ### 5.5 Dry run
 
@@ -345,13 +345,13 @@ Two tables in company.db, plus the same pair in hub.db for hub commands. Hub com
 | Field | Meaning |
 |---|---|
 | id | ULID |
-| seq | integer assigned in insertion order; the feed cursor |
+| seq | integer assigned by the writer as one more than the highest, under the data-root lock; the feed cursor |
 | at | timestamp |
 | command | command name |
 | actor_id, actor_kind, on_behalf_of | from context |
 | interface, client_name, client_version, client_host | from context |
 | session_id, request_id, idempotency_key | from context |
-| reason, directive_id, source_ref | from context |
+| reason, directive_id, directive_code, source_ref | from context; `directive_code` is stored so hub events can show it |
 | summary | one line, returned by the command with its output, e.g. `posted invoice 1043 to Acme Plumbing for 1,250.00` |
 
 `audit_entries`: one row per record touched by the event.
@@ -361,12 +361,12 @@ Two tables in company.db, plus the same pair in hub.db for hub commands. Hub com
 | id | ULID |
 | event_id | |
 | record_type, record_id | |
-| action | `create`, `update`, `delete`, `deactivate`, `activate`, `post`, `void`, `link`, `unlink`, `migrate` |
+| action | `create`, `update`, `delete`, `deactivate`, `activate`, `post`, `void`, `link`, `unlink`, `migrate`, `baseline` |
 | version_before, version_after | |
 | after | JSON snapshot of the record after the write; on `deactivate` and `void`, the record as it stands after; null on `delete` |
 | before | JSON snapshot before the write, stored only on `delete`, since the previous entry's `after` supplies it otherwise |
 
-The snapshot before a write is not stored. It is the `after` of the previous entry for the same record, found by `(record_type, record_id, version_before)`, and is null on create. `audit show` returns both and the field diff. Snapshots hold only stored fields, never derived ones such as `full_name`, `quantity_on_hand`, or `open_balance`, and never secrets: `password_hash` and `token_hash` are excluded by the model. Schema migrations are audited as `migrate` entries by the system user with `on_behalf_of` the actor whose command triggered them, and update the hub's `schema_revision` projection in the same command. A transaction snapshot includes its lines, so posting a 20-line transaction writes one entry. Snapshots over 512 bytes are stored zlib-compressed; the column is a blob with a one-byte prefix marking raw or compressed, from the first migration that creates the table.
+The snapshot before a write is not stored. It is the `after` of the previous entry for the same record, found by `(record_type, record_id, version_before)`, and is null on create. `audit show` returns both and the field diff. Snapshots hold only stored fields, never derived ones such as `full_name`, `quantity_on_hand`, or `open_balance`, and never secrets: `password_hash`, `token_hash`, and `tax_id` are excluded by the model. Schema migrations are audited as `migrate` entries by the system user with `on_behalf_of` the actor whose command triggered them, and update the hub's `schema_revision` projection in the same command. A transaction snapshot includes its lines, so posting a 20-line transaction writes one entry. Snapshots over 512 bytes are stored zlib-compressed; the column is a blob with a one-byte prefix marking raw or compressed, from the first migration that creates the table.
 
 Rules:
 
@@ -442,7 +442,7 @@ Seeded charts, chosen by `--chart`: `general`, `service`, `construction_trades`,
 
 ### 9.3 Demo company
 
-`bookflow demo reset`, a hub-admin command, creates, or moves to `trash/` and recreates, an organization `Demo Holdings LLC` holding a company `Demo Plumbing Co` from a seed file in the package, and grants the local owner the owner role. The seed holds sample data for every table that exists: company info, accounts, customers and jobs, vendors, employees, items, terms, notes, attachments, directives, and, once the ledger exists, a year of transactions. The seed grows in the same change that adds a table or command, so the demo always exercises everything that exists. There is one demo organization per data root. The demo company is an ordinary company: it appears in the workbench picker and every command works on it. Tests run against the demo. A second seed, `Reference Plumbing Co`, holds a full year of hand-verified transactions whose trial balance, profit and loss, balance sheet, and aging totals are recorded beside it; every report change regresses against those totals. It arrives with the ledger and grows with each form.
+`bookflow demo reset`, a hub-admin command, creates, or moves to `trash/` and recreates, an organization `Demo Holdings LLC` holding a company `Demo Plumbing Co` from a seed file in the package, and grants the local owner the owner role. The seed holds sample data for every table that exists: company info, accounts, customers and jobs, vendors, employees, items, terms, notes, attachments, directives, and, once the ledger exists, a year of transactions. The seed grows in the same change that adds a table or command, so the demo always exercises everything that exists. There is one demo organization per data root. The demo company is an ordinary company: it appears in the workbench picker and every command works on it. Tests run against the demo. Ephemeral tables (presence, idempotency keys) are exempt from seeding. A second seed, `Reference Plumbing Co`, holds a full year of hand-verified transactions whose trial balance, profit and loss, balance sheet, and aging totals are recorded beside it; every report change regresses against those totals. It arrives with the ledger and grows with each form.
 
 ### 9.4 Other company commands
 
@@ -790,7 +790,7 @@ When two good things conflict, the earlier line wins.
 | Posting a 20-line transaction completes in under 50 ms | same |
 | Trial balance over 100,000 lines returns in under 2 s | same |
 | A company database with 100,000 transactions stays under 500 MB excluding attachments | |
-| Audit tables occupy at most 1.5 times the live data they describe | measured on the test fixture after 10,000 writes, half of them updates |
+| Audit tables occupy at most 3 times the live data they describe | measured per table with `dbstat` on the fixed fixture of 5,000 creates and 5,000 updates; the bound is 3 rather than lower because every write keeps a full after-snapshot for readability |
 | Installed package with dependencies under 60 MB; no service other than SQLite required | |
 | CLI cold start under 300 ms | Python 3.12, warm disk cache |
 | Full test suite under 60 s | |
