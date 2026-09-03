@@ -165,7 +165,13 @@ def _open_hub(s: Session, writable: bool, ctx: Context, skip_head_check: bool = 
 
 
 def _complete_pending_organizations(s: Session, ctx: Context) -> None:
-    """Every writable hub open finishes pending organization moves (blueprint 3.1), so hub commands never see a stale path."""
+    """A hub admin's writable open finishes every pending organization move (blueprint 3.1).
+
+    Non-admins never touch organizations they cannot administer; the one they are writing into is
+    finished by resolve_company_folder after their command is authorized.
+    """
+    if not s.is_hub_admin:
+        return
     from bookflow.hub.moves import complete_org_move
     rows = s.hub.conn.execute(sa.select(h.organizations).where(h.organizations.c.pending_path.isnot(None))).mappings().all()
     for org in rows:
@@ -195,23 +201,17 @@ def resolve_company_folder(s: Session, ctx: Context, row: dict[str, Any], writab
     via = ctx.interface.value
     org = s.hub.conn.execute(sa.select(h.organizations).where(h.organizations.c.id == row["organization_id"])).mappings().first()
     org = dict(org) if org else None
-    if org and org.get("pending_path"):
+    if org and org.get("pending_path") and not org["pending_path"].startswith("trash/"):
         if writable:
             complete_org_move(s, ctx, org, via)
             s.completed_moves.append(org["id"])
             fresh = s.hub.conn.execute(sa.select(h.companies).where(h.companies.c.id == row["id"])).mappings().first()
             row.update(dict(fresh))
         else:
-            old_prefix = org["path"].rstrip("/") + "/"
-            if row["path"].startswith(old_prefix) and not s.abs_path(row["path"]).exists():
-                moved = effective_path(s, org["path"], org["pending_path"], org["id"])
-                if moved is not None:
-                    candidate = moved / row["path"][len(old_prefix):]
-                    if row.get("pending_path"):
-                        inner = effective_path(s, str(candidate.relative_to(s.data_root)), None, row["id"])
-                        candidate = inner or candidate
-                    if candidate.exists():
-                        return candidate
+            from bookflow.hub.moves import display_path
+            found = display_path(s, row, org)
+            if found.exists():
+                return found
     pending = row.get("pending_path")
     if pending and pending.startswith("trash/"):
         if writable:

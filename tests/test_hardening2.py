@@ -263,3 +263,60 @@ def test_no_op_rename_leaves_no_trace(client, root):
     with open_database(Path(a["path"]) / "company.db", writable=False) as db:
         names = {r[0] for r in db.raw.execute("SELECT username FROM principals").fetchall()}
     assert "nadmin" not in names, "a no-op write mirrors nobody"
+
+
+def test_pending_org_recovery_respects_authorization(client, root):
+    """A non-admin's command never completes a move of an organization they cannot see, and a rejected command leaves everything untouched."""
+    client.organization.new(name="Org Mine"); client.organization.new(name="Secret Client LLC")
+    a = client.company.new(legal_name="Mine Co", home_currency="USD", organization="Org Mine", timezone="UTC")
+    with _hub(root) as db:
+        secret = dict(db.conn.execute(sa.select(h.organizations).where(h.organizations.c.display_name == "Secret Client LLC")).mappings().first())
+    _set_org_pending(root, secret["id"], "organizations/Secret Moved")
+    shutil.move(root / secret["path"], root / "organizations/Secret Moved")
+    make_actor(root, "mineadmin", company_role=(a["company_id"], "admin"))
+    make_actor(root, "minero", company_role=(a["company_id"], "readonly"))
+    as_user(root, "mineadmin").company.rename(name="Mine Co Two", company=a["company_id"])
+    with _hub(root) as db:
+        still = dict(db.conn.execute(sa.select(h.organizations).where(h.organizations.c.id == secret["id"])).mappings().first())
+    assert still["pending_path"] == "organizations/Secret Moved", "an invisible organization was not touched"
+    with pytest.raises(BookflowError):
+        as_user(root, "minero").company.rename(name="Nope", company=a["company_id"])
+    for e in as_user(root, "mineadmin").hub.audit.list()["items"]:
+        assert "Secret" not in e["summary"]
+    client.company.list()  # hub admin, read-only: still untouched
+    client.organization.new(name="Trigger")  # hub admin write completes it, attributed to the system user on the admin's behalf
+    with _hub(root) as db:
+        done = dict(db.conn.execute(sa.select(h.organizations).where(h.organizations.c.id == secret["id"])).mappings().first())
+    assert done["pending_path"] is None and done["path"] == "organizations/Secret Moved"
+    ev = client.hub.audit.list(command="organization move")["items"][0]
+    assert ev["actor_kind"] == "system" and ev["on_behalf_of_name"] == "k"
+
+
+def test_overlapping_pending_moves_resolve_read_only(client, root):
+    cid = client.company.list()["items"][0]["company_id"]
+    with _hub(root) as db:
+        crow = dict(db.conn.execute(sa.select(h.companies).where(h.companies.c.id == cid)).mappings().first())
+        orow = dict(db.conn.execute(sa.select(h.organizations).where(h.organizations.c.id == crow["organization_id"])).mappings().first())
+    co_new = crow["path"].rsplit("/", 1)[0] + "/New Company"
+    with _hub(root, True) as db:
+        db.raw.execute("BEGIN IMMEDIATE")
+        db.conn.execute(h.companies.update().where(h.companies.c.id == cid).values(pending_path=co_new))
+        db.raw.execute("COMMIT")
+    shutil.move(root / crow["path"], root / co_new)  # company moved, not committed
+    _set_org_pending(root, orow["id"], "organizations/New Org")
+    shutil.move(root / orow["path"], root / "organizations/New Org")  # organization moved, not committed
+    assert Path(client.company.list()["items"][0]["path"]) == root / "organizations/New Org/New Company"
+    assert client.company.show(company=cid)["company_id"] == cid
+    client.organization.new(name="Trigger")  # completes both
+    with _hub(root) as db:
+        c2 = dict(db.conn.execute(sa.select(h.companies).where(h.companies.c.id == cid)).mappings().first())
+    assert c2["pending_path"] in (None, "organizations/New Org/New Company")
+    assert client.company.rename(name="Settled", company=cid)["path"] == str(root / "organizations/New Org/New Company")
+
+
+def test_open_hook_repairs_display_copy(client, root):
+    cid = client.company.list()["items"][0]["company_id"]
+    p = Path(client.company.show(company=cid)["path"]) / "company.db"
+    conn = sqlite3.connect(str(p)); conn.execute("UPDATE company_info SET display_name = 'stale'"); conn.commit(); conn.close()
+    client.company.update(industry="Repair", company=cid)  # a company write that does not touch the copy itself
+    conn = sqlite3.connect(str(p)); assert conn.execute("SELECT display_name FROM company_info").fetchone()[0] == "Demo Plumbing Co"; conn.close()

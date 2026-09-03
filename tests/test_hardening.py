@@ -180,8 +180,10 @@ def test_synthetic_migration(client, root, tmp_path):
         import sqlite3 as _sq
         conn = _sq.connect(str(path / "company.db"))
         rows = conn.execute("SELECT e.actor_kind, e.on_behalf_of, n.action FROM audit_events e JOIN audit_entries n ON n.event_id = e.id WHERE e.command = 'upgrade'").fetchall()
+        principals = {r[0] for r in conn.execute("SELECT user_id FROM principals").fetchall()}
         conn.close()
         assert any(r[0] == "system" and r[1] == client.init()["user_id"] and r[2] == "migrate" for r in rows)
+        assert client.init()["user_id"] in principals, "the triggering user is mirrored with the system actor"
     finally:
         tmp.unlink()
         migrate.HEADS.clear(); migrate.HEADS.update(old_heads)

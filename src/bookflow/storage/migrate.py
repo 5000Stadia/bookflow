@@ -128,9 +128,11 @@ def migrate_company(s, ctx, db: Database, folder: Path, row: dict | None) -> tup
     if s.hub is not None:
         from bookflow.hub.users import find_user
         system = find_user(s, kind="system")
+    from bookflow.company.info import upsert_principal
     if system is not None:
-        from bookflow.company.info import upsert_principal
         upsert_principal(db, user_id=system["id"], username=system["username"], display_name=system["display_name"], kind="system")
+    if s.actor is not None:
+        upsert_principal(db, user_id=s.actor.id, username=s.actor.username, display_name=s.actor.display_name, kind=s.actor.kind)
     actor_id = s.actor.id if s.actor else None
     mctx = ctx.model_copy(update={"on_behalf_of": actor_id})
     touched = [Touched("company_info", row["id"] if row else "unknown", "migrate", None, None, {"schema_revision": after, "from": before}, db="company")]

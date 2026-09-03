@@ -94,23 +94,40 @@ def complete_org_move(s: Session, ctx: Context, org: dict[str, Any], via: str) -
                     "updated_at": new["updated_at"], "updated_by": new["updated_by"], "updated_via": via}
             s.hub.conn.execute(h.companies.update().where(h.companies.c.id == crow["id"]).values(path=cnew["path"], pending_path=cnew["pending_path"], version=cnew["version"], updated_at=cnew["updated_at"], updated_by=cnew["updated_by"], updated_via=via))
             touched.append(Touched("company", crow["id"], "update", crow["version"], cnew["version"], cnew))
-    write_event(s, ctx, "organization move", f"moved the folder of organization {org['display_name']}", touched)
+    from bookflow.hub.users import find_user
+    system = find_user(s, kind="system")
+    mctx = ctx.model_copy(update={"on_behalf_of": s.actor.id if s.actor else None})
+    write_event(s, mctx, "organization move", f"moved the folder of organization {org['display_name']}", touched,
+                actor_id=system["id"] if system else None, actor_kind="system")
     s.hub.raw.execute("COMMIT")
     org.update(new)
     return org
 
 
 def display_path(s: Session, row: dict[str, Any], org: dict[str, Any] | None = None) -> Path:
-    """The folder a company can be found in right now, for read outputs (pending moves considered, nothing written)."""
+    """The folder a company can be found in right now, for read outputs: every combination of the
+    organization's effective folder and the company's path or pending path, hop forms included, nothing written."""
     import sqlalchemy as _sa
     if org is None:
         r = s.hub.conn.execute(_sa.select(h.organizations).where(h.organizations.c.id == row["organization_id"])).mappings().first()
         org = dict(r) if r else None
-    rel = row["path"]
-    if org and org.get("pending_path") and not org["pending_path"].startswith("trash/"):
-        old_prefix = org["path"].rstrip("/") + "/"
-        moved = effective_path(s, org["path"], org["pending_path"], org["id"])
-        if moved is not None and rel.startswith(old_prefix) and not s.abs_path(rel).exists():
-            rel = str(moved.relative_to(s.data_root)).rstrip("/") + "/" + rel[len(old_prefix):]
-    found = effective_path(s, rel, row.get("pending_path") if not (row.get("pending_path") or "").startswith("trash/") else None, row["id"])
-    return found if found is not None else s.abs_path(rel)
+    company_rels = [row["path"]]
+    if row.get("pending_path") and not row["pending_path"].startswith("trash/"):
+        company_rels.insert(0, row["pending_path"])
+    bases: list[tuple[str, str]] = []  # (old org prefix, effective org rel)
+    if org:
+        old = org["path"].rstrip("/")
+        if org.get("pending_path") and not org["pending_path"].startswith("trash/"):
+            moved = effective_path(s, org["path"], org["pending_path"], org["id"])
+            if moved is not None:
+                bases.append((old, str(moved.relative_to(s.data_root))))
+        bases.append((old, old))
+    for rel in company_rels:
+        for old_prefix, base in bases or [("", "")]:
+            candidate_rel = rel
+            if old_prefix and rel.startswith(old_prefix + "/") and base != old_prefix:
+                candidate_rel = base.rstrip("/") + "/" + rel[len(old_prefix) + 1:]
+            found = effective_path(s, candidate_rel, None, row["id"])
+            if found is not None:
+                return found
+    return s.abs_path(row["path"])
