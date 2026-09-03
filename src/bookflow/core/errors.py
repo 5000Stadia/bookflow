@@ -41,6 +41,7 @@ COMMAND_CODES: dict[str, str] = {
     "E_DEMO_RESET_INCOMPLETE": "The old demo could not be moved to trash; its folders remain unregistered.",
     "E_AMOUNT_PRECISION": "The amount has more decimal places than the currency allows.",
     "E_EVENT_NOT_FOUND": "No such audit event.",
+    "E_INIT_CONFLICT": "The data root is already initialized for a different user.",
 }
 
 ALL_CODES: dict[str, str] = {**INFRASTRUCTURE_CODES, **COMMAND_CODES}
