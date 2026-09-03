@@ -39,8 +39,16 @@ def create_system_user(s: Session, via: str) -> dict[str, Any]:
     return row
 
 
+def _machine_zone() -> str | None:
+    try:
+        from tzlocal import get_localzone_name
+        return get_localzone_name()
+    except Exception:
+        return None
+
+
 def create_human(s: Session, *, username: str, display_name: str, created_by: str, via: str, hub_admin: bool) -> dict[str, Any]:
     row = {"id": new_id(), "kind": "human", "username": username, "display_name": display_name, "owner_user_id": None,
-           "password_hash": None, "hub_admin": hub_admin, "timezone": None, "active": True, **common(created_by, via)}
+           "password_hash": None, "hub_admin": hub_admin, "timezone": _machine_zone(), "active": True, **common(created_by, via)}
     s.hub.conn.execute(h.users.insert().values(**row))
     return row
