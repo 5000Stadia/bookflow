@@ -1,0 +1,23 @@
+# private working memory
+notes/
+
+# python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# runtime data
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# editors
+.vscode/
+.idea/
