@@ -25,8 +25,8 @@ def test_second_process_gets_busy(tmp_path, monkeypatch):
             with RootLock(tmp_path, "second"):
                 pass
         assert e.value.code == "E_DB_BUSY"
-        assert e.value.details["holder"]["command"] == "holder"
-        assert e.value.details["holder"]["pid"] == str(p.pid)
+        assert e.value.details == {"command": "holder", "held_seconds": e.value.details["held_seconds"]}
+        assert isinstance(e.value.details["held_seconds"], float) and e.value.details["held_seconds"] >= 0
     finally:
         p.terminate()
         p.join()

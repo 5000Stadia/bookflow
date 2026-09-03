@@ -13,7 +13,7 @@ build/
 .ruff_cache/
 
 # runtime data
-data/
+/data/
 *.db
 *.db-wal
 *.db-shm

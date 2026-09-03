@@ -65,7 +65,7 @@ def test_db_busy_through_cli_and_library(cli, root, client):
         assert started.wait(5)
         err, code = cli.error("company", "list")
         assert err["code"] == "E_DB_BUSY" and code == 1
-        assert err["details"]["holder"]["command"] == "holder"
+        assert set(err["details"]) == {"command", "held_seconds"} and err["details"]["command"] == "holder"
         from bookflow import BookflowError
         import pytest
         with pytest.raises(BookflowError) as e:

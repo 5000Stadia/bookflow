@@ -74,11 +74,16 @@ class RootLock:
                 holder = self.holder()
                 self._fh.close()
                 self._fh = None
-                raise BookflowError("E_DB_BUSY", details={"holder": holder})
+                held = None
+                try:
+                    held = round(time.time() - float(holder.get("started", "")), 1)
+                except ValueError:
+                    pass
+                raise BookflowError("E_DB_BUSY", details={"command": holder.get("command"), "held_seconds": held})
             time.sleep(0.05)
         self._fh.seek(0)
         self._fh.truncate()
-        self._fh.write(f"hostname={socket.gethostname()}\npid={os.getpid()}\ncommand={self.command}\n")
+        self._fh.write(f"hostname={socket.gethostname()}\npid={os.getpid()}\ncommand={self.command}\nstarted={time.time()}\n")
         self._fh.flush()
         return self
 

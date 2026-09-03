@@ -111,7 +111,11 @@ def apply_company_rename(plan: Plan, ctx: Context, s: Session) -> Applied:
     if will_move and pending:
         s.close_company()
         src, dst = s.abs_path(new["path"]), s.abs_path(pending)
-        if not dst.exists():
+        hop = dst.with_name(f"{dst.name}.moving-{row['id']}")
+        if hop.exists() and not dst.exists():
+            from bookflow.core.moves import rename_noreplace
+            rename_noreplace(hop, dst)
+        elif not dst.exists():
             if not src.exists():
                 raise BookflowError("E_RENAME_INCOMPLETE", details={"company_id": row["id"], "path": str(dst)})
             move_dir(src, dst, company_id=row["id"])

@@ -114,18 +114,61 @@ def _open_hub(s: Session, writable: bool, ctx: Context) -> None:
             s.hub.raw.execute("COMMIT")
 
 
-def open_company(s: Session, ctx: Context, writable: bool) -> None:
-    """Open the selected company database, completing a pending move first when needed."""
-    row = s.company_row
-    assert row is not None and s.hub is not None
+def _folder_candidates(s: Session, rel: str, moving_id: str) -> Path | None:
+    """The folder at ``rel`` or its case-only hop form, whichever exists."""
+    p = s.abs_path(rel)
+    if p.exists():
+        return p
+    hop = p.with_name(f"{p.name}.moving-{moving_id}")
+    if hop.exists():
+        return hop
+    return None
+
+
+def resolve_company_folder(s: Session, row: dict[str, Any], writable: bool) -> Path:
+    """Blueprint 3.1: consult pending moves on the company and its organization.
+
+    Writable opens complete a pending move; read-only opens use the folder that exists.
+    """
+    assert s.hub is not None
+    org = s.hub.conn.execute(sa.select(h.organizations).where(h.organizations.c.id == row["organization_id"])).mappings().first()
+    org = dict(org) if org else None
+    # organization move in flight: the company's stored path may point into the old organization folder
+    if org and org.get("pending_path") and not s.abs_path(row["path"]).exists():
+        old_prefix = org["path"].rstrip("/") + "/"
+        if row["path"].startswith(old_prefix):
+            moved = _folder_candidates(s, org["pending_path"], org["id"])
+            if moved is not None:
+                new_rel = org["pending_path"].rstrip("/") + "/" + row["path"][len(old_prefix):]
+                if writable:
+                    _complete_org_move(s, org, moved)
+                    row["path"] = new_rel
+                else:
+                    return s.abs_path(new_rel) if s.abs_path(new_rel).exists() else moved / Path(row["path"][len(old_prefix):])
+    pending = row.get("pending_path")
+    if pending:
+        if pending.startswith("trash/"):
+            if writable:
+                _complete_trash(s, row)
+            raise BookflowError("E_COMPANY_NOT_FOUND", details={"source": "option"})
+        target = _folder_candidates(s, pending, row["id"])
+        if target is not None:
+            if writable:
+                _complete_pending(s, row, target)
+                return s.abs_path(row["path"])
+            return target
+        # move not yet performed: the old path must still exist
     path = s.abs_path(row["path"])
     if not path.exists():
-        pending = row.get("pending_path")
-        if pending and s.abs_path(pending).exists():
-            _complete_pending(s, row)
-            path = s.abs_path(row["path"])
-        else:
-            raise BookflowError("E_COMPANY_MISSING", details={"company_id": row["id"], "path": str(path)})
+        raise BookflowError("E_COMPANY_MISSING", details={"company_id": row["id"], "path": str(path)})
+    return path
+
+
+def open_company(s: Session, ctx: Context, writable: bool) -> None:
+    """Open the selected company database, completing pending moves on writable opens."""
+    row = s.company_row
+    assert row is not None and s.hub is not None
+    path = resolve_company_folder(s, row, s.hub.writable)
     db_path = path / "company.db"
     if not writable:
         rev = current_revision_raw(db_path)
@@ -153,15 +196,36 @@ def open_company(s: Session, ctx: Context, writable: bool) -> None:
         info = read_info(s.company)
     s.company_tz = info.get("timezone")
 
-def _complete_pending(s: Session, row: dict[str, Any]) -> None:
-    """A pending move whose folder exists: commit the path (blueprint 3.1)."""
+
+def _complete_org_move(s: Session, org: dict[str, Any], moved: Path) -> None:
+    """Finish an interrupted organization move: hop, then commit paths (blueprint 3.1)."""
+    from bookflow.core.moves import rename_noreplace
+    target = s.abs_path(org["pending_path"])
+    if moved != target:
+        rename_noreplace(moved, target)
+    old_prefix = org["path"].rstrip("/") + "/"
+    s.hub.raw.execute("BEGIN IMMEDIATE")
+    s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == org["id"]).values(path=org["pending_path"], pending_path=None))
+    for crow in s.hub.conn.execute(sa.select(h.companies.c.id, h.companies.c.path).where(h.companies.c.organization_id == org["id"])).all():
+        if crow.path.startswith(old_prefix):
+            s.hub.conn.execute(h.companies.update().where(h.companies.c.id == crow.id).values(path=org["pending_path"].rstrip("/") + "/" + crow.path[len(old_prefix):]))
+    s.hub.raw.execute("COMMIT")
+
+
+def _complete_trash(s: Session, row: dict[str, Any]) -> None:
+    from bookflow.hub.companies import delete_company_rows
+    s.hub.raw.execute("BEGIN IMMEDIATE")
+    delete_company_rows(s, row["id"])
+    s.hub.raw.execute("COMMIT")
+
+
+def _complete_pending(s: Session, row: dict[str, Any], found: Path) -> None:
+    """A pending company move whose folder exists: finish the hop and commit the path."""
+    from bookflow.core.moves import rename_noreplace
     pending = row["pending_path"]
-    if pending.startswith("trash/"):
-        from bookflow.hub.companies import delete_company_rows
-        s.hub.raw.execute("BEGIN IMMEDIATE")
-        delete_company_rows(s, row["id"])
-        s.hub.raw.execute("COMMIT")
-        raise BookflowError("E_COMPANY_NOT_FOUND", details={"source": "option"})
+    target = s.abs_path(pending)
+    if found != target:
+        rename_noreplace(found, target)
     s.hub.raw.execute("BEGIN IMMEDIATE")
     s.hub.conn.execute(h.companies.update().where(h.companies.c.id == row["id"]).values(path=pending, pending_path=None))
     s.hub.raw.execute("COMMIT")
