@@ -46,7 +46,7 @@ def test_help_lists_only_applicable_options(cli):
 
 def test_reason_recorded(cli):
     cli.json("organization", "new", "--name", "Reasoned", "--reason", "testing reasons", "--source-ref", "ticket-1")
-    ev = cli.json("hub", "audit", "list", "--command-name", "organization new")["items"][0]
+    ev = cli.json("hub", "audit", "list", "--command", "organization new")["items"][0]
     assert ev["reason"] == "testing reasons" and ev["source_ref"] == "ticket-1" and ev["interface"] == "cli"
 
 
@@ -85,4 +85,5 @@ def test_cold_start(cli):
     cli.run("company", "list", "--json")
     listed = time.perf_counter() - t
     print(f"cold start --help {best*1000:.0f} ms, company list {listed*1000:.0f} ms")
-    assert best < 0.3, f"--help took {best*1000:.0f} ms"
+    budget = float(__import__("os").environ.get("BOOKFLOW_BUDGET_MS", "300")) / 1000
+    assert best < budget, f"--help took {best*1000:.0f} ms (budget {budget*1000:.0f} ms; override BOOKFLOW_BUDGET_MS)"

@@ -26,7 +26,7 @@ src/bookflow/
 
 ## Command names and scopes
 
-`audit list`, `audit show`, and `audit tail` are company-scope commands: the books' log. The hub log is `hub audit list`, `hub audit show`, `hub audit tail`. Row 1's hub commands are renamed in row 1's closing fixes so no name ever carries two scopes. Both families take the same filters: `--since`, `--until`, `--actor`, `--actor-kind`, `--on-behalf-of`, `--interface`, `--command`, `--record-type`, `--record-id`, `--limit`. `list` pages older with `--before <event_id>` and returns `next_before`; `tail` pages newer with `--after <event_id>` and returns `next_after`. Event ids are ULIDs generated under the data-root lock, so id order is commit order. `tail --follow` on the CLI repeats every two seconds and prints one JSON object per event, the one documented exception to one-document-per-command.
+`audit list`, `audit show`, and `audit tail` are company-scope commands: the books' log. The hub log is `hub audit list`, `hub audit show`, `hub audit tail`. Row 1's hub commands are renamed in row 1's closing fixes so no name ever carries two scopes. Both families take the same filters: `--since`, `--until`, `--actor`, `--kind`, `--principal`, `--via`, `--command`, `--record-type`, `--record-id`, `--limit` (input field names avoid the context field names). `list` pages older with `--before <event_id>` and returns `next_before`; `tail` pages newer with `--after <event_id>` and returns `next_after`. Event ids are ULIDs generated under the data-root lock, so id order is commit order. `tail --follow` on the CLI repeats every two seconds and prints one JSON object per event, the one documented exception to one-document-per-command.
 
 ## Company audit
 

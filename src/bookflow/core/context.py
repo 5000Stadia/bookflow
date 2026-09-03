@@ -50,7 +50,6 @@ class Context(BaseModel):
     directive_id: str | None = None
     source_ref: str | None = None
     company_id: str | None = None
-    hub_admin: bool = False
 
     @classmethod
     def new(cls, interface: Interface, client_name: str, session_id: str | None = None, **kw) -> "Context":

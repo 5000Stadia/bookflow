@@ -42,8 +42,8 @@ def _leaf_type(annotation: Any) -> tuple[type, list[str] | None]:
     return str, None
 
 
-def _flatten(model: type[BaseModel], prefix: str = "") -> list[tuple[str, str, Any, str, bool]]:
-    """Yield (input path with dots, flag name, annotation, help, required) per leaf field."""
+def _flatten(model: type[BaseModel], prefix: str = "") -> list[tuple[str, str, Any, str, bool, Any]]:
+    """Yield (input path with dots, flag name, annotation, help, required, default) per leaf field."""
     out = []
     for name, f in model.model_fields.items():
         ann = f.annotation
@@ -56,8 +56,23 @@ def _flatten(model: type[BaseModel], prefix: str = "") -> list[tuple[str, str, A
             out += _flatten(base, prefix + name + ".")
             continue
         required = f.is_required()
-        out.append((prefix + name, (prefix + name).replace(".", "-").replace("_", "-"), ann, f.description or "", required))
+        default = None if required or f.default is PydanticUndefined else f.default
+        out.append((prefix + name, (prefix + name).replace(".", "-").replace("_", "-"), ann, f.description or "", required, default))
     return out
+
+
+def _help_text(help_: str, py_t: type, choices: list[str] | None, required: bool, default: Any) -> str:
+    parts = [help_] if help_ else []
+    if choices:
+        parts.append("One of: " + ", ".join(choices) + ".")
+    if required:
+        parts.append("Required.")
+    elif default is not None and default != "" and not (isinstance(default, bool) and default is False):
+        parts.append(f"Default: {default}.")
+    return " ".join(parts)
+
+
+_METAVAR = {int: "INT", float: "DECIMAL", str: "TEXT", bool: "BOOL"}
 
 
 def _set_path(d: dict[str, Any], path: str, value: Any) -> None:
@@ -70,20 +85,19 @@ def _set_path(d: dict[str, Any], path: str, value: Any) -> None:
 def _build_command(cmd: registry.Command):
     leaves = _flatten(cmd.input_model)
     params: list[inspect.Parameter] = []
-    for path, flag, ann, help_, required in leaves:
+    for path, flag, ann, help_, required, dflt in leaves:
         py_t, choices = _leaf_type(ann)
         is_positional = path in cmd.positional
-        if choices:
-            help_ = (help_ + " " if help_ else "") + "One of: " + ", ".join(choices) + "."
+        text = _help_text(help_, py_t, choices, required, dflt)
         pname = "f__" + path.replace(".", "__")
         if is_positional:
-            default = typer.Argument(None, help=help_, metavar=path.upper())
+            default = typer.Argument(None, help=text, metavar=path.upper())
             annotation = str | None
         elif py_t is bool:
-            default = typer.Option(None, f"--{flag}/--no-{flag}", help=help_)
+            default = typer.Option(None, f"--{flag}/--no-{flag}", help=text)
             annotation = bool | None
         else:
-            default = typer.Option(None, f"--{flag}", help=help_)
+            default = typer.Option(None, f"--{flag}", help=text, metavar=_METAVAR.get(py_t, "TEXT"))
             annotation = str | None
         params.append(inspect.Parameter(pname, inspect.Parameter.KEYWORD_ONLY, default=default, annotation=annotation))
     params.append(inspect.Parameter("json_", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--json", help="Print the output as one JSON object"), annotation=bool))
@@ -99,25 +113,36 @@ def _build_command(cmd: registry.Command):
     def run(**kw: Any) -> None:
         ctx_obj = click_globals.get_current_context().obj or {}
         as_json = kw.pop("json_", False) or ctx_obj.get("json", False)
-        data_root = kw.pop("data_root", None) or ctx_obj.get("data_root")
+        local_root = kw.pop("data_root", None)
+        if local_root and ctx_obj.get("data_root") and local_root != ctx_obj["data_root"]:
+            raise BookflowError("E_USAGE", message="--data-root was given twice with different values")
+        data_root = local_root or ctx_obj.get("data_root")
         dry_run = kw.pop("dry_run", False)
         reason = kw.pop("reason", None)
         source_ref = kw.pop("source_ref", None)
         interactive = kw.pop("interactive", False)
         company = kw.pop("company", None)
         raw: dict[str, Any] = {}
-        for path, flag, ann, help_, required in leaves:
+        for path, flag, ann, help_, required, dflt in leaves:
             v = kw.get("f__" + path.replace(".", "__"))
             if v is not None:
                 _set_path(raw, path, v)
         if interactive:
             if not sys.stdin.isatty():
                 raise BookflowError("E_USAGE", message="--interactive needs a terminal")
-            for path, flag, ann, help_, required in leaves:
+            for path, flag, ann, help_, required, dflt in leaves:
                 if kw.get("f__" + path.replace(".", "__")) is not None:
                     continue
                 py_t, choices = _leaf_type(ann)
-                label = f"{path}" + (f" ({'/'.join(choices)})" if choices else "") + (" [required]" if required else "")
+                label = path
+                if help_:
+                    label += f" ({help_})"
+                if choices:
+                    label += " [" + "/".join(choices) + "]"
+                if required:
+                    label += " [required]"
+                elif dflt not in (None, ""):
+                    label += f" [default: {dflt}]"
                 v = click_termui.prompt(label, default="", show_default=False, err=True, type=str)
                 if v != "":
                     _set_path(raw, path, v)
@@ -183,6 +208,9 @@ def main() -> None:
     except BookflowError as e:
         sys.exit(emit_error(e, as_json))
     except click_exceptions.UsageError as e:
+        if type(e).__name__ == "NoArgsIsHelpError":
+            typer.echo(e.format_message())
+            sys.exit(0)
         sys.exit(emit_error(BookflowError("E_USAGE", message=e.format_message()), as_json))
     except typer.Exit as e:
         sys.exit(e.exit_code)

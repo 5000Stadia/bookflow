@@ -81,6 +81,8 @@ class Money:
                     raise BookflowError("E_VALIDATION", details={"fields": [{"field": "minor_units", "problem": "must be an integer"}]})
                 return cls(mu, value["currency"])
             if "amount" in value:
+                if isinstance(value["amount"], (float, bool)):
+                    raise BookflowError("E_VALIDATION", details={"fields": [{"field": "amount", "problem": "amounts must be decimal strings, never floats"}]})
                 return cls.parse(str(value["amount"]), value.get("currency", default_currency))
             raise BookflowError("E_VALIDATION", details={"fields": [{"field": "amount", "problem": "object needs amount and currency"}]})
         if isinstance(value, int):

@@ -34,13 +34,13 @@ class _Noun:
 
 
 class Client:
-    def __init__(self, data_root: str | None = None, client_name: str = "python", login: str | None = None):
+    def __init__(self, data_root: str | None = None, client_name: str = "python"):
         registry.load_all()
         self.data_root = data_root
         self.client_name = client_name
         self.session_id = new_id()
         self._company: str | None = None
-        self._login = login
+        self._login: str | None = None  # the OS login is taken from the process; tests may override this private attribute
 
     def use_company(self, selector: str | None) -> None:
         self._company = selector

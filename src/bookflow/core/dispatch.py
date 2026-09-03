@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import sqlalchemy as sa
 from pydantic import BaseModel, ValidationError
@@ -21,7 +23,7 @@ from bookflow.core.registry import Command, Plan
 from bookflow.core.session import Actor, Session
 from bookflow.hub import access, schema as h
 from bookflow.hub.audit import write_event
-from bookflow.storage.engine import open_database
+from bookflow.storage.engine import io_error, open_database
 from bookflow.storage.migrate import HEADS, backup, classify, current_revision_raw, migrate_to_head
 from bookflow.storage.paths import name_key, resolve_data_root
 
@@ -29,6 +31,44 @@ from bookflow.storage.paths import name_key, resolve_data_root
 def _validation_error(e: ValidationError) -> BookflowError:
     fields = [{"field": ".".join(str(p) for p in err["loc"]) or "input", "problem": err["msg"]} for err in e.errors()]
     return BookflowError("E_VALIDATION", details={"fields": fields})
+
+
+CONTEXT_LIMITS = {"reason": 140, "source_ref": 512, "idempotency_key": 128}
+
+
+def validate_context(ctx: Context) -> None:
+    fields = []
+    for name, limit in CONTEXT_LIMITS.items():
+        v = getattr(ctx, name)
+        if v is not None and len(v) > limit:
+            fields.append({"field": name, "problem": f"at most {limit} characters"})
+    if fields:
+        raise BookflowError("E_VALIDATION", details={"fields": fields})
+
+
+def parse_when(value: str, zone: str | None, end: bool = False) -> str:
+    """Parse an ISO date or timestamp given in the viewer's zone into the stored UTC form."""
+    try:
+        if len(value) == 10:
+            dt = datetime.fromisoformat(value)
+            dt = dt.replace(tzinfo=ZoneInfo(zone) if zone else timezone.utc)
+            if end:
+                from datetime import timedelta
+                dt = dt + timedelta(days=1)
+        else:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=ZoneInfo(zone) if zone else timezone.utc)
+    except (ValueError, KeyError) as e:
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "since/until", "problem": f"not a date or timestamp: {value!r}"}]})
+    return dt.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def redact_error(err: BookflowError, allowed: bool) -> BookflowError:
+    if allowed:
+        return err
+    err.details = redact_paths(err.details, False)
+    return err
 
 
 def validate_input(cmd: Command, raw: dict[str, Any]) -> BaseModel:
@@ -43,6 +83,8 @@ def validate_input(cmd: Command, raw: dict[str, Any]) -> BaseModel:
 
 def _load_actor(s: Session) -> None:
     table = s.config.user_table(s.os_login)
+    if table is not None and (not isinstance(table, dict) or not isinstance(table.get("user_id"), str)):
+        raise BookflowError("E_CONFIG_INVALID", details={"path": str(s.config.path), "problem": f"users.{s.os_login} is malformed"})
     if not table or "user_id" not in table:
         raise BookflowError("E_NO_ACTOR")
     row = s.hub.conn.execute(sa.select(h.users).where(h.users.c.id == table["user_id"], h.users.c.active.is_(True))).mappings().first()
@@ -93,11 +135,11 @@ def resolve_organization(s: Session, selector: str) -> dict[str, Any]:
     raise BookflowError("E_ORGANIZATION_NOT_FOUND")
 
 
-def _open_hub(s: Session, writable: bool, ctx: Context) -> None:
+def _open_hub(s: Session, writable: bool, ctx: Context, skip_head_check: bool = False) -> None:
     path = s.data_root / "hub.db"
     if not path.exists():
         raise BookflowError("E_NOT_INITIALIZED", details={"data_root": str(s.data_root)})
-    if not writable:
+    if not writable and not skip_head_check:
         rev = current_revision_raw(path)
         state = classify("hub", rev)
         if state == "unknown":
@@ -109,55 +151,51 @@ def _open_hub(s: Session, writable: bool, ctx: Context) -> None:
     if writable:
         before, after = migrate_to_head(s.hub, "hub", s.data_root / "backups")
         if before != after:
-            s.hub.raw.execute("BEGIN IMMEDIATE")
-            write_event(s, ctx, "upgrade", f"migrated hub from {before} to {after}", [], actor_id=None, actor_kind=None)
-            s.hub.raw.execute("COMMIT")
+            s.hub_migrated = (before, after)
+            _record_migration(s, ctx, s.hub, "hub", before, after)
 
 
-def _folder_candidates(s: Session, rel: str, moving_id: str) -> Path | None:
-    """The folder at ``rel`` or its case-only hop form, whichever exists."""
-    p = s.abs_path(rel)
-    if p.exists():
-        return p
-    hop = p.with_name(f"{p.name}.moving-{moving_id}")
-    if hop.exists():
-        return hop
-    return None
-
-
-def resolve_company_folder(s: Session, row: dict[str, Any], writable: bool) -> Path:
+def resolve_company_folder(s: Session, ctx: Context, row: dict[str, Any], writable: bool) -> Path:
     """Blueprint 3.1: consult pending moves on the company and its organization.
 
-    Writable opens complete a pending move; read-only opens use the folder that exists.
+    A writable hub open completes any pending move (same versioned, audited state as an
+    uninterrupted move); a read-only open uses the folder that exists and writes nothing.
     """
+    from bookflow.hub.moves import complete_company_move, complete_org_move, effective_path
     assert s.hub is not None
+    via = ctx.interface.value
     org = s.hub.conn.execute(sa.select(h.organizations).where(h.organizations.c.id == row["organization_id"])).mappings().first()
     org = dict(org) if org else None
-    # organization move in flight: the company's stored path may point into the old organization folder
-    if org and org.get("pending_path") and not s.abs_path(row["path"]).exists():
-        old_prefix = org["path"].rstrip("/") + "/"
-        if row["path"].startswith(old_prefix):
-            moved = _folder_candidates(s, org["pending_path"], org["id"])
-            if moved is not None:
-                new_rel = org["pending_path"].rstrip("/") + "/" + row["path"][len(old_prefix):]
-                if writable:
-                    _complete_org_move(s, org, moved)
-                    row["path"] = new_rel
-                else:
-                    return s.abs_path(new_rel) if s.abs_path(new_rel).exists() else moved / Path(row["path"][len(old_prefix):])
+    if org and org.get("pending_path"):
+        if writable:
+            complete_org_move(s, ctx, org, via)
+            s.completed_moves.append(org["id"])
+            fresh = s.hub.conn.execute(sa.select(h.companies).where(h.companies.c.id == row["id"])).mappings().first()
+            row.update(dict(fresh))
+        else:
+            old_prefix = org["path"].rstrip("/") + "/"
+            if row["path"].startswith(old_prefix) and not s.abs_path(row["path"]).exists():
+                moved = effective_path(s, org["path"], org["pending_path"], org["id"])
+                if moved is not None:
+                    candidate = moved / row["path"][len(old_prefix):]
+                    if row.get("pending_path"):
+                        inner = effective_path(s, str(candidate.relative_to(s.data_root)), None, row["id"])
+                        candidate = inner or candidate
+                    if candidate.exists():
+                        return candidate
     pending = row.get("pending_path")
+    if pending and pending.startswith("trash/"):
+        if writable:
+            _complete_trash(s, row)
+        raise BookflowError("E_COMPANY_NOT_FOUND", details={"source": "option"})
     if pending:
-        if pending.startswith("trash/"):
-            if writable:
-                _complete_trash(s, row)
-            raise BookflowError("E_COMPANY_NOT_FOUND", details={"source": "option"})
-        target = _folder_candidates(s, pending, row["id"])
-        if target is not None:
-            if writable:
-                _complete_pending(s, row, target)
-                return s.abs_path(row["path"])
-            return target
-        # move not yet performed: the old path must still exist
+        if writable:
+            complete_company_move(s, ctx, row, via)
+            s.completed_moves.append(row["id"])
+            return s.abs_path(row["path"])
+        found = effective_path(s, row["path"], pending, row["id"])
+        if found is not None:
+            return found
     path = s.abs_path(row["path"])
     if not path.exists():
         raise BookflowError("E_COMPANY_MISSING", details={"company_id": row["id"], "path": str(path)})
@@ -168,8 +206,10 @@ def open_company(s: Session, ctx: Context, writable: bool) -> None:
     """Open the selected company database, completing pending moves on writable opens."""
     row = s.company_row
     assert row is not None and s.hub is not None
-    path = resolve_company_folder(s, row, s.hub.writable)
+    path = resolve_company_folder(s, ctx, row, s.hub.writable)
     db_path = path / "company.db"
+    if not db_path.exists():
+        raise BookflowError("E_COMPANY_MISSING", details={"company_id": row["id"], "check": "database", "path": str(db_path)})
     if not writable:
         rev = current_revision_raw(db_path)
         state = classify("company", rev)
@@ -188,27 +228,28 @@ def open_company(s: Session, ctx: Context, writable: bool) -> None:
         if info.get("display_name") != row["display_name"]:
             write_display_name_copy(s.company, row["display_name"])
         if before != after:
+            from bookflow.storage.paths import write_company_marker
             s.hub.raw.execute("BEGIN IMMEDIATE")
             s.hub.conn.execute(h.companies.update().where(h.companies.c.id == row["id"]).values(schema_revision=after))
-            write_event(s, ctx, "upgrade", f"migrated company {row['display_name']} from {before} to {after}", [], actor_id=None, actor_kind=None)
             s.hub.raw.execute("COMMIT")
+            write_company_marker(path, company_id=row["id"], state="ready", display_name=row["display_name"], schema_revision=after)
+            _record_migration(s, ctx, s.hub, "company", before, after, record_id=row["id"], label=row["display_name"])
     else:
         info = read_info(s.company)
     s.company_tz = info.get("timezone")
 
 
-def _complete_org_move(s: Session, org: dict[str, Any], moved: Path) -> None:
-    """Finish an interrupted organization move: hop, then commit paths (blueprint 3.1)."""
-    from bookflow.core.moves import rename_noreplace
-    target = s.abs_path(org["pending_path"])
-    if moved != target:
-        rename_noreplace(moved, target)
-    old_prefix = org["path"].rstrip("/") + "/"
+def _record_migration(s: Session, ctx: Context, db, chain: str, before: str | None, after: str, record_id: str | None = None, label: str = "hub") -> None:
+    """Blueprint 7: a `migrate` entry by the system user with on_behalf_of the triggering actor."""
+    from bookflow.core.registry import Touched
+    from bookflow.hub.users import find_user
+    system = find_user(s, kind="system") if s.hub is not None else None
+    actor_id = system["id"] if system else None
+    on_behalf = s.actor.id if s.actor else None
+    mctx = ctx.model_copy(update={"on_behalf_of": on_behalf})
+    touched = [Touched(chain if chain == "hub" else "company", record_id or "hub", "migrate", None, None, {"schema_revision": after, "from": before})]
     s.hub.raw.execute("BEGIN IMMEDIATE")
-    s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == org["id"]).values(path=org["pending_path"], pending_path=None))
-    for crow in s.hub.conn.execute(sa.select(h.companies.c.id, h.companies.c.path).where(h.companies.c.organization_id == org["id"])).all():
-        if crow.path.startswith(old_prefix):
-            s.hub.conn.execute(h.companies.update().where(h.companies.c.id == crow.id).values(path=org["pending_path"].rstrip("/") + "/" + crow.path[len(old_prefix):]))
+    write_event(s, mctx, "upgrade", f"migrated {label} from {before} to {after}", touched, actor_id=actor_id, actor_kind="system")
     s.hub.raw.execute("COMMIT")
 
 
@@ -217,19 +258,6 @@ def _complete_trash(s: Session, row: dict[str, Any]) -> None:
     s.hub.raw.execute("BEGIN IMMEDIATE")
     delete_company_rows(s, row["id"])
     s.hub.raw.execute("COMMIT")
-
-
-def _complete_pending(s: Session, row: dict[str, Any], found: Path) -> None:
-    """A pending company move whose folder exists: finish the hop and commit the path."""
-    from bookflow.core.moves import rename_noreplace
-    pending = row["pending_path"]
-    target = s.abs_path(pending)
-    if found != target:
-        rename_noreplace(found, target)
-    s.hub.raw.execute("BEGIN IMMEDIATE")
-    s.hub.conn.execute(h.companies.update().where(h.companies.c.id == row["id"]).values(path=pending, pending_path=None))
-    s.hub.raw.execute("COMMIT")
-    row["path"], row["pending_path"] = pending, None
 
 
 def _close(s: Session) -> None:
@@ -258,36 +286,46 @@ def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str
         return _run_bootstrap(cmd, inp, ctx, s)
     if not (root / "hub.db").exists():
         raise BookflowError("E_NOT_INITIALIZED", details={"data_root": str(root)})
-    with private_umask(), RootLock(root, cmd.name):
-        try:
-            s.config = Config.load(root / "config.toml")
-            _open_hub(s, bool(cmd.writes & {"hub", "config"}), ctx)
-            _load_actor(s)
-            ctx = ctx.model_copy(update={"actor_id": s.actor.id, "actor_kind": ActorKind(s.actor.kind), "hub_admin": s.actor.hub_admin})
-            if cmd.scope == "company":
-                s.company_row = resolve_company(s, company_selector, company_source)
-                acc, role = access.company_role(s, s.company_row["id"], s.company_row["organization_id"])
-                if acc is None or not access.role_satisfies(role, acc, cmd.required_role, s.is_hub_admin):
+    validate_context(ctx)
+    allowed = False
+    try:
+        with private_umask(), RootLock(root, cmd.name):
+            try:
+                s.config = Config.load(root / "config.toml")
+                _open_hub(s, bool(cmd.writes & {"hub", "config"}) and not (dry_run and cmd.name == "upgrade"), ctx, skip_head_check=(dry_run and cmd.name == "upgrade"))
+                _load_actor(s)
+                allowed = s.is_hub_admin
+                ctx = ctx.model_copy(update={"actor_id": s.actor.id, "actor_kind": ActorKind(s.actor.kind)})
+                if cmd.scope == "company":
+                    s.company_row = resolve_company(s, company_selector, company_source)
+                    acc, role = access.company_role(s, s.company_row["id"], s.company_row["organization_id"])
                     if acc is None:
                         raise BookflowError("E_COMPANY_NOT_FOUND", details={"source": company_source})
+                    if not access.role_satisfies(role, acc, cmd.required_role, s.is_hub_admin):
+                        raise BookflowError("E_PERMISSION")
+                    ctx = ctx.model_copy(update={"company_id": s.company_row["id"]})
+                    open_company(s, ctx, "company" in cmd.writes)
+                elif cmd.required_role == "hub_admin" and not s.is_hub_admin:
                     raise BookflowError("E_PERMISSION")
-                ctx = ctx.model_copy(update={"company_id": s.company_row["id"]})
-                open_company(s, ctx, "company" in cmd.writes)
-            elif cmd.required_role == "hub_admin" and not s.is_hub_admin:
-                raise BookflowError("E_PERMISSION")
-            plan = cmd.plan(inp, ctx, s)
-            if dry_run or not cmd.is_write:
-                out = plan.preview.model_dump(mode="json")
-                if dry_run:
-                    out["dry_run"] = True
+                plan = cmd.plan(inp, ctx, s)
+                if dry_run or not cmd.is_write:
+                    out = plan.preview.model_dump(mode="json")
+                    if dry_run:
+                        out["dry_run"] = True
+                    return redact_paths(out, s.is_hub_admin)
+                applied = _apply(cmd, plan, ctx, s)
+                out = applied.output.model_dump(mode="json")
+                if s.warnings and "warnings" in out:
+                    out["warnings"] = list(s.warnings)
                 return redact_paths(out, s.is_hub_admin)
-            applied = _apply(cmd, plan, ctx, s)
-            out = applied.output.model_dump(mode="json")
-            if s.warnings and "warnings" in out:
-                out["warnings"] = list(s.warnings)
-            return redact_paths(out, s.is_hub_admin)
-        finally:
-            _close(s)
+            finally:
+                _close(s)
+    except BookflowError as e:
+        raise redact_error(e, allowed)
+    except (OSError, sqlite3.Error) as e:
+        raise redact_error(io_error("command", e), allowed)
+    except sa.exc.DBAPIError as e:
+        raise redact_error(io_error("command", e.orig if isinstance(e.orig, sqlite3.Error) else e), allowed)
 
 
 def _accepts_selector(cmd: Command) -> bool:

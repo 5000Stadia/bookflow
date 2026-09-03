@@ -72,14 +72,14 @@ company_rename = command("company rename", scope="company", description="Rename 
 @company_rename
 def plan_company_rename(inp: RenameInput, ctx: Context, s: Session) -> Plan:
     row = s.company_row
-    name = normalize_display_name(inp.name)
+    name = normalize_display_name(inp.name, field="name")
     if co.name_taken(s, row["organization_id"], name_key(name), exclude_id=row["id"]):
         raise BookflowError("E_NAME_TAKEN", details={"name": name})
     orow = org.get(s, row["organization_id"])
     org_folder = s.abs_path(orow["path"])
     current_folder = Path(row["path"]).name
     target = choose_folder_name(org_folder, name, exclude=current_folder) if inp.move else current_folder
-    will_move = inp.move and (target != current_folder or row.get("pending_path") is not None)
+    will_move = inp.move and (target != current_folder or row.get("pending_path") is not None or row["id"] in s.completed_moves)
     target_rel = s.rel_path(org_folder / target)
     return Plan(preview=RenameOutput(company_id=row["id"], display_name=name, previous_display_name=row["display_name"], path=str(org_folder / target), moved=will_move),
                 data={"name": name, "target_rel": target_rel, "will_move": will_move})
@@ -96,7 +96,7 @@ def apply_company_rename(plan: Plan, ctx: Context, s: Session) -> Applied:
         changes["pending_path"] = target_rel
     if not changes and not row.get("pending_path"):
         s.company.raw.execute("COMMIT")
-        return Applied(RenameOutput(company_id=row["id"], display_name=row["display_name"], previous_display_name=row["display_name"], path=str(s.abs_path(row["path"])), moved=False), [], "no change", audited=True)
+        return Applied(RenameOutput(company_id=row["id"], display_name=row["display_name"], previous_display_name=row["display_name"], path=str(s.abs_path(row["path"])), moved=row["id"] in s.completed_moves), [], "no change", audited=True)
     new = row
     if changes:
         new, t = co.update(s, row, via, **changes)
@@ -106,22 +106,10 @@ def apply_company_rename(plan: Plan, ctx: Context, s: Session) -> Applied:
     s.company.raw.execute("COMMIT")
     folder = s.abs_path(new["path"])
     write_company_marker(folder, company_id=row["id"], state="ready", display_name=name, schema_revision=new["schema_revision"])
-    moved = False
-    pending = new.get("pending_path")
-    if will_move and pending:
+    moved = row["id"] in s.completed_moves
+    if will_move and new.get("pending_path"):
+        from bookflow.hub.moves import complete_company_move
         s.close_company()
-        src, dst = s.abs_path(new["path"]), s.abs_path(pending)
-        hop = dst.with_name(f"{dst.name}.moving-{row['id']}")
-        if hop.exists() and not dst.exists():
-            from bookflow.core.moves import rename_noreplace
-            rename_noreplace(hop, dst)
-        elif not dst.exists():
-            if not src.exists():
-                raise BookflowError("E_RENAME_INCOMPLETE", details={"company_id": row["id"], "path": str(dst)})
-            move_dir(src, dst, company_id=row["id"])
-        s.hub.raw.execute("BEGIN IMMEDIATE")
-        final, t2 = co.update(s, new, via, path=pending, pending_path=None)
-        audit.write_event(s, ctx, "company move", f"moved company {name} to {pending}", [t2])
-        s.hub.raw.execute("COMMIT")
-        new, moved = final, True
+        new = complete_company_move(s, ctx, dict(new), via)
+        moved = True
     return Applied(RenameOutput(company_id=row["id"], display_name=new["display_name"], previous_display_name=row["display_name"], path=str(s.abs_path(new["path"])), moved=moved), [], "", audited=True)

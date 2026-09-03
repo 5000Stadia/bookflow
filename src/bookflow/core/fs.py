@@ -10,7 +10,7 @@ from bookflow.core.errors import BookflowError
 
 LOCAL_TYPES = frozenset({
     "ext2", "ext3", "ext4", "xfs", "btrfs", "f2fs", "zfs", "tmpfs", "overlay",
-    "apfs", "hfs", "hfsplus", "ntfs", "exfat", "vfat", "fat32", "refs", "msdos",
+    "apfs", "hfs", "hfsplus", "ntfs", "fuseblk", "exfat", "vfat", "fat32", "refs", "msdos",
 })
 
 
@@ -100,5 +100,5 @@ def check_local(path: Path, fs_type: str | None = None) -> str:
     if t is None:
         raise BookflowError("E_FS_UNKNOWN", details={"path": str(path)})
     if t.lower() not in LOCAL_TYPES:
-        raise BookflowError("E_NETWORK_SHARE", details={"path": str(path), "fs_type": t})
+        raise BookflowError("E_NETWORK_SHARE", message=f"Filesystem type {t!r} is not a supported local type; Bookflow refuses network and unknown filesystems.", details={"path": str(path), "fs_type": t})
     return t

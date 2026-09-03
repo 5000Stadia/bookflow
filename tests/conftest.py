@@ -85,5 +85,8 @@ def make_actor(root: Path, username: str, *, hub_admin: bool = False, org_role: 
 
 
 def as_user(root: Path, login: str) -> "bookflow.Client":
+    """Test-only: act as another mapped login. The public Client has no such parameter (blueprint 4.4)."""
     from bookflow.client import Client
-    return Client(data_root=str(root), login=login)
+    c = Client(data_root=str(root))
+    c._login = login
+    return c

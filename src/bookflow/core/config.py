@@ -57,9 +57,11 @@ class Config:
             raw = tomllib.loads(path.read_text(encoding="utf-8"))
         except (OSError, tomllib.TOMLDecodeError) as e:
             raise BookflowError("E_CONFIG_INVALID", details={"path": str(path), "problem": str(e)})
-        if not isinstance(raw, dict) or not isinstance(raw.get("users", {}), dict):
+        users = raw.get("users", {}) if isinstance(raw, dict) else None
+        client = raw.get("client", {}) if isinstance(raw, dict) else None
+        if users is None or not isinstance(users, dict) or not isinstance(client, dict) or any(not isinstance(v, dict) for v in users.values()):
             raise BookflowError("E_CONFIG_INVALID", details={"path": str(path), "problem": "unexpected shape"})
-        cfg.data = {"client": dict(raw.get("client", {})), "users": {k: dict(v) for k, v in raw.get("users", {}).items()}}
+        cfg.data = {"client": dict(client), "users": {k: dict(v) for k, v in users.items()}}
         return cfg
 
     def user_table(self, login: str) -> dict[str, Any] | None:

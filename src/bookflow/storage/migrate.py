@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from bookflow.core.errors import BookflowError
-from bookflow.storage.engine import Database
+from bookflow.storage.engine import Database, io_error, sqlite_uri
 
 # Head revisions as constants: checked before Alembic is imported on the read path.
 HEADS = {"hub": "hub0001", "company": "co0001"}
@@ -30,12 +30,19 @@ def known_revisions(chain: str) -> set[str]:
 
 def current_revision_raw(path: Path) -> str | None:
     """Read alembic_version with a plain sqlite3 read-only connection; None on a fresh file."""
-    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        conn = sqlite3.connect(sqlite_uri(path, "ro"), uri=True)
+    except sqlite3.Error as e:
+        raise io_error("open", e, path)
     try:
         try:
             row = conn.execute("SELECT version_num FROM alembic_version").fetchone()
-        except sqlite3.OperationalError:
-            return None
+        except sqlite3.OperationalError as e:
+            if "no such table" in str(e):
+                return None
+            raise io_error("read", e, path)
+        except sqlite3.DatabaseError as e:
+            raise io_error("read", e, path)
         return row[0] if row else None
     finally:
         conn.close()
@@ -65,13 +72,16 @@ def backup(path: Path, backups_dir: Path, prefix: str = "") -> Path:
     while target.exists():
         n += 1
         target = backups_dir / f"{prefix}{stamp}-{n}.db"
-    src = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-    dst = sqlite3.connect(str(target))
     try:
-        src.backup(dst)
-    finally:
-        dst.close()
-        src.close()
+        src = sqlite3.connect(sqlite_uri(path, "ro"), uri=True)
+        dst = sqlite3.connect(sqlite_uri(target, "rwc"), uri=True)
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+            src.close()
+    except (sqlite3.Error, OSError) as e:
+        raise io_error("backup", e, target)
     return target
 
 

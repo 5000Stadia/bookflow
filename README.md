@@ -6,15 +6,14 @@ A multi-company double-entry accounting core for small businesses. A Python libr
 
 ```
 uv venv && uv pip install -e ".[dev]"
-bookflow init
-bookflow demo reset
-bookflow company list
+uv run bookflow init
+uv run bookflow demo reset
+uv run bookflow company list
 ```
 
-Every command takes `--json`; `bookflow --help` lists the rest.
+Every command takes `--json`; `uv run bookflow --help` lists the rest. Activate the environment (`source .venv/bin/activate`) to drop the `uv run` prefix.
 
 ## Layout
 
 - `design/blueprint.md` — what every part is and how it works
 - `design/intention.md` — the spec list, in build order
-- `docs/` — command and schema reference, generated once something runs

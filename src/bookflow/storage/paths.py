@@ -22,13 +22,13 @@ def resolve_data_root(option: str | None = None) -> Path:
     return Path(raw).expanduser()
 
 
-def normalize_display_name(name: str) -> str:
+def normalize_display_name(name: str, field: str = "name") -> str:
     """Trim, collapse whitespace, NFC. Raises E_VALIDATION on empty or '/'."""
     n = _WS.sub(" ", unicodedata.normalize("NFC", name)).strip()
     if not n:
-        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "name", "problem": "must not be empty"}]})
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": field, "problem": "must not be empty"}]})
     if "/" in n:
-        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "name", "problem": "must not contain '/'"}]})
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": field, "problem": "must not contain '/'"}]})
     return n
 
 

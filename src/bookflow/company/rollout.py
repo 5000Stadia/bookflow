@@ -23,7 +23,7 @@ def create_company_folder(s: Session, org_folder: Path, company_id: str, display
         write_company_marker(folder, company_id=company_id, state="creating", display_name=display_name)
         for sub in ("attachments", "backups", "exports"):
             (folder / sub).mkdir(mode=0o700)
-        with open_database(folder / "company.db", writable=True) as db:
+        with open_database(folder / "company.db", writable=True, create=True) as db:
             migrate_to_head(db, "company", None)
             row = {"id": company_id, **common(s.actor.id, via), **info, "display_name": display_name}
             db.conn.execute(c.company_info.insert().values(**row))

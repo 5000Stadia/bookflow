@@ -206,7 +206,7 @@ def test_audit_diff_and_delete_snapshots(client):
     assert entry["action"] == "update" and entry["diff"]["display_name"] == {"before": "Demo Plumbing Co", "after": "Renamed Demo"}
     cid = client.company.list()["items"][0]["company_id"]
     client.company.detach(company=cid)
-    ev = client.hub.audit.list(command_name="company detach")["items"][0]
+    ev = client.hub.audit.list(command="company detach")["items"][0]
     entries = client.hub.audit.show(event=ev["id"])["entries"]
     assert any(e["action"] == "delete" and e["record_type"] == "company" and e["before"]["id"] == cid for e in entries)
     assert any(e["action"] == "delete" and e["record_type"] == "membership" for e in entries)
@@ -285,12 +285,12 @@ def test_init_edges(tmp_path, monkeypatch):
     first = c.init(username="kay", display_name="Kay")
     assert first["created"] and first["username"] == "kay"
     again = c.init()
-    assert again["created"] is False and again["hub_admin_user_id"] == first["hub_admin_user_id"]
+    assert again["created"] is False and again["user_id"] == first["user_id"]
     with pytest.raises(BookflowError) as e:
         c.init(username="other")
     assert e.value.code == "E_INIT_CONFLICT"
-    ev = c.hub.audit.list(command_name="init")["items"][0]
-    assert ev["actor_id"] == first["hub_admin_user_id"] and ev["interface"] == "python"
+    ev = c.hub.audit.list(command="init")["items"][0]
+    assert ev["actor_id"] == first["user_id"] and ev["interface"] == "python"
     (r / "config.toml").unlink()
     assert c.init()["created"] is False and (r / "config.toml").exists()
     (r / "config.toml").write_text("bad = [")

@@ -44,6 +44,8 @@ class Session:
     memberships: list[dict[str, Any]] = field(default_factory=list)
     pending_config: bool = False
     company_tz: str | None = None
+    hub_migrated: tuple | None = None
+    completed_moves: list = field(default_factory=list)  # ids whose pending move this command finished on open
 
     def close_company(self) -> None:
         cm = getattr(self, '_co_cm', None)

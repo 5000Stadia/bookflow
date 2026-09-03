@@ -16,7 +16,7 @@ from bookflow.commands.common import (CompanySummary, Empty, ListInput, NameInpu
 from bookflow.core.context import Context
 from bookflow.core.errors import BookflowError
 from bookflow.core.fs import check_local
-from bookflow.core.ids import new_id
+from bookflow.core.ids import is_ulid, new_id
 from bookflow.core.lazy import lazy
 from bookflow.core.locks import RootLock
 from bookflow.core.models import ListOutput, redact_paths
@@ -54,7 +54,8 @@ class InitInput(BaseModel):
 class InitOutput(WriteOutput):
     data_root: str | None
     created: bool
-    hub_admin_user_id: str
+    user_id: str
+    hub_admin: bool
     username: str
     display_name: str
     system_user_id: str
@@ -73,7 +74,7 @@ def run_init(cmd, inp: InitInput, ctx: Context, s: Session) -> dict[str, Any]:
     username = inp.username or s.os_login
     display_name = inp.display_name or username
     if s.dry_run and not (root / "hub.db").exists():
-        out = InitOutput(dry_run=True, data_root=str(root), created=True, hub_admin_user_id=new_id(), username=username, display_name=display_name, system_user_id=new_id())
+        out = InitOutput(dry_run=True, data_root=str(root), created=True, user_id=new_id(), hub_admin=True, username=username, display_name=display_name, system_user_id=new_id())
         return out.model_dump(mode="json")
     with private_umask():
         root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -83,7 +84,7 @@ def run_init(cmd, inp: InitInput, ctx: Context, s: Session) -> dict[str, Any]:
             from bookflow.core.config import Config
             cfg_path = root / "config.toml"
             s.config = Config.load(cfg_path) if cfg_path.exists() else Config(cfg_path)
-            with engine.open_database(root / "hub.db", writable=True) as hub:
+            with engine.open_database(root / "hub.db", writable=True, create=True) as hub:
                 s.hub = hub
                 migrate.migrate_to_head(hub, "hub", root / "backups")
                 system = users.find_user(s, kind="system")
@@ -96,20 +97,20 @@ def run_init(cmd, inp: InitInput, ctx: Context, s: Session) -> dict[str, Any]:
                             raise BookflowError("E_NO_ACTOR")
                         if inp.username and inp.username != me["username"]:
                             raise BookflowError("E_INIT_CONFLICT", details={"username": me["username"]})
-                        out = InitOutput(data_root=str(root), created=False, hub_admin_user_id=me["id"], username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
+                        out = InitOutput(data_root=str(root), created=False, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
                         return redact_paths(out.model_dump(mode="json"), me["hub_admin"])
                     if not cfg_path.exists() and len(humans) == 1:
                         me = humans[0]
                         if s.dry_run:
-                            out = InitOutput(dry_run=True, data_root=str(root), created=False, hub_admin_user_id=me["id"], username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
+                            out = InitOutput(dry_run=True, data_root=str(root), created=False, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
                             return out.model_dump(mode="json")
                         s.config.set_user(s.os_login, me["id"])
                         s.config.save()
-                        out = InitOutput(data_root=str(root), created=False, hub_admin_user_id=me["id"], username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
+                        out = InitOutput(data_root=str(root), created=False, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
                         return redact_paths(out.model_dump(mode="json"), me["hub_admin"])
                     raise BookflowError("E_NO_ACTOR")
                 if s.dry_run:
-                    out = InitOutput(dry_run=True, data_root=str(root), created=True, hub_admin_user_id=new_id(), username=username, display_name=display_name, system_user_id=new_id())
+                    out = InitOutput(dry_run=True, data_root=str(root), created=True, user_id=new_id(), hub_admin=True, username=username, display_name=display_name, system_user_id=new_id())
                     return out.model_dump(mode="json")
                 if users.find_user(s, username=username):
                     raise BookflowError("E_INIT_CONFLICT", details={"username": username})
@@ -125,7 +126,7 @@ def run_init(cmd, inp: InitInput, ctx: Context, s: Session) -> dict[str, Any]:
                     raise
                 s.config.set_user(s.os_login, me["id"])
                 s.config.save()
-                out = InitOutput(data_root=str(root), created=True, hub_admin_user_id=me["id"], username=username, display_name=display_name, system_user_id=system["id"])
+                out = InitOutput(data_root=str(root), created=True, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=username, display_name=display_name, system_user_id=system["id"])
                 return out.model_dump(mode="json")
 
 
@@ -148,14 +149,19 @@ upgrade_cmd = command("upgrade", scope="hub", description="Migrate the hub datab
 def plan_upgrade(inp: Empty, ctx: Context, s: Session) -> Plan:
     rows = co.list_visible(s)
     writable = [r for r in rows if _may_write(s, r)]
-    migrated, skipped, missing = [], [], []
+    migrated, skipped, missing, failed = [], [], [], []
     for r in writable:
         p = s.abs_path(r["path"]) / "company.db"
         if not p.exists():
             missing.append(r["id"]); continue
-        state = migrate.classify("company", migrate.current_revision_raw(p))
+        try:
+            state = migrate.classify("company", migrate.current_revision_raw(p))
+        except BookflowError as e:
+            failed.append({"company_id": r["id"], "code": e.code}); continue
         (skipped if state == "head" else migrated).append(r["id"])
-    return Plan(preview=UpgradeOutput(hub_migrated=False, hub_revision=migrate.HEADS["hub"], companies_migrated=migrated, companies_skipped=skipped, companies_missing=missing, companies_failed=[]), data={"rows": writable})
+    hub_rev = migrate.current_revision_raw(s.data_root / "hub.db")
+    hub_would = s.hub_migrated is not None or migrate.classify("hub", hub_rev) == "behind"
+    return Plan(preview=UpgradeOutput(hub_migrated=hub_would, hub_revision=migrate.HEADS["hub"], companies_migrated=migrated, companies_skipped=skipped, companies_missing=missing, companies_failed=failed), data={"rows": writable})
 
 
 def _may_write(s: Session, row: dict[str, Any]) -> bool:
@@ -178,12 +184,14 @@ def apply_upgrade(plan: Plan, ctx: Context, s: Session) -> Applied:
                 skipped.append(r["id"]); continue
             s.hub.raw.execute("BEGIN IMMEDIATE")
             s.hub.conn.execute(h.companies.update().where(h.companies.c.id == r["id"]).values(schema_revision=after))
-            audit.write_event(s, ctx, "upgrade", f"migrated company {r['display_name']} from {before} to {after}", [Touched("company", r["id"], "migrate", None, None, {"schema_revision": after})])
             s.hub.raw.execute("COMMIT")
+            write_company_marker(s.abs_path(r["path"]), company_id=r["id"], state="ready", display_name=r["display_name"], schema_revision=after)
+            from bookflow.core.dispatch import _record_migration
+            _record_migration(s, ctx, s.hub, "company", before, after, record_id=r["id"], label=f"company {r['display_name']}")
             migrated.append(r["id"])
         except BookflowError as e:
             failed.append({"company_id": r["id"], "code": e.code}); break
-    out = UpgradeOutput(hub_migrated=False, hub_revision=migrate.HEADS["hub"], companies_migrated=migrated, companies_skipped=skipped, companies_missing=missing, companies_failed=failed)
+    out = UpgradeOutput(hub_migrated=s.hub_migrated is not None, hub_revision=migrate.HEADS["hub"], companies_migrated=migrated, companies_skipped=skipped, companies_missing=missing, companies_failed=failed)
     return Applied(out, [], "upgrade run", audited=True)
 
 
@@ -213,7 +221,7 @@ org_new = command("organization new", scope="hub", description="Create an organi
 
 @org_new
 def plan_org_new(inp: NameInput, ctx: Context, s: Session) -> Plan:
-    name = normalize_display_name(inp.name)
+    name = normalize_display_name(inp.name, field="name")
     if org.name_taken(s, name_key(name)):
         raise BookflowError("E_NAME_TAKEN", details={"name": name})
     folder = choose_folder_name(s.organizations_dir, name)
@@ -288,26 +296,10 @@ def apply_org_rename(plan: Plan, ctx: Context, s: Session) -> Applied:
         audit.write_event(s, ctx, "organization rename", f"renamed organization {row['display_name']} to {name}" if name != row["display_name"] else f"move requested for organization {name}", [Touched("organization", row["id"], "update", row["version"], new["version"], new)])
     s.hub.raw.execute("COMMIT")
     moved = False
-    pending = new.get("pending_path") or row.get("pending_path")
-    if plan.data["will_move"] and pending:
-        src, dst = s.abs_path(new["path"]), s.abs_path(pending)
-        if not dst.exists():
-            if not src.exists():
-                raise BookflowError("E_RENAME_INCOMPLETE", details={"organization_id": row["id"], "path": str(dst)})
-            move_dir(src, dst, company_id=row["id"])
-        s.hub.raw.execute("BEGIN IMMEDIATE")
-        final = org.bump(new, s.actor.id, VIA(ctx), path=pending, pending_path=None)
-        s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == row["id"]).values(path=pending, pending_path=None, version=final["version"], updated_at=final["updated_at"], updated_by=final["updated_by"], updated_via=final["updated_via"]))
-        touched = [Touched("organization", row["id"], "update", new["version"], final["version"], final)]
-        old_prefix = new["path"].rstrip("/") + "/"
-        for crow in s.hub.conn.execute(sa.select(h.companies).where(h.companies.c.organization_id == row["id"])).mappings().all():
-            crow = dict(crow)
-            if crow["path"].startswith(old_prefix):
-                cnew, t = co.update(s, crow, VIA(ctx), path=pending.rstrip("/") + "/" + crow["path"][len(old_prefix):])
-                touched.append(t)
-        audit.write_event(s, ctx, "organization move", f"moved organization {name} to {pending}", touched)
-        s.hub.raw.execute("COMMIT")
-        new, moved = final, True
+    if plan.data["will_move"] and new.get("pending_path"):
+        from bookflow.hub.moves import complete_org_move
+        new = complete_org_move(s, ctx, dict(new), VIA(ctx))
+        moved = True
     return Applied(OrgRenameOutput(organization_id=row["id"], display_name=new["display_name"], previous_display_name=row["display_name"], path=str(s.abs_path(new["path"])), moved=moved), [], "", audited=True)
 
 
@@ -456,7 +448,7 @@ def plan_company_new(inp: CompanyNewInput, ctx: Context, s: Session) -> Plan:
     orow = _resolve_org_for_new(s, inp.organization)
     if inp.display_name is None and "/" in inp.legal_name:
         raise BookflowError("E_VALIDATION", details={"fields": [{"field": "display_name", "problem": "defaults to legal_name, which contains '/'; give display_name"}]})
-    display = normalize_display_name(inp.display_name or inp.legal_name)
+    display = normalize_display_name(inp.display_name or inp.legal_name, field="display_name" if inp.display_name else "legal_name")
     if co.name_taken(s, orow["id"], name_key(display)):
         raise BookflowError("E_NAME_TAKEN", details={"name": display})
     if inp.timezone is None:
@@ -546,12 +538,16 @@ company_attach = command("company attach", scope="hub", description="Register a 
 
 def _read_company_raw(db_path: Path) -> dict[str, Any]:
     import sqlite3
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    from bookflow.storage.engine import sqlite_uri
+    try:
+        conn = sqlite3.connect(sqlite_uri(db_path, "ro"), uri=True)
+    except sqlite3.Error:
+        raise BookflowError("E_ATTACH_INVALID", details={"check": "database", "path": str(db_path)})
     try:
         try:
             rev = conn.execute("SELECT version_num FROM alembic_version").fetchone()
             row = conn.execute("SELECT id, display_name, legal_name, home_currency FROM company_info").fetchone()
-        except sqlite3.OperationalError:
+        except sqlite3.DatabaseError:
             raise BookflowError("E_ATTACH_INVALID", details={"check": "database", "path": str(db_path)})
     finally:
         conn.close()
@@ -717,8 +713,11 @@ class AuditListInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     since: str | None = Field(None, description="ISO timestamp or date; events at or after")
     until: str | None = Field(None, description="ISO timestamp or date; events before")
-    actor: str | None = Field(None, description="Actor user id")
-    command_name: str | None = Field(None, description="Command name, e.g. 'company new'")
+    actor: str | None = Field(None, description="Actor user id or username")
+    kind: Literal["human", "agent", "system"] | None = Field(None, description="Actor kind")
+    via: Literal["cli", "http", "mcp", "gui", "python", "system"] | None = Field(None, description="Interface the write came through")
+    principal: str | None = Field(None, description="On-behalf-of user id")
+    command: str | None = Field(None, description="Command name, e.g. 'company new'")
     record_type: str | None = None
     record_id: str | None = None
     limit: int = Field(50, ge=1, le=1000)
@@ -766,11 +765,16 @@ class AuditListOutput(BaseModel):
 
 
 def _event_out(s: Session, e: dict[str, Any], names: dict[str, str], with_entries: bool) -> AuditEventOut:
-    count = s.hub.conn.execute(sa.select(sa.func.count()).select_from(h.audit_entries).where(h.audit_entries.c.event_id == e["id"])).scalar_one()
+    visible = audit.visible_record_ids(s)
+    entry_q = sa.select(h.audit_entries).where(h.audit_entries.c.event_id == e["id"])
+    if visible is not None:
+        entry_q = entry_q.where(h.audit_entries.c.record_id.in_(visible))
+    rows = s.hub.conn.execute(entry_q).mappings().all()
+    count = len(rows)
     entries = None
     if with_entries:
         entries = []
-        for r in s.hub.conn.execute(sa.select(h.audit_entries).where(h.audit_entries.c.event_id == e["id"])).mappings().all():
+        for r in rows:
             before, after = audit.decode_snapshot(r["before"]), audit.decode_snapshot(r["after"])
             if before is None and r["action"] == "update" and r["version_before"] is not None:
                 prev = s.hub.conn.execute(sa.select(h.audit_entries.c.after).where(h.audit_entries.c.record_type == r["record_type"], h.audit_entries.c.record_id == r["record_id"], h.audit_entries.c.version_after == r["version_before"])).first()
@@ -778,6 +782,9 @@ def _event_out(s: Session, e: dict[str, Any], names: dict[str, str], with_entrie
             diff = None
             if before is not None and after is not None:
                 diff = {k: {"before": before.get(k), "after": after.get(k)} for k in sorted(set(before) | set(after)) if before.get(k) != after.get(k)}
+            before, after = redact_paths(before, s.is_hub_admin), redact_paths(after, s.is_hub_admin)
+            if diff is not None:
+                diff = {k: v for k, v in diff.items() if not (k == "path" or k.endswith("_path")) or s.is_hub_admin}
             entries.append(AuditEntryOut(id=r["id"], record_type=r["record_type"], record_id=r["record_id"], action=r["action"], version_before=r["version_before"], version_after=r["version_after"], before=before, after=after, diff=diff))
     return AuditEventOut(**{k: e[k] for k in AuditEventOut.model_fields if k in e and k not in ("at",)}, at=localize(s, e["at"]), actor_name=names.get(e["actor_id"]), entry_count=count, entries=entries)
 
@@ -788,14 +795,23 @@ audit_list = command("hub audit list", scope="hub", description="List hub audit 
 @audit_list
 def plan_audit_list(inp: AuditListInput, ctx: Context, s: Session) -> Plan:
     q = sa.select(h.audit_events).where(audit.visible_event_ids_filter(s)).order_by(h.audit_events.c.id.desc()).limit(inp.limit + 1)
+    from bookflow.core.dispatch import parse_when
+    zone = (s.actor.timezone if s.actor else None) or s.company_tz
     if inp.since:
-        q = q.where(h.audit_events.c.at >= inp.since)
+        q = q.where(h.audit_events.c.at >= parse_when(inp.since, zone))
     if inp.until:
-        q = q.where(h.audit_events.c.at < inp.until)
+        q = q.where(h.audit_events.c.at < parse_when(inp.until, zone, end=True))
     if inp.actor:
-        q = q.where(h.audit_events.c.actor_id == inp.actor)
-    if inp.command_name:
-        q = q.where(h.audit_events.c.command == inp.command_name)
+        actor_row = users.find_user(s, username=inp.actor) if not is_ulid(inp.actor) else None
+        q = q.where(h.audit_events.c.actor_id == (actor_row["id"] if actor_row else inp.actor.upper()))
+    if inp.kind:
+        q = q.where(h.audit_events.c.actor_kind == inp.kind)
+    if inp.via:
+        q = q.where(h.audit_events.c.interface == inp.via)
+    if inp.principal:
+        q = q.where(h.audit_events.c.on_behalf_of == inp.principal.upper())
+    if inp.command:
+        q = q.where(h.audit_events.c.command == inp.command)
     if inp.record_type or inp.record_id:
         sub = sa.select(h.audit_entries.c.event_id)
         if inp.record_type:
