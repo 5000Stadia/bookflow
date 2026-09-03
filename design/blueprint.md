@@ -326,7 +326,7 @@ An `update` without `expected_version` proceeds against the current version. The
 
 ### 6.4 Presence
 
-Table `presence` in company.db: `record_type`, `record_id`, `user_id`, `interface`, `started_at`, `heartbeat_at`. A GUI registers presence when a user opens a record for editing and sends a heartbeat every 30 seconds. Presence older than 90 seconds is ignored. `show` output includes `editing_by` listing live presence. Presence never blocks a write.
+Table `presence` in company.db: `record_type`, `record_id`, `user_id`, `interface`, `started_at`, `heartbeat_at`. Presence is not audited. A GUI registers presence when a user opens a record for editing and sends a heartbeat every 30 seconds. Presence older than 90 seconds is ignored. `show` output includes `editing_by` listing live presence. Presence never blocks a write.
 
 ### 6.5 Idempotency
 
@@ -371,14 +371,14 @@ Rules:
 
 - No command updates or deletes audit rows. The repository layer exposes only insert and read.
 - `audit list` filters by actor, actor kind, interface, record type, record id, command, and time range, and returns events with entry counts. `audit show <event_id>` returns the event with entries and a computed field diff per entry.
-- `activity <record_type> <record_id>` merges audit entries, notes, and attachment links for that record in time order. The hub has the same `audit list` and `audit show`, hub-scoped: hub admins see every event; other users see events whose entries reference an organization or company they can see, and `audit show` on any other event returns `E_EVENT_NOT_FOUND` exactly as for a nonexistent id. Snapshots inside entries are redacted like any output: fields named `path` or ending in `_path` are removed for non-hub-admins. `audit list` filters: `--since`, `--until`, `--actor`, `--command`, `--record-type`, `--record-id`, `--limit`, `--after` cursor.
-- Reads are not audited. Every write, including one that changes only `config.toml`, records an event.
+- `activity <record_type> <record_id>` merges audit entries, notes, and attachment links for that record in time order. The hub has `hub audit list`, `hub audit show`, and `hub audit tail`, hub-scoped, with the same filters: hub admins see every event; other users see events whose entries reference an organization or company they can see, and `audit show` on any other event returns `E_EVENT_NOT_FOUND` exactly as for a nonexistent id. Snapshots inside entries are redacted like any output: fields named `path` or ending in `_path` are removed for non-hub-admins. `audit list` filters: `--since`, `--until`, `--actor`, `--actor-kind`, `--on-behalf-of`, `--interface`, `--command`, `--record-type`, `--record-id`, `--limit`; `list` pages older with `--before` and `tail` pages newer with `--after`.
+- Reads are not audited. Every write, including one that changes only `config.toml`, records an event. Presence (6.4) is advisory state, not a record, and its heartbeats are never audited.
 
 `undo <event_id>` reverses a list-record event by writing the entry's before-state as a new versioned write, itself audited with `reason` `undo of <event_id>`; it refuses events that touched the ledger (`E_NOT_UNDOABLE`), which are voided instead.
 
 ### 7.1 Event feed
 
-The audit log is the event stream. `audit tail --after <cursor> --limit <n>` returns events after the cursor in commit order with a new cursor; the cursor is the last event id. `--follow` on the CLI keeps polling. The host exposes `GET /companies/{company_id}/events?after=<cursor>` as server-sent events, one event per message, with the same filters as `audit list`. A subscriber that stores its last cursor resumes with nothing missed. Webhooks are a later addition on top of this feed and are not in release 1.
+The audit log is the event stream. `audit tail --after <cursor> --limit <n>` returns events after the cursor in commit order with a new cursor; the cursor is the last event id, and event ids are ULIDs generated under the data-root lock, so id order is commit order. `tail` accepts every `list` filter. `--follow` on the CLI keeps polling. The host exposes `GET /companies/{company_id}/events?after=<cursor>` as server-sent events, one event per message, with the same filters as `audit list`. A subscriber that stores its last cursor resumes with nothing missed. Webhooks are a later addition on top of this feed and are not in release 1.
 
 ## 8. Money and currency
 
