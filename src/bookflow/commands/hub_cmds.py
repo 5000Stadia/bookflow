@@ -679,7 +679,7 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
         pending = existing.get("pending_path") or trash_rel
         if not existing.get("pending_path"):
             s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == existing["id"]).values(pending_path=pending))
-            audit.write_event(s, ctx, "demo reset", f"moving demo organization to {pending}", [Touched("organization", existing["id"], "update", existing["version"], existing["version"], {**existing, "pending_path": pending})])
+            audit.write_event(s, ctx, "demo reset", "moving the previous demo organization to trash", [Touched("organization", existing["id"], "update", existing["version"], existing["version"], {**existing, "pending_path": pending})])
         s.hub.raw.execute("COMMIT")
         src, dst = s.abs_path(existing["path"]), s.abs_path(pending)
         n = 1
@@ -786,7 +786,11 @@ def _event_out(s: Session, e: dict[str, Any], names: dict[str, str], with_entrie
             if diff is not None:
                 diff = {k: v for k, v in diff.items() if not (k == "path" or k.endswith("_path")) or s.is_hub_admin}
             entries.append(AuditEntryOut(id=r["id"], record_type=r["record_type"], record_id=r["record_id"], action=r["action"], version_before=r["version_before"], version_after=r["version_after"], before=before, after=after, diff=diff))
-    return AuditEventOut(**{k: e[k] for k in AuditEventOut.model_fields if k in e and k not in ("at",)}, at=localize(s, e["at"]), actor_name=names.get(e["actor_id"]), entry_count=count, entries=entries)
+    fields = {k: e[k] for k in AuditEventOut.model_fields if k in e and k not in ("at",)}
+    if not s.is_hub_admin:
+        import re as _re
+        fields["summary"] = _re.sub(r"(organizations|trash)/\S+", "<path>", fields["summary"])
+    return AuditEventOut(**fields, at=localize(s, e["at"]), actor_name=names.get(e["actor_id"]), entry_count=count, entries=entries)
 
 
 audit_list = command("hub audit list", scope="hub", description="List hub audit events the acting user may see, newest first.", input_model=AuditListInput, output_model=AuditListOutput)

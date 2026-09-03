@@ -117,11 +117,20 @@ def _build_command(cmd: registry.Command):
         if local_root and ctx_obj.get("data_root") and local_root != ctx_obj["data_root"]:
             raise BookflowError("E_USAGE", message="--data-root was given twice with different values")
         data_root = local_root or ctx_obj.get("data_root")
-        dry_run = kw.pop("dry_run", False)
-        reason = kw.pop("reason", None)
-        source_ref = kw.pop("source_ref", None)
+
+        def merged(name: str, local: Any, applicable: bool) -> Any:
+            root_v = ctx_obj.get(name)
+            if root_v not in (None, False) and not applicable:
+                raise BookflowError("E_USAGE", message=f"--{name.replace('_', '-')} does not apply to `{cmd.name}`")
+            if root_v not in (None, False) and local not in (None, False) and root_v != local:
+                raise BookflowError("E_USAGE", message=f"--{name.replace('_', '-')} was given twice with different values")
+            return local if local not in (None, False) else root_v
+
+        dry_run = bool(merged("dry_run", kw.pop("dry_run", False), cmd.is_write))
+        reason = merged("reason", kw.pop("reason", None), cmd.is_write)
+        source_ref = merged("source_ref", kw.pop("source_ref", None), cmd.is_write)
         interactive = kw.pop("interactive", False)
-        company = kw.pop("company", None)
+        company = merged("company", kw.pop("company", None), cmd.scope == "company")
         raw: dict[str, Any] = {}
         for path, flag, ann, help_, required, dflt in leaves:
             v = kw.get("f__" + path.replace(".", "__"))
@@ -176,8 +185,12 @@ def build_app() -> typer.Typer:
     @app.callback()
     def root(ctx: typer.Context,
              json_: Annotated[bool, typer.Option("--json", help="Print output as one JSON object")] = False,
-             data_root: Annotated[str | None, typer.Option("--data-root", help="Data root; else BOOKFLOW_DATA_ROOT, else ~/.bookflow")] = None) -> None:
-        ctx.obj = {"json": json_, "data_root": data_root, "session_id": new_id()}
+             data_root: Annotated[str | None, typer.Option("--data-root", help="Data root; else BOOKFLOW_DATA_ROOT, else ~/.bookflow")] = None,
+             dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate and preview; write nothing (writing commands only)")] = False,
+             company: Annotated[str | None, typer.Option("--company", help="Company selector (company-scoped commands only)")] = None,
+             reason: Annotated[str | None, typer.Option("--reason", help="Why, in one short phrase (writing commands only)")] = None,
+             source_ref: Annotated[str | None, typer.Option("--source-ref", help="What triggered this write (writing commands only)")] = None) -> None:
+        ctx.obj = {"json": json_, "data_root": data_root, "dry_run": dry_run, "company": company, "reason": reason, "source_ref": source_ref, "session_id": new_id()}
 
     groups: dict[str, typer.Typer] = {}
 

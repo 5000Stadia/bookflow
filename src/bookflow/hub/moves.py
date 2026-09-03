@@ -68,7 +68,7 @@ def complete_company_move(s: Session, ctx: Context, row: dict[str, Any], via: st
     s.hub.raw.execute("BEGIN IMMEDIATE")
     s.hub.conn.execute(h.companies.update().where(h.companies.c.id == row["id"]).values(
         path=pending, pending_path=None, version=new["version"], updated_at=new["updated_at"], updated_by=new["updated_by"], updated_via=new["updated_via"]))
-    write_event(s, ctx, "company move", f"moved company {row['display_name']} to {pending}",
+    write_event(s, ctx, "company move", f"moved the folder of company {row['display_name']}",
                 [Touched("company", row["id"], "update", row["version"], new["version"], {k: v for k, v in new.items() if k in h.companies.c})])
     s.hub.raw.execute("COMMIT")
     row.update(new)
@@ -85,11 +85,15 @@ def complete_org_move(s: Session, ctx: Context, org: dict[str, Any], via: str) -
     s.hub.raw.execute("BEGIN IMMEDIATE")
     s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == org["id"]).values(
         path=pending, pending_path=None, version=new["version"], updated_at=new["updated_at"], updated_by=new["updated_by"], updated_via=new["updated_via"]))
-    for crow in s.hub.conn.execute(sa.select(h.companies.c.id, h.companies.c.path).where(h.companies.c.organization_id == org["id"])).all():
-        if crow.path.startswith(old_prefix):
-            s.hub.conn.execute(h.companies.update().where(h.companies.c.id == crow.id).values(path=pending.rstrip("/") + "/" + crow.path[len(old_prefix):]))
-    write_event(s, ctx, "organization move", f"moved organization {org['display_name']} to {pending}",
-                [Touched("organization", org["id"], "update", org["version"], new["version"], {k: v for k, v in new.items() if k in h.organizations.c})])
+    touched = [Touched("organization", org["id"], "update", org["version"], new["version"], {k: v for k, v in new.items() if k in h.organizations.c})]
+    for crow in s.hub.conn.execute(sa.select(h.companies).where(h.companies.c.organization_id == org["id"])).mappings().all():
+        crow = dict(crow)
+        if crow["path"].startswith(old_prefix):
+            cnew = {**crow, "path": pending.rstrip("/") + "/" + crow["path"][len(old_prefix):], "version": crow["version"] + 1,
+                    "updated_at": new["updated_at"], "updated_by": new["updated_by"], "updated_via": via}
+            s.hub.conn.execute(h.companies.update().where(h.companies.c.id == crow["id"]).values(path=cnew["path"], version=cnew["version"], updated_at=cnew["updated_at"], updated_by=cnew["updated_by"], updated_via=via))
+            touched.append(Touched("company", crow["id"], "update", crow["version"], cnew["version"], cnew))
+    write_event(s, ctx, "organization move", f"moved the folder of organization {org['display_name']}", touched)
     s.hub.raw.execute("COMMIT")
     org.update(new)
     return org

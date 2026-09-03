@@ -279,15 +279,20 @@ def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str
     if company_selector is not None and cmd.scope != "company" and not _accepts_selector(cmd):
         raise BookflowError("E_USAGE", message=f"`{cmd.name}` is not a company-scoped command; --company does not apply.")
     inp = validate_input(cmd, raw_input)
-    root = resolve_data_root(data_root)
-    check_local(root)
-    s = Session(data_root=root, os_login=login or os_login(), config=Config(root / "config.toml"), dry_run=dry_run)
-    if cmd.bootstrap:
-        return _run_bootstrap(cmd, inp, ctx, s)
-    if not (root / "hub.db").exists():
-        raise BookflowError("E_NOT_INITIALIZED", details={"data_root": str(root)})
     validate_context(ctx)
     allowed = False
+    try:
+        root = resolve_data_root(data_root)
+        check_local(root)
+        s = Session(data_root=root, os_login=login or os_login(), config=Config(root / "config.toml"), dry_run=dry_run)
+        if cmd.bootstrap:
+            return _run_bootstrap(cmd, inp, ctx, s)
+        if not (root / "hub.db").exists():
+            raise BookflowError("E_NOT_INITIALIZED", details={"data_root": str(root)})
+    except BookflowError as e:
+        raise redact_error(e, allowed)
+    except (OSError, sqlite3.Error) as e:
+        raise redact_error(io_error("command", e), allowed)
     try:
         with private_umask(), RootLock(root, cmd.name):
             try:
@@ -338,6 +343,7 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session):
         s.hub.raw.execute("BEGIN IMMEDIATE")
     if s.company is not None and "company" in cmd.writes:
         s.company.raw.execute("BEGIN IMMEDIATE")
+        _upsert_principals(s, ctx)
     try:
         applied = cmd.apply(plan, ctx, s)
         if s.company is not None and "company" in cmd.writes and s.company.raw.in_transaction:
@@ -358,6 +364,17 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session):
     if s.pending_config:
         s.config.save()
     return applied
+
+
+def _upsert_principals(s: Session, ctx: Context) -> None:
+    """Blueprint 4.1a: every company write mirrors the actor and the principal into the company."""
+    from bookflow.company.info import upsert_principal
+    from bookflow.hub.users import find_user
+    upsert_principal(s.company, user_id=s.actor.id, username=s.actor.username, display_name=s.actor.display_name, kind=s.actor.kind)
+    if ctx.on_behalf_of:
+        p = find_user(s, id=ctx.on_behalf_of)
+        if p:
+            upsert_principal(s.company, user_id=p["id"], username=p["username"], display_name=p["display_name"], kind=p["kind"])
 
 
 def _run_bootstrap(cmd: Command, inp: BaseModel, ctx: Context, s: Session) -> dict[str, Any]:

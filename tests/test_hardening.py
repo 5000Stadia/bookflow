@@ -254,7 +254,7 @@ def test_org_hop_completed_by_rerun(client, root):
     out = client.organization.rename(organization=orow["id"], name=name.upper(), move=True)
     assert out["moved"] and not hop.exists() and (root / new_rel).exists()
     ev = client.hub.audit.list(command="organization move")["items"][0]
-    assert ev["entry_count"] == 1
+    assert ev["entry_count"] == 2, "the organization row and the one company row it rewrote"
 
 
 @pytest.mark.parametrize("platform,fn,mocked,expected", [
@@ -304,3 +304,70 @@ def test_sibling_companies_hidden_in_hub_audit(client, root):
     two_event = [e for e in client.hub.audit.list(command="company new")["items"] if "S Two" in e["summary"]][0]
     with pytest.raises(BookflowError):
         m.hub.audit.show(event=two_event["id"])
+
+
+def test_init_goes_through_the_boundary(tmp_path, monkeypatch):
+    r = tmp_path / "r"
+    c = bookflow.connect(data_root=str(r))
+    with pytest.raises(BookflowError) as e:
+        c.init(reason="x" * 141)
+    assert e.value.code == "E_VALIDATION" and e.value.details["fields"][0]["field"] == "reason"
+    real = Path.mkdir
+    def boom(self, *a, **k):
+        if self.name == "r":
+            raise PermissionError(13, "denied")
+        return real(self, *a, **k)
+    monkeypatch.setattr(Path, "mkdir", boom)
+    with pytest.raises(BookflowError) as e:
+        c.init()
+    assert e.value.code == "E_IO" and e.value.details["errno"] == "EACCES"
+
+
+def test_principals_mirror_every_company_write(client, root):
+    client.organization.new(name="Org P")
+    a = client.company.new(legal_name="P Co", home_currency="USD", organization="Org P", timezone="UTC")
+    make_actor(root, "padmin", org_role=(a["organization_id"], "admin"))
+    as_user(root, "padmin").company.rename(name="P Co Renamed", company=a["company_id"])
+    with open_database(Path(a["path"]) / "company.db", writable=False) as db:
+        names = {r[0] for r in db.raw.execute("SELECT username FROM principals").fetchall()}
+    assert "padmin" in names
+
+
+def test_non_admin_summaries_have_no_paths(client, root):
+    client.organization.new(name="Visible Org")
+    a = client.company.new(legal_name="Visible Co", home_currency="USD", organization="Visible Org", timezone="UTC")
+    client.company.rename(name="Moved Visible Co", move=True, company=a["company_id"])
+    client.organization.rename(organization="Visible Org", name="Visible Org Moved", move=True)
+    make_actor(root, "vmember", org_role=(a["organization_id"], "standard"))
+    m = as_user(root, "vmember")
+    for e in m.hub.audit.list()["items"]:
+        assert "organizations/" not in e["summary"] and "/tmp" not in e["summary"], e["summary"]
+        shown = m.hub.audit.show(event=e["id"])
+        assert "organizations/" not in shown["summary"]
+
+
+def test_org_move_versions_company_rows(client, root):
+    client.organization.new(name="Ver Org")
+    a = client.company.new(legal_name="Ver Co", home_currency="USD", organization="Ver Org", timezone="UTC")
+    before = client.company.show(company=a["company_id"])["version"]
+    client.organization.rename(organization="Ver Org", name="Ver Org Two", move=True)
+    after = client.company.show(company=a["company_id"])
+    assert after["version"] == before + 1 and "Ver Org Two" in after["path"]
+    ev = client.hub.audit.list(command="organization move")["items"][0]
+    entries = client.hub.audit.show(event=ev["id"])["entries"]
+    assert any(en["record_type"] == "company" and en["record_id"] == a["company_id"] and en["version_after"] == before + 1 for en in entries)
+
+
+def test_options_before_noun_and_verb(cli, root):
+    out = cli.json("--dry-run", "organization", "new", "--name", "Early Dry")
+    assert out["dry_run"] is True and cli.json("organization", "list")["count"] == 1
+    cli.json("--reason", "early", "--source-ref", "ref-1", "organization", "new", "--name", "Early Reason")
+    ev = cli.json("hub", "audit", "list", "--command", "organization new")["items"][0]
+    assert ev["reason"] == "early" and ev["source_ref"] == "ref-1"
+    assert cli.json("--company", "Demo Plumbing Co", "company", "show")["display_name"] == "Demo Plumbing Co"
+    err, code = cli.error("--dry-run", "organization", "list")
+    assert err["code"] == "E_USAGE"
+    err, code = cli.error("--reason", "a", "organization", "new", "--name", "X", "--reason", "b")
+    assert err["code"] == "E_USAGE"
+    err, code = cli.error("--company", "Demo Plumbing Co", "organization", "list")
+    assert err["code"] == "E_USAGE"
