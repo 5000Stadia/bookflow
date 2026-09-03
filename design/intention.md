@@ -25,6 +25,7 @@ Picture the plumber at 9pm asking their agent to post today's receipts, then ope
 - **One command contract.** Every operation is a named command with a typed input, a typed output, a stable error code, and a JSON form. Adapters translate; they never contain logic.
 - **QuickBooks vocabulary.** Lists, items, jobs, classes, terms, memorized transactions. When Bookflow names a thing, it uses the QuickBooks Desktop name.
 - **Integer minor units plus currency code** for every amount, everywhere.
+- **The demo company exercises everything.** A change that adds a table or command extends the demo seed in the same change, and the demo is what testing runs against.
 
 ## What it must never do
 

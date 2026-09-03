@@ -364,7 +364,11 @@ Table `company_info` in company.db, exactly one row.
 
 Seeded charts, chosen by `--chart`: `general`, `service`, `construction_trades`, `retail`, `nonprofit`. Each is a data file in the package. `general` is the default.
 
-### 9.3 Other company commands
+### 9.3 Demo company
+
+`bookflow demo reset` creates, or deletes and recreates, a company named `Demo Plumbing Co` from a seed file in the package, and grants the local owner the owner role. The seed holds sample data for every table that exists: company info, accounts, customers and jobs, vendors, employees, items, terms, notes, attachments, directives, and, once the ledger exists, a year of transactions. The seed grows in the same change that adds a table or command, so the demo always exercises everything that exists. `bookflow demo reset --name <other>` seeds under a different name. The demo company is an ordinary company: it appears in the workbench picker and every command works on it.
+
+### 9.4 Other company commands
 
 `company list`, `company show`, `company update`, `company rename`, `company use`, `company attach <path>`, `company backup`, `company compact`, `company delete`.
 
