@@ -789,7 +789,13 @@ When two good things conflict, the earlier line wins.
 
 Not in release 1: transaction forms other than journal entries, reports beyond trial balance and general ledger, work orders, time entries, scheduler, price levels, ship methods, inventory assemblies, the product interface beyond the workbench, a desktop wrapper, rate fetching, email, bank feeds, encryption at rest.
 
-Never in scope without a new design pass: payroll, multi-currency ledgers, non-US tax regimes.
+Three integrations are designed as their own passes, each behind a provider interface so the churn of outside services never reaches the core:
+
+- **Email per company** (section 13.4) ships in release 2 with the `event` and `smtp` channels; the Gmail package follows. Provider credentials and OAuth refresh live in the hub behind the provider interface, so a provider change never touches a company's books.
+- **Bank feeds.** A `bank_feed_items` inbox per bank or credit card account: transactions arrive from a provider (file import of OFX, QFX, and CSV first; then live connections behind the same interface, SimpleFIN Bridge first for its small universal shape, then Plaid for institution coverage), are matched to existing transactions or proposed as new ones by rules the company defines (payee pattern to account, class, and memo), and are either auto-posted where a rule says so or held for approval in the inbox. Approval is the default for anything a rule does not cover; the approving user and the rule are recorded on the posted transaction.
+- **Payroll.** Employees, the time clock, and time entries already have their tables. Payroll adds pay schedules, earnings and deduction items, tax tables delivered as a versioned data package updated like `tzdata`, paycheck posting through the ordinary ledger, and filings and payments through a provider interface, so tax-table updates and e-file submission change providers without changing the module.
+
+Never in scope without a new design pass: multi-currency ledgers, non-US tax regimes.
 
 Later releases, each designed as its own pass against this blueprint: customer relationship management (lead generation and tracking, contacts, follow-ups, communication history, pipeline reporting), purchase orders and receiving, inventory assemblies and build orders, shipping with printable labels, customer letters and statements, marketing lists and mailings, scheduled automated billing and late-payment notices with delivery of delinquent invoices after a set age, calendar integration with work orders and multi-phase project schedules spanning days, an employee time clock (clock in and out per employee, feeding time entries), payroll. Each is a set of lists, transaction types, and reports registered through the same command registry.
 
@@ -811,4 +817,4 @@ The build order is the spec list in `design/intention.md`, rows 1 to 9. That lis
 
 Release 1 is done when a stranger, given a fresh machine and the README, can: initialize a data root, create a company, log in to the workbench in a browser, add accounts and customers there, attach a receipt image to a customer, post a balanced journal entry from the workbench and another from the CLI, post a third over HTTP from a second process, list accounts from an MCP client, see all of it in the audit page with correct actors and interfaces, and reproduce all of it on a second copy of the company folder.
 
-Release 2 is forms (section 10.3), reports (section 14), and import and export (section 14.1). Release 3 is work orders, time, and the scheduler (section 13). The product interface is designed after release 2 against the HTTP host.
+Release 2 is forms (section 10.3), reports (section 14), import and export (section 14.1), and email delivery (section 13.4). Release 3 is work orders, time, and the scheduler (section 13). The product interface is designed after release 2 against the HTTP host.

@@ -6,11 +6,6 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from alembic import command
-from alembic.config import Config
-from alembic.runtime.migration import MigrationContext
-from alembic.script import ScriptDirectory
-
 from bookflow.core.errors import BookflowError
 from bookflow.storage.engine import Database
 
@@ -19,7 +14,8 @@ HEADS = {"hub": "hub0001", "company": "co0001"}
 _PKG = Path(__file__).parent
 
 
-def _config(chain: str, connection) -> Config:
+def _config(chain: str, connection):
+    from alembic.config import Config
     cfg = Config()
     cfg.set_main_option("script_location", str(_PKG / f"{chain}_migrations"))
     cfg.attributes["connection"] = connection
@@ -27,6 +23,7 @@ def _config(chain: str, connection) -> Config:
 
 
 def known_revisions(chain: str) -> set[str]:
+    from alembic.script import ScriptDirectory
     script = ScriptDirectory.from_config(_config(chain, None))
     return {r.revision for r in script.walk_revisions()}
 
@@ -45,11 +42,12 @@ def current_revision_raw(path: Path) -> str | None:
 
 
 def current_revision(db: Database) -> str | None:
+    from alembic.runtime.migration import MigrationContext
     return MigrationContext.configure(db.conn).get_current_revision()
 
 
 def classify(chain: str, revision: str | None) -> str:
-    """'head', 'behind', 'fresh', or 'unknown'."""
+    """'head', 'behind', 'fresh', or 'unknown'. Head is a constant; Alembic loads only for older revisions."""
     if revision is None:
         return "fresh"
     if revision == HEADS[chain]:
@@ -87,6 +85,7 @@ def migrate_to_head(db: Database, chain: str, backups_dir: Path | None) -> tuple
         return before, before
     if state == "behind" and backups_dir is not None:
         backup(db.path, backups_dir, prefix="hub-" if chain == "hub" else "")
+    from alembic import command
     command.upgrade(_config(chain, db.conn), "head")
     return before, HEADS[chain]
 

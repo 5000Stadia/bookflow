@@ -1,0 +1,89 @@
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+os.environ.setdefault("BOOKFLOW_LOCK_TIMEOUT", "0.2")
+
+import bookflow  # noqa: E402
+from bookflow.core import registry  # noqa: E402
+from bookflow.core.context import Context, Interface  # noqa: E402
+from bookflow.core.dispatch import run as dispatch_run  # noqa: E402
+
+BIN = Path(sys.executable).parent / "bookflow"
+
+
+@pytest.fixture
+def root(tmp_path, monkeypatch):
+    """A fresh, initialized data root with the demo organization and company."""
+    r = tmp_path / "root"
+    monkeypatch.setenv("BOOKFLOW_DATA_ROOT", str(r))
+    monkeypatch.delenv("BOOKFLOW_COMPANY", raising=False)
+    c = bookflow.connect(data_root=str(r))
+    c.init()
+    c.demo.reset()
+    return r
+
+
+@pytest.fixture
+def client(root):
+    return bookflow.connect(data_root=str(root))
+
+
+class Cli:
+    def __init__(self, root: Path):
+        self.root = root
+
+    def run(self, *args: str, env: dict | None = None, expect: int | None = 0):
+        e = {**os.environ, "BOOKFLOW_DATA_ROOT": str(self.root), **(env or {})}
+        p = subprocess.run([str(BIN), *args], capture_output=True, text=True, env=e)
+        if expect is not None:
+            assert p.returncode == expect, (p.stdout, p.stderr)
+        return p
+
+    def json(self, *args: str, env: dict | None = None):
+        p = self.run(*args, "--json", env=env)
+        return json.loads(p.stdout)
+
+    def error(self, *args: str, env: dict | None = None):
+        p = self.run(*args, "--json", env=env, expect=None)
+        assert p.returncode != 0, p.stdout
+        return json.loads(p.stderr.strip().splitlines()[-1]), p.returncode
+
+
+@pytest.fixture
+def cli(root):
+    return Cli(root)
+
+
+def make_actor(root: Path, username: str, *, hub_admin: bool = False, org_role: tuple[str, str] | None = None,
+               company_role: tuple[str, str] | None = None, login: str | None = None) -> str:
+    """Test-only fixture standing in for row 7's `user add` and `membership grant`."""
+    from bookflow.core.config import Config
+    from bookflow.core.ids import new_id
+    from bookflow.core.session import now_iso
+    from bookflow.hub import schema as h
+    from bookflow.hub.users import common
+    from bookflow.storage.engine import open_database
+    login = login or username
+    with open_database(root / "hub.db", writable=True) as db:
+        uid = new_id()
+        db.raw.execute("BEGIN IMMEDIATE")
+        db.conn.execute(h.users.insert().values(id=uid, kind="human", username=username, display_name=username.title(), owner_user_id=None,
+                                                password_hash=None, hub_admin=hub_admin, timezone=None, active=True, **common(uid, "system")))
+        for scope, grant in (("organization", org_role), ("company", company_role)):
+            if grant:
+                db.conn.execute(h.memberships.insert().values(id=new_id(), user_id=uid, scope_type=scope, scope_id=grant[0], role=grant[1], granted_by=uid, granted_at=now_iso(), revoked_at=None))
+        db.raw.execute("COMMIT")
+    cfg = Config.load(root / "config.toml")
+    cfg.set_user(login, uid)
+    cfg.save()
+    return uid
+
+
+def as_user(root: Path, login: str) -> "bookflow.Client":
+    from bookflow.client import Client
+    return Client(data_root=str(root), login=login)

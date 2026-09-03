@@ -7,8 +7,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from typing import TYPE_CHECKING
+
 from bookflow.core.config import Config
-from bookflow.storage.engine import Database
+
+if TYPE_CHECKING:  # pragma: no cover
+    from bookflow.storage.engine import Database
 
 
 def now_iso() -> str:
@@ -30,8 +34,8 @@ class Session:
     data_root: Path
     os_login: str
     config: Config
-    hub: Database | None = None
-    company: Database | None = None
+    hub: "Database | None" = None
+    company: "Database | None" = None
     company_id: str | None = None
     company_row: dict[str, Any] | None = None
     actor: Actor | None = None

@@ -9,30 +9,36 @@ from pathlib import Path
 from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-import sqlalchemy as sa
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from bookflow.commands.common import (CompanySummary, Empty, ListInput, NameInput, OrganizationOutput, WriteOutput,
                                       company_summary, organization_output)
-from bookflow.company.info import write_display_name_copy
-from bookflow.company.rollout import create_company_folder
 from bookflow.core.context import Context
 from bookflow.core.errors import BookflowError
 from bookflow.core.fs import check_local
 from bookflow.core.ids import new_id
+from bookflow.core.lazy import lazy
 from bookflow.core.locks import RootLock
 from bookflow.core.models import ListOutput, redact_paths
 from bookflow.core.money import is_currency
 from bookflow.core.moves import move_dir
 from bookflow.core.perms import is_private_dir, private_umask
 from bookflow.core.registry import Applied, Plan, Touched, command
-from bookflow.core.session import Actor, Session, localize, now_iso
-from bookflow.hub import access, companies as co, organizations as org, schema as h, users
-from bookflow.hub.audit import decode_snapshot, visible_event_ids_filter, write_event
-from bookflow.storage.engine import open_database
-from bookflow.storage.migrate import HEADS, classify, current_revision_raw, migrate_to_head
+from bookflow.core.session import Session, localize, now_iso
 from bookflow.storage.paths import (choose_folder_name, name_key, normalize_display_name, read_company_marker,
                                     write_company_marker)
+
+sa = lazy("sqlalchemy")
+h = lazy("bookflow.hub.schema")
+access = lazy("bookflow.hub.access")
+co = lazy("bookflow.hub.companies")
+org = lazy("bookflow.hub.organizations")
+users = lazy("bookflow.hub.users")
+audit = lazy("bookflow.hub.audit")
+info = lazy("bookflow.company.info")
+rollout = lazy("bookflow.company.rollout")
+engine = lazy("bookflow.storage.engine")
+migrate = lazy("bookflow.storage.migrate")
 
 VIA = lambda ctx: ctx.interface.value  # noqa: E731
 
@@ -77,9 +83,9 @@ def run_init(cmd, inp: InitInput, ctx: Context, s: Session) -> dict[str, Any]:
             from bookflow.core.config import Config
             cfg_path = root / "config.toml"
             s.config = Config.load(cfg_path) if cfg_path.exists() else Config(cfg_path)
-            with open_database(root / "hub.db", writable=True) as hub:
+            with engine.open_database(root / "hub.db", writable=True) as hub:
                 s.hub = hub
-                migrate_to_head(hub, "hub", root / "backups")
+                migrate.migrate_to_head(hub, "hub", root / "backups")
                 system = users.find_user(s, kind="system")
                 humans = [dict(r) for r in hub.conn.execute(sa.select(h.users).where(h.users.c.kind == "human")).mappings().all()]
                 mapped = s.config.user_table(s.os_login)
@@ -112,7 +118,7 @@ def run_init(cmd, inp: InitInput, ctx: Context, s: Session) -> dict[str, Any]:
                     system = system or users.create_system_user(s, VIA(ctx))
                     me = users.create_human(s, username=username, display_name=display_name, created_by=system["id"], via=VIA(ctx), hub_admin=True)
                     touched = [Touched("user", system["id"], "create", None, 1, system), Touched("user", me["id"], "create", None, 1, me)]
-                    write_event(s, ctx, "init", f"initialized data root; first user {username}", touched, actor_id=me["id"], actor_kind="human")
+                    audit.write_event(s, ctx, "init", f"initialized data root; first user {username}", touched, actor_id=me["id"], actor_kind="human")
                     hub.raw.execute("COMMIT")
                 except BaseException:
                     hub.raw.execute("ROLLBACK")
@@ -147,9 +153,9 @@ def plan_upgrade(inp: Empty, ctx: Context, s: Session) -> Plan:
         p = s.abs_path(r["path"]) / "company.db"
         if not p.exists():
             missing.append(r["id"]); continue
-        state = classify("company", current_revision_raw(p))
+        state = migrate.classify("company", migrate.current_revision_raw(p))
         (skipped if state == "head" else migrated).append(r["id"])
-    return Plan(preview=UpgradeOutput(hub_migrated=False, hub_revision=HEADS["hub"], companies_migrated=migrated, companies_skipped=skipped, companies_missing=missing, companies_failed=[]), data={"rows": writable})
+    return Plan(preview=UpgradeOutput(hub_migrated=False, hub_revision=migrate.HEADS["hub"], companies_migrated=migrated, companies_skipped=skipped, companies_missing=missing, companies_failed=[]), data={"rows": writable})
 
 
 def _may_write(s: Session, row: dict[str, Any]) -> bool:
@@ -166,18 +172,18 @@ def apply_upgrade(plan: Plan, ctx: Context, s: Session) -> Applied:
         if not p.exists():
             missing.append(r["id"]); continue
         try:
-            with open_database(p, writable=True) as db:
-                before, after = migrate_to_head(db, "company", s.abs_path(r["path"]) / "backups")
+            with engine.open_database(p, writable=True) as db:
+                before, after = migrate.migrate_to_head(db, "company", s.abs_path(r["path"]) / "backups")
             if before == after:
                 skipped.append(r["id"]); continue
             s.hub.raw.execute("BEGIN IMMEDIATE")
             s.hub.conn.execute(h.companies.update().where(h.companies.c.id == r["id"]).values(schema_revision=after))
-            write_event(s, ctx, "upgrade", f"migrated company {r['display_name']} from {before} to {after}", [Touched("company", r["id"], "migrate", None, None, {"schema_revision": after})])
+            audit.write_event(s, ctx, "upgrade", f"migrated company {r['display_name']} from {before} to {after}", [Touched("company", r["id"], "migrate", None, None, {"schema_revision": after})])
             s.hub.raw.execute("COMMIT")
             migrated.append(r["id"])
         except BookflowError as e:
             failed.append({"company_id": r["id"], "code": e.code}); break
-    out = UpgradeOutput(hub_migrated=False, hub_revision=HEADS["hub"], companies_migrated=migrated, companies_skipped=skipped, companies_missing=missing, companies_failed=failed)
+    out = UpgradeOutput(hub_migrated=False, hub_revision=migrate.HEADS["hub"], companies_migrated=migrated, companies_skipped=skipped, companies_missing=missing, companies_failed=failed)
     return Applied(out, [], "upgrade run", audited=True)
 
 
@@ -279,7 +285,7 @@ def apply_org_rename(plan: Plan, ctx: Context, s: Session) -> Applied:
     new = org.bump(row, s.actor.id, VIA(ctx), **changes) if changes else row
     if changes:
         s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == row["id"]).values(**{k: new[k] for k in changes} | {"version": new["version"], "updated_at": new["updated_at"], "updated_by": new["updated_by"], "updated_via": new["updated_via"]}))
-        write_event(s, ctx, "organization rename", f"renamed organization {row['display_name']} to {name}" if name != row["display_name"] else f"move requested for organization {name}", [Touched("organization", row["id"], "update", row["version"], new["version"], new)])
+        audit.write_event(s, ctx, "organization rename", f"renamed organization {row['display_name']} to {name}" if name != row["display_name"] else f"move requested for organization {name}", [Touched("organization", row["id"], "update", row["version"], new["version"], new)])
     s.hub.raw.execute("COMMIT")
     moved = False
     pending = new.get("pending_path") or row.get("pending_path")
@@ -299,7 +305,7 @@ def apply_org_rename(plan: Plan, ctx: Context, s: Session) -> Applied:
             if crow["path"].startswith(old_prefix):
                 cnew, t = co.update(s, crow, VIA(ctx), path=pending.rstrip("/") + "/" + crow["path"][len(old_prefix):])
                 touched.append(t)
-        write_event(s, ctx, "organization move", f"moved organization {name} to {pending}", touched)
+        audit.write_event(s, ctx, "organization move", f"moved organization {name} to {pending}", touched)
         s.hub.raw.execute("COMMIT")
         new, moved = final, True
     return Applied(OrgRenameOutput(organization_id=row["id"], display_name=new["display_name"], previous_display_name=row["display_name"], path=str(s.abs_path(new["path"])), moved=moved), [], "", audited=True)
@@ -360,18 +366,30 @@ class CompanyNewInput(BaseModel):
             raise ValueError("must contain exactly one @")
         return v
 
-    @model_validator(mode="after")
-    def _shapes(self) -> "CompanyNewInput":
-        if self.tax_id is not None and not _TAX_SHAPES[self.tax_id_kind].match(self.tax_id):
-            raise ValueError(f"tax_id must match the {self.tax_id_kind} shape")
-        if self.timezone is not None:
+    @field_validator("tax_id")
+    @classmethod
+    def _tax(cls, v: str | None, info) -> str | None:
+        kind = info.data.get("tax_id_kind", "ein")
+        if v is not None and not _TAX_SHAPES[kind].match(v):
+            raise ValueError(f"must match the {kind} shape")
+        return v
+
+    @field_validator("timezone")
+    @classmethod
+    def _tz(cls, v: str | None) -> str | None:
+        if v is not None:
             try:
-                ZoneInfo(self.timezone)
+                ZoneInfo(v)
             except (ZoneInfoNotFoundError, ValueError):
-                raise ValueError(f"unknown timezone {self.timezone!r}")
-        if self.display_name is not None and "/" in self.display_name:
-            raise ValueError("display_name must not contain '/'")
-        return self
+                raise ValueError(f"unknown timezone {v!r}")
+        return v
+
+    @field_validator("display_name")
+    @classmethod
+    def _dn(cls, v: str | None) -> str | None:
+        if v is not None and "/" in v:
+            raise ValueError("must not contain '/'")
+        return v
 
 
 class CompanyNewOutput(WriteOutput):
@@ -436,6 +454,8 @@ company_new = command("company new", scope="hub", description="Create a company 
 @company_new
 def plan_company_new(inp: CompanyNewInput, ctx: Context, s: Session) -> Plan:
     orow = _resolve_org_for_new(s, inp.organization)
+    if inp.display_name is None and "/" in inp.legal_name:
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "display_name", "problem": "defaults to legal_name, which contains '/'; give display_name"}]})
     display = normalize_display_name(inp.display_name or inp.legal_name)
     if co.name_taken(s, orow["id"], name_key(display)):
         raise BookflowError("E_NAME_TAKEN", details={"name": display})
@@ -454,11 +474,11 @@ def plan_company_new(inp: CompanyNewInput, ctx: Context, s: Session) -> Plan:
 @company_new.applier
 def apply_company_new(plan: Plan, ctx: Context, s: Session) -> Applied:
     orow, display, cid = plan.data["org"], plan.data["display"], plan.data["company_id"]
-    folder = create_company_folder(s, s.abs_path(orow["path"]), cid, display, plan.data["info"], VIA(ctx))
+    folder = rollout.create_company_folder(s, s.abs_path(orow["path"]), cid, display, plan.data["info"], VIA(ctx))
     try:
         row, touched = co.register(s, company_id=cid, organization_id=orow["id"], display_name=display, rel_path=s.rel_path(folder),
                                    legal_name=plan.data["info"]["legal_name"], home_currency=plan.data["info"]["home_currency"],
-                                   schema_revision=HEADS["company"], via=VIA(ctx))
+                                   schema_revision=migrate.HEADS["company"], via=VIA(ctx))
     except BookflowError as e:
         raise BookflowError("E_ROLLOUT_INCOMPLETE", details={"state": "unregistered", "path": str(folder), "cause": e.code})
     return Applied(CompanyNewOutput(company_id=cid, organization_id=orow["id"], display_name=display, path=str(folder)), touched, f"created company {display} in {orow['display_name']}")
@@ -563,7 +583,7 @@ def plan_company_attach(inp: AttachInput, ctx: Context, s: Session) -> Plan:
     raw = _read_company_raw(db_path)
     if raw["id"] != marker["company_id"]:
         raise BookflowError("E_ATTACH_INVALID", details={"check": "id", "path": str(folder)})
-    state = classify("company", raw["revision"])
+    state = migrate.classify("company", raw["revision"])
     if state == "unknown":
         raise BookflowError("E_SCHEMA_UNKNOWN", details={"revision": raw["revision"], "path": str(db_path)})
     if co.get(s, raw["id"]):
@@ -582,13 +602,13 @@ def plan_company_attach(inp: AttachInput, ctx: Context, s: Session) -> Plan:
 def apply_company_attach(plan: Plan, ctx: Context, s: Session) -> Applied:
     folder, orow, raw, name = plan.data["folder"], plan.data["org"], plan.data["raw"], plan.data["name"]
     row, touched = co.register(s, company_id=raw["id"], organization_id=orow["id"], display_name=name, rel_path=s.rel_path(folder),
-                               legal_name=raw["legal_name"], home_currency=raw["home_currency"], schema_revision=raw["revision"] or HEADS["company"],
+                               legal_name=raw["legal_name"], home_currency=raw["home_currency"], schema_revision=raw["revision"] or migrate.HEADS["company"],
                                via=VIA(ctx), owner_membership=False)
     if plan.data["behind"] or plan.data["rename_copy"]:
         try:
-            with open_database(folder / "company.db", writable=True) as db:
-                before, after = migrate_to_head(db, "company", folder / "backups")
-                write_display_name_copy(db, name)
+            with engine.open_database(folder / "company.db", writable=True) as db:
+                before, after = migrate.migrate_to_head(db, "company", folder / "backups")
+                info.write_display_name_copy(db, name)
             if before != after:
                 s.hub.conn.execute(h.companies.update().where(h.companies.c.id == raw["id"]).values(schema_revision=after))
             write_company_marker(folder, company_id=raw["id"], state="ready", display_name=name, schema_revision=after or raw["revision"])
@@ -663,7 +683,7 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
         pending = existing.get("pending_path") or trash_rel
         if not existing.get("pending_path"):
             s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == existing["id"]).values(pending_path=pending))
-            write_event(s, ctx, "demo reset", f"moving demo organization to {pending}", [Touched("organization", existing["id"], "update", existing["version"], existing["version"], {**existing, "pending_path": pending})])
+            audit.write_event(s, ctx, "demo reset", f"moving demo organization to {pending}", [Touched("organization", existing["id"], "update", existing["version"], existing["version"], {**existing, "pending_path": pending})])
         s.hub.raw.execute("COMMIT")
         src, dst = s.abs_path(existing["path"]), s.abs_path(pending)
         n = 1
@@ -678,16 +698,16 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
         trashed = str(dst)
         s.hub.raw.execute("BEGIN IMMEDIATE")
         touched = co.delete_organization_rows(s, existing["id"])
-        write_event(s, ctx, "demo reset", "removed previous demo organization", touched)
+        audit.write_event(s, ctx, "demo reset", "removed previous demo organization", touched)
     orow, t_org = org.create(s, normalize_display_name(seed["organization"]["display_name"]), VIA(ctx), is_demo=True)
     inp = CompanyNewInput.model_validate({k: v for k, v in seed["company"].items()} | {"organization": orow["id"]})
     display = normalize_display_name(inp.display_name or inp.legal_name)
     if inp.timezone is None:
         inp = inp.model_copy(update={"timezone": _machine_zone() or "UTC"})
     cid = new_id()
-    folder = create_company_folder(s, s.abs_path(orow["path"]), cid, display, _info_columns(inp), VIA(ctx))
+    folder = rollout.create_company_folder(s, s.abs_path(orow["path"]), cid, display, _info_columns(inp), VIA(ctx))
     row, t_co = co.register(s, company_id=cid, organization_id=orow["id"], display_name=display, rel_path=s.rel_path(folder), legal_name=inp.legal_name,
-                            home_currency=inp.home_currency, schema_revision=HEADS["company"], via=VIA(ctx), is_demo=True)
+                            home_currency=inp.home_currency, schema_revision=migrate.HEADS["company"], via=VIA(ctx), is_demo=True)
     return Applied(DemoResetOutput(organization_id=orow["id"], company_id=cid, display_name=display, path=str(folder), trashed_path=trashed), [t_org, *t_co], f"reset demo: {orow['display_name']} / {display}")
 
 
@@ -751,10 +771,10 @@ def _event_out(s: Session, e: dict[str, Any], names: dict[str, str], with_entrie
     if with_entries:
         entries = []
         for r in s.hub.conn.execute(sa.select(h.audit_entries).where(h.audit_entries.c.event_id == e["id"])).mappings().all():
-            before, after = decode_snapshot(r["before"]), decode_snapshot(r["after"])
+            before, after = audit.decode_snapshot(r["before"]), audit.decode_snapshot(r["after"])
             if before is None and r["action"] == "update" and r["version_before"] is not None:
                 prev = s.hub.conn.execute(sa.select(h.audit_entries.c.after).where(h.audit_entries.c.record_type == r["record_type"], h.audit_entries.c.record_id == r["record_id"], h.audit_entries.c.version_after == r["version_before"])).first()
-                before = decode_snapshot(prev[0]) if prev else None
+                before = audit.decode_snapshot(prev[0]) if prev else None
             diff = None
             if before is not None and after is not None:
                 diff = {k: {"before": before.get(k), "after": after.get(k)} for k in sorted(set(before) | set(after)) if before.get(k) != after.get(k)}
@@ -767,7 +787,7 @@ audit_list = command("audit list", scope="hub", description="List hub audit even
 
 @audit_list
 def plan_audit_list(inp: AuditListInput, ctx: Context, s: Session) -> Plan:
-    q = sa.select(h.audit_events).where(visible_event_ids_filter(s)).order_by(h.audit_events.c.id.desc()).limit(inp.limit + 1)
+    q = sa.select(h.audit_events).where(audit.visible_event_ids_filter(s)).order_by(h.audit_events.c.id.desc()).limit(inp.limit + 1)
     if inp.since:
         q = q.where(h.audit_events.c.at >= inp.since)
     if inp.until:
@@ -803,7 +823,7 @@ audit_show = command("audit show", scope="hub", description="Show one hub audit 
 
 @audit_show
 def plan_audit_show(inp: EventSelector, ctx: Context, s: Session) -> Plan:
-    row = s.hub.conn.execute(sa.select(h.audit_events).where(h.audit_events.c.id == inp.event.upper(), visible_event_ids_filter(s))).mappings().first()
+    row = s.hub.conn.execute(sa.select(h.audit_events).where(h.audit_events.c.id == inp.event.upper(), audit.visible_event_ids_filter(s))).mappings().first()
     if row is None:
         raise BookflowError("E_EVENT_NOT_FOUND")
     e = dict(row)

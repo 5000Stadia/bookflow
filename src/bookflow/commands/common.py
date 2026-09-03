@@ -8,8 +8,10 @@ from pydantic import BaseModel, Field
 
 from bookflow.core.models import WriteOutput
 from bookflow.core.session import Session, localize
-from bookflow.hub import access
-from bookflow.hub.users import user_names
+from bookflow.core.lazy import lazy
+
+access = lazy("bookflow.hub.access")
+users = lazy("bookflow.hub.users")
 
 
 class CommonOut(BaseModel):
@@ -64,7 +66,7 @@ class CompanySummary(CommonOut):
 
 def company_summary(s: Session, row: dict[str, Any], organization_name: str, names: dict[str, str] | None = None) -> CompanySummary:
     acc, role = access.company_role(s, row["id"], row["organization_id"])
-    names = names if names is not None else user_names(s, {row["created_by"]})
+    names = names if names is not None else users.user_names(s, {row["created_by"]})
     return CompanySummary(**common_out(s, row), company_id=row["id"], organization_id=row["organization_id"], organization_name=organization_name,
                           display_name=row["display_name"], legal_name=row["legal_name"], home_currency=row["home_currency"],
                           schema_revision=row["schema_revision"], is_demo=bool(row["is_demo"]), access=acc, role=role,

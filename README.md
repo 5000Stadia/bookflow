@@ -2,7 +2,16 @@
 
 A multi-company double-entry accounting core for small businesses. A Python library with a CLI, an HTTP host, and an MCP server over the same commands, so people and AI agents post to the same books.
 
-Nothing runs yet; the first layer is row 1 of `design/intention.md`.
+## Run
+
+```
+uv venv && uv pip install -e ".[dev]"
+bookflow init
+bookflow demo reset
+bookflow company list
+```
+
+Every command takes `--json`; `bookflow --help` lists the rest.
 
 ## Layout
 

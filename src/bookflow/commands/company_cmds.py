@@ -8,16 +8,19 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from bookflow.commands.common import CompanySummary, Empty, WriteOutput, common_out, company_summary
-from bookflow.company.info import principal_names, read_info, write_display_name_copy
 from bookflow.core.context import Context
 from bookflow.core.errors import BookflowError
+from bookflow.core.lazy import lazy
 from bookflow.core.moves import move_dir
 from bookflow.core.registry import Applied, Plan, Touched, command
 from bookflow.core.session import Session, localize
-from bookflow.hub import companies as co, organizations as org, schema as h
-from bookflow.hub.audit import write_event
 from bookflow.storage.paths import choose_folder_name, name_key, normalize_display_name, write_company_marker
-from bookflow.storage.migrate import HEADS
+
+h = lazy("bookflow.hub.schema")
+co = lazy("bookflow.hub.companies")
+org = lazy("bookflow.hub.organizations")
+audit = lazy("bookflow.hub.audit")
+cinfo = lazy("bookflow.company.info")
 
 
 class CompanyInfoOut(BaseModel):
@@ -39,11 +42,11 @@ def plan_company_show(inp: Empty, ctx: Context, s: Session) -> Plan:
     row = s.company_row
     orow = org.get(s, row["organization_id"])
     summary = company_summary(s, row, orow["display_name"])
-    info = read_info(s.company)
+    info = cinfo.read_info(s.company)
     info.pop("display_name", None)
     for k in ("created_at", "updated_at"):
         info[k] = localize(s, info[k])
-    names = principal_names(s.company, {info["created_by"], info["updated_by"]})
+    names = cinfo.principal_names(s.company, {info["created_by"], info["updated_by"]})
     return Plan(preview=CompanyShowOutput(**summary.model_dump(), info=info, info_created_by_name=names.get(info["created_by"]), info_updated_by_name=names.get(info["updated_by"])))
 
 
@@ -97,9 +100,9 @@ def apply_company_rename(plan: Plan, ctx: Context, s: Session) -> Applied:
     new = row
     if changes:
         new, t = co.update(s, row, via, **changes)
-        write_event(s, ctx, "company rename", f"renamed company {row['display_name']} to {name}" if name != row["display_name"] else f"move requested for company {name}", [t])
+        audit.write_event(s, ctx, "company rename", f"renamed company {row['display_name']} to {name}" if name != row["display_name"] else f"move requested for company {name}", [t])
     s.hub.raw.execute("COMMIT")
-    write_display_name_copy(s.company, name)
+    cinfo.write_display_name_copy(s.company, name)
     s.company.raw.execute("COMMIT")
     folder = s.abs_path(new["path"])
     write_company_marker(folder, company_id=row["id"], state="ready", display_name=name, schema_revision=new["schema_revision"])
@@ -114,7 +117,7 @@ def apply_company_rename(plan: Plan, ctx: Context, s: Session) -> Applied:
             move_dir(src, dst, company_id=row["id"])
         s.hub.raw.execute("BEGIN IMMEDIATE")
         final, t2 = co.update(s, new, via, path=pending, pending_path=None)
-        write_event(s, ctx, "company move", f"moved company {name} to {pending}", [t2])
+        audit.write_event(s, ctx, "company move", f"moved company {name} to {pending}", [t2])
         s.hub.raw.execute("COMMIT")
         new, moved = final, True
     return Applied(RenameOutput(company_id=row["id"], display_name=new["display_name"], previous_display_name=row["display_name"], path=str(s.abs_path(new["path"])), moved=moved), [], "", audited=True)

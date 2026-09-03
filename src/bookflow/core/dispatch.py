@@ -238,7 +238,7 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session):
         s.company.raw.execute("BEGIN IMMEDIATE")
     try:
         applied = cmd.apply(plan, ctx, s)
-        if s.company is not None and "company" in cmd.writes:
+        if s.company is not None and "company" in cmd.writes and s.company.raw.in_transaction:
             s.company.raw.execute("COMMIT")
         if "hub" in cmd.writes or "config" in cmd.writes:
             if not applied.audited:
