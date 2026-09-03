@@ -258,7 +258,7 @@ Errors are always JSON documents on stderr with `code`, `message`, and `details`
 
 ### 5.5 Dry run
 
-Every command that writes accepts `--dry-run`. It runs validation and returns the output model that a real run would return, with `dry_run: true`, and writes no record to any database, no configuration, and no company folder, including nothing to the audit log. It may take the data-root lock and, like any writable open, migrate a database behind the current revision, since schema migration is not the command's write; `upgrade --dry-run` reports what would migrate without migrating.
+Every command that writes accepts `--dry-run`. It runs validation and returns the output model that a real run would return, with `dry_run: true`, and writes no record to any database, no configuration, and no company folder, including nothing to the audit log. It may take the data-root lock and, like any writable open, migrate a database behind the current revision, since schema migration is not the command's write; projection repair, by contrast, runs only inside real writes; `upgrade --dry-run` reports what would migrate without migrating.
 
 ### 5.6 Money on input
 
@@ -366,7 +366,7 @@ Two tables in company.db, plus the same pair in hub.db for hub commands. Hub com
 | after | JSON snapshot of the record after the write; on `deactivate` and `void`, the record as it stands after; null on `delete` |
 | before | JSON snapshot before the write, stored only on `delete`, since the previous entry's `after` supplies it otherwise |
 
-The snapshot before a write is not stored. It is the `after` of the previous entry for the same record, found by `(record_type, record_id, version_before)`, and is null on create. `audit show` returns both and the field diff. Snapshots hold only stored fields, never derived ones such as `full_name`, `quantity_on_hand`, or `open_balance`, and never secrets: `password_hash`, `token_hash`, and `tax_id` are excluded by the model. Schema migrations are audited as `migrate` entries by the system user with `on_behalf_of` the actor whose command triggered them, and update the hub's `schema_revision` projection in the same command. A transaction snapshot includes its lines, so posting a 20-line transaction writes one entry. Snapshots over 512 bytes are stored zlib-compressed; the column is a blob with a one-byte prefix marking raw or compressed, from the first migration that creates the table.
+The snapshot before a write is not stored. It is the `after` of the previous entry for the same record, found by `(record_type, record_id, version_before)`, and is null on create. `audit show` returns both and the field diff. Snapshots hold only stored fields, never derived ones such as `full_name`, `quantity_on_hand`, or `open_balance`, and never secret values: `password_hash`, `token_hash`, and `tax_id` are stored as a short hash of the value, so a change is visible and the value is not. Schema migrations are audited as `migrate` entries by the system user with `on_behalf_of` the actor whose command triggered them, and update the hub's `schema_revision` projection in the same command. A transaction snapshot includes its lines, so posting a 20-line transaction writes one entry. Snapshots over 512 bytes are stored zlib-compressed; the column is a blob with a one-byte prefix marking raw or compressed, from the first migration that creates the table.
 
 Rules:
 
@@ -790,7 +790,7 @@ When two good things conflict, the earlier line wins.
 | Posting a 20-line transaction completes in under 50 ms | same |
 | Trial balance over 100,000 lines returns in under 2 s | same |
 | A company database with 100,000 transactions stays under 500 MB excluding attachments | |
-| Audit tables occupy at most 3 times the live data they describe | measured per table with `dbstat` on the fixed fixture of 5,000 creates and 5,000 updates; the bound is 3 rather than lower because every write keeps a full after-snapshot for readability |
+| Audit tables occupy at most 6 times the live data they describe, in aggregate | measured with `dbstat` on the fixed fixture of 5,000 creates and 5,000 updates; every write keeps a full after-snapshot for readability and an event row of context, which the arithmetic in the row 2 plan puts near 5 |
 | Installed package with dependencies under 60 MB; no service other than SQLite required | |
 | CLI cold start under 300 ms | Python 3.12, warm disk cache |
 | Full test suite under 60 s | |
