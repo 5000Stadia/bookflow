@@ -495,11 +495,11 @@ All lists share the common fields of section 6.1, `active`, and the five verbs `
 
 Table `customers`. A job is a customer with `parent_id` set; jobs may nest to depth 5.
 
-Fields: `name`, `company_name`, `salutation`, `first_name`, `last_name`, `bill_address` (line1, line2, city, state, postal_code, country), `ship_address` (same shape), `phone`, `alt_phone`, `fax`, `email`, `cc_email`, `website`, `contact`, `alt_contact`, `terms_id`, `sales_tax_code_id`, `sales_tax_item_id`, `resale_number`, `credit_limit`, `price_level_id` (nullable, reserved), `preferred_payment_method_id`, `account_number`, `job_status` (`none`, `pending`, `awarded`, `in_progress`, `closed`, `not_awarded`), `job_start`, `job_projected_end`, `job_end`, `job_description`, `job_type`, `linked_vendor_id` (nullable, see 11.3), `notes`.
+Fields: `name`, `company_name`, `salutation`, `first_name`, `last_name`, `bill_address` (line1, line2, city, state, postal_code, country), `ship_address` (same shape), `phone`, `alt_phone`, `fax`, `email`, `cc_email`, `website`, `contact`, `alt_contact`, `terms_id`, `sales_tax_code_id`, `sales_tax_item_id`, `resale_number`, `credit_limit`, `price_level_id`, `customer_type_id`, `sales_rep_id`, `preferred_payment_method_id`, `preferred_delivery_method` (`none`, `email`, `mail`), `account_number`, `job_status` (`none`, `pending`, `awarded`, `in_progress`, `closed`, `not_awarded`), `job_start`, `job_projected_end`, `job_end`, `job_description`, `job_type_id`, `linked_vendor_id` (nullable, see 11.3), `notes`.
 
 ### 11.2 Vendors
 
-Table `vendors`. Fields: `name`, `company_name`, `salutation`, `first_name`, `last_name`, `address`, `phone`, `alt_phone`, `fax`, `email`, `cc_email`, `website`, `contact`, `alt_contact`, `terms_id`, `account_number`, `tax_id`, `eligible_1099` (bool), `default_expense_account_id`, `linked_customer_id` (nullable), `notes`.
+Table `vendors`. Fields: `name`, `company_name`, `salutation`, `first_name`, `last_name`, `address`, `phone`, `alt_phone`, `fax`, `email`, `cc_email`, `website`, `contact`, `alt_contact`, `terms_id`, `account_number`, `tax_id`, `eligible_1099` (bool), `vendor_type_id`, `default_expense_account_ids` (up to three, in order), `billing_rate_level_id` (nullable, reserved), `linked_customer_id` (nullable), `notes`.
 
 ### 11.3 Customer and vendor link
 
@@ -551,9 +551,30 @@ Table `payment_methods`. Fields: `name`, `kind` (`cash`, `check`, `credit_card`,
 
 Table `sales_tax_codes`. Fields: `code` (three characters), `description`, `taxable` (bool). Seeded: `Tax` taxable, `Non` non-taxable. Sales tax items and groups live in `items`.
 
-### 11.11 Price levels and ship methods
+### 11.11 Supporting lists
 
-Reserved. Tables are not created in release 1; the customer field `price_level_id` exists and is null.
+Each is a table with the common fields, `name`, and `active`, plus the fields listed.
+
+| Table | Extra fields | Used by |
+|---|---|---|
+| `customer_types` | `parent_id` | customers |
+| `vendor_types` | `parent_id` | vendors |
+| `job_types` | `parent_id` | customers (jobs) |
+| `sales_reps` | `initials` (unique, up to 5 characters), `name_type` and `name_id` pointing at an employee, vendor, or other name | customers (default rep), sales forms, sales by rep reports, commission tracking |
+| `ship_methods` | | sales forms |
+| `customer_messages` | `text` | sales forms |
+| `price_levels` | `kind` (`fixed_percent` or `per_item`), `percent` (signed), `per_item_prices` (item id and price or percent) | customers, sales forms |
+| `units_of_measure` | `base_unit`, `related_units` (name, conversion factor), `default_purchase_unit`, `default_sales_unit`, `default_shipping_unit` | items |
+| `memorized_transactions` | `transaction_type`, `template` (the form input as JSON), `schedule_id` (nullable), `group_name` | forms; see 13.3 |
+| `to_dos` | `text`, `due_at`, `done`, `record_type`, `record_id` | any record |
+
+### 11.12 Custom fields
+
+Table `custom_field_defs`: `list_name` (customers, vendors, employees, items, or any transaction type), `name`, `kind` (`text`, `number`, `date`, `bool`, `choice`), `choices`, `position`, `active`. Table `custom_field_values`: `def_id`, `record_type`, `record_id`, `value` as text, parsed by kind on read. Every list and form input model accepts `custom_fields` as a mapping of definition name to value, and every `show` output returns it. The workbench renders them as ordinary fields.
+
+### 11.13 Completeness rule
+
+Before a list, form, or report is built, its blueprint section is completed to name every field, option, and behavior the anchor offers on the equivalent screen or report, including defaults, validations, filters, columns, and what each field is used by. The section is the inventory; the row is built against it; the artifact critic checks the built thing against the section. Reports are designed as one set with shared parameters, filters, column conventions, and drill-down, never one at a time. Improvements beyond the anchor, such as commission rates on sales reps tied to employees, are added as separate fields marked as such in the section, after the anchor's set is complete.
 
 ## 12. Notes, attachments, and activity
 
