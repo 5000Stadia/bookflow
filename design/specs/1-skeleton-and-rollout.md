@@ -1,6 +1,6 @@
 # Row 1 — plan
 
-Round 2. Revised against two plan critiques; the blueprint was amended in the same change (sections 3, 4.1, 4.1a, 5.1, 5.3, 5.4, 9.2, 9.3).
+Round 3. Revised against two plan critiques and the introduction of organizations (blueprint 3.0, 4.3); the blueprint was amended in the same changes (sections 3, 4.1, 4.1a, 4.3, 5.1, 5.3, 5.4, 9.2, 9.3).
 
 ## Package layout
 
@@ -25,18 +25,19 @@ src/bookflow/
     hub_migrations/versions/
     company_migrations/versions/
   hub/
-    schema.py                  users, api_tokens, companies, memberships
+    schema.py                  users, api_tokens, organizations, companies, memberships (scope_type, scope_id)
     users.py                   bootstrap (system then first human, hub_admin), OS-login mapping in config.toml
-    companies.py               registry: register, list for actor, resolve id-or-name, detach
+    organizations.py           registry: create, list for actor, resolve id-or-name, rename
+    companies.py               registry: register, list for actor, resolve id, Org/Company, or name, detach
   company/
     schema.py                  company_info, principals, sequences
     info.py                    read; rename; principals upsert
     rollout.py                 company new: staged, recoverable
   commands/
-    hub_cmds.py                init, company new/list/use/attach/detach, demo reset
+    hub_cmds.py                init, organization new/list/show/rename, company new/list/use/attach/detach, demo reset
     company_cmds.py            company show, company rename
   demo/
-    seed.toml                  Demo Plumbing Co company info
+    seed.toml                  Demo Holdings LLC organization and Demo Plumbing Co company info
     reset.py
   adapters/cli/
     app.py                     Typer app generated from the registry; global options on every command
@@ -47,7 +48,9 @@ tests/
   test_errors.py               every E_ code declared by a row 1 command is reachable and asserted through library and CLI
   test_init.py                 first run, replay, second OS user, bootstrap provenance
   test_company_new.py          required and default fields, validation, folder naming table, collision race, staged failure at each boundary
-  test_company_cmds.py         list, show (admin and member views), use, rename with and without --move, attach validation matrix, detach
+  test_organizations.py      new, list for member and hub admin, show, rename with and without --move, name uniqueness, folder naming
+  test_company_cmds.py       list, show (admin and member views), use, rename with and without --move, attach validation matrix, detach
+  test_isolation.py          org member sees only own org; company-scope member sees only that company; not-found parity across orgs
   test_selection.py            --company, env, default; id-before-name; ambiguous; not-found parity for nonexistent and unauthorized
   test_demo.py                 reset twice; membership and hub-admin gates; trash contents
   test_locks.py                second writer E_DB_BUSY; read-only opens unlocked; lock released on close
@@ -63,11 +66,15 @@ tests/
 | Command | Scope | Actor | Positional | Writes |
 |---|---|---|---|---|
 | `init` | hub | none required | | yes |
-| `company new` | hub | hub admin, human | | yes |
+| `organization new` | hub | hub admin, human | | yes |
+| `organization list` | hub | any | | no |
+| `organization show` | hub | member or hub admin | `organization` | no |
+| `organization rename` | hub | admin or owner role on it, or hub admin | `organization` | yes |
+| `company new` | hub | admin or owner on the organization, or hub admin; human | | yes |
 | `company list` | hub | any | | no |
 | `company use` | hub | any member | `company` | yes (config.toml) |
-| `company attach` | hub | hub admin, human | `path` | yes |
-| `company detach` | hub | hub admin, human | `company` | yes |
+| `company attach` | hub | admin or owner on the containing organization, or hub admin; human | `path` | yes |
+| `company detach` | hub | admin or owner on the organization, or hub admin; human | `company` | yes |
 | `company show` | company | member or hub admin | | no |
 | `company rename` | company | admin or owner role, or hub admin | | yes |
 | `demo reset` | hub | hub admin, human | | yes |
@@ -80,7 +87,7 @@ tests/
 
 Global options defined on every generated command and on the root: `--json`, `--dry-run`, `--company`, `--data-root`. Options belonging to rows 2 and 7 (`--reason`, `--directive`, `--source-ref`, `--idempotency-key`, `--as-token`) are not defined in this row.
 
-The output model of every `list` is `ListOutput{items, count}`. Output models: `InitOutput{data_root, created, hub_admin_user_id, username, system_user_id}`, `CompanySummary{company_id, display_name, legal_name, home_currency, role, is_demo}`, `CompanyNewOutput{company_id, display_name, path}`, `CompanyShowOutput{company_id, display_name, role, schema_revision, is_demo, path (null unless hub admin), info: CompanyInfo, created_by_name, updated_by_name}`, `CompanyUseOutput{company_id, display_name}`, `CompanyAttachOutput{company_id, display_name, path}`, `CompanyDetachOutput{company_id, display_name, path}`, `CompanyRenameOutput{company_id, display_name, previous_display_name, path, moved}`, `DemoResetOutput{company_id, display_name, path, trashed_path (null if none)}`.
+The output model of every `list` is `ListOutput{items, count}`. Output models: `InitOutput{data_root, created, hub_admin_user_id, username, system_user_id}`, `OrganizationOutput{organization_id, display_name, role, path (null unless hub admin), company_count}`, `CompanySummary{company_id, organization_id, organization_name, display_name, legal_name, home_currency, role, is_demo}`, `CompanyNewOutput{company_id, display_name, path}`, `CompanyShowOutput{company_id, display_name, role, schema_revision, is_demo, path (null unless hub admin), info: CompanyInfo, created_by_name, updated_by_name}`, `CompanyUseOutput{company_id, display_name}`, `CompanyAttachOutput{company_id, display_name, path}`, `CompanyDetachOutput{company_id, display_name, path}`, `CompanyRenameOutput{company_id, display_name, previous_display_name, path, moved}`, `DemoResetOutput{company_id, display_name, path, trashed_path (null if none)}`.
 
 ## Context and actor
 
@@ -92,19 +99,19 @@ Every company write upserts the actor into `principals` before its own rows, in 
 
 ## Data root and configuration
 
-Resolution: `--data-root`, `BOOKFLOW_DATA_ROOT`, `~/.bookflow`. `init` creates `hub.db`, `config.toml`, `companies/`, `trash/`. Any other command on a root without `hub.db` returns `E_NOT_INITIALIZED`. Locality is checked on the data root before `init` creates anything.
+Resolution: `--data-root`, `BOOKFLOW_DATA_ROOT`, `~/.bookflow`. `init` creates `hub.db`, `config.toml`, `organizations/`, `trash/`. Any other command on a root without `hub.db` returns `E_NOT_INITIALIZED`. Locality is checked on the data root before `init` creates anything.
 
 ## Rollout
 
-Input: blueprint 9.1 fields except `closing_date`, `default_chart`, and `home_currency` immutability handled by omission from later `update`. Required and defaults per blueprint 9.2. `--interactive` prompts for each field with its default shown; non-interactive terminals get `E_USAGE`. `--chart` is not accepted in this row; `default_chart` is stored null, meaning none applied.
+Input: `organization` (id or name; defaulted when the actor sees exactly one, else `E_ORGANIZATION_REQUIRED`) and the blueprint 9.1 fields except `closing_date` and `default_chart`. Required and defaults per blueprint 9.2. `--interactive` prompts for each field with its default shown; non-interactive terminals get `E_USAGE`. `--chart` is not accepted in this row; `default_chart` is stored null, meaning none applied.
 
 Stages, in order, with the recovery each failure leaves:
 
-1. Validate input and display-name uniqueness (`E_NAME_TAKEN`).
-2. Derive the folder name and reserve it with atomic directory creation, trying suffixes on `FileExistsError`.
+1. Validate input, resolve the organization and the actor's role on it, check display-name uniqueness within the organization (`E_NAME_TAKEN`).
+2. Derive the folder name and reserve it inside the organization's folder with atomic directory creation, trying suffixes on `FileExistsError`.
 3. Write the marker with `state = creating`. Create `attachments/`, `backups/`, `exports/`.
 4. Create `company.db`, run company migrations, insert `company_info` and the creator's `principals` row, checkpoint, close.
-5. In one hub transaction: insert `companies` (path relative to the data root, `is_demo`) and the owner membership.
+5. In one hub transaction: insert `companies` (organization id, path relative to the data root, `is_demo`) and, when the actor has no organization-scope membership, a company-scope owner membership.
 6. Rewrite the marker with `state = ready` and the schema revision.
 
 A failure in stages 2 to 4 removes the folder this attempt created and nothing else. A failure in stage 5 leaves a complete folder with no registration: it is invisible, `company new` with the same name takes the next suffix, and `attach` can adopt it after its checks, which also repair the marker. A failure in stage 6 leaves a registered company with a `creating` marker; every open repairs the marker from the database when the hub row exists.
@@ -115,11 +122,11 @@ A failure in stages 2 to 4 removes the folder this attempt created and nothing e
 
 ## Attach and detach
 
-`attach` performs the checks of blueprint 3.1 in order, opening the database read-only, and registers in one hub transaction with owner membership for the actor. `detach` removes the registry row and memberships in one transaction and leaves the folder untouched.
+`attach` derives the organization from the folder that contains the path, checks the actor's role on it, performs the checks of blueprint 3.1 in order opening the database read-only, and registers in one hub transaction with a company-scope owner membership for the actor when they hold no organization-scope membership. `detach` removes the registry row and memberships in one transaction and leaves the folder untouched.
 
 ## Company selection
 
-Blueprint 5.3: id first (ULID shape), then display name after NFC and case folding; `E_COMPANY_AMBIGUOUS` cannot occur because display names are unique, so the code is not declared. `BOOKFLOW_COMPANY` and `default_company` resolve through the same function. Non-members and nonexistent companies get `E_COMPANY_NOT_FOUND` from the same code path; hub admins resolve any company.
+Blueprint 5.3: id first (ULID shape), then `Organization/Company`, then bare company name among the companies the actor can see; a bare name matching in two organizations is `E_COMPANY_AMBIGUOUS`. Organization resolution is the same shape without the slash form. `BOOKFLOW_COMPANY` and `default_company` resolve through the same function. Non-members and nonexistent companies get `E_COMPANY_NOT_FOUND` from the same code path; hub admins resolve any company.
 
 ## Filesystem locality and locks
 
@@ -135,7 +142,7 @@ Alembic chains for hub and company, run programmatically. `migrate.py` compares 
 
 ## Demo reset
 
-Hub admin only. Finds companies with `is_demo` in the registry, moves each folder to `trash/<folder>-<timestamp>/` and removes its hub rows in one transaction, then runs the rollout with the seed and `is_demo = true`, marker `demo = true`. Never touches a company not flagged demo.
+Hub admin only. Finds the organization with `is_demo` in the registry, moves its whole folder to `trash/<folder>-<timestamp>/` and removes its hub rows and its companies' rows in one transaction, then creates the seed organization and company with `is_demo = true` and marker `demo = true`. Never touches a company not flagged demo.
 
 ## Money
 
