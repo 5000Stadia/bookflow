@@ -26,10 +26,13 @@ class _Noun:
             dry_run = kwargs.pop("dry_run", False)
             reason = kwargs.pop("reason", None)
             source_ref = kwargs.pop("source_ref", None)
+            fields = registry.get(name).input_model.model_fields
+            directive = kwargs.pop("directive", None) if "directive" not in fields else None
+            idempotency_key = kwargs.pop("idempotency_key", None)
             company = None
-            if registry.get(name).scope == "company" and "company" not in registry.get(name).input_model.model_fields:
+            if registry.get(name).scope == "company" and "company" not in fields:
                 company = kwargs.pop("company", None)
-            return self._client.run(name, kwargs, company=company, dry_run=dry_run, reason=reason, source_ref=source_ref)
+            return self._client.run(name, kwargs, company=company, dry_run=dry_run, reason=reason, source_ref=source_ref, directive=directive, idempotency_key=idempotency_key)
         return call
 
 
@@ -46,11 +49,11 @@ class Client:
         self._company = selector
 
     def run(self, name: str, input: dict[str, Any] | None = None, *, company: str | None = None, dry_run: bool = False,
-            reason: str | None = None, source_ref: str | None = None) -> dict[str, Any]:
+            reason: str | None = None, source_ref: str | None = None, directive: str | None = None, idempotency_key: str | None = None) -> dict[str, Any]:
         cmd = registry.get(name)
         if cmd is None:
             raise BookflowError("E_USAGE", message=f"unknown command {name!r}")
-        ctx = Context.new(Interface.python, self.client_name, session_id=self.session_id, reason=reason, source_ref=source_ref)
+        ctx = Context.new(Interface.python, self.client_name, session_id=self.session_id, reason=reason, source_ref=source_ref, directive_id=directive, idempotency_key=idempotency_key)
         selector, source = company, "option"
         if selector is None and self._company is not None and cmd.scope == "company":
             selector, source = self._company, "option"
@@ -76,7 +79,7 @@ class Client:
                 dry_run = kwargs.pop("dry_run", False)
                 reason = kwargs.pop("reason", None)
                 source_ref = kwargs.pop("source_ref", None)
-                return self.run(noun, kwargs, dry_run=dry_run, reason=reason, source_ref=source_ref)
+                return self.run(noun, kwargs, dry_run=dry_run, reason=reason, source_ref=source_ref, idempotency_key=kwargs.pop("idempotency_key", None))
             return call
         return _Noun(self, noun)
 

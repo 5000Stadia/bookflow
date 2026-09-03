@@ -719,6 +719,36 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
     folder = rollout.create_company_folder(s, s.abs_path(orow["path"]), cid, display, _info_columns(inp), VIA(ctx), ctx)
     row, t_co = co.register(s, company_id=cid, organization_id=orow["id"], display_name=display, rel_path=s.rel_path(folder), legal_name=inp.legal_name,
                             home_currency=inp.home_currency, schema_revision=migrate.HEADS["company"], via=VIA(ctx), is_demo=True)
+    _apply_seed_history(s, ctx, seed, row)
     return Applied(DemoResetOutput(organization_id=orow["id"], company_id=cid, display_name=display, path=str(folder), trashed_path=trashed), [t_org, *t_co], f"reset demo: {orow['display_name']} / {display}")
 
 
+
+
+def _apply_seed_history(s: Session, ctx: Context, seed: dict[str, Any], row: dict[str, Any]) -> None:
+    """Seed directives and a visible update history through the same path as user writes (run_in_session)."""
+    from bookflow.core import registry as _registry
+    from bookflow.core.dispatch import open_company, run_in_session
+    s.hub.raw.execute("COMMIT")
+    saved_row, saved_company = s.company_row, s.company
+    s.company_row = dict(row)
+    s.close_company()
+    open_company(s, ctx.model_copy(update={"company_id": row["id"]}), True)
+    try:
+        for d in seed.get("directives", []):
+            run_in_session(_registry.get("directive add"), _registry.get("directive add").input_model(text=d["text"]), ctx.model_copy(update={"company_id": row["id"]}), s)
+        base = None
+        for u in seed.get("updates", []):
+            fields = {k: v for k, v in u.items() if k != "mode"}
+            if u["mode"] == "versioned":
+                base = s.company_info_row["version"] if s.company_info_row else None
+                from bookflow.company.info import read_info
+                base = read_info(s.company)["version"]
+                fields["expected_version"] = base
+            elif u["mode"] == "merged" and base is not None:
+                fields["expected_version"] = base
+            run_in_session(_registry.get("company update"), _registry.get("company update").input_model(**fields), ctx.model_copy(update={"company_id": row["id"]}), s)
+    finally:
+        s.close_company()
+        s.company_row, s.company = saved_row, saved_company
+    s.hub.raw.execute("BEGIN IMMEDIATE")

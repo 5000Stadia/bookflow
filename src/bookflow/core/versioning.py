@@ -10,6 +10,7 @@ from bookflow.core.errors import BookflowError
 
 # column name -> top-level field name used by callers (blueprint: merges are per top-level field)
 ADDRESS_PREFIXES = ("address", "legal_address", "ship_address")
+BOOKKEEPING = {"id", "version", "created_at", "created_by", "created_via", "updated_at", "updated_by", "updated_via", "display_name"}
 
 
 def fold_field(column: str) -> str:
@@ -102,3 +103,45 @@ def check_update(*, current_version: int, current_updated_at: str | None, curren
     if changes & set(changed_fields):
         raise BookflowError("E_VERSION_CONFLICT", details={**details, "changed_fields": changed_fields})
     return UpdateMeta(version=current_version + 1, changed_fields=sorted(changes), merged_over_versions=[e.version_after for e in entries])
+
+
+def apply_update_meta(meta: "UpdateMeta") -> dict:
+    return meta.as_dict()
+
+
+def history_from_entries(db, record_type: str, record_id: str, since_version: int, decode) -> list[HistoryEntry]:
+    """Audit entries for one record with version_after > since_version, oldest first, as HistoryEntry."""
+    import sqlalchemy as sa
+    from bookflow.company import schema as c
+    q = (sa.select(c.audit_entries, c.audit_events.c.actor_id, c.audit_events.c.on_behalf_of, c.audit_events.c.interface, c.audit_events.c.at)
+         .join(c.audit_events, c.audit_events.c.id == c.audit_entries.c.event_id)
+         .where(c.audit_entries.c.record_type == record_type, c.audit_entries.c.record_id == record_id, c.audit_entries.c.version_after > since_version)
+         .order_by(c.audit_entries.c.version_after.asc()))
+    rows = db.conn.execute(q).mappings().all()
+    out: list[HistoryEntry] = []
+    prev_after = None
+    if rows:
+        first = rows[0]
+        prev = db.conn.execute(sa.select(c.audit_entries.c.after).where(c.audit_entries.c.record_type == record_type, c.audit_entries.c.record_id == record_id, c.audit_entries.c.version_after == first["version_before"]).order_by(c.audit_entries.c.id.desc())).first()
+        prev_after = decode(prev[0]) if prev else None
+    for r in rows:
+        after = decode(r["after"])
+        changed = None
+        if prev_after is not None and after is not None:
+            changed = sorted(k for k in set(prev_after) | set(after) if prev_after.get(k) != after.get(k) and k not in BOOKKEEPING)
+        out.append(HistoryEntry(version_after=r["version_after"], changed_columns=changed, updated_by=r["actor_id"], on_behalf_of=r["on_behalf_of"], updated_via=r["interface"], at=r["at"]))
+        prev_after = after
+    return out
+
+
+def current_writer_from_entries(db, record_type: str, record_id: str, version: int) -> HistoryEntry | None:
+    import sqlalchemy as sa
+    from bookflow.company import schema as c
+    q = (sa.select(c.audit_events.c.actor_id, c.audit_events.c.on_behalf_of, c.audit_events.c.interface, c.audit_events.c.at)
+         .join(c.audit_events, c.audit_events.c.id == c.audit_entries.c.event_id)
+         .where(c.audit_entries.c.record_type == record_type, c.audit_entries.c.record_id == record_id, c.audit_entries.c.version_after == version)
+         .order_by(c.audit_entries.c.id.desc()))
+    r = db.conn.execute(q).mappings().first()
+    if r is None:
+        return None
+    return HistoryEntry(version_after=version, changed_columns=None, updated_by=r["actor_id"], on_behalf_of=r["on_behalf_of"], updated_via=r["interface"], at=r["at"])

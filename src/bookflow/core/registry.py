@@ -138,8 +138,28 @@ def all_commands() -> list[Command]:
     return [REGISTRY[k] for k in sorted(REGISTRY)]
 
 
-def load_all() -> None:
-    """Import every command module so the registry is complete."""
-    import bookflow.commands.hub_cmds  # noqa: F401
-    import bookflow.commands.company_cmds  # noqa: F401
-    import bookflow.commands.audit_cmds  # noqa: F401
+# Which module registers which nouns. The CLI loads only the module it needs, so cold start does not grow
+# with the command count; tests/test_registry.py asserts this index matches what the modules register.
+NOUN_MODULES: dict[str, list[str]] = {
+    "bookflow.commands.hub_cmds": ["init", "upgrade", "organization", "company", "demo"],
+    "bookflow.commands.company_cmds": ["company", "directive", "presence"],
+    "bookflow.commands.audit_cmds": ["audit", "hub audit"],
+}
+
+_loaded: set[str] = set()
+
+
+def load_all(target: str | None = None) -> None:
+    """Import the command modules; with ``target`` (a noun path), only the modules that register it."""
+    import importlib
+    for module, nouns in NOUN_MODULES.items():
+        if module in _loaded:
+            continue
+        if target is not None and not any(target == n or target.startswith(n + " ") or n.startswith(target + " ") for n in nouns):
+            continue
+        importlib.import_module(module)
+        _loaded.add(module)
+
+
+def all_nouns() -> list[str]:
+    return sorted({n for nouns in NOUN_MODULES.values() for n in nouns})

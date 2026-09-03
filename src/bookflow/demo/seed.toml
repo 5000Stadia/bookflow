@@ -24,3 +24,21 @@ city = "Springfield"
 state = "IL"
 postal_code = "62701"
 country = "US"
+
+[[directives]]
+text = "When I finish a job and tell you the amount, post it and invoice the customer on file"
+
+[[directives]]
+text = "Attach every receipt photo I send to the matching expense"
+
+[[updates]]
+mode = "blind"
+phone = "555-0101"
+
+[[updates]]
+mode = "versioned"
+contact_name = "Pat Demo-Smith"
+
+[[updates]]
+mode = "merged"
+website = "https://demoplumbing.example/new"

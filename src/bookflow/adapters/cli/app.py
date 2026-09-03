@@ -107,6 +107,14 @@ def _build_command(cmd: registry.Command):
         params.append(inspect.Parameter("reason", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--reason", help="Why, in one short phrase (at most 140 characters)", metavar="TEXT"), annotation=str | None))
         params.append(inspect.Parameter("source_ref", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--source-ref", help="What triggered this write, e.g. an email or attachment id", metavar="TEXT"), annotation=str | None))
         params.append(inspect.Parameter("interactive", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--interactive", help="Prompt for fields not given as options"), annotation=bool))
+        if cmd.scope == "company":
+            params.append(inspect.Parameter("directive", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--directive", help="Standing instruction this write follows, by code (SI-3) or id", metavar="TEXT"), annotation=str | None))
+    if cmd.accepts_idempotency_key:
+        params.append(inspect.Parameter("idempotency_key", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--idempotency-key", help="A key of your choosing; a retry with the same key and input returns the first result instead of writing again", metavar="TEXT"), annotation=str | None))
+    if cmd.clearable:
+        params.append(inspect.Parameter("clear", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--clear", help="Set a field to null; repeatable; a nested name clears every child (e.g. --clear phone, --clear address, --clear address-line2)", metavar="FIELD"), annotation=list[str] | None))
+    if cmd.streams:
+        params.append(inspect.Parameter("follow", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--follow", help="Keep polling every two seconds and print each new event; stop with Ctrl-C"), annotation=bool))
     if cmd.scope == "company":
         params.append(inspect.Parameter("company", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--company", help="Company id, Organization/Company, or display name; else BOOKFLOW_COMPANY, else the saved default", metavar="TEXT"), annotation=str | None))
 
@@ -130,12 +138,29 @@ def _build_command(cmd: registry.Command):
         reason = merged("reason", kw.pop("reason", None), cmd.is_write)
         source_ref = merged("source_ref", kw.pop("source_ref", None), cmd.is_write)
         interactive = kw.pop("interactive", False)
+        directive = merged("directive", kw.pop("directive", None), cmd.is_write and cmd.scope == "company")
+        idempotency_key = merged("idempotency_key", kw.pop("idempotency_key", None), cmd.accepts_idempotency_key)
+        clears = kw.pop("clear", None) or []
+        follow = kw.pop("follow", False)
         company = merged("company", kw.pop("company", None), cmd.scope == "company")
         raw: dict[str, Any] = {}
         for path, flag, ann, help_, required, dflt in leaves:
             v = kw.get("f__" + path.replace(".", "__"))
             if v is not None:
                 _set_path(raw, path, v)
+        known = {p for p, *_ in leaves} | {p.split(".")[0] for p, *_ in leaves}
+        for name in clears:
+            dotted = name.replace("-", ".", 1) if "." not in name and any(p.startswith(name.split("-")[0] + ".") for p in known) else name
+            dotted = dotted.replace("-", "_")
+            if dotted not in known:
+                raise BookflowError("E_VALIDATION", details={"fields": [{"field": name, "problem": "not a clearable field of this command"}]})
+            top = dotted.split(".")[0]
+            if top in raw and raw.get(top) is not None and (dotted == top or dotted in {k for k in raw}):
+                raise BookflowError("E_VALIDATION", details={"fields": [{"field": name, "problem": "given both a value and --clear"}]})
+            if "." in dotted:
+                _set_path(raw, dotted, None)
+            else:
+                raw[top] = None
         if interactive:
             if not sys.stdin.isatty():
                 raise BookflowError("E_USAGE", message="--interactive needs a terminal")
@@ -168,8 +193,30 @@ def _build_command(cmd: registry.Command):
                 if table.get("default_company"):
                     company, source = table["default_company"], "default"
         from bookflow.core.dispatch import run as dispatch_run
-        ctx = Context.new(Interface.cli, "bookflow-cli", session_id=ctx_obj.get("session_id") or new_id(), reason=reason, source_ref=source_ref)
+        ctx = Context.new(Interface.cli, "bookflow-cli", session_id=ctx_obj.get("session_id") or new_id(), reason=reason, source_ref=source_ref, directive_id=directive, idempotency_key=idempotency_key)
+        if follow:
+            import time as _time
+            after = raw.get("after")
+            while True:
+                try:
+                    out = dispatch_run(cmd, {**raw, **({"after": after} if after is not None else {})}, ctx, data_root=data_root, company_selector=company, company_source=source, dry_run=dry_run)
+                except BookflowError as e:
+                    if e.code != "E_DB_BUSY":
+                        raise
+                    out = {"items": [], "next_after": after}
+                for item in out.get("items", []):
+                    typer.echo(render_output(item, as_json) if as_json else render_output({"items": [item], "count": 1}, False))
+                if out.get("next_after") is not None:
+                    after = out["next_after"]
+                elif after is None:
+                    after = raw.get("after") or 0
+                try:
+                    _time.sleep(2)
+                except KeyboardInterrupt:
+                    return
         out = dispatch_run(cmd, raw, ctx, data_root=data_root, company_selector=company, company_source=source, dry_run=dry_run)
+        for w_ in (out.get("warnings") or []) if isinstance(out, dict) else []:
+            typer.echo(f"warning: {w_}", err=True)
         typer.echo(render_output(out, as_json))
 
     run.__signature__ = inspect.Signature(params)  # type: ignore[attr-defined]
@@ -190,9 +237,12 @@ def _target_noun(argv: list[str]) -> str | None:
     return " ".join(words) if words else None
 
 
-def build_app(target: str | None = None) -> typer.Typer:
-    """Build the CLI. With ``target``, only that noun's commands are built; other groups are registered empty so help still lists them."""
-    registry.load_all()
+def build_app(target: str | None = None, full: bool = False) -> typer.Typer:
+    """Build the CLI. With ``target``, only that noun's module is loaded and built and other groups are registered empty so help still lists them; ``full`` builds everything."""
+    if full:
+        registry.load_all()
+    elif target is not None:
+        registry.load_all(target)
     app = typer.Typer(add_completion=False, no_args_is_help=True, help="Bookflow: multi-company double-entry accounting.", rich_markup_mode=None)
 
     @app.callback()
@@ -202,8 +252,10 @@ def build_app(target: str | None = None) -> typer.Typer:
              dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate and preview; write nothing (writing commands only)")] = False,
              company: Annotated[str | None, typer.Option("--company", help="Company selector (company-scoped commands only)")] = None,
              reason: Annotated[str | None, typer.Option("--reason", help="Why, in one short phrase (writing commands only)")] = None,
-             source_ref: Annotated[str | None, typer.Option("--source-ref", help="What triggered this write (writing commands only)")] = None) -> None:
-        ctx.obj = {"json": json_, "data_root": data_root, "dry_run": dry_run, "company": company, "reason": reason, "source_ref": source_ref, "session_id": new_id()}
+             source_ref: Annotated[str | None, typer.Option("--source-ref", help="What triggered this write (writing commands only)")] = None,
+             directive: Annotated[str | None, typer.Option("--directive", help="Standing instruction, by code or id (company-scoped writes only)")] = None,
+             idempotency_key: Annotated[str | None, typer.Option("--idempotency-key", help="Retry-safe key (create commands only)")] = None) -> None:
+        ctx.obj = {"json": json_, "data_root": data_root, "dry_run": dry_run, "company": company, "reason": reason, "source_ref": source_ref, "directive": directive, "idempotency_key": idempotency_key, "session_id": new_id()}
 
     groups: dict[str, typer.Typer] = {}
 
@@ -217,22 +269,30 @@ def build_app(target: str | None = None) -> typer.Typer:
         parent.add_typer(sub, name=leaf)
         return sub
 
+    single = {"init": "Create the data root, the system user, and the first hub-admin user mapped from the OS login.", "upgrade": "Migrate the hub database and every company database the acting user may write to the current schema revision."}
+    built = set()
     for cmd in registry.all_commands():
         if not cmd.verb:
-            if target is None or target == cmd.noun:
-                app.command(cmd.noun, help=cmd.description)(_build_command(cmd))
+            app.command(cmd.noun, help=cmd.description)(_build_command(cmd))
+            built.add(cmd.noun)
             continue
-        group = group_for(cmd.noun)
-        if target is None or target == cmd.noun or target.startswith(cmd.noun + " ") or cmd.noun.startswith(target + " "):
-            group.command(cmd.verb, help=cmd.description)(_build_command(cmd))
+        group_for(cmd.noun).command(cmd.verb, help=cmd.description)(_build_command(cmd))
+        built.add(cmd.noun)
+    for noun in registry.all_nouns():
+        if noun in built:
+            continue
+        if noun in single:
+            app.command(noun, help=single[noun])(lambda: None)
+        else:
+            group_for(noun)
     return app
 
 
 def main() -> None:
     target = _target_noun(sys.argv)
-    registry.load_all()
-    known = target is not None and any(c.noun == target or c.noun.startswith(target + " ") or target.startswith(c.noun + " ") for c in registry.all_commands())
-    app = build_app(target if known else None)
+    known = target is not None and any(n == target or n.startswith(target + " ") or target.startswith(n + " ") for n in registry.all_nouns())
+    # a root-level option value can masquerade as the noun; when the guess is unknown, build everything
+    app = build_app(target if known else None, full=(target is not None and not known))
     as_json = "--json" in sys.argv
     try:
         app(standalone_mode=False)
@@ -245,8 +305,8 @@ def main() -> None:
         sys.exit(emit_error(BookflowError("E_USAGE", message=e.format_message()), as_json))
     except typer.Exit as e:
         sys.exit(e.exit_code)
-    except typer.Abort:
-        sys.exit(emit_error(BookflowError("E_USAGE", message="aborted"), as_json))
+    except (typer.Abort, KeyboardInterrupt):
+        sys.exit(0)
     except Exception as e:  # noqa: BLE001
         sys.exit(emit_error(BookflowError("E_INTERNAL", message=f"{type(e).__name__}: {e}"), as_json))
 

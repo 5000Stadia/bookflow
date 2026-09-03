@@ -21,6 +21,13 @@ MATRIX = {
     "audit list": {"E_VALIDATION": "bad since/until"},
     "audit show": {"E_EVENT_NOT_FOUND": "absent event"},
     "audit tail": {"E_VALIDATION": "bad since/until"},
+    "company update": {"E_VERSION_CONFLICT": "stale expected_version with overlapping fields", "E_PARTIAL_WRITE": "hub projection failed after the company commit", "E_PERMISSION": "standard member", "E_VALIDATION": "bad merged row, unknown or non-nullable --clear"},
+    "directive add": {"E_PERMISSION": "agent without a principal; readonly member", "E_IDEMPOTENCY_MISMATCH": "same key, different input"},
+    "directive list": {},
+    "directive show": {"E_DIRECTIVE_NOT_FOUND": "unknown id or code"},
+    "directive deactivate": {"E_DIRECTIVE_NOT_FOUND": "unknown id or code", "E_PERMISSION": "readonly member"},
+    "presence set": {"E_RECORD_NOT_FOUND": "unknown record id", "E_VALIDATION": "unknown record type"},
+    "presence clear": {"E_VALIDATION": "unknown record type"},
 }
 
 INFRASTRUCTURE = ["E_USAGE", "E_VALIDATION", "E_CONTEXT_IN_INPUT", "E_NOT_INITIALIZED", "E_NO_ACTOR", "E_PERMISSION", "E_COMPANY_NOT_FOUND",

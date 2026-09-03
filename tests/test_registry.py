@@ -19,3 +19,15 @@ def test_every_command_is_complete():
             assert pos in c.input_model.model_fields
         if c.is_write and not c.bootstrap:
             assert c.apply is not None
+
+
+def test_noun_index_matches_modules():
+    import importlib
+    from bookflow.core.registry import NOUN_MODULES, REGISTRY
+    for module, nouns in NOUN_MODULES.items():
+        importlib.import_module(module)
+    by_module = {}
+    for cmd in REGISTRY.values():
+        by_module.setdefault(cmd.plan.__module__, set()).add(cmd.noun)
+    for module, nouns in NOUN_MODULES.items():
+        assert by_module.get(module, set()) == set(nouns), (module, by_module.get(module), nouns)

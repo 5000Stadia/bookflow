@@ -12,10 +12,12 @@ from bookflow.core.context import Context
 from bookflow.core.errors import BookflowError
 from bookflow.core.lazy import lazy
 from bookflow.core.moves import move_dir
+from bookflow.core.ids import new_id
 from bookflow.core.registry import Applied, Plan, Touched, command
-from bookflow.core.session import Session, localize
+from bookflow.core.session import Session, localize, now_iso
 from bookflow.storage.paths import choose_folder_name, name_key, normalize_display_name, write_company_marker
 
+sa = lazy("sqlalchemy")
 h = lazy("bookflow.hub.schema")
 co = lazy("bookflow.hub.companies")
 org = lazy("bookflow.hub.organizations")
@@ -29,8 +31,10 @@ class CompanyInfoOut(BaseModel):
 
 class CompanyShowOutput(CompanySummary):
     info: dict[str, Any]
+    info_version: int
     info_created_by_name: str | None
     info_updated_by_name: str | None
+    editing_by: list[dict[str, Any]] = []
 
 
 company_show = command("company show", scope="company", description="Show the selected company: registration, company information, and who created it.",
@@ -47,7 +51,8 @@ def plan_company_show(inp: Empty, ctx: Context, s: Session) -> Plan:
     for k in ("created_at", "updated_at"):
         info[k] = localize(s, info[k])
     names = cinfo.principal_names(s.company, {info["created_by"], info["updated_by"]})
-    return Plan(preview=CompanyShowOutput(**summary.model_dump(), info=info, info_created_by_name=names.get(info["created_by"]), info_updated_by_name=names.get(info["updated_by"])))
+    return Plan(preview=CompanyShowOutput(**summary.model_dump(), info=info, info_version=info["version"], info_created_by_name=names.get(info["created_by"]), info_updated_by_name=names.get(info["updated_by"]),
+                                          editing_by=_editing_by(s, "company_info", row["id"])))
 
 
 class RenameInput(BaseModel):
@@ -117,3 +122,348 @@ def apply_company_rename(plan: Plan, ctx: Context, s: Session) -> Applied:
         new = complete_company_move(s, ctx, dict(new), via)
         moved = True
     return Applied(RenameOutput(company_id=row["id"], display_name=new["display_name"], previous_display_name=row["display_name"], path=str(s.abs_path(new["path"])), moved=moved), [], "", audited=True)
+
+
+# ---------------------------------------------------------------- company update, directives, presence (row 2)
+
+from typing import Literal
+
+from pydantic import field_validator
+
+from bookflow.commands.hub_cmds import Address, _TAX_SHAPES, _empty_to_none
+from bookflow.core.models import ListOutput, WriteOutput as _WriteOutput
+from bookflow.core.versioning import check_update, current_writer_from_entries, history_from_entries
+
+versioning_audit = lazy("bookflow.core.audit")
+directives = lazy("bookflow.company.directives")
+presence = lazy("bookflow.company.presence")
+cschema = lazy("bookflow.company.schema")
+
+ADDRESS_FIELDS = ("line1", "line2", "city", "state", "postal_code", "country")
+
+
+class UpdateOutput(_WriteOutput):
+    version: int
+    changed_fields: list[str]
+    merged_over_versions: list[int]
+    previous_version: int | None = None
+    previous_updated_by: str | None = None
+    previous_updated_by_name: str | None = None
+    previous_on_behalf_of: str | None = None
+    previous_on_behalf_of_name: str | None = None
+    previous_updated_via: str | None = None
+    seconds_since_previous_update: float | None = None
+    recent_concurrent_activity: bool = False
+
+
+class CompanyUpdateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    expected_version: int | None = Field(None, ge=1, description="The info_version you read; omit for a blind write")
+    legal_name: str | None = Field(None, max_length=200, description="Name on tax forms; also updates the registry copy")
+    tax_id_kind: Literal["ein", "ssn"] | None = Field(None, description="Kind of tax id")
+    tax_id: str | None = Field(None, description="NN-NNNNNNN for ein, NNN-NN-NNNN for ssn")
+    entity_type: Literal["sole_proprietor", "partnership", "llc", "s_corp", "c_corp", "nonprofit", "other"] | None = None
+    income_tax_form: Literal["1040_schedule_c", "1065", "1120", "1120s", "990", "other"] | None = None
+    industry: str | None = Field(None, max_length=128, description="Line of business")
+    contact_name: str | None = Field(None, max_length=128, description="Primary contact person")
+    address: Address | None = Field(None, description="Company address; children given are patched, others kept")
+    legal_address: Address | None = Field(None, description="Address on tax forms")
+    ship_address: Address | None = Field(None, description="Where goods are received")
+    phone: str | None = Field(None, max_length=64, description="Main phone")
+    fax: str | None = Field(None, max_length=64, description="Fax")
+    email: str | None = Field(None, max_length=254, description="Main email; exactly one @")
+    website: str | None = Field(None, max_length=254, description="Website")
+    fiscal_year_start_month: int | None = Field(None, ge=1, le=12, description="First month of the fiscal year")
+    tax_year_start_month: int | None = Field(None, ge=1, le=12, description="First month of the tax year")
+    report_basis: Literal["accrual", "cash"] | None = Field(None, description="Default basis for reports")
+    timezone: str | None = Field(None, description="IANA zone")
+    closing_date: str | None = Field(None, description="Books closed through this date, YYYY-MM-DD")
+    recent_activity_window_seconds: int | None = Field(None, ge=0, description="Window for the recent-activity warning")
+
+    @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", mode="before")
+    @classmethod
+    def _blank(cls, v):
+        return _empty_to_none(v)
+
+
+SCALARS = [f for f in CompanyUpdateInput.model_fields if f not in ("expected_version", "address", "legal_address", "ship_address")]
+
+
+def _merged_row(current: dict[str, Any], inp: CompanyUpdateInput) -> tuple[dict[str, Any], set[str]]:
+    """Patch the stored row with the input: a key absent leaves the field, a key set to null clears it (blueprint: one JSON shape on every surface)."""
+    new = dict(current)
+    fields_set = set(inp.model_fields_set) - {"expected_version"}
+    for f in SCALARS:
+        if f in fields_set:
+            new[f] = getattr(inp, f)
+    for prefix in ("address", "legal_address", "ship_address"):
+        if prefix in fields_set:
+            sub = getattr(inp, prefix)
+            if sub is None:
+                for child in ADDRESS_FIELDS:
+                    new[f"{prefix}_{child}"] = None
+            else:
+                for child in sub.model_fields_set:
+                    new[f"{prefix}_{child}"] = getattr(sub, child)
+    return new, fields_set
+
+
+def _validate_merged(new: dict[str, Any]) -> None:
+    fields = []
+    if new.get("tax_id") is not None and not _TAX_SHAPES[new.get("tax_id_kind", "ein")].match(new["tax_id"]):
+        fields.append({"field": "tax_id", "problem": f"must match the {new.get('tax_id_kind')} shape"})
+    if new.get("email") is not None and new["email"].count("@") != 1:
+        fields.append({"field": "email", "problem": "must contain exactly one @"})
+    if new.get("timezone") is not None:
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+        try:
+            ZoneInfo(new["timezone"])
+        except (ZoneInfoNotFoundError, ValueError):
+            fields.append({"field": "timezone", "problem": f"unknown timezone {new['timezone']!r}"})
+    if new.get("closing_date") is not None:
+        from datetime import date
+        try:
+            date.fromisoformat(new["closing_date"])
+        except ValueError:
+            fields.append({"field": "closing_date", "problem": "must be YYYY-MM-DD"})
+    for f in ("legal_name", "timezone"):
+        if new.get(f) in (None, ""):
+            fields.append({"field": f, "problem": "must not be empty"})
+    if fields:
+        raise BookflowError("E_VALIDATION", details={"fields": fields})
+
+
+company_update = command("company update", scope="company", description="Update the selected company's information; versioned, blind, or merged per the concurrency rules.",
+                         input_model=CompanyUpdateInput, output_model=UpdateOutput, writes={"company", "hub"}, required_role="admin", truth="company", clearable=True,
+                         error_codes=["E_VERSION_CONFLICT", "E_PARTIAL_WRITE"])
+
+
+@company_update
+def plan_company_update(inp: CompanyUpdateInput, ctx: Context, s: Session) -> Plan:
+    current = cinfo.read_info(s.company)
+    new, fields_set = _merged_row(current, inp)
+    changed = {f for f in fields_set if any(new.get(col) != current.get(col) for col in ([f] if f not in ("address", "legal_address", "ship_address") else [f"{f}_{c}" for c in ADDRESS_FIELDS]))}
+    if changed:
+        _validate_merged(new)
+    window = current.get("recent_activity_window_seconds", 60)
+    writer = current_writer_from_entries(s.company, "company_info", current["id"], current["version"])
+    names = cinfo.principal_names(s.company, {x for x in ((writer.updated_by, writer.on_behalf_of) if writer else ()) if x})
+    if writer:
+        writer.updated_by_name = names.get(writer.updated_by)
+        writer.on_behalf_of_name = names.get(writer.on_behalf_of)
+    meta = check_update(current_version=current["version"], current_updated_at=current["updated_at"], current_writer=writer, changes=changed,
+                        expected_version=inp.expected_version, history_since=lambda v: history_from_entries(s.company, "company_info", current["id"], v, versioning_audit.decode_snapshot),
+                        actor_id=s.actor.id, window_seconds=window)
+    warnings = []
+    if meta.merged_over_versions:
+        warnings.append(f"merged over versions {meta.merged_over_versions}; those changes touched other fields")
+    if meta.recent_concurrent_activity:
+        who = meta.previous_updated_by_name or meta.previous_updated_by
+        if meta.previous_on_behalf_of_name:
+            who = f"{who} on behalf of {meta.previous_on_behalf_of_name}"
+        warnings.append(f"{who} changed this record {meta.seconds_since_previous_update} s ago through {meta.previous_updated_via}")
+    preview = UpdateOutput(warnings=warnings, **{k: v for k, v in meta.as_dict().items()})
+    return Plan(preview=preview, data={"current": current, "new": new, "changed": sorted(changed), "meta": meta, "warnings": warnings})
+
+
+@company_update.applier
+def apply_company_update(plan: Plan, ctx: Context, s: Session) -> Applied:
+    current, new, changed, meta = plan.data["current"], plan.data["new"], plan.data["changed"], plan.data["meta"]
+    if not changed:
+        return Applied(UpdateOutput(**meta.as_dict()), [], "no change")
+    via = ctx.interface.value
+    new = {**new, "version": meta.version, "updated_at": now_iso(), "updated_by": s.actor.id, "updated_via": via}
+    cols = {k: v for k, v in new.items() if k in cschema.company_info.c}
+    s.company.conn.execute(cschema.company_info.update().where(cschema.company_info.c.id == current["id"]).values(**cols))
+    snap = {k: v for k, v in cols.items() if k != "display_name"}
+    touched = [Touched("company_info", current["id"], "update", current["version"], meta.version, snap, db="company")]
+    summary = "updated company info: " + ", ".join(changed)
+    return Applied(UpdateOutput(warnings=plan.data["warnings"], **meta.as_dict()), touched, summary)
+
+
+# ---------------------------------------------------------------- directives
+
+class DirectiveAddInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    text: str = Field(description="The standing instruction, as the principal gave it", min_length=1, max_length=1000)
+
+
+class DirectiveSelector(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    directive: str = Field(description="Directive id or code, e.g. SI-3")
+
+
+class DirectiveListInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    include_inactive: bool = Field(False, description="Include deactivated directives")
+
+
+class DirectiveOut(BaseModel):
+    id: str
+    version: int
+    created_at: str
+    created_by: str
+    created_via: str
+    updated_at: str
+    updated_by: str
+    updated_via: str
+    code: str
+    text: str
+    given_by: str
+    given_by_name: str | None
+    recorded_by: str
+    recorded_by_name: str | None
+    active: bool
+    deactivated_at: str | None
+    deactivated_by: str | None
+    deactivated_by_name: str | None
+    access: str | None = None
+    role: str | None = None
+
+
+class DirectiveAddOutput(_WriteOutput):
+    idempotent_replay: bool = False
+    directive: DirectiveOut
+
+
+def _directive_out(s: Session, row: dict[str, Any]) -> DirectiveOut:
+    names = cinfo.principal_names(s.company, {x for x in (row["given_by"], row["recorded_by"], row.get("deactivated_by")) if x})
+    from bookflow.hub import access
+    acc, role = access.company_role(s, s.company_row["id"], s.company_row["organization_id"])
+    return DirectiveOut(**{k: (localize(s, row[k]) if k in ("created_at", "updated_at", "deactivated_at") else row[k]) for k in DirectiveOut.model_fields if k in row},
+                        given_by_name=names.get(row["given_by"]), recorded_by_name=names.get(row["recorded_by"]), deactivated_by_name=names.get(row.get("deactivated_by")), access=acc, role=role)
+
+
+directive_add = command("directive add", scope="company", description="Record a standing instruction that later writes can cite by code instead of repeating a reason.",
+                        input_model=DirectiveAddInput, output_model=DirectiveAddOutput, writes={"company"}, required_role="standard", truth="company", accepts_idempotency_key=True)
+
+
+@directive_add
+def plan_directive_add(inp: DirectiveAddInput, ctx: Context, s: Session) -> Plan:
+    if s.actor.kind == "human":
+        given_by = s.actor.id
+    elif ctx.on_behalf_of:
+        given_by = ctx.on_behalf_of
+    else:
+        raise BookflowError("E_PERMISSION", message="An agent without a principal cannot record a directive.")
+    n = s.company.conn.execute(sa.select(cschema.sequences.c.next_number).where(cschema.sequences.c.name == "directive")).scalar_one()
+    row = {"id": new_id(), "code": f"SI-{n}", "text": inp.text, "given_by": given_by, "recorded_by": s.actor.id, "active": True, "deactivated_at": None, "deactivated_by": None,
+           "version": 1, "created_at": now_iso(), "created_by": s.actor.id, "created_via": ctx.interface.value, "updated_at": now_iso(), "updated_by": s.actor.id, "updated_via": ctx.interface.value}
+    return Plan(preview=DirectiveAddOutput(directive=_directive_out(s, row)), data={"given_by": given_by})
+
+
+@directive_add.applier
+def apply_directive_add(plan: Plan, ctx: Context, s: Session) -> Applied:
+    row, t = directives.add(s.company, text=plan.preview.directive.text, given_by=plan.data["given_by"], recorded_by=s.actor.id, via=ctx.interface.value)
+    t.db = "company"
+    return Applied(DirectiveAddOutput(directive=_directive_out(s, row)), [t], f"recorded directive {row['code']}")
+
+
+directive_list = command("directive list", scope="company", description="List this company's standing instructions.", input_model=DirectiveListInput, output_model=ListOutput[DirectiveOut], required_role="member")
+
+
+@directive_list
+def plan_directive_list(inp: DirectiveListInput, ctx: Context, s: Session) -> Plan:
+    items = [_directive_out(s, r) for r in directives.list_all(s.company, inp.include_inactive)]
+    return Plan(preview=ListOutput[DirectiveOut](items=items, count=len(items)))
+
+
+directive_show = command("directive show", scope="company", description="Show one standing instruction.", input_model=DirectiveSelector, output_model=DirectiveOut, required_role="member", positional=["directive"], error_codes=["E_DIRECTIVE_NOT_FOUND"])
+
+
+@directive_show
+def plan_directive_show(inp: DirectiveSelector, ctx: Context, s: Session) -> Plan:
+    return Plan(preview=_directive_out(s, directives.resolve(s.company, inp.directive)))
+
+
+class DirectiveDeactivateOutput(_WriteOutput):
+    directive: DirectiveOut
+
+
+directive_deactivate = command("directive deactivate", scope="company", description="Deactivate a standing instruction so it can no longer be cited.",
+                               input_model=DirectiveSelector, output_model=DirectiveDeactivateOutput, writes={"company"}, required_role="standard", truth="company",
+                               positional=["directive"], error_codes=["E_DIRECTIVE_NOT_FOUND"])
+
+
+@directive_deactivate
+def plan_directive_deactivate(inp: DirectiveSelector, ctx: Context, s: Session) -> Plan:
+    row = directives.resolve(s.company, inp.directive)
+    preview = dict(row, active=False, deactivated_at=now_iso(), deactivated_by=s.actor.id, version=row["version"] + (1 if row["active"] else 0))
+    return Plan(preview=DirectiveDeactivateOutput(directive=_directive_out(s, preview)), data={"row": row})
+
+
+@directive_deactivate.applier
+def apply_directive_deactivate(plan: Plan, ctx: Context, s: Session) -> Applied:
+    row = plan.data["row"]
+    if not row["active"]:
+        return Applied(DirectiveDeactivateOutput(directive=_directive_out(s, row)), [], "no change")
+    new, t = directives.deactivate(s.company, row, s.actor.id, ctx.interface.value)
+    t.db = "company"
+    return Applied(DirectiveDeactivateOutput(directive=_directive_out(s, new)), [t], f"deactivated directive {row['code']}")
+
+
+# ---------------------------------------------------------------- presence
+
+RECORD_TYPES = ("company_info", "directive")
+
+
+class PresenceInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    record_type: Literal["company_info", "directive"] = Field(description="Record type")
+    record_id: str = Field(description="Record id")
+
+
+class PresenceOutput(BaseModel):
+    record_type: str
+    record_id: str
+    editing_by: list[dict[str, Any]]
+
+
+def _record_exists(s: Session, record_type: str, record_id: str) -> None:
+    if record_type == "company_info":
+        if record_id.upper() != s.company_row["id"]:
+            raise BookflowError("E_RECORD_NOT_FOUND", details={"record_type": record_type, "suggestions": [s.company_row["id"]]})
+        return
+    try:
+        directives.resolve(s.company, record_id)
+    except BookflowError as e:
+        raise BookflowError("E_RECORD_NOT_FOUND", details={"record_type": record_type, "suggestions": e.details.get("suggestions", [])})
+
+
+def _editing_by(s: Session, record_type: str, record_id: str) -> list[dict[str, Any]]:
+    rows = presence.live_for(s.company, record_type, record_id.upper())
+    names = cinfo.principal_names(s.company, {r["user_id"] for r in rows})
+    return [{"user_id": r["user_id"], "name": names.get(r["user_id"]), "interface": r["interface"], "since": localize(s, r["started_at"])} for r in rows]
+
+
+presence_set = command("presence set", scope="company", description="Say that you are editing a record, so other people's screens can show it; advisory only, never blocks a write.",
+                       input_model=PresenceInput, output_model=PresenceOutput, writes={"company"}, kind="advisory", required_role="standard", positional=["record_type", "record_id"], error_codes=["E_RECORD_NOT_FOUND"])
+
+
+@presence_set
+def plan_presence_set(inp: PresenceInput, ctx: Context, s: Session) -> Plan:
+    _record_exists(s, inp.record_type, inp.record_id)
+    return Plan(preview=PresenceOutput(record_type=inp.record_type, record_id=inp.record_id.upper(), editing_by=[]))
+
+
+@presence_set.applier
+def apply_presence_set(plan: Plan, ctx: Context, s: Session) -> Applied:
+    p = plan.preview
+    presence.set_presence(s.company, record_type=p.record_type, record_id=p.record_id, user_id=s.actor.id, interface=ctx.interface.value)
+    return Applied(PresenceOutput(record_type=p.record_type, record_id=p.record_id, editing_by=_editing_by(s, p.record_type, p.record_id)), [], "")
+
+
+presence_clear = command("presence clear", scope="company", description="Say that you stopped editing a record.",
+                         input_model=PresenceInput, output_model=PresenceOutput, writes={"company"}, kind="advisory", required_role="standard", positional=["record_type", "record_id"])
+
+
+@presence_clear
+def plan_presence_clear(inp: PresenceInput, ctx: Context, s: Session) -> Plan:
+    return Plan(preview=PresenceOutput(record_type=inp.record_type, record_id=inp.record_id.upper(), editing_by=[]))
+
+
+@presence_clear.applier
+def apply_presence_clear(plan: Plan, ctx: Context, s: Session) -> Applied:
+    p = plan.preview
+    presence.clear_presence(s.company, record_type=p.record_type, record_id=p.record_id, user_id=s.actor.id, interface=ctx.interface.value)
+    return Applied(PresenceOutput(record_type=p.record_type, record_id=p.record_id, editing_by=_editing_by(s, p.record_type, p.record_id)), [], "")
