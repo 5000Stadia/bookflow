@@ -61,14 +61,14 @@ Everything must remain portable to PostgreSQL. No SQLite-only SQL in repositorie
 <data_root>/                     default ~/.bookflow, override with BOOKFLOW_DATA_ROOT
   hub.db                         users, credentials, tokens, company registry, memberships, hub audit
   config.toml                    per-OS-user mapping to a Bookflow user and that user's default company
-  locks/                         ephemeral lock files: hub.lock and <company_id>.lock; never contain data
+  root.lock                      the one lock for this data root; holds the holder's hostname, pid, and command while held
   backups/
     hub-<YYYY-MM-DD-HHMMSS>.db   copies of hub.db taken before hub migrations and by `hub backup`
   organizations/
     <Organization Name>/         one folder per organization: the business entity that holds one or more companies
-      bookflow-organization.toml cache of organization id and display name
+      bookflow-organization.toml organization id
       <Company Name>/            one folder per company, named after the company
-        bookflow-company.toml    cache of company id, organization id, display name, schema version, state, demo flag
+        bookflow-company.toml    company id and rollout state; display name and schema revision as an informational copy
         company.db               every table for one company (SQLite adds company.db-wal and company.db-shm while open)
         attachments/
           <first two hex of sha256>/<sha256>    content-addressed file bodies
@@ -76,36 +76,38 @@ Everything must remain portable to PostgreSQL. No SQLite-only SQL in repositorie
           <YYYY-MM-DD-HHMMSS>.db copies of company.db taken with the SQLite backup API, before migrations and by `company backup`
         exports/                 files written by report `--csv` and by `company export`; safe to empty
   trash/
-    <Organization Name>/<Company Name>-<YYYY-MM-DD-HHMMSS>/   whole company folders removed by `demo reset` or `company delete`; `trash empty` deletes them
+    <Organization Name>/<Company Name>-<YYYY-MM-DD-HHMMSS>/   company folders removed by `company delete`
+    <Organization Name>-<YYYY-MM-DD-HHMMSS>/                  organization folders removed by `demo reset` or `organization delete`; `trash empty` deletes everything here
 ```
 
 ### 3.0 Organizations
 
 An organization is the business entity that holds one or more companies: a single business with one set of books, or a holding or accounting firm keeping books for many. Access is granted at the organization or at the company. A member of an organization sees every company in it, including ones created later; a member of one company sees only that company. Nobody sees an organization they have no membership in. A hub admin (4.1) sees every organization. Two organizations on one data root are invisible to each other, which is the hosted-service shape: the operator is hub admin, each client is an organization, and each client's people and agents are members of it.
 
-Table `organizations` in hub.db: `id`, `display_name` (unique across the hub after NFC and case folding), `path` relative to the data root, `created_at`, `active`, common fields. Every company belongs to exactly one organization. `organization new`, `organization list`, `organization show`, `organization rename [--move]`. When a hub has exactly one organization, `company new` defaults to it; otherwise `--organization` is required.
+Table `organizations` in hub.db: `id`, `display_name` and `name_key` (unique across the hub after trimming, NFC, and case folding), `path` relative to the data root, `is_demo`, common fields. Table `companies` in hub.db: `id`, `organization_id`, `display_name`, `name_key` (unique within the organization), `path` relative to the data root, `legal_name`, `home_currency`, `schema_revision`, `is_demo`, `last_opened_at`, common fields. Moving an organization folder updates every path under it in one transaction. Every company belongs to exactly one organization. `organization new`, `organization list`, `organization show`, `organization rename [--move]`. Organizations are created, renamed, attached, and detached only by hub admins, because their names are unique across the hub and a collision would reveal another organization to a non-admin. When a hub has exactly one organization, `company new` defaults to it; otherwise `--organization` is required. Display names of organizations and companies may not contain `/`.
 
 ### 3.1 Company folders
 
 - The company folder lives inside its organization's folder. Organization folder names follow the same derivation rule as company folder names. Company display names are unique within their organization.
-- The folder name is derived from the display name: Unicode NFC normalization; `/ \ : * ? " < > |` and characters below U+0020 replaced by a space; runs of whitespace collapsed; leading and trailing spaces and dots removed; truncated to 90 bytes of UTF-8 at a character boundary and then stripped again; `Company` if empty; if the part before the first dot is, case-insensitively, a Windows reserved device name (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`), ` Co` is appended. If a folder with that name exists, compared after NFC and case folding, ` (2)`, ` (3)`, and so on is appended. Reservation is the atomic directory creation itself; a creator that loses the race takes the next suffix. A company's own folder is excluded from the collision check when it is renamed.
+- The folder name is derived from the display name and chosen under the data-root lock by listing the parent and comparing existing names after NFC and case folding, so that two names that differ only in case or normalization never become two folders that one filesystem would merge; the directory creation then reserves exactly the chosen name. Derivation: Unicode NFC normalization; `/ \ : * ? " < > |` and characters below U+0020 replaced by a space; runs of whitespace collapsed; leading and trailing spaces and dots removed; truncated to 90 bytes of UTF-8 at a character boundary and then stripped again; `Company` if empty; if the part before the first dot is, case-insensitively, a Windows reserved device name (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`), ` Co` is appended. If a folder with that name exists, compared after NFC and case folding, ` (2)`, ` (3)`, and so on is appended. Reservation is the atomic directory creation itself; a creator that loses the race takes the next suffix. A company's own folder is excluded from the collision check when it is renamed.
 - Display names are trimmed and whitespace-collapsed on input, and unique within the organization compared after NFC and case folding; `E_NAME_TAKEN` otherwise.
 - The hub registry stores the folder path relative to the data root, so a whole data root can be moved or copied.
-- The company database is the source of truth for everything in `bookflow-company.toml` and for the hub's projection of the company (display name, legal name, home currency, schema revision, demo flag). The marker is a cache rewritten whenever any of those change and repaired from the database on open; the hub projection is written in the same operation that changes the database and repaired from the database on open.
+- **The hub is the source of truth for registration**: which organization a company belongs to, its display name, its folder path, its memberships, and its demo flag. **The company database is the source of truth for the books**: everything in `company_info` except `display_name`, and every list and transaction. `company_info.display_name` and the marker's display name and revision are one-way copies written after the hub commit for the benefit of `attach` on another machine; if the copy is not written, nothing depends on it, and the next writable open rewrites it. Organization association is local to a data root and is not carried in the folder: an attached folder joins the organization whose folder contains it.
 - A company folder is in exactly one of these states. **Incomplete**: the marker says `creating`; rollout did not finish. It is ignored by every command, `attach` refuses it with `E_INCOMPLETE_COMPANY`, and the operator removes it by hand. **Unregistered**: the marker says `ready` and no hub row references the folder; the database is complete. `attach` adopts it after validation. **Registered**: a hub row references the folder. Rollout writes `ready` only after the database is complete and before the hub row is written, so a crash at any point leaves a folder in one of these states.
-- Recovery on open: if the registered path does not exist, the organization's folder is scanned for a folder whose marker carries the company id and whose database `company_info.id` confirms it; exactly one such folder rewrites the hub path, any other count returns `E_COMPANY_MISSING`. A folder left under a temporary name by an interrupted move is found the same way and renamed to its target.
+- Folder moves are the only operation that cannot be inside a hub transaction. A rename with `--move` is two audited steps: one transaction commits the new name, then the folder is moved, then a second transaction commits the new path. A failure between leaves the hub pointing at the old path, which still exists, so nothing is inconsistent, and `rename --move` to the same name completes the move. Immediately before moving, under the lock, the target must not exist; a move never replaces a directory. If a registered path does not exist on open, the error is `E_COMPANY_MISSING` naming the company; there is no scan.
 - The company id is `company_info.id`, the single row's primary key. `attach` reads the marker, opens the database read-only, and refuses on any mismatch.
 - Every company is exactly one folder under its organization's folder. Nothing about a company is written outside it, and nothing that is not about that company is written inside it. Temporary files go to the operating system temporary directory.
-- `company attach <path> [--name <display name>]` registers a folder that is already under an organization's folder, under a new display name when the folder's own name is taken; a folder elsewhere is refused with `E_NOT_IN_ORGANIZATION_DIR` and the message names where to move it. The organization is the one whose folder contains the path. Before registering, `attach` verifies: the path resolves, after symlinks, to a directory directly under a registered organization's folder; the filesystem is local; the marker and database exist and agree on the company id; the database schema revision is known to this version; the id is not already registered (`E_ALREADY_ATTACHED`); the display name is not taken (`E_NAME_TAKEN`). Any failure leaves the hub unchanged. `company detach <company>` removes the registry row and memberships and leaves the folder in place. Restoring from a copy on the same machine is detach the live company, move the copy into the organization's folder, attach it.
-- `demo reset` acts only on the organization whose hub row carries `is_demo`, which only `demo reset` sets. `company_info.is_demo` is a label copied into the marker and hub projection for display; it grants nothing.
+- `company attach <path> [--name <display name>]` is a hub-admin command that registers a folder already under a registered organization's folder, under the display name copied in the folder or the one given. Any other path is refused with `E_NOT_IN_ORGANIZATION_DIR`. Before registering, `attach` verifies: the path resolves, after symlinks, to a directory directly under that organization's folder; the filesystem is local; the marker and database exist and agree on the company id; the database schema revision is known to this version, behind the current revision or not, since the first writable open migrates it; the marker state is `ready`; the id is not registered (`E_ALREADY_ATTACHED`); the display name is free in the organization (`E_NAME_TAKEN`). Any failure leaves the hub unchanged. Registration is one hub transaction; the display-name copy in the folder is written afterwards. `company detach <company>`, hub admin only, deletes the registry row and its memberships in one audited transaction whose entries carry the deleted rows, and leaves the folder in place. Restoring from a copy on the same machine is detach the live company, move the copy into the organization's folder, attach it.
+- `demo reset` acts only on the organization whose hub row carries `is_demo`, which only `demo reset` sets.
 
 ### 3.2 Locality and locking
 
-- Before opening `hub.db`, `company.db`, or an `attach` path, the core resolves symlinks and determines the filesystem type. Local types are an allowlist: `ext2`, `ext3`, `ext4`, `xfs`, `btrfs`, `f2fs`, `zfs`, `tmpfs`, `overlay`, `apfs`, `hfs`, `ntfs`, `exfat`, `vfat`, `fat32`, `refs`. On Linux the type comes from the mount table; on macOS from `statfs`; on Windows a UNC path or a drive whose type is remote is refused. Any other type, and any failure to determine the type, is refused: `E_NETWORK_SHARE` when the type is known and not local, `E_FS_UNKNOWN` when it cannot be determined.
-- Lock files live in `<data_root>/locks/`, outside every company folder, so a folder can be moved while its lock is held. Every writable open of a database takes an exclusive lock on its lock file for the lifetime of the open; every read-only open takes a shared lock. A process that cannot take its lock within 5 seconds fails with `E_DB_BUSY` naming the holder's hostname and pid from the lock file. Commands that move, detach, or trash a company folder take its exclusive lock first, so no reader or writer has it open during the move. The host process holds the exclusive lock for as long as it runs, which is what makes it the single writer.
-- On closing a writable open, the WAL is checkpointed and truncated, so a folder no process has open is safe to copy with ordinary file tools.
-- Migrations run inside the exclusive lock. Before migrating an existing database, a backup is written with the SQLite backup API to the company's `backups/` or to `<data_root>/backups/` for the hub.
-- Read-only opens set `query_only` and never change the journal mode. A read-only open of a database behind the current revision returns `E_SCHEMA_BEHIND`, and any writable open by an actor allowed to write migrates it; a read-only member asks a writer to open it once.
+- Before opening `hub.db`, any `company.db`, or an `attach` path, the core resolves symlinks and determines the filesystem type. Local types are an allowlist: `ext2`, `ext3`, `ext4`, `xfs`, `btrfs`, `f2fs`, `zfs`, `tmpfs`, `overlay`, `apfs`, `hfs`, `ntfs`, `exfat`, `vfat`, `fat32`, `refs`. On Linux the type comes from the mount table; on macOS from `statfs`; on Windows a UNC path or a drive whose type is remote is refused. Any other type, and any failure to determine the type, is refused: `E_NETWORK_SHARE` when the type is known and not local, `E_FS_UNKNOWN` when it cannot be determined.
+- **One lock per data root.** Every command, reading or writing, takes an exclusive lock on `root.lock` for its duration; the holder writes its hostname, pid, and command name into the file while it holds it. A process that cannot take the lock within 5 seconds (`BOOKFLOW_LOCK_TIMEOUT` overrides, for tests) fails with `E_DB_BUSY`; hub admins see the holder, others see only that another command is running. The lock file's contents are ephemeral and are not part of any data. Everything a command does, including resolving the actor and company, checking roles, opening databases, moving folders, and writing `config.toml`, happens under this lock, so nothing it resolved can change under it. Commands are short, so contention is rare; the host process (section 15.2) holds the lock for its lifetime and every other process on that machine finds the host's pid in the lock file and sends its command to the host instead. Row 3 builds that hand-off; until then a running host simply blocks other processes with `E_DB_BUSY`.
+- On closing a writable database, the WAL is checkpointed and truncated, so a folder no process has open is safe to copy with ordinary file tools.
+- Migrations run under the root lock. Before migrating an existing database, a backup is written with the SQLite backup API to the company's `backups/` or to `<data_root>/backups/` for the hub.
+- Read-only opens set `query_only` and never change the journal mode. A read-only open of a database behind the current revision returns `E_SCHEMA_BEHIND` whose message names `bookflow upgrade`, which migrates the hub and every company the actor may write; any writable open also migrates.
+- The data root is created with mode `0700` and every file inside it with `0600`; folders inside inherit `0700`. On Windows the default ACL of the creating user applies.
 
 ### 3.3 Schema versions
 
@@ -130,6 +132,8 @@ Table `users` in hub.db.
 | created_at, updated_at, version | | see section 6 |
 
 There is exactly one `system` user per data root, created by `bookflow init`. Scheduled jobs and migrations act as it. Its `created_by` is its own id; it is the only self-referencing row. The first human user, created by `init`, is a hub admin. Hub admins are the operators of the data root: they see every organization and company and their folder paths, and they create organizations. Every other user sees only what their memberships grant and never a path.
+
+`organization new` creates no membership; a hub admin grants the organization's first owner with `user add` and `membership grant` (row 7).
 
 ### 4.1a Principals mirror
 
@@ -156,7 +160,7 @@ An agent acting for several people holds one token per person. The principal is 
 
 Table `companies` in hub.db: `id`, `display_name`, `path`, `created_at`, `active`.
 
-Table `memberships` in hub.db: `user_id`, `scope_type` (`organization` or `company`), `scope_id`, `role`, `granted_by`, `granted_at`, `revoked_at`. An organization membership applies to every company in the organization; a company membership applies to that company only. When both apply, the higher role wins. Creating a company requires the admin or owner role on its organization or hub admin.
+Table `memberships` in hub.db: `user_id`, `scope_type` (`organization` or `company`), `scope_id`, `role`, `granted_by`, `granted_at`, `revoked_at`. An organization membership applies to every company in the organization; a company membership applies to that company only. When both apply, the higher role wins. Creating a company requires the admin or owner role on its organization or hub admin, and always grants the creator an explicit company-scope owner membership.
 
 Roles and what they may do:
 
@@ -171,7 +175,7 @@ An agent's memberships are granted by a human with admin or owner role on that o
 
 ### 4.3a Configuration file
 
-`config.toml` holds one `[users.<os_login>]` table per mapped OS login with `user_id` and `default_company`, and `[client]` with `display_name`. It is rewritten atomically (temporary file and rename) under the hub lock. A command that removes a company clears every `default_company` that named it in the same operation. An unreadable or malformed file is `E_CONFIG_INVALID` with the path.
+`config.toml` holds one `[users.<os_login>]` table per mapped OS login with `user_id` and `default_company`, and `[client]` with `display_name`. It is rewritten atomically (temporary file and rename) under the root lock, after the hub transaction that made it necessary. A `default_company` that no longer resolves is ignored and reported in the error's `details.source` as `default`; a command that removes a company clears such defaults, and a failure to do so is harmless. An unreadable or malformed file is `E_CONFIG_INVALID` with the path.
 
 ### 4.4 Authentication per interface
 
@@ -199,7 +203,9 @@ Positional arguments are declared per command in the registry; everything else i
 
 `E_USAGE` covers syntax only: an unknown option, a missing positional, or a conflicting placement. Every value problem, including a missing required field or an unparseable value, is `E_VALIDATION` from the input model, so the library and the CLI return the same code for the same input.
 
-`--interactive`, on the CLI only, prompts on stderr for every input field not supplied as an option, using the field's description, default, and choices from the registry; a non-terminal stdin is `E_USAGE`. It is generic to every write command and never reaches HTTP or MCP.
+Nested input fields become flags joined with `-`: the `address` object's `line1` is `--address-line1`. Lists of scalars repeat the flag. Anything deeper takes a JSON value.
+
+`--interactive`, on the CLI only and only on commands that write, prompts on stderr for every input field not supplied as an option or positional, using the field's description, default, and choices from the registry; a non-terminal stdin is `E_USAGE`. It never reaches HTTP or MCP.
 
 ### 5.2 Context
 
@@ -222,7 +228,7 @@ Every command receives a context that the adapter builds. No field of the contex
 | source_ref | text, nullable | caller supplied; an identifier for what triggered the write, such as an email id or attachment id |
 | company_id | ULID, nullable | the company the command runs against; null for hub commands |
 
-`reason`, `directive_id`, `source_ref`, and `idempotency_key` are set by the caller through global flags on the CLI (`--reason`, `--directive`, `--source-ref`, `--idempotency-key`), request headers on HTTP (`X-Bookflow-Reason`, `X-Bookflow-Directive`, `X-Bookflow-Source-Ref`, `Idempotency-Key`), and named tool arguments on MCP.
+`reason` and `source_ref` exist on every writing command from the first version; `directive_id` and `idempotency_key` from the rows that store them. They are set by the caller through global flags on the CLI (`--reason`, `--directive`, `--source-ref`, `--idempotency-key`), request headers on HTTP (`X-Bookflow-Reason`, `X-Bookflow-Directive`, `X-Bookflow-Source-Ref`, `Idempotency-Key`), and named tool arguments on MCP.
 
 ### 5.3 Company selection
 
@@ -245,7 +251,7 @@ Every command returns a structured result. On the CLI:
 
 Every `list` output is `{"items": [...], "count": n}`, and every item carries the common fields of 6.1 plus `access` (`hub_admin`, `organization`, or `company`) and `role` (null for hub admins without membership). Every output model for a write includes the identifying fields of what it wrote and `dry_run`. Fields that hold filesystem paths are null in every output and error detail unless the actor is a hub admin; dispatch applies the rule, not individual commands.
 
-Errors are always JSON documents on stderr with `code`, `message`, and `details`, whether or not `--json` was given; without `--json` a one-line message precedes the JSON. Usage errors from the CLI parser are emitted the same way with code `E_USAGE`. Input validation failures are `E_VALIDATION` with `details.fields`, a list of `{"field", "problem"}`. Unknown input keys are `E_VALIDATION`; input keys named like context fields are `E_CONTEXT_IN_INPUT` on every surface. Every command may return the infrastructure codes, listed once in the documentation: `E_USAGE`, `E_VALIDATION`, `E_CONTEXT_IN_INPUT`, `E_NOT_INITIALIZED`, `E_NO_ACTOR`, `E_PERMISSION`, `E_COMPANY_NOT_FOUND`, `E_COMPANY_AMBIGUOUS`, `E_DB_BUSY`, `E_NETWORK_SHARE`, `E_FS_UNKNOWN`, `E_SCHEMA_UNKNOWN`, `E_SCHEMA_BEHIND`, `E_CONFIG_INVALID`, `E_IO`, `E_INTERNAL`. `E_IO` carries `details.operation` and `details.errno`; `E_INTERNAL` is the only code for exit 3. Command-specific codes are listed per command. Error codes are stable strings prefixed `E_`. Every command's documentation lists the codes it can return. An option that a command does not support in the current version is not defined on that command; nothing is accepted and ignored.
+Errors are always JSON documents on stderr with `code`, `message`, and `details`, whether or not `--json` was given; without `--json` a one-line message precedes the JSON. Usage errors from the CLI parser are emitted the same way with code `E_USAGE`. Input validation failures are `E_VALIDATION` with `details.fields`, a list of `{"field", "problem"}`. Unknown input keys are `E_VALIDATION`; input keys named like context fields are `E_CONTEXT_IN_INPUT` on every surface. Every command may return the infrastructure codes, listed once in the documentation: `E_USAGE`, `E_VALIDATION`, `E_CONTEXT_IN_INPUT`, `E_NOT_INITIALIZED`, `E_NO_ACTOR`, `E_PERMISSION`, `E_COMPANY_NOT_FOUND`, `E_COMPANY_AMBIGUOUS`, `E_ORGANIZATION_NOT_FOUND`, `E_DB_BUSY`, `E_NETWORK_SHARE`, `E_FS_UNKNOWN`, `E_SCHEMA_UNKNOWN`, `E_SCHEMA_BEHIND`, `E_CONFIG_INVALID`, `E_IO`, `E_INTERNAL`. `E_IO` carries `details.operation` and `details.errno`; `E_INTERNAL` is the only code for exit 3. An unknown command name is `E_USAGE` on every surface. `E_ORGANIZATION_NOT_FOUND` and `E_COMPANY_NOT_FOUND` are returned identically for absent and for inaccessible targets. Command-specific codes are listed per command. Error codes are stable strings prefixed `E_`. Every command's documentation lists the codes it can return. An option that a command does not support in the current version is not defined on that command; nothing is accepted and ignored.
 
 ### 5.5 Dry run
 
@@ -361,8 +367,8 @@ Rules:
 
 - No command updates or deletes audit rows. The repository layer exposes only insert and read.
 - `audit list` filters by actor, actor kind, interface, record type, record id, command, and time range, and returns events with entry counts. `audit show <event_id>` returns the event with entries and a computed field diff per entry.
-- `activity <record_type> <record_id>` merges audit entries, notes, and attachment links for that record in time order.
-- Reads are not audited.
+- `activity <record_type> <record_id>` merges audit entries, notes, and attachment links for that record in time order. The hub has the same `audit list` and `audit show`, hub-scoped: hub admins see every event, other users the events about organizations and companies they can see.
+- Reads are not audited. Writes to `config.toml` alone are not audited.
 
 ### 7.1 Event feed
 
@@ -396,12 +402,12 @@ Rates are entered with `rate set`. There is no automatic rate fetching. A fetche
 
 ### 9.1 Company info
 
-Table `company_info` in company.db, exactly one row.
+Table `company_info` in company.db, exactly one row. This table and the rollout below are the completed inventory of the anchor's company information screen; the artifact critic checks the built form against it, and the human runs the side-by-side.
 
 | Field | Meaning |
 |---|---|
 | legal_name | the name on tax forms |
-| display_name | shown in lists, forms, and the GUI |
+| display_name | copy of the hub's display name, written after every hub change; read only by `attach` |
 | tax_id_kind | `ein` or `ssn` |
 | tax_id | `NN-NNNNNNN` for EIN, `NNN-NN-NNNN` for SSN, validated for shape only |
 | industry | free text; selects the default chart during rollout |
@@ -420,11 +426,10 @@ Table `company_info` in company.db, exactly one row.
 | closing_date | date, nullable; see 10.6 |
 | recent_activity_window_seconds | default 60 |
 | default_chart | which seeded chart was applied; null until one is applied with `chart apply` |
-| is_demo | label set by `demo reset` |
 
 ### 9.2 Rollout
 
-`bookflow company new` takes every field above as options, or `--interactive` to prompt for each, plus `--organization` (id or name; defaulted when the actor can see exactly one) and `--chart` (a seeded chart name or `none`). Required: `legal_name`, `home_currency`. Defaults: `display_name` = `legal_name`; `fiscal_year_start_month` = 1; `timezone` = the machine's zone; `country` = `US`; `entity_type` and `income_tax_form` = `other`; everything else empty. `closing_date` is not accepted at rollout; it is set with `company update`. The tax id, when given, must match the shape for its kind; email must contain one `@`; timezone must be an IANA name; months must be 1 to 12. Until charts exist, `--chart` accepts only `none`; `chart apply <name>` seeds a chart into a company whose `default_chart` is null. It creates the directory, the database, the `company_info` row, the seeded chart of accounts named by `--chart`, the standard terms, payment methods, and sales tax codes listed in section 11, and grants the creating user the owner role. Output is the company id and display name.
+`bookflow company new` takes every field above as options, or `--interactive` to prompt for each, plus `--organization` (id or name; defaulted when the actor can see exactly one) and `--chart` (a seeded chart name or `none`). Required: `legal_name`, `home_currency`. Defaults: `display_name` = `legal_name`; `fiscal_year_start_month` = 1; `timezone` = the machine's zone as reported by the `tzlocal` package; `country` = `US`; `entity_type` and `income_tax_form` = `other`; everything else empty. `closing_date` is not accepted at rollout; it is set with `company update`. The tax id, when given, must match the shape for its kind; email must contain one `@`; timezone must be an IANA name; months must be 1 to 12. Until charts exist, `--chart` accepts only `none`; `chart apply <name>` seeds a chart into a company whose `default_chart` is null. It creates the directory, the database, the `company_info` row, the seeded chart of accounts named by `--chart`, the standard terms, payment methods, and sales tax codes listed in section 11, and grants the creating user the owner role. Output is the company id and display name.
 
 Seeded charts, chosen by `--chart`: `general`, `service`, `construction_trades`, `retail`, `nonprofit`. Each is a data file in the package. `general` is the default.
 
@@ -709,6 +714,8 @@ Trial balance and general ledger ship with the ledger in release 1.
 
 `bookflow serve --bind 127.0.0.1:8123`. Routes are `POST /companies/{company_id}/commands/{command_name}` with the input model as the JSON body and the output model as the response. Hub commands are `POST /commands/{command_name}`. Errors return status 400 for named errors with the error JSON as body, 401 for missing or bad token, 404 for `E_COMPANY_NOT_FOUND`, 409 for `E_VERSION_CONFLICT`, 500 for internal failure. `GET /openapi.json` is generated. Binding to a non-loopback address requires `--allow-network`, and the docs state that TLS termination is the deployer's job. The host also serves the workbench at `/` and static assets under `/static/`.
 
+While the host runs it holds the data root's lock (3.2); a CLI or library call on the same machine reads the host's pid from the lock file and forwards the command to it over loopback, so there is never a second writer.
+
 Browser sessions: `POST /login` with username and password sets an HTTP-only session cookie that maps to a session token in `api_tokens` with kind `session`, expiring after 12 hours of inactivity. API calls from the browser send the cookie; API calls from programs send a bearer token. Both resolve to the same context.
 
 ### 15.2a Workbench
@@ -789,7 +796,7 @@ Later releases, each designed as its own pass against this blueprint: customer r
 | Adapter logic drift | HTTP and CLI accept different inputs for the same command. Guard: adapters are generated from the same definitions and a test calls every command through all three. |
 | Silent merge surprises | A disjoint-field merge lands a change the caller did not expect. Guard: the output names the merged versions and the CLI warns. |
 | SQLite on a shared drive | Corruption. Guard: refusal on network filesystems and the host-only rule. |
-| Migration on an open file | Two processes migrate at once. Guard: an exclusive lock file per company during migration. |
+| Migration on an open file | Two processes migrate at once. Guard: the data-root lock. |
 | Docs go stale | An agent follows a page that no longer matches. Guard: generation plus the freshness test. |
 | Attachment store bloat | Unlinked bodies accumulate. Guard: `company compact`. |
 | Precision drift on rates | Repeated conversions compound rounding. Guard: convert once at posting, store the rate, never re-convert. |
