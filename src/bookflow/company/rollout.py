@@ -1,0 +1,38 @@
+"""Staged company creation (plan section Rollout)."""
+
+from __future__ import annotations
+
+import shutil
+from pathlib import Path
+from typing import Any
+
+from bookflow.company import schema as c
+from bookflow.company.info import upsert_principal
+from bookflow.core.errors import BookflowError
+from bookflow.core.session import Session
+from bookflow.hub.users import common
+from bookflow.storage.engine import open_database
+from bookflow.storage.migrate import HEADS, migrate_to_head
+from bookflow.storage.paths import reserve_folder, write_company_marker
+
+
+def create_company_folder(s: Session, org_folder: Path, company_id: str, display_name: str, info: dict[str, Any], via: str) -> Path:
+    """Stages 2-4. Returns the folder. Removes it on failure in 2 or 3."""
+    folder = reserve_folder(org_folder, display_name)
+    try:
+        write_company_marker(folder, company_id=company_id, state="creating", display_name=display_name)
+        for sub in ("attachments", "backups", "exports"):
+            (folder / sub).mkdir(mode=0o700)
+        with open_database(folder / "company.db", writable=True) as db:
+            migrate_to_head(db, "company", None)
+            row = {"id": company_id, **common(s.actor.id, via), **info, "display_name": display_name}
+            db.conn.execute(c.company_info.insert().values(**row))
+            upsert_principal(db, user_id=s.actor.id, username=s.actor.username, display_name=s.actor.display_name, kind=s.actor.kind)
+    except BaseException:
+        shutil.rmtree(folder, ignore_errors=True)
+        raise
+    try:
+        write_company_marker(folder, company_id=company_id, state="ready", display_name=display_name, schema_revision=HEADS["company"])
+    except OSError as e:
+        raise BookflowError("E_ROLLOUT_INCOMPLETE", details={"state": "incomplete", "path": str(folder), "problem": str(e)})
+    return folder

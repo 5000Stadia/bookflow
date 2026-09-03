@@ -1,0 +1,117 @@
+"""The command registry. Every adapter is generated from it."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Callable
+
+from pydantic import BaseModel
+
+from bookflow.core.context import CONTEXT_FIELD_NAMES
+from bookflow.core.errors import ALL_CODES
+
+Role = str  # "member", "admin", "owner", "hub_admin", or None for any actor
+
+
+@dataclass
+class Touched:
+    record_type: str
+    record_id: str
+    action: str  # create, update, delete, migrate
+    version_before: int | None
+    version_after: int | None
+    after: dict[str, Any] | None
+    before: dict[str, Any] | None = None
+
+
+@dataclass
+class Plan:
+    """What `apply` will do. ``preview`` is the output a real run would return."""
+
+    preview: BaseModel
+    data: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class Applied:
+    output: BaseModel
+    touched: list[Touched]
+    summary: str
+    audited: bool = False  # True when apply wrote its own audit events
+
+
+@dataclass
+class Command:
+    name: str
+    scope: str  # "hub" or "company"
+    description: str
+    input_model: type[BaseModel]
+    output_model: type[BaseModel]
+    plan: Callable[..., Plan]
+    apply: Callable[..., Applied] | None
+    writes: frozenset[str] = frozenset()  # subset of {"hub", "company", "config"}
+    required_role: Role | None = None
+    positional: list[str] = field(default_factory=list)
+    error_codes: list[str] = field(default_factory=list)
+    bootstrap: bool = False
+
+    @property
+    def is_write(self) -> bool:
+        return bool(self.writes)
+
+    @property
+    def noun(self) -> str:
+        return self.name.split(" ", 1)[0]
+
+    @property
+    def verb(self) -> str:
+        parts = self.name.split(" ", 1)
+        return parts[1] if len(parts) > 1 else ""
+
+
+REGISTRY: dict[str, Command] = {}
+
+
+def command(name: str, *, scope: str, description: str, input_model: type[BaseModel], output_model: type[BaseModel],
+            writes: set[str] | frozenset[str] = frozenset(), required_role: Role | None = None,
+            positional: list[str] | None = None, error_codes: list[str] | None = None, bootstrap: bool = False):
+    """Register ``plan`` (and, via ``.apply``, the apply function) under ``name``."""
+    bad = set(input_model.model_fields) & CONTEXT_FIELD_NAMES
+    if bad:
+        raise ValueError(f"{name}: input model declares context field(s) {sorted(bad)}")
+    for code in error_codes or []:
+        if code not in ALL_CODES:
+            raise ValueError(f"{name}: unknown error code {code}")
+    if scope not in ("hub", "company"):
+        raise ValueError(f"{name}: bad scope {scope}")
+
+    def register(plan_fn: Callable[..., Plan]) -> Command:
+        cmd = Command(name=name, scope=scope, description=description, input_model=input_model, output_model=output_model,
+                      plan=plan_fn, apply=None, writes=frozenset(writes), required_role=required_role,
+                      positional=list(positional or []), error_codes=list(error_codes or []), bootstrap=bootstrap)
+        REGISTRY[name] = cmd
+
+        def applier(apply_fn: Callable[..., Applied]) -> Callable[..., Applied]:
+            cmd.apply = apply_fn
+            return apply_fn
+
+        cmd.applier = applier  # type: ignore[attr-defined]
+        register.applier = applier  # type: ignore[attr-defined]
+        register.cmd = cmd  # type: ignore[attr-defined]
+        return cmd
+
+    return register
+
+
+def get(name: str) -> Command | None:
+    return REGISTRY.get(name)
+
+
+def all_commands() -> list[Command]:
+    return [REGISTRY[k] for k in sorted(REGISTRY)]
+
+
+def load_all() -> None:
+    """Import every command module so the registry is complete."""
+    import bookflow.commands.hub_cmds  # noqa: F401
+    import bookflow.commands.company_cmds  # noqa: F401

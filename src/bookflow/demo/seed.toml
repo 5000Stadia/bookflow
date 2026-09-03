@@ -1,0 +1,26 @@
+[organization]
+display_name = "Demo Holdings LLC"
+
+[company]
+legal_name = "Demo Plumbing Company LLC"
+display_name = "Demo Plumbing Co"
+tax_id_kind = "ein"
+tax_id = "12-3456789"
+entity_type = "llc"
+income_tax_form = "1065"
+industry = "Plumbing contractor"
+contact_name = "Pat Demo"
+phone = "555-0100"
+email = "office@demoplumbing.example"
+website = "https://demoplumbing.example"
+fiscal_year_start_month = 1
+home_currency = "USD"
+timezone = "America/Chicago"
+report_basis = "accrual"
+
+[company.address]
+line1 = "100 Main St"
+city = "Springfield"
+state = "IL"
+postal_code = "62701"
+country = "US"
