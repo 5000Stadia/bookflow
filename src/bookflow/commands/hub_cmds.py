@@ -179,15 +179,13 @@ def apply_upgrade(plan: Plan, ctx: Context, s: Session) -> Applied:
             missing.append(r["id"]); continue
         try:
             with engine.open_database(p, writable=True) as db:
-                before, after = migrate.migrate_to_head(db, "company", s.abs_path(r["path"]) / "backups")
+                before, after = migrate.migrate_company(s, ctx, db, s.abs_path(r["path"]), r)
             if before == after:
                 skipped.append(r["id"]); continue
             s.hub.raw.execute("BEGIN IMMEDIATE")
             s.hub.conn.execute(h.companies.update().where(h.companies.c.id == r["id"]).values(schema_revision=after))
+            audit.write_event(s, ctx, "upgrade", f"migrated company {r['display_name']} from {before} to {after}", [t for t in s.hub_touched if t.record_id == r["id"]])
             s.hub.raw.execute("COMMIT")
-            write_company_marker(s.abs_path(r["path"]), company_id=r["id"], state="ready", display_name=r["display_name"], schema_revision=after)
-            from bookflow.core.dispatch import _record_migration
-            _record_migration(s, ctx, s.hub, "company", before, after, record_id=r["id"], label=f"company {r['display_name']}")
             migrated.append(r["id"])
         except BookflowError as e:
             failed.append({"company_id": r["id"], "code": e.code}); break
@@ -466,7 +464,7 @@ def plan_company_new(inp: CompanyNewInput, ctx: Context, s: Session) -> Plan:
 @company_new.applier
 def apply_company_new(plan: Plan, ctx: Context, s: Session) -> Applied:
     orow, display, cid = plan.data["org"], plan.data["display"], plan.data["company_id"]
-    folder = rollout.create_company_folder(s, s.abs_path(orow["path"]), cid, display, plan.data["info"], VIA(ctx))
+    folder = rollout.create_company_folder(s, s.abs_path(orow["path"]), cid, display, plan.data["info"], VIA(ctx), ctx)
     try:
         row, touched = co.register(s, company_id=cid, organization_id=orow["id"], display_name=display, rel_path=s.rel_path(folder),
                                    legal_name=plan.data["info"]["legal_name"], home_currency=plan.data["info"]["home_currency"],
@@ -603,7 +601,7 @@ def apply_company_attach(plan: Plan, ctx: Context, s: Session) -> Applied:
     if plan.data["behind"] or plan.data["rename_copy"]:
         try:
             with engine.open_database(folder / "company.db", writable=True) as db:
-                before, after = migrate.migrate_to_head(db, "company", folder / "backups")
+                before, after = migrate.migrate_company(s, ctx, db, folder, row)
                 info.write_display_name_copy(db, name)
             if before != after:
                 s.hub.conn.execute(h.companies.update().where(h.companies.c.id == raw["id"]).values(schema_revision=after))
@@ -701,7 +699,7 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
     if inp.timezone is None:
         inp = inp.model_copy(update={"timezone": _machine_zone() or "UTC"})
     cid = new_id()
-    folder = rollout.create_company_folder(s, s.abs_path(orow["path"]), cid, display, _info_columns(inp), VIA(ctx))
+    folder = rollout.create_company_folder(s, s.abs_path(orow["path"]), cid, display, _info_columns(inp), VIA(ctx), ctx)
     row, t_co = co.register(s, company_id=cid, organization_id=orow["id"], display_name=display, rel_path=s.rel_path(folder), legal_name=inp.legal_name,
                             home_currency=inp.home_currency, schema_revision=migrate.HEADS["company"], via=VIA(ctx), is_demo=True)
     return Applied(DemoResetOutput(organization_id=orow["id"], company_id=cid, display_name=display, path=str(folder), trashed_path=trashed), [t_org, *t_co], f"reset demo: {orow['display_name']} / {display}")

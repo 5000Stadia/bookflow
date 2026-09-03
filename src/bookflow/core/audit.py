@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import zlib
 from typing import Any
@@ -17,10 +18,17 @@ SECRET_FIELDS = {"password_hash", "token_hash", "tax_id"}
 RAW, ZIP = b"\x00", b"\x01"
 
 
+def _mask(v: Any) -> Any:
+    """Secrets are stored as a short hash so a change is visible and the value is not."""
+    if v is None:
+        return None
+    return "sha256:" + hashlib.sha256(str(v).encode("utf-8")).hexdigest()[:12]
+
+
 def encode_snapshot(data: dict[str, Any] | None) -> bytes | None:
     if data is None:
         return None
-    clean = {k: v for k, v in data.items() if k not in SECRET_FIELDS}
+    clean = {k: (_mask(v) if k in SECRET_FIELDS else v) for k, v in data.items()}
     raw = json.dumps(clean, sort_keys=True, default=str).encode("utf-8")
     if len(raw) > 512:
         return ZIP + zlib.compress(raw)

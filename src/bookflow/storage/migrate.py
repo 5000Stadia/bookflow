@@ -108,3 +108,42 @@ def require_head_readonly(path: Path, chain: str) -> str:
     if state == "unknown":
         raise BookflowError("E_SCHEMA_UNKNOWN", details={"revision": rev, "path": str(path)})
     raise BookflowError("E_SCHEMA_BEHIND", details={"revision": rev, "head": HEADS[chain], "path": str(path)})
+
+
+def migrate_company(s, ctx, db: Database, folder: Path, row: dict | None) -> tuple[str | None, str]:
+    """Migrate an open writable company database and record it (blueprint 7; row 2 plan).
+
+    Writes the `migrate` entry into the company by the system user with on_behalf_of the actor,
+    a `baseline` entry for company_info when this migration created the audit tables, rewrites the
+    marker, and updates the hub projection with an entry on the caller's hub event (the caller
+    records the hub side through ``s.hub_touched``). ``row`` is the hub registry row or None at rollout.
+    """
+    from bookflow.core.audit import write_event_to
+    from bookflow.core.registry import Touched
+    from bookflow.storage.paths import write_company_marker
+    before, after = migrate_to_head(db, "company", folder / "backups")
+    if before == after:
+        return before, after
+    system = None
+    if s.hub is not None:
+        from bookflow.hub.users import find_user
+        system = find_user(s, kind="system")
+    if system is not None:
+        from bookflow.company.info import upsert_principal
+        upsert_principal(db, user_id=system["id"], username=system["username"], display_name=system["display_name"], kind="system")
+    actor_id = s.actor.id if s.actor else None
+    mctx = ctx.model_copy(update={"on_behalf_of": actor_id})
+    touched = [Touched("company_info", row["id"] if row else "unknown", "migrate", None, None, {"schema_revision": after, "from": before}, db="company")]
+    if before is not None and before < "co0002" <= after:
+        from bookflow.company.info import read_info
+        info = read_info(db)
+        if info:
+            snap = {k: v for k, v in info.items() if k != "display_name"}
+            touched.append(Touched("company_info", info["id"], "baseline", None, info["version"], snap, db="company"))
+    db.raw.execute("BEGIN IMMEDIATE") if not db.raw.in_transaction else None
+    write_event_to(db, mctx, "upgrade", f"migrated from {before} to {after}", touched, actor_id=system["id"] if system else None, actor_kind="system")
+    db.raw.execute("COMMIT")
+    if row is not None:
+        write_company_marker(folder, company_id=row["id"], state="ready", display_name=row["display_name"], schema_revision=after)
+        s.hub_touched.append(Touched("company", row["id"], "migrate", None, None, {"schema_revision": after, "from": before}, db="hub"))
+    return before, after

@@ -26,6 +26,7 @@ INFRASTRUCTURE_CODES: dict[str, str] = {
     "E_CONFIG_INVALID": "The configuration file could not be read.",
     "E_IO": "A filesystem operation failed.",
     "E_REASON_REQUIRED": "Writes by an agent need --reason or --directive.",
+    "E_FEATURE_DISABLED": "This feature is not enabled for the company.",
     "E_INTERNAL": "Internal failure.",
 }
 

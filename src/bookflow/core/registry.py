@@ -17,11 +17,12 @@ Role = str  # "member", "admin", "owner", "hub_admin", or None for any actor
 class Touched:
     record_type: str
     record_id: str
-    action: str  # create, update, delete, migrate
+    action: str  # create, update, delete, deactivate, migrate, baseline
     version_before: int | None
     version_after: int | None
     after: dict[str, Any] | None
     before: dict[str, Any] | None = None
+    db: str = "hub"  # which database's event this entry belongs to: "hub" or "company"
 
 
 @dataclass
@@ -54,10 +55,18 @@ class Command:
     positional: list[str] = field(default_factory=list)
     error_codes: list[str] = field(default_factory=list)
     bootstrap: bool = False
+    kind: str = "read"  # read, write, advisory; derived from writes unless advisory is declared
+    truth: str = "hub"  # the database whose transaction commits first and holds the idempotency row
+    accepts_idempotency_key: bool = False
+    clearable: bool = False  # update commands whose fields may be set to null (--clear)
+    streams: bool = False  # commands with a CLI-only --follow form
+    ledger: bool = False
+    capability: str = ""  # dotted area a membership may be granted or denied (blueprint 4.3b); derived from the noun
+    feature: str | None = None  # a per-company unlockable service this command needs (blueprint 4.3b)
 
     @property
     def is_write(self) -> bool:
-        return bool(self.writes)
+        return self.kind == "write"
 
     @property
     def noun(self) -> str:
@@ -76,7 +85,9 @@ REGISTRY: dict[str, Command] = {}
 
 def command(name: str, *, scope: str, description: str, input_model: type[BaseModel], output_model: type[BaseModel],
             writes: set[str] | frozenset[str] = frozenset(), required_role: Role | None = None,
-            positional: list[str] | None = None, error_codes: list[str] | None = None, bootstrap: bool = False):
+            positional: list[str] | None = None, error_codes: list[str] | None = None, bootstrap: bool = False,
+            kind: str | None = None, truth: str | None = None, accepts_idempotency_key: bool = False,
+            clearable: bool = False, streams: bool = False, capability: str | None = None, feature: str | None = None):
     """Register ``plan`` (and, via ``.apply``, the apply function) under ``name``."""
     bad = set(input_model.model_fields) & CONTEXT_FIELD_NAMES
     if bad:
@@ -86,11 +97,25 @@ def command(name: str, *, scope: str, description: str, input_model: type[BaseMo
             raise ValueError(f"{name}: unknown error code {code}")
     if scope not in ("hub", "company"):
         raise ValueError(f"{name}: bad scope {scope}")
+    derived_kind = "write" if writes else "read"
+    if kind is None:
+        kind = derived_kind
+    elif kind == "advisory":
+        if "company" not in writes:
+            raise ValueError(f"{name}: advisory commands must open the company writable")
+    elif kind != derived_kind:
+        raise ValueError(f"{name}: declared kind {kind!r} disagrees with writes {sorted(writes)}")
+    if truth is None:
+        truth = "company" if scope == "company" and "company" in writes else "hub"
+    if truth not in ("hub", "company"):
+        raise ValueError(f"{name}: bad truth {truth}")
 
     def register(plan_fn: Callable[..., Plan]) -> Command:
         cmd = Command(name=name, scope=scope, description=description, input_model=input_model, output_model=output_model,
                       plan=plan_fn, apply=None, writes=frozenset(writes), required_role=required_role,
-                      positional=list(positional or []), error_codes=list(error_codes or []), bootstrap=bootstrap)
+                      positional=list(positional or []), error_codes=list(error_codes or []), bootstrap=bootstrap,
+                      kind=kind, truth=truth, accepts_idempotency_key=accepts_idempotency_key, clearable=clearable, streams=streams,
+                      capability=capability or name.split(" ")[0], feature=feature)
         REGISTRY[name] = cmd
 
         def applier(apply_fn: Callable[..., Applied]) -> Callable[..., Applied]:

@@ -16,7 +16,7 @@ from bookflow.storage.migrate import HEADS, migrate_to_head
 from bookflow.storage.paths import reserve_folder, write_company_marker
 
 
-def create_company_folder(s: Session, org_folder: Path, company_id: str, display_name: str, info: dict[str, Any], via: str) -> Path:
+def create_company_folder(s: Session, org_folder: Path, company_id: str, display_name: str, info: dict[str, Any], via: str, ctx=None) -> Path:
     """Stages 2-4. Returns the folder. Removes it on failure in 2 or 3."""
     folder = reserve_folder(org_folder, display_name)
     try:
@@ -28,6 +28,11 @@ def create_company_folder(s: Session, org_folder: Path, company_id: str, display
             row = {"id": company_id, **common(s.actor.id, via), **info, "display_name": display_name}
             db.conn.execute(c.company_info.insert().values(**row))
             upsert_principal(db, user_id=s.actor.id, username=s.actor.username, display_name=s.actor.display_name, kind=s.actor.kind)
+            from bookflow.core.audit import write_event_to
+            from bookflow.core.registry import Touched
+            db.raw.execute("BEGIN IMMEDIATE")
+            write_event_to(db, ctx, "company new", f"created company {display_name}", [Touched("company_info", company_id, "create", None, 1, {k: v for k, v in row.items() if k != "display_name"}, db="company")], actor_id=s.actor.id, actor_kind=s.actor.kind)
+            db.raw.execute("COMMIT")
     except BaseException:
         shutil.rmtree(folder, ignore_errors=True)
         raise

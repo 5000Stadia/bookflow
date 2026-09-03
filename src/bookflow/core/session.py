@@ -47,7 +47,10 @@ class Session:
     company_tz: str | None = None
     hub_migrated: tuple | None = None
     completed_moves: list = field(default_factory=list)
-    directive_code: str | None = None  # ids whose pending move this command finished on open
+    directive_code: str | None = None
+    hub_touched: list = field(default_factory=list)  # entries the dispatcher adds to the command's hub event (migrations, projection repair)
+    company_touched: list = field(default_factory=list)
+    company_info_row: dict | None = None  # ids whose pending move this command finished on open
 
     def close_company(self) -> None:
         cm = getattr(self, '_co_cm', None)

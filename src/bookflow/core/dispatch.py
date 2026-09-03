@@ -19,7 +19,7 @@ from bookflow.core.ids import is_ulid, normalize_ulid
 from bookflow.core.locks import RootLock
 from bookflow.core.models import redact_paths
 from bookflow.core.perms import private_umask
-from bookflow.core.registry import Command, Plan
+from bookflow.core.registry import Command, Plan, Touched
 from bookflow.core.session import Actor, Session
 from bookflow.hub import access, schema as h
 from bookflow.hub.audit import write_event
@@ -139,20 +139,22 @@ def _open_hub(s: Session, writable: bool, ctx: Context, skip_head_check: bool = 
     path = s.data_root / "hub.db"
     if not path.exists():
         raise BookflowError("E_NOT_INITIALIZED", details={"data_root": str(s.data_root)})
-    if not writable and not skip_head_check:
-        rev = current_revision_raw(path)
-        state = classify("hub", rev)
-        if state == "unknown":
-            raise BookflowError("E_SCHEMA_UNKNOWN", details={"revision": rev, "path": str(path)})
-        if state != "head":
-            raise BookflowError("E_SCHEMA_BEHIND", details={"revision": rev, "head": HEADS["hub"], "path": str(path)}, message="The hub database schema is behind this version of Bookflow; run `bookflow upgrade`, or ask a user with write access to.")
+    rev = current_revision_raw(path)
+    state = classify("hub", rev)
+    if state == "unknown":
+        raise BookflowError("E_SCHEMA_UNKNOWN", details={"revision": rev, "path": str(path)})
+    if not writable and not skip_head_check and state != "head":
+        raise BookflowError("E_SCHEMA_BEHIND", details={"revision": rev, "head": HEADS["hub"], "path": str(path)}, message="The hub database schema is behind this version of Bookflow; run `bookflow upgrade`, or ask a user with write access to.")
     s._hub_cm = open_database(path, writable)  # type: ignore[attr-defined]
     s.hub = s._hub_cm.__enter__()  # type: ignore[attr-defined]
-    if writable:
-        before, after = migrate_to_head(s.hub, "hub", s.data_root / "backups")
-        if before != after:
-            s.hub_migrated = (before, after)
-            _record_migration(s, ctx, s.hub, "hub", before, after)
+
+
+def _migrate_hub(s: Session, ctx: Context) -> None:
+    """Migrate the hub after the actor is known (row 2 plan, 'Schema migrations')."""
+    before, after = migrate_to_head(s.hub, "hub", s.data_root / "backups")
+    if before != after:
+        s.hub_migrated = (before, after)
+        _record_migration(s, ctx, s.hub, "hub", before, after)
 
 
 def resolve_company_folder(s: Session, ctx: Context, row: dict[str, Any], writable: bool) -> Path:
@@ -222,21 +224,20 @@ def open_company(s: Session, ctx: Context, writable: bool) -> None:
     s.company_id = row["id"]
     s.company_tz = None
     from bookflow.company.info import read_info, write_display_name_copy
+    from bookflow.storage.migrate import migrate_company
     if writable:
-        before, after = migrate_to_head(s.company, "company", path / "backups")
-        info = read_info(s.company)
-        if info.get("display_name") != row["display_name"]:
-            write_display_name_copy(s.company, row["display_name"])
+        before, after = migrate_company(s, ctx, s.company, path, row)
         if before != after:
-            from bookflow.storage.paths import write_company_marker
             s.hub.raw.execute("BEGIN IMMEDIATE")
             s.hub.conn.execute(h.companies.update().where(h.companies.c.id == row["id"]).values(schema_revision=after))
             s.hub.raw.execute("COMMIT")
-            write_company_marker(path, company_id=row["id"], state="ready", display_name=row["display_name"], schema_revision=after)
-            _record_migration(s, ctx, s.hub, "company", before, after, record_id=row["id"], label=row["display_name"])
+        info = read_info(s.company)
+        if info.get("display_name") != row["display_name"]:
+            write_display_name_copy(s.company, row["display_name"])
     else:
         info = read_info(s.company)
     s.company_tz = info.get("timezone")
+    s.company_info_row = info
 
 
 def _record_migration(s: Session, ctx: Context, db, chain: str, before: str | None, after: str, record_id: str | None = None, label: str = "hub") -> None:
@@ -297,32 +298,14 @@ def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str
         with private_umask(), RootLock(root, cmd.name):
             try:
                 s.config = Config.load(root / "config.toml")
-                _open_hub(s, bool(cmd.writes & {"hub", "config"}) and not (dry_run and cmd.name == "upgrade"), ctx, skip_head_check=(dry_run and cmd.name == "upgrade"))
+                needs_hub_write = bool(cmd.writes & {"hub", "config"}) or cmd.kind == "advisory" or (cmd.scope == "company" and "company" in cmd.writes)
+                _open_hub(s, needs_hub_write and not (dry_run and cmd.name == "upgrade"), ctx, skip_head_check=(dry_run and cmd.name == "upgrade"))
                 _load_actor(s)
                 allowed = s.is_hub_admin
                 ctx = ctx.model_copy(update={"actor_id": s.actor.id, "actor_kind": ActorKind(s.actor.kind)})
-                if cmd.scope == "company":
-                    s.company_row = resolve_company(s, company_selector, company_source)
-                    acc, role = access.company_role(s, s.company_row["id"], s.company_row["organization_id"])
-                    if acc is None:
-                        raise BookflowError("E_COMPANY_NOT_FOUND", details={"source": company_source})
-                    if not access.role_satisfies(role, acc, cmd.required_role, s.is_hub_admin):
-                        raise BookflowError("E_PERMISSION")
-                    ctx = ctx.model_copy(update={"company_id": s.company_row["id"]})
-                    open_company(s, ctx, "company" in cmd.writes)
-                elif cmd.required_role == "hub_admin" and not s.is_hub_admin:
-                    raise BookflowError("E_PERMISSION")
-                plan = cmd.plan(inp, ctx, s)
-                if dry_run or not cmd.is_write:
-                    out = plan.preview.model_dump(mode="json")
-                    if dry_run:
-                        out["dry_run"] = True
-                    return redact_paths(out, s.is_hub_admin)
-                applied = _apply(cmd, plan, ctx, s)
-                out = applied.output.model_dump(mode="json")
-                if s.warnings and "warnings" in out:
-                    out["warnings"] = list(s.warnings)
-                return redact_paths(out, s.is_hub_admin)
+                if s.hub.writable and not (dry_run and cmd.name == "upgrade"):
+                    _migrate_hub(s, ctx)
+                return run_in_session(cmd, inp, ctx, s, company_selector=company_selector, company_source=company_source, dry_run=dry_run)
             finally:
                 _close(s)
     except BookflowError as e:
@@ -333,26 +316,151 @@ def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str
         raise redact_error(io_error("command", e.orig if isinstance(e.orig, sqlite3.Error) else e), allowed)
 
 
+def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, company_selector: str | None = None,
+                   company_source: str = "option", dry_run: bool = False) -> dict[str, Any]:
+    """Run a command inside an open, locked session with a loaded actor. Used by run(), demo reset, and later the host."""
+    from bookflow.core import idempotency
+    s.dry_run = dry_run
+    s.hub_touched, s.company_touched, s.warnings = [], [], []
+    if cmd.scope == "company":
+        if s.company_row is None or (company_selector is not None):
+            s.close_company()
+            s.company_row = resolve_company(s, company_selector, company_source)
+        acc, role = access.company_role(s, s.company_row["id"], s.company_row["organization_id"])
+        if acc is None:
+            raise BookflowError("E_COMPANY_NOT_FOUND", details={"source": company_source})
+        if not access.role_satisfies(role, acc, cmd.required_role, s.is_hub_admin):
+            raise BookflowError("E_PERMISSION")
+        ctx = ctx.model_copy(update={"company_id": s.company_row["id"]})
+        if s.company is None:
+            open_company(s, ctx, "company" in cmd.writes)
+    elif cmd.required_role == "hub_admin" and not s.is_hub_admin:
+        raise BookflowError("E_PERMISSION")
+    # directive resolution and the reason gate (blueprint 5.8)
+    s.directive_code = None
+    if ctx.directive_id:
+        if cmd.scope != "company":
+            raise BookflowError("E_USAGE", message="--directive applies only to company-scoped commands.")
+        from bookflow.company.directives import resolve as resolve_directive
+        drow = resolve_directive(s.company, ctx.directive_id, include_inactive=False)
+        ctx = ctx.model_copy(update={"directive_id": drow["id"]})
+        s.directive_code = drow["code"]
+    if cmd.is_write and s.actor.kind in ("agent", "system") and not ctx.reason and not ctx.directive_id:
+        raise BookflowError("E_REASON_REQUIRED")
+    # idempotency lookup (blueprint 6.5)
+    key_db = None
+    ihash = None
+    if ctx.idempotency_key:
+        if not cmd.accepts_idempotency_key:
+            raise BookflowError("E_USAGE", message=f"`{cmd.name}` does not accept an idempotency key.")
+        key_db = s.company if cmd.truth == "company" else s.hub
+        ihash = idempotency.input_hash(inp.model_dump(mode="json"), s.company_row["id"] if s.company_row else None)
+        hit = idempotency.lookup(key_db, s.actor.id, ctx.idempotency_key, cmd.name, ihash)
+        if hit is not None:
+            replay = _replay(cmd, hit, s)
+            if replay is not None:
+                replay["idempotent_replay"] = True
+                if dry_run:
+                    replay["dry_run"] = True
+                return redact_paths(replay, s.is_hub_admin)
+    plan = cmd.plan(inp, ctx, s)
+    if dry_run or not cmd.is_write:
+        out = plan.preview.model_dump(mode="json")
+        if dry_run:
+            out["dry_run"] = True
+        if cmd.kind == "advisory":
+            applied = _apply(cmd, plan, ctx, s)
+            out = applied.output.model_dump(mode="json")
+        return redact_paths(out, s.is_hub_admin)
+    applied = _apply(cmd, plan, ctx, s, key=(key_db, ihash))
+    out = applied.output.model_dump(mode="json")
+    if "warnings" in out:
+        out["warnings"] = list(out.get("warnings") or []) + list(s.warnings)
+    return redact_paths(out, s.is_hub_admin)
+
+
+def _replay(cmd: Command, hit: dict[str, Any], s: Session) -> dict[str, Any] | None:
+    """A done key replays its output; an in-progress rollout key inspects the folder it names."""
+    import json
+    if hit["state"] == "done" and hit["output"]:
+        return json.loads(hit["output"])
+    if cmd.name == "company new" and hit["output"]:
+        info = json.loads(hit["output"])
+        folder = Path(info.get("path", ""))
+        from bookflow.storage.paths import read_company_marker
+        if not folder.exists():
+            return None
+        try:
+            marker = read_company_marker(folder)
+        except BookflowError:
+            raise BookflowError("E_ROLLOUT_INCOMPLETE", details={"state": "incomplete", "path": str(folder)})
+        registered = s.hub.conn.execute(sa.select(h.companies.c.id).where(h.companies.c.id == marker["company_id"])).first()
+        if registered:
+            return info
+        state = "incomplete" if marker.get("state") != "ready" else "unregistered"
+        raise BookflowError("E_ROLLOUT_INCOMPLETE", details={"state": state, "path": str(folder)}, message="Company creation did not finish; a folder remains." + (" `company attach` adopts it." if state == "unregistered" else ""))
+    return None
+
+
 def _accepts_selector(cmd: Command) -> bool:
     return False
 
 
-def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session):
+def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None)):
+    """Apply with one transaction per database, events where the touched records live, commits in truth order."""
+    from bookflow.core import idempotency
+    from bookflow.core.audit import write_event_to
     assert cmd.apply is not None
-    if "hub" in cmd.writes or "config" in cmd.writes:
+    key_db, ihash = key
+    hub_tx = bool(cmd.writes & {"hub", "config"}) or cmd.kind == "advisory"
+    co_tx = s.company is not None and "company" in cmd.writes
+    if hub_tx:
         s.hub.raw.execute("BEGIN IMMEDIATE")
-    if s.company is not None and "company" in cmd.writes:
+    if co_tx:
         s.company.raw.execute("BEGIN IMMEDIATE")
         _upsert_principals(s, ctx)
     try:
         applied = cmd.apply(plan, ctx, s)
-        if s.company is not None and "company" in cmd.writes and s.company.raw.in_transaction:
-            s.company.raw.execute("COMMIT")
-        if "hub" in cmd.writes or "config" in cmd.writes:
-            if not applied.audited:
-                write_event(s, ctx, cmd.name, applied.summary, applied.touched)
+        if cmd.kind == "advisory":
+            if s.company.raw.in_transaction:
+                s.company.raw.execute("COMMIT")
             if s.hub.raw.in_transaction:
                 s.hub.raw.execute("COMMIT")
+            return applied
+        hub_entries = [t for t in applied.touched if t.db == "hub"] + list(s.hub_touched)
+        co_entries = [t for t in applied.touched if t.db == "company"]
+        changed = bool(applied.touched) or applied.audited or bool(s.hub_touched)
+        output = applied.output.model_dump(mode="json")
+        if s.company is not None and cmd.truth == "company":
+            if co_entries and not applied.audited and s.company.raw.in_transaction:
+                write_event_to(s.company, ctx, cmd.name, applied.summary, co_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
+            if key_db is s.company and ihash and changed:
+                idempotency.store(s.company, s.actor.id, ctx.idempotency_key, cmd.name, ihash, ctx.request_id, output)
+            if s.company.raw.in_transaction:
+                s.company.raw.execute("COMMIT")
+            try:
+                hub_entries += _repair_projection(s, ctx)
+                if hub_tx and (hub_entries or applied.summary) and not applied.audited and changed:
+                    write_event_to(s.hub, ctx, cmd.name, applied.summary, hub_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
+                if key_db is s.hub and ihash and changed:
+                    idempotency.store(s.hub, s.actor.id, ctx.idempotency_key, cmd.name, ihash, ctx.request_id, output)
+                if s.hub.raw.in_transaction:
+                    s.hub.raw.execute("COMMIT")
+            except (BookflowError, OSError, sqlite3.Error, sa.exc.DBAPIError) as e:
+                if s.hub.raw.in_transaction:
+                    s.hub.raw.execute("ROLLBACK")
+                raise BookflowError("E_PARTIAL_WRITE", details={"durable": sorted({t.record_type for t in co_entries}), "request_id": ctx.request_id, "cause": getattr(e, "code", "E_IO")})
+        else:
+            if hub_tx and not applied.audited and changed:
+                write_event_to(s.hub, ctx, cmd.name, applied.summary, hub_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
+            if key_db is s.hub and ihash and changed:
+                idempotency.store(s.hub, s.actor.id, ctx.idempotency_key, cmd.name, ihash, ctx.request_id, output)
+            if s.hub is not None and s.hub.raw.in_transaction:
+                s.hub.raw.execute("COMMIT")
+            if s.company is not None and s.company.raw.in_transaction:
+                if co_entries and not applied.audited:
+                    write_event_to(s.company, ctx, cmd.name, applied.summary, co_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
+                s.company.raw.execute("COMMIT")
     except BaseException:
         for db in (s.company, s.hub):
             if db is not None and db.raw.in_transaction:
@@ -364,6 +472,25 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session):
     if s.pending_config:
         s.config.save()
     return applied
+
+
+def _repair_projection(s: Session, ctx: Context) -> list:
+    """Row 2 plan: inside a real write, converge the hub projection with company_info."""
+    from bookflow.core.registry import Touched
+    if s.company is None or s.company_row is None or s.dry_run:
+        return []
+    from bookflow.company.info import read_info
+    info = read_info(s.company)
+    row = s.company_row
+    changes = {k: info[k] for k in ("legal_name", "home_currency") if info.get(k) != row.get(k)}
+    if not changes:
+        return []
+    if not s.hub.raw.in_transaction:
+        s.hub.raw.execute("BEGIN IMMEDIATE")
+    from bookflow.hub import companies as co
+    new, t = co.update(s, row, ctx.interface.value, **changes)
+    s.company_row = new
+    return [t]
 
 
 def _upsert_principals(s: Session, ctx: Context) -> None:

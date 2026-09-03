@@ -169,10 +169,15 @@ def test_synthetic_migration(client, root, tmp_path):
         marker = (path / "bookflow-company.toml").read_text()
         assert 'schema_revision = "co9999"' in marker
         ev = client.hub.audit.list(command="upgrade")["items"][0]
-        assert ev["actor_kind"] == "system" and ev["on_behalf_of"] == client.init()["user_id"]
+        assert ev["actor_kind"] == "human", "the upgrade command is the human's; the migration itself is recorded in the company by the system user"
         shown = client.hub.audit.show(event=ev["id"])
-        assert shown["entries"][0]["action"] == "migrate"
+        assert any(en["action"] == "migrate" for en in shown["entries"])
         assert client.company.list()["items"][0]["schema_revision"] == "co9999"
+        import sqlite3 as _sq
+        conn = _sq.connect(str(path / "company.db"))
+        rows = conn.execute("SELECT e.actor_kind, e.on_behalf_of, n.action FROM audit_events e JOIN audit_entries n ON n.event_id = e.id WHERE e.command = 'upgrade'").fetchall()
+        conn.close()
+        assert any(r[0] == "system" and r[1] == client.init()["user_id"] and r[2] == "migrate" for r in rows)
     finally:
         tmp.unlink()
         migrate.HEADS.clear(); migrate.HEADS.update(old_heads)
