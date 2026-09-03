@@ -10,7 +10,7 @@ from bookflow.core.errors import BookflowError
 from bookflow.storage.engine import Database, io_error, sqlite_uri
 
 # Head revisions as constants: checked before Alembic is imported on the read path.
-HEADS = {"hub": "hub0001", "company": "co0001"}
+HEADS = {"hub": "hub0002", "company": "co0002"}
 _PKG = Path(__file__).parent
 
 

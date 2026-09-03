@@ -152,7 +152,8 @@ def test_synthetic_migration(client, root, tmp_path):
     import bookflow.storage.migrate as migrate
     versions = Path(migrate.__file__).parent / "company_migrations" / "versions"
     tmp = versions / "9999_synthetic.py"
-    tmp.write_text('"""synthetic\n\nRevision ID: co9999\nRevises: co0001\n"""\nfrom alembic import op\nimport sqlalchemy as sa\nrevision = "co9999"\ndown_revision = "co0001"\n\ndef upgrade():\n    op.add_column("principals", sa.Column("synthetic", sa.String(4), nullable=True))\n\ndef downgrade():\n    pass\n')
+    base = migrate.HEADS["company"]
+    tmp.write_text(f'"""synthetic\n\nRevision ID: co9999\nRevises: {base}\n"""\nfrom alembic import op\nimport sqlalchemy as sa\nrevision = "co9999"\ndown_revision = "{base}"\n\ndef upgrade():\n    op.add_column("principals", sa.Column("synthetic", sa.String(4), nullable=True))\n\ndef downgrade():\n    pass\n')
     old_heads = dict(migrate.HEADS)
     try:
         migrate.HEADS["company"] = "co9999"

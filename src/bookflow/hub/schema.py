@@ -92,6 +92,7 @@ memberships = sa.Table(
 audit_events = sa.Table(
     "audit_events", metadata,
     sa.Column("id", sa.String(26), primary_key=True),
+    sa.Column("seq", sa.Integer, nullable=True, unique=True),
     sa.Column("at", sa.String(32), nullable=False),
     sa.Column("command", sa.String(64), nullable=False),
     sa.Column("actor_id", sa.String(26), nullable=True),
@@ -106,8 +107,21 @@ audit_events = sa.Table(
     sa.Column("idempotency_key", sa.String(128), nullable=True),
     sa.Column("reason", sa.String(140), nullable=True),
     sa.Column("directive_id", sa.String(26), nullable=True),
+    sa.Column("directive_code", sa.String(16), nullable=True),
     sa.Column("source_ref", sa.String(512), nullable=True),
     sa.Column("summary", sa.String(512), nullable=False),
+)
+
+idempotency_keys = sa.Table(
+    "idempotency_keys", metadata,
+    sa.Column("actor_id", sa.String(26), primary_key=True),
+    sa.Column("key", sa.String(128), primary_key=True),
+    sa.Column("command", sa.String(64), nullable=False),
+    sa.Column("input_hash", sa.String(64), nullable=False),
+    sa.Column("state", sa.String(12), nullable=False),
+    sa.Column("request_id", sa.String(26), nullable=False),
+    sa.Column("output", sa.Text, nullable=True),
+    sa.Column("created_at", sa.String(32), nullable=False),
 )
 
 audit_entries = sa.Table(

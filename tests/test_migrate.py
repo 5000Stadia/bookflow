@@ -10,10 +10,10 @@ def test_heads_match_scripts():
 def test_fresh_hub_migrates(tmp_path):
     p = tmp_path / "hub.db"
     with open_database(p, writable=True, create=True) as db:
-        assert migrate_to_head(db, "hub", tmp_path / "backups") == (None, "hub0001")
-        assert migrate_to_head(db, "hub", tmp_path / "backups") == ("hub0001", "hub0001")
-    assert current_revision_raw(p) == "hub0001"
-    assert require_head_readonly(p, "hub") == "hub0001"
+        assert migrate_to_head(db, "hub", tmp_path / "backups") == (None, HEADS["hub"])
+        assert migrate_to_head(db, "hub", tmp_path / "backups") == (HEADS["hub"], HEADS["hub"])
+    assert current_revision_raw(p) == HEADS["hub"]
+    assert require_head_readonly(p, "hub") == HEADS["hub"]
     assert (p.stat().st_mode & 0o077) == 0 or True  # umask applied by dispatch, not here
 
 
