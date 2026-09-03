@@ -312,6 +312,10 @@ Rules:
 - `activity <record_type> <record_id>` merges audit entries, notes, and attachment links for that record in time order.
 - Reads are not audited.
 
+### 7.1 Event feed
+
+The audit log is the event stream. `audit tail --after <cursor> --limit <n>` returns events after the cursor in commit order with a new cursor; the cursor is the last event id. `--follow` on the CLI keeps polling. The host exposes `GET /companies/{company_id}/events?after=<cursor>` as server-sent events, one event per message, with the same filters as `audit list`. A subscriber that stores its last cursor resumes with nothing missed. Webhooks are a later addition on top of this feed and are not in release 1.
+
 ## 8. Money and currency
 
 ### 8.1 Representation
@@ -593,6 +597,10 @@ Release 2 reports: trial balance, general ledger, profit and loss, balance sheet
 
 Trial balance and general ledger ship with the ledger in release 1.
 
+### 14.1 Import and export
+
+`import <noun> <file.csv>` reads one row per record, maps columns to the noun's `create` input model by header name, and runs one `create` command per row through the registry, so every row is validated, audited, and idempotent (the idempotency key is the file hash plus row number). The output reports created, replayed, and rejected rows with their errors. `--dry-run` validates every row and writes nothing. Import of transactions uses the same mechanism with one file per transaction type. Export is `list --csv` on any noun and `report <name> --csv`. QuickBooks IIF import is a later addition that maps IIF sections onto the same imports. Import and export are release 2.
+
 ## 15. Adapters
 
 ### 15.1 CLI
@@ -636,6 +644,7 @@ The reader is an agent that has never seen Bookflow and cannot read the source. 
 | `docs/cli/<noun>.md` | every command of that noun: purpose in one sentence, every flag with type and default, output fields, error codes, one example invocation and its JSON output | `bookflow docs generate`, from command definitions |
 | `docs/schema/<table>.md` | every field with type, nullability, meaning, and references | `bookflow docs generate`, from models |
 | `docs/concepts.md` | the command contract, context, concurrency rules, money, company selection, exit codes, stated declaratively | hand, verified by tests where possible |
+| `docs/agent-guide.md` | one page for an agent: authenticate, pick a company, record and cite a directive, post, read the event feed, handle `E_VERSION_CONFLICT`; every example runnable against the demo company | hand, examples verified by a test |
 | `docs/index.md` | the entry point; lists every page | generated |
 
 A test regenerates the docs and fails when the result differs from the committed files.
@@ -690,4 +699,4 @@ The build order is the spec list in `design/intention.md`, rows 1 to 9. That lis
 
 Release 1 is done when a stranger, given a fresh machine and the README, can: initialize a data root, create a company, log in to the workbench in a browser, add accounts and customers there, attach a receipt image to a customer, post a balanced journal entry from the workbench and another from the CLI, post a third over HTTP from a second process, list accounts from an MCP client, see all of it in the audit page with correct actors and interfaces, and reproduce all of it on a second copy of the company folder.
 
-Release 2 is forms (section 10.3) and reports (section 14). Release 3 is work orders, time, and the scheduler (section 13). The product interface is designed after release 2 against the HTTP host.
+Release 2 is forms (section 10.3), reports (section 14), and import and export (section 14.1). Release 3 is work orders, time, and the scheduler (section 13). The product interface is designed after release 2 against the HTTP host.
