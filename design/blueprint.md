@@ -254,7 +254,7 @@ Every command returns a structured result. On the CLI:
 
 Every `list` output is `{"items": [...], "count": n}`, and every item carries the common fields of 6.1 plus `access` (`hub_admin`, `organization`, or `company`) and `role` (null for hub admins without membership). Every output model for a write includes the identifying fields of what it wrote, `dry_run`, and `warnings`, a list of strings for work the command finished without, such as a schema migration left for `upgrade`. Fields that hold filesystem paths are null, never absent, in every output and error detail unless the actor is a hub admin, and error messages are built from templates whose path arguments pass through the same rule; dispatch applies it, not individual commands.
 
-Errors are always JSON documents on stderr with `code`, `message`, and `details`, whether or not `--json` was given; without `--json` a one-line message precedes the JSON. Usage errors from the CLI parser are emitted the same way with code `E_USAGE`. Input validation failures are `E_VALIDATION` with `details.fields`, a list of `{"field", "problem"}`. Unknown input keys are `E_VALIDATION`; input keys named like context fields are `E_CONTEXT_IN_INPUT` on every surface. Every command may return the infrastructure codes, listed once in the documentation: `E_USAGE`, `E_VALIDATION`, `E_CONTEXT_IN_INPUT`, `E_NOT_INITIALIZED`, `E_NO_ACTOR`, `E_PERMISSION`, `E_COMPANY_NOT_FOUND`, `E_COMPANY_AMBIGUOUS`, `E_ORGANIZATION_NOT_FOUND`, `E_DB_BUSY`, `E_NETWORK_SHARE`, `E_FS_UNKNOWN`, `E_SCHEMA_UNKNOWN`, `E_SCHEMA_BEHIND`, `E_CONFIG_INVALID`, `E_IO`, `E_INTERNAL`. `E_IO` carries `details.operation` and `details.errno`; `E_INTERNAL` is the only code for exit 3. An unknown command name is `E_USAGE` on every surface. `E_ORGANIZATION_NOT_FOUND` and `E_COMPANY_NOT_FOUND` are returned identically for absent and for inaccessible targets. Command-specific codes are listed per command. Error codes are stable strings prefixed `E_`. Every command's documentation lists the codes it can return. An option that a command does not support in the current version is not defined on that command; nothing is accepted and ignored.
+Errors are always JSON documents on stderr with `code`, `message`, and `details`, whether or not `--json` was given; without `--json` a one-line message precedes the JSON. Usage errors from the CLI parser are emitted the same way with code `E_USAGE`. Input validation failures are `E_VALIDATION` with `details.fields`, a list of `{"field", "problem"}`. Unknown input keys are `E_VALIDATION`; input keys named like context fields are `E_CONTEXT_IN_INPUT` on every surface. Every command may return the infrastructure codes, listed once in the documentation: `E_USAGE`, `E_VALIDATION`, `E_CONTEXT_IN_INPUT`, `E_NOT_INITIALIZED`, `E_NO_ACTOR`, `E_PERMISSION`, `E_COMPANY_NOT_FOUND`, `E_COMPANY_AMBIGUOUS`, `E_ORGANIZATION_NOT_FOUND`, `E_DB_BUSY`, `E_NETWORK_SHARE`, `E_FS_UNKNOWN`, `E_SCHEMA_UNKNOWN`, `E_SCHEMA_BEHIND`, `E_CONFIG_INVALID`, `E_IO`, `E_INTERNAL`. `E_IO` carries `details.operation` and `details.errno`; `E_INTERNAL` is the only code for exit 3. An unknown command name is `E_USAGE` on every surface. `E_ORGANIZATION_NOT_FOUND` and `E_COMPANY_NOT_FOUND` are returned identically for absent and for inaccessible targets. Every not-found or ambiguous error for a named record carries `details.suggestions`, up to three close matches drawn only from what the caller can see, so an agent that misspelled a name can correct it without a second lookup. Command-specific codes are listed per command. Error codes are stable strings prefixed `E_`. Every command's documentation lists the codes it can return. An option that a command does not support in the current version is not defined on that command; nothing is accepted and ignored.
 
 ### 5.5 Dry run
 
@@ -374,6 +374,8 @@ Rules:
 - `activity <record_type> <record_id>` merges audit entries, notes, and attachment links for that record in time order. The hub has the same `audit list` and `audit show`, hub-scoped: hub admins see every event; other users see events whose entries reference an organization or company they can see, and `audit show` on any other event returns `E_EVENT_NOT_FOUND` exactly as for a nonexistent id. Snapshots inside entries are redacted like any output: fields named `path` or ending in `_path` are removed for non-hub-admins. `audit list` filters: `--since`, `--until`, `--actor`, `--command`, `--record-type`, `--record-id`, `--limit`, `--after` cursor.
 - Reads are not audited. Every write, including one that changes only `config.toml`, records an event.
 
+`undo <event_id>` reverses a list-record event by writing the entry's before-state as a new versioned write, itself audited with `reason` `undo of <event_id>`; it refuses events that touched the ledger (`E_NOT_UNDOABLE`), which are voided instead.
+
 ### 7.1 Event feed
 
 The audit log is the event stream. `audit tail --after <cursor> --limit <n>` returns events after the cursor in commit order with a new cursor; the cursor is the last event id. `--follow` on the CLI keeps polling. The host exposes `GET /companies/{company_id}/events?after=<cursor>` as server-sent events, one event per message, with the same filters as `audit list`. A subscriber that stores its last cursor resumes with nothing missed. Webhooks are a later addition on top of this feed and are not in release 1.
@@ -439,11 +441,11 @@ Seeded charts, chosen by `--chart`: `general`, `service`, `construction_trades`,
 
 ### 9.3 Demo company
 
-`bookflow demo reset`, a hub-admin command, creates, or moves to `trash/` and recreates, an organization `Demo Holdings LLC` holding a company `Demo Plumbing Co` from a seed file in the package, and grants the local owner the owner role. The seed holds sample data for every table that exists: company info, accounts, customers and jobs, vendors, employees, items, terms, notes, attachments, directives, and, once the ledger exists, a year of transactions. The seed grows in the same change that adds a table or command, so the demo always exercises everything that exists. There is one demo organization per data root. The demo company is an ordinary company: it appears in the workbench picker and every command works on it. Tests run against the demo.
+`bookflow demo reset`, a hub-admin command, creates, or moves to `trash/` and recreates, an organization `Demo Holdings LLC` holding a company `Demo Plumbing Co` from a seed file in the package, and grants the local owner the owner role. The seed holds sample data for every table that exists: company info, accounts, customers and jobs, vendors, employees, items, terms, notes, attachments, directives, and, once the ledger exists, a year of transactions. The seed grows in the same change that adds a table or command, so the demo always exercises everything that exists. There is one demo organization per data root. The demo company is an ordinary company: it appears in the workbench picker and every command works on it. Tests run against the demo. A second seed, `Reference Plumbing Co`, holds a full year of hand-verified transactions whose trial balance, profit and loss, balance sheet, and aging totals are recorded beside it; every report change regresses against those totals. It arrives with the ledger and grows with each form.
 
 ### 9.4 Other company commands
 
-`company list`, `company show`, `company update`, `company rename [--move]`, `company use <company>`, `company attach <path>`, `company detach <company>`, `company backup`, `company compact`, `company delete <company> --confirm <id>`. `delete` moves the folder to `trash/` and removes the registry rows; `trash list` and `trash empty` manage the folder. `company show` includes `path` only for hub admins.
+`company list`, `company show`, `company update`, `company rename [--move]`, `company use <company>`, `company attach <path>`, `company detach <company>`, `company backup`, `company restore <backup>`, `company verify` (SQLite integrity check plus ledger invariants: every transaction balances, every application is within its open balance, every referenced record exists), `company compact`, `company delete <company> --confirm <id>`. Backups can be scheduled (13.3) with a retention count. `delete` moves the folder to `trash/` and removes the registry rows; `trash list` and `trash empty` manage the folder. `company show` includes `path` only for hub admins.
 
 ## 10. The general ledger
 
@@ -537,12 +539,19 @@ Each type is a form that produces lines. The posting rule is fixed per type.
 | transfer | `transfer post` | none | Dr to account; Cr from account |
 | inventory_adjustment | `inventory adjust` | none | Dr or Cr Inventory Asset; offset to adjustment account |
 | vendor_credit | `vendor-credit post` | vendor | reverse of bill |
+| estimate | `estimate create` | customer or job | non-posting; converts to an invoice in full or by progress percentage or selected lines |
+| sales_order | `sales-order create` | customer or job | non-posting; converts to an invoice and tracks backorders |
+| purchase_order | `purchase-order create` | vendor | non-posting; received against by bills and item receipts |
+| item_receipt | `item-receipt post` | vendor | Dr Inventory Asset; Cr AP, converted to a bill when the bill arrives |
+| statement | `statement send` | customer | non-posting; the customer's open items and activity for a period |
+
+Bank and credit card reconciliation: `reconcile start <account> --statement-date --ending-balance`, `reconcile mark <transaction> [--clear|--unclear]`, `reconcile finish`, which records the reconciliation with its difference (zero, or posted to a reconciliation discrepancy account with `--force`) and marks cleared transactions with the reconciliation id. Batch invoicing creates one invoice per selected customer from a template. `find <text>` searches names, memos, numbers, and amounts across lists and transactions the actor can see.
 
 Forms and their tables are built in the release after the ledger; see section 21.
 
 ### 10.4 Applications
 
-Table `applications`: `paying_transaction_id`, `paid_transaction_id`, `amount`. Payments apply to invoices, bill payments to bills, credits to either. Open balance of a transaction is its total minus applied amounts. Aging reports read this table.
+Table `applications`: `paying_transaction_id`, `paid_transaction_id`, `amount`. Payments apply to invoices, bill payments to bills, credits to either. Open balance of a transaction is its total minus applied amounts. Aging reports read this table. Editing a transaction that has applications is allowed while its new total still covers the applied amount; otherwise the edit is rejected with `E_APPLIED_EXCEEDS_TOTAL` and the caller unapplies first. Every edit keeps its applications and re-derives the open balance.
 
 ### 10.5 Void
 
@@ -692,7 +701,7 @@ Channels are providers behind one interface with `send(delivery) -> provider_mes
 | `gmail` | Gmail API with OAuth, for accounts where SMTP app passwords are unavailable. | separate optional package `bookflow-gmail`, pinned to the vendor client library, dependency updates automated |
 | `file` | Writes the rendered document to `exports/`. | core |
 
-Inbound email is not read by Bookflow. An agent harness reads mail and calls commands, such as attaching a receipt or posting a bill. Company settings hold the configured channel per purpose (`invoices`, `statements`, `reports`, `reminders`) and the sender address; provider credentials live in the hub, encrypted with a key held outside the data root, never in a company folder.
+Inbound email is not read by Bookflow. An agent harness reads mail and calls commands, such as attaching a receipt or posting a bill. Company settings hold the configured channel per purpose (`invoices`, `statements`, `reports`, `reminders`) and the sender address; provider credentials live in the hub, encrypted with a key held in the operating system keyring where one exists and otherwise in a key file outside the data root named at `init`, never in a company folder.
 
 Dependency updates for the whole project, including the optional email package, run through the repository's automated dependency update service; an update that passes the test suite merges.
 
@@ -700,7 +709,7 @@ Dependency updates for the whole project, including the optional email package, 
 
 Every report reads `transaction_lines`, `transactions`, and `applications` only. Every report takes `--from`, `--to`, `--basis accrual|cash`, `--json`, and `--csv`. Cash basis treats income and expense as occurring when payment applies, using `applications`.
 
-Release 2 reports: trial balance, general ledger, profit and loss, balance sheet, AR aging summary and detail, AP aging summary and detail, customer balance detail, vendor balance detail, sales by customer, sales by item, inventory valuation summary, transaction list by date, audit trail.
+Release 2 reports: trial balance, general ledger, profit and loss (standard, detail, by class, year to date comparison), balance sheet (standard, detail), statement of cash flows, AR aging summary and detail, AP aging summary and detail, customer balance summary and detail, vendor balance summary and detail, open invoices, unpaid bills, collections, sales by customer and by item summary and detail, purchases by vendor and by item, inventory valuation summary and detail, inventory stock status, job profitability summary and detail, estimates versus actuals, unbilled costs by job, time by job, sales tax liability, transaction list by date, transaction detail by account, check detail, deposit detail, missing checks, reconciliation summary and detail, budget versus actual, 1099 summary and detail, audit trail. The full set is inventoried from the anchor's report guides before the release is planned (11.13).
 
 Trial balance and general ledger ship with the ledger in release 1.
 
@@ -718,7 +727,7 @@ Trial balance and general ledger ship with the ledger in release 1.
 
 `bookflow serve --bind 127.0.0.1:8123`. Routes are `POST /companies/{company_id}/commands/{command_name}` with the input model as the JSON body and the output model as the response. Hub commands are `POST /commands/{command_name}`. Errors return status 400 for named errors with the error JSON as body, 401 for missing or bad token, 404 for `E_COMPANY_NOT_FOUND`, 409 for `E_VERSION_CONFLICT`, 500 for internal failure. `GET /openapi.json` is generated. Binding to a non-loopback address requires `--allow-network`, and the docs state that TLS termination is the deployer's job. The host also serves the workbench at `/` and static assets under `/static/`.
 
-While the host runs it holds the data root's lock (3.2); a CLI or library call on the same machine reads the host's pid from the lock file and forwards the command to it over loopback, so there is never a second writer.
+While the host runs it holds the data root's lock (3.2); a CLI or library call on the same machine reads the host's pid from the lock file and forwards the command to it over loopback, so there is never a second writer. Inside the host, reads run concurrently on their own read-only connections and writes queue on one writer per database, so many users reading never wait on each other.
 
 Browser sessions: `POST /login` with username and password sets an HTTP-only session cookie that maps to a session token in `api_tokens` with kind `session`, expiring after 12 hours of inactivity. API calls from the browser send the cookie; API calls from programs send a bearer token. Both resolve to the same context.
 
@@ -741,7 +750,7 @@ The workbench has no styling beyond a readable default stylesheet. It exists so 
 
 ### 15.3 MCP server
 
-`bookflow mcp --token <secret>`. One tool per command, named `bookflow_<noun>_<verb>`, with the input schema generated from the input model plus `company_id`, `reason`, `source_ref`, and `idempotency_key`. Tool descriptions are the command descriptions from the documentation. `bookflow_help` returns the documentation page for any command.
+`bookflow mcp --token <secret>`. Three tools, so that the agent's context never carries every command's schema at once: `bookflow_list_commands` returns every command name with its one-sentence description and scope; `bookflow_help` returns a command's documentation page, including its input schema, output fields, and error codes; `bookflow_run` takes `command`, `input`, and the context arguments `company`, `reason`, `directive`, `source_ref`, and `idempotency_key`, and returns the output or the error document. The three are generated from the registry like every other adapter.
 
 ## 16. Documentation contract
 
