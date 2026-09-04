@@ -21,6 +21,7 @@ from bookflow.core.errors import BookflowError
 from bookflow.core.fs import check_local
 from bookflow.core.locks import RootLock
 from bookflow.core.session import Session
+from bookflow.core import performance
 from bookflow.storage.engine import Database
 
 log = logging.getLogger("bookflow.host")
@@ -32,6 +33,9 @@ class _Job:
     done: threading.Event = field(default_factory=threading.Event)
     result: Any = None
     error: BaseException | None = None
+    trace_context: Any = None
+    trace_wait: Any = None
+    trace_mode: str = "maintenance"
 
 
 class Host:
@@ -40,6 +44,7 @@ class Host:
     def __init__(self, data_root: Path, *, version: str, idle_checkpoint_seconds: float = 30.0,
                  sweep_seconds: float = 3600.0, filesystem_wait_seconds: float = 5.0):
         self.data_root = data_root
+        performance.protect_root(data_root)
         self.version = version
         self.idle_checkpoint_seconds = idle_checkpoint_seconds
         self.sweep_seconds = sweep_seconds
@@ -73,7 +78,7 @@ class Host:
         self._lock = RootLock(self.data_root, "serve")
         self._lock.__enter__()
         self._writer.start()
-        self.submit(self._open_hub_on_writer)
+        self.submit(self._open_hub_on_writer, _maintenance=True)
         self._timer.start()
 
     def stop(self) -> None:
@@ -87,7 +92,7 @@ class Host:
         with self._readers_lock:
             if not self._readers_lock.wait_for(lambda: self._readers_attached == 0, timeout=30):
                 raise BookflowError("E_DB_BUSY", message="Host readers are still closing; retry shutdown.")
-        self.submit(self._shutdown_on_writer, _during_shutdown=True)
+        self.submit(self._shutdown_on_writer, _during_shutdown=True, _maintenance=True)
         with self._readers_lock:
             self._jobs_closed = True
             self._queue.put(None)
@@ -99,12 +104,17 @@ class Host:
             os.umask(self._umask_old)
 
     # ---------------------------------------------------------------- writer thread
-    def submit(self, fn: Callable[[], Any], timeout: float | None = None, *, _during_shutdown: bool = False) -> Any:
+    @performance.measured("writer.submit")
+    def submit(self, fn: Callable[[], Any], timeout: float | None = None, *, _during_shutdown: bool = False,
+               _maintenance: bool = False) -> Any:
         """Run ``fn`` on the writer thread and return its result; exceptions propagate to the caller."""
         job = _Job(fn)
         with self._readers_lock:
             if self._jobs_closed or (self._stopping and not _during_shutdown):
                 raise BookflowError("E_DB_BUSY", message="The host is stopping; retry after shutdown.")
+            job.trace_context = performance.current_context()
+            job.trace_wait = performance.begin_wait("writer.queue")
+            job.trace_mode = "maintenance" if _maintenance else "hosted"
             self._queue.put(job)
         if not job.done.wait(timeout):
             raise TimeoutError("the Bookflow writer did not finish the submitted job in time")
@@ -118,20 +128,30 @@ class Host:
             if job is None:
                 return
             try:
-                job.result = job.fn()
-            except BaseException as e:  # noqa: BLE001 - handed back to the submitter
+                performance.finish_wait(job.trace_wait)
+                with performance.bind(job.trace_context), performance.span(
+                        "writer.execute", mode=job.trace_mode):
+                    try:
+                        job.result = job.fn()
+                    except BaseException as e:  # noqa: BLE001 - handed back to the submitter
+                        job.error = e
+                    finally:
+                        try:
+                            with performance.span("writer.cleanup"):
+                                self._leave_clean()
+                        except BaseException as e:  # noqa: BLE001 - cleanup errors also reach the submitter
+                            if job.error is None:
+                                job.error = e
+                        finally:
+                            with self._readers_lock:
+                                self._filesystem_exclusive = False
+                                self._readers_lock.notify_all()
+                    if job.error is not None:
+                        raise job.error
+            except BaseException as e:  # handed back after recording the failed execution
                 job.error = e
             finally:
-                try:
-                    self._leave_clean()
-                except BaseException as e:  # noqa: BLE001 - cleanup errors also reach the submitter
-                    if job.error is None:
-                        job.error = e
-                finally:
-                    with self._readers_lock:
-                        self._filesystem_exclusive = False
-                        self._readers_lock.notify_all()
-                    job.done.set()
+                job.done.set()
 
     def _leave_clean(self) -> None:
         """A long-lived connection must never carry an open transaction into the next request."""
@@ -234,7 +254,9 @@ class Host:
         with self._readers_lock:
             self._filesystem_exclusive = True
             self._readers_lock.notify_all()
-            if not self._readers_lock.wait_for(lambda: self._readers_attached == 0, timeout=self.filesystem_wait_seconds):
+            with performance.span("reader.drain"):
+                drained = self._readers_lock.wait_for(lambda: self._readers_attached == 0, timeout=self.filesystem_wait_seconds)
+            if not drained:
                 raise BookflowError("E_DB_BUSY", message="Company readers are still active; retry the folder operation after they finish.",
                                     details={"operation": "filesystem_change"})
         if company_id is None:
@@ -243,6 +265,7 @@ class Host:
         if db is not None:
             db.close()
 
+    @performance.measured("reader.open")
     def reader_session(self, user_id: str, login: str = "") -> Session:
         """A read-only session on the calling thread; closed by the caller through dispatch._close."""
         from bookflow.core.dispatch import _close, _open_hub, _load_actor_by_id
@@ -294,6 +317,7 @@ class Host:
                 self._after_write()
         return self.submit(job)
 
+    @performance.measured("writer.maintenance")
     def _after_write(self) -> None:
         self._last_write = time.monotonic()
         for name, db in [("hub", self._hub), *self._companies.items()]:
@@ -403,7 +427,7 @@ class Host:
         """RESTART checkpoint the hub and every pooled company connection, on the writer. Results are logged."""
         if not self._writer.is_alive():
             return {}
-        return self.submit(self._checkpoint_on_writer)
+        return self.submit(self._checkpoint_on_writer, _maintenance=True)
 
     def _checkpoint_on_writer(self) -> dict[str, Any]:
         out: dict[str, Any] = {}
@@ -425,7 +449,7 @@ class Host:
         """Delete session tokens expired more than a day, as one system audit event. Returns how many went."""
         if not self._writer.is_alive():
             return 0
-        return self.submit(self._sweep_on_writer)
+        return self.submit(self._sweep_on_writer, _maintenance=True)
 
     def _sweep_on_writer(self) -> int:
         import sqlalchemy as sa

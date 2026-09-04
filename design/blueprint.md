@@ -1130,6 +1130,14 @@ When two good things conflict, the earlier line wins.
 | Installed package with dependencies under 60 MB; no service other than SQLite required | |
 | CLI cold start: `bookflow --help` under 300 ms; process-cold read timings are recorded, not release gates | Python 3.12, warm disk cache; fresh processes include imports, command construction and execution. Modest misses of the 750 ms read target are nonblocking; material regressions require investigation. Warm interactive budgets remain strict. |
 
+### 18.1 Local diagnostic capture
+
+`BOOKFLOW_TRACE_DIR` enables a finite process-local duration trace before CLI application import, never from an HTTP request. Without it the recorder is inactive. Capture admits at most 10,000 spans over 60 seconds, with at most 256 concurrent reservations and 32 nesting levels. Queue waits use separate virtual lanes and retain diagnostic-only operation ancestry after caller timeout. Export follows normal console/host shutdown; library callers explicitly close their recorder. Dropped, unfinished and truncated coverage is visible in numeric metadata.
+
+Only fixed phase, mode and database-category labels, canonical registry command names, generated diagnostic identifiers, numeric timings and outcomes are collected. SQL, arguments, business identifiers, paths, credentials, reasons and raw errors are excluded. Best-effort private export creates a unique mode-0600 file in an existing owner-private local directory outside every selected root, including selections on rejected commands. Linux directory handles and mount validation enforce this; other platforms refuse export. The process remembers at most 128 distinct protected roots, then refuses export permanently. Files remain until explicitly removed by the operator. There is no telemetry, remote capture control, accounting schema or audit event.
+
+Stages describe API boundaries and inclusive wall time, not exclusive CPU cost. SQLite-internal synchronization remains inside commit timing. Existing connections, explicit custom cursor factories and out-of-factory migration/backup handles have no detailed SQL coverage. Browser network/render timing stays in browser developer tools. Forwarded CLI and host traces have no cross-process parentage. Existing operation budgets are measured without capture; enabled overhead is reported separately.
+
 ## 19. Out of scope for release 1, and beyond
 
 Not in release 1: transaction forms other than journal entries, reports beyond trial balance and general ledger, work orders, time entries, scheduler, assembly build transactions, bespoke per-list browser centers, a desktop wrapper, rate fetching, email, bank feeds, encryption at rest.

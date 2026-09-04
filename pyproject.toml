@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.scripts]
-bookflow = "bookflow.adapters.cli.app:main"
+bookflow = "bookflow.bootstrap:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-timeout>=2.3", "httpx>=0.27"]

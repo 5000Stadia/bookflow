@@ -11,6 +11,7 @@ import sqlalchemy as sa
 
 from bookflow.core.context import Context
 from bookflow.core.ids import new_id
+from bookflow.core.performance import measured
 from bookflow.core.registry import Touched
 from bookflow.core.session import Session, now_iso
 
@@ -57,6 +58,7 @@ def next_seq(db, events_table) -> int:
     return (current or 0) + 1
 
 
+@measured("command.audit")
 def write_event_to(db, ctx: Context, command: str, summary: str, touched: list[Touched], *, actor_id: str | None,
                    actor_kind: str | None, directive_code: str | None = None) -> str:
     """Insert one event and its entries into ``db`` inside the caller's open transaction."""

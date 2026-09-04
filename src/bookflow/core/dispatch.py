@@ -19,6 +19,7 @@ from bookflow.core.ids import is_ulid, normalize_ulid
 from bookflow.core.locks import RootLock
 from bookflow.core.models import redact_paths
 from bookflow.core.perms import private_umask
+from bookflow.core import performance
 from bookflow.core.registry import Command, Plan, Touched
 from bookflow.core.session import Actor, Session
 from bookflow.hub import access, schema as h
@@ -71,6 +72,7 @@ def redact_error(err: BookflowError, allowed: bool) -> BookflowError:
     return err
 
 
+@performance.measured("command.validate")
 def validate_input(cmd: Command, raw: dict[str, Any]) -> BaseModel:
     ctx_keys = set(raw) & CONTEXT_FIELD_NAMES
     if ctx_keys:
@@ -81,6 +83,7 @@ def validate_input(cmd: Command, raw: dict[str, Any]) -> BaseModel:
         raise _validation_error(e)
 
 
+@performance.measured("command.resolve")
 def _load_actor(s: Session) -> None:
     table = s.config.user_table(s.os_login)
     if table is not None and (not isinstance(table, dict) or not isinstance(table.get("user_id"), str)):
@@ -94,6 +97,7 @@ def _load_actor(s: Session) -> None:
     access.load_memberships(s)
 
 
+@performance.measured("command.resolve")
 def _load_actor_by_id(s: Session, user_id: str) -> None:
     """The host's actor resolution: a credential already named the user; memberships load the same way as the CLI's."""
     row = s.hub.conn.execute(sa.select(h.users).where(h.users.c.id == user_id, h.users.c.active.is_(True))).mappings().first()
@@ -103,6 +107,7 @@ def _load_actor_by_id(s: Session, user_id: str) -> None:
     access.load_memberships(s)
 
 
+@performance.measured("command.resolve")
 def resolve_company(s: Session, selector: str | None, source: str) -> dict[str, Any]:
     """Blueprint 5.3. Returns the hub company row or raises E_COMPANY_NOT_FOUND / E_COMPANY_AMBIGUOUS."""
     if selector is None:
@@ -335,6 +340,7 @@ def _complete_trash(s: Session, row: dict[str, Any], ctx: Context) -> None:
         s.pending_config = False
 
 
+@performance.measured("command.close")
 def _close(s: Session) -> None:
     try:
         s.close_company()
@@ -378,13 +384,24 @@ def execute(cmd: Command, raw_input: dict[str, Any], ctx: Context, s: Session, *
             s.config.flush_pending(s.hub)
             _complete_pending_organizations(s, ctx)
         return run_in_session(cmd, inp, ctx, s, company_selector=company_selector, company_source=company_source, dry_run=dry_run)
-    return guard(body, s.is_hub_admin)
+    with performance.span("command.execute", command=cmd.name):
+        return guard(body, s.is_hub_admin)
 
 
 def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str | None = None,
         company_selector: str | None = None, company_source: str = "option", dry_run: bool = False,
         _login: str | None = None) -> dict[str, Any]:
     """Execute a command from a fresh process: data root, hand-off to a live host, lock, hub, actor, migration, execute."""
+    if performance.enabled():
+        performance.protect_selection(data_root)
+    with performance.span("command", command=cmd.name, mode="offline"):
+        return _run(cmd, raw_input, ctx, data_root=data_root, company_selector=company_selector,
+                    company_source=company_source, dry_run=dry_run, _login=_login)
+
+
+def _run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str | None = None,
+         company_selector: str | None = None, company_source: str = "option", dry_run: bool = False,
+         _login: str | None = None) -> dict[str, Any]:
     if dry_run and not cmd.is_write:
         raise BookflowError("E_USAGE", message=f"`{cmd.name}` does not write; --dry-run does not apply.")
     if company_selector is not None and cmd.scope != "company":
@@ -401,6 +418,7 @@ def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str
 
     def before_lock():
         root = resolve_data_root(data_root)
+        performance.protect_root(root)
         if root.exists() and not root.is_dir():
             raise BookflowError("E_IO", details={"operation": "data_root", "errno": "ENOTDIR", "path": str(root)})
         check_local(root)
@@ -414,7 +432,8 @@ def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str
     if done is not None:
         return done
     from bookflow.core.forward import try_forward  # try_forward decides what may travel; bootstrap commands never do
-    forwarded = try_forward(s.data_root, cmd, raw_input, ctx, company_selector, company_source, dry_run)
+    with performance.span("command.forward", mode="forwarded"):
+        forwarded = try_forward(s.data_root, cmd, raw_input, ctx, company_selector, company_source, dry_run)
     if forwarded is not None:
         return forwarded
 
@@ -481,9 +500,11 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
                 if dry_run:
                     replay["dry_run"] = True
                 return redact_paths(replay, s.is_hub_admin)
-    plan = cmd.plan(inp, ctx, s)
+    with performance.span("command.plan", command=cmd.name):
+        plan = cmd.plan(inp, ctx, s)
     if dry_run or not cmd.is_write:
-        out = plan.preview.model_dump(mode="json")
+        with performance.span("command.serialize"):
+            out = plan.preview.model_dump(mode="json")
         if dry_run:
             out["dry_run"] = True
         if cmd.kind == "advisory":
@@ -491,7 +512,8 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
             out = applied.output.model_dump(mode="json")
         return redact_paths(out, s.is_hub_admin)
     applied = _apply(cmd, plan, ctx, s, key=(key_db, ihash))
-    out = applied.output.model_dump(mode="json")
+    with performance.span("command.serialize"):
+        out = applied.output.model_dump(mode="json")
     if "warnings" in out:
         out["warnings"] = list(out.get("warnings") or []) + list(s.warnings)
     return redact_paths(out, s.is_hub_admin)
@@ -538,7 +560,8 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
         s.company.raw.execute("BEGIN IMMEDIATE")
         _upsert_principals(s, ctx)  # inside the transaction: a no-op command rolls it back with everything else
     try:
-        applied = cmd.apply(plan, ctx, s)
+        with performance.span("command.apply", command=cmd.name):
+            applied = cmd.apply(plan, ctx, s)
         if s.pending_config:
             s.config.stage_pending(s.hub, request_id=ctx.request_id)
         if cmd.kind == "advisory":
@@ -620,6 +643,7 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
     return applied
 
 
+@performance.measured("command.projection")
 def _repair_projection(s: Session, ctx: Context) -> list:
     """Row 2 plan: inside a real write, converge the hub projection with company_info."""
     from bookflow.core.registry import Touched

@@ -7,6 +7,7 @@ What is built, module by module: package skeleton, registry, data root, hub, org
 ```
 src/bookflow/
   __init__.py            lazy exports: connect, Client, BookflowError, Money (nothing heavy imports at package load)
+  bootstrap.py           standard-library console launcher; optional local capture before CLI import; conservative root exclusions even on parser errors
   client.py              Client.run / use_company / attribute form; builds Context with interface "python"
   core/
     registry.py          Command, Plan, Applied, Touched, @command, REGISTRY, load_all(); exact authorization text and rootless standalone runners
@@ -19,12 +20,13 @@ src/bookflow/
     models.py            ListOutput, WriteOutput, CommonFields, redact_paths()
     config.py            config.toml: user mappings/defaults; hub-committed pending projection overlay and durable file publication; os_login() from uid
     durability.py        private unique metadata temporaries, file/directory synchronization, move-parent synchronization
+    performance.py       finite opt-in local Chrome duration trace; fixed labels, diagnostic-only ancestry, virtual queue lanes, bounded reservations, private Linux export
     fs.py                filesystem type detection (Linux mountinfo; macOS statfs; Windows drive type) and check_local()
     locks.py             RootLock: <data_root>/root.lock, exclusive for the whole command, holder info, BOOKFLOW_LOCK_TIMEOUT
     perms.py             private_umask() (077), is_private_dir()
     moves.py             rename_noreplace() per platform; move_dir() with case-only hop
     lazy.py              LazyModule: command modules import services lazily so the CLI builds without SQLAlchemy
-    clock.py             the one time source (now, now_iso, parse_iso); tests replace now
+    clock.py             the business time source (now, now_iso, parse_iso); tests replace now; diagnostic elapsed time uses perf_counter_ns separately
     versioning.py        check_update(): versioned, blind, and disjoint-field merge rules; history_from_entries() folds audit diffs to top-level fields
     idempotency.py       input_hash(), lookup() (mismatch, expiry), store() with in-progress state
     audit.py             write_event_to() over either database with seq; snapshot codec; secrets stored as sha256 prefixes
@@ -33,6 +35,7 @@ src/bookflow/
   storage/
     paths.py             data root resolution; display-name normalization and name_key; folder derivation, collision choice, reservation; markers
     engine.py            Database (sqlite3 + SQLAlchemy Core); explicit read-only snapshots, verified WAL/FULL/foreign-key writers, writable-transaction detection and exception-safe cleanup; percent-encoded URIs; create=True only for init/rollout
+    traced_sqlite.py      capture-enabled per-connection native subclasses; bounded statement classification, execute/fetch/transaction timing, caller factories preserved
     migrate.py           HEADS constants; classify(); backup via sqlite backup API; migrate_to_head(); Alembic loaded only when migrating
     hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection)
     company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit/presence/directives), co0003 (20 supporting lists), co0004 (job delivery inheritance)
@@ -107,7 +110,19 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 
 ## Verified on this machine (Linux, ext4, Python 3.12)
 
-The complete correctness suite at `073a563` passes 696 tests in 471.33 seconds. Generated documentation freshness checks 93 files. The same run records cold root help at 218.09 ms, company list at 546.41 ms, customer list at 777.18 ms and term list at 588.61 ms; cold reads are diagnostics, while root help and the 10,000-record warm-query gate pass their strict limits. Customer/job and nested reference workflows have real-Chrome desktop/narrow-screen witnesses. Human browser acceptance of the wider list workbench remains pending.
+The complete correctness suite passes 736 tests in 476.54 seconds, with nine dependency/schema-order warnings. Generated documentation freshness checks 93 files. The same run records cold root help at 229.88 ms, company list at 555.11 ms, customer list at 771.97 ms and term list at 597.56 ms; cold reads are diagnostics, while root help and the 10,000-record warm-query gate pass their strict limits. Customer/job and nested reference workflows have real-Chrome desktop/narrow-screen witnesses. Human browser acceptance of the wider list workbench remains pending.
+
+Local tracing has 40 recorder, SQLite and integration witnesses, including original-error/durable-result parity, CLI parser rejection, private export, exhausted captures, HTTP cleanup and late queued writes. A synthetic exported capture opens in Perfetto UI v58.3 with all nine slices on three separate caller/writer/virtual-wait tracks and zero parser errors.
+
+Alternating traced/untraced in-process host operations on one disposable seeded root produced these measurements (12 samples per mode after per-host warmup; no concurrent tests):
+
+| Operation | Off median / maximum ms | On median / maximum ms |
+|---|---:|---:|
+| Bounded customer query | 20.59 / 23.61 | 21.70 / 24.88 |
+| Customer show | 19.73 / 22.53 | 21.48 / 115.71 |
+| Versioned customer update | 17.37 / 36.14 | 19.58 / 105.49 |
+
+These small-fixture host calls include session setup/cleanup but exclude host startup and network transport; they do not replace the strict 10,000-record fixture. With 12 samples, nearest-rank p95 equals the observed maximum. Each enabled host capture contains 462 events with no drops or unfinished reservations. Export after host shutdown costs 4.09 ms median and 9.46 ms maximum. Five alternating cold-process samples per mode give help medians 229.81/234.89 ms and company-list medians 527.38/553.83 ms (off/on, including export). Cold maxima are 236.06/243.01 ms and 537.87/560.65 ms respectively. An initial independent run gave warm off/on medians of 21.13/21.22 ms for query, 20.08/21.86 ms for show, and 16.72/18.98 ms for update, with enabled show/update maxima of 131.13/103.61 ms. In the repeat, both large enabled outliers coincided with generation-2 garbage collection; no exclusive attribution or enabled tail-latency guarantee is claimed. Trace allocation can shift collection timing. Normal budgets remain untraced.
 
 Storage/query correction measurements on Python 3.12.3, SQLite 3.45.1 and SQLAlchemy 2.0.52, with ext4 on a local NVMe drive:
 

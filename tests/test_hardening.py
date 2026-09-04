@@ -302,7 +302,7 @@ def test_wheel_contains_data(tmp_path):
     assert "bookflow/documentation/resources/concepts.md" in names
     assert "bookflow/documentation/resources/agent-guide.md" in names
     assert "Name: bookflow-core\n" in metadata
-    assert "bookflow = bookflow.adapters.cli.app:main" in entry_points
+    assert "bookflow = bookflow.bootstrap:main" in entry_points
 
     generated = tmp_path / "wheel-docs"
     script = """

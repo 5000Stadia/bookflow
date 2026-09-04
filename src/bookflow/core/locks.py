@@ -10,6 +10,7 @@ from pathlib import Path
 from types import TracebackType
 
 from bookflow.core.errors import BookflowError
+from bookflow.core.performance import measured
 
 DEFAULT_TIMEOUT = 5.0
 
@@ -63,6 +64,7 @@ class RootLock:
                 out[k.strip()] = v.strip()
         return out
 
+    @measured("lock.acquire")
     def __enter__(self) -> "RootLock":
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._fh = open(self.path, "a+", encoding="utf-8")

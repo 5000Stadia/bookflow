@@ -12,7 +12,10 @@ import os
 import tempfile
 from pathlib import Path
 
+from bookflow.core.performance import measured, span
 
+
+@measured("directory.sync")
 def sync_directory(path: Path) -> None:
     """Persist directory entries on POSIX; never suppress a failed synchronization."""
     if os.name != "posix":  # pragma: no cover - no portable Windows directory fsync
@@ -31,6 +34,7 @@ def sync_move_parents(src: Path, dst: Path) -> None:
         sync_directory(src.parent)
 
 
+@measured("file.sync")
 def sync_file(path: Path) -> None:
     """Synchronize an existing owned file without changing its contents."""
     fd = os.open(path, os.O_RDWR)
@@ -40,6 +44,7 @@ def sync_file(path: Path) -> None:
         os.close(fd)
 
 
+@measured("file.publish")
 def write_metadata(path: Path, text: str) -> None:
     """Replace a UTF-8 file using a private, unique, same-directory temporary file.
 
@@ -59,8 +64,10 @@ def write_metadata(path: Path, text: str) -> None:
         with stream:
             stream.write(text.encode("utf-8"))
             stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(tmp, path)
+            with span("file.sync"):
+                os.fsync(stream.fileno())
+        with span("file.replace"):
+            os.replace(tmp, path)
         sync_directory(path.parent)
     finally:
         try:

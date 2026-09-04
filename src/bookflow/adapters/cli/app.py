@@ -18,6 +18,7 @@ from pydantic_core import PydanticUndefined
 
 from bookflow.adapters.cli.render import emit_error, render_output
 from bookflow.core import registry
+from bookflow.core.performance import span
 from bookflow.core.context import Context, Interface
 from bookflow.core.errors import BookflowError
 from bookflow.core.ids import new_id
@@ -155,6 +156,10 @@ def _build_command(cmd: registry.Command):
         ctx_obj = click_globals.get_current_context().obj or {}
         as_json = kw.pop("json_", False) or ctx_obj.get("json", False)
         local_root = kw.pop("data_root", None)
+        from bookflow.core import performance
+        if performance.enabled():
+            performance.protect_selection(local_root)
+            performance.protect_selection(ctx_obj.get("data_root"))
         if cmd.standalone:
             if local_root is not None or ctx_obj.get("data_root") is not None:
                 raise BookflowError("E_USAGE", message=f"--data-root does not apply to `{cmd.name}`")
@@ -195,10 +200,13 @@ def _build_command(cmd: registry.Command):
             for path in sorted(secret_paths):
                 if kw.get("f__" + path.replace(".", "__")) is not None:
                     continue
-                first = getpass.getpass(f"{path}: ")
+                with span("cli.prompt"):
+                    first = getpass.getpass(f"{path}: ")
                 if first == "":
                     continue
-                if first != getpass.getpass(f"{path} (again): "):
+                with span("cli.prompt"):
+                    confirmation = getpass.getpass(f"{path} (again): ")
+                if first != confirmation:
                     raise BookflowError("E_VALIDATION", details={"fields": [{"field": path, "problem": "the two entries did not match"}]})
                 _set_path(raw, path, first)
         if interactive:
@@ -217,7 +225,8 @@ def _build_command(cmd: registry.Command):
                     label += " [required]"
                 elif dflt not in (None, ""):
                     label += f" [default: {dflt}]"
-                v = click_termui.prompt(label, default="", show_default=False, err=True, type=str)
+                with span("cli.prompt"):
+                    v = click_termui.prompt(label, default="", show_default=False, err=True, type=str)
                 if v != "":
                     _set_path(raw, path, _input_value(ann, v, path))
         source = "option"
@@ -258,7 +267,8 @@ def _build_command(cmd: registry.Command):
         out = dispatch_run(cmd, raw, ctx, data_root=data_root, company_selector=company, company_source=source, dry_run=dry_run)
         for w_ in (out.get("warnings") or []) if isinstance(out, dict) else []:
             typer.echo(f"warning: {w_}", err=True)
-        typer.echo(render_output(out, as_json))
+        with span("cli.render"):
+            typer.echo(render_output(out, as_json))
 
     run.__signature__ = inspect.Signature(params)  # type: ignore[attr-defined]
     run.__name__ = cmd.verb or cmd.noun
@@ -321,6 +331,9 @@ def build_app(target: str | None = None, full: bool = False) -> typer.Typer:
              source_ref: Annotated[str | None, typer.Option("--source-ref", help="What triggered this write (writing commands only)")] = None,
              directive: Annotated[str | None, typer.Option("--directive", help="Standing instruction, by code or id (company-scoped writes only)")] = None,
              idempotency_key: Annotated[str | None, typer.Option("--idempotency-key", help="Retry-safe key (create commands only)")] = None) -> None:
+        from bookflow.core import performance
+        if performance.enabled():
+            performance.protect_selection(data_root)
         ctx.obj = {"json": json_, "data_root": data_root, "dry_run": dry_run, "company": company, "reason": reason, "source_ref": source_ref, "directive": directive, "idempotency_key": idempotency_key, "session_id": new_id()}
 
     groups: dict[str, typer.Typer] = {}
@@ -367,7 +380,8 @@ def main() -> None:
     target = _target_noun(sys.argv)
     known = target is not None and any(n == target or n.startswith(target + " ") or target.startswith(n + " ") for n in registry.all_nouns())
     # a root-level option value can masquerade as the noun; when the guess is unknown, build everything
-    app = build_app(target if known else None, full=(target is not None and not known))
+    with span("cli.parser"):
+        app = build_app(target if known else None, full=(target is not None and not known))
     as_json = "--json" in sys.argv
     try:
         app(standalone_mode=False)

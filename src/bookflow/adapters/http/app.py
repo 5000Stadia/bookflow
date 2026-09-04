@@ -140,6 +140,11 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
 
     # ------------------------------------------------------------ running commands
     def run_command(cmd, raw: dict[str, Any], ctx: Context, cred: Credential, selector: str | None, source: str, dry_run: bool) -> dict[str, Any]:
+        from bookflow.core.performance import span
+        with span("command", command=cmd.name, mode="hosted"):
+            return run_command_body(cmd, raw, ctx, cred, selector, source, dry_run)
+
+    def run_command_body(cmd, raw: dict[str, Any], ctx: Context, cred: Credential, selector: str | None, source: str, dry_run: bool) -> dict[str, Any]:
         from bookflow.core.dispatch import _close, execute, guard
         bad = [k for k in raw if k in Context.model_fields]
         if bad:

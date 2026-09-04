@@ -13,6 +13,7 @@ import sqlalchemy as sa
 
 from bookflow.core.errors import BookflowError
 from bookflow.core.fs import check_local
+from bookflow.core import performance
 
 
 def sqlite_uri(path: Path, mode: str) -> str:
@@ -37,7 +38,12 @@ def _connect(path: Path, writable: bool, create: bool) -> sqlite3.Connection:
         raise BookflowError("E_IO", details={"operation": "open", "errno": "ENOENT", "path": str(path)})
     uri = sqlite_uri(path, "rwc" if (writable and create) else "rw" if writable else "ro")
     try:
-        conn = sqlite3.connect(uri, uri=True, timeout=5.0, isolation_level=None)
+        if performance.enabled():
+            from bookflow.storage.traced_sqlite import Connection, category
+            conn = sqlite3.connect(uri, uri=True, timeout=5.0, isolation_level=None, factory=Connection)
+            conn.trace_database = category(path)
+        else:
+            conn = sqlite3.connect(uri, uri=True, timeout=5.0, isolation_level=None)
     except sqlite3.Error as e:
         raise io_error("open", e, path)
     try:
@@ -61,6 +67,7 @@ def _connect(path: Path, writable: bool, create: bool) -> sqlite3.Connection:
 class Database:
     """One open database: an sqlite3 connection wrapped by a SQLAlchemy engine."""
 
+    @performance.measured("db.open")
     def __init__(self, path: Path, writable: bool, create: bool = False):
         self.path = path
         self.writable = writable
@@ -89,6 +96,7 @@ class Database:
         """A writable transaction, distinct from a pinned read snapshot."""
         return self.writable and self.raw.in_transaction
 
+    @performance.measured("db.close")
     def close(self) -> None:
         if self._closed:
             return
