@@ -43,3 +43,519 @@ contact_name = "Pat Demo-Smith"
 [[updates]]
 mode = "merged"
 website = "https://demoplumbing.example/new"
+
+# Read stable rollout records through their public commands before creating
+# demo records that reference them.
+
+[[commands]]
+command = "account show"
+capture = "income_account"
+input = { account = "Service Income" }
+
+[[commands]]
+command = "account show"
+capture = "cogs_account"
+input = { account = "Cost of Goods Sold" }
+
+[[commands]]
+command = "account show"
+capture = "inventory_account"
+input = { account = "Inventory Asset" }
+
+[[commands]]
+command = "account show"
+capture = "tax_payable_account"
+input = { account = "Sales Tax Payable" }
+
+[[commands]]
+command = "account show"
+capture = "expense_account"
+input = { account = "Professional Fees" }
+
+[[commands]]
+command = "payment-method show"
+capture = "check_method"
+input = { payment_method = "Check" }
+
+[[commands]]
+command = "sales-tax-code show"
+capture = "tax_code"
+input = { sales_tax_code = "Tax" }
+
+[[commands]]
+command = "term show"
+capture = "net_30"
+input = { term = "Net 30" }
+
+[[commands]]
+command = "ship-method show"
+capture = "delivery_method"
+input = { ship_method = "Delivery" }
+
+[[commands]]
+command = "company update"
+input = { use_classes = true, enable_price_levels = true, units_of_measure_mode = "multiple_related_units", sales_tax_enabled = true }
+
+# Accounts and every supporting list include ordinary active data and an
+# inactive example. The class hierarchy is three levels deep.
+
+[[commands]]
+command = "account create"
+capture = "fixed_asset_account"
+input = { name = "Service Equipment", number = "1500", type = "fixed_asset", description = "Field equipment owned by the company" }
+
+[[commands]]
+command = "account create"
+capture = "retired_account"
+input = { name = "Retired Clearing", number = "6999", type = "expense" }
+
+[[commands]]
+command = "account deactivate"
+input = { account = "${retired_account.id}", expected_version = "${retired_account.version}" }
+
+[[commands]]
+command = "class create"
+capture = "class_root"
+input = { name = "Operations" }
+
+[[commands]]
+command = "class create"
+capture = "class_middle"
+input = { name = "Service", parent_id = "${class_root.id}" }
+
+[[commands]]
+command = "class create"
+capture = "class_leaf"
+input = { name = "Residential", parent_id = "${class_middle.id}" }
+
+[[commands]]
+command = "class create"
+capture = "retired_class"
+input = { name = "Retired Class" }
+
+[[commands]]
+command = "class deactivate"
+input = { class = "${retired_class.id}", expected_version = "${retired_class.version}" }
+
+[[commands]]
+command = "item-category create"
+capture = "parts_category"
+input = { name = "Plumbing Parts" }
+
+[[commands]]
+command = "item-category create"
+capture = "retired_category"
+input = { name = "Retired Category" }
+
+[[commands]]
+command = "item-category deactivate"
+input = { item_category = "${retired_category.id}", expected_version = "${retired_category.version}" }
+
+[[commands]]
+command = "customer-type create"
+capture = "customer_type"
+input = { name = "Property Manager" }
+
+[[commands]]
+command = "customer-type create"
+capture = "retired_customer_type"
+input = { name = "Retired Customer Type" }
+
+[[commands]]
+command = "customer-type deactivate"
+input = { customer_type = "${retired_customer_type.id}", expected_version = "${retired_customer_type.version}" }
+
+[[commands]]
+command = "vendor-type create"
+capture = "vendor_type"
+input = { name = "Parts Supplier" }
+
+[[commands]]
+command = "vendor-type create"
+capture = "retired_vendor_type"
+input = { name = "Retired Vendor Type" }
+
+[[commands]]
+command = "vendor-type deactivate"
+input = { vendor_type = "${retired_vendor_type.id}", expected_version = "${retired_vendor_type.version}" }
+
+[[commands]]
+command = "job-type create"
+capture = "job_type"
+input = { name = "Remodel" }
+
+[[commands]]
+command = "job-type create"
+capture = "retired_job_type"
+input = { name = "Retired Job Type" }
+
+[[commands]]
+command = "job-type deactivate"
+input = { job_type = "${retired_job_type.id}", expected_version = "${retired_job_type.version}" }
+
+[[commands]]
+command = "term create"
+capture = "progress_term"
+input = { name = "Progress billing", kind = "date_driven", due_day_of_month = 15, due_next_month_if_within_days = 5, discount_day_of_month = 5, discount_percent = "1" }
+
+[[commands]]
+command = "term create"
+capture = "retired_term"
+input = { name = "Retired Terms", kind = "standard", due_days = 45 }
+
+[[commands]]
+command = "term deactivate"
+input = { term = "${retired_term.id}", expected_version = "${retired_term.version}" }
+
+[[commands]]
+command = "payment-method create"
+capture = "mobile_method"
+input = { name = "Mobile Wallet", kind = "other" }
+
+[[commands]]
+command = "payment-method create"
+capture = "retired_payment_method"
+input = { name = "Retired Payment Method", kind = "other" }
+
+[[commands]]
+command = "payment-method deactivate"
+input = { payment_method = "${retired_payment_method.id}", expected_version = "${retired_payment_method.version}" }
+
+[[commands]]
+command = "sales-tax-code create"
+capture = "exempt_code"
+input = { code = "EX", description = "Exempt sale", taxable = false }
+
+[[commands]]
+command = "sales-tax-code create"
+capture = "retired_tax_code"
+input = { code = "OLD", description = "Retired tax treatment", taxable = false }
+
+[[commands]]
+command = "sales-tax-code deactivate"
+input = { sales_tax_code = "${retired_tax_code.id}", expected_version = "${retired_tax_code.version}" }
+
+[[commands]]
+command = "ship-method create"
+capture = "crew_delivery"
+input = { name = "Crew Delivery", display_order = 20 }
+
+[[commands]]
+command = "ship-method create"
+capture = "retired_ship_method"
+input = { name = "Retired Ship Method", display_order = 99 }
+
+[[commands]]
+command = "ship-method deactivate"
+input = { ship_method = "${retired_ship_method.id}", expected_version = "${retired_ship_method.version}" }
+
+[[commands]]
+command = "customer-message create"
+capture = "service_message"
+input = { name = "Service follow-up", text = "Thank you. Please call if the repair needs attention.", display_order = 20 }
+
+[[commands]]
+command = "customer-message create"
+capture = "retired_customer_message"
+input = { name = "Retired Customer Message", text = "This message is retained as an inactive example.", display_order = 99 }
+
+[[commands]]
+command = "customer-message deactivate"
+input = { customer_message = "${retired_customer_message.id}", expected_version = "${retired_customer_message.version}" }
+
+# Every runtime custom-field kind is represented. Choice reconciliation also
+# leaves one historical inactive scope and choice.
+
+[[commands]]
+command = "custom-field create"
+capture = "cf_text"
+input = { name = "Work order note", kind = "text", scopes = ["customer", "vendor", "employee", "other_name", "item"], position = 1 }
+
+[[commands]]
+command = "custom-field create"
+capture = "cf_number"
+input = { name = "Service priority", kind = "number", scopes = ["customer", "vendor", "employee", "other_name", "item"], position = 2 }
+
+[[commands]]
+command = "custom-field create"
+capture = "cf_date"
+input = { name = "Review date", kind = "date", scopes = ["customer", "vendor", "employee", "other_name", "item"], position = 3 }
+
+[[commands]]
+command = "custom-field create"
+capture = "cf_bool"
+input = { name = "After-hours approved", kind = "bool", scopes = ["customer", "vendor", "employee", "other_name", "item"], position = 4 }
+
+[[commands]]
+command = "custom-field create"
+capture = "cf_choice_initial"
+input = { name = "Service territory", kind = "choice", scopes = ["customer", "vendor", "employee", "other_name", "item", "invoice"], choices = [{ value = "Central" }, { value = "West" }, { value = "Retired" }], position = 5 }
+
+[[commands]]
+command = "custom-field update"
+capture = "cf_choice"
+input = { custom_field = "${cf_choice_initial.id}", expected_version = "${cf_choice_initial.version}", scopes = ["customer", "vendor", "employee", "other_name", "item"], choices = [{ id = "${cf_choice_initial.choices.0.id}", value = "Central" }, { id = "${cf_choice_initial.choices.1.id}", value = "West" }] }
+
+[[commands]]
+command = "custom-field create"
+capture = "retired_custom_field"
+input = { name = "Retired Custom Field", kind = "text", scopes = ["customer"], position = 99 }
+
+[[commands]]
+command = "custom-field deactivate"
+input = { custom_field = "${retired_custom_field.id}", expected_version = "${retired_custom_field.version}" }
+
+# The count set carries base and default units; its update retires one child.
+
+[[commands]]
+command = "unit-of-measure create"
+capture = "count_units_initial"
+input = { name = "Inventory Count", units = [{ name = "Each", abbreviation = "ea", is_base = true, base_factor = "1" }, { name = "Box", abbreviation = "box", base_factor = "12" }, { name = "Pallet", abbreviation = "plt", base_factor = "480" }] }
+
+[[commands]]
+command = "unit-of-measure update"
+capture = "count_units"
+input = { unit_of_measure = "${count_units_initial.id}", expected_version = "${count_units_initial.version}", default_purchase_unit_id = "${count_units_initial.units.1.id}", default_sales_unit_id = "${count_units_initial.units.0.id}", default_shipping_unit_id = "${count_units_initial.units.1.id}", units = [{ id = "${count_units_initial.units.0.id}", name = "Each", abbreviation = "ea", is_base = true, base_factor = "1" }, { id = "${count_units_initial.units.1.id}", name = "Box", abbreviation = "box", base_factor = "12" }] }
+
+[[commands]]
+command = "unit-of-measure create"
+capture = "retired_units"
+input = { name = "Retired Units", units = [{ name = "Unit", abbreviation = "u", is_base = true, base_factor = "1" }] }
+
+[[commands]]
+command = "unit-of-measure deactivate"
+input = { unit_of_measure = "${retired_units.id}", expected_version = "${retired_units.version}" }
+
+[[commands]]
+command = "price-level create"
+capture = "preferred_price"
+input = { name = "Preferred Customer", kind = "fixed_percent", percent = "-7.5", rounding_mode = "nearest", rounding_increment = "0.05", rounding_offset = "0" }
+
+[[commands]]
+command = "price-level create"
+capture = "retired_price"
+input = { name = "Retired Price Level", kind = "fixed_percent", percent = "0" }
+
+[[commands]]
+command = "price-level deactivate"
+input = { price_level = "${retired_price.id}", expected_version = "${retired_price.version}" }
+
+# Parties exercise contacts, contact points, shipping addresses, expense
+# accounts, custom values, a live link, an inactive historical link, and both
+# job collection modes in a three-level customer/job hierarchy.
+
+[[commands]]
+command = "employee create"
+capture = "employee"
+input = { name = "Casey Worker", first_name = "Casey", last_name = "Worker", job_title = "Service Technician", print_name_on_check_as = "Casey Worker", employment_type = "full_time", address = { line1 = "410 Oak St", city = "Springfield", state = "IL", postal_code = "62702", country = "US" }, phone = "555-0140", email = "casey.worker@example.test", hire_date = "2024-03-18", emergency_contact_name = "Morgan Worker", emergency_contact_relationship = "Partner", emergency_contact_phone = "555-0141", default_class_id = "${class_leaf.id}", notes = "Demo employee", custom_fields = { "${cf_text.id}" = "Lead technician", "${cf_number.id}" = "2", "${cf_date.id}" = "2026-10-01", "${cf_bool.id}" = true, "${cf_choice.id}" = "Central" } }
+
+[[commands]]
+command = "employee create"
+capture = "retired_employee"
+input = { name = "Retired Employee", first_name = "Robin", last_name = "Former", address = { line1 = "1 Archive Way", city = "Springfield", state = "IL", postal_code = "62701" }, email = "retired.employee@example.test" }
+
+[[commands]]
+command = "employee deactivate"
+input = { employee = "${retired_employee.id}", expected_version = "${retired_employee.version}" }
+
+[[commands]]
+command = "other-name create"
+capture = "conversion_candidate"
+input = { name = "Alex Community", company_name = "Community Referral", first_name = "Alex", last_name = "Community", address = { line1 = "90 Market St", city = "Springfield", state = "IL", postal_code = "62701", country = "US" }, phone = "555-0160", email = "alex.community@example.test", contact = "Alex Community", account_number = "REF-100", default_class_id = "${class_leaf.id}", notes = "Ready for a later conversion exercise", custom_fields = { "${cf_text.id}" = "Referral source", "${cf_number.id}" = "1.25", "${cf_date.id}" = "2026-09-30", "${cf_bool.id}" = false, "${cf_choice.id}" = "West" } }
+
+[[commands]]
+command = "other-name create"
+capture = "retired_other_name"
+input = { name = "Retired Other Name" }
+
+[[commands]]
+command = "other-name deactivate"
+input = { other_name = "${retired_other_name.id}", expected_version = "${retired_other_name.version}" }
+
+[[commands]]
+command = "sales-rep create"
+capture = "sales_rep"
+input = { name = "Casey Worker", initials = "CW", name_type = "employee", name_id = "${employee.id}" }
+
+[[commands]]
+command = "sales-rep create"
+capture = "retired_sales_rep"
+input = { name = "Former Representative", initials = "FR", name_type = "employee", name_id = "${employee.id}" }
+
+[[commands]]
+command = "sales-rep deactivate"
+input = { sales_rep = "${retired_sales_rep.id}", expected_version = "${retired_sales_rep.version}" }
+
+[[commands]]
+command = "vendor create"
+capture = "vendor_initial"
+input = { name = "Central Supply", company_name = "Central Supply Company", address = { line1 = "800 Industrial Rd", city = "Springfield", state = "IL", postal_code = "62703", country = "US" }, terms_id = "${net_30.id}", vendor_type_id = "${vendor_type.id}", default_class_id = "${class_leaf.id}", account_number = "V-100", print_name_on_check_as = "Central Supply Company", credit_limit = "25000", eligible_1099 = false, notes = "Primary materials vendor", contacts = [{ role = "primary", display_name = "Jordan Supply", work_phone = "555-0120", primary_email = "orders@central.example.test", points = [{ kind = "main_phone", value = "555-0120" }, { kind = "url_1", value = "https://central.example.test/orders" }] }, { role = "alternate", display_name = "Retired Contact", work_phone = "555-0129" }], expense_accounts = [{ account_id = "${expense_account.id}" }, { account_id = "${cogs_account.id}" }], custom_fields = { "${cf_text.id}" = "Morning delivery", "${cf_number.id}" = "4.5", "${cf_date.id}" = "2026-10-15", "${cf_bool.id}" = true, "${cf_choice.id}" = "Central" } }
+
+[[commands]]
+command = "vendor update"
+capture = "vendor"
+input = { vendor = "${vendor_initial.id}", expected_version = "${vendor_initial.version}", contacts = [{ id = "${vendor_initial.contacts.0.id}", role = "primary", display_name = "Jordan Supply", work_phone = "555-0120", primary_email = "orders@central.example.test", points = [{ id = "${vendor_initial.contacts.0.points.0.id}", kind = "main_phone", value = "555-0120" }] }], expense_accounts = [{ id = "${vendor_initial.expense_accounts.0.id}", account_id = "${expense_account.id}" }] }
+
+[[commands]]
+command = "vendor create"
+capture = "backup_vendor"
+input = { name = "Regional Parts", vendor_type_id = "${vendor_type.id}", email = "parts@regional.example.test" }
+
+[[commands]]
+command = "vendor create"
+capture = "tax_agency"
+input = { name = "State Revenue Office", is_tax_agency = true, address = { line1 = "1 State Plaza", city = "Springfield", state = "IL", postal_code = "62701", country = "US" } }
+
+[[commands]]
+command = "customer create"
+capture = "customer_initial"
+input = { name = "Riverside Apartments", company_name = "Riverside Apartments LLC", billing_address = { line1 = "200 River Rd", city = "Springfield", state = "IL", postal_code = "62704", country = "US" }, terms_id = "${progress_term.id}", sales_tax_code_id = "${tax_code.id}", price_level_id = "${preferred_price.id}", customer_type_id = "${customer_type.id}", sales_rep_id = "${sales_rep.id}", preferred_payment_method_id = "${check_method.id}", preferred_ship_method_id = "${delivery_method.id}", credit_limit = "15000", preferred_delivery_method = "email", account_number = "C-100", notes = "Multi-building service account", default_class_id = "${class_leaf.id}", shipping_addresses = [{ label = "Office", is_default = true, line1 = "200 River Rd", city = "Springfield", state = "IL", postal_code = "62704", country = "US" }, { label = "Temporary", line1 = "202 River Rd", city = "Springfield", state = "IL", postal_code = "62704", country = "US" }], contacts = [{ role = "primary", display_name = "Jamie Rivers", work_phone = "555-0110", primary_email = "jamie@riverside.example.test", points = [{ kind = "mobile_phone", value = "555-0111" }, { kind = "additional_email", value = "maintenance@riverside.example.test" }] }, { role = "alternate", display_name = "Retired Contact", work_phone = "555-0119" }], custom_fields = { "${cf_text.id}" = "Gate code on work order", "${cf_number.id}" = "3.75", "${cf_date.id}" = "2026-11-01", "${cf_bool.id}" = true, "${cf_choice.id}" = "West" } }
+
+[[commands]]
+command = "customer update"
+capture = "customer"
+input = { customer = "${customer_initial.id}", expected_version = "${customer_initial.version}", shipping_addresses = [{ id = "${customer_initial.shipping_addresses.0.id}", label = "Office", is_default = true, line1 = "200 River Rd", city = "Springfield", state = "IL", postal_code = "62704", country = "US" }], contacts = [{ id = "${customer_initial.contacts.0.id}", role = "primary", display_name = "Jamie Rivers", work_phone = "555-0110", primary_email = "jamie@riverside.example.test", points = [{ id = "${customer_initial.contacts.0.points.0.id}", kind = "mobile_phone", value = "555-0111" }] }] }
+
+[[commands]]
+command = "customer create"
+capture = "job_inherit"
+input = { name = "Building A", parent_id = "${customer.id}", job_status = "in_progress", job_type_id = "${job_type.id}", job_start = "2026-08-15", job_projected_end = "2026-10-31", job_description = "Replace supply lines", address_mode = "inherit", contact_mode = "inherit" }
+
+[[commands]]
+command = "customer create"
+capture = "job_own"
+input = { name = "Unit 301", parent_id = "${job_inherit.id}", job_status = "awarded", job_type_id = "${job_type.id}", job_start = "2026-09-05", job_projected_end = "2026-09-20", job_description = "Kitchen rough-in", address_mode = "own", contact_mode = "own", billing_address = { line1 = "200 River Rd, Unit 301", city = "Springfield", state = "IL", postal_code = "62704", country = "US" }, shipping_addresses = [{ label = "Unit", is_default = true, line1 = "200 River Rd, Unit 301", city = "Springfield", state = "IL", postal_code = "62704", country = "US" }], contacts = [{ role = "primary", display_name = "Site Lead", mobile_phone = "555-0115" }] }
+
+[[commands]]
+command = "customer link-vendor"
+capture = "active_link"
+input = { customer = "${customer.id}", vendor = "${vendor.id}", expected_customer_version = "${customer.version}", expected_vendor_version = "${vendor.version}" }
+
+[[commands]]
+command = "customer create"
+capture = "retired_customer_initial"
+input = { name = "Retired Customer", custom_fields = { "${cf_text.id}" = "Historical value" } }
+
+[[commands]]
+command = "customer update"
+capture = "retired_customer_cleared"
+input = { customer = "${retired_customer_initial.id}", expected_version = "${retired_customer_initial.version}", custom_fields = { "${cf_text.id}" = "${null}" } }
+
+[[commands]]
+command = "vendor create"
+capture = "retired_vendor"
+input = { name = "Retired Vendor" }
+
+[[commands]]
+command = "customer link-vendor"
+capture = "retired_link_active"
+input = { customer = "${retired_customer_cleared.id}", vendor = "${retired_vendor.id}", expected_customer_version = "${retired_customer_cleared.version}", expected_vendor_version = "${retired_vendor.version}" }
+
+[[commands]]
+command = "customer unlink-vendor"
+capture = "retired_link"
+input = { customer = "${retired_link_active.customer_id}", expected_customer_version = "${retired_link_active.customer_version}", expected_vendor_version = "${retired_link_active.vendor_version}", expected_link_version = "${retired_link_active.link_version}" }
+
+[[commands]]
+command = "customer deactivate"
+input = { customer = "${retired_link.customer_id}", expected_version = "${retired_link.customer_version}" }
+
+[[commands]]
+command = "vendor deactivate"
+input = { vendor = "${retired_link.vendor_id}", expected_version = "${retired_link.vendor_version}" }
+
+# All twelve item profiles are real item-create commands. Aggregate updates
+# leave historical inactive member and vendor-profile rows.
+
+[[commands]]
+command = "item create"
+capture = "service_item"
+input = { name = "Mainline Clearing", type = "service", category_id = "${parts_category.id}", description = "Drain clearing labor", sales_enabled = true, price = "145", income_account_id = "${income_account.id}", default_class_id = "${class_leaf.id}", sales_tax_code_id = "${tax_code.id}", notes = "Standard call", custom_fields = { "${cf_text.id}" = "Bring camera", "${cf_number.id}" = "1.5", "${cf_date.id}" = "2026-09-12", "${cf_bool.id}" = true, "${cf_choice.id}" = "Central" } }
+
+[[commands]]
+command = "item create"
+capture = "inventory_item_initial"
+input = { name = "Brass Shutoff Valve", type = "inventory_part", category_id = "${parts_category.id}", description = "Quarter-turn valve", purchase_description = "Brass shutoff valve", sales_enabled = true, purchase_enabled = true, price = "24.95", cost = "11.40", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", asset_account_id = "${inventory_account.id}", default_class_id = "${class_leaf.id}", sales_tax_code_id = "${tax_code.id}", manufacturer_part_number = "BSV-050", barcode = "100000000050", reorder_point_min = "6", reorder_point_max = "24", vendor_profiles = [{ vendor_id = "${vendor.id}", preferred_rank = 1, vendor_item_name = "Valve 1/2", purchase_cost = "10.95", minimum_quantity = "12", lead_time_days = 2 }, { vendor_id = "${backup_vendor.id}", preferred_rank = 2, vendor_item_name = "Regional Valve", purchase_cost = "11.25", minimum_quantity = "6", lead_time_days = 4 }] }
+
+[[commands]]
+command = "item update"
+capture = "inventory_item"
+input = { item = "${inventory_item_initial.id}", expected_version = "${inventory_item_initial.version}", vendor_profiles = [{ id = "${inventory_item_initial.vendor_profiles.0.id}", vendor_id = "${vendor.id}", preferred_rank = 1, vendor_item_name = "Valve 1/2", purchase_cost = "10.95", minimum_quantity = "12", lead_time_days = 2 }] }
+
+[[commands]]
+command = "item create"
+capture = "noninventory_item"
+input = { name = "Copper Coupling", type = "non_inventory_part", category_id = "${parts_category.id}", description = "Nonstock fitting", sales_enabled = true, price = "5.50", income_account_id = "${income_account.id}", sales_tax_code_id = "${tax_code.id}" }
+
+[[commands]]
+command = "item create"
+capture = "other_charge_item"
+input = { name = "Trip Charge", type = "other_charge", description = "Service-area surcharge", sales_enabled = true, charge_percent = "2.5", income_account_id = "${income_account.id}", sales_tax_code_id = "${tax_code.id}" }
+
+[[commands]]
+command = "item create"
+capture = "subtotal_item"
+input = { name = "Work Order Subtotal", type = "subtotal", description = "Subtotal" }
+
+[[commands]]
+command = "item create"
+capture = "group_item_initial"
+input = { name = "Drain Service Bundle", type = "group", print_members = true, members = [{ component_item_id = "${service_item.id}", quantity = "1" }, { component_item_id = "${noninventory_item.id}", quantity = "2" }] }
+
+[[commands]]
+command = "item update"
+capture = "group_item"
+input = { item = "${group_item_initial.id}", expected_version = "${group_item_initial.version}", members = [{ id = "${group_item_initial.members.0.id}", component_item_id = "${service_item.id}", quantity = "1" }] }
+
+[[commands]]
+command = "item create"
+capture = "discount_item"
+input = { name = "Loyalty Discount", type = "discount", description = "Preferred-customer discount", discount_percent = "5", income_account_id = "${income_account.id}", sales_tax_code_id = "${tax_code.id}" }
+
+[[commands]]
+command = "item create"
+capture = "payment_item"
+input = { name = "Received Payment", type = "payment", description = "Customer payment", payment_method_id = "${check_method.id}", use_undeposited_funds = true }
+
+[[commands]]
+command = "item create"
+capture = "tax_item"
+input = { name = "Springfield Sales Tax", type = "sales_tax_item", description = "Local sales tax", tax_percent = "8.25", tax_agency_vendor_id = "${tax_agency.id}", liability_account_id = "${tax_payable_account.id}" }
+
+[[commands]]
+command = "item create"
+capture = "tax_group_item"
+input = { name = "Combined Sales Tax", type = "sales_tax_group", members = [{ component_item_id = "${tax_item.id}", quantity = "1" }] }
+
+[[commands]]
+command = "item create"
+capture = "assembly_item"
+input = { name = "Two-Valve Kit", type = "inventory_assembly", description = "Assembled valve kit", purchase_description = "Valve assembly components", sales_enabled = true, purchase_enabled = true, price = "49.95", cost = "22.80", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", asset_account_id = "${inventory_account.id}", sales_tax_code_id = "${tax_code.id}", assembly_build_point = "3", members = [{ component_item_id = "${inventory_item.id}", quantity = "2" }] }
+
+[[commands]]
+command = "item create"
+capture = "fixed_asset_item"
+input = { name = "Inspection Camera", type = "fixed_asset", asset_number = "CAM-001", description = "Pipe inspection camera", purchase_date = "2025-04-15", original_cost = "3200", asset_account_id = "${fixed_asset_account.id}", vendor_id = "${vendor.id}", location = "Service van 1", serial_number = "DEMO-CAM-001", warranty_expiration = "2027-04-15", disposal_status = "in_service", depreciation_method = "straight_line", useful_life_months = 60, book_basis = "3200", tax_basis = "3200" }
+
+[[commands]]
+command = "item create"
+capture = "retired_item"
+input = { name = "Retired Service Item", type = "service", description = "Inactive item example", sales_enabled = true, price = "1", income_account_id = "${income_account.id}", sales_tax_code_id = "${tax_code.id}" }
+
+[[commands]]
+command = "item deactivate"
+input = { item = "${retired_item.id}", expected_version = "${retired_item.version}" }
+
+[[commands]]
+command = "price-level create"
+capture = "item_price_initial"
+input = { name = "Contract Pricing", kind = "per_item", rounding_mode = "up", rounding_increment = "0.05", rounding_offset = "0", items = [{ item_id = "${service_item.id}", percent = "-10", adjustment_basis = "standard_price" }, { item_id = "${inventory_item.id}", price = "21.50", adjustment_basis = "standard_price" }] }
+
+[[commands]]
+command = "price-level update"
+capture = "item_price"
+input = { price_level = "${item_price_initial.id}", expected_version = "${item_price_initial.version}", items = [{ id = "${item_price_initial.items.0.id}", item_id = "${service_item.id}", percent = "-10", adjustment_basis = "standard_price" }] }
+
+[[commands]]
+command = "company update"
+input = { use_classes = false, enable_price_levels = false, units_of_measure_mode = "disabled", sales_tax_enabled = false, default_sales_tax_item_id = "${null}", sales_tax_liability_basis = "invoice_date", sales_tax_remittance_frequency = "quarterly", default_ship_method_id = "${null}", free_on_board = "${null}" }

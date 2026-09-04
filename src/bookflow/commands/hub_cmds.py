@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import shutil
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
@@ -836,7 +837,7 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
 
 
 def _apply_seed_history(s: Session, ctx: Context, seed: dict[str, Any], row: dict[str, Any]) -> None:
-    """Seed directives and a visible update history through the same path as user writes (run_in_session)."""
+    """Seed the demo through the same registered command path as user writes."""
     from bookflow.core import registry as _registry
     from bookflow.core.dispatch import open_company, run_in_session
     saved_row, saved_company = s.company_row, s.company
@@ -857,6 +858,73 @@ def _apply_seed_history(s: Session, ctx: Context, seed: dict[str, Any], row: dic
             elif u["mode"] == "merged" and base is not None:
                 fields["expected_version"] = base
             run_in_session(_registry.get("company update"), _registry.get("company update").input_model(**fields), ctx.model_copy(update={"company_id": row["id"]}), s)
+        captures: dict[str, dict[str, Any]] = {}
+        for index, entry in enumerate(seed.get("commands", []), start=1):
+            unexpected = set(entry) - {"command", "capture", "input"}
+            if unexpected:
+                raise ValueError(
+                    f"demo seed command {index} has unknown keys: {sorted(unexpected)}"
+                )
+            name = entry.get("command")
+            if not isinstance(name, str):
+                raise ValueError(f"demo seed command {index} has no command name")
+            cmd = _registry.get(name)
+            if cmd is None:
+                raise ValueError(f"demo seed command {index} is not registered: {name}")
+            if cmd.scope != "company":
+                raise ValueError(f"demo seed command {index} is not company-scoped: {name}")
+            raw = entry.get("input", {})
+            if not isinstance(raw, dict):
+                raise ValueError(f"demo seed command {index} input is not a table")
+            raw_input = _resolve_seed_references(raw, captures)
+            output = run_in_session(
+                cmd,
+                cmd.input_model.model_validate(raw_input),
+                ctx.model_copy(update={"company_id": row["id"]}),
+                s,
+            )
+            capture = entry.get("capture")
+            if capture is not None:
+                if (
+                    not isinstance(capture, str)
+                    or _SEED_CAPTURE.fullmatch(capture) is None
+                    or capture in captures
+                ):
+                    raise ValueError(f"demo seed command {index} has an invalid capture name")
+                captures[capture] = output
     finally:
         s.close_company()
         s.company_row, s.company = saved_row, saved_company
+
+
+_SEED_CAPTURE = re.compile(r"^[a-z][a-z0-9_]*$")
+_SEED_REFERENCE = re.compile(r"^\$\{([a-z][a-z0-9_]*)(\.[a-zA-Z0-9_]+)*\}$")
+
+
+def _resolve_seed_references(value: Any, captures: Mapping[str, Any]) -> Any:
+    """Replace whole-value ``${capture.path}`` references in demo seed inputs."""
+    if isinstance(value, str):
+        if value == "${null}":
+            return None
+        match = _SEED_REFERENCE.fullmatch(value)
+        if match is None:
+            return value
+        path = value[2:-1].split(".")
+        try:
+            resolved: Any = captures[path[0]]
+            for part in path[1:]:
+                resolved = resolved[int(part)] if isinstance(resolved, list) else resolved[part]
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise ValueError(f"demo seed reference does not resolve: {value}") from exc
+        return resolved
+    if isinstance(value, list):
+        return [_resolve_seed_references(item, captures) for item in value]
+    if isinstance(value, dict):
+        resolved: dict[Any, Any] = {}
+        for key, item in value.items():
+            new_key = _resolve_seed_references(key, captures)
+            if new_key in resolved:
+                raise ValueError(f"demo seed reference creates a duplicate key: {new_key}")
+            resolved[new_key] = _resolve_seed_references(item, captures)
+        return resolved
+    return value
