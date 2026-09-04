@@ -8,6 +8,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -162,6 +163,16 @@ def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
     if not path and definition is None and isinstance(shown.get("info"), dict):
         current = shown["info"]
     return dict(current) if isinstance(current, dict) else {}
+
+
+def _inactive_toggle(path: str, request: Request, *, include: bool) -> str:
+    """Toggle inactive rows without discarding any other list-page state."""
+    pairs = [(key, value) for key, value in request.query_params.multi_items()
+             if key != "include_inactive"]
+    if not include:
+        pairs.append(("include_inactive", "1"))
+    query = urlencode(pairs)
+    return path + (f"?{query}" if query else "")
 
 
 def _success_target(cmd: registry.Command, company_id: str | None, noun: str, record_id: str | None,
@@ -375,6 +386,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             meta=meta,
             has_inactive="include_inactive" in cmd.input_model.model_fields,
             include=include,
+            inactive_toggle=_inactive_toggle(request.url.path, request, include=include),
             verbs=page_verbs,
             query=raw.get("query", ""),
             filters=filters,

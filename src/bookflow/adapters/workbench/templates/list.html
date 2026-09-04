@@ -2,9 +2,9 @@
 {% set base = ("/c/" ~ company_id ~ "/" ~ noun) if company_id else ("/hub/" ~ noun.replace(" ", "-")) %}
 <h1>{{ noun }}</h1>
 <p class="actions">{% for v in verbs %}{% if v.is_write and not v.version_source and not v.positional %}<a href="{{ base }}/{{ v.verb }}">{{ v.verb }}</a>{% endif %}{% endfor %}
-{% if has_inactive %}<a href="{{ base }}?include_inactive={{ '0' if include else '1' }}">{{ "hide" if include else "include" }} inactive</a>{% endif %}</p>
+{% if has_inactive %}<a href="{{ inactive_toggle }}">{{ "hide" if include else "include" }} inactive</a>{% endif %}</p>
 {% if meta.definition %}<form method="get" class="list-tools"><label>Search<input name="query" value="{{ query }}" placeholder="Search {{ meta.plural_label | lower }}"></label>
-<label>Filter<input name="filter" value="{{ filters[0] if filters else '' }}" placeholder="field=value"></label>
+<label>Filters{% for filter in filters %}<input name="filter" value="{{ filter }}" placeholder="field=value">{% endfor %}<input name="filter" value="" placeholder="field=value"></label>
 <label>Sort<select name="sort"><option value="">Default</option>{% for sort in meta.definition.sorts %}<option value="{{ sort }}" {% if selected_sort == sort %}selected{% endif %}>{{ sort }}</option>{% endfor %}</select></label>
 <label>Direction<select name="direction"><option value="asc" {% if selected_direction == 'asc' %}selected{% endif %}>Ascending</option><option value="desc" {% if selected_direction == 'desc' %}selected{% endif %}>Descending</option></select></label>
 <label>Columns<small>Comma-separated, in display order</small><input name="columns" value="{{ selected_columns }}"></label>

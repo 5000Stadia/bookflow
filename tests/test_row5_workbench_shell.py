@@ -1,6 +1,7 @@
 """The Row 5 workbench shell groups and queries list nouns responsively."""
 
 import html
+from urllib.parse import parse_qs, urlsplit
 
 from fastapi.testclient import TestClient
 
@@ -72,6 +73,38 @@ def test_list_columns_are_url_only_selectable_and_ordered(hosted):
     )
     assert invalid.status_code == 422
     assert "E_LIST_FILTER" in invalid.text
+
+
+def test_list_page_preserves_repeated_filters_and_state_when_toggling_inactive(hosted):
+    browser = _browser(hosted)
+    page = browser.get(
+        f"/c/{hosted.company_id}/term",
+        params=[
+            ("query", "Net"),
+            ("filter", "active=true"),
+            ("filter", "kind=standard"),
+            ("sort", "name"),
+            ("direction", "desc"),
+            ("columns", "name,active"),
+        ],
+    )
+    assert page.status_code == 200
+    assert page.text.count('name="filter"') == 3
+    assert 'value="active=true"' in page.text
+    assert 'value="kind=standard"' in page.text
+
+    marker = 'href="/c/' + hosted.company_id + '/term?'
+    start = page.text.index(marker) + len('href="')
+    end = page.text.index('"', start)
+    query = parse_qs(urlsplit(html.unescape(page.text[start:end])).query)
+    assert query == {
+        "query": ["Net"],
+        "filter": ["active=true", "kind=standard"],
+        "sort": ["name"],
+        "direction": ["desc"],
+        "columns": ["name,active"],
+        "include_inactive": ["1"],
+    }
 
 
 def test_shell_declares_mobile_viewport_and_scopes_horizontal_scroll_to_tables(hosted):
