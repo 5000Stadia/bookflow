@@ -1,6 +1,7 @@
 """The shipped migration chains upgrade populated older databases (a fresh root never exercises this)."""
 
 import importlib
+import inspect
 import sqlite3
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from bookflow.storage.engine import open_database, sqlite_uri
 from bookflow.storage.migrate import HEADS, current_revision_raw, migrate_to_head
 
 HUB0003 = importlib.import_module("bookflow.storage.hub_migrations.versions.0003_capabilities_features")
+CO0002 = importlib.import_module("bookflow.storage.company_migrations.versions.0002_contract")
 
 
 def _make_revision(path: Path, chain: str, revision: str, populate) -> None:
@@ -41,6 +43,17 @@ def _registry_role_capability_projection() -> tuple[tuple[str, str, str], ...]:
 
 def _pk_columns(conn: sqlite3.Connection, table: str) -> list[str]:
     return [row[1] for row in sorted(conn.execute(f"PRAGMA table_info({table})"), key=lambda row: row[5]) if row[5]]
+
+
+def test_company_co0002_is_frozen_revision_local_ddl(tmp_path):
+    assert "bookflow.company.schema" not in inspect.getsource(CO0002)
+    path = tmp_path / "co0002.db"
+    _make_revision(path, "company", "co0002", lambda _conn: None)
+    with sqlite3.connect(path) as conn:
+        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        audit_columns = {row[1] for row in conn.execute("PRAGMA table_info(audit_events)")}
+    assert {"audit_events", "audit_entries", "presence", "idempotency_keys", "directives", "sequences"} <= tables
+    assert "undo_of_event_id" not in audit_columns
 
 
 def test_fresh_init_has_current_compatibility_schema(tmp_path):
