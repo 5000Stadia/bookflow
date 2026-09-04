@@ -5,6 +5,7 @@ from pathlib import Path
 import sqlalchemy as sa
 
 from bookflow.company import schema
+from bookflow.core import registry
 from bookflow.core.session import now_iso
 from bookflow.storage.engine import open_database
 
@@ -36,6 +37,15 @@ UPDATES = {
     "ship-method": {"display_order": 41},
     "customer-message": {"text": "Edited command message text"},
 }
+
+
+def test_generated_update_models_keep_create_field_constraints():
+    create = registry.get("term create").input_model.model_json_schema()["properties"]
+    update = registry.get("term update").input_model.model_json_schema()["properties"]
+    assert update["name"]["anyOf"][0]["minLength"] == create["name"]["minLength"] == 1
+    assert update["name"]["anyOf"][0]["maxLength"] == create["name"]["maxLength"] == 200
+    assert update["due_days"]["anyOf"][0]["minimum"] == create["due_days"]["anyOf"][0]["minimum"] == 0
+    assert update["due_days"]["anyOf"][0]["maximum"] == create["due_days"]["anyOf"][0]["maximum"] == 365
 
 
 def _insert_employee_source(client) -> str:

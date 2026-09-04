@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import copy
 from datetime import date
 from typing import Literal
 
@@ -314,7 +315,10 @@ def _update_model(noun: str, create_input: type[BaseModel]) -> type[BaseModel]:
         "expected_version": (int | None, Field(default=None, ge=1)),
     }
     for name, model_field in create_input.model_fields.items():
-        fields[name] = (model_field.annotation | None, None)
+        optional_field = copy(model_field)
+        optional_field.default = None
+        optional_field.default_factory = None
+        fields[name] = (model_field.annotation | None, optional_field)
     return create_model(
         f"{_class_name(noun)}UpdateInput",
         __config__=ConfigDict(extra="forbid", str_strip_whitespace=True),
