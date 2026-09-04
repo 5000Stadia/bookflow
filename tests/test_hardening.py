@@ -328,6 +328,45 @@ print(json.dumps(generate_docs(sys.argv[2], False)))
     )
 
 
+def test_sdist_excludes_local_agent_metadata(tmp_path):
+    import tarfile
+
+    repo = Path(__file__).resolve().parents[1]
+    source = tmp_path / "source"
+    shutil.copytree(
+        repo,
+        source,
+        ignore=shutil.ignore_patterns(
+            ".git",
+            ".venv",
+            ".pytest_cache",
+            "__pycache__",
+            "dist",
+            "notes",
+        ),
+    )
+    (source / ".agentpost.toml").write_text(
+        "[identity]\nmailbox = 'must-not-ship'\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "dist"
+    built = subprocess.run(
+        ["uv", "build", "--sdist", "-o", str(output), "-q"],
+        cwd=source,
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "PATH": os.environ["PATH"] + ":" + str(Path.home() / ".local/bin"),
+        },
+    )
+    assert built.returncode == 0, built.stderr
+    archive = next(output.glob("*.tar.gz"))
+    with tarfile.open(archive, "r:gz") as package:
+        names = package.getnames()
+    assert not any(Path(name).name == ".agentpost.toml" for name in names)
+
+
 def test_sibling_companies_hidden_in_hub_audit(client, root):
     client.organization.new(name="Org S")
     a = client.company.new(legal_name="S One", home_currency="USD", organization="Org S", timezone="UTC")

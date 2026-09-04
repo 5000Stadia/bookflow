@@ -33,6 +33,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/bookflow"]
 
+[tool.hatch.build.targets.sdist]
+exclude = ["/.agentpost.toml"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 timeout = 60
