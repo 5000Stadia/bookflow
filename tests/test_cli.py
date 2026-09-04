@@ -88,3 +88,22 @@ def test_cold_start(cli):
     budget = float(__import__("os").environ.get("BOOKFLOW_BUDGET_MS", "300")) / 1000
     assert best < budget, f"--help took {best*1000:.0f} ms (budget {budget*1000:.0f} ms; override BOOKFLOW_BUDGET_MS)"
     assert listed < 2.5 * budget, f"company list took {listed*1000:.0f} ms (budget {2.5*budget*1000:.0f} ms)"
+
+
+def test_row5_modules_keep_the_read_cold_start_budget(cli):
+    budget = float(__import__("os").environ.get("BOOKFLOW_BUDGET_MS", "300")) / 1000
+    read_budget = 2.5 * budget
+    for label, arguments in (
+        ("customer list", ("customer", "list", "--company", "Demo Plumbing Co", "--json")),
+        ("term list", ("term", "list", "--company", "Demo Plumbing Co", "--json")),
+    ):
+        best = 10.0
+        for _ in range(3):
+            began = time.perf_counter()
+            cli.run(*arguments)
+            best = min(best, time.perf_counter() - began)
+        print(f"cold start {label} {best*1000:.0f} ms")
+        assert best < read_budget, (
+            f"{label} took {best*1000:.0f} ms "
+            f"(budget {read_budget*1000:.0f} ms; override BOOKFLOW_BUDGET_MS)"
+        )

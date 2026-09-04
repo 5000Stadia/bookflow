@@ -31,3 +31,38 @@ def test_noun_index_matches_modules():
         by_module.setdefault(cmd.plan.__module__, set()).add(cmd.noun)
     for module, nouns in NOUN_MODULES.items():
         assert by_module.get(module, set()) == set(nouns), (module, by_module.get(module), nouns)
+
+
+def test_multi_noun_modules_load_incrementally_for_one_cli_target():
+    """A cold CLI builds one noun, while later in-process loads remain complete."""
+
+    import subprocess
+    import sys
+
+    witness = """
+from bookflow.core import registry
+
+registry.load_all('customer list')
+assert 'customer show' in registry.REGISTRY
+assert 'vendor show' not in registry.REGISTRY
+assert 'term show' not in registry.REGISTRY
+
+registry.load_all('vendor list')
+assert 'vendor show' in registry.REGISTRY
+assert 'employee show' not in registry.REGISTRY
+
+registry.load_all('term list')
+assert 'term show' in registry.REGISTRY
+assert 'payment-method show' not in registry.REGISTRY
+
+registry.load_all()
+assert 'employee show' in registry.REGISTRY
+assert 'payment-method show' in registry.REGISTRY
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", witness],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr

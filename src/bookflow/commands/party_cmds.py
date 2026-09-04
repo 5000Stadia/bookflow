@@ -18,7 +18,7 @@ from bookflow.company.lists import get_list_definition
 from bookflow.core import audit
 from bookflow.core.context import Context
 from bookflow.core.models import ListOutput, WriteOutput
-from bookflow.core.registry import Applied, Plan, Touched, command
+from bookflow.core.registry import REGISTRY, Applied, Plan, Touched, command, loading_target
 from bookflow.core.session import Session, localize
 from bookflow.core.versioning import check_update, current_writer, history_from_entries
 from bookflow.hub import access
@@ -339,7 +339,7 @@ def _selector_field(noun: str) -> str:
 def _record_model(noun: str) -> type[BaseModel]:
     return create_model(
         f"{_class_name(noun)}Output",
-        __config__=ConfigDict(extra="forbid"),
+        __config__=ConfigDict(extra="forbid", defer_build=True),
         **_PUBLIC_FIELDS[noun],
     )
 
@@ -366,7 +366,12 @@ def _write_model(noun: str, record: type[BaseModel], verb: str) -> type[BaseMode
 def _selector_model(noun: str) -> type[BaseModel]:
     return create_model(
         f"{_class_name(noun)}SelectorInput",
-        __config__=ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True),
+        __config__=ConfigDict(
+            extra="forbid",
+            strict=True,
+            str_strip_whitespace=True,
+            defer_build=True,
+        ),
         **{
             _selector_field(noun): (
                 str,
@@ -396,7 +401,12 @@ def _update_model(noun: str, create_input: type[BaseModel]) -> type[BaseModel]:
         fields[name] = (annotation, None)
     return create_model(
         f"{_class_name(noun)}UpdateInput",
-        __config__=ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True),
+        __config__=ConfigDict(
+            extra="forbid",
+            strict=True,
+            str_strip_whitespace=True,
+            defer_build=True,
+        ),
         **fields,
     )
 
@@ -410,7 +420,12 @@ def _active_model(noun: str, *, cascade: bool) -> type[BaseModel]:
         fields["cascade"] = (bool, False)
     return create_model(
         f"{_class_name(noun)}{'Deactivate' if cascade else 'Activate'}Input",
-        __config__=ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True),
+        __config__=ConfigDict(
+            extra="forbid",
+            strict=True,
+            str_strip_whitespace=True,
+            defer_build=True,
+        ),
         **fields,
     )
 
@@ -1083,8 +1098,22 @@ def _register_party(noun: str) -> None:
     )
 
 
-for _noun in parties.PARTY_NOUNS:
-    _register_party(_noun)
+def _load_target(target: str | None) -> None:
+    requested = (
+        parties.PARTY_NOUNS
+        if target is None
+        else tuple(
+            noun
+            for noun in parties.PARTY_NOUNS
+            if target == noun or target.startswith(noun + " ") or noun.startswith(target + " ")
+        )
+    )
+    for noun in requested:
+        if f"{noun} show" not in REGISTRY:
+            _register_party(noun)
+
+
+_load_target(loading_target())
 
 
 # Customer/vendor relationship ---------------------------------------------

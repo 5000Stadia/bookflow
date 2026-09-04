@@ -212,17 +212,36 @@ NOUN_MODULES: dict[str, list[str]] = {
 }
 
 _loaded: set[str] = set()
+_loading_target: str | None = None
+
+
+def loading_target() -> str | None:
+    """Return the noun path whose command module is currently being imported.
+
+    Command modules with several nouns use this hint to construct only the
+    requested CLI surface. A direct import or a full registry load receives
+    ``None`` and registers the complete module.
+    """
+
+    return _loading_target
 
 
 def load_all(target: str | None = None) -> None:
     """Import the command modules; with ``target`` (a noun path), only the modules that register it."""
     import importlib
+    global _loading_target
     for module, nouns in NOUN_MODULES.items():
-        if module in _loaded:
-            continue
         if target is not None and not any(target == n or target.startswith(n + " ") or n.startswith(target + " ") for n in nouns):
             continue
-        importlib.import_module(module)
+        previous = _loading_target
+        _loading_target = target
+        try:
+            imported = importlib.import_module(module)
+        finally:
+            _loading_target = previous
+        incremental_loader = getattr(imported, "_load_target", None)
+        if incremental_loader is not None:
+            incremental_loader(target)
         _loaded.add(module)
 
 

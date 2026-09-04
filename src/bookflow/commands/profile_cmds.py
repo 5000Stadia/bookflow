@@ -21,7 +21,7 @@ from bookflow.company.lists import get_list_definition
 from bookflow.core.context import Context
 from bookflow.core.errors import BookflowError
 from bookflow.core.models import ListOutput
-from bookflow.core.registry import Applied, Plan, Touched, command
+from bookflow.core.registry import REGISTRY, Applied, Plan, Touched, command, loading_target
 from bookflow.core.session import Session, localize
 from bookflow.core.versioning import check_update, current_writer, history_from_entries
 from bookflow.core import audit
@@ -267,7 +267,7 @@ def _selector_field(noun: str) -> str:
 def _record_model(noun: str) -> type[BaseModel]:
     return create_model(
         f"{_class_name(noun)}Output",
-        __config__=ConfigDict(extra="forbid"),
+        __config__=ConfigDict(extra="forbid", defer_build=True),
         **_COMMON_RECORD_FIELDS,
         **_PUBLIC_FIELDS[noun],
     )
@@ -304,7 +304,11 @@ def _selector_model(noun: str, *, show: bool = False) -> type[BaseModel]:
         fields["transaction_date"] = (date | None, None)
     return create_model(
         f"{_class_name(noun)}{'Show' if show else 'Selector'}Input",
-        __config__=ConfigDict(extra="forbid", str_strip_whitespace=True),
+        __config__=ConfigDict(
+            extra="forbid",
+            str_strip_whitespace=True,
+            defer_build=True,
+        ),
         **fields,
     )
 
@@ -321,7 +325,11 @@ def _update_model(noun: str, create_input: type[BaseModel]) -> type[BaseModel]:
         fields[name] = (model_field.annotation | None, optional_field)
     return create_model(
         f"{_class_name(noun)}UpdateInput",
-        __config__=ConfigDict(extra="forbid", str_strip_whitespace=True),
+        __config__=ConfigDict(
+            extra="forbid",
+            str_strip_whitespace=True,
+            defer_build=True,
+        ),
         **fields,
     )
 
@@ -335,7 +343,11 @@ def _active_model(noun: str, *, cascade: bool) -> type[BaseModel]:
         fields["cascade"] = (bool, False)
     return create_model(
         f"{_class_name(noun)}{'Deactivate' if cascade else 'Activate'}Input",
-        __config__=ConfigDict(extra="forbid", str_strip_whitespace=True),
+        __config__=ConfigDict(
+            extra="forbid",
+            str_strip_whitespace=True,
+            defer_build=True,
+        ),
         **fields,
     )
 
@@ -604,5 +616,19 @@ def _register_supporting_noun(noun: str) -> None:
     )
 
 
-for _noun in profiles.PROFILE_MODELS:
-    _register_supporting_noun(_noun)
+def _load_target(target: str | None) -> None:
+    requested = (
+        tuple(profiles.PROFILE_MODELS)
+        if target is None
+        else tuple(
+            noun
+            for noun in profiles.PROFILE_MODELS
+            if target == noun or target.startswith(noun + " ") or noun.startswith(target + " ")
+        )
+    )
+    for noun in requested:
+        if f"{noun} show" not in REGISTRY:
+            _register_supporting_noun(noun)
+
+
+_load_target(loading_target())
