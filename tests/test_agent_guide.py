@@ -71,12 +71,17 @@ def test_every_hand_authored_fence_is_classified():
 def test_agent_guide_covers_a_source_checkout_and_the_complete_trial_lifecycle():
     guide = resource_text("agent-guide.md")
     for expected in (
-        "BOOKFLOW=(uv run --frozen --no-sync bookflow)",
+        "BOOKFLOW=(uv run --frozen --no-sync --project",
         "command -v bookflow",
         "[ -f uv.lock ]",
+        "set -euo pipefail",
+        'UV_PROJECT_ENVIRONMENT="$BOOKFLOW_TRIAL_ROOT/venv"',
+        "printf 'export UV_PROJECT_ENVIRONMENT=%q",
+        'uv sync --frozen --project "$BOOKFLOW_CHECKOUT"',
+        '--no-sync --project "$BOOKFLOW_CHECKOUT"',
         '"${BOOKFLOW[@]}" init --json',
         '"${BOOKFLOW[@]}" demo reset --json',
-        'export BOOKFLOW_STATE="$BOOKFLOW_DATA_ROOT/agent-guide.env"',
+        'export BOOKFLOW_STATE="$BOOKFLOW_TRIAL_ROOT/agent-guide.env"',
         "nohup",
         "chmod 600",
         'response.status == 200',

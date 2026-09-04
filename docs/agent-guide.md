@@ -6,32 +6,40 @@ The bootstrap bearer belongs to the human who issued it. The current command reg
 
 ## Operator bootstrap
 
-Install the `bookflow-core` distribution first, or prepare the source checkout's environment using its README. The block automatically uses an installed `bookflow` command when one is on `PATH`. Otherwise, from a source-checkout root containing `pyproject.toml` and the committed `uv.lock`, it uses `uv run --frozen --no-sync bookflow`; those flags prohibit lockfile updates and environment changes. Every later command uses the selected array, so the rest of the instructions are identical in both environments.
+Install the `bookflow-core` distribution first, or run from a source-checkout root containing `pyproject.toml` and the committed `uv.lock`. The block automatically uses an installed `bookflow` command when one is on `PATH`. Otherwise it creates and synchronizes a dedicated environment inside the disposable trial directory, then uses `uv run --frozen --no-sync`; the checkout's lockfile and shared environment remain unchanged. Every later command uses the selected array, so the rest of the instructions are identical in both environments.
 
-Run this as one Bash block on the host. It creates a specifically named temporary data root, chooses a currently unused loopback port, issues and extracts a one-day token, starts a detached host, records its client environment and process id in an owner-only state file inside that root, and waits for `GET /health` to return HTTP 200. It prints the state-file path, never the token. If an agent runner starts a fresh shell for each step, source that exact state file before running the executable journey or cleanup.
+Run this as one Bash block on the host. It creates a specifically named temporary trial directory and data root, chooses a currently unused loopback port, issues and extracts a one-day token, starts a detached host, records its client environment and process id in an owner-only state file inside that directory, and waits for `GET /health` to return HTTP 200. It prints the state-file path, never the token. If an agent runner starts a fresh shell for each step, source that exact state file before running the executable journey or cleanup.
 
 The port probe and host bind are separate operations. If the host reports `E_IO` because another process claimed the port between them, keep the initialized temporary root, choose another port, update `BOOKFLOW_BIND` and `BOOKFLOW_URL`, and retry only the host launch and state-file write.
 
 <!-- bookflow-example: illustrative -->
 ```bash
+set -euo pipefail
+
 if command -v python3 >/dev/null 2>&1; then
     PYTHON=(python3)
 else
     PYTHON=(python)
 fi
+
+umask 077
+export BOOKFLOW_TRIAL_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/bookflow-agent-guide.XXXXXX")"
+export BOOKFLOW_DATA_ROOT="$BOOKFLOW_TRIAL_ROOT/data"
+export BOOKFLOW_STATE="$BOOKFLOW_TRIAL_ROOT/agent-guide.env"
+
 if command -v bookflow >/dev/null 2>&1; then
     BOOKFLOW=(bookflow)
 elif command -v uv >/dev/null 2>&1 && [ -f pyproject.toml ] && [ -f uv.lock ]; then
-    BOOKFLOW=(uv run --frozen --no-sync bookflow)
+    BOOKFLOW_CHECKOUT="$PWD"
+    export UV_PROJECT_ENVIRONMENT="$BOOKFLOW_TRIAL_ROOT/venv"
+    uv sync --frozen --project "$BOOKFLOW_CHECKOUT" >/dev/null
+    BOOKFLOW=(uv run --frozen --no-sync --project "$BOOKFLOW_CHECKOUT" bookflow)
 else
-    echo "Install bookflow-core, or run from a prepared source-checkout root." >&2
+    echo "Install bookflow-core, or run from a source-checkout root with uv and uv.lock." >&2
     exit 1
 fi
 "${BOOKFLOW[@]}" --help >/dev/null
 
-umask 077
-export BOOKFLOW_DATA_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/bookflow-agent-guide.XXXXXX")"
-export BOOKFLOW_STATE="$BOOKFLOW_DATA_ROOT/agent-guide.env"
 BOOKFLOW_PORT="$("${PYTHON[@]}" - <<'PY'
 import socket
 with socket.socket() as probe:
@@ -45,15 +53,21 @@ export BOOKFLOW_URL="http://$BOOKFLOW_BIND"
 "${BOOKFLOW[@]}" demo reset --json
 TOKEN_DOCUMENT="$("${BOOKFLOW[@]}" token issue --label agent-guide --days 1 --json)"
 export BOOKFLOW_TOKEN="$(printf '%s' "$TOKEN_DOCUMENT" | "${PYTHON[@]}" -c 'import json,sys; print(json.load(sys.stdin)["secret"])')"
-nohup "${BOOKFLOW[@]}" serve --bind "$BOOKFLOW_BIND" </dev/null >"$BOOKFLOW_DATA_ROOT/host.out" 2>"$BOOKFLOW_DATA_ROOT/host.err" &
+nohup "${BOOKFLOW[@]}" serve --bind "$BOOKFLOW_BIND" </dev/null >"$BOOKFLOW_TRIAL_ROOT/host.out" 2>"$BOOKFLOW_TRIAL_ROOT/host.err" &
 BOOKFLOW_HOST_PID=$!
 
 {
+    printf 'export BOOKFLOW_TRIAL_ROOT=%q\n' "$BOOKFLOW_TRIAL_ROOT"
     printf 'export BOOKFLOW_DATA_ROOT=%q\n' "$BOOKFLOW_DATA_ROOT"
     printf 'export BOOKFLOW_STATE=%q\n' "$BOOKFLOW_STATE"
     printf 'export BOOKFLOW_URL=%q\n' "$BOOKFLOW_URL"
     printf 'export BOOKFLOW_TOKEN=%q\n' "$BOOKFLOW_TOKEN"
     printf 'export BOOKFLOW_HOST_PID=%q\n' "$BOOKFLOW_HOST_PID"
+    if [ -n "${UV_PROJECT_ENVIRONMENT:-}" ]; then
+        printf 'export UV_PROJECT_ENVIRONMENT=%q\n' "$UV_PROJECT_ENVIRONMENT"
+    fi
+    declare -p PYTHON
+    declare -p BOOKFLOW
 } >"$BOOKFLOW_STATE"
 chmod 600 "$BOOKFLOW_STATE"
 printf 'BOOKFLOW_STATE=%s\n' "$BOOKFLOW_STATE" >&2
@@ -78,7 +92,7 @@ else:
 PY
 ```
 
-For a later shell on the same machine, source the exact `BOOKFLOW_STATE` path printed by bootstrap; the containing data root is mode 0700 and the state file is mode 0600. For an agent on another machine, transfer `BOOKFLOW_URL` and `BOOKFLOW_TOKEN` through the operator's normal secret channel instead. Never put the bearer token in the repository, command history, or logs. The token secret is returned only at issuance. Do not print `TOKEN_DOCUMENT` or `BOOKFLOW_TOKEN` after capture, and delete the temporary state file during cleanup.
+For a later shell on the same machine, source the exact `BOOKFLOW_STATE` path printed by bootstrap; the containing trial directory is mode 0700 and the state file is mode 0600. For an agent on another machine, transfer `BOOKFLOW_URL` and `BOOKFLOW_TOKEN` through the operator's normal secret channel instead. Never put the bearer token in the repository, command history, or logs. The token secret is returned only at issuance. Do not print `TOKEN_DOCUMENT` or `BOOKFLOW_TOKEN` after capture, and delete the temporary state file during cleanup.
 
 ## Executable journey
 
@@ -309,4 +323,4 @@ PY
 unset BOOKFLOW_TOKEN TOKEN_DOCUMENT
 ```
 
-Confirm that the host has stopped before removing anything. If this was an isolated documentation trial, remove only the exact temporary data root created by `mktemp`; never remove a normal Bookflow data root. Cleanup is intentionally not a recursive copy-paste command because the data-root path must be inspected by the operator first. If the data root is retained, revoke the short-lived guide token with [`token revoke`](cli/token.md) when it is no longer needed.
+Confirm that the host has stopped before removing anything. If this was an isolated documentation trial, remove only the exact `BOOKFLOW_TRIAL_ROOT` created by `mktemp`; it contains the isolated data root and, for a source run, the isolated environment. Never remove a normal Bookflow data root or a source checkout. Cleanup is intentionally not a recursive copy-paste command because the trial-root path must be inspected by the operator first. If the data root is retained, revoke the short-lived guide token with [`token revoke`](cli/token.md) when it is no longer needed.

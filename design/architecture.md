@@ -71,7 +71,7 @@ src/bookflow/
   adapters/workbench/    pages.py (picker, hub and company indexes, generated list/record/form/audit pages), forms.py (input model -> leaves; form -> command JSON with originals, tri-state booleans, clears, Preview), templates/, static/ (vendored htmx, stylesheet)
 ```
 
-The repository root carries `uv.lock`; source-checkout documentation trials use `uv run --frozen --no-sync` so reading and executing the guide does not update the lock or replace packages in a shared environment.
+The repository root carries `uv.lock`; source-checkout documentation trials sync a dedicated environment inside their disposable trial root, then use `uv run --frozen --no-sync`, so executing the guide does not update the checkout's lock or replace packages in a shared environment.
 
 Multi-word nouns (`hub audit`) become nested CLI groups and attribute chains on the client (`client.hub.audit.list()`).
 
@@ -98,7 +98,7 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - A single-word command (`upgrade`) has no verb: its noun page is its form, and it submits to `/hub/<noun>`.
 - `docs generate` is a rootless standalone command: no data root, lock, actor, capability, forwarding, or HTTP route. It renders all registered commands including standalone tooling, validates examples and schema descriptions, and copies packaged prose resources. Generation accepts only an absent, empty, or exactly marked real directory; it refuses symlinks and unrelated trees, validates a sibling stage, swaps it atomically, and restores the previous complete tree if publication fails. `--check` performs a read-only byte/path comparison and reports sorted missing, extra, and changed paths as `E_DOCS_STALE`.
 - The cold-start test budgets `bookflow --help` below 300 ms; neither root help nor command discovery imports FastAPI, uvicorn, or the workbench.
-- The suite is 287 tests in 167.57 s on this machine (Linux, ext4, Python 3.12). Duration is diagnostic rather than a release budget. The host/workbench/local group contains 87 tests.
+- The suite is 287 tests in 170.26 s on this machine (Linux, ext4, Python 3.12). Duration is diagnostic rather than a release budget. The host/workbench/local group contains 87 tests.
 
 ## Verified on this machine (Linux, ext4, Python 3.12)
 
