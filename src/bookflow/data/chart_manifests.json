@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "selection_default": "general",
+  "required_system_roles": [
+    "accounts_receivable", "accounts_payable", "undeposited_funds",
+    "opening_balance_equity", "retained_earnings", "sales_tax_payable",
+    "inventory_asset", "cost_of_goods_sold", "exchange_gain_loss"
+  ],
+  "common_accounts": [
+    ["checking", "1000", "Checking", "bank", null],
+    ["accounts_receivable", "1100", "Accounts Receivable", "accounts_receivable", "accounts_receivable"],
+    ["undeposited_funds", "1200", "Undeposited Funds", "other_current_asset", "undeposited_funds"],
+    ["inventory_asset", "1300", "Inventory Asset", "other_current_asset", "inventory_asset"],
+    ["accounts_payable", "2000", "Accounts Payable", "accounts_payable", "accounts_payable"],
+    ["sales_tax_payable", "2100", "Sales Tax Payable", "other_current_liability", "sales_tax_payable"],
+    ["opening_balance_equity", "3000", "Opening Balance Equity", "equity", "opening_balance_equity"],
+    ["retained_earnings", "3100", "Retained Earnings", "equity", "retained_earnings"],
+    ["cost_of_goods_sold", "5000", "Cost of Goods Sold", "cost_of_goods_sold", "cost_of_goods_sold"],
+    ["exchange_gain_loss", "9000", "Exchange Gain/Loss", "other_income", "exchange_gain_loss"]
+  ],
+  "templates": {
+    "general": {
+      "display_name": "General business",
+      "description": "General service and operating accounts.",
+      "accounts": [
+        ["4000", "Sales Income", "income"], ["4100", "Service Income", "income"],
+        ["6000", "Advertising", "expense"], ["6100", "Bank Fees", "expense"],
+        ["6200", "Insurance", "expense"], ["6300", "Office Supplies", "expense"],
+        ["6400", "Professional Fees", "expense"], ["6500", "Rent", "expense"],
+        ["6600", "Repairs and Maintenance", "expense"], ["6700", "Utilities", "expense"],
+        ["6800", "Payroll Expenses", "expense"], ["8000", "Other Income", "other_income"],
+        ["9100", "Other Expense", "other_expense"]
+      ]
+    },
+    "service": {
+      "display_name": "Service business",
+      "description": "Service revenue, reimbursed expense, and subcontractor accounts.",
+      "accounts": [
+        ["4000", "Service Income", "income"], ["4100", "Reimbursed Expenses", "income"],
+        ["5100", "Subcontractors", "cost_of_goods_sold"], ["6000", "Advertising", "expense"],
+        ["6100", "Bank Fees", "expense"], ["6200", "Insurance", "expense"],
+        ["6300", "Office Supplies", "expense"], ["6400", "Professional Fees", "expense"],
+        ["6500", "Rent", "expense"], ["6600", "Repairs and Maintenance", "expense"],
+        ["6700", "Utilities", "expense"], ["6800", "Payroll Expenses", "expense"],
+        ["8000", "Other Income", "other_income"], ["9100", "Other Expense", "other_expense"]
+      ]
+    },
+    "product": {
+      "display_name": "Product business",
+      "description": "Product sales, inventory adjustments, and freight accounts.",
+      "accounts": [
+        ["4000", "Product Sales", "income"], ["4010", "Sales Returns and Allowances", "income"],
+        ["5100", "Freight and Delivery", "cost_of_goods_sold"], ["5200", "Inventory Adjustments", "cost_of_goods_sold"],
+        ["6000", "Advertising", "expense"], ["6100", "Bank Fees", "expense"],
+        ["6200", "Insurance", "expense"], ["6300", "Office Supplies", "expense"],
+        ["6400", "Professional Fees", "expense"], ["6500", "Rent", "expense"],
+        ["6700", "Utilities", "expense"], ["6800", "Payroll Expenses", "expense"],
+        ["8000", "Other Income", "other_income"], ["9100", "Other Expense", "other_expense"]
+      ]
+    },
+    "contractor": {
+      "display_name": "Contractor",
+      "description": "Job materials, subcontractors, equipment, permit, and service accounts.",
+      "accounts": [
+        ["4000", "Construction Income", "income"], ["4100", "Service Income", "income"],
+        ["5100", "Job Materials", "cost_of_goods_sold"], ["5200", "Subcontractors", "cost_of_goods_sold"],
+        ["5300", "Equipment Rental", "cost_of_goods_sold"], ["5400", "Permits", "cost_of_goods_sold"],
+        ["6000", "Advertising", "expense"], ["6100", "Bank Fees", "expense"],
+        ["6200", "Insurance", "expense"], ["6300", "Office Supplies", "expense"],
+        ["6400", "Professional Fees", "expense"], ["6500", "Vehicle Expense", "expense"],
+        ["6600", "Repairs and Maintenance", "expense"], ["6700", "Utilities", "expense"],
+        ["6800", "Payroll Expenses", "expense"], ["8000", "Other Income", "other_income"],
+        ["9100", "Other Expense", "other_expense"]
+      ]
+    },
+    "retail": {
+      "display_name": "Retail",
+      "description": "Merchandise, freight-in, shrinkage, and merchant fee accounts.",
+      "accounts": [
+        ["4000", "Merchandise Sales", "income"], ["4010", "Sales Returns and Allowances", "income"],
+        ["5100", "Freight-In", "cost_of_goods_sold"], ["5200", "Inventory Shrinkage", "cost_of_goods_sold"],
+        ["6000", "Advertising", "expense"], ["6100", "Bank Fees", "expense"],
+        ["6200", "Insurance", "expense"], ["6300", "Merchant Fees", "expense"],
+        ["6400", "Office Supplies", "expense"], ["6500", "Rent", "expense"],
+        ["6700", "Utilities", "expense"], ["6800", "Payroll Expenses", "expense"],
+        ["8000", "Other Income", "other_income"], ["9100", "Other Expense", "other_expense"]
+      ]
+    },
+    "nonprofit": {
+      "display_name": "Nonprofit",
+      "description": "Contribution, grant, program, fundraising, and administration accounts.",
+      "accounts": [
+        ["4000", "Contributions", "income"], ["4100", "Grants", "income"],
+        ["4200", "Program Service Revenue", "income"], ["6000", "Program Services", "expense"],
+        ["6100", "Fundraising", "expense"], ["6200", "Management and General", "expense"],
+        ["6300", "Bank Fees", "expense"], ["6400", "Professional Fees", "expense"],
+        ["6500", "Rent", "expense"], ["6700", "Utilities", "expense"],
+        ["6800", "Payroll Expenses", "expense"], ["8000", "Other Income", "other_income"],
+        ["9100", "Other Expense", "other_expense"]
+      ]
+    }
+  }
+}

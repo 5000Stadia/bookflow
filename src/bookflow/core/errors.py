@@ -63,6 +63,8 @@ COMMAND_CODES: dict[str, str] = {
     "E_NOT_UNDOABLE": "That audit event is not eligible for list-event undo.",
     "E_ALREADY_UNDONE": "That audit event has already been compensated.",
     "E_UNDO_CONFLICT": "Current record state overlaps the change that would be undone.",
+    "E_CHART_INVALID": "The chart template cannot be applied to this company.",
+    "E_CHART_EXISTS": "This company already has an applied chart.",
     "E_PARTIAL_WRITE": "The write completed in one database but not the other.",
     "E_LOGIN_FAILED": "Login failed.",
     "E_WORKBENCH_HEADER": "Cookie-authenticated writes need the X-Bookflow-Workbench header.",
