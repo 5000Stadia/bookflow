@@ -55,6 +55,25 @@ def test_list_page_uses_declared_columns_and_command_backed_query_controls(hoste
     assert '<option value="desc" selected>Descending</option>' in page.text
 
 
+def test_list_columns_are_url_only_selectable_and_ordered(hosted):
+    browser = _browser(hosted)
+    page = browser.get(
+        f"/c/{hosted.company_id}/term",
+        params={"query": "Net 30", "columns": "active,name,kind"},
+    )
+    assert page.status_code == 200
+    assert page.text.index("<th>active</th>") < page.text.index("<th>name</th>")
+    assert page.text.index("<th>name</th>") < page.text.index("<th>kind</th>")
+    assert 'name="columns" value="active,name,kind"' in page.text
+
+    invalid = browser.get(
+        f"/c/{hosted.company_id}/term",
+        params={"columns": "name,not-a-column"},
+    )
+    assert invalid.status_code == 422
+    assert "E_LIST_FILTER" in invalid.text
+
+
 def test_shell_declares_mobile_viewport_and_scopes_horizontal_scroll_to_tables(hosted):
     page = _browser(hosted).get(f"/c/{hosted.company_id}/term")
     css = _browser(hosted).get("/static/style.css")

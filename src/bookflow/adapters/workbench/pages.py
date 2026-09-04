@@ -350,6 +350,20 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         items = out.get("items", [])
         definition = meta.get("definition")
         columns = list(definition.default_columns) if definition is not None else list_columns(items)
+        column_text = request.query_params.get("columns", "")
+        if column_text and definition is not None:
+            requested_columns = [field.strip() for field in column_text.split(",") if field.strip()]
+            unknown_columns = [field for field in requested_columns if field not in definition.all_columns]
+            if not requested_columns or unknown_columns or len(requested_columns) != len(set(requested_columns)):
+                return page_error(request, BookflowError(
+                    "E_LIST_FILTER",
+                    details={
+                        "problem": "columns must be a unique comma-separated selection",
+                        "unknown": unknown_columns,
+                        "allowed": list(definition.all_columns),
+                    },
+                ))
+            columns = requested_columns
         return render(
             "list.html",
             request,
@@ -366,6 +380,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             filters=filters,
             selected_sort=raw.get("sort", ""),
             selected_direction=raw.get("direction", "asc"),
+            selected_columns=",".join(columns),
             extra={k: v for k, v in out.items() if k != "items"},
         )
 
