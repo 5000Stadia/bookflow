@@ -98,7 +98,8 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - A single-word command (`upgrade`) has no verb: its noun page is its form, and it submits to `/hub/<noun>`.
 - `docs generate` is a rootless standalone command: no data root, lock, actor, capability, forwarding, or HTTP route. It renders all registered commands including standalone tooling, validates examples and schema descriptions, and copies packaged prose resources. Generation accepts only an absent, empty, or exactly marked real directory; it refuses symlinks and unrelated trees, validates a sibling stage, swaps it atomically, and restores the previous complete tree if publication fails. `--check` performs a read-only byte/path comparison and reports sorted missing, extra, and changed paths as `E_DOCS_STALE`.
 - The cold-start test budgets `bookflow --help` below 300 ms; neither root help nor command discovery imports FastAPI, uvicorn, or the workbench.
-- The suite is 287 tests in 170.26 s on this machine (Linux, ext4, Python 3.12). Duration is diagnostic rather than a release budget. The host/workbench/local group contains 87 tests.
+- The suite is 529 tests in 364.61 s on this machine (Linux, ext4, Python 3.12). Duration is diagnostic rather than a release budget. The host/workbench/local group contains 87 tests; the row 5 list group contains 233.
+- Tests that need a seeded data root copy one built once per session (tests/conftest.py::_seeded_template) rather than running rollout each time. Rollout now runs the company migration chain, applies a chart, and installs the profile seed manifests, about 2.5 s; the copy is about 2 ms and the tree is byte-identical, so each test still gets its own isolated root. This halved the suite, 752 s to 365 s.
 
 ## Verified on this machine (Linux, ext4, Python 3.12)
 

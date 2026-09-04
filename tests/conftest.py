@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -16,15 +17,36 @@ from bookflow.core.dispatch import run as dispatch_run  # noqa: E402
 BIN = Path(sys.executable).parent / "bookflow"
 
 
+@pytest.fixture(scope="session")
+def _seeded_template(tmp_path_factory):
+    """One initialized, demo-seeded data root, built once and copied per test.
+
+    Rollout since row 5 runs the company migration chain, applies a chart, and installs the
+    profile seed manifests, which costs about 2.5 s. Copying the finished tree costs about 2 ms
+    and yields a byte-identical root, so every test still gets its own isolated data root.
+    """
+    src = tmp_path_factory.mktemp("seed") / "root"
+    previous = os.environ.get("BOOKFLOW_DATA_ROOT")
+    os.environ["BOOKFLOW_DATA_ROOT"] = str(src)
+    try:
+        c = bookflow.connect(data_root=str(src))
+        c.init()
+        c.demo.reset()
+    finally:
+        if previous is None:
+            os.environ.pop("BOOKFLOW_DATA_ROOT", None)
+        else:
+            os.environ["BOOKFLOW_DATA_ROOT"] = previous
+    return src
+
+
 @pytest.fixture
-def root(tmp_path, monkeypatch):
+def root(tmp_path, monkeypatch, _seeded_template):
     """A fresh, initialized data root with the demo organization and company."""
     r = tmp_path / "root"
     monkeypatch.setenv("BOOKFLOW_DATA_ROOT", str(r))
     monkeypatch.delenv("BOOKFLOW_COMPANY", raising=False)
-    c = bookflow.connect(data_root=str(r))
-    c.init()
-    c.demo.reset()
+    shutil.copytree(_seeded_template, r)
     return r
 
 
