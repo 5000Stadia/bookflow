@@ -2,86 +2,90 @@
 
 ## What this row adds
 
-`bookflow serve`: the HTTP host that exposes every registered command over loopback with the same inputs, outputs, and errors as the CLI, a browser login and company picker, generated workbench pages for every list, record, and command, the server-sent event feed, and the local hand-off that lets a CLI or library call on the same machine forward to a running host.
+`bookflow serve`: the HTTP host that exposes every registered command over loopback with the same inputs, outputs, and errors as the CLI, browser login and a company picker, generated workbench pages for every noun and verb, the server-sent event feed, and the local hand-off by which a CLI or library call on the host's machine runs through the host instead of waiting on the lock.
+
+## One core entry point
+
+`core/dispatch.py` gains `execute(cmd, raw_input, ctx, s, *, company_selector, company_source, dry_run)`: input validation (`E_VALIDATION`, `E_CONTEXT_IN_INPUT`), context validation, the dry-run-on-read and selector-on-hub-command usage checks, `run_in_session`, and the error boundary (path redaction for non-hub-admins, OS and SQLite failures to `E_IO`). `run()` becomes: resolve the data root, take the lock, open the hub, load the actor, migrate, then `execute`. The host and `demo reset` call `execute`; no adapter re-implements any of it (blueprint 2).
+
+Registry additions this row: `local_only` (commands that act on the calling process or its OS login and are never served over HTTP: `init`, `serve`, `company use`); `version_source` on update commands, the show command and output field path that supply `expected_version` (`company update` → `company show`, `info_version`); and per noun, in `NOUN_META`, the record type its records are audited under and the positional that identifies a record (`company` → `company_info`, the selected company; `directive` → `directive`, positional `directive`; `audit` → event id, positional `event`). Pages and forms read only these.
 
 ## Modules
 
 ```
 src/bookflow/
-  adapters/http/
-    app.py                 FastAPI application factory; routes generated from the registry; OpenAPI from input and output models
-    auth.py                bearer tokens and browser session cookies -> Session actor (hub api_tokens with kind session or bearer)
-    routes.py              POST /commands/{name} (hub scope), POST /companies/{selector}/commands/{name} (company scope), GET /companies/{selector}/events (SSE), GET /openapi.json, /login, /logout
-    errors.py              BookflowError -> status codes per blueprint 15.2; the same JSON error document as the CLI
-    forward.py             client side: if root.lock names a live host, send the command to it over loopback and return its result
-  adapters/workbench/
-    pages.py               routes for /, /login, /c/{company}/, /c/{company}/{noun}, /c/{company}/{noun}/{id}, /c/{company}/{noun}/{verb}, /c/{company}/audit, /c/{company}/activity/{type}/{id}
-    forms.py               input model -> HTML form (one input per leaf field, typed, description, choices, defaults, expected_version hidden field from the show it rendered)
-    tables.py              list output -> table with the same columns the CLI prefers; record output -> field view with nested sections
-    templates/             Jinja2: base, login, picker, index, list, record, form, audit, result, error
-    static/                one stylesheet, htmx.min.js (vendored), no build step
-  core/host.py             HostRunner: holds the data-root lock for its lifetime, one hub connection, a reader pool per company, one writer queue per database; runs commands through run_in_session on a worker thread
-  commands/hub_cmds.py     + serve (hub; long-running), token issue/list/revoke (hub admin; session tokens are issued by /login), user set-password, user add (hub admin), membership grant/revoke (admin or owner on the scope)
+  core/dispatch.py           + execute(); run() reshaped around it
+  core/forward.py            standard library only: if root.lock is held by a live host, send the call over the host's Unix socket and return its result; used by run() before taking the lock
+  core/host.py               Host: holds the data-root lock and a long-lived writable connection per database on one writer thread; reader connections per request; passive checkpoints on a schedule and a truncating checkpoint at shutdown; commit notifications for the event stream
+  adapters/http/app.py       FastAPI application factory; routes generated from the registry; OpenAPI from the registry
+  adapters/http/auth.py      session cookies and bearer tokens -> actor
+  adapters/http/routes.py    command routes, login/logout, events, openapi, health
+  adapters/http/local.py     the Unix-socket listener for forwarded calls; peer credentials -> OS login
+  adapters/workbench/        pages.py, forms.py, tables.py, templates/, static/ (htmx.min.js vendored; one stylesheet)
+  commands/hub_cmds.py       + serve (local_only; hub admin), user set-password, token issue/list/revoke (bearer tokens for human users; agent tokens are row 7)
 ```
 
-`serve`, `token *`, `user *`, and `membership *` are row 7 in the intention; this row builds the subset the host cannot run without: `serve`, `user set-password`, session tokens issued by `/login`, and bearer tokens for programs. Row 7 keeps agent tokens bound to a principal, `user add`, and `membership grant/revoke`. The intention rows 3 and 7 are amended to say so in the same change.
+`user add` and `membership grant/revoke` stay in row 7. Row 3's target text names `user set-password`, session cookies, and bearer tokens; that is what this row builds.
 
-## The host
+## The host process
 
-`bookflow serve --bind 127.0.0.1:8123 [--allow-network]` opens the hub, takes the data-root lock, writes its pid and bind address into `root.lock`, and serves until interrupted. Inside the process:
+`bookflow serve --bind 127.0.0.1:8123 [--allow-network] [--secure-cookies]`, run by a hub admin (`E_PERMISSION` otherwise), sets umask `077` for its lifetime, takes the data-root lock, writes `command=serve`, its pid, bind address, socket path, and package version into `root.lock`, migrates the hub at startup with itself as the triggering actor, and serves until interrupted. Companies migrate on their first writable open exactly as dispatch does today, attributed to the request's actor.
 
-- Reads run concurrently: each request opens its own read-only connections (hub and company) on a worker thread; nothing serializes them.
-- Writes queue: one writer lock per database path inside the process; a write request takes the hub writer lock and, for company scope, the company's writer lock, in that order, runs `run_in_session` on a worker thread, and releases. Two writes to different companies run concurrently; two writes to one company serialize.
-- Every request builds a `Context` with interface `http` (or `gui` when the request carries the workbench's header), `client_name` from the `User-Agent` or the `X-Bookflow-Client` header, `client_host` from the peer address, `session_id` from the token or cookie, `request_id` fresh, and `reason`, `source_ref`, `directive`, `idempotency_key` from the headers of blueprint 5.2.
-- Schema migration happens once at startup, never per request.
+- **One writer thread** per host owns a long-lived writable connection per database (hub and each company it has written), opened on that thread; every write request is queued to it and runs there through `execute`. All writes serialize; the concurrency the host offers is reads, which is what SQLite gives.
+- **Readers** open their own read-only connections per request on worker threads (`check_same_thread` holds because each connection lives and dies on one thread); nothing serializes reads. Reads never see a writable hub, so a read never completes a pending move.
+- **Checkpoints**: the writer runs `PRAGMA wal_checkpoint(PASSIVE)` after every write and a `TRUNCATE` checkpoint at graceful shutdown; `Database.close()`'s truncating checkpoint stays for one-shot CLI opens.
+- **Graceful shutdown**: stop accepting requests, finish queued writes, clear the host's own presence rows, checkpoint, release the lock, remove the socket.
+- **Reader pool**: keyed by company id, re-resolving the folder from the hub row on every open; `detach` and `demo reset` evict.
+- **Per-request Session**: the host builds a new `Session` for every request (hub connection, actor, memberships, config, `os_login` when known, `dry_run`) and shares none across threads.
 
-Locality: the host refuses to start on a non-local data root like any command. `--allow-network` is required to bind outside loopback; the help and the README say TLS termination is the deployer's job.
+## Local hand-off
 
-## Forwarding
-
-`core/dispatch.run` reads `root.lock` before trying to take it. When the file names a live host (pid alive, bind address present), the command is sent to `POST http://<bind>/commands/...` with the caller's OS login in a loopback-only header the host accepts only from peers on the same machine (`X-Bookflow-Local-Login`, verified by comparing the peer address to loopback), and the host's JSON response is returned as the command's output or raised as its error. So a CLI call while the host runs never waits on the lock and never sees `E_DB_BUSY`. The client and the CLI need no change; forwarding lives under `run`.
+`core/forward.py` runs inside `run()` before the lock: try the non-blocking lock first; only if that fails read the holder; forward only when the holder's `command` is `serve`, its pid is not this process, and its socket answers; otherwise proceed to the normal wait and `E_DB_BUSY`. `init` and `serve` are never forwarded. The call travels as one JSON envelope (`command`, `input`, `company_selector`, `company_source`, `dry_run`, and the caller's full `Context`) over the host's Unix domain socket at `<data_root>/host.sock` (mode `0600`, so only the data-root owner's processes can connect); the host takes the peer's uid from `SO_PEERCRED`, maps it to the OS login, and runs the call with the caller's own context, so a forwarded CLI call is recorded with interface `cli`, its own `session_id`, `client_version`, and hostname, and `company use` writes the forwarder's login table. On Windows the socket is a named pipe with the same envelope and the pipe's client identity. The host and the forwarder compare package versions; a mismatch is `E_VERSION_MISMATCH` naming both. Loopback TCP carries no identity; there is no login header.
 
 ## Authentication
 
-- `POST /login` with `username` and `password` (argon2id, `user set-password` sets one; a user with no password cannot log in) sets an HTTP-only cookie holding a session token: a row in `api_tokens` with `kind = session`, `expires_at` 12 hours after last use, refreshed on each request.
-- `Authorization: Bearer <secret>` resolves a token row of kind `bearer` (issued with `token issue --for <user> --label`, shown once) or `session`.
-- The actor is the token's user; `on_behalf_of` is the token's `on_behalf_of` (null for humans in this row; row 7 binds agents).
-- Every other route returns 401 with the error document when neither is present; `/openapi.json` and `/login` are open.
+- `POST /login` with `username` and `password` (argon2id; `user set-password` sets one: a user always sets their own, a hub admin may set anyone's, and the CLI prompts on stderr when the value is omitted) returns a session cookie: `HttpOnly`, `SameSite=Lax`, `Secure` when `--secure-cookies`, holding a token row of kind `session`. Every login failure, unknown user, wrong password, or no password, is `E_LOGIN_FAILED` (401) after a 500 ms delay. Login and logout are audited hub events; token hashes are masked in snapshots.
+- Session liveness: `api_tokens.last_used_at` and `expires_at` (12 hours after last use) are ephemeral columns, exempt from versioning and audit like presence, refreshed on the writer at most every five minutes, never on the read path.
+- `Authorization: Bearer <secret>` resolves a `bearer` token issued with `token issue --for <user> --label <label>` (shown once, hashed at rest, revocable, expiring). In this row bearer tokens bind human users only; `client_name` is the token's label when no header is given, and agent tokens with a principal arrive in row 7.
+- Cookie-authenticated command routes require the header `X-Bookflow-Workbench: 1`, which the workbench sends on every request and which a cross-origin form cannot; bearer requests are exempt.
+- `/login`, `/openapi.json`, and `/health` are open; `/health` returns only the host's pid, bind, version, and the code's head revisions.
 
 ## Routes
 
-`POST /commands/{name}` for hub scope and `POST /companies/{selector}/commands/{name}` for company scope, where `{selector}` is a company id, `Organization/Company` percent-encoded, or a display name, and `{name}` is the command name with spaces as dashes (`company-update`). The body is the input model as JSON; `?dry_run=true` is the dry run. The response is the output model as JSON, status 200. Errors: 400 with the error document for named errors, 401 for missing or bad token, 403 for `E_PERMISSION`, 404 for `E_COMPANY_NOT_FOUND`, `E_ORGANIZATION_NOT_FOUND`, `E_EVENT_NOT_FOUND`, `E_DIRECTIVE_NOT_FOUND`, `E_RECORD_NOT_FOUND`, 409 for `E_VERSION_CONFLICT`, `E_IDEMPOTENCY_MISMATCH`, `E_NAME_TAKEN`, `E_DB_BUSY`, 422 for `E_VALIDATION`, 500 for `E_INTERNAL`; every status carries the same `{code, message, details}` document the CLI prints. `GET /openapi.json` is generated from the registry with one operation per command and the input and output schemas. `GET /companies/{selector}/events?after=<seq>&...filters` streams `audit tail` results as server-sent events, one event per message with `id: <seq>`, polling the database every two seconds inside the host; a client reconnecting with `Last-Event-ID` resumes. `GET /health` returns the host's pid, bind, and schema revisions.
+`POST /commands/{noun}/{verb}` for hub scope and `POST /companies/{selector}/commands/{noun}/{verb}` for company scope; `{noun}` may itself contain a slash for two-word nouns (`hub/audit`), verbs keep their dashes (`set-password`). `{selector}` is a company id, or a display name, or `organization~company` (the tilde replaces the slash so the path stays one segment). The body is the raw JSON input, passed to `execute` untouched, so context keys in the body are `E_CONTEXT_IN_INPUT` and unknown commands are the `E_USAGE` document, never a framework 404 or 422. `?dry_run=true` is the dry run and `E_USAGE` on a read. Context comes from the headers of blueprint 5.2. `local_only` commands are not routed.
+
+Status codes, each with the same `{code, message, details}` document the CLI prints: 200 success; 401 unauthenticated and `E_LOGIN_FAILED`; 403 `E_PERMISSION`; 404 `E_COMPANY_NOT_FOUND`, `E_ORGANIZATION_NOT_FOUND`, `E_EVENT_NOT_FOUND`, `E_DIRECTIVE_NOT_FOUND`, `E_RECORD_NOT_FOUND`; 409 `E_VERSION_CONFLICT`, `E_IDEMPOTENCY_MISMATCH`, `E_NAME_TAKEN`, `E_DB_BUSY`; 422 `E_VALIDATION`; 400 every other named error; 500 `E_INTERNAL`. The additions to blueprint 15.2's table exist because an HTTP client that never reads the body should still be able to tell not-found, conflict, and invalid input apart; blueprint 15.2 is amended to this table.
+
+`GET /openapi.json` is generated from the registry: one operation per routed command with the input and output schemas, the context headers as parameters, the selector forms, `dry_run`, the error document schema, and each operation's error codes. `GET /companies/{selector}/events?after=<seq>&...filters` streams `audit tail` as server-sent events with `id: <seq>`; the host's writer signals a per-database condition after every commit, so subscribers wake on commit rather than polling; a burst larger than `limit` is drained in a loop; `Last-Event-ID` wins over `after`; a keep-alive comment every 15 seconds; token revocation ends the stream. `GET /companies/{selector}/hub-events` does the same for the hub log with the same visibility as `hub audit tail`.
 
 ## The workbench
 
-Server-rendered HTML with HTMX for partial updates; no JavaScript build step; one stylesheet; readable, unstyled beyond that. Pages, all generated from the registry:
+Server-rendered HTML with HTMX; no build step; one stylesheet. Workbench requests are recorded with interface `http` and `client_name` `bookflow-workbench` (blueprint 4.4 reserves `gui` for the product client). The URL is the working company; nothing is stored in the session beyond the token.
 
-- `/login`, `/logout`.
-- `/`: the company picker from `company list`; selecting sets the working company in the session.
-- `/c/{company}/`: the noun index: every noun with company-scope commands, plus hub audit for hub admins.
-- `/c/{company}/{noun}`: the `list` output as a table with the CLI's preferred columns, an "include inactive" toggle where the input has it, and a row link to the record page.
-- `/c/{company}/{noun}/{id}`: the `show` output as a field view, `editing_by` at the top, the record's audit events below (`audit list --record-type --record-id`), and a button per verb the actor's role permits; the form for an update carries `expected_version` from the show it rendered, so the workbench never blind-writes; opening the page calls `presence set` and leaving it calls `presence clear`, both through HTMX.
-- `/c/{company}/{noun}/{verb}`: a form generated from the input model: one input per leaf field, typed (`number`, `date`, `checkbox`, `select` for choices, `text`), the description as help, defaults filled, `reason` and `source_ref` fields on writes, a `directive` select on company writes, `--clear` as a per-field "clear" checkbox on update forms; submit runs the command and renders the output as a field view or the error document with its code and fields.
-- `/c/{company}/audit`: `audit list` with its filters and paging by `next_before`; a row opens `audit show` with entries and diffs.
-- `/hub/audit`: the same for hub admins.
-- `/c/{company}/activity/{type}/{id}`: the record's audit events in time order (the row 6 feed will merge notes and attachments into this page).
+Pages, all generated from the registry and `NOUN_META`:
 
-Every page takes its data from the same routes a program would call, through the in-process runner, with interface `gui`.
+- `/login`, `/logout`; `/`: the company picker from `company list`.
+- `/c/{company}/`: nouns with company-scope commands; `/hub/`: hub nouns (`organization`, `company`, `demo`, `upgrade`, `user`, `token`, `hub audit`), each command a page, so every registered command that is not `local_only` has one.
+- `/c/{company}/{noun}`: the `list` output as a table with the CLI's preferred columns and an "include inactive" toggle where the input has it; each row links to the record page by the noun's identifying positional.
+- `/c/{company}/{noun}/{id}`: the `show` output as a field view, `editing_by` at the top, the record's audit events below (`audit list --record-type <NOUN_META record type> --record-id`), a button per verb the actor's role permits, an HTMX heartbeat calling `presence set` every 30 seconds while the page is open and `presence clear` on leave, skipped for members below `standard`.
+- `/c/{company}/{noun}/{verb}`: a form generated from the input model. The workbench's own form route translates form encoding into the command's JSON by one generic rule: a leaf is sent only when its value is non-blank, or when its "clear" checkbox is ticked, in which case `null` is sent; nested names are dotted; checkboxes are booleans; the model types numbers; `reason`, `source_ref`, `directive`, and `idempotency_key` fields become the context headers; an update form reached from a record page carries `expected_version` from the field `version_source` names on the show it rendered, and an update form reached any other way fetches that show first, so the workbench never blind-writes. Submit runs the command through `execute` and renders the output as a field view or the error document with its code and fields.
+- `/c/{company}/audit` and `/hub/audit`: `audit list` and `hub audit list` with their filters and `next_before` paging, visibility exactly as the commands give it; a row opens `show`.
 
 ## Demo
 
-The seed gains nothing; the workbench shows what exists.
+The seed is unchanged: users and passwords are hub state that row 7 owns, and the README's run command gains `bookflow user set-password` so the demo owner can log in. Section 9.3 records the exemption.
 
 ## Error matrix additions
 
-`E_LOGIN_FAILED` (bad username or password, 401), `E_NO_PASSWORD` (login for a user without one, 401), `E_TOKEN_EXPIRED` (401), `E_HOST_UNREACHABLE` (a CLI call found a live host in `root.lock` but could not reach it; the message says to stop the stale host or remove the lock). `serve` refuses to start when another host holds the lock (`E_DB_BUSY`).
+`E_LOGIN_FAILED` (401), `E_TOKEN_EXPIRED` (401), `E_VERSION_MISMATCH` (forwarder and host differ), `E_HOST_UNREACHABLE` (a live `serve` holder whose socket does not answer; the message says to stop that host, never to remove the lock), `E_NETWORK_NOT_ALLOWED` (`serve --bind` outside loopback without `--allow-network`). `serve` returns `E_DB_BUSY` when another process holds the lock.
 
 ## Edges
 
 - Does not touch: lists, ledger, attachments, agent tokens bound to principals, `user add`, `membership grant`, MCP.
-- The host is the single writer while it runs; a CLI on the same machine forwards; a CLI on another machine talks HTTP with a bearer token.
-- Cold start of the CLI is unaffected: `adapters/http` and `adapters/workbench` are imported only by `serve`.
+- `core/forward.py` and `adapters/http/local.py` use only the standard library on the client side; `adapters/http/app.py` imports FastAPI only when `serve` runs, so CLI cold start is unaffected.
+- Uvicorn access logs are off; the host logs command names and request ids, never URLs with names or bodies.
+- IPv6 loopback forms (`::1`, `::ffff:127.0.0.1`) count as loopback for the bind check.
 
 ## Verification the builder will perform
 
-Tests: every registered command called through the library, the CLI, and HTTP with the same inputs and compared outputs and errors including status codes; a second process's CLI call forwarded to a running host and recorded with interface `cli`; concurrent reads not blocked by a long write; two writes to one company serialized and to two companies concurrent; login, session expiry, bearer tokens, 401s; the SSE stream delivering a new event and resuming from `Last-Event-ID`; the workbench pages rendered for every noun and verb with a form field per input leaf, an update form carrying `expected_version`, and a submit round trip through HTMX; `--allow-network` gating. By hand, and this is the human's taste gate: open the workbench in a browser, log in, pick the demo company, edit company information twice from two browsers to see the conflict, add a directive, watch presence, and read the audit page.
+Tests: every routed command called through the library, the CLI, and HTTP with the same inputs and compared outputs and errors including status codes; context keys in a JSON body → `E_CONTEXT_IN_INPUT`; unknown command → `E_USAGE` document; isolation over HTTP and the workbench (a member of A requesting B by id, name, or `organization~company` gets 404 with a body identical to a nonexistent id, and no path in any error); a forwarded CLI call recorded with interface `cli`, its own `session_id`, `client_version`, and hostname, and a forwarded `company use` writing the caller's login table; a process of another uid refused on the socket; `serve` and `init` never forwarded; a CSRF-shaped POST without the workbench header refused; two readers not blocked by a long write; writes serialized; a session refresh not written on reads and not audited; login and logout audited; the SSE stream delivering an event on commit, draining a burst, resuming from `Last-Event-ID`, and closing on revocation; every routed command's page rendering a form with one control per input leaf, an update form carrying `expected_version`, and a submit with blank fields changing nothing; the version-mismatch error; WAL size bounded after N writes with readers attached; a startup migration attributed to the serve actor; `--allow-network` gating. By hand, and this is the human's taste gate: open the workbench in a browser, log in, pick the demo company, edit company information from two browsers to see the conflict and the warning, add a directive, watch presence, and read the audit page.
