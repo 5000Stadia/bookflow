@@ -13,8 +13,15 @@ from bookflow.company import charts, schema
 from bookflow.storage.engine import open_database
 
 
-def _database(client) -> Path:
-    return Path(client.company.show(company="Demo Plumbing Co")["path"]) / "company.db"
+def _chartless_database(client) -> Path:
+    made = client.company.new(
+        legal_name="Chart Application Test LLC",
+        home_currency="USD",
+        organization="Demo Holdings LLC",
+        timezone="UTC",
+        chart="none",
+    )
+    return Path(made["path"]) / "company.db"
 
 
 def _ids():
@@ -60,7 +67,8 @@ def test_manifest_validation_rejects_duplicate_or_incomplete_roles():
 
 def test_chart_plan_is_write_free_and_apply_is_one_complete_set(client):
     ids = _ids()
-    with open_database(_database(client), writable=True) as db:
+    database = _chartless_database(client)
+    with open_database(database, writable=True) as db:
         db.raw.execute("BEGIN IMMEDIATE")
         company = db.conn.execute(sa.select(schema.company_info)).mappings().one()
         plan = charts.plan_chart_application(
@@ -73,14 +81,14 @@ def test_chart_plan_is_write_free_and_apply_is_one_complete_set(client):
 
     assert after["default_chart"] == "contractor" and after["default_chart_version"] == 1
     assert len(rows) == len(charts.get_manifest("contractor").accounts)
-    with open_database(_database(client), writable=False) as db:
+    with open_database(database, writable=False) as db:
         stored = db.conn.execute(sa.select(schema.accounts).order_by(schema.accounts.c.number)).mappings().all()
         info = db.conn.execute(sa.select(schema.company_info)).mappings().one()
         assert len(stored) == len(rows)
         assert {row["system_role"] for row in stored if row["system_role"]} == charts.required_system_roles()
         assert info["default_chart"] == "contractor" and info["default_chart_version"] == 1
 
-    with open_database(_database(client), writable=True) as db:
+    with open_database(database, writable=True) as db:
         with pytest.raises(BookflowError) as exc:
             charts.plan_chart_application(db, "general", actor_id=after["updated_by"], via="python")
     assert exc.value.code == "E_CHART_EXISTS"
@@ -88,7 +96,7 @@ def test_chart_plan_is_write_free_and_apply_is_one_complete_set(client):
 
 def test_existing_account_conflict_rejects_before_any_chart_write(client):
     ids = _ids()
-    with open_database(_database(client), writable=True) as db:
+    with open_database(_chartless_database(client), writable=True) as db:
         db.raw.execute("BEGIN IMMEDIATE")
         company = db.conn.execute(sa.select(schema.company_info)).mappings().one()
         prospective = charts.plan_chart_application(
@@ -113,3 +121,44 @@ def test_unknown_chart_uses_nonrevealing_record_not_found_shape():
         charts.get_manifest("missing")
     assert exc.value.code == "E_RECORD_NOT_FOUND"
     assert exc.value.details == {"record_type": "chart", "selector": "missing", "suggestions": []}
+
+
+def test_company_rollout_applies_selected_chart_and_standard_profile(client):
+    made = client.company.new(
+        legal_name="Service Books LLC",
+        home_currency="USD",
+        organization="Demo Holdings LLC",
+        timezone="UTC",
+        chart="service",
+    )
+    path = Path(made["path"]) / "company.db"
+    with open_database(path, writable=False) as db:
+        info = db.conn.execute(sa.select(schema.company_info)).mappings().one()
+        account_count = db.conn.execute(sa.select(sa.func.count()).select_from(schema.accounts)).scalar_one()
+        term_count = db.conn.execute(sa.select(sa.func.count()).select_from(schema.terms)).scalar_one()
+        events = db.raw.execute(
+            "SELECT command FROM audit_events ORDER BY seq"
+        ).fetchall()
+
+    assert info["default_chart"] == "service" and info["default_chart_version"] == 1
+    assert info["version"] == 2
+    assert account_count == len(charts.get_manifest("service").accounts)
+    assert term_count == 6
+    assert events == [("company new",), ("chart apply",), ("profile apply",)]
+
+
+def test_explicit_chartless_rollout_still_applies_standard_profile(client):
+    made = client.company.new(
+        legal_name="Chartless Books LLC",
+        home_currency="USD",
+        organization="Demo Holdings LLC",
+        timezone="UTC",
+        chart="none",
+    )
+    with open_database(Path(made["path"]) / "company.db", writable=False) as db:
+        info = db.conn.execute(sa.select(schema.company_info)).mappings().one()
+        account_count = db.conn.execute(sa.select(sa.func.count()).select_from(schema.accounts)).scalar_one()
+        profile_count = db.conn.execute(sa.select(sa.func.count()).select_from(schema.payment_methods)).scalar_one()
+    assert info["default_chart"] is None and info["version"] == 1
+    assert account_count == 0
+    assert profile_count == 11

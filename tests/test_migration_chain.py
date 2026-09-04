@@ -289,7 +289,13 @@ def test_old_data_root_upgrades_end_to_end(tmp_path, monkeypatch):
     root = tmp_path / "old"
     monkeypatch.setenv("BOOKFLOW_DATA_ROOT", str(root))
     c = bookflow.connect(data_root=str(root)); c.init(); c.organization.new(name="Old Org")
-    made = c.company.new(legal_name="Old Co", home_currency="USD", organization="Old Org", timezone="UTC")
+    made = c.company.new(
+        legal_name="Old Co",
+        home_currency="USD",
+        organization="Old Org",
+        timezone="UTC",
+        chart="none",
+    )
     common = ["id", "version", "created_at", "created_by", "created_via", "updated_at", "updated_by", "updated_via"]
     _downgrade_copy(root / "hub.db", "hub", {
         "users": common + ["kind", "username", "display_name", "owner_user_id", "password_hash", "hub_admin", "timezone", "active"],

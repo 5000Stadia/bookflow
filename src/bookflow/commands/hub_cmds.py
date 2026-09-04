@@ -337,7 +337,10 @@ class CompanyNewInput(BaseModel):
     home_currency: str = Field(description="ISO 4217 code, upper case; immutable after creation", max_length=3)
     organization: str | None = Field(None, description="Organization id or name; defaults when exactly one is visible")
     display_name: str | None = Field(None, description="Name shown in lists; defaults to legal_name", max_length=200)
-    chart: Literal["none"] = Field("none", description="Chart of accounts to seed; only none in this version")
+    chart: Literal["general", "service", "product", "contractor", "retail", "nonprofit", "none"] = Field(
+        "general",
+        description="Packaged chart of accounts to seed, or none for a chartless company",
+    )
     tax_id_kind: Literal["ein", "ssn"] = Field("ein", description="Kind of tax id")
     tax_id: str | None = Field(None, description="NN-NNNNNNN for ein, NNN-NN-NNNN for ssn")
     entity_type: Literal["sole_proprietor", "partnership", "llc", "s_corp", "c_corp", "nonprofit", "other"] = "other"
@@ -514,7 +517,17 @@ def plan_company_new(inp: CompanyNewInput, ctx: Context, s: Session) -> Plan:
     folder = choose_folder_name(org_folder, display)
     cid = new_id()
     preview = CompanyNewOutput(company_id=cid, organization_id=orow["id"], display_name=display, path=str(org_folder / folder))
-    return Plan(preview=preview, data={"org": orow, "display": display, "info": _info_columns(inp), "company_id": cid, "validated": validated})
+    return Plan(
+        preview=preview,
+        data={
+            "org": orow,
+            "display": display,
+            "info": _info_columns(inp),
+            "company_id": cid,
+            "chart": inp.chart,
+            "validated": validated,
+        },
+    )
 
 
 @company_new.applier
@@ -527,7 +540,16 @@ def apply_company_new(plan: Plan, ctx: Context, s: Session) -> Applied:
         idempotency.store(s.hub, s.actor.id, ctx.idempotency_key, "company new", ihash, ctx.request_id, {"path": plan.preview.path, "company_id": cid}, state="in_progress")
         s.hub.raw.execute("COMMIT")
         s.hub.raw.execute("BEGIN IMMEDIATE")
-    folder = rollout.create_company_folder(s, s.abs_path(orow["path"]), cid, display, plan.data["info"], VIA(ctx), ctx)
+    folder = rollout.create_company_folder(
+        s,
+        s.abs_path(orow["path"]),
+        cid,
+        display,
+        plan.data["info"],
+        VIA(ctx),
+        ctx,
+        chart=plan.data["chart"],
+    )
     try:
         row, touched = co.register(s, company_id=cid, organization_id=orow["id"], display_name=display, rel_path=s.rel_path(folder),
                                    legal_name=plan.data["info"]["legal_name"], home_currency=plan.data["info"]["home_currency"],
@@ -795,7 +817,16 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
     if inp.timezone is None:
         inp = inp.model_copy(update={"timezone": _machine_zone() or "UTC"})
     cid = new_id()
-    folder = rollout.create_company_folder(s, s.abs_path(orow["path"]), cid, display, _info_columns(inp), VIA(ctx), ctx)
+    folder = rollout.create_company_folder(
+        s,
+        s.abs_path(orow["path"]),
+        cid,
+        display,
+        _info_columns(inp),
+        VIA(ctx),
+        ctx,
+        chart=inp.chart,
+    )
     row, t_co = co.register(s, company_id=cid, organization_id=orow["id"], display_name=display, rel_path=s.rel_path(folder), legal_name=inp.legal_name,
                             home_currency=inp.home_currency, schema_revision=migrate.HEADS["company"], via=VIA(ctx), is_demo=True)
     out = DemoResetOutput(organization_id=orow["id"], company_id=cid, display_name=display, path=str(folder), trashed_path=trashed)

@@ -17,6 +17,7 @@ fiscal_year_start_month = 1
 home_currency = "USD"
 timezone = "America/Chicago"
 report_basis = "accrual"
+chart = "contractor"
 
 [company.address]
 line1 = "100 Main St"
