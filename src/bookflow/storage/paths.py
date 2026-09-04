@@ -9,6 +9,7 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
+from bookflow.core.durability import write_metadata
 from bookflow.core.errors import BookflowError
 
 _BAD = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
@@ -100,10 +101,7 @@ def _write_toml(path: Path, data: dict[str, Any]) -> None:
         else:
             s = str(v).replace("\\", "\\\\").replace('"', '\\"')
             lines.append(f'{k} = "{s}"')
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    os.chmod(tmp, 0o600)
-    os.replace(tmp, path)
+    write_metadata(path, "\n".join(lines) + "\n")
 
 
 def write_company_marker(folder: Path, *, company_id: str, state: str, display_name: str | None = None, schema_revision: str | None = None) -> None:

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import secrets
 import threading
 import time
 from html import escape
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 from urllib.parse import urlencode
 
@@ -18,6 +18,7 @@ from starlette.concurrency import run_in_threadpool
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from bookflow.adapters.workbench import forms as F
+from bookflow.adapters.workbench import workflows as W
 from bookflow.core import registry
 from bookflow.core.errors import BookflowError
 from bookflow.core.models import list_columns
@@ -70,7 +71,7 @@ def _nouns(scope: str) -> list[str]:
 
 def _verbs(noun: str, scope: str | None = None) -> list[registry.Command]:
     """A noun's routed commands; on a hub page only hub-scoped ones, on a company page only company-scoped ones."""
-    return [c for c in registry.routed_commands() if c.noun == noun and (scope is None or c.scope == scope)]
+    return [c for c in registry.routed_commands() if c.noun == noun and c.verb != "query" and (scope is None or c.scope == scope)]
 
 
 _GROUP_ORDER = (
@@ -228,38 +229,9 @@ def _reference_target(
     return (normalized if normalized in targets else None), discriminator
 
 
-_SPECIAL_FORM_REFERENCES: dict[tuple[str, str], tuple[str, ...]] = {
-    ("customer", "customer"): ("customer",),
-    ("customer", "vendor"): ("vendor",),
-}
-
-_COLLECTION_FORM_REFERENCES: dict[tuple[str, str], tuple[tuple[str, ...], bool]] = {
-    ("price-level", "items.item_id"): (("item",), False),
-    ("item", "members.component_item_id"): (("item",), False),
-    ("item", "members.unit_id"): (("unit-of-measure",), True),
-    ("item", "vendor_profiles.vendor_id"): (("vendor",), False),
-    ("vendor", "expense_accounts.account_id"): (("account",), False),
-}
-
-
 def _form_reference(definition: Any, noun: str, path: str) -> Any | None:
-    """Resolve declarative references plus relationship-command selectors."""
-    declared = F.reference_for_path(definition, path)
-    if declared is not None:
-        return declared
-    collection_reference = _COLLECTION_FORM_REFERENCES.get((noun, path))
-    if collection_reference is not None:
-        targets, child_units = collection_reference
-        return SimpleNamespace(
-            target_nouns=targets,
-            many=False,
-            field=path,
-            child_units=child_units,
-        )
-    targets = _SPECIAL_FORM_REFERENCES.get((noun, path))
-    if targets is None:
-        return None
-    return SimpleNamespace(target_nouns=targets, many=False, field=path)
+    """Project the domain's sole authoritative reference declarations."""
+    return F.reference_for_path(definition, path)
 
 
 def _decorate_collection_references(
@@ -269,6 +241,7 @@ def _decorate_collection_references(
     noun: str,
     company_id: str,
     path: str,
+    create_targets: Any = None,
 ) -> None:
     """Attach scoped search metadata to scalar leaves in recursive collections."""
     item = schema["item"]
@@ -279,6 +252,7 @@ def _decorate_collection_references(
             noun=noun,
             company_id=company_id,
             path=path,
+            create_targets=create_targets,
         )
         return
     if item["kind"] != "object":
@@ -292,6 +266,7 @@ def _decorate_collection_references(
                 noun=noun,
                 company_id=company_id,
                 path=child_path,
+                create_targets=create_targets,
             )
             continue
         reference = _form_reference(definition, noun, child_path)
@@ -302,6 +277,7 @@ def _decorate_collection_references(
             "target": target,
             "suggestion_url": f"/c/{company_id}/_references/{noun}/{child_path}?target={target}",
             "include_closest": bool(getattr(reference, "child_units", False)),
+            "add_targets": create_targets((target,)) if create_targets and not getattr(reference, "child_units", False) else [],
         }
 
 
@@ -335,7 +311,7 @@ def _matching_vendor_link(
 def _inactive_toggle(path: str, request: Request, *, include: bool) -> str:
     """Toggle inactive rows without discarding any other list-page state."""
     pairs = [(key, value) for key, value in request.query_params.multi_items()
-             if key != "include_inactive"]
+             if key not in ("include_inactive", "cursor")]
     if not include:
         pairs.append(("include_inactive", "1"))
     query = urlencode(pairs)
@@ -371,10 +347,17 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.http.app import STATUS, error_response, safe_workbench_destination
 
     flashes = _FlashStore()
+    static_urls = {
+        name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
+        for name in ("style.css", "htmx.min.js", "workflow.js")
+    }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
         if not ctx.get("company_id") and request.cookies.get(LAST_COMPANY):
             ctx.setdefault("header_company_id", request.cookies.get(LAST_COMPANY))  # hub pages keep the company links
+        company_view = getattr(request.state, "workbench_company", None)
+        if company_view and company_view["company_id"] == (ctx.get("company_id") or ctx.get("header_company_id")):
+            ctx["company_label"] = company_view["display_name"]
         flash_id = request.query_params.get("flash")
         if flash_id:
             try:
@@ -384,7 +367,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             else:
                 ctx.setdefault("flash_result", flashes.take(flash_id, session_token))
         tpl = env.get_template(name)
-        response = HTMLResponse(tpl.render(request=request, hub_nouns=_nouns("hub"), company_nouns=_nouns("company"), json=json, **ctx),
+        response = HTMLResponse(tpl.render(request=request, static_urls=static_urls, hub_nouns=_nouns("hub"), company_nouns=_nouns("company"), json=json, **ctx),
                                 status_code=status_code)
         if ctx.get("flash_result") is not None:
             response.headers["Cache-Control"] = "no-store"
@@ -406,7 +389,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             ctx = ctx.model_copy(update={"reason": headers.get("X-Bookflow-Reason", ctx.reason), "source_ref": headers.get("X-Bookflow-Source-Ref", ctx.source_ref),
                                          "directive_id": headers.get("X-Bookflow-Directive", ctx.directive_id), "idempotency_key": headers.get("Idempotency-Key", ctx.idempotency_key)})
         ctx = ctx.model_copy(update={"client_name": "bookflow-workbench"})
-        return run_command(cmd, raw, ctx, cred, company, "option" if company else "none", dry_run)
+        result = run_command(cmd, raw, ctx, cred, company, "option" if company else "none", dry_run)
+        if name == "company show":
+            request.state.workbench_company = result
+        return result
 
     @app.get("/static/{name}")
     def static(name: str):
@@ -502,7 +488,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         target = requested_target.replace("_", "-") if requested_target else (targets[0] if len(targets) == 1 else None)
         if target not in targets:
             return page_error(request, BookflowError("E_USAGE", message="invalid reference target"))
-        list_command = registry.get(f"{target} list")
+        target_definition = registry.noun_meta(target).get("definition")
+        list_command = registry.get(target_definition.query_command) if target_definition else None
         if list_command is None or list_command.local_only:
             return page_error(request, BookflowError("E_USAGE", message="reference target is not listable"))
         if not _role_allows(list_command, company_view, hub_admin=cred.hub_admin):
@@ -581,7 +568,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     break
             return HTMLResponse("".join(options), headers={"Cache-Control": "no-store"})
         try:
-            output = run(request, list_command.name, {"query": query}, company_id)
+            output = run(request, list_command.name, {"query": query, "projection": "reference", "limit": 25}, company_id)
         except BookflowError as err:
             return page_error(request, err)
         relationship_versions: dict[str, int] = {}
@@ -609,7 +596,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             stable_id = row.get(identifier) or row.get("id")
             if stable_id is None or not row.get("active", True):
                 continue
-            label = _reference_label(target, row, company_view)
+            label = str(row["label"])
             relationship_version = relationship_versions.get(str(stable_id), "")
             options.append(
                 f'<option value="{escape(str(stable_id), quote=True)}" '
@@ -639,7 +626,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                           if not cmd.is_write or _role_allows(cmd, role_view, hub_admin=cred.hub_admin)]
         else:
             page_verbs = [cmd for cmd in page_verbs if _role_allows(cmd, {}, hub_admin=cred.hub_admin)]
-        cmd = registry.get(f"{noun} list")
+        meta = registry.noun_meta(noun)
+        definition = meta.get("definition")
+        cmd = registry.get(definition.query_command if definition is not None and company_id else f"{noun} list")
         if cmd is None:
             single = registry.get(noun)  # a single-word command such as `upgrade`: the noun's page is its form
             if single is not None and not single.local_only:
@@ -652,6 +641,14 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                           has_inactive=False, include=False, verbs=page_verbs, extra={"note": "this noun has no list; use its actions"})
         include = request.query_params.get("include_inactive") == "1"
         raw: dict[str, Any] = {}
+        if definition is not None and company_id:
+            try:
+                limit = int(request.query_params.get("limit", "50"))
+            except ValueError:
+                return page_error(request, BookflowError("E_VALIDATION", details={"fields": [{"field": "limit", "problem": "must be an integer"}]}))
+            raw.update({"projection": "summary", "limit": limit})
+            if request.query_params.get("cursor"):
+                raw["cursor"] = request.query_params["cursor"]
         for field in ("query", "sort", "direction"):
             value = request.query_params.get(field)
             if value and field in cmd.input_model.model_fields:
@@ -664,22 +661,26 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         try:
             out = run(request, cmd.name, raw, company_id if cmd.scope == "company" else None)
         except BookflowError as e:
+            if e.code == "E_QUERY_STALE":
+                restart = request.url.path + "?" + urlencode([(k, v) for k, v in request.query_params.multi_items() if k != "cursor"])
+                return render("error.html", request, error={**e.to_dict(), "message": "The list changed while you were browsing. Restart to see current results."}, restart_url=restart)
             return page_error(request, e)
         meta = registry.noun_meta(noun)
         items = out.get("items", [])
         definition = meta.get("definition")
-        columns = list(definition.default_columns) if definition is not None else list_columns(items)
+        columns = list(definition.summary_columns) if definition is not None else list_columns(items)
         column_text = request.query_params.get("columns", "")
         if column_text and definition is not None:
             requested_columns = [field.strip() for field in column_text.split(",") if field.strip()]
-            unknown_columns = [field for field in requested_columns if field not in definition.all_columns]
+            allowed_columns = (*definition.summary_columns, definition.display_field, "id", "version", "active")
+            unknown_columns = [field for field in requested_columns if field not in allowed_columns]
             if not requested_columns or unknown_columns or len(requested_columns) != len(set(requested_columns)):
                 return page_error(request, BookflowError(
                     "E_LIST_FILTER",
                     details={
                         "problem": "columns must be a unique comma-separated selection",
                         "unknown": unknown_columns,
-                        "allowed": list(definition.all_columns),
+                        "allowed": list(allowed_columns),
                     },
                 ))
             columns = requested_columns
@@ -701,7 +702,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             selected_sort=raw.get("sort", ""),
             selected_direction=raw.get("direction", "asc"),
             selected_columns=",".join(columns),
-            extra={k: v for k, v in out.items() if k != "items"},
+            next_url=(request.url.path + "?" + urlencode([(k, v) for k, v in request.query_params.multi_items() if k != "cursor"] + [("cursor", out["next_cursor"])])) if out.get("next_cursor") else None,
+            extra={k: v for k, v in out.items() if k not in ("items", "next_cursor", "projection")},
         )
 
     @app.get("/c/{company_id}/{noun}", response_class=HTMLResponse)
@@ -734,7 +736,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         except BookflowError as e:
             return page_error(request, e)
         verbs = [c for c in _verbs(command_noun, "company" if company_id else "hub")
-                 if c.verb not in ("list", "show", "new") and _role_allows(c, role_view, hub_admin=cred.hub_admin)]
+                 if c.verb not in ("list", "show", "new", "create") and _role_allows(c, role_view, hub_admin=cred.hub_admin)]
         if command_noun == "customer":
             verbs = [
                 command
@@ -742,6 +744,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 if not (
                     (command.verb == "link-vendor" and out.get("linked_vendor_id"))
                     or (command.verb == "unlink-vendor" and not out.get("linked_vendor_id"))
+                    or (command.verb == "activate" and out.get("active"))
+                    or (command.verb == "deactivate" and not out.get("active"))
                 )
             ]
         audit_undo = None
@@ -787,8 +791,24 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     "url": f"/c/{company_id}/{command_noun}/{record_id}/copy-contact",
                     "label": f"copy contact details to linked {target_noun}",
                 }
+        workspace = None
+        if company_id is not None and command_noun == "customer":
+            try:
+                jobs = run(request, definition.query_command, {"projection": "summary", "filter": [f"parent_id={out['id']}"], "limit": 25}, company_id)
+                source_ids = {value for key, value in out.items() if key.endswith("_source_id") and value and value != out["id"]}
+                source_names = {source: run(request, "customer show", {"customer": source}, company_id)["full_name"] for source in source_ids}
+            except BookflowError as err:
+                return page_error(request, err)
+            create = registry.get("customer create")
+            workspace = {
+                "sections": W.customer_sections(out), "jobs": jobs["items"],
+                "jobs_url": f"/c/{company_id}/customer?" + urlencode({"filter": f"parent_id={out['id']}"}),
+                "more_jobs": bool(jobs.get("next_cursor")),
+                "add_job": f"/c/{company_id}/customer/create?" + urlencode({"parent": out["id"]}) if create and out.get("active") and _role_allows(create, role_view, hub_admin=cred.hub_admin) else None,
+                "inheritance": [{"field": W.label(key.removesuffix("_source_id")), "id": value, "name": source_names[value]} for key, value in out.items() if key.endswith("_source_id") and value in source_names],
+            }
         return render("record.html", request, company_id=company_id, noun=noun, record_id=record_id, record=visible_record, record_title=record_title, audit=audit, meta=meta, verbs=verbs,
-                      audit_undo=audit_undo, contact_copy=contact_copy,
+                      audit_undo=audit_undo, contact_copy=contact_copy, workspace=workspace,
                       presence=(meta["record_type"] in _presence_types()) and company_id is not None
                                and _may_publish_presence(role_view, hub_admin=cred.hub_admin),
                       editing=(out.get("editing_by") or []) if _may_publish_presence(role_view, hub_admin=cred.hub_admin) else [])
@@ -858,6 +878,13 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         elif cmd.version_source and record_id is None:
             return page_error(request, BookflowError("E_USAGE", message="open this update from a record page"))
         originals = originals or {}
+        if company_id is not None and cmd.name == "customer create" and request.query_params.get("parent") and not attempted:
+            try:
+                parent = run(request, "customer show", {"customer": request.query_params["parent"]}, company_id)
+            except BookflowError as err:
+                return page_error(request, err)
+            attempted["f:parent_id"] = parent["id"]
+            workflow_note = f"Add a job under {parent['full_name']}. Unset commercial defaults inherit from its ancestors. Contact and shipping address source controls choose inherited or owned details; review these before saving."
         if company_id is not None and record_id is not None and cmd.name == "other-name convert":
             try:
                 source = run(request, "other-name show", {"other_name": record_id}, company_id)
@@ -905,11 +932,26 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         if definition is not None and definition.custom_fields:
             originals["custom_fields"] = _custom_value_map(originals.get("custom_fields"))
         described = F.describe_fields(noun, verb, cmd.input_model, originals, attempted)
+        for index, leaf in enumerate(described, 1):
+            leaf["index"] = index
+            if noun == "customer":
+                leaf["label"] = W.label(leaf["path"])
         selector = _record_selector(cmd, noun) if record_id is not None else None
         for leaf in described:
             if leaf["path"] == selector:
                 leaf["pinned"] = True
         if company_id is not None and definition is not None:
+            def creation_targets(targets: tuple[str, ...]) -> list[dict[str, Any]]:
+                choices = []
+                for candidate in targets:
+                    create_command = registry.get(f"{candidate} create")
+                    if create_command is not None and _role_allows(create_command, authorized_company or {}, hub_admin=cred.hub_admin):
+                        target_definition = registry.noun_meta(candidate).get("definition")
+                        return_token = secrets.token_urlsafe(24)
+                        choices.append({"target": candidate, "label": target_definition.singular_label if target_definition else candidate,
+                                        "return_token": return_token,
+                                        "url": f"/c/{company_id}/{candidate}/create?" + urlencode({"return_token": return_token, "return_target": candidate})})
+                return choices
             for leaf in described:
                 if leaf["kind"] == "collection":
                     _decorate_collection_references(
@@ -918,6 +960,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                         noun=noun,
                         company_id=company_id,
                         path=leaf["path"],
+                        create_targets=creation_targets,
                     )
             for leaf in described:
                 reference = _form_reference(definition, noun, leaf["path"])
@@ -945,24 +988,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                                 "version": row.get("version"),
                                 "link_version": originals.get("expected_link_version"),
                             }
-                add_targets = []
-                for candidate in targets:
-                    create_command = registry.get(f"{candidate} create")
-                    if (
-                        create_command is not None
-                        and _role_allows(create_command, authorized_company or {}, hub_admin=cred.hub_admin)
-                    ):
-                        target_definition = registry.noun_meta(candidate).get("definition")
-                        return_token = secrets.token_urlsafe(24)
-                        add_targets.append({
-                            "target": candidate,
-                            "label": target_definition.singular_label if target_definition is not None else candidate,
-                            "return_token": return_token,
-                            "url": f"/c/{company_id}/{candidate}/create?" + urlencode({
-                                "return_token": return_token,
-                                "return_target": candidate,
-                            }),
-                        })
+                add_targets = creation_targets(targets)
                 version_field = None
                 link_version_field = None
                 include_fields = []
@@ -985,6 +1011,57 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     "include_fields": include_fields,
                 }
         runtime_fields = []
+        reference_values: dict[str, dict[str, Any]] = {}
+        reference_cache: dict[tuple[str, str], dict[str, Any]] = {}
+        presentation_attempt = dict(attempted)
+        def current_reference(target: str, value: str) -> dict[str, Any]:
+            key = (target, value)
+            if key not in reference_cache:
+                target_meta = registry.noun_meta(target)
+                try:
+                    row = run(request, f"{target} show", {target_meta["identifier"]: value}, company_id)
+                except BookflowError as err:
+                    if err.code not in ("E_RECORD_NOT_FOUND", "E_INACTIVE_REFERENCE"):
+                        raise
+                    row = {}
+                reference_cache[key] = row
+            return reference_cache[key]
+
+        def collect_references(schema: dict[str, Any], values: list[Any], wire_path: str, source_path: str | None = None) -> None:
+            item = schema["item"]
+            source_path = source_path or wire_path
+            source_prefix = "c:" + source_path + ":"
+            source_indexes = list(dict.fromkeys(key[len(source_prefix):].split(":", 1)[0] for key in presentation_attempt if key.startswith(source_prefix)))
+            for index, value in enumerate(values):
+                if item["kind"] != "object" or not isinstance(value, dict):
+                    continue
+                for child in item["fields"]:
+                    path = f"{wire_path}:{index}:{child['name']}"
+                    source_index = source_indexes[index] if index < len(source_indexes) else str(index)
+                    original_path = f"{source_path}:{source_index}:{child['name']}"
+                    for prefix in ("label:c:", "ref-state:c:"):
+                        if prefix + original_path in presentation_attempt:
+                            attempted[prefix + path] = presentation_attempt[prefix + original_path]
+                    current_value = value.get(child["name"])
+                    if child["kind"] == "collection":
+                        collect_references(child["collection"], current_value or [], path, original_path)
+                    elif child.get("reference") and current_value:
+                        target = child["reference"]["target"]
+                        if child["reference"].get("include_closest"):
+                            component = current_reference("item", value.get("component_item_id", ""))
+                            unit_set = current_reference("unit-of-measure", component["unit_of_measure_set_id"]) if component.get("unit_of_measure_set_id") else {}
+                            row = next((unit for unit in unit_set.get("units", []) if unit["id"] == current_value), {})
+                            label = f"{unit_set.get('name', '')} · {row.get('name', '')} ({row.get('abbreviation', '')})" if row else "Unavailable unit"
+                        else:
+                            row = current_reference(target, str(current_value))
+                            label = _reference_label(target, row, authorized_company or {}) if row else "Unavailable record"
+                        reference_values["c:" + path] = {"id": current_value, "label": label, "active": row.get("active", True), "version": row.get("version")}
+        try:
+            for leaf in described:
+                if leaf["kind"] == "collection":
+                    collect_references(leaf["collection"], leaf["collection"]["values"], leaf["path"])
+        except BookflowError as err:
+            return page_error(request, err)
         if company_id is not None and definition is not None and definition.runtime_field_provider == "custom-fields":
             try:
                 definitions = run(
@@ -1011,7 +1088,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       attempted=attempted, record_id=record_id, runtime_fields=runtime_fields,
                       ctx_fields=F.context_fields(cmd), result=result, error=error,
                       preview=preview, get=F.get_path, form_value=F.form_value,
-                      return_context=return_context, workflow_note=workflow_note)
+                      return_context=return_context, workflow_note=workflow_note,
+                      reference_values=reference_values,
+                      form_groups=W.customer_form_groups(described) if noun == "customer" and verb in ("create", "update") else None)
 
     def contact_copy_page(
         request: Request,
@@ -1099,6 +1178,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         originals = json.loads(form.get("originals", "{}") or "{}")
         try:
             session_token = credential(request).token_id
+            unresolved = [key.removeprefix("ref-state:") for key, value in form.items() if key.startswith("ref-state:") and value == "pending"]
+            if unresolved:
+                raise BookflowError("E_VALIDATION", details={"fields": [{"field": key, "problem": "Choose a matching record by name, or use Clear."} for key in unresolved]})
             raw, headers, preview = F.translate(cmd, form, originals if originals else None)
             if cmd.version_source and record_id is not None and "expected_version" not in raw and form.get("f:expected_version"):
                 raw["expected_version"] = int(form["f:expected_version"])
@@ -1131,6 +1213,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 "target": noun,
                 "id": created_id,
                 "version": created_version,
+                "label": _reference_label(noun, out.get(noun, out), {}),
             }).replace("</", "<\\/")
             record_url = f"/c/{company_id}/{noun}/{created_id}" if company_id else f"/hub/{noun.replace(' ', '-')}/{created_id}"
             return HTMLResponse(

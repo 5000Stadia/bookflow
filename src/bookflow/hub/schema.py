@@ -176,3 +176,13 @@ audit_entries = _table(
     sa.Index("ix_audit_entries_event", "event_id"),
     description="Record-level snapshots grouped under hub audit events.",
 )
+
+pending_config = _table(
+    "pending_config",
+    _column("id", sa.Integer, "Singleton key, always 1.", primary_key=True),
+    _column("token", sa.String(26), "Unique generation of this pending file projection.", nullable=False),
+    _column("request_id", sa.String(26), "Request whose audited transaction committed these settings.", nullable=False),
+    _column("contents", sa.Text, "Complete desired config.toml contents; private to the local data root.", nullable=False),
+    sa.CheckConstraint("id = 1", name="ck_pending_config_singleton"),
+    description="Committed local settings awaiting durable config.toml replacement. Reads overlay this row; successful file synchronization clears it.",
+)

@@ -17,6 +17,7 @@ from typing import Any, Callable
 
 from bookflow.core.config import Config
 from bookflow.core.context import Context
+from bookflow.core.errors import BookflowError
 from bookflow.core.fs import check_local
 from bookflow.core.locks import RootLock
 from bookflow.core.session import Session
@@ -37,11 +38,12 @@ class Host:
     """Owns the data-root lock and every connection while it runs. One writer thread; readers per request."""
 
     def __init__(self, data_root: Path, *, version: str, idle_checkpoint_seconds: float = 30.0,
-                 sweep_seconds: float = 3600.0):
+                 sweep_seconds: float = 3600.0, filesystem_wait_seconds: float = 5.0):
         self.data_root = data_root
         self.version = version
         self.idle_checkpoint_seconds = idle_checkpoint_seconds
         self.sweep_seconds = sweep_seconds
+        self.filesystem_wait_seconds = filesystem_wait_seconds
         self._lock: RootLock | None = None
         self._queue: "queue.Queue[_Job | None]" = queue.Queue()
         self._writer = threading.Thread(target=self._writer_loop, name="bookflow-writer", daemon=True)
@@ -54,8 +56,10 @@ class Host:
         self._refresh_pending: set[str] = set()
         self._refresh_lock = threading.Lock()
         self._readers_attached = 0
-        self._readers_lock = threading.Lock()
+        self._readers_lock = threading.Condition()
         self._stopping = False
+        self._jobs_closed = False
+        self._filesystem_exclusive = False
         self._umask_old: int | None = None
         self._last_write = time.monotonic()  # when the writer last committed; the idle checkpoint waits on it
         self._checkpointed_write = 0.0  # the _last_write value the last idle checkpoint answered, so one write earns one checkpoint
@@ -78,8 +82,15 @@ class Host:
         self._timer_stop.set()
         if self._timer.is_alive():
             self._timer.join(timeout=10)
-        self.submit(self._shutdown_on_writer)
-        self._queue.put(None)
+        # A read snapshot can prevent the final checkpoint. Keep the root
+        # lock until admitted readers have actually closed their handles.
+        with self._readers_lock:
+            if not self._readers_lock.wait_for(lambda: self._readers_attached == 0, timeout=30):
+                raise BookflowError("E_DB_BUSY", message="Host readers are still closing; retry shutdown.")
+        self.submit(self._shutdown_on_writer, _during_shutdown=True)
+        with self._readers_lock:
+            self._jobs_closed = True
+            self._queue.put(None)
         self._writer.join(timeout=30)
         if self._lock is not None:
             self._lock.__exit__(None, None, None)
@@ -88,10 +99,13 @@ class Host:
             os.umask(self._umask_old)
 
     # ---------------------------------------------------------------- writer thread
-    def submit(self, fn: Callable[[], Any], timeout: float | None = None) -> Any:
+    def submit(self, fn: Callable[[], Any], timeout: float | None = None, *, _during_shutdown: bool = False) -> Any:
         """Run ``fn`` on the writer thread and return its result; exceptions propagate to the caller."""
         job = _Job(fn)
-        self._queue.put(job)
+        with self._readers_lock:
+            if self._jobs_closed or (self._stopping and not _during_shutdown):
+                raise BookflowError("E_DB_BUSY", message="The host is stopping; retry after shutdown.")
+            self._queue.put(job)
         if not job.done.wait(timeout):
             raise TimeoutError("the Bookflow writer did not finish the submitted job in time")
         if job.error is not None:
@@ -108,8 +122,16 @@ class Host:
             except BaseException as e:  # noqa: BLE001 - handed back to the submitter
                 job.error = e
             finally:
-                self._leave_clean()
-                job.done.set()
+                try:
+                    self._leave_clean()
+                except BaseException as e:  # noqa: BLE001 - cleanup errors also reach the submitter
+                    if job.error is None:
+                        job.error = e
+                finally:
+                    with self._readers_lock:
+                        self._filesystem_exclusive = False
+                        self._readers_lock.notify_all()
+                    job.done.set()
 
     def _leave_clean(self) -> None:
         """A long-lived connection must never carry an open transaction into the next request."""
@@ -117,7 +139,7 @@ class Host:
             if db is None:
                 continue
             try:
-                if db.raw.in_transaction:
+                if db.write_transaction:
                     db.raw.execute("ROLLBACK")
             except sqlite3.Error:
                 self._discard(db)
@@ -200,25 +222,58 @@ class Host:
             self._companies[row["id"]] = db
         return db
 
-    def release_company(self, company_id: str) -> None:
-        """Close the writer's connection to a company before its folder moves or is trashed."""
+    def release_company(self, company_id: str | None) -> None:
+        """Fence folder changes against admitted reads, then close the writer's handle.
+
+        None acquires the gate without selecting a company, including moves of
+        empty organizations. The writer job retains this gate through cleanup;
+        ordinary writes that do not release a handle remain concurrent with reads.
+        """
+        if threading.current_thread() is not self._writer:
+            raise RuntimeError("company release must run on the host writer")
+        with self._readers_lock:
+            self._filesystem_exclusive = True
+            self._readers_lock.notify_all()
+            if not self._readers_lock.wait_for(lambda: self._readers_attached == 0, timeout=self.filesystem_wait_seconds):
+                raise BookflowError("E_DB_BUSY", message="Company readers are still active; retry the folder operation after they finish.",
+                                    details={"operation": "filesystem_change"})
+        if company_id is None:
+            return
         db = self._companies.pop(company_id, None)
         if db is not None:
             db.close()
 
     def reader_session(self, user_id: str, login: str = "") -> Session:
         """A read-only session on the calling thread; closed by the caller through dispatch._close."""
-        from bookflow.core.dispatch import _open_hub, _load_actor_by_id
-        s = Session(data_root=self.data_root, os_login=login, config=Config.load(self.data_root / "config.toml"))
-        _open_hub(s, False, self._system_ctx())
-        _load_actor_by_id(s, user_id)
-        with self._readers_lock:
-            self._readers_attached += 1
+        from bookflow.core.dispatch import _close, _open_hub, _load_actor_by_id
+        self.reader_started()
+        s = None
+        try:
+            s = Session(data_root=self.data_root, os_login=login, config=Config.load(self.data_root / "config.toml"))
+            _open_hub(s, False, self._system_ctx())
+            _load_actor_by_id(s, user_id)
+        except BaseException:
+            try:
+                if s is not None:
+                    _close(s)
+            finally:
+                self.reader_done()
+            raise
         return s
+
+    def reader_started(self) -> None:
+        with self._readers_lock:
+            if self._stopping:
+                raise BookflowError("E_DB_BUSY", message="The host is stopping; retry after shutdown.")
+            if self._filesystem_exclusive:
+                raise BookflowError("E_DB_BUSY", message="Company folders are being changed; retry shortly.",
+                                    details={"operation": "filesystem_change"})
+            self._readers_attached += 1
 
     def reader_done(self) -> None:
         with self._readers_lock:
             self._readers_attached = max(0, self._readers_attached - 1)
+            self._readers_lock.notify_all()
 
     def run_write(self, user_id: str, login: str, fn: Callable[[Session], Any]) -> Any:
         """Build the session on the writer, run ``fn(session)`` there, checkpoint passively, signal subscribers."""
@@ -246,6 +301,9 @@ class Host:
                 continue
             try:
                 db.raw.execute("PRAGMA wal_checkpoint(PASSIVE)")
+            except sqlite3.Error as error:
+                log.warning("passive checkpoint of %s failed: %s", name, error)
+            try:
                 row = db.raw.execute("SELECT max(seq) FROM audit_events").fetchone()
             except sqlite3.Error:
                 continue
@@ -288,7 +346,8 @@ class Host:
 
     def begin_shutdown(self) -> None:
         """Make shutdown observable immediately and wake every idle event stream."""
-        self._stopping = True
+        with self._readers_lock:
+            self._stopping = True
         self._wake_subscribers()
 
     # ---------------------------------------------------------------- credential liveness
@@ -309,7 +368,12 @@ class Host:
                 with self._refresh_lock:
                     self._refresh_pending.discard(token_id)
 
-        self._queue.put(_Job(refresh))
+        with self._readers_lock:
+            if self._stopping or self._jobs_closed:
+                with self._refresh_lock:
+                    self._refresh_pending.discard(token_id)
+                return False
+            self._queue.put(_Job(refresh))
         return True
 
     # ---------------------------------------------------------------- timers
@@ -388,7 +452,7 @@ class Host:
                            actor_id=system["id"] if system else None, actor_kind="system")
             db.raw.execute("COMMIT")
         except BaseException:
-            if db.raw.in_transaction:
+            if db.write_transaction:
                 db.raw.execute("ROLLBACK")
             raise
         log.info("session sweep removed %d expired session token(s)", len(rows))

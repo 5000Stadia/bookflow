@@ -7,18 +7,21 @@ uninterrupted move would: a bumped row, `path` set, `pending_path` cleared, one 
 
 from __future__ import annotations
 
+import errno
 from pathlib import Path
 from typing import Any
 
 import sqlalchemy as sa
 
 from bookflow.core.context import Context
+from bookflow.core.durability import sync_move_parents
 from bookflow.core.errors import BookflowError
-from bookflow.core.moves import move_dir, rename_noreplace
+from bookflow.core.moves import move_dir
 from bookflow.core.registry import Touched
 from bookflow.core.session import Session, now_iso
 from bookflow.hub import schema as h
 from bookflow.hub.audit import write_event
+from bookflow.storage.paths import read_company_marker, read_org_marker
 
 
 def find_folder(s: Session, rel: str, moving_id: str) -> Path | None:
@@ -44,18 +47,39 @@ def effective_path(s: Session, rel: str, pending: str | None, moving_id: str) ->
 
 def _do_move(s: Session, old_rel: str, pending: str, moving_id: str, error_code: str, id_key: str, row_id: str) -> None:
     target = s.abs_path(pending)
-    if target.exists():
-        return
-    hop = target.with_name(f"{target.name}.moving-{moving_id}")
-    if hop.exists():
-        rename_noreplace(hop, target)
-        return
     src = s.abs_path(old_rel)
-    if not src.exists():
-        raise BookflowError("E_COMPANY_MISSING", details={id_key: row_id, "path": str(target)})
+
+    def verify(folder: Path) -> None:
+        marker = read_company_marker(folder) if id_key == "company_id" else read_org_marker(folder)
+        if not marker or marker.get(id_key) != row_id:
+            raise BookflowError(error_code, details={id_key: row_id, "path": str(folder), "cause": "E_IO", "errno": "EINVAL"})
+
     try:
+        if target.exists() and not src.exists():
+            # The rename may have completed before a failed directory fsync or
+            # interruption. Persist it before clearing the recovery record.
+            verify(target)
+            sync_move_parents(src, target)
+            return
+        if target.exists() and not src.samefile(target):
+            raise FileExistsError(errno.EEXIST, "target exists", str(target))
+        hop = target.with_name(f"{target.name}.moving-{moving_id}")
+        if hop.exists():
+            if src.exists():
+                raise FileExistsError(errno.EEXIST, "source and hop both exist", str(hop))
+            verify(hop)
+            move_dir(hop, target, company_id=moving_id)
+            if src.parent != target.parent:
+                sync_move_parents(src, target)
+            return
+        if not src.exists():
+            raise BookflowError("E_COMPANY_MISSING", details={id_key: row_id, "path": str(target)})
         move_dir(src, target, company_id=moving_id)
+    except OSError as e:
+        raise BookflowError(error_code, details={id_key: row_id, "path": str(target), "cause": "E_IO", "errno": errno.errorcode.get(e.errno or 0, str(e.errno))}) from e
     except BookflowError as e:
+        if e.code in ("E_COMPANY_MISSING", error_code):
+            raise
         raise BookflowError(error_code, details={id_key: row_id, "path": str(target), "cause": e.code, "errno": e.details.get("errno")})
 
 
@@ -79,6 +103,7 @@ def complete_company_move(s: Session, ctx: Context, row: dict[str, Any], via: st
 def complete_org_move(s: Session, ctx: Context, org: dict[str, Any], via: str) -> dict[str, Any]:
     """Finish the organization's pending move and rewrite every company path under it."""
     pending = org["pending_path"]
+    s.release_company(None)
     companies = [dict(row) for row in s.hub.conn.execute(
         sa.select(h.companies).where(h.companies.c.organization_id == org["id"])
     ).mappings().all()]

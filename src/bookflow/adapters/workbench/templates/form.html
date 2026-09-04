@@ -4,11 +4,29 @@
 <nav class="crumbs"><a href="{{ base }}">{{ noun }}</a> / {{ verb or "run" }}</nav>
 <h1>{{ noun }} {{ verb }}</h1><p class="muted">{{ cmd.description }}</p>
 {% if error %}<div class="error"><b>{{ error.code }}</b> {{ error.message }}{% if error.details.fields %}<ul>{% for f in error.details.fields %}<li>{{ f.field }}: {{ f.problem }}</li>{% endfor %}</ul>{% endif %}{% if error.details.suggestions %}<p>Did you mean: {{ error.details.suggestions | join(", ") }}</p>{% endif %}</div>{% endif %}
+{% if error and error.code == 'E_VERSION_CONFLICT' %}<div class="workflow-note" role="alert">Someone changed this record while you were editing. Your entered values and attempted version are preserved below. Changed fields: {{ error.details.changed_fields | join(', ') }}. <a href="{{ base }}/{{ record_id }}" target="_blank" rel="noopener">Review the saved record in another tab</a> before starting a new edit; submitting this stale version again does not overwrite their changes.</div>{% endif %}
 {% if result %}<div class="{{ 'warn' if preview else 'field' }}"><b>{{ "Preview (nothing written)" if preview else "Result" }}</b><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></div>{% endif %}
 {% if workflow_note %}<div class="workflow-note">{{ workflow_note }}</div>{% endif %}
 
+{% macro reference_control(reference, name, cur, id, current, clearable) %}
+{% set refid = "reference-" ~ id %}
+<div class="reference-picker" data-reference data-suggestions="{{ reference.suggestion_url }}{% if reference.target and '?' not in reference.suggestion_url %}?target={{ reference.target }}{% endif %}"
+ {% if reference.include_closest %}data-ref-component="1"{% endif %}
+ {% if reference.discriminator %}data-ref-discriminator="{{ reference.discriminator }}"{% endif %}
+ {% if reference.version_field %}data-ref-version-field="{{ reference.version_field }}"{% endif %}
+ {% if reference.link_version_field %}data-ref-link-version-field="{{ reference.link_version_field }}"{% endif %}>
+<input type="hidden" data-ref-value name="{{ name }}" value="{{ cur if cur is not none else '' }}">
+<input type="hidden" data-ref-state name="ref-state:{{ name }}" value="{{ attempted.get('ref-state:' ~ name, 'selected' if cur else '') }}">
+<input id="{{ id }}" data-ref-search name="label:{{ name }}" value="{{ attempted.get('label:' ~ name, current.label if current else '') }}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="{{ refid }}-choices" placeholder="Search by name, then choose">
+<datalist id="{{ refid }}" data-ref-data></datalist><div id="{{ refid }}-choices" data-ref-options role="listbox" hidden></div>
+<small data-ref-status aria-live="polite">{% if current %}Selected: {{ current.label }}{% if not current.active %} (inactive; readable only){% endif %}{% endif %}</small>
+{% if clearable %}<button type="button" class="reference-clear" data-ref-clear>Clear selection</button>{% endif %}
+{% if reference.add_targets %}<span class="reference-actions">{% for target in reference.add_targets %}{% set token = target.return_token ~ '-' ~ id %}<a href="{{ target.url.replace(target.return_token, token) }}" target="bookflow-add-{{ token }}" rel="opener" data-ref-add-target="{{ target.target }}" data-return-token="{{ token }}"{% if reference.target and target.target != reference.target %} hidden{% elif not reference.target and reference.targets|length > 1 %} hidden{% endif %}>Add new {{ target.label }}…</a>{% endfor %}</span>{% endif %}
+</div>
+{% endmacro %}
+
 {% macro collection_scalar(control, name, cur, id) %}
-{% if control.reference %}{% set refid = "reference-" ~ id %}<input id="{{ id }}" name="{{ name }}" value="{{ cur if cur is not none else '' }}" list="{{ refid }}" autocomplete="off" placeholder="Search, then choose a stable id" hx-get="{{ control.reference.suggestion_url }}" hx-trigger="input changed delay:250ms" hx-target="#{{ refid }}" hx-swap="innerHTML"{% if control.reference.include_closest %} hx-include="closest [data-collection-item]"{% endif %}><datalist id="{{ refid }}"></datalist>
+{% if control.reference %}{{ reference_control(control.reference, name, cur, id, reference_values.get(name), not control.required) }}
 {% elif control.kind == "choice" %}<select id="{{ id }}" name="{{ name }}"><option value="">(choose)</option>{% for choice in control.choices %}<option value="{{ choice }}"{% if cur == choice %} selected{% endif %}>{{ choice }}</option>{% endfor %}</select>
 {% elif control.kind == "bool" %}<select id="{{ id }}" name="{{ name }}"><option value="unset">(unset)</option><option value="true"{% if cur == true or cur == "true" %} selected{% endif %}>true</option><option value="false"{% if cur == false or cur == "false" %} selected{% endif %}>false</option></select>
 {% else %}<input id="{{ id }}" name="{{ name }}" value="{{ cur if cur is not none else '' }}"{% if control.kind == "number" %} inputmode="numeric"{% endif %}>{% endif %}
@@ -25,13 +43,13 @@
 {% if child.kind == "collection" %}
 {{ collection_control(child.collection, path ~ ":" ~ child.name, child_value or [], depth + 1, child.name) }}
 {% else %}
-{% set child_name = "c:" ~ path ~ ":" ~ child.name %}
-<div class="collection-field"><label for="{{ child_name }}">{{ child.name }}{% if child.required %} *{% endif %}<small>{{ child.description }}</small></label>{% if child.name == "id" %}<input type="hidden" id="{{ child_name }}" name="{{ child_name }}" value="{{ child_value or '' }}"><code class="stable-child-id">{{ child_value or "assigned when saved" }}</code>{% else %}{{ collection_scalar(child, child_name, child_value, child_name) }}{% endif %}</div>
+{% set child_name = "c:" ~ path ~ ":" ~ child.name %}{% set child_id = child_name.replace(':', '-').replace('.', '-') %}
+<div class="collection-field"{% if child.name == 'id' %} hidden{% endif %}><label for="{{ child_id }}">{{ child.name.replace('_id', '').replace('_', ' ') }}{% if child.required %} *{% endif %}<small>{{ child.description }}</small></label>{% if child.name == "id" %}<input type="hidden" id="{{ child_id }}" name="{{ child_name }}" value="{{ child_value or '' }}"><code class="stable-child-id">{{ child_value or "assigned when saved" }}</code>{% else %}{{ collection_scalar(child, child_name, child_value, child_id) }}{% endif %}</div>
 {% endif %}
 {% endfor %}
 {% else %}
 {% set child_name = "c:" ~ path ~ ":value" %}
-<div class="collection-field"><label for="{{ child_name }}">value *</label>{{ collection_scalar(item, child_name, value, child_name) }}</div>
+{% set child_id = child_name.replace(':', '-').replace('.', '-') %}<div class="collection-field"><label for="{{ child_id }}">value *</label>{{ collection_scalar(item, child_name, value, child_id) }}</div>
 {% endif %}
 <div class="collection-item-actions"><button type="button" data-collection-up aria-label="Move entry up">↑ Up</button><button type="button" data-collection-down aria-label="Move entry down">↓ Down</button><button type="button" data-collection-remove>Remove</button></div>
 </fieldset>
@@ -57,20 +75,9 @@
 <small>{{ l.description }}{% if l.choices and not l.runtime %} One of: {{ l.choices | join(", ") }}.{% endif %}{% if l.kind == "json" %} Enter a JSON {{ l.json_shape }}.{% endif %}{% if l.default not in (none, "", false) %} Default: {{ l.default }}.{% endif %}</small></label>
 <div class="control-stack">
 {% if l.pinned %}
-<input type="hidden" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"><select disabled aria-label="{{ l.path }} (fixed)"><option value="{{ cur }}" selected>{{ cur }}</option></select><span class="pinned-value"><small>fixed for this record</small></span>
+<input type="hidden" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"><select disabled aria-label="{{ l.path }} (fixed)"><option value="{{ cur }}" selected>{{ l.reference.current.label if l.reference and l.reference.current else cur }}</option></select><span class="pinned-value"><small>fixed for this record</small></span>
 {% elif l.reference %}
-{% set refid = "reference-" ~ index %}
-<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}" list="{{ refid }}"
- autocomplete="off" placeholder="Search, then choose a stable id"
- hx-get="{{ l.reference.suggestion_url }}{% if l.reference.target %}?target={{ l.reference.target }}{% endif %}"
- hx-trigger="input changed delay:250ms" hx-target="#{{ refid }}" hx-swap="innerHTML"
- {% if l.reference.discriminator or l.reference.include_fields %}hx-include="{% if l.reference.discriminator %}[name='f:{{ l.reference.discriminator }}']{% endif %}{% for included in l.reference.include_fields %}{% if l.reference.discriminator or not loop.first %},{% endif %}[name='f:{{ included }}']{% endfor %}"{% endif %}
- {% if l.reference.discriminator %}data-ref-discriminator="{{ l.reference.discriminator }}"{% endif %}
- {% if l.reference.version_field %}data-ref-version-field="{{ l.reference.version_field }}"{% endif %}
- {% if l.reference.link_version_field %}data-ref-link-version-field="{{ l.reference.link_version_field }}"{% endif %}>
-<datalist id="{{ refid }}">{% if l.reference.current and l.reference.current.active %}<option value="{{ l.reference.current.id }}" label="{{ l.reference.current.label }}" data-version="{{ l.reference.current.version or '' }}" data-link-version="{{ l.reference.current.link_version or '' }}"></option>{% endif %}</datalist>
-{% if l.reference.current %}<small class="reference-current">Current: {{ l.reference.current.label }}{% if not l.reference.current.active %} <b>(inactive; readable only)</b>{% endif %}</small>{% endif %}
-{% if l.reference.add_targets %}<span class="reference-actions">{% for target in l.reference.add_targets %}<a href="{{ target.url }}" target="bookflow-add-{{ target.return_token }}" rel="opener" data-ref-add-target="{{ target.target }}" data-return-token="{{ target.return_token }}"{% if l.reference.target and target.target != l.reference.target %} hidden{% elif not l.reference.target and l.reference.targets|length > 1 %} hidden{% endif %}>Add new {{ target.label }}…</a>{% endfor %}</span>{% endif %}
+{{ reference_control(l.reference, form_name, cur, "control-" ~ index, l.reference.current, l.nullable or not l.required) }}
 {% elif l.kind == "choice" %}
 <select id="control-{{ index }}" name="{{ form_name }}"><option value="">{{ "(choose)" if l.required and not record_id else "(unchanged)" }}</option>{% for c in l.choices %}<option value="{{ c }}" {% if cur == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
 {% elif l.kind == "bool" %}
@@ -89,79 +96,12 @@
 </div>
 {% endmacro %}
 
-<form method="post" action="{{ action }}"{% if not return_context %} hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML"{% endif %} data-generated-form>
+<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" data-generated-form>
 <input type="hidden" name="originals" value='{{ json.dumps(originals, default=str) | e }}'>
 {% if return_context %}<input type="hidden" name="_return_token" value="{{ return_context.token }}"><input type="hidden" name="_return_target" value="{{ return_context.target }}">{% endif %}
-{% for l in leaves %}{{ field(l, loop.index) }}{% endfor %}
+{% if form_groups %}{% for group in form_groups %}<details class="form-section"{% if group.open %} open{% endif %}><summary>{{ group.title }}</summary>{% for l in group.leaves %}{{ field(l, l.index) }}{% endfor %}</details>{% endfor %}{% else %}{% for l in leaves %}{{ field(l, loop.index) }}{% endfor %}{% endif %}
 {% if runtime_fields %}<fieldset class="runtime-fields"><legend>Custom fields</legend>{% for l in runtime_fields %}{{ field(l, "custom-" ~ loop.index) }}{% endfor %}</fieldset>{% endif %}
 {% for c in ctx_fields %}<div class="row"><label>{{ c }}<small>context, sent as a header</small></label><input name="ctx:{{ c }}" value="{{ attempted.get('ctx:' ~ c, '') }}"><span></span></div>{% endfor %}
-<div class="row"><span></span><span>{% if cmd.is_write %}<button name="action" value="preview">Preview</button>{% endif %}<button name="action" value="submit">Submit</button></span></div></form>
+<div class="row form-submit"><span></span><span>{% if cmd.is_write %}<button name="action" value="preview">Preview</button>{% endif %}<button name="action" value="submit">{{ 'Save ' ~ ('job' if originals.parent_id else 'customer') if noun == 'customer' and verb in ('create', 'update') else 'Submit' }}</button></span></div></form>
 
-<script>
-(()=>{
-  const normalize = value => (value || '').replaceAll('_', '-');
-  function refresh(root){
-    root.querySelectorAll('[data-when-field]').forEach(row => {
-      const control = root.querySelector(`[name="f:${CSS.escape(row.dataset.whenField)}"]`);
-      const shown = control && JSON.parse(row.dataset.whenValues).includes(control.value);
-      row.hidden = !shown;
-      row.querySelectorAll('input,select,textarea').forEach(input => { input.disabled = !shown; });
-    });
-    root.querySelectorAll('[data-ref-discriminator]').forEach(input => {
-      const control = root.querySelector(`[name="f:${CSS.escape(input.dataset.refDiscriminator)}"]`);
-      const selected = normalize(control && control.value);
-      input.closest('.form-field').querySelectorAll('[data-ref-add-target]').forEach(link => {
-        link.hidden = link.dataset.refAddTarget !== selected;
-      });
-    });
-  }
-  document.querySelectorAll('[data-generated-form]').forEach(form => {
-    let collectionSequence = 0;
-    form.addEventListener('change', () => refresh(form));
-    form.querySelectorAll('[data-ref-version-field]').forEach(input => input.addEventListener('change', () => {
-      const option = Array.from(document.getElementById(input.getAttribute('list'))?.options || []).find(candidate => candidate.value === input.value);
-      const version = form.querySelector(`[name="f:${CSS.escape(input.dataset.refVersionField)}"]`);
-      if(version) version.value = option?.dataset.version || '';
-      const linkVersion = input.dataset.refLinkVersionField && form.querySelector(`[name="f:${CSS.escape(input.dataset.refLinkVersionField)}"]`);
-      if(linkVersion) linkVersion.value = option?.dataset.linkVersion || '';
-    }));
-    form.addEventListener('click', event => {
-      const add = event.target.closest('[data-collection-add]');
-      if(add){
-        const collection = add.closest('[data-collection]');
-        const template = collection.querySelector(':scope > [data-collection-template]');
-        const token = template.dataset.indexToken;
-        const index = `new${Date.now()}${collectionSequence++}`;
-        const items = collection.querySelector(':scope > [data-collection-items]');
-        items.insertAdjacentHTML('beforeend', template.innerHTML.replaceAll(token, index));
-        if(window.htmx) window.htmx.process(items.lastElementChild);
-        refresh(form);
-        return;
-      }
-      const item = event.target.closest('[data-collection-item]');
-      if(!item) return;
-      if(event.target.closest('[data-collection-remove]')) item.remove();
-      else if(event.target.closest('[data-collection-up]') && item.previousElementSibling) item.parentElement.insertBefore(item, item.previousElementSibling);
-      else if(event.target.closest('[data-collection-down]') && item.nextElementSibling) item.parentElement.insertBefore(item.nextElementSibling, item);
-    });
-    refresh(form);
-  });
-  addEventListener('message', event => {
-    if(event.origin !== location.origin || !event.data || event.data.type !== 'bookflow-reference-created') return;
-    const input = document.querySelector(`[data-return-token="${CSS.escape(event.data.token || '')}"]`)?.closest('.form-field')?.querySelector('input[list]');
-    if(!input || typeof event.data.id !== 'string') return;
-    const choices = document.getElementById(input.getAttribute('list'));
-    let option = Array.from(choices?.options || []).find(candidate => candidate.value === event.data.id);
-    if(choices && !option){
-      option = document.createElement('option');
-      option.value = event.data.id;
-      option.label = `Created ${event.data.target || 'record'}`;
-      choices.append(option);
-    }
-    if(option && Number.isInteger(event.data.version)) option.dataset.version = String(event.data.version);
-    input.value = event.data.id;
-    input.dispatchEvent(new Event('change', {bubbles:true}));
-  });
-})();
-</script>
 {% endblock %}

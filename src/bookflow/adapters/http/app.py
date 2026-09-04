@@ -27,7 +27,7 @@ log = logging.getLogger("bookflow.http")
 
 STATUS = {"E_UNAUTHENTICATED": 401, "E_LOGIN_FAILED": 401, "E_PERMISSION": 403, "E_WORKBENCH_HEADER": 403,
           "E_COMPANY_NOT_FOUND": 404, "E_ORGANIZATION_NOT_FOUND": 404, "E_EVENT_NOT_FOUND": 404, "E_DIRECTIVE_NOT_FOUND": 404, "E_RECORD_NOT_FOUND": 404, "E_USER_NOT_FOUND": 404, "E_TOKEN_NOT_FOUND": 404,
-          "E_VERSION_CONFLICT": 409, "E_IDEMPOTENCY_MISMATCH": 409, "E_NAME_TAKEN": 409, "E_DB_BUSY": 409,
+          "E_VERSION_CONFLICT": 409, "E_QUERY_STALE": 409, "E_IDEMPOTENCY_MISMATCH": 409, "E_NAME_TAKEN": 409, "E_DB_BUSY": 409,
           "E_VALIDATION": 422, "E_VALUE_RANGE": 422, "E_LIST_FILTER": 422, "E_INTERNAL": 500}
 CONTEXT_HEADERS = {"reason": "X-Bookflow-Reason", "directive_id": "X-Bookflow-Directive", "source_ref": "X-Bookflow-Source-Ref",
                    "idempotency_key": "Idempotency-Key", "client_name": "X-Bookflow-Client-Name", "client_version": "X-Bookflow-Client-Version"}
@@ -140,7 +140,7 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
 
     # ------------------------------------------------------------ running commands
     def run_command(cmd, raw: dict[str, Any], ctx: Context, cred: Credential, selector: str | None, source: str, dry_run: bool) -> dict[str, Any]:
-        from bookflow.core.dispatch import _close, execute
+        from bookflow.core.dispatch import _close, execute, guard
         bad = [k for k in raw if k in Context.model_fields]
         if bad:
             raise BookflowError("E_CONTEXT_IN_INPUT", message="Context values go in headers, not the body: " + ", ".join(f"{k} -> {CONTEXT_HEADERS.get(k, 'not accepted')}" for k in bad), details={"fields": bad})
@@ -150,8 +150,10 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
         try:
             return execute(cmd, raw, ctx, s, company_selector=selector, company_source=source, dry_run=dry_run)
         finally:
-            _close(s)
-            host.reader_done()
+            try:
+                guard(lambda: _close(s), cred.hub_admin)
+            finally:
+                host.reader_done()
 
     def lookup(route: str):
         name = command_name(route)
@@ -238,11 +240,11 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
         try:
             with _reader_hub(host) as db:
                 row = db.conn.execute(sa.select(h.users).where(h.users.c.username == username, h.users.c.active.is_(True), h.users.c.kind == "human")).mappings().first()
-                ok = auth.verify_password(row["password_hash"] if row else None, password)
+            ok = auth.verify_password(row["password_hash"] if row else None, password)
             if not ok or row is None:
                 time.sleep(0.5)
                 raise BookflowError("E_LOGIN_FAILED")
-            secret = _issue_session(host, row["id"])
+            secret = _issue_session(host, row["id"], expected_password_hash=row["password_hash"])
         finally:
             auth.release_login(source)
         resp = JSONResponse({"ok": True, "user_id": row["id"], "username": row["username"]})
@@ -270,7 +272,7 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
 
     # ------------------------------------------------------------ events
     def stream(request: Request, company_id: str | None):
-        from bookflow.core.dispatch import _close, execute, validate_input
+        from bookflow.core.dispatch import _close, execute, guard, validate_input
         name = "audit tail" if company_id else "hub audit tail"
         cmd = registry.get(name)
         assert cmd is not None
@@ -294,27 +296,26 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
                 if auth.needs_refresh(row):
                     host.enqueue_token_refresh(row["id"], row["kind"])
 
-        def drain(start: int | None) -> tuple[list[str], int, str]:
+        def drain(start: int | None) -> tuple[list[str], int, str, bool]:
             frames: list[str] = []
             next_cursor = start
             s = host.reader_session(cred.user_id, cred.login)
             try:
-                while True:
-                    command_input = {**values, **({"after": next_cursor} if next_cursor is not None else {}), "limit": 100}
-                    out = execute(cmd, command_input, ctx, s, company_selector=selector, company_source="option")
-                    for item in out["items"]:
-                        frames.append(f"id: {item['seq']}\nevent: audit\ndata: {json.dumps(item, default=str)}\n\n")
-                    if out["next_after"] is not None:
-                        next_cursor = out["next_after"]
-                    elif next_cursor is None:
-                        next_cursor = out.get("high_water") or 0
-                    if out["count"] < 100:
-                        break
+                command_input = {**values, **({"after": next_cursor} if next_cursor is not None else {}), "limit": 100, "scan_limit": 100}
+                out = execute(cmd, command_input, ctx, s, company_selector=selector, company_source="option")
+                for item in out["items"]:
+                    frames.append(f"id: {item['seq']}\nevent: audit\ndata: {json.dumps(item, default=str)}\n\n")
+                if out["next_after"] is not None:
+                    next_cursor = out["next_after"]
+                elif next_cursor is None:
+                    next_cursor = out.get("high_water") or 0
             finally:
-                _close(s)
-                host.reader_done()
+                try:
+                    guard(lambda: _close(s), cred.hub_admin)
+                finally:
+                    host.reader_done()
             canonical_key = s.company_row["id"] if s.company_row is not None else "hub"
-            return frames, next_cursor or 0, canonical_key
+            return frames, next_cursor or 0, canonical_key, out["scan_more"]
 
         async def gen():
             nonlocal cursor
@@ -323,7 +324,7 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
             ready_announced = False
             try:
                 try:
-                    frames, cursor, key = await run_in_threadpool(drain, cursor)
+                    frames, cursor, key, more = await run_in_threadpool(drain, cursor)
                 except BookflowError as e:
                     yield f"event: error\ndata: {json.dumps(e.to_dict())}\n\n"
                     return
@@ -340,7 +341,7 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
                     before = host.stream_sequence(key)
                     try:
                         await run_in_threadpool(resolve_again)
-                        frames, cursor, canonical_key = await run_in_threadpool(drain, cursor)
+                        frames, cursor, canonical_key, more = await run_in_threadpool(drain, cursor)
                     except BookflowError as e:
                         yield f"event: error\ndata: {json.dumps(e.to_dict())}\n\n"
                         return
@@ -352,7 +353,7 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
                         yield "event: error\ndata: {\"code\": \"E_DB_BUSY\", \"message\": \"the host is stopping\", \"details\": {}}\n\n"
                         return
                     latest = host.stream_sequence(key)
-                    if latest != before or event.is_set():
+                    if more or latest != before or event.is_set():
                         continue
                     if not ready_announced:
                         # An SSE comment is invisible to clients but makes the
@@ -401,15 +402,29 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
 
 
 def _reader_hub(host):
+    from contextlib import contextmanager
     from bookflow.storage.engine import open_database
-    return open_database(host.data_root / "hub.db", writable=False)
+
+    @contextmanager
+    def reader():
+        host.reader_started()
+        try:
+            with open_database(host.data_root / "hub.db", writable=False) as db:
+                yield db
+        finally:
+            host.reader_done()
+    return reader()
 
 
-def _issue_session(host, user_id: str) -> str:
+def _issue_session(host, user_id: str, *, expected_password_hash: str) -> str:
     def job(s: Session):
         from bookflow.core.audit import write_event_to
         from bookflow.core.registry import Touched
         s.hub.raw.execute("BEGIN IMMEDIATE")
+        user = s.hub.conn.execute(sa.select(h.users).where(h.users.c.id == user_id)).mappings().first()
+        if (user is None or not user["active"] or user["kind"] != "human"
+                or user["password_hash"] != expected_password_hash):
+            raise BookflowError("E_LOGIN_FAILED")
         row, secret = auth.issue_token(s.hub, user_id=user_id, kind="session", label="browser session", days=None, via="http", actor_id=user_id)
         ctx = Context(interface=Interface.http, client_name="bookflow-workbench", client_version=host.version, client_host=_socket.gethostname(), session_id=row["id"], request_id=new_id())
         write_event_to(s.hub, ctx, "login", "logged in", [Touched("api_token", row["id"], "create", None, 1, {k: v for k, v in row.items() if k != "token_hash"})], actor_id=user_id, actor_kind="human")

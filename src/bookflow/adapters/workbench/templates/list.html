@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% block title %}{{ noun }}{% endblock %}{% block body %}
 {% set base = ("/c/" ~ company_id ~ "/" ~ noun) if company_id else ("/hub/" ~ noun.replace(" ", "-")) %}
-<h1>{{ noun }}</h1>
+<h1>{{ meta.plural_label or noun }}</h1>
 <p class="actions">{% for v in verbs %}{% if v.is_write and not v.version_source and not v.positional %}<a href="{{ base }}/{{ v.verb }}">{{ v.verb }}</a>{% endif %}{% endfor %}
 {% if has_inactive %}<a href="{{ inactive_toggle }}">{{ "hide" if include else "include" }} inactive</a>{% endif %}</p>
 {% if meta.definition %}<form method="get" class="list-tools"><label>Search<input name="query" value="{{ query }}" placeholder="Search {{ meta.plural_label | lower }}"></label>
@@ -12,4 +12,6 @@
 <div class="table-wrap"><table><tr>{% for c in columns or [] %}<th>{{ c }}</th>{% endfor %}</tr>
 {% for it in items %}<tr>{% for c in columns %}{% set value = it.get(c) %}<td>{% if loop.first and has_show and meta.identifier and it.get(meta.identifier) %}<a href="{{ base }}/{{ it[meta.identifier] }}">{{ value if value is not none else "" }}</a>{% elif loop.first and noun == "company" and it.get("company_id") %}<a href="/c/{{ it.company_id }}/company/self">{{ value if value is not none else "" }}</a>{% elif loop.first and has_show and it.get("id") %}<a href="{{ base }}/{{ it.id }}">{{ value if value is not none else "" }}</a>{% else %}{{ value if value is not none else "" }}{% endif %}</td>{% endfor %}</tr>{% endfor %}</table>
 </div>
+{% if not items %}<p>No matching records. Try a different search or include inactive records.</p>{% endif %}
+{% if next_url %}<nav class="pagination" aria-label="Results pages"><a href="{{ next_url }}" rel="next">Next page →</a></nav>{% endif %}
 <p class="muted">{% for k, v in extra.items() %}{{ k }}={{ v }} {% endfor %}</p>{% endblock %}

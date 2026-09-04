@@ -400,17 +400,19 @@ def test_add_new_reference_preserves_caller_and_returns_created_stable_id(hosted
     token = query["return_token"][0]
     assert query["return_target"] == ["term"]
     assert matched.group(2) == token
-    assert "bookflow-reference-created" in caller.text
-    assert "input.value = event.data.id" in caller.text
+    assert '/static/workflow.js' in caller.text
+    script = browser.get('/static/workflow.js').text
+    assert "bookflow-reference-created" in script
+    assert 'data-ref-value' in caller.text and 'data-ref-search' in caller.text
 
     child = browser.get(child_url)
     assert child.status_code == 200
     assert f'name="_return_token" value="{token}"' in child.text
     assert 'name="_return_target" value="term"' in child.text
-    # Callback forms use a top-level submission in the child window so the
-    # returned script executes, while the caller's in-memory draft stays put.
+    # Callback forms use the authenticated workbench transport in the child;
+    # the returned script executes there without replacing the caller's draft.
     form_tag = re.search(r'<form method="post"[^>]+data-generated-form>', child.text)
-    assert form_tag is not None and "hx-post" not in form_tag.group(0)
+    assert form_tag is not None and "hx-post" in form_tag.group(0)
 
     created = browser.post(
         urlsplit(child_url).path,
@@ -493,7 +495,7 @@ def test_nested_collection_references_are_scoped_search_controls_including_compo
         "vendor_profiles.vendor_id",
     ):
         assert f"/_references/item/{path}?target=" in item_form.text
-    assert 'hx-include="closest [data-collection-item]"' in item_form.text
+    assert 'data-ref-component="1"' in item_form.text
     assert 'name="c:members:__INDEX0__:component_item_id"' in item_form.text
     assert 'name="c:members:__INDEX0__:unit_id"' in item_form.text
 
@@ -566,7 +568,7 @@ def test_add_new_vendor_callback_populates_link_endpoint_version_protocol(hosted
     )
     assert caller.status_code == 200
     assert 'data-ref-version-field="expected_vendor_version"' in caller.text
-    assert "option.dataset.version = String(event.data.version)" in caller.text
+    assert "option.dataset.version = String(event.data.version)" in browser.get('/static/workflow.js').text
     matched = re.search(
         rf'href="([^"]*/c/{hosted.company_id}/vendor/create\?[^"]+)"', caller.text
     )

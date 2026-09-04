@@ -98,5 +98,6 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`hub/idempotency_keys`](schema/hub/idempotency_keys.md)
 - [`hub/memberships`](schema/hub/memberships.md)
 - [`hub/organizations`](schema/hub/organizations.md)
+- [`hub/pending_config`](schema/hub/pending_config.md)
 - [`hub/role_capabilities`](schema/hub/role_capabilities.md)
 - [`hub/users`](schema/hub/users.md)

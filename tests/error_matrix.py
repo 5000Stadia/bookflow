@@ -65,6 +65,7 @@ _LIFECYCLE_ERRORS = {
     },
     "show": {"E_RECORD_NOT_FOUND"},
     "list": {"E_LIST_FILTER"},
+    "query": {"E_LIST_FILTER", "E_QUERY_STALE"},
     "activate": {
         "E_RECORD_NOT_FOUND", "E_VERSION_CONFLICT", "E_INACTIVE_REFERENCE", "E_NAME_TAKEN",
         "E_SYSTEM_RECORD",
@@ -78,6 +79,7 @@ _LIFECYCLE_ERRORS = {
 for _noun in _SUPPORTING_LIST_NOUNS:
     for _verb, _codes in _LIFECYCLE_ERRORS.items():
         MATRIX[f"{_noun} {_verb}"] = {code: "shared Row 5 lifecycle rule" for code in _codes}
+    MATRIX[f"{_noun} query"]["E_QUERY_STALE"] = "company audit changed after the first page; restart without a cursor"
 
 MATRIX.update({
     "customer link-vendor": {
@@ -132,4 +134,4 @@ STANDALONE_MATRIX = {
 
 INFRASTRUCTURE = ["E_USAGE", "E_VALIDATION", "E_CONTEXT_IN_INPUT", "E_NOT_INITIALIZED", "E_NO_ACTOR", "E_PERMISSION", "E_COMPANY_NOT_FOUND",
                   "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND", "E_DB_BUSY", "E_NETWORK_SHARE", "E_FS_UNKNOWN", "E_SCHEMA_UNKNOWN",
-                  "E_SCHEMA_BEHIND", "E_MIGRATION_FAILED", "E_CONFIG_INVALID", "E_IO", "E_REASON_REQUIRED", "E_FEATURE_DISABLED", "E_UNAUTHENTICATED", "E_INTERNAL"]
+                  "E_SCHEMA_BEHIND", "E_MIGRATION_FAILED", "E_CONFIG_INVALID", "E_IO", "E_PARTIAL_WRITE", "E_REASON_REQUIRED", "E_FEATURE_DISABLED", "E_UNAUTHENTICATED", "E_INTERNAL"]

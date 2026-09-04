@@ -1766,15 +1766,12 @@ def aggregate_snapshot(
     return snapshot
 
 
-def list_items(
+def item_query_options(
     db: Database,
     *,
-    query: str | None = None,
     filters: Sequence[str] = (),
-    sort: str | None = None,
-    direction: Literal["asc", "desc"] = "asc",
-    include_inactive: bool = False,
-) -> list[ItemOutput]:
+) -> dict[str, Any]:
+    """Authoritative item search/filter/sort expressions for list and query."""
     definition = get_list_definition(ITEM_NOUN)
     assert definition is not None
     owner = schema.items
@@ -1849,10 +1846,8 @@ def list_items(
         schema.custom_field_defs.c.active.is_(True),
         schema.custom_field_defs.c.kind.in_(("text", "choice")),
     ).scalar_subquery()
-    rows = list_service.list_rows(
-        db, owner, definition,
-        query=query, filters=ordinary_filters, sort=sort, direction=direction,
-        include_inactive=include_inactive,
+    return dict(
+        filters=ordinary_filters,
         search_expressions={
             "category": sa.func.lower(sa.func.coalesce(category, "")),
             "vendor_item_identifiers": sa.func.lower(sa.func.coalesce(vendor_names, "")),
@@ -1866,6 +1861,23 @@ def list_items(
             "category": category,
         },
         visible=sa.and_(*custom_predicates) if custom_predicates else None,
+    )
+
+
+def list_items(
+    db: Database,
+    *,
+    query: str | None = None,
+    filters: Sequence[str] = (),
+    sort: str | None = None,
+    direction: Literal["asc", "desc"] = "asc",
+    include_inactive: bool = False,
+) -> list[ItemOutput]:
+    definition = get_list_definition(ITEM_NOUN)
+    rows = list_service.list_rows(
+        db, schema.items, definition, query=query, sort=sort,
+        direction=direction, include_inactive=include_inactive,
+        **item_query_options(db, filters=filters),
     )
     cache = _build_projection_cache(db, rows)
     return [project_item(db, row, cache=cache) for row in rows]

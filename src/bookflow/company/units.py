@@ -494,15 +494,8 @@ def persist_unit_mutation(db: Database, mutation: UnitMutation) -> None:
             db.conn.execute(schema.unit_conversions.insert().values(**values))
 
 
-def list_unit_records(
-    db: Database,
-    *,
-    query: str | None = None,
-    filters: Sequence[str] = (),
-    sort: str | None = None,
-    direction: Literal["asc", "desc"] = "asc",
-    include_inactive: bool = False,
-) -> list[UnitOfMeasureOutput]:
+def unit_query_options() -> dict[str, Any]:
+    """Authoritative unit search/filter/sort expressions for list and query."""
     definition = get_list_definition(UNIT_NOUN)
     assert definition is not None
     child = schema.unit_conversions
@@ -521,15 +514,7 @@ def list_unit_records(
         child.c.unit_of_measure_id == owner.c.id, active_child
     ).scalar_subquery()
     default_name = lambda column: sa.select(child.c.name).where(child.c.id == column).scalar_subquery()
-    rows = list_service.list_rows(
-        db,
-        owner,
-        definition,
-        query=query,
-        filters=filters,
-        sort=sort,
-        direction=direction,
-        include_inactive=include_inactive,
+    return dict(
         search_expressions={
             "unit_names": sa.func.lower(sa.func.coalesce(child_names, "")),
             "unit_abbreviations": sa.func.lower(sa.func.coalesce(child_abbreviations, "")),
@@ -542,6 +527,22 @@ def list_unit_records(
             "default_shipping_unit": default_name(owner.c.default_shipping_unit_id),
             "related_unit_count": count,
         },
+    )
+
+
+def list_unit_records(
+    db: Database,
+    *,
+    query: str | None = None,
+    filters: Sequence[str] = (),
+    sort: str | None = None,
+    direction: Literal["asc", "desc"] = "asc",
+    include_inactive: bool = False,
+) -> list[UnitOfMeasureOutput]:
+    rows = list_service.list_rows(
+        db, schema.units_of_measure, get_list_definition(UNIT_NOUN),
+        query=query, filters=filters, sort=sort, direction=direction,
+        include_inactive=include_inactive, **unit_query_options(),
     )
     return [project_unit_record(db, row) for row in rows]
 

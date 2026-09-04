@@ -284,7 +284,7 @@ def describe_fields(
 
 def reference_for_path(definition: Any, path: str) -> Any | None:
     """Return a direct scalar reference declared by a list definition."""
-    if definition is None or "." in path:
+    if definition is None:
         return None
     for reference in definition.references:
         if not reference.many and reference.field == path:
@@ -530,6 +530,10 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
             v = _read_collection(
                 leaf["annotation"], (path,), form, coerce=True
             )
+            # An untouched optional collection on a create form is absent, not
+            # an explicit replacement with an empty collection.
+            if cmd.verb in ("create", "new") and original is None and not leaf["required"] and not v:
+                continue
             projected_original = _project_value(leaf["annotation"], original)
             if (
                 originals is not None

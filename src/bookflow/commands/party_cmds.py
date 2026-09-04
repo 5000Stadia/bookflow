@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
@@ -503,10 +505,10 @@ def _concat(*columns: sa.ColumnElement[Any]) -> sa.ColumnElement[Any]:
     return sa.func.lower(expression)
 
 
-def _reference_name(table: sa.Table, record_id: sa.ColumnElement[Any]) -> sa.ColumnElement[Any]:
+def _reference_name(table: sa.Table, record_id: sa.ColumnElement[Any], *, fold: bool = True) -> sa.ColumnElement[Any]:
     label = table.c.full_name if "full_name" in table.c else table.c.name
     return (
-        sa.select(sa.func.lower(label))
+        sa.select(sa.func.lower(label) if fold else label)
         .where(table.c.id == record_id)
         .scalar_subquery()
     )
@@ -530,53 +532,40 @@ def _custom_search(record_type: str, outer: sa.Table) -> sa.ColumnElement[Any]:
     )
 
 
+def _customer_inherited_expression(tag: str, value) -> sa.ColumnElement[Any]:
+    """Nearest non-null value using bounded, indexed ancestor point lookups."""
+    from bookflow.company.lists import MAX_HIERARCHY_DEPTH
+    outer = schema.customers
+    ancestors = [outer.alias(f"effective_{tag}_{depth}") for depth in range(1, MAX_HIERARCHY_DEPTH)]
+    joined = ancestors[0]
+    for parent, grandparent in zip(ancestors, ancestors[1:]):
+        joined = joined.outerjoin(grandparent, grandparent.c.id == parent.c.parent_id)
+    inherited = (
+        sa.select(sa.func.coalesce(*(value(ancestor) for ancestor in ancestors)))
+        .select_from(joined).where(ancestors[0].c.id == outer.c.parent_id)
+        .correlate(outer).scalar_subquery()
+    )
+    return sa.func.coalesce(value(outer), inherited)
+
+
+@lru_cache(maxsize=None)
 def _customer_effective(field: str) -> sa.ColumnElement[Any]:
-    outer = schema.customers
-    ancestor = schema.customers.alias(f"effective_{field}_ancestor")
-    return (
-        sa.select(ancestor.c[field])
-        .where(
-            outer.c.path.like(ancestor.c.path + "%"),
-            ancestor.c[field].is_not(None),
-        )
-        .order_by(ancestor.c.depth.desc(), ancestor.c.id)
-        .limit(1)
-        .correlate(outer)
-        .scalar_subquery()
-    )
+    return _customer_inherited_expression(field, lambda table: table.c[field])
 
 
+@lru_cache(maxsize=None)
 def _customer_collection_owner(mode_field: str) -> sa.ColumnElement[Any]:
-    outer = schema.customers
-    ancestor = schema.customers.alias(f"effective_{mode_field}_ancestor")
-    return (
-        sa.select(ancestor.c.id)
-        .where(
-            outer.c.path.like(ancestor.c.path + "%"),
-            ancestor.c[mode_field] == "own",
-        )
-        .order_by(ancestor.c.depth.desc(), ancestor.c.id)
-        .limit(1)
-        .correlate(outer)
-        .scalar_subquery()
+    return _customer_inherited_expression(
+        mode_field, lambda table: sa.case((table.c[mode_field] == "own", table.c.id))
     )
 
 
+@lru_cache(maxsize=1)
 def _effective_customer_billing() -> sa.ColumnElement[Any]:
-    outer = schema.customers
-    ancestor = schema.customers.alias("effective_billing_ancestor")
-    leaves = tuple(ancestor.c[f"billing_{leaf}"] for leaf in AddressOutput.model_fields)
-    return (
-        sa.select(_concat(*leaves))
-        .where(
-            outer.c.path.like(ancestor.c.path + "%"),
-            sa.or_(*(leaf.is_not(None) for leaf in leaves)),
-        )
-        .order_by(ancestor.c.depth.desc(), ancestor.c.id)
-        .limit(1)
-        .correlate(outer)
-        .scalar_subquery()
-    )
+    def address(candidate):
+        leaves = tuple(candidate.c[f"billing_{leaf}"] for leaf in AddressOutput.model_fields)
+        return sa.case((sa.or_(*(leaf.is_not(None) for leaf in leaves)), _concat(*leaves)))
+    return _customer_inherited_expression("billing", address)
 
 
 def _contact_search(
@@ -612,9 +601,7 @@ def _contact_points_search(
             contacts.c[owner_field] == owner_id,
             contacts.c.active.is_(True),
             points.c.active.is_(True),
-        )
-        .correlate(outer)
-        .scalar_subquery()
+        ).correlate(outer).scalar_subquery()
     )
 
 
@@ -626,8 +613,9 @@ def _contact_sort(
     field: str,
     *,
     primary_only: bool = False,
+    fold: bool = True,
 ) -> sa.ColumnElement[Any]:
-    statement = sa.select(sa.func.lower(contacts.c[field])).where(
+    statement = sa.select(sa.func.lower(contacts.c[field]) if fold else contacts.c[field]).where(
         contacts.c[owner_field] == owner_id,
         contacts.c.active.is_(True),
     )
@@ -646,6 +634,7 @@ def _contact_sort(
     return statement.limit(1).correlate(outer).scalar_subquery()
 
 
+@lru_cache(maxsize=1)
 def _customer_expressions() -> tuple[dict[str, sa.ColumnElement], dict[str, sa.ColumnElement], dict[str, sa.ColumnElement]]:
     table = schema.customers
     linked = (

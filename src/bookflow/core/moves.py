@@ -8,6 +8,7 @@ import os
 import sys
 from pathlib import Path
 
+from bookflow.core.durability import sync_move_parents
 from bookflow.core.errors import BookflowError
 
 
@@ -64,8 +65,11 @@ def move_dir(src: Path, dst: Path, company_id: str | None = None) -> None:
         if src.parent == dst.parent and src.name != dst.name and src.name.casefold() == dst.name.casefold() and src.resolve() == dst.resolve():
             tmp = dst.with_name(f"{dst.name}.moving-{company_id or 'x'}")
             rename_noreplace(src, tmp)
+            sync_move_parents(src, tmp)
             rename_noreplace(tmp, dst)
+            sync_move_parents(tmp, dst)
         else:
             rename_noreplace(src, dst)
+            sync_move_parents(src, dst)
     except OSError as e:
         raise BookflowError("E_IO", details={"operation": "rename", "errno": errno.errorcode.get(e.errno or 0, str(e.errno)), "path": str(dst)})

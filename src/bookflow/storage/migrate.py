@@ -5,14 +5,18 @@ from __future__ import annotations
 from typing import Any
 
 import sqlite3
+import os
+import tempfile
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
 from bookflow.core.errors import BookflowError
+from bookflow.core.durability import sync_directory, sync_file
 from bookflow.storage.engine import Database, io_error, sqlite_uri
 
 # Head revisions as constants: checked before Alembic is imported on the read path.
-HEADS = {"hub": "hub0005", "company": "co0004"}
+HEADS = {"hub": "hub0006", "company": "co0004"}
 _PKG = Path(__file__).parent
 
 
@@ -55,6 +59,17 @@ def current_revision(db: Database) -> str | None:
     return MigrationContext.configure(db.conn).get_current_revision()
 
 
+def current_revision_open(db: Database) -> str | None:
+    """Read the revision in the same SQLite snapshot as the command's data."""
+    try:
+        row = db.raw.execute("SELECT version_num FROM alembic_version").fetchone()
+    except sqlite3.OperationalError as exc:
+        if "no such table" in str(exc):
+            return None
+        raise
+    return row[0] if row else None
+
+
 def classify(chain: str, revision: str | None) -> str:
     """'head', 'behind', 'fresh', or 'unknown'. Head is a constant; Alembic loads only for older revisions."""
     if revision is None:
@@ -72,6 +87,14 @@ def backup(path: Path, backups_dir: Path, prefix: str = "", from_revision: str |
     if from_revision:
         existing = sorted(backups_dir.glob(f"{prefix}*-from-{from_revision}.db"))
         if existing:
+            # A previous attempt can have replaced the file but failed to
+            # persist its directory entry. Retry that boundary before reuse.
+            try:
+                sync_file(existing[-1])
+                sync_directory(backups_dir)
+                sync_directory(backups_dir.parent)
+            except OSError as e:
+                raise io_error("backup", e, existing[-1])
             return existing[-1]
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M%S")
     suffix = f"-from-{from_revision}" if from_revision else ""
@@ -80,11 +103,12 @@ def backup(path: Path, backups_dir: Path, prefix: str = "", from_revision: str |
     while target.exists():
         n += 1
         target = backups_dir / f"{prefix}{stamp}-{n}{suffix}.db"
-    tmp = target.with_suffix(".db.partial")
+    tmp = None
     try:
-        src = sqlite3.connect(sqlite_uri(path, "ro"), uri=True)
-        dst = sqlite3.connect(sqlite_uri(tmp, "rwc"), uri=True)
-        try:
+        fd, name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".partial", dir=backups_dir)
+        os.close(fd)
+        tmp = Path(name)
+        with closing(sqlite3.connect(sqlite_uri(path, "ro"), uri=True)) as src, closing(sqlite3.connect(sqlite_uri(tmp, "rwc"), uri=True)) as dst:
             src.backup(dst)
             ok = dst.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
             rev = None
@@ -92,15 +116,16 @@ def backup(path: Path, backups_dir: Path, prefix: str = "", from_revision: str |
                 rev = dst.execute("SELECT version_num FROM alembic_version").fetchone()
             except sqlite3.OperationalError:
                 pass
-        finally:
-            dst.close()
-            src.close()
         if not ok or (from_revision and (rev is None or rev[0] != from_revision)):
             raise sqlite3.DatabaseError("backup verification failed")
+        sync_file(tmp)
         tmp.replace(target)
+        sync_directory(backups_dir)
+        sync_directory(backups_dir.parent)
     except (sqlite3.Error, OSError) as e:
         try:
-            tmp.unlink()
+            if tmp is not None:
+                tmp.unlink(missing_ok=True)
         except OSError:
             pass
         raise io_error("backup", e, target)

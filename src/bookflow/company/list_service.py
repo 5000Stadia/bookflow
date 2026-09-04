@@ -174,8 +174,7 @@ def _search_expression(table: sa.Table, field: str, supplied: ExpressionMap | No
     return None
 
 
-def list_rows(
-    db_or_connection: Any,
+def list_statement(
     table: sa.Table,
     definition: ListDefinition,
     *,
@@ -188,9 +187,8 @@ def list_rows(
     filter_expressions: ExpressionMap | None = None,
     sort_expressions: ExpressionMap | None = None,
     visible: sa.ColumnElement[bool] | None = None,
-) -> list[dict[str, Any]]:
-    """Apply the declared search/filter/sort contract and return mapping rows."""
-    connection = _connection(db_or_connection)
+) -> sa.Select:
+    """Build the declared search/filter/sort selection without materializing it."""
     if direction not in ("asc", "desc"):
         raise BookflowError(
             "E_LIST_FILTER",
@@ -231,6 +229,18 @@ def list_rows(
             expression = expression.nulls_last()
         order.append(expression)
     statement = statement.order_by(*order)
+    return statement
+
+
+def list_rows(
+    db_or_connection: Any,
+    table: sa.Table,
+    definition: ListDefinition,
+    **options: Any,
+) -> list[dict[str, Any]]:
+    """Return complete compatibility enumeration using the shared selection."""
+    connection = _connection(db_or_connection)
+    statement = list_statement(table, definition, **options)
     return [dict(row) for row in connection.execute(statement).mappings().all()]
 
 
@@ -740,6 +750,7 @@ __all__ = [
     "hierarchy_ancestors",
     "insert_row",
     "list_rows",
+    "list_statement",
     "normalize_lookup_key",
     "plan_activation",
     "plan_deactivation",

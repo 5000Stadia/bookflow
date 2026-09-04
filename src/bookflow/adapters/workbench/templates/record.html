@@ -1,11 +1,19 @@
 {% extends "base.html" %}{% block title %}{{ noun }} {{ record_id }}{% endblock %}{% block body %}
 {% set base = ("/c/" ~ company_id ~ "/" ~ noun) if company_id else ("/hub/" ~ noun.replace(" ", "-")) %}
-<nav class="crumbs"><a href="{{ base }}">{{ noun }}</a> / {{ record_id }}</nav>
+<nav class="crumbs"><a href="{{ base }}">{{ meta.plural_label or noun }}</a> / {{ record_title }}</nav>
 {% if editing %}<div class="warn">Editing now: {% for e in editing %}{{ e.name or e.user_id }} ({{ e.interface }}, since {{ e.since }}){% if not loop.last %}, {% endif %}{% endfor %}</div>{% endif %}
 {% if presence %}<div hx-post="/c/{{ company_id }}/presence/set/{{ meta.record_type }}/{{ record.id if noun != 'company' else record.company_id }}" hx-trigger="load, every 30s" hx-swap="none"></div>
 <script>addEventListener('pagehide',()=>navigator.sendBeacon&&fetch('/c/{{ company_id }}/presence/clear/{{ meta.record_type }}/{{ record.id if noun != 'company' else record.company_id }}',{method:'POST',headers:{'X-Bookflow-Workbench':'1'},keepalive:true}))</script>{% endif %}
 <h1>{{ record_title }}</h1>
-<p class="actions">{% for v in verbs %}{% if v.is_write %}<a href="{{ base }}/{{ record_id }}/{{ v.verb }}">{{ v.verb }}</a>{% endif %}{% endfor %}{% if contact_copy %}<a href="{{ contact_copy.url }}">{{ contact_copy.label }}</a>{% endif %}</p>
+<p class="actions">{% if workspace %}{% for v in verbs if v.verb == 'update' %}<a class="primary-action" href="{{ base }}/{{ record_id }}/update">Edit {{ 'job' if record.parent_id else 'customer' }}</a>{% endfor %}{% endif %}{% for v in verbs %}{% if v.is_write and not (workspace and v.verb == 'update') %}<a href="{{ base }}/{{ record_id }}/{{ v.verb }}">{{ v.verb.replace('-', ' ').capitalize() if workspace else v.verb }}</a>{% endif %}{% endfor %}{% if contact_copy %}<a href="{{ contact_copy.url }}">{{ contact_copy.label }}</a>{% endif %}</p>
+{% if workspace %}
+{% macro readable(value) %}{% if value is mapping %}{% if value.currency and value.amount is defined %}{{ value.amount }} {{ value.currency }}{% else %}{% for key, part in value.items() if key not in ('id', 'owner_id', 'active', 'position') and not key.endswith('_id') %}{% if part not in (none, '', []) %}<div><span class="muted">{{ key.replace('_', ' ') }}:</span> {{ readable(part) }}</div>{% endif %}{% endfor %}{% endif %}{% elif value is sequence and value is not string %}{% for part in value %}<div class="contact-entry">{{ readable(part) }}</div>{% endfor %}{% elif value == true %}Yes{% elif value == false %}No{% else %}{{ value }}{% endif %}{% endmacro %}
+<div class="customer-workspace">
+{% for section in workspace.sections %}{% if section.fields %}<section class="workspace-card"><h2>{{ section.title }}</h2>{% for label, value in section.fields %}<div class="field"><b>{{ label }}</b><div>{{ readable(value) }}</div></div>{% endfor %}</section>{% endif %}{% endfor %}
+<section class="workspace-card"><h2>Inherited values</h2>{% if workspace.inheritance %}<p>These values follow their source until explicitly overridden.</p><ul>{% for source in workspace.inheritance %}<li>{{ source.field }} — <a href="{{ base }}/{{ source.id }}">{{ source.name }}</a></li>{% endfor %}</ul>{% else %}<p class="muted">No values currently inherited from another customer or job.</p>{% endif %}</section>
+</div>
+<section class="workspace-card" aria-label="Jobs"><h2>Jobs</h2>{% if workspace.add_job %}<a class="add-job" href="{{ workspace.add_job }}">Add job</a>{% endif %}{% if workspace.jobs %}<ul>{% for job in workspace.jobs %}<li><a href="{{ base }}/{{ job.id }}">{{ job.full_name }}</a>{% if job.phone %} · {{ job.phone }}{% endif %}</li>{% endfor %}</ul>{% else %}<p class="muted">No active jobs under this record.</p>{% endif %}<a href="{{ workspace.jobs_url }}">{{ 'View all jobs' if workspace.more_jobs else 'Browse jobs and inactive records' }}</a></section>
+{% endif %}
 {% if audit_undo %}<section class="audit-undo" aria-label="Undo status">
 {% if audit_undo.eligible %}<form method="post" action="/c/{{ company_id }}/undo" hx-post="/c/{{ company_id }}/undo" hx-target="body" hx-swap="outerHTML" hx-confirm="Undo this audit event?">
 <input type="hidden" name="originals" value="{}"><input type="hidden" name="f:event_id" value="{{ audit_undo.event_id }}"><button name="action" value="submit">Undo this event</button></form>
@@ -14,7 +22,7 @@
 {% elif audit_undo.unavailable %}<p class="muted">Undo unavailable: {{ audit_undo.unavailable }}</p>{% endif %}
 </section>{% endif %}
 {% macro fields(obj, prefix) %}{% for k, v in obj.items() %}{% if v is mapping %}<div class="field"><b>{{ prefix }}{{ k }}</b><span></span></div>{{ fields(v, prefix ~ k ~ ".") }}{% elif v is sequence and v is not string and v and v[0] is mapping %}<div class="field"><b>{{ prefix }}{{ k }}</b><pre>{{ json.dumps(v, indent=1, default=str) }}</pre></div>{% else %}<div class="field"><b>{{ prefix }}{{ k }}</b><span>{{ v if v is not none else "" }}</span></div>{% endif %}{% endfor %}{% endmacro %}
-{{ fields(record, "") }}
+{% if workspace %}<details class="technical-details"><summary>All fields and technical details</summary>{{ fields(record, "") }}</details>{% else %}{{ fields(record, "") }}{% endif %}
 {% if audit is not none %}<h3>Audit</h3><div class="table-wrap"><table><tr><th>at</th><th>command</th><th>actor</th><th>interface</th><th>reason</th><th>summary</th></tr>
 {% for e in audit %}<tr><td>{{ e.at }}</td><td>{{ e.command }}</td><td>{{ e.actor_name or e.actor_id }}</td><td>{{ e.interface }}</td><td>{{ e.reason or "" }}{% if e.directive_code %} ({{ e.directive_code }}){% endif %}</td><td>{{ e.summary }}</td></tr>{% endfor %}</table></div>{% endif %}
 {% endblock %}

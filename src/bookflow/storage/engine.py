@@ -1,4 +1,4 @@
-"""SQLite opens. Writable opens set WAL and checkpoint on close; read-only opens set query_only."""
+"""Durable WAL writers and read-only handles with a stable transaction snapshot."""
 
 from __future__ import annotations
 
@@ -43,9 +43,12 @@ def _connect(path: Path, writable: bool, create: bool) -> sqlite3.Connection:
     try:
         conn.execute("PRAGMA busy_timeout=5000")
         if writable:
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA synchronous=NORMAL")  # durable across process crashes in WAL mode; one fsync per checkpoint, not per commit
+            journal = conn.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+            conn.execute("PRAGMA synchronous=FULL")
             conn.execute("PRAGMA foreign_keys=ON")
+            if (journal != "wal" or conn.execute("PRAGMA synchronous").fetchone()[0] != 2
+                    or conn.execute("PRAGMA foreign_keys").fetchone()[0] != 1):
+                raise sqlite3.OperationalError("required database guarantees are unavailable")
         else:
             conn.execute("PRAGMA query_only=ON")
         conn.execute("SELECT count(*) FROM sqlite_master")
@@ -62,23 +65,51 @@ class Database:
         self.path = path
         self.writable = writable
         self.raw = _connect(path, writable, create)
-        self.engine = sa.create_engine("sqlite://", creator=lambda: self.raw, poolclass=sa.pool.StaticPool)
-        self.conn = self.engine.connect()
+        self._closed = False
+        self.engine = None
+        self.conn = None
+        try:
+            self.engine = sa.create_engine("sqlite://", creator=lambda: self.raw, poolclass=sa.pool.StaticPool)
+            self.conn = self.engine.connect()
+            if not writable:
+                # SQLAlchemy's logical autobegin does not BEGIN sqlite3 in
+                # autocommit mode. Begin after its connection initialization.
+                self.raw.execute("BEGIN")
+        except BaseException:
+            try:
+                self.close()
+            except Exception:
+                # Pool initialization may already have invalidated the raw
+                # connection. Preserve the original opening failure.
+                pass
+            raise
+
+    @property
+    def write_transaction(self) -> bool:
+        """A writable transaction, distinct from a pinned read snapshot."""
+        return self.writable and self.raw.in_transaction
 
     def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
         try:
+            self.raw.rollback()
             if self.writable:
                 try:
                     self.raw.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 except sqlite3.OperationalError:
                     pass
         finally:
-            self.conn.close()
-            self.engine.dispose()
             try:
-                self.raw.close()
-            except sqlite3.ProgrammingError:
-                pass
+                if self.conn is not None:
+                    self.conn.close()
+            finally:
+                try:
+                    if self.engine is not None:
+                        self.engine.dispose()
+                finally:
+                    self.raw.close()
 
 
 @contextmanager

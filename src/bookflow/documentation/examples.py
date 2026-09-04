@@ -101,6 +101,7 @@ for _noun, _create_input in _SUPPORTING_CREATE_INPUTS.items():
         f"{_noun} create": Example(f"{_prefix} create {_company}", _create_input),
         f"{_noun} show": Example(f"{_prefix} show {ID} {_company}", {_selector: ID}),
         f"{_noun} list": Example(f"{_prefix} list {_company}", {}),
+        f"{_noun} query": Example(f"{_prefix} query --limit 25 {_company}", {"limit": 25}),
         f"{_noun} update": Example(
             f"{_prefix} update {ID} --expected-version 1 {_company}",
             {_selector: ID, "expected_version": 1},

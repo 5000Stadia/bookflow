@@ -45,8 +45,10 @@ company_show = command("company show", scope="company", description="Show the se
 def plan_company_show(inp: Empty, ctx: Context, s: Session) -> Plan:
     row = s.company_row
     orow = org.get(s, row["organization_id"])
-    summary = company_summary(s, row, orow["display_name"])
     info = cinfo.read_info(s.company)
+    # Registry names/paths belong to the hub snapshot. Company-owned values
+    # come from the company snapshot, not a potentially lagging hub copy.
+    summary = company_summary(s, {**row, "legal_name": info["legal_name"], "home_currency": info["home_currency"]}, orow["display_name"])
     info.pop("display_name", None)
     for k in ("created_at", "updated_at"):
         info[k] = localize(s, info[k])

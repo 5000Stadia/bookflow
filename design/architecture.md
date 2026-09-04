@@ -17,7 +17,8 @@ src/bookflow/
     ids.py               ULID new_id / is_ulid / normalize_ulid
     money.py             Money (minor units + code), currency table from data/currencies.csv, parse/format/JSON form
     models.py            ListOutput, WriteOutput, CommonFields, redact_paths()
-    config.py            config.toml: [users.<login>] user_id/default_company; atomic save; os_login() from uid
+    config.py            config.toml: user mappings/defaults; hub-committed pending projection overlay and durable file publication; os_login() from uid
+    durability.py        private unique metadata temporaries, file/directory synchronization, move-parent synchronization
     fs.py                filesystem type detection (Linux mountinfo; macOS statfs; Windows drive type) and check_local()
     locks.py             RootLock: <data_root>/root.lock, exclusive for the whole command, holder info, BOOKFLOW_LOCK_TIMEOUT
     perms.py             private_umask() (077), is_private_dir()
@@ -31,10 +32,10 @@ src/bookflow/
     forward.py           stdlib only: private runtime-directory validation, socket_path(), read_descriptor(), call_host(), try_forward() (run() sends every non-bootstrap call to a live host over its Unix socket)
   storage/
     paths.py             data root resolution; display-name normalization and name_key; folder derivation, collision choice, reservation; markers
-    engine.py            Database (sqlite3 + SQLAlchemy Core on one connection); percent-encoded file URIs; read-only (query_only) and writable (WAL, checkpoint on close) opens; create=True only for init and rollout; io_error() translation
+    engine.py            Database (sqlite3 + SQLAlchemy Core); explicit read-only snapshots, verified WAL/FULL/foreign-key writers, writable-transaction detection and exception-safe cleanup; percent-encoded URIs; create=True only for init/rollout
     migrate.py           HEADS constants; classify(); backup via sqlite backup API; migrate_to_head(); Alembic loaded only when migrating
-    hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (membership capability overrides, frozen role capabilities, inert feature flags)
-    company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit tables, presence, idempotency_keys, directives, sequences)
+    hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection)
+    company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit/presence/directives), co0003 (20 supporting lists), co0004 (job delivery inheritance)
     migrate.py           + migrate_company(): the one owner of company migrations: migrate entry by the system user, baseline entry, marker, hub projection entry
   hub/
     schema.py            users, api_tokens, organizations, companies, memberships, role_capabilities, features, audit_events, audit_entries; co-located table and column descriptions
@@ -50,6 +51,8 @@ src/bookflow/
     rollout.py           create_company_folder(): stages 2-4 with cleanup; writes the company_info create entry
     presence.py          set/clear/live_for/prune; 90 s TTL; never audited
     directives.py        add/resolve/deactivate/list_all; SI-<n> codes from sequences, never reused
+    query.py             strict bounded query inputs, reference rows, scoped/permission-bound continuation contract
+    query_providers.py   SQL-first noun selection and summary/reference projection; audit-watermark continuation validation
   commands/
     common.py            OrganizationOutput, CompanySummary builders, Empty/ListInput/NameInput
     hub_cmds.py          init (bootstrap path run_init), upgrade, organization new/list/show/rename, company new/list/use/attach/detach, demo reset, hub audit list/show
@@ -57,6 +60,7 @@ src/bookflow/
     audit_cmds.py        audit list/show/tail (company) and hub audit list/show/tail, one implementation over either database; seq cursors; per-entry visibility
     host_cmds.py         serve (bootstrap path run_serve, bind parsing, the --allow-network gate), start_serving()/ServeHandle, migrate_everything(), make_local_handler(), user_for_login(); user set-password; token issue/list/revoke
     docs_cmds.py         standalone docs generate/check command; imports the renderer only when invoked
+    query_cmds.py        lazy registry generation of typed query models and commands for all 20 company list nouns
   documentation/
     generate.py          deterministic command/schema/resource projection; complete-tree freshness comparison; sibling staging and atomic swap with rollback
     introspection.py     recursive Pydantic field facts, deterministic valid output samples, and SQLAlchemy column facts
@@ -68,7 +72,7 @@ src/bookflow/
   adapters/http/app.py   FastAPI app from the registry: /commands/<noun.verb>, authoritative /companies/{id}/commands/<noun.verb>, /login, /logout, async /companies/{id}/events and /hub-events, exact generated /openapi.json, /health; credential/cookie handling and the same error documents as the CLI with HTTP statuses
   adapters/http/auth.py  argon2 passwords (constant-time on unknown users), bearer and session tokens stored as sha256, liveness refresh, login throttle
   adapters/http/local.py LocalListener on the Unix socket: peer identity from SO_PEERCRED, envelope identity fields discarded, 8 MiB frame cap and 30-second accepted-connection timeout
-  adapters/workbench/    pages.py (picker, hub and company indexes, generated list/record/form/audit pages), forms.py (input model -> leaves; form -> command JSON with originals, tri-state booleans, clears, Preview), templates/, static/ (vendored htmx, stylesheet)
+  adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
 ```
 
 The repository root carries `uv.lock`; source-checkout documentation trials sync a dedicated environment inside their disposable trial root, then use `uv run --frozen --no-sync`, so executing the guide does not update the checkout's lock or replace packages in a shared environment.
@@ -79,26 +83,26 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 
 ## Runtime facts
 
-- Every command takes `root.lock` exclusively for its whole duration; `init` creates the root first. Lock timeout 5 s, `BOOKFLOW_LOCK_TIMEOUT` overrides (tests use 0.2).
+- Offline commands take `root.lock` exclusively for their duration; hosted commands run under the host-held root lock with one writer and concurrent read snapshots. `init` creates the root first. Lock timeout is 5 s; `BOOKFLOW_LOCK_TIMEOUT` overrides it.
 - Hub opens writable when the command writes hub or config (the audit event lives in the hub); company opens writable only when the command writes company.
-- Writable opens migrate behind-head databases after a backup and record an `upgrade` event; read-only opens of a behind-head database return `E_SCHEMA_BEHIND`.
+- Writable opens verify WAL, `synchronous=FULL` and foreign keys, migrate behind-head databases after a durably published backup, and record an `upgrade` event. Read-only opens begin a deferred SQLite transaction after SQLAlchemy setup; revision checks and dependent reads use that snapshot. Behind-head reads return `E_SCHEMA_BEHIND`. Hub and company snapshots are independent, not cross-database atomic.
 - `apply` runs inside one hub transaction and one company transaction started by dispatch; commands that need more than one hub transaction (rename with move, organization move, demo reset, upgrade) commit and reopen transactions themselves and return `audited=True`.
 - Paths in outputs, error details, and audit snapshots are nulled for non-hub-admins in dispatch (`redact_paths`, `redact_error`); OS and SQLite failures become `E_IO` at the dispatch boundary; `E_DB_BUSY` carries only the holder's command and hold time.
 - A writable hub open completes any pending organization move (all of them) and the selected company's pending move before the command plans (hub/moves.py); read-only opens and dry runs use whichever folder exists and write nothing. Dry runs open every database read-only and never migrate.
-- Dispatch order under the lock: config; hub open; actor; hub migration; pending organization moves; company resolution and role; company open (pending move, migration, display-name copy); directive resolution; reason gate (any write by an agent or system actor); idempotency lookup; plan; dry-run return; apply with principals upserted at the start of the company transaction (rolled back on a no-op), events per database, truth-ordered commits, projection repair as a hub entry, idempotency store; config write. `run_in_session` runs a command inside an open session (demo seed; later the host).
+- Dispatch order under the lock: config; hub open; actor; hub migration; pending organization moves; company resolution and role; company open (pending move, migration, display-name copy); directive resolution; reason gate (any write by an agent or system actor); idempotency lookup; plan; dry-run return; apply with principals upserted at the start of the company transaction (rolled back on a no-op), events per database, truth-ordered commits, projection repair as a hub entry, idempotency store; committed config intent and durable file projection. Nested after-commit demo commands do not inherit the outer config-dirty flag. `run_in_session` runs a command inside an open session (demo seed; later the host).
 - Company audit events carry every context column; `company_info` snapshots exclude `display_name` and store `tax_id` as a short hash; the before-state is derived from the previous entry's after for every action but create, baseline, migrate, delete.
 - Schema migrations record a `migrate` entry by the system user with `on_behalf_of` the triggering actor, and rewrite the company marker and hub projection.
 - `Client.use_company` and `company=` on a call are step 1 of selection; `BOOKFLOW_COMPANY` is step 2; the saved default is step 3.
-- The host holds the data-root lock as `serve` for its whole run and acquires it before binding TCP; `host.json` is published only after both listeners are ready. Every write and advisory request runs on one writer thread with long-lived writable connections; reads open and close their own read-only connections during one short worker call. Pooled company handles are released before a company or organization folder move, trash/reset, detach, upgrade, or attach. Even a write that raises after a durable commit runs the checkpoint-and-notify pass. Credential liveness refreshes are deduplicated and queued without waiting for the writer. A discarded writer hub is reopened on the writer thread before its next operation.
+- The host holds the data-root lock as `serve` for its whole run and acquires it before binding TCP; `host.json` is published only after both listeners are ready. Every write and advisory request runs on one writer thread with long-lived writable connections; reads own explicit read-only snapshots for their command lifetime and close them on success or failure. Reader accounting also covers credential reads. Shutdown closes admission for readers and queued writes, drains admitted work, and only releases the root lock after final cleanup. Pooled company handles are released before a company or organization folder move, trash/reset, detach, upgrade, or attach. Even a write that raises after a durable commit runs the checkpoint-and-notify pass; checkpoint failure cannot suppress the sequence read or subscriber wake. Credential liveness refreshes are deduplicated and queued without waiting for the writer. A discarded writer hub is reopened on the writer thread before its next operation.
 - `local_only` keeps `init`, `serve`, and `company use` off HTTP. On POSIX, the local socket carries every non-bootstrap command because the peer's OS login is known there; only `init` and `serve` remain in the calling process. The forwarded JSON envelope and command handler do not depend on Unix socket names or peer-credential APIs, leaving a seam for an owner-restricted Windows named-pipe transport. Accepted connections time out after 30 seconds and frames over 8 MiB are refused before their bodies are read. `serve` requires a human hub admin. `user set-password` is routed and enforces human self-service or hub-admin reset in its planner.
-- The event stream validates its cursor before sending a streaming response, drains each reader entirely within one worker call, and waits idle on `asyncio.Event` without occupying the worker pool. Subscriptions use the canonical company id and a sequence comparison closes the drain/wait race. Every wake re-resolves the credential; disconnect and shutdown unregister immediately. Bookflow's SIGINT/SIGTERM handlers wake streams before asking Uvicorn to exit.
+- The event stream validates its cursor before sending a streaming response. Each worker call drains at most 100 events, closes its snapshot before yielding frames, and immediately redrains a full page. It reauthenticates between batches. Idle streams wait on `asyncio.Event` without a reader or worker. Canonical database ids and subscribe/redrain sequence comparison close the drain/wait race. Disconnect and shutdown unregister subscriptions.
 - Company API paths require a ULID. An accompanying `X-Bookflow-Company` must be the same ULID after normalization; mismatch is `E_VALIDATION` before visibility lookup. Header-only company selection through `/commands/<noun.verb>` retains the ordinary selector rules.
 - Session and bearer liveness refreshes are throttled to five minutes. A browser session's database expiry and cookie `Max-Age` renew together; SSE does not renew the cookie. Password changes revoke every other session for the target and preserve bearer tokens.
-- Hub schema `hub0003` declares nullable membership grants/denies, the frozen role-capability projection, and inert feature rows. Its seeded capability rows are registry projections for compatibility, not current authorization promises; row 7 replaces or refines planner-sensitive and bootstrap rows before enabling enforcement. Enforcement remains role-based until then; company head remains `co0002`.
+- Hub head `hub0006` adds recoverable pending configuration contents. Company head is `co0004`. Membership grants/denies and capability/feature projections remain compatibility state; enforcement remains role-based until row 7. The planned agent-authority epochs and immutable ledger document/posting contracts are not implemented tables.
 - A single-word command (`upgrade`) has no verb: its noun page is its form, and it submits to `/hub/<noun>`.
 - `docs generate` is a rootless standalone command: no data root, lock, actor, capability, forwarding, or HTTP route. It renders all registered commands including standalone tooling, validates examples and schema descriptions, and copies packaged prose resources. Generation accepts only an absent, empty, or exactly marked real directory; it refuses symlinks and unrelated trees, validates a sibling stage, swaps it atomically, and restores the previous complete tree if publication fails. `--check` performs a read-only byte/path comparison and reports sorted missing, extra, and changed paths as `E_DOCS_STALE`.
 - The cold-start test budgets `bookflow --help` below 300 ms; neither root help nor command discovery imports FastAPI, uvicorn, or the workbench.
-- The suite is 529 tests in 364.61 s on this machine (Linux, ext4, Python 3.12). Duration is diagnostic rather than a release budget. The host/workbench/local group contains 87 tests; the row 5 list group contains 233.
+- Suite duration is diagnostic rather than a release budget. Correctness, command startup and interactive query budgets have separate witnesses.
 - Tests that need a seeded data root copy one built once per session (tests/conftest.py::_seeded_template) rather than running rollout each time. Rollout now runs the company migration chain, applies a chart, and installs the profile seed manifests, about 2.5 s; the copy is about 2 ms and the tree is byte-identical, so each test still gets its own isolated root. This halved the suite, 752 s to 365 s.
 
 ## Verified on this machine (Linux, ext4, Python 3.12)
@@ -109,7 +113,7 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - File modes under umask 022: every file 0600, every directory 0700.
 - Cold start: `bookflow --help` remains inside its 300 ms test budget on this machine (root help loads no command module); `BOOKFLOW_BUDGET_MS` overrides the test on slower machines, and SQLAlchemy is not imported for help.
 - Names containing `#`, `%`, `?`, and spaces in company, organization, and data-root names; a `bookflow-core` wheel built with `uv build` carries the `bookflow` import package, currency table, and `bookflow` console entry point.
-- The same wheel carries the hand-authored documentation resources and can import the generator directly from the wheel archive to reproduce the complete 35-file tree without a source checkout.
+- The same wheel carries the hand-authored documentation resources and can import the generator directly from the wheel archive to reproduce the complete documentation tree without a source checkout.
 - Migration of a behind-head company with a synthetic revision: backup, `migrate` event, marker and projection updated (tests/test_hardening.py::test_synthetic_migration).
 - Demo reset repeated on one root; trash accumulates one folder per reset.
 

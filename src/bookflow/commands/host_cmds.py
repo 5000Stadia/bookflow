@@ -248,12 +248,15 @@ class ServeHandle:
     def stop(self) -> None:
         if self.stopped:
             return
-        self.stopped = True
         try:
             self.listener.stop()
         finally:
-            self.host.remove_descriptor()
+            # A busy reader can make host shutdown retryable while it still
+            # holds the root lock. Keep the descriptor and this handle usable
+            # until the actual host has finished stopping.
             self.host.stop()
+            self.host.remove_descriptor()
+            self.stopped = True
 
 
 def start_serving(data_root: Path | str, version: str, *, bind: str = DEFAULT_BIND,
@@ -350,7 +353,7 @@ def make_local_handler(host, version: str):
 
     def handler(login: str, envelope: dict[str, Any]) -> dict[str, Any]:
         from bookflow.core import registry
-        from bookflow.core.dispatch import _close, execute
+        from bookflow.core.dispatch import _close, execute, guard
         ctx = context_from_envelope(envelope)
         sent = envelope.get("version") or ctx.client_version
         if sent != version:
@@ -373,8 +376,10 @@ def make_local_handler(host, version: str):
         try:
             return execute(cmd, raw, ctx, s, company_selector=selector, company_source=source, dry_run=dry_run)
         finally:
-            _close(s)
-            host.reader_done()
+            try:
+                guard(lambda: _close(s), s.is_hub_admin)
+            finally:
+                host.reader_done()
 
     return handler
 

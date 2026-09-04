@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 import json
 import types
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Any, Literal, Union, get_args, get_origin
 
@@ -116,6 +116,13 @@ def model_fields(model: type[BaseModel], *, leaves_only: bool = False, prefix: s
     for name, field in model.model_fields.items():
         path = prefix + name
         nested = _base_model(field.annotation)
+        base, _ = _optional(field.annotation)
+        variants = ()
+        if get_origin(base) in (list, tuple, set):
+            member = get_args(base)[0]
+            members, _ = _optional(member)
+            if isinstance(members, tuple) and all(inspect.isclass(item) and issubclass(item, BaseModel) for item in members):
+                variants = members
         origin = get_origin(_optional(field.annotation)[0])
         child_prefix = path + ("[]." if origin in (list, tuple, set) else ".")
         extra = field.json_schema_extra if isinstance(field.json_schema_extra, dict) else {}
@@ -128,12 +135,27 @@ def model_fields(model: type[BaseModel], *, leaves_only: bool = False, prefix: s
             description=(field.description or "").strip(),
             constraints=_constraints(field),
             secret=bool(extra.get("secret")),
-            leaf=nested is None,
+            leaf=nested is None and not variants,
         )
         if not leaves_only or doc.leaf:
             result.append(doc)
         if nested is not None:
             result.extend(model_fields(nested, leaves_only=leaves_only, prefix=child_prefix))
+        elif variants:
+            branches = [model_fields(variant, leaves_only=leaves_only, prefix=child_prefix) for variant in variants]
+            paths = dict.fromkeys(item.path for branch in branches for item in branch)
+            for variant_path in paths:
+                present = [(variant, item) for variant, branch in zip(variants, branches)
+                           for item in branch if item.path == variant_path]
+                item = present[0][1]
+                description = item.description
+                if len(present) != len(variants):
+                    description = " ".join(filter(None, (description,
+                        "Present in " + ", ".join(variant.__name__ for variant, _ in present) + ".")))
+                result.append(replace(item,
+                    required=len(present) == len(variants) and all(entry.required for _, entry in present),
+                    description=description,
+                    type=" | ".join(dict.fromkeys(entry.type for _, entry in present))))
     return result
 
 

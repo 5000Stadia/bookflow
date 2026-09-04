@@ -619,6 +619,7 @@ def _read_calls(hosted):
         listed = hosted.ok(f"{noun}.list", company=cid)
         assert listed["items"]
         calls[f"{noun} list"] = ({}, cid)
+        calls[f"{noun} query"] = ({"limit": 2}, cid)
         calls[f"{noun} show"] = ({noun.replace("-", "_"): listed["items"][0]["id"]}, cid)
     return calls
 

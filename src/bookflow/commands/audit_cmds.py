@@ -48,6 +48,10 @@ class AuditListInput(AuditFilters):
 class AuditTailInput(AuditFilters):
     after: int | None = Field(None, description="Cursor: events newer than this seq; default the newest, so only new events")
     limit: int = Field(100, ge=1, le=1000)
+    scan_limit: int | None = Field(
+        None, ge=1, le=1000,
+        description="Bound visible candidate events examined before business filters to the smaller of this value and limit; omitted preserves matching-event pagination",
+    )
 
 
 class AuditEntryOut(BaseModel):
@@ -105,11 +109,13 @@ class AuditTailOutput(BaseModel):
     items: list[AuditEventOut] = Field(description="Matching events newer than the request cursor, in sequence order")
     count: int = Field(description="Number of events returned")
     next_after: int | None = Field(
-        description="Sequence of the last returned event; null when this response has no events"
+        description="Sequence of the last returned event, or last scanned visible candidate when scan_limit is set; null when none were returned or scanned"
     )
     high_water: int | None = Field(
         description="Lower-bound cursor used for this request: the supplied after value, or the newest visible sequence when after was omitted"
     )
+    scanned_count: int = Field(0, description="Visible candidates examined before business filters in bounded scan mode; zero when scan_limit is omitted")
+    scan_more: bool = Field(False, description="More visible candidates remain after this bounded scan; false when scan_limit is omitted")
 
 
 class EventSelector(BaseModel):
@@ -223,16 +229,34 @@ def _tail(s: Session, hub: bool, inp: AuditTailInput) -> AuditTailOutput:
     db, events, entries, visible, resolver, _ = _scope(s, hub)
     after = inp.after
     if after is None:
-        after = db.conn.execute(sa.select(sa.func.max(events.c.seq))).scalar() or 0
-    q = sa.select(events).where(events.c.seq > after).order_by(events.c.seq.asc()).limit(inp.limit)
-    if hub:
-        q = q.where(hub_audit.visible_event_ids_filter(s))
+        newest = sa.select(sa.func.max(events.c.seq))
+        if hub and inp.scan_limit is not None:
+            newest = newest.where(hub_audit.visible_event_ids_filter(s))
+        after = db.conn.execute(newest).scalar() or 0
+    scanned: list[int] = []
+    scan_more = False
+    if inp.scan_limit is not None:
+        cap = min(inp.scan_limit, inp.limit)
+        candidates = sa.select(events.c.seq).where(events.c.seq > after).order_by(events.c.seq.asc()).limit(cap + 1)
+        if hub:
+            candidates = candidates.where(hub_audit.visible_event_ids_filter(s))
+        sequences = list(db.conn.execute(candidates).scalars())
+        scanned, scan_more = sequences[:cap], len(sequences) > cap
+        if not scanned:
+            return AuditTailOutput(items=[], count=0, next_after=None, high_water=after)
+        q = sa.select(events).where(events.c.seq.in_(scanned)).order_by(events.c.seq.asc())
+    else:
+        q = sa.select(events).where(events.c.seq > after).order_by(events.c.seq.asc()).limit(inp.limit)
+        if hub:
+            q = q.where(hub_audit.visible_event_ids_filter(s))
     q = _apply_filters(q, events, s, hub, inp, entries)
     rows = [dict(r) for r in db.conn.execute(q).mappings().all()]
     ids = {r["actor_id"] for r in rows if r["actor_id"]} | {r["on_behalf_of"] for r in rows if r.get("on_behalf_of")}
     names = resolver(ids)
     items = [_event_out(s, hub, r, names, False) for r in rows]
-    return AuditTailOutput(items=items, count=len(items), next_after=rows[-1]["seq"] if rows else None, high_water=after)
+    next_after = scanned[-1] if scanned else rows[-1]["seq"] if rows else None
+    return AuditTailOutput(items=items, count=len(items), next_after=next_after, high_water=after,
+                           scanned_count=len(scanned), scan_more=scan_more)
 
 
 def _show(s: Session, hub: bool, inp: EventSelector) -> AuditEventOut:

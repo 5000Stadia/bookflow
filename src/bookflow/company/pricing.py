@@ -714,15 +714,8 @@ def persist_price_mutation(db: Database, mutation: PriceMutation) -> None:
             db.conn.execute(schema.price_level_items.insert().values(**values))
 
 
-def list_price_levels(
-    db: Database,
-    *,
-    query: str | None = None,
-    filters: Sequence[str] = (),
-    sort: str | None = None,
-    direction: Literal["asc", "desc"] = "asc",
-    include_inactive: bool = False,
-) -> list[PriceLevelOutput]:
+def price_query_options() -> dict[str, Any]:
+    """Authoritative price-level search/filter/sort expressions for list and query."""
     definition = get_list_definition(PRICE_NOUN)
     assert definition is not None
     owner = schema.price_levels
@@ -739,15 +732,7 @@ def list_price_levels(
         owner.c.currency,
         sa.select(schema.company_info.c.home_currency).limit(1).scalar_subquery(),
     )
-    rows = list_service.list_rows(
-        db,
-        owner,
-        definition,
-        query=query,
-        filters=filters,
-        sort=sort,
-        direction=direction,
-        include_inactive=include_inactive,
+    return dict(
         search_expressions={
             "per_item_item_names": sa.func.lower(sa.func.coalesce(item_names, "")),
         },
@@ -757,6 +742,22 @@ def list_price_levels(
             "item_count": item_count,
             "currency": resolved_currency,
         },
+    )
+
+
+def list_price_levels(
+    db: Database,
+    *,
+    query: str | None = None,
+    filters: Sequence[str] = (),
+    sort: str | None = None,
+    direction: Literal["asc", "desc"] = "asc",
+    include_inactive: bool = False,
+) -> list[PriceLevelOutput]:
+    rows = list_service.list_rows(
+        db, schema.price_levels, get_list_definition(PRICE_NOUN),
+        query=query, filters=filters, sort=sort, direction=direction,
+        include_inactive=include_inactive, **price_query_options(),
     )
     return [project_price_level(db, row) for row in rows]
 

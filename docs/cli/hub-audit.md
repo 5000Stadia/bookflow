@@ -123,6 +123,7 @@ Example JSON output:
 | `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
 | `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -261,6 +262,7 @@ Example JSON output:
 | `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
 | `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -301,6 +303,7 @@ Hub audit events newer than a cursor, oldest first; the event feed.
 | `record_id` | `--record-id` | string \| null | no | yes | null | — |
 | `limit` | `--limit` | integer | no | no | 100 | minimum 1; maximum 1000 |
 | `after` | `--after` | integer \| null | no | yes | null | Cursor: events newer than this seq; default the newest, so only new events |
+| `scan_limit` | `--scan-limit` | integer \| null | no | yes | null | Bound visible candidate events examined before business filters to the smaller of this value and limit; omitted preserves matching-event pagination |
 
 ### Command and context options
 
@@ -361,8 +364,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].entries[].after` | object[string, any] \| null | yes | yes | — | — |
 | `items[].entries[].diff` | object[string, any] \| null | no | yes | null | — |
 | `count` | integer | yes | no | — | Number of events returned |
-| `next_after` | integer \| null | yes | yes | — | Sequence of the last returned event; null when this response has no events |
+| `next_after` | integer \| null | yes | yes | — | Sequence of the last returned event, or last scanned visible candidate when scan_limit is set; null when none were returned or scanned |
 | `high_water` | integer \| null | yes | yes | — | Lower-bound cursor used for this request: the supplied after value, or the newest visible sequence when after was omitted |
+| `scanned_count` | integer | no | no | 0 | Visible candidates examined before business filters in bounded scan mode; zero when scan_limit is omitted |
+| `scan_more` | boolean | no | no | false | More visible candidates remain after this bounded scan; false when scan_limit is omitted |
 
 Example JSON output:
 
@@ -371,7 +376,9 @@ Example JSON output:
   "count": 1,
   "high_water": null,
   "items": [],
-  "next_after": null
+  "next_after": null,
+  "scan_more": false,
+  "scanned_count": 0
 }
 ```
 
@@ -393,6 +400,7 @@ Example JSON output:
 | `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
 | `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |

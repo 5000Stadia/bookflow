@@ -6,6 +6,7 @@ from typing import Any
 
 import sqlalchemy as sa
 
+from bookflow.core.durability import sync_directory
 from bookflow.core.errors import BookflowError
 from bookflow.core.ids import new_id
 from bookflow.core.registry import Touched
@@ -31,6 +32,8 @@ def create(s: Session, display_name: str, via: str, is_demo: bool = False) -> tu
     oid = new_id()
     try:
         write_org_marker(folder, organization_id=oid)
+        sync_directory(s.organizations_dir)
+        sync_directory(s.organizations_dir.parent)
         row = {"id": oid, "display_name": display_name, "name_key": key, "path": s.rel_path(folder), "pending_path": None,
                "is_demo": is_demo, **common(s.actor.id, via)}
         s.hub.conn.execute(h.organizations.insert().values(**row))

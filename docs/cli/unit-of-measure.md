@@ -180,6 +180,7 @@ Example JSON output:
 | `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
 | `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_RECORD_NOT_FOUND` | No such record. |
@@ -375,6 +376,7 @@ Example JSON output:
 | `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
 | `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_RECORD_NOT_FOUND` | No such record. |
@@ -562,6 +564,7 @@ Example JSON output:
 | `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
 | `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_RECORD_IN_USE` | The record is still used by active records. |
@@ -712,7 +715,146 @@ Example JSON output:
 | `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
 | `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
+## `unit-of-measure query`
+
+Query a bounded page of units of measure.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | unit-of-measure |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/unit-of-measure.query` |
+
+### CLI
+
+`bookflow unit-of-measure query --limit 25 --company "Demo Plumbing Co" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `query` | `--query` | string \| null | no | yes | null | — |
+| `include_inactive` | `--include-inactive` | boolean | no | no | false | — |
+| `filter` | `--filter` | array[string] | no | no | [] | — |
+| `sort` | `--sort` | string \| null | no | yes | null | — |
+| `direction` | `--direction` | literal["asc", "desc"] | no | no | "asc" | — |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `projection` | `--projection` | literal["summary", "reference"] | no | no | "summary" | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/unit-of-measure.query`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `projection` | literal["summary", "reference"] | yes | no | — | — |
+| `count` | integer | yes | no | — | Number of items returned on this page (not total matches). |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `items` | array[object \| object] | yes | no | — | — |
+| `items[].id` | string | yes | no | — | — |
+| `items[].version` | integer | yes | no | — | — |
+| `items[].label` | string | yes | no | — | — |
+| `items[].active` | boolean | yes | no | — | — |
+| `items[].name` | string | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].base_unit` | object | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].base_unit.id` | string | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].base_unit.position` | integer | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].base_unit.active` | boolean | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].base_unit.name` | string | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].base_unit.abbreviation` | string | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].base_unit.is_base` | boolean | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].base_unit.base_factor` | string | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_purchase_unit` | object \| null | no | yes | — | Present in UnitOfMeasureSummary. |
+| `items[].default_purchase_unit.id` | string | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_purchase_unit.position` | integer | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_purchase_unit.active` | boolean | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_purchase_unit.name` | string | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_purchase_unit.abbreviation` | string | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_purchase_unit.is_base` | boolean | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_purchase_unit.base_factor` | string | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_sales_unit` | object \| null | no | yes | — | Present in UnitOfMeasureSummary. |
+| `items[].default_sales_unit.id` | string | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_sales_unit.position` | integer | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_sales_unit.active` | boolean | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_sales_unit.name` | string | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_sales_unit.abbreviation` | string | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_sales_unit.is_base` | boolean | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_sales_unit.base_factor` | string | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_shipping_unit` | object \| null | no | yes | — | Present in UnitOfMeasureSummary. |
+| `items[].default_shipping_unit.id` | string | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_shipping_unit.position` | integer | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_shipping_unit.active` | boolean | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_shipping_unit.name` | string | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_shipping_unit.abbreviation` | string | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_shipping_unit.is_base` | boolean | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].default_shipping_unit.base_factor` | string | no | no | — | Present in UnitOfMeasureSummary. |
+| `items[].related_unit_count` | integer | no | no | — | Present in UnitOfMeasureSummary. |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "items": [],
+  "next_cursor": null,
+  "projection": "summary"
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_LIST_FILTER` | The requested list filter or sort field is not supported. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
@@ -877,6 +1019,7 @@ Example JSON output:
 | `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
 | `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_RECORD_NOT_FOUND` | No such record. |
@@ -1078,6 +1221,7 @@ Example JSON output:
 | `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
 | `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_RECORD_NOT_FOUND` | No such record. |

@@ -1,13 +1,15 @@
-"""config.toml: OS-login mappings and per-user default company. Written atomically."""
+"""OS-login mappings and defaults, with recoverable hub-committed file projection."""
 
 from __future__ import annotations
 
 import os
+import sqlite3
 import sys
 import tomllib
 from pathlib import Path
 from typing import Any
 
+from bookflow.core.durability import write_metadata
 from bookflow.core.errors import BookflowError
 
 
@@ -51,17 +53,17 @@ class Config:
     @classmethod
     def load(cls, path: Path) -> "Config":
         cfg = cls(path)
+        pending = _pending_from_disk(path.parent / "hub.db")
+        if pending is not None:
+            cfg.data = _parse(pending["contents"], path)
+            return cfg
         if not path.exists():
             return cfg
         try:
-            raw = tomllib.loads(path.read_text(encoding="utf-8"))
-        except (OSError, tomllib.TOMLDecodeError) as e:
+            contents = path.read_text(encoding="utf-8")
+        except OSError as e:
             raise BookflowError("E_CONFIG_INVALID", details={"path": str(path), "problem": str(e)})
-        users = raw.get("users", {}) if isinstance(raw, dict) else None
-        client = raw.get("client", {}) if isinstance(raw, dict) else None
-        if users is None or not isinstance(users, dict) or not isinstance(client, dict) or any(not isinstance(v, dict) for v in users.values()):
-            raise BookflowError("E_CONFIG_INVALID", details={"path": str(path), "problem": "unexpected shape"})
-        cfg.data = {"client": dict(client), "users": {k: dict(v) for k, v in users.items()}}
+        cfg.data = _parse(contents, path)
         return cfg
 
     def user_table(self, login: str) -> dict[str, Any] | None:
@@ -86,7 +88,90 @@ class Config:
                 table.pop("default_company", None)
 
     def save(self) -> None:
-        tmp = self.path.with_suffix(".toml.tmp")
-        tmp.write_text(dump(self.data), encoding="utf-8")
-        os.chmod(tmp, 0o600)
-        os.replace(tmp, self.path)
+        write_metadata(self.path, dump(self.data))
+
+    def stage_pending(self, hub, *, request_id: str) -> None:
+        """Record the desired file contents inside the caller's audited hub transaction."""
+        if not hub.writable or not hub.raw.in_transaction:
+            raise RuntimeError("config intent requires an active writable hub transaction")
+        from bookflow.core.ids import new_id
+        from bookflow.hub.schema import pending_config
+
+        hub.conn.execute(pending_config.delete())
+        hub.conn.execute(pending_config.insert().values(
+            id=1, token=new_id(), request_id=request_id, contents=dump(self.data),
+        ))
+
+    def flush_pending(self, hub) -> bool:
+        """Project committed settings, then clear their intent in a separate transaction.
+
+        A failed file replacement or intent deletion retains recoverable committed
+        state. Read-only Config.load overlays that state without changing either
+        database or file. The caller must serialize writers and hold no transaction.
+        """
+        if not hub.writable or hub.raw.in_transaction:
+            raise RuntimeError("config projection requires an idle writable hub handle")
+        pending = _pending_row(hub.raw)
+        if pending is None:
+            return False
+        from bookflow.hub.schema import pending_config
+        from sqlalchemy.exc import DBAPIError
+
+        try:
+            self.data = _parse(pending["contents"], self.path)
+            self.save()
+            hub.raw.execute("BEGIN IMMEDIATE")
+            hub.conn.execute(pending_config.delete().where(pending_config.c.token == pending["token"]))
+            hub.raw.execute("COMMIT")
+        except BaseException as e:
+            try:
+                if hub.raw.in_transaction:
+                    hub.raw.rollback()
+            except sqlite3.Error:
+                pass
+            if not isinstance(e, (BookflowError, OSError, sqlite3.Error, DBAPIError)):
+                raise
+            raise BookflowError(
+                "E_PARTIAL_WRITE",
+                message="The settings change was committed; its config.toml copy is pending. Reads use the committed settings; the next writable command retries the file update.",
+                details={"durable": ["config"], "projection_pending": True, "request_id": pending["request_id"], "cause": getattr(e, "code", "E_IO")},
+            ) from e
+        return True
+
+
+def _parse(contents: str, path: Path) -> dict[str, Any]:
+    try:
+        raw = tomllib.loads(contents)
+    except tomllib.TOMLDecodeError as e:
+        raise BookflowError("E_CONFIG_INVALID", details={"path": str(path), "problem": str(e)})
+    users = raw.get("users", {})
+    client = raw.get("client", {})
+    if not isinstance(users, dict) or not isinstance(client, dict) or any(not isinstance(v, dict) for v in users.values()):
+        raise BookflowError("E_CONFIG_INVALID", details={"path": str(path), "problem": "unexpected shape"})
+    return {"client": dict(client), "users": {k: dict(v) for k, v in users.items()}}
+
+
+def _pending_row(conn: sqlite3.Connection) -> dict[str, str] | None:
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pending_config'").fetchone() is None:
+        return None
+    row = conn.execute("SELECT token, request_id, contents FROM pending_config WHERE id = 1").fetchone()
+    return dict(zip(("token", "request_id", "contents"), row)) if row is not None else None
+
+
+def _pending_from_disk(hub_path: Path) -> dict[str, str] | None:
+    """Read a committed intent before config-based actor/default selection, with no repair."""
+    if not hub_path.exists():
+        return None
+    from bookflow.core.fs import check_local
+    from bookflow.storage.engine import io_error, sqlite_uri
+
+    check_local(hub_path)
+    try:
+        conn = sqlite3.connect(sqlite_uri(hub_path, "ro"), uri=True, isolation_level=None)
+        try:
+            conn.execute("BEGIN")
+            return _pending_row(conn)
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        raise io_error("read", e, hub_path) from e

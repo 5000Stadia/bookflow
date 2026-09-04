@@ -70,9 +70,9 @@ class Session:
             self.company_releaser(self.company_id)
         self.company = None
 
-    def release_company(self, company_id: str) -> None:
-        """Close a host-owned company handle whether or not it is selected."""
-        if self.company is not None and self.company_id == company_id:
+    def release_company(self, company_id: str | None) -> None:
+        """Close a host-owned handle; None takes only the host's filesystem gate."""
+        if company_id is not None and self.company is not None and self.company_id == company_id:
             self.close_company()
         elif self.company_releaser is not None:
             self.company_releaser(company_id)

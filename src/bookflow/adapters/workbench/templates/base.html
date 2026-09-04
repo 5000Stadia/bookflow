@@ -1,11 +1,11 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{% block title %}Bookflow{% endblock %}</title>
-<link rel="stylesheet" href="/static/style.css"><script src="/static/htmx.min.js"></script></head>
+<link rel="stylesheet" href="{{ static_urls['style.css'] }}"><script src="{{ static_urls['htmx.min.js'] }}"></script><script src="{{ static_urls['workflow.js'] }}" defer></script></head>
 <body hx-headers='{"X-Bookflow-Workbench": "1"}'>
 <header><a href="/"><strong>Bookflow</strong></a><a href="/companies">Companies</a>
-{% set hc = company_id or header_company_id %}{% if hc %}<a href="/c/{{ hc }}/">company</a><a href="/c/{{ hc }}/audit">audit</a>{% endif %}
+{% set hc = company_id or header_company_id %}{% if hc %}<a class="current-company" href="/c/{{ hc }}/" aria-label="Current company: {{ company_label or 'Company' }}">{{ company_label or 'Company' }}</a><a href="/c/{{ hc }}/audit">audit</a>{% endif %}
 <a href="/hub/">Hub</a><a href="/hub/audit">Hub audit</a>
 <span class="header-spacer"><form method="post" action="/logout" hx-post="/logout" hx-swap="none" hx-on::after-request="window.location='/login'" class="inline-form"><button>Log out</button></form></span></header>
-{% if flash_result %}<div class="field"><b>Result — {{ flash_result.command }}: done</b>{% if flash_result.result.warnings %}<div class="warn">{% for warning in flash_result.result.warnings %}{{ warning }}<br>{% endfor %}</div>{% endif %}<pre>{{ json.dumps(flash_result.result, indent=1, default=str) }}</pre></div>{% endif %}
+{% if flash_result %}<section class="save-feedback" role="status"><b>Saved successfully — {{ flash_result.command }}</b>{% if flash_result.result.warnings %}<div class="warn">{% for warning in flash_result.result.warnings %}{{ warning }}<br>{% endfor %}</div>{% endif %}<details><summary>Result — {{ flash_result.command }}: done</summary><pre>{{ json.dumps(flash_result.result, indent=1, default=str) }}</pre></details></section>{% endif %}
 <main>{% block body %}{% endblock %}</main>
 <p class="muted">Forms submit through HTMX with the workbench header; plain form submission without JavaScript is not supported.</p>
 </body></html>

@@ -26,6 +26,12 @@ Durable write commands accept dry-run execution. A dry run performs selection, a
 
 Only commands whose reference says they accept an idempotency key may use one. For 30 days, repeating the same key as the same actor with the same command, validated input, and company returns the stored result with `idempotent_replay: true`. Reusing the key for different work returns `E_IDEMPOTENCY_MISMATCH`.
 
+## Bounded list queries
+
+Use each primary company list noun's `query` command for interactive browsing. It returns typed summary rows by default; `projection=reference` returns only stable id, version, readable label and active state for selection controls. `limit` is an integer from 1 to 200, default 50. Search, filters and sorting apply before pagination. `show` returns the complete record, and legacy `list` remains complete enumeration with full records rather than a bounded page.
+
+A query result contains `projection`, `items`, `count` and `next_cursor`. Count is the number of returned items, not a total across all pages. Pass the cursor with the same company, permissions and query arguments for the next page. A company write invalidates an earlier continuation with `E_QUERY_STALE` (HTTP 409), even when it changes another list. Restart without the cursor and discard accumulated pages; do not combine stale and fresh pages. Presence updates do not invalidate query pages. A cursor never grants access.
+
 ## Versions and concurrent updates
 
 Mutable records carry an integer version. Read the version from the corresponding show command and send it as the update command's `expected_version`.
@@ -44,6 +50,8 @@ Successful durable mutations append audit events in the database that owns the c
 
 A directive is a company-scoped standing instruction with a stable code such as `SI-3`. Active directives can be cited by a company write instead of repeating a reason. Deactivation preserves history and prevents later citation. Audit events snapshot the directive code and expose its text from the directive record.
 
+For bounded audit scanning, pass `scan_limit`. That mode examines at most the smaller of `limit` and `scan_limit` visible candidate events before applying filters; `scanned_count` reports that work, and `scan_more` says more candidates remain. `next_after` advances across nonmatches even when `items` is empty. Continue with it while `scan_more` is true. The HTTP stream uses this mode in 100-candidate batches, reauthorizes and releases its snapshot between batches, and holds no reader while idle.
+
 Presence says that a user is editing a company record. It expires, is advisory, does not block writes, and is not part of the audit trail.
 
 ## Identity, roles, and isolation
@@ -59,6 +67,12 @@ A money value uses an ISO 4217 currency and integer `minor_units`; binary floati
 ## Local storage and schema revisions
 
 A data root contains the hub database, configuration, organization and company directories, backups, and trash. Each company owns a separate SQLite database. Bookflow refuses network filesystems because its correctness depends on local filesystem and SQLite locking semantics. A running host serializes mutations through one writer while allowing independent reads, and compatible local CLI/Python calls hand work to that host.
+
+Every read uses one consistent SQLite snapshot per opened database; hub and company snapshots are not a global atomic snapshot. Writers use WAL with full commit synchronization. Checkpoints reclaim/reuse WAL space; they are not the acknowledgement durability boundary. Stop the host cleanly before copying a complete company folder, and never discard its WAL files while open or after interrupted shutdown.
+
+Folder moves temporarily refuse new readers and wait up to five seconds for admitted readers to close. An admission conflict or drain timeout returns retryable `E_DB_BUSY`; a drain timeout leaves folders untouched. Ordinary record updates remain concurrent with readers. Shutdown refuses new reader and writer work and retains the root lock until admitted work has drained and database handles have closed.
+
+Settings-file changes commit a recoverable intent with their hub audit event, then durably replace `config.toml`. If publication fails, `E_PARTIAL_WRITE` names the already-committed effects and request identity. Reads use committed pending settings; the next writable command retries file publication. Inspect those effects before retrying a mutation: this error does not mean that the whole command rolled back.
 
 Hub and company schema revisions are explicit. Opening a database from an unknown newer schema returns `E_SCHEMA_UNKNOWN`; a known older schema returns `E_SCHEMA_BEHIND` until `upgrade` runs. Upgrades back up each database before migration.
 

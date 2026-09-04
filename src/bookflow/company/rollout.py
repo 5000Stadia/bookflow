@@ -9,13 +9,14 @@ from typing import Any
 from bookflow.company import charts, profiles, schema as c
 from bookflow.company.info import logical_info_values, upsert_principal
 from bookflow.core.context import Context
+from bookflow.core.durability import sync_directory
 from bookflow.core.errors import BookflowError
 from bookflow.core.registry import Touched
 from bookflow.core.session import Session
 from bookflow.hub.users import common
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, migrate_to_head
-from bookflow.storage.paths import reserve_folder, write_company_marker
+from bookflow.storage.paths import read_company_marker, reserve_folder, write_company_marker
 
 
 def create_company_folder(
@@ -134,7 +135,22 @@ def create_company_folder(
         shutil.rmtree(folder, ignore_errors=True)
         raise
     try:
+        # Persist the complete folder before its marker can advertise readiness,
+        # and its parent before a hub registration can acknowledge the folder.
+        for sub in ("attachments", "backups", "exports"):
+            sync_directory(folder / sub)
+        sync_directory(folder)
+        sync_directory(org_folder)
         write_company_marker(folder, company_id=company_id, state="ready", display_name=display_name, schema_revision=HEADS["company"])
     except OSError as e:
-        raise BookflowError("E_ROLLOUT_INCOMPLETE", details={"state": "incomplete", "path": str(folder), "problem": str(e)})
+        # Directory synchronization can fail after replacing the ready marker.
+        # Report the state a retry will actually observe rather than claiming
+        # that the previous creating marker is still present.
+        state = "incomplete"
+        try:
+            if read_company_marker(folder)["state"] == "ready":
+                state = "unregistered"
+        except BookflowError:
+            pass
+        raise BookflowError("E_ROLLOUT_INCOMPLETE", details={"state": state, "path": str(folder), "problem": str(e)})
     return folder

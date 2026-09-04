@@ -91,6 +91,7 @@ Example JSON output:
 | `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
 | `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |

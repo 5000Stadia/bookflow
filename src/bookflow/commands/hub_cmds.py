@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from bookflow.commands.common import (CompanySummary, Empty, ListInput, NameInput, OrganizationOutput, WriteOutput,
                                       company_summary, organization_output)
 from bookflow.core.context import Context
+from bookflow.core.durability import sync_directory, sync_move_parents
 from bookflow.core.errors import BookflowError
 from bookflow.core.fs import check_local
 from bookflow.core.ids import is_ulid, new_id
@@ -26,7 +27,7 @@ from bookflow.core.moves import move_dir
 from bookflow.core.perms import is_private_dir, private_umask
 from bookflow.core.registry import Applied, Plan, Touched, command
 from bookflow.core.session import Session, localize, now_iso
-from bookflow.storage.paths import (choose_folder_name, name_key, normalize_display_name, read_company_marker,
+from bookflow.storage.paths import (choose_folder_name, name_key, normalize_display_name, read_company_marker, read_org_marker,
                                     write_company_marker)
 
 sa = lazy("sqlalchemy")
@@ -83,14 +84,21 @@ def run_init(cmd, inp: InitInput, ctx: Context, s: Session) -> dict[str, Any]:
             root.mkdir(mode=0o700, parents=True, exist_ok=True)
             for sub in ("organizations", "backups", "trash"):
                 (root / sub).mkdir(mode=0o700, exist_ok=True)
+                sync_directory(root / sub)
+            # Initialization may create a nested data root. Synchronize its
+            # entire directory lineage, including on retry after an incomplete
+            # initialization, before acknowledging any authoritative files.
+            for directory in (root.absolute(), *root.absolute().parents):
+                sync_directory(directory)
         with RootLock(root, "init"):
             from bookflow.core.config import Config
             cfg_path = root / "config.toml"
-            s.config = Config.load(cfg_path) if cfg_path.exists() else Config(cfg_path)
+            s.config = Config.load(cfg_path)
             with engine.open_database(root / "hub.db", writable=not s.dry_run or not (root / "hub.db").exists(), create=not s.dry_run) as hub:
                 s.hub = hub
                 if hub.writable:
                     migrate.migrate_to_head(hub, "hub", root / "backups")
+                    s.config.flush_pending(hub)
                 system = users.find_user(s, kind="system")
                 humans = [dict(r) for r in hub.conn.execute(sa.select(h.users).where(h.users.c.kind == "human")).mappings().all()]
                 mapped = s.config.user_table(s.os_login)
@@ -107,7 +115,16 @@ def run_init(cmd, inp: InitInput, ctx: Context, s: Session) -> dict[str, Any]:
                             out = InitOutput(dry_run=True, data_root=str(root), created=False, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
                             return out.model_dump(mode="json")
                         s.config.set_user(s.os_login, me["id"])
-                        s.config.save()
+                        hub.raw.execute("BEGIN IMMEDIATE")
+                        try:
+                            audit.write_event(s, ctx, "init", "restored the local login mapping", [], actor_id=me["id"], actor_kind="human")
+                            s.config.stage_pending(hub, request_id=ctx.request_id)
+                            hub.raw.execute("COMMIT")
+                        except BaseException:
+                            if hub.raw.in_transaction:
+                                hub.raw.execute("ROLLBACK")
+                            raise
+                        s.config.flush_pending(hub)
                         out = InitOutput(data_root=str(root), created=False, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
                         return redact_paths(out.model_dump(mode="json"), me["hub_admin"])
                     raise BookflowError("E_NO_ACTOR")
@@ -122,12 +139,13 @@ def run_init(cmd, inp: InitInput, ctx: Context, s: Session) -> dict[str, Any]:
                     me = users.create_human(s, username=username, display_name=display_name, created_by=system["id"], via=VIA(ctx), hub_admin=True)
                     touched = [Touched("user", system["id"], "create", None, 1, system), Touched("user", me["id"], "create", None, 1, me)]
                     audit.write_event(s, ctx, "init", f"initialized data root; first user {username}", touched, actor_id=me["id"], actor_kind="human")
+                    s.config.set_user(s.os_login, me["id"])
+                    s.config.stage_pending(hub, request_id=ctx.request_id)
                     hub.raw.execute("COMMIT")
                 except BaseException:
                     hub.raw.execute("ROLLBACK")
                     raise
-                s.config.set_user(s.os_login, me["id"])
-                s.config.save()
+                s.config.flush_pending(hub)
                 out = InitOutput(data_root=str(root), created=True, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=username, display_name=display_name, system_user_id=system["id"])
                 return out.model_dump(mode="json")
 
@@ -278,11 +296,21 @@ def plan_org_rename(inp: OrgRenameInput, ctx: Context, s: Session) -> Plan:
     if org.name_taken(s, name_key(name), exclude_id=row["id"]):
         raise BookflowError("E_NAME_TAKEN", details={"name": name})
     current_folder = Path(row["path"]).name
-    target = choose_folder_name(s.organizations_dir, name, exclude=current_folder) if inp.move else current_folder
     pending = row.get("pending_path")
+    if pending and pending.startswith("trash/"):
+        raise BookflowError("E_RENAME_INCOMPLETE", details={"organization_id": row["id"], "path": str(s.abs_path(pending)), "cause": "E_DEMO_RESET_INCOMPLETE"})
+    # A prior move can already have renamed the folder while its synchronization
+    # still needs retry. Its occupied destination is the persisted recovery
+    # target, not a name collision to sidestep with another suffix.
+    if pending:
+        target_rel = pending
+    else:
+        target_name = choose_folder_name(s.organizations_dir, name, exclude=current_folder) if inp.move else current_folder
+        target_rel = f"organizations/{target_name}"
+    target = Path(target_rel).name
     will_move = inp.move and (target != current_folder or pending is not None or row["id"] in s.completed_moves)
-    preview = OrgRenameOutput(organization_id=row["id"], display_name=name, previous_display_name=row["display_name"], path=str(s.abs_path(f"organizations/{target}" if inp.move else row["path"])), moved=will_move)
-    return Plan(preview=preview, data={"row": row, "name": name, "target": f"organizations/{target}", "move": inp.move, "will_move": will_move})
+    preview = OrgRenameOutput(organization_id=row["id"], display_name=name, previous_display_name=row["display_name"], path=str(s.abs_path(target_rel if inp.move else row["path"])), moved=will_move)
+    return Plan(preview=preview, data={"row": row, "name": name, "target": target_rel, "move": inp.move, "will_move": will_move})
 
 
 @org_rename.applier
@@ -291,7 +319,7 @@ def apply_org_rename(plan: Plan, ctx: Context, s: Session) -> Applied:
     changes: dict[str, Any] = {}
     if name != row["display_name"]:
         changes.update(display_name=name, name_key=name_key(name))
-    if plan.data["will_move"] and target != row["path"]:
+    if plan.data["will_move"] and target != row["path"] and target != row.get("pending_path"):
         changes["pending_path"] = target
     if not changes and not row.get("pending_path"):
         return Applied(OrgRenameOutput(organization_id=row["id"], display_name=row["display_name"], previous_display_name=row["display_name"], path=str(s.abs_path(row["path"])), moved=row["id"] in s.completed_moves), [], "no change", audited=True)
@@ -686,6 +714,10 @@ def apply_company_attach(plan: Plan, ctx: Context, s: Session) -> Applied:
     tightened = _tighten_modes(folder)
     if tightened:
         s.warnings.append(f"tightened the modes of {tightened} entries in the folder to 0700/0600")
+    # A ready folder may be left by an interrupted rollout whose final
+    # directory synchronization failed after marker replacement.
+    sync_directory(folder)
+    sync_directory(folder.parent)
     row, touched = co.register(s, company_id=raw["id"], organization_id=orow["id"], display_name=name, rel_path=s.rel_path(folder),
                                legal_name=raw["legal_name"], home_currency=raw["home_currency"], schema_revision=raw["revision"] or migrate.HEADS["company"],
                                via=VIA(ctx), owner_membership=False)
@@ -775,7 +807,14 @@ def plan_demo_reset(inp: Empty, ctx: Context, s: Session) -> Plan:
     if existing is None and org.name_taken(s, name_key(seed["organization"]["display_name"])):
         raise BookflowError("E_NAME_TAKEN", details={"name": seed["organization"]["display_name"]})
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M%S")
-    trash_rel = f"trash/{Path(existing['path']).name}-{stamp}" if existing else None
+    trash_rel = None
+    if existing:
+        pending = existing.get("pending_path")
+        if pending and pending.startswith("trash/"):
+            trash_rel = pending
+        else:
+            trash_name = choose_folder_name(s.data_root / "trash", f"{Path(existing['path']).name}-{stamp}")
+            trash_rel = f"trash/{trash_name}"
     org_folder = choose_folder_name(s.organizations_dir, seed["organization"]["display_name"], exclude=Path(existing["path"]).name if existing else None)
     from bookflow.storage.paths import derive_folder_name
     company_folder = derive_folder_name(seed["company"]["display_name"]) if existing else choose_folder_name(s.organizations_dir / org_folder, seed["company"]["display_name"])
@@ -788,6 +827,7 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
     seed, existing, trash_rel = plan.data["seed"], plan.data["existing"], plan.data["trash_rel"]
     trashed = None
     if existing:
+        s.release_company(None)
         company_ids = s.hub.conn.execute(sa.select(h.companies.c.id).where(
             h.companies.c.organization_id == existing["id"]
         )).scalars().all()
@@ -799,15 +839,20 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
             audit.write_event(s, ctx, "demo reset", "moving the previous demo organization to trash", [Touched("organization", existing["id"], "update", existing["version"], existing["version"], {**existing, "pending_path": pending})])
         s.hub.raw.execute("COMMIT")
         src, dst = s.abs_path(existing["path"]), s.abs_path(pending)
-        n = 1
-        while dst.exists():
-            n += 1
-            dst = s.abs_path(f"{pending}-{n}")
-        if src.exists():
-            try:
+        try:
+            if src.exists():
+                # The persisted pending path is the recovery destination. A
+                # collision must not silently select an unrecorded destination.
                 move_dir(src, dst, company_id=existing["id"])
-            except BookflowError as e:
-                raise BookflowError("E_DEMO_RESET_INCOMPLETE", details={"organization_id": existing["id"], "cause": e.code, "path": str(dst)})
+            elif dst.exists():
+                marker = read_org_marker(dst)
+                if not marker or marker.get("organization_id") != existing["id"]:
+                    raise BookflowError("E_DEMO_RESET_INCOMPLETE", details={"organization_id": existing["id"], "cause": "E_IO", "path": str(dst)})
+                sync_move_parents(src, dst)
+            else:
+                raise BookflowError("E_COMPANY_MISSING", details={"organization_id": existing["id"], "path": str(dst)})
+        except (BookflowError, OSError) as e:
+            raise BookflowError("E_DEMO_RESET_INCOMPLETE", details={"organization_id": existing["id"], "cause": e.code if isinstance(e, BookflowError) else "E_IO", "path": str(dst)}) from e
         trashed = str(dst)
         s.hub.raw.execute("BEGIN IMMEDIATE")
         touched = co.delete_organization_rows(s, existing["id"])
