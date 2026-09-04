@@ -79,6 +79,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].directive_code` | string \| null | yes | yes | — | — |
 | `items[].directive_text` | string \| null | yes | yes | — | — |
 | `items[].source_ref` | string \| null | yes | yes | — | — |
+| `items[].undo_of_event_id` | string \| null | no | yes | null | Original company audit event compensated by this event; null otherwise |
 | `items[].summary` | string | yes | no | — | — |
 | `items[].entry_count` | integer | yes | no | — | Number of records touched by this event |
 | `items[].entries` | array[object] \| null | no | yes | null | Touched-record details returned by audit show; null in list and tail results |
@@ -196,6 +197,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `directive_code` | string \| null | yes | yes | — | — |
 | `directive_text` | string \| null | yes | yes | — | — |
 | `source_ref` | string \| null | yes | yes | — | — |
+| `undo_of_event_id` | string \| null | no | yes | null | Original company audit event compensated by this event; null otherwise |
 | `summary` | string | yes | no | — | — |
 | `entry_count` | integer | yes | no | — | Number of records touched by this event |
 | `entries` | array[object] \| null | no | yes | null | Touched-record details returned by audit show; null in list and tail results |
@@ -235,7 +237,8 @@ Example JSON output:
   "seq": null,
   "session_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "source_ref": null,
-  "summary": "value"
+  "summary": "value",
+  "undo_of_event_id": null
 }
 ```
 
@@ -344,6 +347,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].directive_code` | string \| null | yes | yes | — | — |
 | `items[].directive_text` | string \| null | yes | yes | — | — |
 | `items[].source_ref` | string \| null | yes | yes | — | — |
+| `items[].undo_of_event_id` | string \| null | no | yes | null | Original company audit event compensated by this event; null otherwise |
 | `items[].summary` | string | yes | no | — | — |
 | `items[].entry_count` | integer | yes | no | — | Number of records touched by this event |
 | `items[].entries` | array[object] \| null | no | yes | null | Touched-record details returned by audit show; null in list and tail results |

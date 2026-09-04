@@ -331,7 +331,7 @@ Create a company inside an organization: its folder, database, and company infor
 | `home_currency` | `--home-currency` | string | yes | no | — | ISO 4217 code, upper case; immutable after creation; maximum length 3 |
 | `organization` | `--organization` | string \| null | no | yes | null | Organization id or name; defaults when exactly one is visible |
 | `display_name` | `--display-name` | string \| null | no | yes | null | Name shown in lists; defaults to legal_name |
-| `chart` | `--chart` | literal["none"] | no | no | "none" | Chart of accounts to seed; only none in this version |
+| `chart` | `--chart` | literal["general", "service", "product", "contractor", "retail", "nonprofit", "none"] | no | no | "general" | Packaged chart of accounts to seed, or none for a chartless company |
 | `tax_id_kind` | `--tax-id-kind` | literal["ein", "ssn"] | no | no | "ein" | Kind of tax id |
 | `tax_id` | `--tax-id` | string \| null | no | yes | null | NN-NNNNNNN for ein, NNN-NN-NNNN for ssn |
 | `entity_type` | `--entity-type` | literal["sole_proprietor", "partnership", "llc", "s_corp", "c_corp", "nonprofit", "other"] | no | no | "other" | — |
@@ -365,6 +365,18 @@ Create a company inside an organization: its folder, database, and company infor
 | `report_basis` | `--report-basis` | literal["accrual", "cash"] | no | no | "accrual" | Default basis for reports |
 | `timezone` | `--timezone` | string \| null | no | yes | null | IANA zone; defaults to the machine's zone |
 | `recent_activity_window_seconds` | `--recent-activity-window-seconds` | integer | no | no | 60 | Window for the recent-activity warning on blind writes; minimum 0 |
+| `use_account_numbers` | `--use-account-numbers` | boolean | no | no | true | Show account numbers in forms, tables, and pickers |
+| `show_lowest_subaccount_only` | `--show-lowest-subaccount-only` | boolean | no | no | false | Use leaf names instead of full account hierarchy labels in pickers |
+| `required_employee_profile_fields` | `--required-employee-profile-fields` | array[array[string]] | no | no | [["first_name"], ["last_name"], ["address.line1"], ["address.city"], ["address.state"], ["address.postal_code"], ["phone", "email"]] | Ordered alternative registered paths used to report employee profile completeness |
+| `use_classes` | `--use-classes` | boolean | no | no | false | Enable class controls on later forms |
+| `prompt_for_class` | `--prompt-for-class` | boolean | no | no | false | Require or warn for a class on later forms |
+| `enable_price_levels` | `--enable-price-levels` | boolean | no | no | false | Enable price-level controls on later sales forms |
+| `units_of_measure_mode` | `--units-of-measure-mode` | literal["disabled", "single_unit_per_item", "multiple_related_units"] | no | no | "disabled" | — |
+| `sales_tax_enabled` | `--sales-tax-enabled` | boolean | no | no | false | Enable sales-tax controls on later forms |
+| `sales_tax_liability_basis` | `--sales-tax-liability-basis` | literal["invoice_date", "payment_receipt"] | no | no | "invoice_date" | — |
+| `sales_tax_remittance_frequency` | `--sales-tax-remittance-frequency` | literal["monthly", "quarterly", "annually"] | no | no | "quarterly" | — |
+| `free_on_board` | `--free-on-board` | string \| null | no | yes | null | Default free-on-board location for later sales forms |
+| `order_printable_checks` | `--order-printable-checks` | boolean | no | no | false | Company default for ordering printable checks |
 
 ### Command and context options
 
@@ -749,6 +761,20 @@ Update the selected company's information; versioned, blind, or merged per the c
 | `timezone` | `--timezone` | string \| null | no | yes | null | IANA zone |
 | `closing_date` | `--closing-date` | string \| null | no | yes | null | Books closed through this date, YYYY-MM-DD |
 | `recent_activity_window_seconds` | `--recent-activity-window-seconds` | integer \| null | no | yes | null | Window for the recent-activity warning |
+| `use_account_numbers` | `--use-account-numbers` | boolean \| null | no | yes | null | Show account numbers in forms, tables, and pickers |
+| `show_lowest_subaccount_only` | `--show-lowest-subaccount-only` | boolean \| null | no | yes | null | Use leaf account names in pickers |
+| `required_employee_profile_fields` | `--required-employee-profile-fields` | array[array[string]] \| null | no | yes | null | Ordered alternative registered employee-completeness paths |
+| `use_classes` | `--use-classes` | boolean \| null | no | yes | null | Enable class controls on later forms |
+| `prompt_for_class` | `--prompt-for-class` | boolean \| null | no | yes | null | Require or warn for a class on later forms |
+| `enable_price_levels` | `--enable-price-levels` | boolean \| null | no | yes | null | Enable price-level controls on later sales forms |
+| `units_of_measure_mode` | `--units-of-measure-mode` | literal["disabled", "single_unit_per_item", "multiple_related_units"] \| null | no | yes | null | — |
+| `sales_tax_enabled` | `--sales-tax-enabled` | boolean \| null | no | yes | null | Enable sales-tax controls on later forms |
+| `default_sales_tax_item_id` | `--default-sales-tax-item-id` | string \| null | no | yes | null | Active sales-tax item or group default |
+| `sales_tax_liability_basis` | `--sales-tax-liability-basis` | literal["invoice_date", "payment_receipt"] \| null | no | yes | null | — |
+| `sales_tax_remittance_frequency` | `--sales-tax-remittance-frequency` | literal["monthly", "quarterly", "annually"] \| null | no | yes | null | — |
+| `default_ship_method_id` | `--default-ship-method-id` | string \| null | no | yes | null | Active default ship method |
+| `free_on_board` | `--free-on-board` | string \| null | no | yes | null | Default free-on-board location |
+| `order_printable_checks` | `--order-printable-checks` | boolean \| null | no | yes | null | Company default for ordering printable checks |
 
 ### Command and context options
 

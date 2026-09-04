@@ -26,4 +26,5 @@ Database: `company`.
 | `directive_id` | VARCHAR(26) | yes | — | — | — | — | Standing-instruction id cited by the write; null when absent. |
 | `directive_code` | VARCHAR(16) | yes | — | — | — | — | Standing-instruction code captured with the event; null when absent. |
 | `source_ref` | VARCHAR(512) | yes | — | — | — | — | Caller-supplied reference to the source of the write; null when absent. |
+| `undo_of_event_id` | VARCHAR(26) | yes | — | — | ux_co_audit_events_undo | audit_events.id | Original company audit event compensated by this event; null for ordinary events. |
 | `summary` | VARCHAR(512) | no | — | — | — | — | Human-readable summary of what the command did. |

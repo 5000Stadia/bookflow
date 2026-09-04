@@ -54,3 +54,18 @@ Database: `company`.
 | `closing_date` | VARCHAR(10) | yes | — | — | — | — | Latest date through which the books are closed; null when open. |
 | `recent_activity_window_seconds` | INTEGER | no | 60 | — | — | — | Age in seconds within which a prior write triggers a concurrency warning. |
 | `default_chart` | VARCHAR(64) | yes | — | — | — | — | Identifier of the chart template selected at rollout; null when none was seeded. |
+| `default_chart_version` | INTEGER | yes | — | — | — | — | Version of the applied chart manifest; null while the company is chartless. |
+| `use_account_numbers` | BOOLEAN | no | true | — | — | — | Whether account numbers appear in account labels and selectors. |
+| `show_lowest_subaccount_only` | BOOLEAN | no | false | — | — | — | Whether account selectors abbreviate hierarchy labels to the lowest subaccount. |
+| `required_employee_profile_fields` | TEXT | no | — | — | — | — | Canonical JSON array of alternative field-path groups required for employee profile completeness. |
+| `use_classes` | BOOLEAN | no | false | — | — | — | Whether class controls are enabled for later forms. |
+| `prompt_for_class` | BOOLEAN | no | false | — | — | — | Whether later forms require or warn for a class when classes are enabled. |
+| `enable_price_levels` | BOOLEAN | no | false | — | — | — | Whether price-level selectors are enabled for later sales forms. |
+| `units_of_measure_mode` | VARCHAR(24) | no | "disabled" | — | — | — | Unit mode: disabled, single_unit_per_item, or multiple_related_units. |
+| `sales_tax_enabled` | BOOLEAN | no | false | — | — | — | Whether sales-tax controls are enabled for later forms. |
+| `default_sales_tax_item_id` | VARCHAR(26) | yes | — | — | ix_company_info_default_sales_tax_item_id | items.id | Default active sales-tax item or group id; null when unset. |
+| `sales_tax_liability_basis` | VARCHAR(20) | no | "invoice_date" | — | — | — | Sales-tax liability basis: invoice_date or payment_receipt. |
+| `sales_tax_remittance_frequency` | VARCHAR(12) | no | "quarterly" | — | — | — | Sales-tax remittance frequency: monthly, quarterly, or annually. |
+| `default_ship_method_id` | VARCHAR(26) | yes | — | — | ix_company_info_default_ship_method_id | ship_methods.id | Default active shipping-method id; null when unset. |
+| `free_on_board` | VARCHAR(128) | yes | — | — | — | — | Default free-on-board text for later sales forms; null when unset. |
+| `order_printable_checks` | BOOLEAN | no | false | — | — | — | Company default for ordering printable checks. |
