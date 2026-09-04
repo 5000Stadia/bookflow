@@ -107,6 +107,8 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 
 ## Verified on this machine (Linux, ext4, Python 3.12)
 
+The complete correctness suite at `073a563` passes 696 tests in 471.33 seconds. Generated documentation freshness checks 93 files. The same run records cold root help at 218.09 ms, company list at 546.41 ms, customer list at 777.18 ms and term list at 588.61 ms; cold reads are diagnostics, while root help and the 10,000-record warm-query gate pass their strict limits. Customer/job and nested reference workflows have real-Chrome desktop/narrow-screen witnesses. Human browser acceptance of the wider list workbench remains pending.
+
 Storage/query correction measurements on Python 3.12.3, SQLite 3.45.1 and SQLAlchemy 2.0.52, with ext4 on a local NVMe drive:
 
 | Operation | Baseline median ms | Correction-tree median ms | Samples per tree |
