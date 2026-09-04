@@ -605,8 +605,19 @@ def test_customer_vendor_link_unlink_reactivation_versions_and_audit_order(clien
         idempotency_key="link-customer-vendor",
     )
     assert replay == {**linked, "idempotent_replay": True}
-    assert client.customer.show(customer=customer["id"], company=COMPANY)["linked_vendor_id"] == vendor["id"]
-    assert client.vendor.show(vendor=vendor["id"], company=COMPANY)["linked_customer_id"] == customer["id"]
+    shown_customer = client.customer.show(customer=customer["id"], company=COMPANY)
+    shown_vendor = client.vendor.show(vendor=vendor["id"], company=COMPANY)
+    assert shown_customer["linked_vendor_id"] == vendor["id"]
+    assert shown_vendor["linked_customer_id"] == customer["id"]
+    expected_link_state = [{
+        "id": linked["link_id"],
+        "version": 1,
+        "customer_id": customer["id"],
+        "vendor_id": vendor["id"],
+        "active": True,
+    }]
+    assert shown_customer["vendor_links"] == expected_link_state
+    assert shown_vendor["customer_links"] == expected_link_state
 
     event = client.audit.list(company=COMPANY, command="customer link-vendor")["items"][0]
     details = client.audit.show(event=event["id"], company=COMPANY)
@@ -631,6 +642,12 @@ def test_customer_vendor_link_unlink_reactivation_versions_and_audit_order(clien
         idempotency_key="unlink-customer-vendor",
     )
     assert unlinked["active"] is False
+    unlinked_customer = client.customer.show(customer=customer["id"], company=COMPANY)
+    unlinked_vendor = client.vendor.show(vendor=vendor["id"], company=COMPANY)
+    assert unlinked_customer["linked_vendor_id"] is None
+    assert unlinked_vendor["linked_customer_id"] is None
+    assert unlinked_customer["vendor_links"] == [{**expected_link_state[0], "version": 2, "active": False}]
+    assert unlinked_vendor["customer_links"] == [{**expected_link_state[0], "version": 2, "active": False}]
     event = client.audit.list(company=COMPANY, command="customer unlink-vendor")["items"][0]
     details = client.audit.show(event=event["id"], company=COMPANY)
     assert [entry["record_type"] for entry in details["entries"]] == [

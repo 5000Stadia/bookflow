@@ -111,6 +111,17 @@ class VendorItemProfileOutput(BaseModel):
     availability_notes: str | None = None
 
 
+class CustomerVendorLinkStateOutput(BaseModel):
+    """Authoritative version state for one customer/vendor relationship."""
+
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    version: int
+    customer_id: str
+    vendor_id: str
+    active: bool
+
+
 class PartyListInput(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)
     query: str | None = None
@@ -207,6 +218,7 @@ _CUSTOMER_FIELDS: dict[str, tuple[object, object]] = {
     "payment_expiry_year": (int | None, None),
     "payment_billing_address": (AddressOutput | None, None),
     "linked_vendor_id": (str | None, None),
+    "vendor_links": (list[CustomerVendorLinkStateOutput], Field(default_factory=list)),
     "stored_shipping_addresses": (list[ShippingAddressOutput], Field(default_factory=list)),
     "shipping_addresses": (list[ShippingAddressOutput], Field(default_factory=list)),
     "shipping_addresses_source_id": (str | None, None),
@@ -254,6 +266,7 @@ _VENDOR_FIELDS: dict[str, tuple[object, object]] = {
     "tax_id_kind": (Literal["ein", "ssn"] | None, None),
     "tax_id_last4": (str | None, None),
     "linked_customer_id": (str | None, None),
+    "customer_links": (list[CustomerVendorLinkStateOutput], Field(default_factory=list)),
     "contacts": (list[ContactOutput], Field(default_factory=list)),
     "contact": (str | None, None),
     "alt_contact": (str | None, None),

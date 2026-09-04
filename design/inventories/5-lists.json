@@ -378,6 +378,7 @@
         {"n": "payment_expiry_month", "t": "integer", "null": true, "io": "output", "w": "field"}, {"n": "payment_expiry_year", "t": "integer", "null": true, "io": "output", "w": "field"},
         {"n": "payment_billing_address", "shape": "address", "null": true, "io": "output", "w": "field"},
         {"n": "linked_vendor_id", "t": "ulid", "null": true, "io": "output", "w": "derived"},
+        {"n": "vendor_links", "t": "array", "shape": "customer_vendor_link-state", "io": "output", "w": "derived"},
         {"n": "notes", "t": "string", "null": true, "w": "field"}, {"n": "default_class_id", "t": "ulid", "null": true, "w": "field"}, {"n": "custom_fields", "t": "map<definition-ulid,typed-value>", "w": "field"},
         {"n": "current_balance", "shape": "money", "io": "output", "default": "zero-unavailable", "w": "derived"}, {"n": "open_balance", "shape": "money", "io": "output", "default": "zero-unavailable", "w": "derived"},
         {"n": "job_status", "t": "enum", "enum": ["none", "pending", "awarded", "in_progress", "closed", "not_awarded"], "default": "none", "w": "field"},
@@ -418,6 +419,7 @@
         {"n": "tax_profile_ref", "t": "opaque-ref", "null": true, "io": "staged", "default": null, "w": "field"},
         {"n": "current_balance", "shape": "money", "io": "output", "default": "zero-unavailable", "w": "derived"}, {"n": "open_balance", "shape": "money", "io": "output", "default": "zero-unavailable", "w": "derived"},
         {"n": "linked_customer_id", "t": "ulid", "null": true, "io": "output", "w": "derived"},
+        {"n": "customer_links", "t": "array", "shape": "customer_vendor_link-state", "io": "output", "w": "derived"},
         {"n": "item_vendor_profiles", "t": "array", "fields": ["id", "item_id", "vendor_id", "preferred_rank", "vendor_item_name", "purchase_cost", "minimum_quantity", "lead_time_days", "manufacturer_part_number", "availability_notes", "active"], "v": ["rank-unique-per-item", "minimum-nonnegative", "lead-time-nonnegative"], "w": "child_field"},
         {"n": "last_purchase_date", "t": "date", "null": true, "io": "output", "w": "derived"}, {"n": "last_purchase_cost", "shape": "money", "null": true, "io": "output", "w": "derived"}
       ],

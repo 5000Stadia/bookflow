@@ -2091,22 +2091,43 @@ def _reference_label(db: Database, table: sa.Table, record_id: str | None) -> st
     return db.conn.execute(sa.select(table.c[label]).where(table.c.id == record_id)).scalar_one_or_none()
 
 
-def _customer_link(db: Database, customer_id: str) -> str | None:
-    return db.conn.execute(
-        sa.select(schema.customer_vendor_links.c.vendor_id).where(
-            schema.customer_vendor_links.c.customer_id == customer_id,
-            schema.customer_vendor_links.c.active.is_(True),
-        )
-    ).scalar_one_or_none()
+def _customer_vendor_links(
+    db: Database,
+    noun: Literal["customer", "vendor"],
+    record_id: str,
+) -> list[dict[str, Any]]:
+    """Return deterministic public relationship state, including inactive pairs.
 
+    Keeping former pairs visible is what lets a caller supply the exact link
+    version when it intentionally reactivates a relationship.
+    """
 
-def _vendor_link(db: Database, vendor_id: str) -> str | None:
-    return db.conn.execute(
-        sa.select(schema.customer_vendor_links.c.customer_id).where(
-            schema.customer_vendor_links.c.vendor_id == vendor_id,
-            schema.customer_vendor_links.c.active.is_(True),
+    endpoint = (
+        schema.customer_vendor_links.c.customer_id
+        if noun == "customer"
+        else schema.customer_vendor_links.c.vendor_id
+    )
+    rows = db.conn.execute(
+        sa.select(
+            schema.customer_vendor_links.c.id,
+            schema.customer_vendor_links.c.version,
+            schema.customer_vendor_links.c.customer_id,
+            schema.customer_vendor_links.c.vendor_id,
+            schema.customer_vendor_links.c.active,
         )
-    ).scalar_one_or_none()
+        .where(endpoint == record_id)
+        .order_by(schema.customer_vendor_links.c.active.desc(), schema.customer_vendor_links.c.id)
+    ).mappings().all()
+    return [
+        {
+            "id": str(row["id"]),
+            "version": int(row["version"]),
+            "customer_id": str(row["customer_id"]),
+            "vendor_id": str(row["vendor_id"]),
+            "active": bool(row["active"]),
+        }
+        for row in rows
+    ]
 
 
 def _vendor_item_profiles(db: Database, vendor_id: str) -> list[dict[str, Any]]:
@@ -2313,6 +2334,7 @@ def project_party_record(
         )
     }
     if noun == "customer":
+        vendor_links = _customer_vendor_links(db, "customer", str(values["id"]))
         ancestors = list_service.hierarchy_ancestors(db, schema.customers, row)
         stored_collections = collections or read_party_collections(db, "customer", str(values["id"]))
         effective_addresses, effective_address_source = _effective_collection(
@@ -2358,7 +2380,11 @@ def project_party_record(
             "payment_expiry_month": values["payment_expiry_month"],
             "payment_expiry_year": values["payment_expiry_year"],
             "payment_billing_address": _address_output(values, "payment_billing"),
-            "linked_vendor_id": _customer_link(db, str(values["id"])),
+            "linked_vendor_id": next(
+                (link["vendor_id"] for link in vendor_links if link["active"]),
+                None,
+            ),
+            "vendor_links": vendor_links,
             "stored_shipping_addresses": _public_shipping_addresses(
                 stored_collections.get("shipping_addresses", ())
             ),
@@ -2413,6 +2439,7 @@ def project_party_record(
         "custom_fields": list(custom),
     }
     if noun == "vendor":
+        customer_links = _customer_vendor_links(db, "vendor", str(values["id"]))
         party_collections = collections or read_party_collections(db, "vendor", str(values["id"]))
         public_contacts = _public_contacts(party_collections.get("contacts", ()))
         return {
@@ -2431,7 +2458,11 @@ def project_party_record(
             "recall_last_transaction": values["recall_last_transaction"],
             "tax_id_kind": values["tax_id_kind"] if reveal_tax_suffix else None,
             "tax_id_last4": values["tax_id_last4"] if reveal_tax_suffix else None,
-            "linked_customer_id": _vendor_link(db, str(values["id"])),
+            "linked_customer_id": next(
+                (link["customer_id"] for link in customer_links if link["active"]),
+                None,
+            ),
+            "customer_links": customer_links,
             "item_vendor_profiles": _vendor_item_profiles(db, str(values["id"])),
             "last_purchase_date": None,
             "last_purchase_cost": None,
