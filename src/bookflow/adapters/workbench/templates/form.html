@@ -1,19 +1,77 @@
 {% extends "base.html" %}{% block title %}{{ noun }} {{ verb }}{% endblock %}{% block body %}
 {% set base = ("/c/" ~ company_id ~ "/" ~ noun) if company_id else ("/hub/" ~ noun.replace(" ", "-")) %}
 {% set action = ((base ~ "/" ~ record_id) if record_id else base) ~ (("/" ~ verb) if verb else "") %}
-<nav class="crumbs"><a href="{{ base }}">{{ noun }}</a> / {{ verb }}</nav><h1>{{ noun }} {{ verb }}</h1><p class="muted">{{ cmd.description }}</p>
+<nav class="crumbs"><a href="{{ base }}">{{ noun }}</a> / {{ verb or "run" }}</nav>
+<h1>{{ noun }} {{ verb }}</h1><p class="muted">{{ cmd.description }}</p>
 {% if error %}<div class="error"><b>{{ error.code }}</b> {{ error.message }}{% if error.details.fields %}<ul>{% for f in error.details.fields %}<li>{{ f.field }}: {{ f.problem }}</li>{% endfor %}</ul>{% endif %}{% if error.details.suggestions %}<p>Did you mean: {{ error.details.suggestions | join(", ") }}</p>{% endif %}</div>{% endif %}
 {% if result %}<div class="{{ 'warn' if preview else 'field' }}"><b>{{ "Preview (nothing written)" if preview else "Result" }}</b><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></div>{% endif %}
-<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML">
-<input type="hidden" name="originals" value='{{ json.dumps(originals, default=str) | e }}'>
-{% for l in leaves %}<div class="row"><label>{{ l.path }}{% if l.required %} *{% endif %}<small>{{ l.description }}{% if l.choices %} One of: {{ l.choices | join(", ") }}.{% endif %}{% if l.kind == "json" %} Enter a JSON {{ l.json_shape }}.{% endif %}{% if l.default not in (none, "", false) %} Default: {{ l.default }}.{% endif %}</small></label>
+
+{% macro field(l, index) %}
 {% set cur = form_value(l, originals, attempted) %}
-{% if l.kind == "choice" %}<select name="f:{{ l.path }}"><option value="">(unchanged)</option>{% for c in l.choices %}<option value="{{ c }}" {% if cur == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
-{% elif l.kind == "bool" %}<select name="f:{{ l.path }}"><option value="unset">(unset)</option><option value="true" {% if cur == true %}selected{% endif %}>true</option><option value="false" {% if cur == false %}selected{% endif %}>false</option></select>
-{% elif l.kind == "secret" %}<input type="password" name="f:{{ l.path }}">
-{% elif l.kind == "json" %}<textarea name="f:{{ l.path }}" rows="6" spellcheck="false">{{ cur if cur is not none else '' }}</textarea>
-{% else %}<input name="f:{{ l.path }}" value="{{ cur if cur is not none else '' }}" {% if l.kind == "number" %}inputmode="numeric"{% endif %}>{% endif %}
-<span>{% if cmd.clearable and l.nullable and l.kind != "json" %}<label><input type="checkbox" name="clear:{{ l.path }}" value="1" {% if attempted.get("clear:" ~ l.path) == "1" %}checked{% endif %}> clear</label>{% endif %}</span></div>{% endfor %}
+{% set form_name = l.form_key or ("f:" ~ l.path) %}
+<div class="row form-field{% if l.runtime %} runtime-field{% endif %}" id="field-{{ index }}"
+ {% if l.visible_when %}data-when-field="{{ l.visible_when.field }}" data-when-values='{{ json.dumps(l.visible_when["values"]) | e }}'{% if not l.visible %} hidden{% endif %}{% endif %}>
+<label for="control-{{ index }}">{{ l.label or l.path }}{% if l.required %} *{% endif %}
+<small>{{ l.description }}{% if l.choices and not l.runtime %} One of: {{ l.choices | join(", ") }}.{% endif %}{% if l.kind == "json" %} Enter a JSON {{ l.json_shape }}.{% endif %}{% if l.default not in (none, "", false) %} Default: {{ l.default }}.{% endif %}</small></label>
+<div class="control-stack">
+{% if l.pinned %}
+<input type="hidden" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"><select disabled aria-label="{{ l.path }} (fixed)"><option value="{{ cur }}" selected>{{ cur }}</option></select><span class="pinned-value"><small>fixed for this record</small></span>
+{% elif l.reference %}
+{% set refid = "reference-" ~ index %}
+<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}" list="{{ refid }}"
+ autocomplete="off" placeholder="Search, then choose a stable id"
+ hx-get="{{ l.reference.suggestion_url }}{% if l.reference.target %}?target={{ l.reference.target }}{% endif %}"
+ hx-trigger="input changed delay:250ms" hx-target="#{{ refid }}" hx-swap="innerHTML"
+ {% if l.reference.discriminator %}hx-include="[name='f:{{ l.reference.discriminator }}']" data-ref-discriminator="{{ l.reference.discriminator }}"{% endif %}>
+<datalist id="{{ refid }}">{% if l.reference.current and l.reference.current.active %}<option value="{{ l.reference.current.id }}" label="{{ l.reference.current.label }}"></option>{% endif %}</datalist>
+{% if l.reference.current %}<small class="reference-current">Current: {{ l.reference.current.label }}{% if not l.reference.current.active %} <b>(inactive; readable only)</b>{% endif %}</small>{% endif %}
+{% if l.reference.add_targets %}<span class="reference-actions">{% for target in l.reference.add_targets %}<a href="{{ target.url }}" target="_blank" rel="noopener" data-ref-add-target="{{ target.target }}"{% if l.reference.target and target.target != l.reference.target %} hidden{% elif not l.reference.target and l.reference.targets|length > 1 %} hidden{% endif %}>Add new {{ target.label }}…</a>{% endfor %}</span>{% endif %}
+{% elif l.kind == "choice" %}
+<select id="control-{{ index }}" name="{{ form_name }}"><option value="">{{ "(choose)" if l.required and not record_id else "(unchanged)" }}</option>{% for c in l.choices %}<option value="{{ c }}" {% if cur == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+{% elif l.kind == "bool" %}
+<select id="control-{{ index }}" name="{{ form_name }}"><option value="unset">(unset)</option><option value="true" {% if cur == true or cur == "true" %}selected{% endif %}>true</option><option value="false" {% if cur == false or cur == "false" %}selected{% endif %}>false</option></select>
+{% elif l.kind == "secret" %}<input id="control-{{ index }}" type="password" name="{{ form_name }}">
+{% elif l.kind == "json" %}<textarea name="{{ form_name }}" id="control-{{ index }}" rows="6" spellcheck="false">{{ cur if cur is not none else '' }}</textarea>
+{% elif l.kind == "custom-choice" %}<input type="hidden" name="cf-kind:{{ l.definition_id }}" value="choice"><select id="control-{{ index }}" name="{{ form_name }}"><option value="">(unchanged)</option>{% for c in l.choices %}<option value="{{ c }}"{% if cur == c %} selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+{% elif l.kind == "custom-bool" %}<input type="hidden" name="cf-kind:{{ l.definition_id }}" value="bool"><select id="control-{{ index }}" name="{{ form_name }}"><option value="unset">(unchanged)</option><option value="true"{% if cur == true or cur == "true" %} selected{% endif %}>true</option><option value="false"{% if cur == false or cur == "false" %} selected{% endif %}>false</option></select>
+{% elif l.kind == "custom-date" %}<input type="hidden" name="cf-kind:{{ l.definition_id }}" value="date"><input id="control-{{ index }}" type="date" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}">
+{% elif l.kind == "custom-number" %}<input type="hidden" name="cf-kind:{{ l.definition_id }}" value="number"><input id="control-{{ index }}" inputmode="decimal" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}">
+{% elif l.kind == "custom-text" %}<input type="hidden" name="cf-kind:{{ l.definition_id }}" value="text"><input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}">
+{% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}" {% if l.kind == "number" %}inputmode="numeric"{% endif %}>{% endif %}
+</div>
+<span>{% if (cmd.clearable or l.runtime) and l.nullable and l.kind != "json" %}<label class="clear-control"><input type="checkbox" name="clear:{{ l.path }}" value="1" {% if attempted.get("clear:" ~ l.path) == "1" %}checked{% endif %}> clear</label>{% endif %}</span>
+</div>
+{% endmacro %}
+
+<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" data-generated-form>
+<input type="hidden" name="originals" value='{{ json.dumps(originals, default=str) | e }}'>
+{% for l in leaves %}{{ field(l, loop.index) }}{% endfor %}
+{% if runtime_fields %}<fieldset class="runtime-fields"><legend>Custom fields</legend>{% for l in runtime_fields %}{{ field(l, "custom-" ~ loop.index) }}{% endfor %}</fieldset>{% endif %}
 {% for c in ctx_fields %}<div class="row"><label>{{ c }}<small>context, sent as a header</small></label><input name="ctx:{{ c }}" value="{{ attempted.get('ctx:' ~ c, '') }}"><span></span></div>{% endfor %}
 <div class="row"><span></span><span>{% if cmd.is_write %}<button name="action" value="preview">Preview</button>{% endif %}<button name="action" value="submit">Submit</button></span></div></form>
+
+<script>
+(()=>{
+  const normalize = value => (value || '').replaceAll('_', '-');
+  function refresh(root){
+    root.querySelectorAll('[data-when-field]').forEach(row => {
+      const control = root.querySelector(`[name="f:${CSS.escape(row.dataset.whenField)}"]`);
+      const shown = control && JSON.parse(row.dataset.whenValues).includes(control.value);
+      row.hidden = !shown;
+      row.querySelectorAll('input,select,textarea').forEach(input => { input.disabled = !shown; });
+    });
+    root.querySelectorAll('[data-ref-discriminator]').forEach(input => {
+      const control = root.querySelector(`[name="f:${CSS.escape(input.dataset.refDiscriminator)}"]`);
+      const selected = normalize(control && control.value);
+      input.closest('.form-field').querySelectorAll('[data-ref-add-target]').forEach(link => {
+        link.hidden = link.dataset.refAddTarget !== selected;
+      });
+    });
+  }
+  document.querySelectorAll('[data-generated-form]').forEach(form => {
+    form.addEventListener('change', () => refresh(form));
+    refresh(form);
+  });
+})();
+</script>
 {% endblock %}

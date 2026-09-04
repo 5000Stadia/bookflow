@@ -6,6 +6,7 @@ import json
 import secrets
 import threading
 import time
+from html import escape
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -165,6 +166,57 @@ def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
     return dict(current) if isinstance(current, dict) else {}
 
 
+def _custom_value_map(value: Any) -> dict[str, Any]:
+    """Translate a show projection into the static command mapping shape."""
+    if isinstance(value, dict):
+        return dict(value)
+    if not isinstance(value, list):
+        return {}
+    return {
+        str(item["definition_id"]): item.get("value")
+        for item in value
+        if isinstance(item, dict) and item.get("definition_id")
+    }
+
+
+def _reference_label(
+    target: str,
+    row: dict[str, Any],
+    company_view: dict[str, Any],
+) -> str:
+    definition = registry.noun_meta(target).get("definition")
+    display_field = definition.display_field if definition is not None else "name"
+    label = next(
+        (
+            str(row[field])
+            for field in (display_field, "full_name", "name", "code", "text", "id")
+            if row.get(field) not in (None, "")
+        ),
+        str(row.get("id", "")),
+    )
+    if target == "account":
+        info = company_view.get("info") if isinstance(company_view.get("info"), dict) else company_view
+        if info.get("show_lowest_subaccount_only") and row.get("name"):
+            label = str(row["name"])
+        if info.get("use_account_numbers") and row.get("number"):
+            label = f"{row['number']} · {label}"
+    return label
+
+
+def _reference_target(
+    targets: tuple[str, ...],
+    noun: str,
+    originals: dict[str, Any],
+    attempted: dict[str, str],
+) -> tuple[str | None, str | None]:
+    if len(targets) == 1:
+        return targets[0], None
+    discriminator = "name_type" if noun == "sales-rep" else None
+    chosen = F.selected_value(discriminator, originals, attempted) if discriminator else None
+    normalized = str(chosen).replace("_", "-") if chosen else None
+    return (normalized if normalized in targets else None), discriminator
+
+
 def _inactive_toggle(path: str, request: Request, *, include: bool) -> str:
     """Toggle inactive rows without discarding any other list-page state."""
     pairs = [(key, value) for key, value in request.query_params.multi_items()
@@ -311,6 +363,66 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         resp.set_cookie(LAST_COMPANY, show["company_id"], samesite="lax", secure=secure_cookies, max_age=90 * 86400, path="/")  # a per-browser convenience, no identity in it
         return resp
 
+    @app.get("/c/{company_id}/_references/{owner_noun}/{field}", response_class=HTMLResponse)
+    def reference_suggestions(
+        company_id: str,
+        owner_noun: str,
+        field: str,
+        request: Request,
+    ):
+        """Return at most 25 active same-company choices for a declared reference."""
+        try:
+            cred = credential(request)
+            company_view = run(request, "company show", {}, company_id)
+        except BookflowError as err:
+            return page_error(request, err)
+        definition = registry.noun_meta(owner_noun).get("definition")
+        reference = F.reference_for_path(definition, field)
+        if reference is None:
+            return page_error(request, BookflowError("E_USAGE", message="unknown form reference"))
+        targets = reference.target_nouns
+        requested_target = request.query_params.get("target")
+        if requested_target is None and len(targets) > 1:
+            requested_target = request.query_params.get("f:name_type")
+        target = requested_target.replace("_", "-") if requested_target else (targets[0] if len(targets) == 1 else None)
+        if target not in targets:
+            return page_error(request, BookflowError("E_USAGE", message="invalid reference target"))
+        list_command = registry.get(f"{target} list")
+        if list_command is None or list_command.local_only:
+            return page_error(request, BookflowError("E_USAGE", message="reference target is not listable"))
+        if not _role_allows(list_command, company_view, hub_admin=cred.hub_admin):
+            return page_error(request, BookflowError("E_PERMISSION", details={
+                "capability": list_command.capability,
+                "required_role": list_command.required_role,
+            }))
+        query = request.query_params.get("q")
+        if query is None:
+            query = request.query_params.get(f"f:{field}", "")
+        query = query.strip()
+        if not query:
+            return HTMLResponse("", headers={"Cache-Control": "no-store"})
+        if len(query) > 200:
+            return page_error(request, BookflowError(
+                "E_VALIDATION",
+                details={"fields": [{"field": "query", "problem": "must be at most 200 characters"}]},
+            ))
+        try:
+            output = run(request, list_command.name, {"query": query}, company_id)
+        except BookflowError as err:
+            return page_error(request, err)
+        target_definition = registry.noun_meta(target).get("definition")
+        identifier = target_definition.identifier if target_definition is not None else "id"
+        options = []
+        for row in output.get("items", [])[:25]:
+            stable_id = row.get(identifier) or row.get("id")
+            if stable_id is None or not row.get("active", True):
+                continue
+            label = _reference_label(target, row, company_view)
+            options.append(
+                f'<option value="{escape(str(stable_id), quote=True)}" label="{escape(label, quote=True)}"></option>'
+            )
+        return HTMLResponse("".join(options), headers={"Cache-Control": "no-store"})
+
     def noun_page(request: Request, company_id: str | None, noun: str):
         if noun in ("audit", "hub audit"):
             return audit_common(request, company_id if noun == "audit" else None)
@@ -426,8 +538,27 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return page_error(request, e)
         verbs = [c for c in _verbs(command_noun, "company" if company_id else "hub")
                  if c.verb not in ("list", "show", "new") and _role_allows(c, role_view, hub_admin=cred.hub_admin)]
+        audit_undo = None
+        if company_id is not None and command_noun == "audit":
+            if out.get("undo_of_event_id"):
+                audit_undo = {"original_event_id": out["undo_of_event_id"]}
+            else:
+                undo_command = registry.get("undo")
+                if undo_command is not None and _role_allows(undo_command, role_view, hub_admin=cred.hub_admin):
+                    try:
+                        run(request, "undo", {"event_id": out["id"]}, company_id, dry_run=True)
+                    except BookflowError as err:
+                        if err.code == "E_ALREADY_UNDONE":
+                            audit_undo = {"undo_event_id": err.details.get("undo_event_id")}
+                        elif err.code in ("E_NOT_UNDOABLE", "E_UNDO_CONFLICT"):
+                            audit_undo = {
+                                "unavailable": err.details.get("problem") or err.message,
+                            }
+                    else:
+                        audit_undo = {"eligible": True, "event_id": out["id"]}
         visible_record = {key: value for key, value in out.items() if key != "editing_by"}
         return render("record.html", request, company_id=company_id, noun=noun, record_id=record_id, record=visible_record, audit=audit, meta=meta, verbs=verbs,
+                      audit_undo=audit_undo,
                       presence=(meta["record_type"] in _presence_types()) and company_id is not None
                                and _may_publish_presence(role_view, hub_admin=cred.hub_admin),
                       editing=(out.get("editing_by") or []) if _may_publish_presence(role_view, hub_admin=cred.hub_admin) else [])
@@ -468,6 +599,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 "capability": cmd.capability, "required_role": cmd.required_role,
             }))
         originals = None
+        shown = None
         generic_selector_form = record_id == "self" and cmd.version_source and cmd.version_source[0] != "company show"
         if cmd.version_source and record_id is not None and not generic_selector_form:
             show_name, ident, field = cmd.version_source
@@ -479,8 +611,74 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             originals = {**_editable_values(noun, shown), "expected_version": shown.get(field)}
         elif cmd.version_source and record_id is None:
             return page_error(request, BookflowError("E_USAGE", message="open this update from a record page"))
-        return render("form.html", request, company_id=company_id, noun=noun, verb=verb, cmd=cmd, leaves=F.leaves(cmd.input_model), originals=originals or {},
-                      attempted=attempted or {}, record_id=record_id,
+        originals = originals or {}
+        attempted = attempted or {}
+        meta = registry.noun_meta(noun)
+        definition = meta.get("definition")
+        if definition is not None and definition.custom_fields:
+            originals["custom_fields"] = _custom_value_map(originals.get("custom_fields"))
+        described = F.describe_fields(noun, verb, cmd.input_model, originals, attempted)
+        if company_id is not None and definition is not None:
+            for leaf in described:
+                reference = F.reference_for_path(definition, leaf["path"])
+                if reference is None:
+                    continue
+                targets = reference.target_nouns
+                target, discriminator = _reference_target(targets, noun, originals, attempted)
+                value = F.selected_value(leaf["path"], originals, attempted)
+                current = None
+                if target is not None and value:
+                    target_meta = registry.noun_meta(target)
+                    show_command = registry.get(f"{target} show")
+                    identifier = target_meta.get("identifier")
+                    if show_command is not None and identifier:
+                        try:
+                            row = run(request, show_command.name, {identifier: value}, company_id)
+                        except BookflowError as err:
+                            if err.code not in ("E_RECORD_NOT_FOUND", "E_INACTIVE_REFERENCE"):
+                                return page_error(request, err)
+                        else:
+                            current = {
+                                "id": row.get("id", value),
+                                "label": _reference_label(target, row, authorized_company or {}),
+                                "active": row.get("active", True),
+                            }
+                add_targets = []
+                for candidate in targets:
+                    create_command = registry.get(f"{candidate} create")
+                    if (
+                        create_command is not None
+                        and _role_allows(create_command, authorized_company or {}, hub_admin=cred.hub_admin)
+                    ):
+                        target_definition = registry.noun_meta(candidate).get("definition")
+                        add_targets.append({
+                            "target": candidate,
+                            "label": target_definition.singular_label if target_definition is not None else candidate,
+                            "url": f"/c/{company_id}/{candidate}/create",
+                        })
+                leaf["reference"] = {
+                    "targets": targets,
+                    "target": target,
+                    "discriminator": discriminator,
+                    "suggestion_url": f"/c/{company_id}/_references/{noun}/{leaf['path']}",
+                    "current": current,
+                    "add_targets": add_targets,
+                }
+        runtime_fields = []
+        if company_id is not None and definition is not None and definition.runtime_field_provider == "custom-fields":
+            try:
+                definitions = run(
+                    request,
+                    "custom-field list",
+                    {"filter": [f"target_type={definition.record_type}"]},
+                    company_id,
+                ).get("items", [])
+            except BookflowError as err:
+                return page_error(request, err)
+            runtime_fields = F.custom_field_descriptors(definitions)
+            described = [leaf for leaf in described if leaf["path"] != "custom_fields"]
+        return render("form.html", request, company_id=company_id, noun=noun, verb=verb, cmd=cmd, leaves=described, originals=originals,
+                      attempted=attempted, record_id=record_id, runtime_fields=runtime_fields,
                       ctx_fields=F.context_fields(cmd), result=result, error=error,
                       preview=preview, get=F.get_path, form_value=F.form_value)
 
@@ -530,6 +728,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     @app.post("/c/{company_id}/{noun}/{verb}")
     async def company_submit(company_id: str, noun: str, verb: str, request: Request):
         return await run_in_threadpool(submit, request, company_id, noun, verb, None, await form_of(request))
+
+    @app.post("/c/{company_id}/{noun}")
+    async def company_single_submit(company_id: str, noun: str, request: Request):
+        return await run_in_threadpool(submit, request, company_id, noun, "", None, await form_of(request))
 
     @app.post("/c/{company_id}/{noun}/{record_id}/{verb}")
     async def company_record_submit(company_id: str, noun: str, record_id: str, verb: str, request: Request):

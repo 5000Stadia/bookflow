@@ -10,6 +10,12 @@ th{background:#f0f0f0}
 form .row{display:grid;grid-template-columns:240px 1fr auto;gap:.5rem;align-items:center;padding:.25rem 0}
 form .row small{color:#666;display:block}
 input,select,textarea{font:inherit;padding:.25rem .4rem;width:100%;box-sizing:border-box}
+input[type="checkbox"],input[type="hidden"]{width:auto}
+.control-stack{display:grid;gap:.25rem;min-width:0}.reference-current{color:#555}.reference-actions{font-size:.9rem}.reference-actions a{margin-right:.75rem}
+.pinned-value{padding:.3rem .45rem;background:#f1f4f7;border:1px solid #d5dce4;border-radius:.2rem}.pinned-value small{display:inline}
+.clear-control{white-space:nowrap;font-size:.9rem}.runtime-fields{border:1px solid #d5dce4;margin:1rem 0;padding:.6rem .8rem}.runtime-fields legend{font-weight:600;color:#1f3a5f}
+.audit-undo{background:#f1f6fb;border:1px solid #b9cadb;padding:.65rem;margin:.75rem 0}.audit-undo p{margin:0}
+[hidden]{display:none!important}
 button{font:inherit;padding:.35rem .8rem;margin-right:.5rem}
 .error{background:#fde8e8;border:1px solid #e0a0a0;padding:.5rem;margin:.5rem 0}
 .warn{background:#fff6dc;border:1px solid #e0c060;padding:.5rem;margin:.5rem 0}

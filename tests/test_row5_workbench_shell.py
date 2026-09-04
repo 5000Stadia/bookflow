@@ -39,6 +39,11 @@ def test_company_home_uses_the_fixed_accounting_navigation_groups(hosted):
     assert f'href="/c/{hosted.company_id}/term"' in page.text
     assert f'href="/c/{hosted.company_id}/profile/apply"' in page.text
     assert f'href="/c/{hosted.company_id}/chart/apply"' in page.text
+    assert f'href="/c/{hosted.company_id}/undo"' in page.text
+
+    undo = _browser(hosted).get(f"/c/{hosted.company_id}/undo")
+    assert undo.status_code == 200
+    assert 'name="f:event_id"' in undo.text
 
 
 def test_list_page_uses_declared_columns_and_command_backed_query_controls(hosted):
