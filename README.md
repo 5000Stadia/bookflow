@@ -2,6 +2,8 @@
 
 A multi-company double-entry accounting core for small businesses. A Python library with a CLI, an HTTP host, and an MCP server over the same commands, so people and AI agents post to the same books.
 
+The Python distribution is `bookflow-core`; the import package and command are both `bookflow`.
+
 ## Run
 
 ```

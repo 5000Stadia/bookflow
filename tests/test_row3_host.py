@@ -1575,7 +1575,7 @@ def test_an_agent_token_with_a_principal_acts_on_behalf_of_that_person(hosted, r
 
 
 def test_login_lands_in_a_company_without_a_click(hosted):
-    """Human taste gate (2026-09-04): no picker step when the company is not in doubt; deep links return through login."""
+    """No picker step when the company is not in doubt; deep links return through login."""
     c = TestClient(hosted.handle.app, follow_redirects=False)
     # a deep link before login goes to /login?next=<the link>
     r = c.get(f"/c/{hosted.company_id}/directive")
@@ -1602,7 +1602,7 @@ def test_login_lands_in_a_company_without_a_click(hosted):
 
 
 def test_every_link_the_workbench_renders_resolves(hosted):
-    """Human taste gate (2026-09-04): the company index linked to /c//company because the page never got the id."""
+    """Every internal link emitted by the generated workbench resolves."""
     import re
     c = TestClient(hosted.handle.app, follow_redirects=True)
     assert c.post("/login", json={"username": hosted.login, "password": PASSWORD}).status_code == 200

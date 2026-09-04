@@ -1,5 +1,5 @@
 [project]
-name = "bookflow"
+name = "bookflow-core"
 version = "0.0.1"
 description = "Multi-company double-entry accounting core with a command set exposed through a CLI, an HTTP host, a web workbench, and an MCP server."
 readme = "README.md"

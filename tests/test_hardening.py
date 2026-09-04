@@ -291,8 +291,16 @@ def test_wheel_contains_data(tmp_path):
     assert out.returncode == 0, out.stderr
     import zipfile
     wheel = next(tmp_path.glob("*.whl"))
-    names = zipfile.ZipFile(wheel).namelist()
+    assert wheel.name.startswith("bookflow_core-")
+    with zipfile.ZipFile(wheel) as archive:
+        names = archive.namelist()
+        metadata_name = next(name for name in names if name.endswith(".dist-info/METADATA"))
+        entry_points_name = next(name for name in names if name.endswith(".dist-info/entry_points.txt"))
+        metadata = archive.read(metadata_name).decode()
+        entry_points = archive.read(entry_points_name).decode()
     assert "bookflow/data/currencies.csv" in names
+    assert "Name: bookflow-core\n" in metadata
+    assert "bookflow = bookflow.adapters.cli.app:main" in entry_points
 
 
 def test_sibling_companies_hidden_in_hub_audit(client, root):

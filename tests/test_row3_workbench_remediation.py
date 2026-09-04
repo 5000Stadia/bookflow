@@ -302,3 +302,67 @@ def test_successful_htmx_login_redirects_to_a_safe_visible_destination(hosted):
         "/login", json={"username": hosted.login, "password": PASSWORD}
     )
     assert ordinary_api.status_code == 200 and "HX-Redirect" not in ordinary_api.headers
+
+
+def test_browser_journey_conflict_presence_directive_and_audit(hosted, root):
+    """The mechanical Row 3 browser acceptance journey is one executable witness."""
+    cid = hosted.company_id
+    before = hosted.info()
+    originals = {**before["info"], "expected_version": before["info_version"]}
+    owner = _login(hosted)
+
+    make_actor(root, "second-browser", company_role=(cid, "admin"))
+    hosted.ok(
+        "user.set-password",
+        {"username": "second-browser", "password": "second-browser-password"},
+    )
+    second = TestClient(hosted.handle.app, follow_redirects=False)
+    assert second.post(
+        "/login", json={"username": "second-browser", "password": "second-browser-password"}
+    ).status_code == 200
+
+    presence = second.post(
+        f"/c/{cid}/presence/set/company_info/{cid}", headers=WB,
+    )
+    assert presence.status_code == 204
+    record = owner.get(f"/c/{cid}/company/self")
+    assert "Editing now:" in record.text and "Second-Browser" in record.text
+
+    first = owner.post(
+        f"/c/{cid}/company/self/update",
+        headers=WB,
+        data={
+            "originals": json.dumps(originals, default=str),
+            "f:phone": "555-0201",
+            "f:expected_version": str(before["info_version"]),
+            "action": "submit",
+        },
+    )
+    assert first.status_code == 303
+    stale = second.post(
+        f"/c/{cid}/company/self/update",
+        headers=WB,
+        data={
+            "originals": json.dumps(originals, default=str),
+            "f:phone": "555-0202",
+            "f:expected_version": str(before["info_version"]),
+            "action": "submit",
+        },
+    )
+    assert stale.status_code == 200 and "E_VERSION_CONFLICT" in stale.text
+    assert hosted.info()["info"]["phone"] == "555-0201"
+
+    directive_text = "Post approved browser entries."
+    directive = owner.post(
+        f"/c/{cid}/directive/add",
+        headers=WB,
+        data={"originals": "{}", "f:text": directive_text, "action": "submit"},
+    )
+    assert directive.status_code == 303
+    directive_page = owner.get(directive.headers["location"])
+    assert directive_page.status_code == 200 and directive_text in directive_page.text
+
+    audit_page = owner.get(f"/c/{cid}/audit")
+    assert audit_page.status_code == 200
+    assert "company update" in audit_page.text and "directive add" in audit_page.text
+    assert "http" in audit_page.text
