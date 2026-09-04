@@ -98,8 +98,8 @@ def _may_publish_presence(record: dict[str, Any], *, hub_admin: bool = False) ->
     return role in ROLE_RANK and ROLE_RANK[role] >= ROLE_RANK["standard"]
 
 
-def _output_identifier(noun: str, meta: dict[str, str | None], output: dict[str, Any]) -> str | None:
-    identifier = meta.get("identifier")
+def _output_identifier(noun: str, meta: dict[str, Any], output: dict[str, Any]) -> str | None:
+    identifier = meta.get("output_identifier") or meta.get("identifier")
     if identifier:
         for key in (identifier, f"{identifier}_id"):
             value = output.get(key)

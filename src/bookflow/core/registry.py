@@ -227,13 +227,36 @@ NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
 }
 
 
-def noun_meta(noun: str) -> dict[str, str | None]:
-    """Record type and identifying positional for a noun, derived from the registry with the overrides above."""
+def noun_meta(noun: str) -> dict[str, Any]:
+    """Project routing metadata, including an authoritative Row 5 list definition when available."""
     if noun in NOUN_META_OVERRIDES:
         return dict(NOUN_META_OVERRIDES[noun])
     show = REGISTRY.get(f"{noun} show")
     identifier = show.positional[0] if show and show.positional else None
-    return {"record_type": noun.replace(" ", "_"), "identifier": identifier}
+    from bookflow.company.lists import get_list_definition
+
+    definition = get_list_definition(noun)
+    if definition is None:
+        return {"record_type": noun.replace(" ", "_"), "identifier": identifier}
+    return {
+        "record_type": definition.record_type,
+        "identifier": identifier,
+        "output_identifier": definition.identifier,
+        "definition": definition,
+        "route_slug": definition.route_slug,
+        "singular_label": definition.singular_label,
+        "plural_label": definition.plural_label,
+        "display_field": definition.display_field,
+        "ui_group": definition.ui_group,
+        "ui_order": definition.ui_order,
+        "primary_collection_action": definition.primary_collection_action,
+        "collection_actions": definition.collection_actions,
+        "record_actions": definition.record_actions,
+        "hierarchy": definition.hierarchy,
+        "columns": definition.all_columns,
+        "filters": definition.filters,
+        "runtime_field_provider": definition.runtime_field_provider,
+    }
 
 
 def routed_commands() -> list[Command]:

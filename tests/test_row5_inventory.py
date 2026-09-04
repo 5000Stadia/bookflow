@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from string import Formatter
+
+from bookflow.company.lists import LIST_DEFINITIONS, SortTerm
 
 
 ROOT = Path(__file__).parents[1]
-INVENTORY_PATH = ROOT / "design" / "specs" / "5-lists-inventory.json"
+INVENTORY_PATH = ROOT / "design" / "inventories" / "5-lists.json"
 
 NOUNS = {
     "account", "customer", "vendor", "employee", "other-name", "item", "item-category", "class",
@@ -50,6 +53,22 @@ def _names(entries: list[dict]) -> list[str]:
     return [entry["n"] for entry in entries]
 
 
+def _column_tokens(value):
+    if isinstance(value, str) and value.startswith("$"):
+        yield value
+    elif isinstance(value, dict):
+        for child in value.values():
+            yield from _column_tokens(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _column_tokens(child)
+
+
+def _sort_term(value: str) -> SortTerm:
+    parts = value.split(":")
+    return SortTerm(parts[0], "desc" if "desc" in parts[1:] else "asc", "nulls-last" in parts[1:])
+
+
 def test_inventory_has_every_required_noun_action_and_witness_dimension():
     data = inventory()
     assertions = data["coverage_assertions"]
@@ -81,12 +100,59 @@ def test_each_noun_has_unique_fields_complete_lifecycle_and_query_contract():
         assert definition["table"] and definition["service"] and definition["selector"], noun
 
 
+def test_witness_placeholders_tokens_and_authoritative_queries_resolve():
+    data = inventory()
+    allowed_placeholders = {"bp", "table", "n", "service", "noun", "child_table", "command"}
+    templates = data["witness_templates"]
+    for witness, dimensions in templates.items():
+        for dimension, template in dimensions.items():
+            placeholders = {field for _, field, _, _ in Formatter().parse(template) if field}
+            assert placeholders <= allowed_placeholders, (witness, dimension, placeholders)
+
+    defined_tokens = set(data["notation"]["column_tokens"])
+    used_tokens = set(_column_tokens({"nouns": data["nouns"]}))
+    assert used_tokens <= defined_tokens
+
+    for noun, planned in data["nouns"].items():
+        runtime = LIST_DEFINITIONS[noun]
+        context = {
+            "bp": planned["bp"], "table": planned["table"], "n": "field",
+            "service": planned["service"], "noun": noun,
+            "child_table": planned.get("child_table", planned["table"]),
+            "command": f"{noun} create",
+        }
+        for dimensions in templates.values():
+            for template in dimensions.values():
+                assert "{" not in template.format_map(context)
+
+        query = planned["query"]
+        assert tuple(query["search"]) == runtime.search_fields
+        assert tuple(query["filters"]) == tuple(item.field for item in runtime.filters)
+        assert tuple(query["sorts"]) == runtime.sorts
+        assert tuple(_sort_term(value) for value in query["default_sort"]) == runtime.default_sort
+        assert tuple(query["default_columns"]) == runtime.default_columns
+        assert tuple(query["additional_columns"]) == runtime.additional_columns
+
+
 def test_discriminated_profiles_company_settings_and_navigation_are_closed_sets():
     data = inventory()
     item = data["nouns"]["item"]
     item_types = next(field["enum"] for field in item["fields"] if field["n"] == "type")
     assert set(item_types) == set(item["type_profiles"])
     assert len(item_types) == 12
+
+    fixed_asset = item["type_profiles"]["fixed_asset"]
+    assert fixed_asset["requires"] == [
+        "asset_number", "description", "purchase_date", "original_cost", "fixed-asset-account",
+        "disposal_status", "depreciation_method",
+    ]
+    assert fixed_asset["allows"] == [
+        "vendor_id", "location", "serial_number", "warranty_expiration", "disposal_date",
+        "disposal_proceeds", "disposal_costs", "accumulated_depreciation_account_id",
+        "depreciation_expense_account_id", "gain_loss_account_id", "useful_life_months",
+        "book_basis", "tax_basis",
+    ]
+    assert not set(fixed_asset["requires"]) & set(fixed_asset["allows"])
 
     assert set(_names(data["company_settings"]["fields"])) == COMPANY_FIELDS
     groups = data["browser_and_documentation"]["ui_group_assignments"]
@@ -123,7 +189,9 @@ def test_migration_inventory_names_the_historical_convergence_witness():
     rules = {entry["id"]: entry["rule"] for entry in inventory()["migration"]["rules"]}
     assert set(rules) == {
         "migration.freeze-co0002", "migration.undo-link", "migration.chart-identity",
-        "migration.convergence", "migration.failure",
+        "migration.revision-local", "migration.convergence", "migration.pre-ship-correction",
+        "migration.failure",
     }
     assert "revision-local DDL" in rules["migration.freeze-co0002"]
+    assert "future noninitial" in rules["migration.revision-local"]
     assert "identical" in rules["migration.convergence"]
