@@ -356,8 +356,23 @@ class CompanyNewInput(BaseModel):
     report_basis: Literal["accrual", "cash"] = Field("accrual", description="Default basis for reports")
     timezone: str | None = Field(None, description="IANA zone; defaults to the machine's zone")
     recent_activity_window_seconds: int = Field(60, ge=0, description="Window for the recent-activity warning on blind writes")
+    use_account_numbers: bool = Field(True, description="Show account numbers in forms, tables, and pickers")
+    show_lowest_subaccount_only: bool = Field(False, description="Use leaf names instead of full account hierarchy labels in pickers")
+    required_employee_profile_fields: list[list[str]] = Field(
+        default_factory=lambda: [["first_name"], ["last_name"], ["address.line1"], ["address.city"], ["address.state"], ["address.postal_code"], ["phone", "email"]],
+        description="Ordered alternative registered paths used to report employee profile completeness",
+    )
+    use_classes: bool = Field(False, description="Enable class controls on later forms")
+    prompt_for_class: bool = Field(False, description="Require or warn for a class on later forms")
+    enable_price_levels: bool = Field(False, description="Enable price-level controls on later sales forms")
+    units_of_measure_mode: Literal["disabled", "single_unit_per_item", "multiple_related_units"] = "disabled"
+    sales_tax_enabled: bool = Field(False, description="Enable sales-tax controls on later forms")
+    sales_tax_liability_basis: Literal["invoice_date", "payment_receipt"] = "invoice_date"
+    sales_tax_remittance_frequency: Literal["monthly", "quarterly", "annually"] = "quarterly"
+    free_on_board: str | None = Field(None, max_length=128, description="Default free-on-board location for later sales forms")
+    order_printable_checks: bool = Field(False, description="Company default for ordering printable checks")
 
-    @field_validator("display_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "organization", mode="before")
+    @field_validator("display_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "organization", "free_on_board", mode="before")
     @classmethod
     def _blank(cls, v):
         return _empty_to_none(v)
@@ -401,6 +416,12 @@ class CompanyNewInput(BaseModel):
             raise ValueError("must not contain '/'")
         return v
 
+    @model_validator(mode="after")
+    def _row5_settings(self):
+        if self.prompt_for_class and not self.use_classes:
+            raise ValueError("prompt_for_class requires use_classes")
+        return self
+
 
 class CompanyNewOutput(WriteOutput):
     idempotent_replay: bool = False
@@ -428,7 +449,18 @@ def _info_columns(inp: CompanyNewInput) -> dict[str, Any]:
         "phone": inp.phone, "fax": inp.fax, "email": inp.email, "website": inp.website,
         "fiscal_year_start_month": inp.fiscal_year_start_month, "tax_year_start_month": inp.tax_year_start_month or inp.fiscal_year_start_month,
         "report_basis": inp.report_basis, "home_currency": inp.home_currency, "timezone": inp.timezone,
-        "closing_date": None, "recent_activity_window_seconds": inp.recent_activity_window_seconds, "default_chart": None,
+        "closing_date": None, "recent_activity_window_seconds": inp.recent_activity_window_seconds,
+        "default_chart": None, "default_chart_version": None,
+        "use_account_numbers": inp.use_account_numbers,
+        "show_lowest_subaccount_only": inp.show_lowest_subaccount_only,
+        "required_employee_profile_fields": info.encode_employee_profile_fields(inp.required_employee_profile_fields),
+        "use_classes": inp.use_classes, "prompt_for_class": inp.prompt_for_class,
+        "enable_price_levels": inp.enable_price_levels, "units_of_measure_mode": inp.units_of_measure_mode,
+        "sales_tax_enabled": inp.sales_tax_enabled, "default_sales_tax_item_id": None,
+        "sales_tax_liability_basis": inp.sales_tax_liability_basis,
+        "sales_tax_remittance_frequency": inp.sales_tax_remittance_frequency,
+        "default_ship_method_id": None, "free_on_board": inp.free_on_board,
+        "order_printable_checks": inp.order_printable_checks,
     }
     for prefix, a in (("address", addr), ("legal_address", legal), ("ship_address", ship)):
         for f in ("line1", "line2", "city", "state", "postal_code", "country"):
@@ -477,6 +509,7 @@ def plan_company_new(inp: CompanyNewInput, ctx: Context, s: Session) -> Plan:
         if tz is None:
             raise BookflowError("E_VALIDATION", details={"fields": [{"field": "timezone", "problem": "could not detect the machine's zone; give --timezone"}]})
         inp = inp.model_copy(update={"timezone": tz})
+    inp = inp.model_copy(update={"required_employee_profile_fields": info.validate_employee_profile_fields(inp.required_employee_profile_fields)})
     org_folder = s.abs_path(orow["path"])
     folder = choose_folder_name(org_folder, display)
     cid = new_id()

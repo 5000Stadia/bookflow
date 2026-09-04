@@ -31,7 +31,9 @@ def create_company_folder(s: Session, org_folder: Path, company_id: str, display
             from bookflow.core.audit import write_event_to
             from bookflow.core.registry import Touched
             db.raw.execute("BEGIN IMMEDIATE")
-            write_event_to(db, ctx, "company new", f"created company {display_name}", [Touched("company_info", company_id, "create", None, 1, {k: v for k, v in row.items() if k != "display_name"}, db="company")], actor_id=s.actor.id, actor_kind=s.actor.kind)
+            from bookflow.company.info import logical_info_values
+            snapshot = logical_info_values({k: v for k, v in row.items() if k != "display_name"})
+            write_event_to(db, ctx, "company new", f"created company {display_name}", [Touched("company_info", company_id, "create", None, 1, snapshot, db="company")], actor_id=s.actor.id, actor_kind=s.actor.kind)
             db.raw.execute("COMMIT")
     except BaseException:
         shutil.rmtree(folder, ignore_errors=True)

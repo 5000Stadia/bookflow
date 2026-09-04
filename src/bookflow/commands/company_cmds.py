@@ -181,15 +181,36 @@ class CompanyUpdateInput(BaseModel):
     timezone: str | None = Field(None, description="IANA zone")
     closing_date: str | None = Field(None, description="Books closed through this date, YYYY-MM-DD")
     recent_activity_window_seconds: int | None = Field(None, ge=0, description="Window for the recent-activity warning")
+    use_account_numbers: bool | None = Field(None, description="Show account numbers in forms, tables, and pickers")
+    show_lowest_subaccount_only: bool | None = Field(None, description="Use leaf account names in pickers")
+    required_employee_profile_fields: list[list[str]] | None = Field(None, description="Ordered alternative registered employee-completeness paths")
+    use_classes: bool | None = Field(None, description="Enable class controls on later forms")
+    prompt_for_class: bool | None = Field(None, description="Require or warn for a class on later forms")
+    enable_price_levels: bool | None = Field(None, description="Enable price-level controls on later sales forms")
+    units_of_measure_mode: Literal["disabled", "single_unit_per_item", "multiple_related_units"] | None = None
+    sales_tax_enabled: bool | None = Field(None, description="Enable sales-tax controls on later forms")
+    default_sales_tax_item_id: str | None = Field(None, description="Active sales-tax item or group default")
+    sales_tax_liability_basis: Literal["invoice_date", "payment_receipt"] | None = None
+    sales_tax_remittance_frequency: Literal["monthly", "quarterly", "annually"] | None = None
+    default_ship_method_id: str | None = Field(None, description="Active default ship method")
+    free_on_board: str | None = Field(None, max_length=128, description="Default free-on-board location")
+    order_printable_checks: bool | None = Field(None, description="Company default for ordering printable checks")
 
-    @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", mode="before")
+    @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", "free_on_board", mode="before")
     @classmethod
     def _blank(cls, v):
         return _empty_to_none(v)
 
 
 SCALARS = [f for f in CompanyUpdateInput.model_fields if f not in ("expected_version", "address", "legal_address", "ship_address")]
-NOT_NULLABLE = {"legal_name", "tax_id_kind", "entity_type", "income_tax_form", "fiscal_year_start_month", "tax_year_start_month", "report_basis", "timezone", "recent_activity_window_seconds"}
+NOT_NULLABLE = {
+    "legal_name", "tax_id_kind", "entity_type", "income_tax_form", "fiscal_year_start_month",
+    "tax_year_start_month", "report_basis", "timezone", "recent_activity_window_seconds",
+    "use_account_numbers", "show_lowest_subaccount_only", "required_employee_profile_fields",
+    "use_classes", "prompt_for_class", "enable_price_levels", "units_of_measure_mode",
+    "sales_tax_enabled", "sales_tax_liability_basis", "sales_tax_remittance_frequency",
+    "order_printable_checks",
+}
 
 
 def _merged_row(current: dict[str, Any], inp: CompanyUpdateInput) -> tuple[dict[str, Any], set[str]]:
@@ -211,7 +232,7 @@ def _merged_row(current: dict[str, Any], inp: CompanyUpdateInput) -> tuple[dict[
     return new, fields_set
 
 
-def _validate_merged(new: dict[str, Any]) -> None:
+def _validate_merged(new: dict[str, Any], s: Session, changed: set[str]) -> None:
     fields = []
     if new.get("tax_id") is not None and not _TAX_SHAPES[new.get("tax_id_kind", "ein")].match(new["tax_id"]):
         fields.append({"field": "tax_id", "problem": f"must match the {new.get('tax_id_kind')} shape"})
@@ -234,6 +255,35 @@ def _validate_merged(new: dict[str, Any]) -> None:
             fields.append({"field": f, "problem": "must not be empty"})
     if fields:
         raise BookflowError("E_VALIDATION", details={"fields": fields})
+    if new["prompt_for_class"] and not new["use_classes"]:
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "prompt_for_class", "problem": "requires use_classes"}]})
+    if not new["sales_tax_enabled"] and new.get("default_sales_tax_item_id") is not None:
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "sales_tax_enabled", "problem": "clear default_sales_tax_item_id before disabling sales tax"}]})
+
+    for field, table in (("default_sales_tax_item_id", cschema.items), ("default_ship_method_id", cschema.ship_methods)):
+        if field not in changed or new.get(field) is None:
+            continue
+        row = s.company.conn.execute(sa.select(table).where(table.c.id == new[field])).mappings().first()
+        if row is None:
+            raise BookflowError("E_RECORD_NOT_FOUND", details={"record_type": table.name, "selector": new[field], "suggestions": []})
+        if not row["active"]:
+            raise BookflowError("E_INACTIVE_REFERENCE", details={"field": field, "record_id": new[field]})
+        if field == "default_sales_tax_item_id" and row["type"] not in ("sales_tax_item", "sales_tax_group"):
+            raise BookflowError("E_VALIDATION", details={"fields": [{"field": field, "problem": "must name a sales-tax item or group"}]})
+
+    if "units_of_measure_mode" in changed and new["units_of_measure_mode"] == "disabled":
+        blockers = s.company.conn.execute(
+            sa.select(cschema.items.c.id, cschema.items.c.full_name)
+            .where(cschema.items.c.active.is_(True), cschema.items.c.unit_of_measure_set_id.is_not(None))
+            .order_by(cschema.items.c.id)
+        ).mappings().all()
+        if blockers:
+            raise BookflowError("E_ACTIVE_DEPENDENTS", details={"field": "units_of_measure_mode", "records": [dict(row) for row in blockers]})
+
+    if "required_employee_profile_fields" in changed:
+        new["required_employee_profile_fields"] = cinfo.validate_employee_profile_fields(
+            new["required_employee_profile_fields"], s.company,
+        )
 
 
 company_update = command("company update", scope="company", description="Update the selected company's information; versioned, blind, or merged per the concurrency rules.",
@@ -250,7 +300,7 @@ def plan_company_update(inp: CompanyUpdateInput, ctx: Context, s: Session) -> Pl
     new, fields_set = _merged_row(current, inp)
     changed = {f for f in fields_set if any(new.get(col) != current.get(col) for col in ([f] if f not in ("address", "legal_address", "ship_address") else [f"{f}_{c}" for c in ADDRESS_FIELDS]))}
     if changed:
-        _validate_merged(new)
+        _validate_merged(new, s, changed)
     window = current.get("recent_activity_window_seconds", 60)
     writer = current_writer(s.company, "company_info", current["id"], current)
     names = cinfo.principal_names(s.company, {x for x in ((writer.updated_by, writer.on_behalf_of) if writer else ()) if x})
@@ -279,9 +329,11 @@ def apply_company_update(plan: Plan, ctx: Context, s: Session) -> Applied:
         return Applied(UpdateOutput(company_id=current["id"], **meta.as_dict()), [], "no change")
     via = ctx.interface.value
     new = {**new, "version": meta.version, "updated_at": now_iso(), "updated_by": s.actor.id, "updated_via": via}
-    cols = {k: v for k, v in new.items() if k in cschema.company_info.c}
-    s.company.conn.execute(cschema.company_info.update().where(cschema.company_info.c.id == current["id"]).values(**cols))
-    snap = {k: v for k, v in cols.items() if k != "display_name"}
+    logical_cols = {k: v for k, v in new.items() if k in cschema.company_info.c}
+    stored_cols = dict(logical_cols)
+    stored_cols["required_employee_profile_fields"] = cinfo.encode_employee_profile_fields(new["required_employee_profile_fields"])
+    s.company.conn.execute(cschema.company_info.update().where(cschema.company_info.c.id == current["id"]).values(**stored_cols))
+    snap = {k: v for k, v in logical_cols.items() if k != "display_name"}
     touched = [Touched("company_info", current["id"], "update", current["version"], meta.version, snap, db="company")]
     summary = "updated company info: " + ", ".join(changed)
     return Applied(UpdateOutput(company_id=current["id"], warnings=plan.data["warnings"], **meta.as_dict()), touched, summary)
