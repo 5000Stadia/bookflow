@@ -75,6 +75,40 @@ def _create(db, noun: str, payload: dict) -> dict:
     return dict(mutation.after)
 
 
+def test_profile_hierarchy_uses_the_shared_slash_delimited_path(company_db):
+    root = _create(company_db, "class", {"name": "Operations"})
+    child = _create(
+        company_db,
+        "class",
+        {"name": "Field", "parent_id": root["id"]},
+    )
+    grandchild = _create(
+        company_db,
+        "class",
+        {"name": "Service", "parent_id": child["id"]},
+    )
+
+    assert root["path"] == f"/{root['id']}/"
+    assert child["path"] == f"/{root['id']}/{child['id']}/"
+    assert grandchild["path"] == f"/{root['id']}/{child['id']}/{grandchild['id']}/"
+
+    moved = plan_profile_update(
+        company_db,
+        "class",
+        child["id"],
+        {"parent_id": None},
+        actor_id=ACTOR_ID,
+        via="python",
+    )
+    persist_profile_update(company_db, moved)
+    stored = company_db.conn.execute(
+        sa.select(c.classes).where(c.classes.c.id == grandchild["id"])
+    ).mappings().one()
+    assert moved.mutation is not None
+    assert moved.mutation.after["path"] == f"/{child['id']}/"
+    assert stored["path"] == f"/{child['id']}/{grandchild['id']}/"
+
+
 def test_standard_manifest_has_the_exact_versioned_seed_key_inventory():
     manifest = load_standard_profile()
     assert manifest.manifest_id == "standard"

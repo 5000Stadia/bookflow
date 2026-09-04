@@ -438,11 +438,14 @@ def _hierarchy_values(
         str(parent["full_name"]) if parent is not None else None,
         depth=depth,
     )
-    path = f"{parent['path']}/{record_id}" if parent is not None else record_id
+    path = f"{parent['path']}{record_id}/" if parent is not None else f"/{record_id}/"
 
     if current is not None:
         descendants = db.conn.execute(
-            sa.select(table.c.depth).where(table.c.path.like(f"{current['path']}/%"))
+            sa.select(table.c.depth).where(
+                table.c.path.like(f"{current['path']}%"),
+                table.c.id != record_id,
+            )
         ).scalars().all()
         deepest_relative = max((int(value) - int(current["depth"]) for value in descendants), default=0)
         if depth + deepest_relative > 5:
@@ -677,14 +680,14 @@ def plan_profile_update(
     ):
         descendants = db.conn.execute(
             sa.select(table)
-            .where(table.c.path.like(f"{current['path']}/%"))
+            .where(table.c.path.like(f"{current['path']}%"), table.c.id != record_id)
             .order_by(table.c.depth, table.c.path)
         ).mappings().all()
         depth_delta = int(after["depth"]) - int(current["depth"])
         old_name_prefix = f"{current['full_name']}:"
         new_name_prefix = f"{after['full_name']}:"
-        old_path_prefix = f"{current['path']}/"
-        new_path_prefix = f"{after['path']}/"
+        old_path_prefix = str(current["path"])
+        new_path_prefix = str(after["path"])
         subtree_ids = {record_id, *(str(row["id"]) for row in descendants)}
         for descendant in descendants:
             full_name = str(descendant["full_name"])
@@ -779,7 +782,11 @@ def plan_profile_active_change(
                 dict(row)
                 for row in db.conn.execute(
                     sa.select(table)
-                    .where(table.c.active.is_(True), table.c.path.like(f"{requested['path']}/%"))
+                    .where(
+                        table.c.active.is_(True),
+                        table.c.path.like(f"{requested['path']}%"),
+                        table.c.id != record_id,
+                    )
                     .order_by(table.c.depth, table.c.path)
                 ).mappings().all()
             ]
