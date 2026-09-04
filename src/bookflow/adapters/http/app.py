@@ -206,9 +206,11 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
         return None, "none"
 
     def serve_command(route: str, request: Request, raw: dict[str, Any], company_id: str | None):
+        # Authenticate before route and selector diagnostics so an anonymous
+        # caller cannot use error differences to probe the command surface.
+        cred = credential(request)
         cmd = lookup(route)
         selector, source = selector_of(request, company_id)
-        cred = credential(request)
         dry = request.query_params.get("dry_run") in ("1", "true")
         return run_command(cmd, raw, make_context(request, cred), cred, selector, source, dry)
 
@@ -271,6 +273,7 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
         name = "audit tail" if company_id else "hub audit tail"
         cmd = registry.get(name)
         assert cmd is not None
+        cred = credential(request, renew_cookie=False)
         selector, _ = selector_of(request, company_id)
         after = request.headers.get("last-event-id")
         if after is None:
@@ -282,7 +285,6 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
         values = validated.model_dump(mode="json", exclude_none=True)
         cursor = values.pop("after", None)
         values.pop("limit", None)
-        cred = credential(request, renew_cookie=False)
         secret = secret_of(request)
         ctx = make_context(request, cred)
         def resolve_again() -> None:
@@ -317,6 +319,7 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
             nonlocal cursor
             event = asyncio.Event()
             subscription = None
+            ready_announced = False
             try:
                 try:
                     frames, cursor, key = await run_in_threadpool(drain, cursor)
@@ -350,6 +353,13 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
                     latest = host.stream_sequence(key)
                     if latest != before or event.is_set():
                         continue
+                    if not ready_announced:
+                        # An SSE comment is invisible to clients but makes the
+                        # host's first idle boundary observable to shutdown
+                        # probes. Once this reaches the peer, the next iterator
+                        # step is the event wait that begin_shutdown wakes.
+                        yield ": ready\n\n"
+                        ready_announced = True
                     keepalive_at = asyncio.get_running_loop().time() + 15.0
                     while not event.is_set():
                         remaining = keepalive_at - asyncio.get_running_loop().time()

@@ -16,6 +16,8 @@ from bookflow.core.context import Context, Interface
 from bookflow.core.errors import BookflowError
 
 IDENTITY_FIELDS = ("actor_id", "actor_kind", "on_behalf_of", "company_id")
+MAX_FRAME_BYTES = 8 * 1024 * 1024
+CONNECTION_TIMEOUT_SECONDS = 30.0
 
 
 def peer_login(conn: socket.socket) -> str:
@@ -100,10 +102,15 @@ class LocalListener:
     def _serve_one(self, conn: socket.socket) -> None:
         with conn:
             try:
+                conn.settimeout(CONNECTION_TIMEOUT_SECONDS)
                 head = _recv_exact(conn, 4)
                 if head is None:
                     return
                 size = int.from_bytes(head, "big")
+                if size > MAX_FRAME_BYTES:
+                    raise BookflowError("E_VALIDATION", details={"fields": [{
+                        "field": "frame", "problem": f"must be at most {MAX_FRAME_BYTES} bytes",
+                    }]})
                 body = _recv_exact(conn, size)
                 if body is None:
                     return
@@ -113,6 +120,8 @@ class LocalListener:
                     reply = {"output": self.handler(login, envelope)}
                 except BookflowError as e:
                     reply = {"error": e.to_dict()}
+            except BookflowError as e:
+                reply = {"error": e.to_dict()}
             except Exception as e:  # noqa: BLE001
                 reply = {"error": BookflowError("E_INTERNAL", message="host failure", details={"cause": type(e).__name__}).to_dict()}
             payload = json.dumps(reply, default=str).encode("utf-8")

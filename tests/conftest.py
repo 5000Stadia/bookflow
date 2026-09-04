@@ -60,7 +60,8 @@ def cli(root):
 
 
 def make_actor(root: Path, username: str, *, hub_admin: bool = False, org_role: tuple[str, str] | None = None,
-               company_role: tuple[str, str] | None = None, login: str | None = None) -> str:
+               company_role: tuple[str, str] | None = None, login: str | None = None,
+               kind: str = "human", owner_user_id: str | None = None) -> str:
     """Test-only fixture standing in for row 7's `user add` and `membership grant`."""
     from bookflow.core.config import Config
     from bookflow.core.ids import new_id
@@ -72,7 +73,7 @@ def make_actor(root: Path, username: str, *, hub_admin: bool = False, org_role: 
     with open_database(root / "hub.db", writable=True) as db:
         uid = new_id()
         db.raw.execute("BEGIN IMMEDIATE")
-        db.conn.execute(h.users.insert().values(id=uid, kind="human", username=username, display_name=username.title(), owner_user_id=None,
+        db.conn.execute(h.users.insert().values(id=uid, kind=kind, username=username, display_name=username.title(), owner_user_id=owner_user_id,
                                                 password_hash=None, hub_admin=hub_admin, timezone=None, active=True, **common(uid, "system")))
         for scope, grant in (("organization", org_role), ("company", company_role)):
             if grant:

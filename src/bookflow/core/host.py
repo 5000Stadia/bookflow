@@ -142,7 +142,7 @@ class Host:
         from bookflow.core.dispatch import _open_hub
         s = Session(data_root=self.data_root, os_login="", config=Config.load(self.data_root / "config.toml"))
         s.company_opener = self._company_for_writer
-        s.company_releaser = lambda cid: None
+        s.company_releaser = self.release_company
         _open_hub(s, True, self._system_ctx())
         # the session's context manager owns the connection: hold it for the host's life, or the database
         # closes as soon as the session is collected and the writer finds itself without a hub.
@@ -188,7 +188,7 @@ class Host:
         s = Session(data_root=self.data_root, os_login="", config=Config.load(self.data_root / "config.toml"))
         s.hub = self._hub
         s.company_opener = self._company_for_writer
-        s.company_releaser = lambda cid: None
+        s.company_releaser = self.release_company
         return s
 
     def _company_for_writer(self, row: dict[str, Any], writable: bool, db_path: Path) -> Database:
@@ -228,11 +228,15 @@ class Host:
             s.os_login = login
             _load_actor_by_id(s, user_id)
             try:
-                result = fn(s)
+                return fn(s)
             finally:
-                s.close_company()
-            self._after_write()
-            return result
+                # The request session is ephemeral; the host's writable
+                # company connection is deliberately pooled across requests.
+                s.close_company(release=False)
+                # A command can report E_PARTIAL_WRITE after one database has
+                # committed. Those durable events still need a checkpoint and
+                # must wake subscribers even though the command raises.
+                self._after_write()
         return self.submit(job)
 
     def _after_write(self) -> None:

@@ -125,6 +125,19 @@ def test_no_credential_and_a_revoked_bearer_are_401(hosted):
     assert gone.status_code == 401 and gone.json()["details"]["reason"] == "revoked"
 
 
+def test_authentication_precedes_route_and_company_header_diagnostics(hosted):
+    unknown = hosted.api.post("/commands/not.a.command", json={})
+    mismatched = hosted.api.post(
+        f"/companies/{hosted.company_id}/commands/company.show",
+        json={},
+        headers={"X-Bookflow-Company": GHOST},
+    )
+    for response in (unknown, mismatched):
+        assert response.status_code == 401
+        assert response.json()["code"] == "E_UNAUTHENTICATED"
+        assert response.json()["details"]["reason"] == "no credential"
+
+
 def test_token_commands(hosted):
     listed = hosted.ok("token.list")
     assert [t["token_id"] for t in listed["items"]] == [hosted.token]
@@ -327,17 +340,18 @@ def test_a_cli_call_forwards_to_the_running_host(hosted, cli):
 def test_a_forged_actor_id_in_the_envelope_is_ignored(hosted):
     from bookflow.core import forward
     from bookflow.core.context import Context, Interface
-    ctx = Context.new(Interface.cli, "forger").model_dump(mode="json")
+    ctx = Context.new(Interface.system, "forger").model_dump(mode="json")
     ctx["actor_id"] = hosted.outsider_id
     ctx["actor_kind"] = "agent"
     ctx["on_behalf_of"] = hosted.outsider_id
     envelope = {"command": "company update", "input": {"website": "https://forged.example"},
-                "company_selector": hosted.company_id, "company_source": "option", "dry_run": False, "context": ctx}
+                "company_selector": hosted.company_id.lower(), "company_source": "option", "dry_run": False, "context": ctx}
     reply = forward.call_host(str(hosted.handle.socket), envelope)
     assert reply is not None and "output" in reply, reply
     event = hosted.ok("audit.list", {"command": "company update", "limit": 1}, company=hosted.company_id)["items"][0]
     assert event["actor_id"] != hosted.outsider_id and event["actor_name"] != "Outsider"
     assert event["on_behalf_of"] is None and event["client_name"] == "forger"
+    assert event["interface"] == "cli"
 
 
 def test_a_version_mismatch_over_the_socket_is_named(hosted):
@@ -354,6 +368,12 @@ def test_a_second_host_reports_the_lock_holder(hosted, root):
         start_serving(root, client_version(), bind="127.0.0.1:8766")
     assert e.value.code == "E_DB_BUSY" and e.value.details["command"] == "serve"
     assert "already serving this data root" in e.value.message
+
+    # Even when the requested address is already this host's address, the
+    # data-root owner is the deliberate error—not a lower-level bind failure.
+    with pytest.raises(BookflowError) as e:
+        bookflow.connect(data_root=str(root)).run("serve", {"bind": "127.0.0.1:8765"})
+    assert e.value.code == "E_DB_BUSY" and e.value.details["command"] == "serve"
 
 
 # ---------------------------------------------------------------- serve itself
@@ -383,6 +403,15 @@ def test_serve_needs_a_hub_admin_and_an_initialized_root(root, tmp_path):
     with pytest.raises(BookflowError) as e:
         as_user(root, "plain").run("serve", {})
     assert e.value.code == "E_PERMISSION"
+
+    make_actor(
+        root, "serve-agent", hub_admin=True, login="serve-agent-login",
+        kind="agent", owner_user_id=_admin_id(root),
+    )
+    with pytest.raises(BookflowError) as e:
+        as_user(root, "serve-agent-login").run("serve", {})
+    assert e.value.code == "E_PERMISSION"
+    assert e.value.details["required_role"] == "human"
 
 
 def test_the_host_migrates_and_records_the_descriptor(hosted, root):
@@ -779,6 +808,85 @@ def test_two_writes_serialize_into_consecutive_versions(hosted, live):
     assert hosted.info()["info_version"] == start + 2
 
 
+def test_filesystem_operations_release_every_affected_pooled_company(hosted):
+    from pathlib import Path
+
+    from bookflow.storage.engine import Database
+
+    host, cid = hosted.handle.host, hosted.company_id
+
+    def is_pooled(company_id):
+        return host.submit(lambda: company_id in host._companies)
+
+    def pool_company(marker):
+        hosted.ok("company.update", {"fax": marker}, company=cid)
+        assert is_pooled(cid)
+
+    pool_company("555-6101")
+    renamed = hosted.ok("company.rename", {"name": "Release Witness", "move": True}, company=cid)
+    assert renamed["moved"] is True and not is_pooled(cid)
+
+    pool_company("555-6102")
+    organization = hosted.ok("organization.list")["items"][0]["organization_id"]
+    moved = hosted.ok("organization.rename", {
+        "organization": organization, "name": "Release Witness Org", "move": True,
+    })
+    assert moved["moved"] is True and not is_pooled(cid)
+
+    pool_company("555-6103")
+    hosted.ok("upgrade")
+    assert not is_pooled(cid)
+
+    pool_company("555-6104")
+    folder = Path(hosted.info()["path"])
+    hosted.ok("company.detach", {"company": cid})
+    assert not is_pooled(cid)
+
+    # Recreate the stale-cache condition attach must defend against. The
+    # registry row is gone, but a long-lived host could still have the old DB
+    # object if detach came from an older process or interrupted release path.
+    host.submit(lambda: host._companies.__setitem__(cid, Database(folder / "company.db", True)))
+    assert is_pooled(cid)
+    hosted.ok("company.attach", {"path": str(folder)})
+    assert not is_pooled(cid)
+
+    pool_company("555-6105")
+    reset = hosted.ok("demo.reset")
+    assert reset["company_id"] != cid and not is_pooled(cid)
+
+
+def test_a_durable_write_error_still_checkpoints_and_wakes_subscribers(hosted, root):
+    from bookflow.core import registry
+    from bookflow.core.context import Context, Interface
+    from bookflow.core.dispatch import execute
+
+    class ImmediateLoop:
+        @staticmethod
+        def call_soon_threadsafe(fn):
+            fn()
+
+    host, cid = hosted.handle.host, hosted.company_id
+    event = threading.Event()
+    subscription, _ = host.subscribe(cid, ImmediateLoop(), event)
+    ctx = Context.new(Interface.http, "partial-write-witness")
+
+    def committed_then_failed(session):
+        execute(
+            registry.get("company update"), {"fax": "555-6199"}, ctx, session,
+            company_selector=cid, company_source="option",
+        )
+        raise BookflowError("E_PARTIAL_WRITE")
+
+    try:
+        with pytest.raises(BookflowError) as caught:
+            host.run_write(_admin_id(root), "", committed_then_failed)
+        assert caught.value.code == "E_PARTIAL_WRITE"
+        assert event.wait(0.5), "the durable audit event did not wake its subscriber"
+        assert hosted.info()["info"]["fax"] == "555-6199"
+    finally:
+        host.unsubscribe(subscription)
+
+
 def test_a_read_enqueues_at_most_one_throttled_refresh(hosted, root):
     stale = "2001-01-01T00:00:00.000Z"
     _hub_sql(root, "UPDATE api_tokens SET last_used_at = ? WHERE id = ?", (stale, hosted.token))
@@ -1170,6 +1278,7 @@ def test_busy_serve_port_has_a_deliberate_redacted_error(root):
         sock.close()
     assert caught.value.code == "E_IO"
     assert caught.value.details["operation"] == "bind" and caught.value.details["address"] == bind
+    assert caught.value.details["errno"] == "EADDRINUSE"
     assert "path" not in caught.value.details
 
 
@@ -1199,7 +1308,7 @@ def test_sigint_wakes_a_live_stream_and_cleans_the_host(root):
         time.sleep(0.03)
     assert descriptor.exists(), proc.communicate(timeout=2)
     socket_file = json.loads(descriptor.read_text())["socket"]
-    connected = threading.Event()
+    idle_ready = threading.Event()
     ended = []
 
     def follow():
@@ -1207,8 +1316,9 @@ def test_sigint_wakes_a_live_stream_and_cleans_the_host(root):
             with httpx.stream("GET", f"http://127.0.0.1:{port}/hub-events?after={start}", headers={
                 "Authorization": f"Bearer {issued['secret']}",
             }, timeout=15) as response:
-                connected.set()
                 for line in response.iter_lines():
+                    if line == ": ready":
+                        idle_ready.set()
                     if line.startswith("event: error"):
                         ended.append(line)
                         break
@@ -1217,11 +1327,12 @@ def test_sigint_wakes_a_live_stream_and_cleans_the_host(root):
 
     follower = threading.Thread(target=follow, daemon=True)
     follower.start()
-    assert connected.wait(5), "the event stream never connected"
+    assert idle_ready.wait(5), "the event stream never reached its idle wait"
+    time.sleep(0.75)  # let the generator resume from the ready comment into event.wait()
     began = time.monotonic()
     proc.send_signal(signal.SIGINT)
     try:
-        proc.wait(timeout=8)
+        proc.wait(timeout=5)
     finally:
         if proc.poll() is None:
             proc.kill()
@@ -1229,7 +1340,7 @@ def test_sigint_wakes_a_live_stream_and_cleans_the_host(root):
     follower.join(timeout=3)
     stderr = proc.stderr.read() if proc.stderr else ""
     assert proc.returncode == 0, stderr
-    assert time.monotonic() - began < 8
+    assert time.monotonic() - began < 3
     assert not descriptor.exists() and not Path(socket_file).exists()
     assert ended, "the idle stream was not woken during shutdown"
 

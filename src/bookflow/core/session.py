@@ -54,14 +54,28 @@ class Session:
     company_opener: Any = None  # host hook: (row, writable, db_path) -> a Database the host owns; never closed here
     company_releaser: Any = None  # host hook: called with the company id when the session lets go of it
 
-    def close_company(self) -> None:
+    def close_company(self, *, release: bool = True) -> None:
+        """Let go of the selected company.
+
+        A standalone session owns its context manager and always closes it. A
+        hosted session normally leaves its pooled connection alive between
+        requests; callers that are about to move or detach a company use the
+        default ``release=True`` to make the host close that pooled handle.
+        """
         cm = getattr(self, '_co_cm', None)
         if cm is not None:
             cm.__exit__(None, None, None)
             self._co_cm = None
-        elif self.company is not None and self.company_releaser is not None:
+        elif release and self.company is not None and self.company_releaser is not None:
             self.company_releaser(self.company_id)
         self.company = None
+
+    def release_company(self, company_id: str) -> None:
+        """Close a host-owned company handle whether or not it is selected."""
+        if self.company is not None and self.company_id == company_id:
+            self.close_company()
+        elif self.company_releaser is not None:
+            self.company_releaser(company_id)
 
     @property
     def organizations_dir(self) -> Path:

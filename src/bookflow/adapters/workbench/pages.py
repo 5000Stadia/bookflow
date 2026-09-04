@@ -398,7 +398,13 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return form_page(request, company_id, noun, verb, record_id, result=out, preview=True)
         target = _success_target(cmd, company_id, noun, record_id, out)
         flash_id = flashes.put(session_token, {"command": cmd.name, "result": out})
-        return RedirectResponse(f"{target}?flash={flash_id}", status_code=303)
+        location = f"{target}?flash={flash_id}"
+        if request.headers.get("hx-request", "").lower() == "true":
+            # A 303 is followed inside the XHR and leaves the address bar on
+            # the submitted form. HX-Redirect performs the same GET as a
+            # top-level navigation, making the successful destination visible.
+            return Response(status_code=200, headers={"HX-Redirect": location})
+        return RedirectResponse(location, status_code=303)
 
     async def form_of(request: Request) -> dict[str, str]:
         return {k: str(v) for k, v in (await request.form()).items()}

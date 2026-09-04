@@ -27,7 +27,7 @@ src/bookflow/
     versioning.py        check_update(): versioned, blind, and disjoint-field merge rules; history_from_entries() folds audit diffs to top-level fields
     idempotency.py       input_hash(), lookup() (mismatch, expiry), store() with in-progress state
     audit.py             write_event_to() over either database with seq; snapshot codec; secrets stored as sha256 prefixes
-    host.py              Host: holds the root lock as "serve", one writer thread with pooled writable connections, per-request read-only sessions, event-loop subscriptions keyed by database id, deduplicated credential-refresh jobs, host.json descriptor; a timer thread running an idle RESTART checkpoint and an hourly session sweep; begin_shutdown() wakes streams before final stop
+    host.py              Host: holds the root lock as "serve", one writer thread with pooled writable connections, explicit pool release before folder operations, per-request read-only sessions, event-loop subscriptions keyed by database id, deduplicated credential-refresh jobs, host.json descriptor; a timer thread running an idle RESTART checkpoint and an hourly session sweep; begin_shutdown() wakes streams before final stop
     forward.py           stdlib only: private runtime-directory validation, socket_path(), read_descriptor(), call_host(), try_forward() (run() sends every non-bootstrap call to a live host over its Unix socket)
   storage/
     paths.py             data root resolution; display-name normalization and name_key; folder derivation, collision choice, reservation; markers
@@ -61,7 +61,7 @@ src/bookflow/
   adapters/cli/render.py tables, field views, JSON, errors on stderr
   adapters/http/app.py   FastAPI app from the registry: /commands/<noun.verb>, authoritative /companies/{id}/commands/<noun.verb>, /login, /logout, async /companies/{id}/events and /hub-events, exact generated /openapi.json, /health; credential/cookie handling and the same error documents as the CLI with HTTP statuses
   adapters/http/auth.py  argon2 passwords (constant-time on unknown users), bearer and session tokens stored as sha256, liveness refresh, login throttle
-  adapters/http/local.py LocalListener on the Unix socket: peer identity from SO_PEERCRED, envelope identity fields discarded
+  adapters/http/local.py LocalListener on the Unix socket: peer identity from SO_PEERCRED, envelope identity fields discarded, 8 MiB frame cap and 30-second accepted-connection timeout
   adapters/workbench/    pages.py (picker, hub and company indexes, generated list/record/form/audit pages), forms.py (input model -> leaves; form -> command JSON with originals, tri-state booleans, clears, Preview), templates/, static/ (vendored htmx, stylesheet)
 ```
 
@@ -81,15 +81,15 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - Company audit events carry every context column; `company_info` snapshots exclude `display_name` and store `tax_id` as a short hash; the before-state is derived from the previous entry's after for every action but create, baseline, migrate, delete.
 - Schema migrations record a `migrate` entry by the system user with `on_behalf_of` the triggering actor, and rewrite the company marker and hub projection.
 - `Client.use_company` and `company=` on a call are step 1 of selection; `BOOKFLOW_COMPANY` is step 2; the saved default is step 3.
-- The host holds the data-root lock as `serve` for its whole run. Every write and advisory request runs on one writer thread with long-lived writable connections; reads open and close their own read-only connections during one short worker call. Credential liveness refreshes are deduplicated and queued without waiting for the writer. A discarded writer hub is reopened on the writer thread before its next operation.
-- `local_only` keeps `init`, `serve`, and `company use` off HTTP. The local socket carries every non-bootstrap command because the peer's OS login is known there; only `init` and `serve` remain in the calling process. `user set-password` is routed and enforces human self-service or hub-admin reset in its planner.
+- The host holds the data-root lock as `serve` for its whole run and acquires it before binding TCP; `host.json` is published only after both listeners are ready. Every write and advisory request runs on one writer thread with long-lived writable connections; reads open and close their own read-only connections during one short worker call. Pooled company handles are released before a company or organization folder move, trash/reset, detach, upgrade, or attach. Even a write that raises after a durable commit runs the checkpoint-and-notify pass. Credential liveness refreshes are deduplicated and queued without waiting for the writer. A discarded writer hub is reopened on the writer thread before its next operation.
+- `local_only` keeps `init`, `serve`, and `company use` off HTTP. The local socket carries every non-bootstrap command because the peer's OS login is known there; only `init` and `serve` remain in the calling process. Accepted connections time out after 30 seconds and frames over 8 MiB are refused before their bodies are read. `serve` requires a human hub admin. `user set-password` is routed and enforces human self-service or hub-admin reset in its planner.
 - The event stream validates its cursor before sending a streaming response, drains each reader entirely within one worker call, and waits idle on `asyncio.Event` without occupying the worker pool. Subscriptions use the canonical company id and a sequence comparison closes the drain/wait race. Every wake re-resolves the credential; disconnect and shutdown unregister immediately. Bookflow's SIGINT/SIGTERM handlers wake streams before asking Uvicorn to exit.
 - Company API paths require a ULID. An accompanying `X-Bookflow-Company` must be the same ULID after normalization; mismatch is `E_VALIDATION` before visibility lookup. Header-only company selection through `/commands/<noun.verb>` retains the ordinary selector rules.
 - Session and bearer liveness refreshes are throttled to five minutes. A browser session's database expiry and cookie `Max-Age` renew together; SSE does not renew the cookie. Password changes revoke every other session for the target and preserve bearer tokens.
-- Hub schema `hub0003` declares nullable membership grants/denies, the frozen role-capability projection, and inert feature rows. Enforcement remains role-based until row 7; company head remains `co0002`.
+- Hub schema `hub0003` declares nullable membership grants/denies, the frozen role-capability projection, and inert feature rows. Its seeded capability rows are registry projections for compatibility, not current authorization promises; row 7 replaces or refines planner-sensitive and bootstrap rows before enabling enforcement. Enforcement remains role-based until then; company head remains `co0002`.
 - A single-word command (`upgrade`) has no verb: its noun page is its form, and it submits to `/hub/<noun>`.
-- Cold start with row 3 present: `bookflow --help` about 230 ms and `bookflow serve --help` about 255 ms; neither imports FastAPI, uvicorn, or the workbench.
-- The suite is 254 tests in 151.48 s on this machine (Linux, ext4, Python 3.12). The Row 3 host/workbench/local group contains 81 tests.
+- The cold-start test budgets `bookflow --help` below 300 ms; neither root help nor command discovery imports FastAPI, uvicorn, or the workbench.
+- The suite is 259 tests in 153.09 s on this machine (Linux, ext4, Python 3.12). The Row 3 host/workbench/local group contains 86 tests.
 
 ## Verified on this machine (Linux, ext4, Python 3.12)
 
@@ -97,7 +97,7 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - Folder copied to a second data root and attached: identical `company_info`, identical database dump, identical directory listing, original creator's name resolved through `principals`.
 - Second process during a command: `E_DB_BUSY` with the holder's command through the CLI and the library.
 - File modes under umask 022: every file 0600, every directory 0700.
-- Cold start: `bookflow --help` about 220 ms (root help loads no command module); `bookflow company list --json` about 550 ms end to end (`BOOKFLOW_BUDGET_MS` overrides the test on slower machines); SQLAlchemy is not imported for help.
+- Cold start: `bookflow --help` remains inside its 300 ms test budget on this machine (root help loads no command module); `BOOKFLOW_BUDGET_MS` overrides the test on slower machines, and SQLAlchemy is not imported for help.
 - Names containing `#`, `%`, `?`, and spaces in company, organization, and data-root names; a wheel built with `uv build` carries the currency table.
 - Migration of a behind-head company with a synthetic revision: backup, `migrate` event, marker and projection updated (tests/test_hardening.py::test_synthetic_migration).
 - Demo reset repeated on one root; trash accumulates one folder per reset.
@@ -112,7 +112,7 @@ Row 3, in `tests/test_row3_host.py`, `tests/test_row3_local_hardening.py`, and `
 - A forwarded CLI call is recorded with interface `cli`; forged actor, principal, company, and interface fields are ignored; one-byte frame fragments are assembled; unsafe runtime directories are refused; a forwarded `company use` writes the caller's login table; another uid is refused; `serve` and `init` are never forwarded; a descriptor whose socket refuses, and one whose pid is dead, both fall back to the lock path; a pre-socket version mismatch is named.
 - Two reads pass a barrier and finish in under a second while a one-second writer job is active; mutation routing through the writer is detected. Two concurrent updates serialize into consecutive versions. A stale credential read remains non-blocking behind an occupied writer and five concurrent refresh attempts enqueue one job.
 - The async stream drains a burst, resumes from `Last-Event-ID`, validates bad cursors as ordinary 422 documents, wakes under lowercase ids, catches a real commit between first drain and subscription, closes readers/subscriptions after a mid-batch disconnect, and leaves the worker pool available with more than 40 idle subscribers. A live `serve` process with an idle stream exits promptly on SIGINT and removes its descriptor and socket.
-- Every routed command has a role-authorized form page with one control per input leaf. Clear wins over a prefilled value and unchanged rendered fields send nothing. Preview writes nothing. Submit returns 303 and a one-use, session-bound result flash survives one GET without entering the URL or cookie. Audit routes and invalid filters, picker schema state, restricted actions/presence, and rendered links are covered.
+- Every routed command has a role-authorized form page with one control per input leaf. Clear wins over a prefilled value and unchanged rendered fields send nothing. Preview writes nothing. Ordinary submit returns 303; HTMX submit returns `HX-Redirect` so the successful destination reaches the address bar. A one-use, session-bound result flash survives one GET without entering the URL or cookie. Audit routes and invalid filters, picker schema state, restricted actions/presence, and rendered links are covered.
 - `--allow-network` gates a non-loopback bind. The tri-state cookie helper proves non-loopback defaults secure and explicit false is retained; a busy port returns the deliberate redacted `E_IO`. `serve` has no write-only CLI flags or dry run.
 - A company rewound to `co0001` is migrated at startup, and the company's audit shows the `upgrade` event by the system user with the serving hub admin as `on_behalf_of`.
 - After 300 company updates through the writer with a reader attached, the company WAL is under 4 MB once the idle checkpoint runs; `checkpoint_now()` logs a result per connection and `sweep_now()` deletes only sessions expired more than a day, as one `session sweep` event by System with the token hash absent.
@@ -130,7 +130,6 @@ Row 3, in `tests/test_row3_host.py`, `tests/test_row3_local_hardening.py`, and `
 
 ## Known gaps carried to later rows
 
-- `--help` lists options and positionals but not output fields or error codes; generated full help arrives in row 4.
 - No `user add` or `membership grant`; tests insert users through the repository layer (tests/conftest.py::make_actor).
 - The currency table holds 155 codes; the remaining ISO 4217 codes are added on request.
 - Agents cannot yet exist through any surface; the CLI maps an OS login only to a human user, and tests build an agent session at the point row 7's token resolution will fill (`Session.actor`, `Context.on_behalf_of`).

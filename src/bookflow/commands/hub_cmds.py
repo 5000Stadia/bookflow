@@ -177,6 +177,7 @@ def apply_upgrade(plan: Plan, ctx: Context, s: Session) -> Applied:
         p = s.abs_path(r["path"]) / "company.db"
         if not p.exists():
             missing.append(r["id"]); continue
+        s.release_company(r["id"])
         try:
             with engine.open_database(p, writable=True) as db:
                 before, after = migrate.migrate_company(s, ctx, db, s.abs_path(r["path"]), r)
@@ -623,6 +624,7 @@ def plan_company_attach(inp: AttachInput, ctx: Context, s: Session) -> Plan:
 @company_attach.applier
 def apply_company_attach(plan: Plan, ctx: Context, s: Session) -> Applied:
     folder, orow, raw, name = plan.data["folder"], plan.data["org"], plan.data["raw"], plan.data["name"]
+    s.release_company(raw["id"])
     tightened = _tighten_modes(folder)
     if tightened:
         s.warnings.append(f"tightened the modes of {tightened} entries in the folder to 0700/0600")
@@ -681,6 +683,7 @@ def plan_company_detach(inp: CompanySelector, ctx: Context, s: Session) -> Plan:
 @company_detach.applier
 def apply_company_detach(plan: Plan, ctx: Context, s: Session) -> Applied:
     row = plan.data["row"]
+    s.release_company(row["id"])
     touched = co.delete_company_rows(s, row["id"])
     return Applied(DetachOutput(company_id=row["id"], display_name=row["display_name"], path=str(s.abs_path(row["path"]))), touched, f"detached company {row['display_name']}")
 
@@ -727,6 +730,11 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
     seed, existing, trash_rel = plan.data["seed"], plan.data["existing"], plan.data["trash_rel"]
     trashed = None
     if existing:
+        company_ids = s.hub.conn.execute(sa.select(h.companies.c.id).where(
+            h.companies.c.organization_id == existing["id"]
+        )).scalars().all()
+        for company_id in company_ids:
+            s.release_company(company_id)
         pending = existing.get("pending_path") if (existing.get("pending_path") or "").startswith("trash/") else trash_rel
         if existing.get("pending_path") != pending:
             s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == existing["id"]).values(pending_path=pending))

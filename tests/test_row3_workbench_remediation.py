@@ -211,6 +211,28 @@ def test_success_uses_session_bound_one_time_post_redirect_get(hosted, monkeypat
     assert expired_page and '"secret":' not in expired_page and "Result — token issue: done" not in expired_page
 
 
+def test_successful_htmx_submit_navigates_to_the_result_destination(hosted):
+    owner = _login(hosted)
+    before = hosted.info()
+    response = owner.post(
+        f"/c/{hosted.company_id}/company/self/update",
+        headers={**WB, "HX-Request": "true"},
+        data={
+            "originals": json.dumps({**before["info"], "expected_version": before["info_version"]}, default=str),
+            "f:website": "https://visible.example.test",
+            "action": "submit",
+        },
+    )
+
+    assert response.status_code == 200
+    destination = response.headers["HX-Redirect"]
+    assert urlsplit(destination).path == f"/c/{hosted.company_id}/company/self"
+    page = owner.get(destination)
+    assert page.status_code == 200
+    assert "Result — company update: done" in page.text
+    assert "visible.example.test" in page.text
+
+
 def test_canonical_audit_pages_validate_filters(hosted):
     client = _login(hosted)
     company_event = hosted.ok("audit.list", {"limit": 1}, company=hosted.company_id)["items"][0]["id"]

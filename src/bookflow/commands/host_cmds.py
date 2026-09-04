@@ -6,6 +6,7 @@ Nothing here imports FastAPI, uvicorn, or the workbench at module scope: the CLI
 
 from __future__ import annotations
 
+import errno
 import logging
 import os
 from dataclasses import dataclass, field
@@ -147,6 +148,9 @@ def _serve_actor(s: Session) -> dict[str, Any]:
         row = db.raw.execute("SELECT id, kind, username, display_name, hub_admin, active FROM users WHERE id = ?", (table["user_id"],)).fetchone()
     if row is None or not row[5]:
         raise BookflowError("E_NO_ACTOR", details={"mapped_user_id": table["user_id"]})
+    if row[1] != "human":
+        raise BookflowError("E_PERMISSION", details={"capability": "serve", "required_role": "human"},
+                            message="Only a human hub admin can run the host.")
     if not row[4]:
         raise BookflowError("E_PERMISSION", details={"capability": "serve", "required_role": "hub_admin"},
                             message="Only a hub admin can run the host.")
@@ -162,21 +166,31 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
     secure = cookie_security(host_name, inp.secure_cookies)
     import socket as _socket
     import uvicorn
-    tcp = _socket.socket(_socket.AF_INET6 if ":" in host_name else _socket.AF_INET, _socket.SOCK_STREAM)
-    tcp.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
-    try:
-        tcp.bind((host_name, port))
-        tcp.listen(128)
-    except OSError as e:
-        tcp.close()
-        raise BookflowError(
-            "E_IO",
-            message=f"Could not listen on {inp.bind}; choose another address or stop the process already using it.",
-            details={"operation": "bind", "address": inp.bind, "errno": e.errno},
-        )
     handle = None
+    tcp = None
     try:
-        handle = start_serving(s.data_root, client_version(), bind=inp.bind, secure_cookies=secure)
+        # The root lock decides whether another host owns this data root before
+        # the TCP address can obscure that fact with EADDRINUSE. Descriptor
+        # publication remains delayed until both listeners are ready.
+        handle = start_serving(
+            s.data_root, client_version(), bind=inp.bind,
+            secure_cookies=secure, publish_descriptor=False,
+        )
+        tcp = _socket.socket(_socket.AF_INET6 if ":" in host_name else _socket.AF_INET, _socket.SOCK_STREAM)
+        tcp.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+        try:
+            tcp.bind((host_name, port))
+            tcp.listen(128)
+        except OSError as e:
+            raise BookflowError(
+                "E_IO",
+                message=f"Could not listen on {inp.bind}; choose another address or stop the process already using it.",
+                details={
+                    "operation": "bind", "address": inp.bind,
+                    "errno": errno.errorcode.get(e.errno, str(e.errno)),
+                },
+            )
+        handle.host.write_descriptor(inp.bind, str(handle.socket))
         log.warning("bookflow host listening on %s (socket %s)", inp.bind, handle.socket)
         server = uvicorn.Server(uvicorn.Config(handle.app, log_level="warning", access_log=False))
         import signal
@@ -205,10 +219,11 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
     finally:
         if handle is not None:
             handle.stop()
-        try:
-            tcp.close()
-        except OSError:  # pragma: no cover
-            pass
+        if tcp is not None:
+            try:
+                tcp.close()
+            except OSError:  # pragma: no cover
+                pass
     out = ServeOutput(bind=inp.bind, socket=str(handle.socket), pid=os.getpid(), secure_cookies=secure,
                       companies_migrated=list(handle.companies_migrated), companies_failed=list(handle.companies_failed))
     return out.model_dump(mode="json")
@@ -240,7 +255,8 @@ class ServeHandle:
             self.host.stop()
 
 
-def start_serving(data_root: Path | str, version: str, *, bind: str = DEFAULT_BIND, secure_cookies: bool = False) -> ServeHandle:
+def start_serving(data_root: Path | str, version: str, *, bind: str = DEFAULT_BIND,
+                  secure_cookies: bool = False, publish_descriptor: bool = True) -> ServeHandle:
     """Take the lock, migrate everything, build the app, listen on the socket, and write host.json."""
     from bookflow.adapters.http.app import create_app
     from bookflow.adapters.http.local import LocalListener
@@ -269,7 +285,8 @@ def start_serving(data_root: Path | str, version: str, *, bind: str = DEFAULT_BI
         sock = socket_path(root)
         listener = LocalListener(host, sock, make_local_handler(host, version))
         listener.start()
-        host.write_descriptor(bind, str(sock))
+        if publish_descriptor:
+            host.write_descriptor(bind, str(sock))
     except BaseException:
         host.stop()
         raise

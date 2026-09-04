@@ -20,7 +20,7 @@ uv run bookflow user set-password <username>
 uv run bookflow serve
 ```
 
-`serve` listens on 127.0.0.1:8765. `--bind <host>:<port>` moves it; any address outside loopback needs `--allow-network`. Open http://127.0.0.1:8765/ and log in with that username and password.
+Run `user set-password` in an interactive terminal; it prompts for the password twice. `serve` listens on 127.0.0.1:8765. `--bind <host>:<port>` moves it; any address outside loopback needs `--allow-network`. Open http://127.0.0.1:8765/ and log in with that username and password.
 
 ```
 uv run bookflow token issue --label <name>

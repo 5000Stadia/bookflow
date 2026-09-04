@@ -22,6 +22,7 @@ class _FragmentedConnection:
     def __init__(self, incoming: bytes):
         self.incoming = bytearray(incoming)
         self.sent = bytearray()
+        self.timeout = None
 
     def __enter__(self):
         return self
@@ -39,6 +40,9 @@ class _FragmentedConnection:
 
     def sendall(self, payload: bytes) -> None:
         self.sent.extend(payload)
+
+    def settimeout(self, timeout: float) -> None:
+        self.timeout = timeout
 
 
 def test_listener_reads_fragmented_header_and_body(monkeypatch, tmp_path):
@@ -58,9 +62,31 @@ def test_listener_reads_fragmented_header_and_body(monkeypatch, tmp_path):
     listener._serve_one(conn)
 
     assert seen == [("local-user", envelope)]
+    assert conn.timeout == local.CONNECTION_TIMEOUT_SECONDS
     response_size = int.from_bytes(conn.sent[:4], "big")
     response = json.loads(conn.sent[4:4 + response_size])
     assert response == {"output": {"accepted": True}}
+
+
+def test_listener_rejects_an_oversized_frame_before_reading_its_body(monkeypatch, tmp_path):
+    from bookflow.adapters.http import local
+
+    conn = _FragmentedConnection((local.MAX_FRAME_BYTES + 1).to_bytes(4, "big"))
+    called = []
+    listener = local.LocalListener(
+        None,
+        tmp_path / "unused.sock",
+        lambda _login, _envelope: called.append(True),
+    )
+    monkeypatch.setattr(local, "peer_login", lambda _conn: "local-user")
+
+    listener._serve_one(conn)
+
+    response_size = int.from_bytes(conn.sent[:4], "big")
+    response = json.loads(conn.sent[4:4 + response_size])
+    assert response["error"]["code"] == "E_VALIDATION"
+    assert response["error"]["details"]["fields"][0]["field"] == "frame"
+    assert called == []
 
 
 def test_forwarded_context_forces_cli_and_discards_identity():

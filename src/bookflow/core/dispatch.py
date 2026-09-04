@@ -302,6 +302,7 @@ def _record_migration(s: Session, ctx: Context, db, chain: str, before: str | No
 
 def _complete_trash(s: Session, row: dict[str, Any]) -> None:
     from bookflow.hub.companies import delete_company_rows
+    s.release_company(row["id"])
     s.hub.raw.execute("BEGIN IMMEDIATE")
     delete_company_rows(s, row["id"])
     s.hub.raw.execute("COMMIT")
