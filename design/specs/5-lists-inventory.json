@@ -1,0 +1,862 @@
+{
+  "schema_version": 1,
+  "row": 5,
+  "scope": "company master-data lists and their Row 5 company, chart, relationship, conversion, undo, seed, documentation, and browser integrations",
+  "sources": [
+    "design/blueprint.md#9-company",
+    "design/blueprint.md#101-accounts",
+    "design/blueprint.md#11-lists",
+    "design/specs/5-lists.md"
+  ],
+  "notation": {
+    "entry_rule": "Every object in fields, validations, actions, seeds, and deferred_entries is an inventory entry. Every scalar member of an options, enum, search, filters, sorts, default_columns, or additional_columns array is also an entry and inherits the enclosing witness key w.",
+    "keys": {
+      "n": "canonical field or option name",
+      "t": "wire type",
+      "req": "required",
+      "null": "nullable",
+      "default": "default value",
+      "enum": "closed option set",
+      "shape": "reference into reusable_shapes",
+      "io": "input/output direction; rw, input, output, seed, or staged",
+      "v": "validation or invariant identifiers",
+      "use": "consumer or semantic effect",
+      "w": "witness template key"
+    },
+    "column_tokens": {
+      "$common": "all common_record output fields",
+      "$custom": "all applicable custom fields",
+      "$stored": "all stored noun fields",
+      "$children": "all declared active child collections and their preserved inactive identities",
+      "$derived": "all declared derived outputs"
+    }
+  },
+  "witness_templates": {
+    "field": {
+      "blueprint": "{bp} field entry",
+      "schema": "src/bookflow/company/schema.py::{table}.{n} or an explicitly asserted normalized child column",
+      "model": "src/bookflow/company/{service}.py::{noun} typed input/output model",
+      "service": "src/bookflow/company/{service}.py::{noun} validation and persistence",
+      "output": "src/bookflow/commands/list_cmds.py::{noun} output projection",
+      "docs": "generated schema and command pages for {noun}",
+      "form": "runtime form descriptor and workbench record/list rendering for {noun}",
+      "test": "tests/test_row5_inventory.py::{noun} field matrix"
+    },
+    "child_field": {
+      "blueprint": "{bp} owned-child entry",
+      "schema": "src/bookflow/company/schema.py::{child_table}.{n}",
+      "model": "src/bookflow/company/{service}.py::{child_table} typed child model",
+      "service": "src/bookflow/company/{service}.py::{noun} collection reconciliation",
+      "output": "aggregate {noun} snapshot and show projection",
+      "docs": "generated nested schema and command pages for {noun}",
+      "form": "repeated typed controls for {child_table}",
+      "test": "tests/test_row5_inventory.py::{noun} child identity/order/replacement matrix"
+    },
+    "derived": {
+      "blueprint": "{bp} derived field entry",
+      "schema": "absence from writable columns plus source/index metadata where applicable",
+      "model": "src/bookflow/company/{service}.py::{noun} output-only model",
+      "service": "src/bookflow/company/{service}.py::{noun} deterministic projection",
+      "output": "complete list/show output for {noun}",
+      "docs": "generated output schema for {noun}",
+      "form": "read-only detail/list cell for {noun}",
+      "test": "tests/test_row5_inventory.py::{noun} rejects derived input and returns declared placeholder"
+    },
+    "rule": {
+      "blueprint": "{bp} validation or behavior entry",
+      "schema": "constraint/index/FK metadata or explicit service-only ownership assertion",
+      "model": "typed model validation where structurally expressible",
+      "service": "src/bookflow/company/{service}.py::{noun} authoritative rule",
+      "output": "stable success, warning, or error code/details",
+      "docs": "generated validations/errors for {noun}",
+      "form": "matching control constraint without replacing server authority",
+      "test": "tests/test_row5_inventory.py::{noun} rule matrix and no-write assertion"
+    },
+    "query": {
+      "blueprint": "{bp} lookup-and-table inventory",
+      "schema": "normalized search projections and indexed filter/sort paths",
+      "model": "typed {noun} list input/output",
+      "service": "shared list kernel query/filter/stable-sort pipeline",
+      "output": "JSON complete model plus declared human columns",
+      "docs": "generated {noun} list command page",
+      "form": "workbench search, filters, sortable headings, column chooser/reset",
+      "test": "tests/test_row5_inventory.py::{noun} query/filter/sort/column matrix"
+    },
+    "action": {
+      "blueprint": "{bp} lifecycle or special-action entry",
+      "schema": "affected table set, transaction, version, and audit metadata",
+      "model": "registered strict input/output models for {command}",
+      "service": "authoritative {command} service path",
+      "output": "canonical Python/CLI/HTTP/workbench result and error envelope",
+      "docs": "generated command page and validated example for {command}",
+      "form": "metadata-placed authorized collection/record action",
+      "test": "tests/test_row5_inventory.py::{command} reachability, authorization, audit, and atomicity"
+    },
+    "deferred": {
+      "blueprint": "{bp} explicit staging entry",
+      "schema": "absence, nullable staged column, or unavailable marker as declared",
+      "model": "unsupported input rejected and incomplete output visibly marked",
+      "service": "no implicit future behavior",
+      "output": "zero/null/unavailable state or stable rejection",
+      "docs": "generated page labels owning later row or unavailable behavior",
+      "form": "no live control or visibly unavailable panel/action",
+      "test": "tests/test_row5_inventory.py::{noun} deferred-boundary rejection/placeholder"
+    },
+    "seed": {
+      "blueprint": "{bp} exact seed manifest entry",
+      "schema": "nullable unique seed_key and target columns",
+      "model": "versioned packaged manifest schema",
+      "service": "ordinary service creation resolved by immutable seed_key",
+      "output": "deterministic created/preserved manifest result",
+      "docs": "packaged resource inventory",
+      "form": "seeded record renders as an ordinary editable list record",
+      "test": "tests/test_row5_seeds.py exact values, rerun, edit, inactive, and no-duplicate matrix"
+    },
+    "company_field": {
+      "blueprint": "design/blueprint.md#91-company-info::{n}",
+      "schema": "src/bookflow/company/schema.py::company_info.{n}",
+      "model": "src/bookflow/company/info.py company show/update/new models",
+      "service": "src/bookflow/company/info.py validation/version/audit",
+      "output": "company show/update output projection",
+      "docs": "generated company show/update/new schema and command pages",
+      "form": "generated company workbench form",
+      "test": "tests/test_row5_inventory.py::company_settings field/default/validation/form matrix"
+    }
+  },
+  "reusable_shapes": {
+    "common_record": {
+      "fields": [
+        {"n": "id", "t": "ulid", "io": "output", "w": "field"},
+        {"n": "version", "t": "integer", "io": "output", "default": 1, "v": ["increments-on-write", "no-op-preserves"], "w": "field"},
+        {"n": "created_at", "t": "timestamp", "io": "output", "w": "field"},
+        {"n": "created_by", "t": "ulid", "io": "output", "w": "field"},
+        {"n": "created_via", "t": "interface-enum", "io": "output", "w": "field"},
+        {"n": "updated_at", "t": "timestamp", "io": "output", "w": "field"},
+        {"n": "updated_by", "t": "ulid", "io": "output", "w": "field"},
+        {"n": "updated_via", "t": "interface-enum", "io": "output", "w": "field"},
+        {"n": "active", "t": "boolean", "io": "rw", "default": true, "w": "field"},
+        {"n": "seed_key", "t": "string", "null": true, "io": "seed", "v": ["table-unique", "immutable", "seed-service-only"], "w": "field"},
+        {"n": "access", "t": "enum", "enum": ["hub_admin", "organization", "company"], "io": "output", "w": "derived"},
+        {"n": "role", "t": "role-or-null", "io": "output", "w": "derived"}
+      ]
+    },
+    "hierarchy": {
+      "fields": [
+        {"n": "parent_id", "t": "ulid", "null": true, "io": "rw", "w": "field"},
+        {"n": "full_name", "t": "string", "io": "output", "w": "derived"},
+        {"n": "full_name_key", "t": "normalized-string", "io": "output", "w": "derived"},
+        {"n": "depth", "t": "integer", "io": "output", "w": "derived"},
+        {"n": "path", "t": "binary-collated-/ULID/-path", "io": "output", "w": "derived"},
+        {"n": "has_children", "t": "boolean", "io": "output", "w": "derived"}
+      ],
+      "validations": [
+        {"id": "hierarchy.depth", "rule": "root is level one and resulting subtree depth is at most five", "error": "E_HIERARCHY_DEPTH", "w": "rule"},
+        {"id": "hierarchy.cycle", "rule": "parent change cannot create direct or indirect cycle", "error": "E_HIERARCHY_CYCLE", "w": "rule"},
+        {"id": "hierarchy.name", "rule": "leaf/display name excludes colon and is at most 200 characters; normalized leaf key is at most 400; five-level visible full name is at most 1004 and normalized full-name key at most 2004; length errors are E_VALIDATION and active sibling collisions are E_NAME_TAKEN", "error": "E_VALIDATION|E_NAME_TAKEN", "w": "rule"},
+        {"id": "hierarchy.projection", "rule": "rename/reparent validates the entire subtree and atomically recomputes path/full-name/depth without descendant versions or audit entries", "w": "rule"},
+        {"id": "hierarchy.activation", "rule": "activation requires active ancestors; deactivation with descendants requires explicit cascade and returns parent-first ids", "error": "E_ACTIVE_DEPENDENTS", "w": "rule"}
+      ]
+    },
+    "address": {
+      "fields": ["line1", "line2", "city", "state", "postal_code", "country"],
+      "w": "field"
+    },
+    "person_identity": {
+      "fields": ["salutation", "first_name", "middle_name", "last_name", "job_title"],
+      "w": "field"
+    },
+    "contact_child": {
+      "fields": [
+        "id", "role", "salutation", "first_name", "middle_name", "last_name", "job_title",
+        "work_phone", "home_phone", "mobile_phone", "other_phone", "work_fax", "home_fax",
+        "primary_email", "secondary_email", "website", "external_handle", "active"
+      ],
+      "role_options": ["primary", "alternate", "additional"],
+      "w": "child_field"
+    },
+    "owned_child": {
+      "fields": ["id", "owner_id", "active"],
+      "derived": ["position-from-array-order"],
+      "rules": [
+        "omission-preserves-collection", "supplied-array-replaces-collection", "empty-array-clears",
+        "retained-id-preserves-identity", "omitted-active-child-deactivates", "new-child-receives-id",
+        "ordinary-input-cannot-reactivate-inactive-id", "active-semantic-key-unique"
+      ],
+      "w": "child_field"
+    },
+    "money": {
+      "input": "canonical decimal string with optional ISO 4217 currency",
+      "output_fields": ["amount", "currency", "minor_units"],
+      "storage": "signed-64-bit integer minor units plus currency, all-null or all-present",
+      "rejects": ["JSON-float", "boolean", "excess-currency-precision", "signed-64-bit-overflow"],
+      "w": "rule"
+    },
+    "exact_percent": {
+      "input": "canonical decimal string",
+      "storage": "signed integer millionths of one percentage point",
+      "rejects": ["JSON-float", "boolean", "excess-precision", "signed-64-bit-overflow"],
+      "w": "rule"
+    },
+    "exact_quantity": {
+      "input": "canonical decimal string",
+      "storage": "signed integer micro-units",
+      "rounding": "decimal half-even once to six quantity decimals",
+      "rejects": ["JSON-float", "boolean", "excess-precision", "signed-64-bit-overflow"],
+      "w": "rule"
+    },
+    "ordinary_lifecycle": {
+      "commands": ["create", "update", "show", "list", "activate", "deactivate"],
+      "create_options": ["idempotency_key", "dry_run", "reason", "directive_id", "source_ref"],
+      "update_options": ["expected_version", "clear", "dry_run", "reason", "directive_id", "source_ref"],
+      "activate_options": ["expected_version", "dry_run", "reason", "directive_id", "source_ref"],
+      "deactivate_options": ["expected_version", "cascade-if-hierarchical", "dry_run", "reason", "directive_id", "source_ref"],
+      "list_options": ["query", "include_inactive", "repeated-filter-as-field=value", "sort", "direction"],
+      "global_cli_options": ["json", "data_root", "company", "interactive-on-writes"],
+      "defaults": {"include_inactive": false, "direction": "asc", "active": true},
+      "rules": [
+        "selector-resolves-id-before-normalized-display-key", "unknown-input-rejected", "authorization-before-validation",
+        "new-or-changed-references-require-active-same-company-target", "no-hard-delete", "dry-run-writes-nothing",
+        "expected-version-conflicts-on-overlap-and-merges-disjoint-paths", "blind-write-succeeds-with-visible-warning",
+        "no-op-preserves-version-and-audit", "every-write-is-one-audit-event-with-logical-record-entries",
+        "owned-collection-and-mapping-CLI-options-take-one-JSON-array-or-object-string",
+        "interactive-prompts-for-the-same-JSON-value", "empty-array-clears-owned-collection",
+        "empty-custom-map-changes-nothing", "per-custom-key-null-clears-value",
+        "clear-option-applies-to-nullable-scalars-and-objects-not-collections"
+      ],
+      "w": "action"
+    }
+  },
+  "noun_inheritance": {
+    "all_nouns": ["common_record", "ordinary_lifecycle", "normalized-display-key", "stable-query-id-tiebreaker", "schema-model-service-output-docs-form-test-witnesses"],
+    "when_hierarchical_is_true": ["hierarchy"],
+    "when_custom_fields_is_true": ["custom_fields_mapping_and_runtime_controls"],
+    "rule": "The inherited reusable entries are part of every matching noun exactly as if repeated in its fields, validations, options, defaults, and actions arrays."
+  },
+  "global_validations": [
+    {"id": "key.normalization", "rule": "all primary display keys are trimmed, NFC-normalized, case-folded, reject colon, and are at most 200 characters with normalized leaf keys at most 400; hierarchical full names/keys are bounded at 1004/2004", "error": "E_VALIDATION|E_NAME_TAKEN", "w": "rule"},
+    {"id": "selector.visibility", "rule": "suggestions and id/name resolution expose only authorized records and inaccessible equals missing", "error": "E_RECORD_NOT_FOUND", "w": "rule"},
+    {"id": "references", "rule": "foreign keys restrict deletion and are indexed; polymorphic type/id pairs are validated in the same service transaction", "w": "rule"},
+    {"id": "dependency.policy", "rule": "structural/system/required-active dependencies block; classification/default references are soft for unchanged history; inactive owners do not block", "error": "E_RECORD_IN_USE", "w": "rule"},
+    {"id": "aggregate.concurrency", "rule": "each whole child collection is one logical path, each custom-field definition id is a separate path, and links are an endpoint logical path", "w": "rule"},
+    {"id": "aggregate.snapshot", "rule": "snapshots include stable child identities, active and inactive state, custom values, and endpoint links but exclude hierarchy and other derived projections", "w": "rule"},
+    {"id": "query.stability", "rule": "escaped parameterized normalized containment search, typed filters, stable id final sort key, and declared columns", "error": "E_LIST_FILTER", "w": "query"},
+    {"id": "surface.parity", "rule": "Python, CLI, HTTP, and workbench translation return canonical equal outputs/errors; MCP joins in Row 9", "w": "action"},
+    {"id": "protected.output", "rule": "protected profile refs never return or enter audit snapshots; bank suffixes and customer payment brand/last-four are member-visible when later populated; vendor and employee tax suffixes are null below admin; full identifiers and credentials are rejected", "w": "rule"},
+    {"id": "numeric.currency", "rule": "customer, vendor, item, fixed-asset, discount-amount, and vendor-profile money is home currency; account amounts use account currency; price-level money uses resolved level currency; mismatch rejects and no implicit conversion occurs", "error": "E_VALIDATION", "w": "rule"},
+    {"id": "numeric.ranges", "rule": "tax, term-discount, and item-discount percent is 0..100; price-level percent is -100..1000000; declared nonnegative quantities and money reject negatives", "error": "E_VALUE_RANGE", "w": "rule"},
+    {"id": "numeric.errors", "rule": "money excess scale returns E_AMOUNT_PRECISION; malformed or excess-scale non-money returns E_VALIDATION; declared-range or signed-storage overflow returns E_VALUE_RANGE", "w": "rule"}
+  ],
+  "authorization": {
+    "enforcement": "role thresholds in Row 5; capability names are inert compatibility metadata until Row 7",
+    "thresholds": [
+      {"operations": ["ordinary-list-read", "runtime-form-metadata"], "minimum_role": "member", "w": "rule"},
+      {"operations": ["ordinary-list-write", "customer-link-vendor", "customer-unlink-vendor", "other-name-convert", "owner-custom-value-change"], "minimum_role": "standard", "w": "rule"},
+      {"operations": ["custom-field-definition-write", "profile-apply", "company-setting-update", "chart-apply", "undo"], "minimum_role": "admin", "w": "rule"},
+      {"operations": ["undo-original-event"], "minimum_role": "highest-current-role-threshold-among-original-event-commands", "w": "rule"}
+    ],
+    "capability_names": {
+      "ordinary_lifecycle": "exact noun command prefix for each required noun",
+      "chart": "chart",
+      "profile": "profile",
+      "undo": "undo",
+      "link_unlink": "customer",
+      "conversion": "other-name"
+    },
+    "w": "rule"
+  },
+  "migration": {
+    "revision": "co0003",
+    "rules": [
+      {"id": "migration.freeze-co0002", "rule": "co0002 uses revision-local DDL matching its shipped historical shape and imports no live company schema", "w": "rule"},
+      {"id": "migration.undo-link", "rule": "co0003 rebuilds audit_events to add nullable undo_of_event_id plus a unique non-null index while preserving event ids, seq values, foreign keys, and snapshot blobs byte-for-byte", "w": "rule"},
+      {"id": "migration.chart-identity", "rule": "pre-Row-5 default_chart with no version/accounts is cleared and default_chart_version is added null; only the chart service later writes chart identity", "w": "rule"},
+      {"id": "migration.convergence", "rule": "normalized full SQLite schema is identical after fresh-chain creation and populated frozen-co0002 upgrade", "w": "rule"},
+      {"id": "migration.failure", "rule": "failure restores the verified pre-migration backup with no partial revision", "w": "rule"}
+    ],
+    "w": "rule"
+  },
+  "company_settings": {
+    "bp": "design/blueprint.md#91-company-info",
+    "table": "company_info",
+    "service": "info",
+    "fields": [
+      {"n": "use_account_numbers", "t": "boolean", "default": true, "use": "account forms/tables/pickers", "w": "company_field"},
+      {"n": "show_lowest_subaccount_only", "t": "boolean", "default": false, "use": "account picker labels", "w": "company_field"},
+      {"n": "required_employee_profile_fields", "t": "array<nonempty-array<registered-nonsecret-field-path>>", "default": [["first_name"], ["last_name"], ["address.line1"], ["address.city"], ["address.state"], ["address.postal_code"], ["phone", "email"]], "w": "company_field"},
+      {"n": "use_classes", "t": "boolean", "default": false, "use": "later form visibility", "w": "company_field"},
+      {"n": "prompt_for_class", "t": "boolean", "default": false, "v": ["requires-use_classes"], "use": "later form warning/requirement", "w": "company_field"},
+      {"n": "enable_price_levels", "t": "boolean", "default": false, "use": "later sales form/picker visibility", "w": "company_field"},
+      {"n": "units_of_measure_mode", "t": "enum", "enum": ["disabled", "single_unit_per_item", "multiple_related_units"], "default": "disabled", "w": "company_field"},
+      {"n": "sales_tax_enabled", "t": "boolean", "default": false, "v": ["cannot-disable-while-default_sales_tax_item_id-is-set"], "w": "company_field"},
+      {"n": "default_sales_tax_item_id", "t": "ulid", "null": true, "default": null, "v": ["active-sales-tax-item-or-group", "requires-sales_tax_enabled"], "w": "company_field"},
+      {"n": "sales_tax_liability_basis", "t": "enum", "enum": ["invoice_date", "payment_receipt"], "default": "invoice_date", "w": "company_field"},
+      {"n": "sales_tax_remittance_frequency", "t": "enum", "enum": ["monthly", "quarterly", "annually"], "default": "quarterly", "w": "company_field"},
+      {"n": "default_ship_method_id", "t": "ulid", "null": true, "default": null, "v": ["active-ship-method"], "w": "company_field"},
+      {"n": "free_on_board", "t": "string", "null": true, "default": null, "use": "later sales forms", "w": "company_field"},
+      {"n": "order_printable_checks", "t": "boolean", "default": false, "use": "inherited account preference", "w": "company_field"},
+      {"n": "default_chart", "t": "chart-template-id", "null": true, "io": "output", "default": null, "w": "company_field"},
+      {"n": "default_chart_version", "t": "integer", "null": true, "io": "output", "default": null, "w": "company_field"}
+    ],
+    "actions": [
+      {"id": "company.show.row5-settings", "command": "company show", "rule": "returns every Row 5 setting and readable inactive reference targets", "w": "action"},
+      {"id": "company.update.row5-settings", "command": "company update", "options": ["expected_version", "clear", "dry_run", "reason", "directive_id", "source_ref"], "rule": "accepts every non-derived Row 5 setting under the existing company-info version and audit contract", "w": "action"},
+      {"id": "company.new.row5-rollout", "command": "company new", "options": ["organization", "chart", "interactive", "all-writable-nonreference-company-fields"], "defaults": {"chart": "general", "row5-settings": "declared field defaults"}, "rule": "applies explicit chart or none and independently installs profile seeds atomically", "w": "action"},
+      {"id": "demo.reset.row5", "command": "demo reset", "rule": "creates every Row 5 primary/child table state through ordinary commands, including active/inactive, all item/custom kinds, hierarchy, inheritance, links, conversion candidate, pricing and units", "w": "action"}
+    ]
+  },
+  "nouns": {
+    "account": {
+      "bp": "design/blueprint.md#101-accounts", "table": "accounts", "service": "accounts", "selector": "id|full_name", "hierarchical": true, "custom_fields": false,
+      "fields": [
+        {"n": "name", "t": "string", "req": true, "w": "field"},
+        {"n": "number", "t": "string", "null": true, "v": ["company-unique-normalized"], "w": "field"},
+        {"n": "type", "t": "enum", "req": true, "enum": ["bank", "accounts_receivable", "other_current_asset", "fixed_asset", "other_asset", "accounts_payable", "credit_card", "other_current_liability", "long_term_liability", "equity", "income", "cost_of_goods_sold", "expense", "other_income", "other_expense", "non_posting"], "w": "field"},
+        {"n": "parent_id", "t": "ulid", "null": true, "v": ["same-account-type"], "w": "field"},
+        {"n": "description", "t": "string", "null": true, "v": ["max-200"], "w": "field"},
+        {"n": "currency", "t": "iso-4217", "default": "company.home_currency", "v": ["immutable-after-ledger-reference"], "w": "field"},
+        {"n": "tax_line", "t": "string", "null": true, "v": ["compatible-account-type"], "w": "field"},
+        {"n": "institution_name", "t": "string", "null": true, "v": ["allowed-account-type"], "w": "field"},
+        {"n": "institution_account_last4", "t": "last4", "null": true, "v": ["display-only", "allowed-account-type"], "w": "field"},
+        {"n": "routing_number_last4", "t": "last4", "null": true, "v": ["display-only", "bank-only"], "w": "field"},
+        {"n": "provider_profile_ref", "t": "opaque-ref", "null": true, "io": "staged", "default": null, "w": "field"},
+        {"n": "next_check_number", "t": "string", "null": true, "w": "field"},
+        {"n": "check_reorder_number", "t": "string", "null": true, "v": ["bank-only"], "w": "field"},
+        {"n": "order_printable_checks", "t": "boolean", "null": true, "default": null, "v": ["bank-only"], "use": "null inherits company preference", "w": "field"},
+        {"n": "default_class_id", "t": "ulid", "null": true, "w": "field"},
+        {"n": "track_reimbursable_expenses", "t": "boolean", "default": false, "v": ["expense-or-cost-of-goods-sold-only"], "w": "field"},
+        {"n": "reimbursable_income_account_id", "t": "ulid", "null": true, "default": null, "v": ["required-when-reimbursable-tracking-enabled", "active-income-or-other-income", "null-otherwise"], "w": "field"},
+        {"n": "note", "t": "string", "null": true, "w": "field"},
+        {"n": "system_role", "t": "string", "null": true, "io": "seed", "v": ["company-unique", "chart-service-only"], "w": "field"},
+        {"n": "is_system", "t": "boolean", "io": "output", "w": "derived"},
+        {"n": "balance", "shape": "money", "io": "output", "default": "zero-unavailable", "w": "derived"},
+        {"n": "available_balance", "shape": "money", "io": "output", "default": null, "w": "derived"},
+        {"n": "normal_balance", "t": "enum", "enum": ["debit", "credit", "none"], "io": "output", "w": "derived"},
+        {"n": "statement_family", "t": "enum", "enum": ["balance_sheet", "profit_and_loss", "neither"], "io": "output", "w": "derived"},
+        {"n": "has_transactions", "t": "boolean", "io": "output", "default": false, "w": "derived"},
+        {"n": "child_count", "t": "integer", "io": "output", "w": "derived"}
+      ],
+      "validations": [
+        {"id": "account.system", "rule": "required system-role account name/type/parent/currency/role/active are protected", "error": "E_SYSTEM_RECORD", "w": "rule"},
+        {"id": "account.type-change", "rule": "reject for AR/AP, children, system, incompatible currency, or invalidated master/ledger use", "error": "E_TYPE_CHANGE", "w": "rule"},
+        {"id": "account.deactivate", "rule": "reject active descendants, required role, active item/tax/reimbursable-income dependencies, or transactions; vendor expense-account entries are soft defaults", "error": "E_RECORD_IN_USE", "w": "rule"},
+        {"id": "account.reimbursable", "rule": "only expense or cost-of-goods-sold accounts may enable tracking and then require an active income or other-income account", "error": "E_VALIDATION", "w": "rule"}
+      ],
+      "query": {"search": ["name", "full_name", "number", "description", "institution_name", "institution_account_last4", "note"], "filters": ["active", "type", "parent_id", "currency", "tax_line", "is_system", "default_class_id", "track_reimbursable_expenses"], "sorts": ["full_name", "number", "type", "balance", "updated_at", "hierarchy_order"], "default_sort": ["number:asc:nulls-last", "full_name:asc", "id:asc"], "default_columns": ["number", "full_name", "type", "balance", "currency", "active"], "additional_columns": ["parent", "description", "currency", "tax_line", "institution_name", "next_check_number", "default_class_id", "track_reimbursable_expenses", "reimbursable_income_account_id", "system_role", "is_system", "available_balance", "updated_at", "$common"], "w": "query"},
+      "actions": [{"id": "account.lifecycle", "command": "account create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}],
+      "deferred": ["opening-balances", "posted-balances", "provider-balance-refresh", "registers"]
+    },
+    "customer": {
+      "bp": "design/blueprint.md#112-customers-and-jobs", "table": "customers", "child_table": "customer_addresses|customer_contacts", "service": "parties", "selector": "id|full_name", "hierarchical": true, "custom_fields": true,
+      "fields": [
+        {"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "company_name", "t": "string", "null": true, "w": "field"},
+        {"n": "person_identity", "shape": "person_identity", "w": "field"}, {"n": "billing_address", "shape": "address", "null": true, "w": "field"},
+        {"n": "shipping_addresses", "t": "array", "shape": "owned_child+label+address+is_default", "v": ["at-most-one-active-default"], "w": "child_field"},
+        {"n": "contacts", "t": "array", "shape": "owned_child+contact_child", "v": ["at-most-one-active-primary", "at-most-one-active-alternate"], "w": "child_field"},
+        {"n": "contact", "t": "string", "io": "rw-shortcut", "w": "derived"}, {"n": "alt_contact", "t": "string", "io": "rw-shortcut", "w": "derived"},
+        {"n": "phone", "t": "string", "io": "rw-shortcut", "w": "derived"}, {"n": "alt_phone", "t": "string", "io": "rw-shortcut", "w": "derived"},
+        {"n": "fax", "t": "string", "io": "rw-shortcut", "w": "derived"}, {"n": "email", "t": "email", "io": "rw-shortcut", "w": "derived"},
+        {"n": "cc_email", "t": "email", "io": "rw-shortcut", "w": "derived"}, {"n": "website", "t": "string", "io": "rw-shortcut", "w": "derived"},
+        {"n": "terms_id", "t": "ulid", "null": true, "w": "field"}, {"n": "sales_tax_code_id", "t": "ulid", "null": true, "w": "field"},
+        {"n": "sales_tax_item_id", "t": "ulid", "null": true, "w": "field"}, {"n": "price_level_id", "t": "ulid", "null": true, "w": "field"},
+        {"n": "customer_type_id", "t": "ulid", "null": true, "w": "field"}, {"n": "sales_rep_id", "t": "ulid", "null": true, "w": "field"},
+        {"n": "preferred_payment_method_id", "t": "ulid", "null": true, "w": "field"}, {"n": "preferred_ship_method_id", "t": "ulid", "null": true, "w": "field"},
+        {"n": "resale_number", "t": "string", "null": true, "w": "field"}, {"n": "credit_limit", "shape": "money", "null": true, "use": "later sales warning only", "w": "field"},
+        {"n": "preferred_delivery_method", "t": "enum", "enum": ["none", "email", "mail"], "default": "none", "w": "field"},
+        {"n": "account_number", "t": "string", "null": true, "w": "field"},
+        {"n": "payment_profile_ref", "t": "opaque-ref", "null": true, "io": "staged", "default": null, "w": "field"},
+        {"n": "payment_brand", "t": "string", "null": true, "io": "output", "w": "field"}, {"n": "payment_last4", "t": "last4", "null": true, "io": "output", "w": "field"},
+        {"n": "payment_expiry_month", "t": "integer", "null": true, "io": "output", "w": "field"}, {"n": "payment_expiry_year", "t": "integer", "null": true, "io": "output", "w": "field"},
+        {"n": "payment_billing_address", "shape": "address", "null": true, "io": "output", "w": "field"},
+        {"n": "linked_vendor_id", "t": "ulid", "null": true, "io": "output", "w": "derived"},
+        {"n": "notes", "t": "string", "null": true, "w": "field"}, {"n": "default_class_id", "t": "ulid", "null": true, "w": "field"}, {"n": "custom_fields", "t": "map<definition-ulid,typed-value>", "w": "field"},
+        {"n": "current_balance", "shape": "money", "io": "output", "default": "zero-unavailable", "w": "derived"}, {"n": "open_balance", "shape": "money", "io": "output", "default": "zero-unavailable", "w": "derived"},
+        {"n": "job_status", "t": "enum", "enum": ["none", "pending", "awarded", "in_progress", "closed", "not_awarded"], "default": "none", "w": "field"},
+        {"n": "job_type_id", "t": "ulid", "null": true, "w": "field"}, {"n": "job_start", "t": "date", "null": true, "w": "field"},
+        {"n": "job_projected_end", "t": "date", "null": true, "w": "field"}, {"n": "job_end", "t": "date", "null": true, "w": "field"},
+        {"n": "job_description", "t": "string", "null": true, "w": "field"}, {"n": "job_sales_rep_id", "t": "ulid", "null": true, "w": "field"},
+        {"n": "address_mode", "t": "enum", "enum": ["inherit", "own"], "default": "own-for-customer", "w": "field"}, {"n": "contact_mode", "t": "enum", "enum": ["inherit", "own"], "default": "own-for-customer", "w": "field"},
+        {"n": "effective_values", "t": "map<field,value+source_id>", "io": "output", "w": "derived"}
+      ],
+      "validations": [
+        {"id": "customer.job-dates", "rule": "projected or actual end cannot precede start; closed without end succeeds with warning", "w": "rule"},
+        {"id": "customer.inheritance", "rule": "job null scalar inherits nearest ancestor; own collection may be explicitly empty; top-level collections are own", "w": "rule"},
+        {"id": "customer.shortcuts", "rule": "contact shortcut deterministically edits/creates primary then alternate then ordered contact; conflicting shortcut and collection values reject; a job in inherit mode must atomically switch to own and submit the complete collection rather than use a shortcut", "error": "E_VALIDATION", "w": "rule"}
+      ],
+      "query": {"search": ["name", "full_name", "company_name", "effective-contact-names", "effective-contact-points", "effective-billing-address", "effective-shipping-addresses", "account_number", "customer_type", "job_type", "sales_rep", "notes", "$custom-searchable"], "filters": ["active", "parent_id", "customer_or_job", "customer_type_id", "job_type_id", "job_status", "sales_rep_id", "price_level_id", "sales_tax_code_id", "preferred_payment_method_id", "linked_vendor_id"], "sorts": ["full_name", "company_name", "primary_contact", "phone", "current_balance", "customer_type", "sales_rep", "job_status", "updated_at"], "default_sort": ["full_name", "id"], "default_columns": ["full_name", "company_name", "primary_contact", "phone", "current_balance", "customer_type", "sales_rep", "active"], "additional_columns": ["account_number", "postal_code", "email", "payment_method", "terms", "credit_limit", "price_level", "tax_code", "tax_item", "job_status", "job_dates", "delivery_method", "ship_method", "linked_vendor", "$custom", "$common"], "w": "query"},
+      "actions": [
+        {"id": "customer.lifecycle", "command": "customer create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"},
+        {"id": "customer.contact-copy", "command": "workbench contact-copy preview then customer/vendor update", "rule": "preview only; submit ordinary versioned writes", "w": "action"}
+      ],
+      "deferred": ["open-overdue-filters", "transaction-panes", "related-transaction-actions", "delivery-send", "notes-attachments-activity", "purpose-built-customer-center", "protected-payment-store"]
+    },
+    "vendor": {
+      "bp": "design/blueprint.md#113-vendors", "table": "vendors", "child_table": "vendor_contacts|vendor_expense_accounts|item_vendor_profiles", "service": "parties", "selector": "id|name", "hierarchical": false, "custom_fields": true,
+      "fields": [
+        {"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "company_name", "t": "string", "null": true, "w": "field"},
+        {"n": "person_identity", "shape": "person_identity", "w": "field"}, {"n": "address", "shape": "address", "null": true, "w": "field"},
+        {"n": "contacts", "shape": "owned_child+contact_child", "w": "child_field"},
+        {"n": "contact_shortcuts", "t": "contact|alt_contact|phone|alt_phone|fax|email|cc_email|website", "io": "rw-shortcut", "w": "derived"},
+        {"n": "terms_id", "t": "ulid", "null": true, "w": "field"}, {"n": "vendor_type_id", "t": "ulid", "null": true, "w": "field"}, {"n": "default_class_id", "t": "ulid", "null": true, "w": "field"},
+        {"n": "billing_rate_level_id", "t": "opaque-ref", "null": true, "io": "staged", "default": null, "w": "field"},
+        {"n": "account_number", "t": "string", "null": true, "w": "field"}, {"n": "print_name_on_check_as", "t": "string", "null": true, "w": "field"},
+        {"n": "credit_limit", "shape": "money", "null": true, "w": "field"}, {"n": "eligible_1099", "t": "boolean", "default": false, "w": "field"},
+        {"n": "is_tax_agency", "t": "boolean", "default": false, "v": ["cannot-clear-or-deactivate-vendor-while-active-sales-tax-item-depends"], "w": "field"},
+        {"n": "recall_last_transaction", "t": "boolean", "null": true, "default": null, "w": "field"}, {"n": "notes", "t": "string", "null": true, "w": "field"},
+        {"n": "custom_fields", "t": "map<definition-ulid,typed-value>", "w": "field"},
+        {"n": "expense_accounts", "t": "array<account-ulid>", "v": ["maximum-3-active", "expense-or-cogs"], "w": "child_field"},
+        {"n": "tax_id_kind", "t": "ein|ssn", "null": true, "io": "output", "w": "field"}, {"n": "tax_id_last4", "t": "last4", "null": true, "io": "output", "w": "field"},
+        {"n": "tax_profile_ref", "t": "opaque-ref", "null": true, "io": "staged", "default": null, "w": "field"},
+        {"n": "current_balance", "shape": "money", "io": "output", "default": "zero-unavailable", "w": "derived"}, {"n": "open_balance", "shape": "money", "io": "output", "default": "zero-unavailable", "w": "derived"},
+        {"n": "linked_customer_id", "t": "ulid", "null": true, "io": "output", "w": "derived"},
+        {"n": "item_vendor_profiles", "t": "array", "fields": ["id", "item_id", "vendor_id", "preferred_rank", "vendor_item_name", "purchase_cost", "minimum_quantity", "lead_time_days", "manufacturer_part_number", "availability_notes", "active"], "v": ["rank-unique-per-item", "minimum-nonnegative", "lead-time-nonnegative"], "w": "child_field"},
+        {"n": "last_purchase_date", "t": "date", "null": true, "io": "output", "w": "derived"}, {"n": "last_purchase_cost", "shape": "money", "null": true, "io": "output", "w": "derived"}
+      ],
+      "validations": [{"id": "vendor.shortcuts", "rule": "contact roles, resolution, shortcut collision, and collection concurrency equal customer rules", "error": "E_VALIDATION", "w": "rule"}, {"id": "vendor.tax-agency", "rule": "active sales-tax items require an active vendor flagged as tax agency; flag clear or vendor deactivation is blocked while depended on", "error": "E_RECORD_IN_USE", "w": "rule"}],
+      "query": {"search": ["name", "company_name", "person_fields", "contact_fields", "address", "account_number", "print_name_on_check_as", "vendor_type", "item_vendor_identifiers", "notes", "$custom-searchable"], "filters": ["active", "vendor_type_id", "terms_id", "eligible_1099", "is_tax_agency", "default_class_id", "linked_customer_id"], "sorts": ["name", "company_name", "primary_contact", "phone", "open_balance", "terms", "vendor_type", "updated_at"], "default_sort": ["name", "id"], "default_columns": ["name", "company_name", "primary_contact", "phone", "open_balance", "terms", "vendor_type", "active"], "additional_columns": ["account_number", "check_name", "credit_limit", "tax_id_last4", "eligible_1099", "is_tax_agency", "email", "postal_code", "default_accounts", "billing_rate", "linked_customer", "$custom", "$common"], "w": "query"},
+      "actions": [{"id": "vendor.lifecycle", "command": "vendor create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}],
+      "deferred": ["financial-filters", "transaction-panes", "last-purchase-derived-values", "billing-rate-list", "protected-tax-store", "full-tax-id", "prior-transaction-recall-effect"]
+    },
+    "employee": {
+      "bp": "design/blueprint.md#115-employees", "table": "employees", "service": "parties", "selector": "id|name", "hierarchical": false, "custom_fields": true,
+      "fields": [
+        {"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "person_identity", "shape": "person_identity", "w": "field"},
+        {"n": "print_name_on_check_as", "t": "string", "null": true, "w": "field"},
+        {"n": "employment_type", "t": "enum", "enum": ["full_time", "part_time", "seasonal", "temporary", "other"], "null": true, "default": null, "w": "field"},
+        {"n": "address", "shape": "address", "null": true, "w": "field"}, {"n": "phone", "t": "string", "null": true, "w": "field"}, {"n": "email", "t": "email", "null": true, "w": "field"},
+        {"n": "hire_date", "t": "date", "null": true, "w": "field"}, {"n": "release_date", "t": "date", "null": true, "v": ["not-before-hire-date"], "w": "field"},
+        {"n": "emergency_contact", "t": "object", "fields": ["name", "relationship", "phone", "email"], "null": true, "w": "field"},
+        {"n": "default_class_id", "t": "ulid", "null": true, "w": "field"}, {"n": "notes", "t": "string", "null": true, "w": "field"}, {"n": "custom_fields", "t": "map<definition-ulid,typed-value>", "w": "field"},
+        {"n": "tax_id_last4", "t": "last4", "null": true, "io": "output", "w": "field"},
+        {"n": "profile_complete", "t": "boolean", "io": "output", "w": "derived"}, {"n": "missing_profile_fields", "t": "array<array<field-path>>", "io": "output", "w": "derived"}
+      ],
+      "validations": [
+        {"id": "employee.completeness", "rule": "each ordered requirement is satisfied by at least one populated registered non-secret employee or applicable custom path; missing output preserves unsatisfied arrays", "w": "rule"},
+        {"id": "employee.release", "rule": "release does not deactivate; active selection is independent", "w": "rule"}
+      ],
+      "query": {"search": ["name", "job_title", "address", "phone", "email", "emergency_contact", "notes", "$custom-searchable"], "filters": ["active", "released", "unreleased", "employment_type", "profile_complete", "default_class_id"], "sorts": ["name", "hire_date", "release_date", "profile_complete", "updated_at"], "default_sort": ["name", "id"], "default_columns": ["name", "phone", "email", "hire_date", "release_date", "profile_complete", "active"], "additional_columns": ["job_title", "print_name_on_check_as", "employment_type", "address", "emergency_contact", "default_class", "tax_id_last4", "$custom", "$common"], "w": "query"},
+      "actions": [{"id": "employee.lifecycle", "command": "employee create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}],
+      "deferred": ["birth-date-gender-marital-status", "full-tax-identifiers", "payroll-withholding", "earnings-deductions", "paid-time-off", "workers-compensation", "pay-schedules", "direct-deposit", "payroll-transaction-pane"]
+    },
+    "other-name": {
+      "bp": "design/blueprint.md#116-other-names", "table": "other_names", "service": "parties", "selector": "id|name", "hierarchical": false, "custom_fields": true,
+      "fields": [
+        {"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "company_name", "t": "string", "null": true, "w": "field"}, {"n": "person_identity", "shape": "person_identity", "w": "field"},
+        {"n": "address", "shape": "address", "null": true, "w": "field"}, {"n": "phone", "t": "string", "null": true, "w": "field"}, {"n": "email", "t": "email", "null": true, "w": "field"},
+        {"n": "contact", "t": "string", "null": true, "w": "field"}, {"n": "account_number", "t": "string", "null": true, "w": "field"},
+        {"n": "default_class_id", "t": "ulid", "null": true, "w": "field"}, {"n": "notes", "t": "string", "null": true, "w": "field"}, {"n": "custom_fields", "t": "map<definition-ulid,typed-value>", "w": "field"},
+        {"n": "converted_to_type", "t": "enum", "enum": ["customer", "vendor", "employee"], "null": true, "io": "output", "w": "field"}, {"n": "converted_to_id", "t": "ulid", "null": true, "io": "output", "w": "field"}
+      ],
+      "validations": [{"id": "other-name.form-use", "rule": "never substitutes for customer/vendor on type-specific forms", "w": "rule"}],
+      "query": {"search": ["name", "company_name", "person_fields", "contact_fields", "address", "account_number", "notes", "$custom-searchable"], "filters": ["active", "converted", "unconverted", "conversion_target", "default_class_id"], "sorts": ["name", "updated_at"], "default_sort": ["name", "id"], "default_columns": ["name", "company_name", "contact", "phone", "email", "active"], "additional_columns": ["address", "account_number", "conversion_target", "default_class", "updated_at", "$custom", "$common"], "w": "query"},
+      "actions": [{"id": "other-name.lifecycle", "command": "other-name create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}],
+      "deferred": ["later-check-card-charge-time-entry-use", "transaction-pane"]
+    },
+    "item": {
+      "bp": "design/blueprint.md#117-items", "table": "items", "child_table": "item_members|item_vendor_profiles", "service": "items", "selector": "id|full_name", "hierarchical": true, "custom_fields": true,
+      "fields": [
+        {"n": "name", "t": "string", "req": true, "w": "field"},
+        {"n": "type", "t": "enum", "enum": ["service", "inventory_part", "non_inventory_part", "other_charge", "subtotal", "group", "discount", "payment", "sales_tax_item", "sales_tax_group", "inventory_assembly", "fixed_asset"], "req": true, "w": "field"},
+        {"n": "parent_id", "t": "ulid", "null": true, "v": ["same-item-type", "forbidden-for-subtotal-group-payment-sales-tax-group-fixed-asset"], "w": "field"}, {"n": "category_id", "t": "ulid", "null": true, "w": "field"},
+        {"n": "description", "t": "string", "null": true, "w": "field"}, {"n": "purchase_description", "t": "string", "null": true, "w": "field"},
+        {"n": "sales_enabled", "t": "boolean", "default": false, "w": "field"}, {"n": "purchase_enabled", "t": "boolean", "default": false, "w": "field"},
+        {"n": "price", "shape": "money", "null": true, "w": "field"}, {"n": "cost", "shape": "money", "null": true, "w": "field"},
+        {"n": "income_account_id", "t": "ulid", "null": true, "w": "field"}, {"n": "expense_account_id", "t": "ulid", "null": true, "w": "field"}, {"n": "cogs_account_id", "t": "ulid", "null": true, "w": "field"},
+        {"n": "asset_account_id", "t": "ulid", "null": true, "w": "field"}, {"n": "deposit_account_id", "t": "ulid", "null": true, "w": "field"}, {"n": "liability_account_id", "t": "ulid", "null": true, "w": "field"},
+        {"n": "default_class_id", "t": "ulid", "null": true, "w": "field"}, {"n": "sales_tax_code_id", "t": "ulid", "null": true, "w": "field"},
+        {"n": "manufacturer_part_number", "t": "string", "null": true, "w": "field"}, {"n": "barcode", "t": "string", "null": true, "w": "field"},
+        {"n": "unit_of_measure_set_id", "t": "ulid", "null": true, "v": ["null-when-mode-disabled"], "w": "field"},
+        {"n": "reorder_point_min", "shape": "exact_quantity", "null": true, "v": ["nonnegative"], "w": "field"}, {"n": "reorder_point_max", "shape": "exact_quantity", "null": true, "v": ["nonnegative", "not-below-min"], "w": "field"},
+        {"n": "notes", "t": "string", "null": true, "w": "field"}, {"n": "custom_fields", "t": "map<definition-ulid,typed-value>", "w": "field"},
+        {"n": "preferred_vendor_id", "t": "ulid", "null": true, "io": "output", "use": "lowest active unique vendor-profile rank", "w": "derived"},
+        {"n": "members", "t": "array", "fields": ["id", "component_item_id", "quantity", "unit_id", "active"], "v": ["ordered", "same-set-unit", "acyclic", "valid-member-type"], "w": "child_field"},
+        {"n": "vendor_profiles", "t": "array", "ref": "vendor.item_vendor_profiles", "w": "child_field"},
+        {"n": "print_members", "t": "boolean", "null": true, "v": ["group-only"], "w": "field"},
+        {"n": "discount_amount", "shape": "money", "null": true, "v": ["discount-only", "exclusive-with-discount-percent", "nonnegative", "home-currency"], "w": "field"}, {"n": "discount_percent", "shape": "exact_percent", "null": true, "v": ["discount-only", "exclusive-with-discount-amount", "0..100"], "w": "field"},
+        {"n": "payment_method_id", "t": "ulid", "null": true, "v": ["payment-only"], "w": "field"}, {"n": "use_undeposited_funds", "t": "boolean", "null": true, "v": ["payment-only", "exclusive-with-deposit-account"], "w": "field"},
+        {"n": "tax_percent", "shape": "exact_percent", "null": true, "v": ["sales-tax-item-only", "0..100"], "w": "field"}, {"n": "tax_agency_vendor_id", "t": "ulid", "null": true, "v": ["sales-tax-item-only", "active-vendor-with-is_tax_agency-true"], "w": "field"},
+        {"n": "fixed_asset_profile", "t": "object", "fields": ["asset_number", "purchase_date", "original_cost", "vendor_id", "location", "serial_number", "warranty_expiration", "disposal_status", "disposal_date", "disposal_proceeds", "disposal_costs", "accumulated_depreciation_account_id", "depreciation_expense_account_id", "gain_loss_account_id", "depreciation_method", "useful_life_months", "book_basis", "tax_basis"], "enum": {"disposal_status": ["in_service", "sold", "disposed"], "depreciation_method": ["none", "straight_line", "declining_balance", "sum_of_years_digits", "units_of_production", "other"]}, "v": ["fixed-asset-only", "disposal-date-required-outside-in-service", "proceeds-sold-only", "useful-life-positive-nullable", "account-roles"], "w": "field"},
+        {"n": "quantity_on_hand", "shape": "exact_quantity", "io": "output", "default": "zero-unavailable", "w": "derived"}, {"n": "quantity_available", "shape": "exact_quantity", "io": "output", "default": "zero-unavailable", "w": "derived"},
+        {"n": "quantity_committed", "shape": "exact_quantity", "io": "output", "default": "zero-unavailable", "w": "derived"}, {"n": "quantity_on_order", "shape": "exact_quantity", "io": "output", "default": "zero-unavailable", "w": "derived"},
+        {"n": "quantity_pending_build", "shape": "exact_quantity", "io": "output", "default": "zero-unavailable", "w": "derived"}, {"n": "average_cost", "shape": "money", "io": "output", "default": "zero-unavailable", "w": "derived"},
+        {"n": "inventory_value", "shape": "money", "io": "output", "default": "zero-unavailable", "w": "derived"}, {"n": "inventory_values_available", "t": "boolean", "io": "output", "default": false, "w": "derived"},
+        {"n": "bill_of_material_cost", "shape": "money", "io": "output", "v": ["component-extensions-half-even-per-currency-minor-unit-before-sum"], "w": "derived"}, {"n": "combined_percent", "shape": "exact_percent", "io": "output", "w": "derived"}
+      ],
+      "validations": [
+        {"id": "item.discriminator", "rule": "strict type profile rejects fields not allowed by the selected type and requires every enabled side/account/member declared in blueprint", "error": "E_VALIDATION", "w": "rule"},
+        {"id": "item.account-roles", "rule": "income/expense/COGS/inventory/deposit/tax/fixed-asset references match declared roles", "error": "E_VALIDATION", "w": "rule"},
+        {"id": "item.membership", "rule": "group/assembly members reject self and indirect cycles; sales-tax groups contain active sales-tax items", "error": "E_HIERARCHY_CYCLE", "w": "rule"},
+        {"id": "item.type-change", "rule": "only complete transitions among service, non_inventory_part, and other_charge; all other boundaries reject", "error": "E_TYPE_CHANGE", "w": "rule"},
+        {"id": "item.historical", "rule": "reference changes affect future transactions only and never rewrite historical snapshots", "w": "rule"}
+      ],
+      "type_profiles": {
+        "service": {"requires": ["sales_enabled-or-purchase_enabled"], "sales_requires": ["description", "price", "sales_tax_code_id", "income_account_id"], "purchase_requires": ["purchase_description", "cost", "expense_account_id"], "allows": ["vendor_profiles"]},
+        "non_inventory_part": {"requires": ["sales_enabled-or-purchase_enabled"], "sales_requires": ["description", "price", "income_account_id"], "purchase_requires": ["purchase_description", "cost", "expense_account_id"], "allows": ["both-profiles", "vendor_profiles"]},
+        "inventory_part": {"requires": ["sales-profile", "purchase-profile", "income_account_id", "cogs_account_id", "inventory-role-asset_account_id"], "allows": ["unit_of_measure_set_id", "manufacturer_part_number", "barcode", "vendor_profiles", "reorder_point_min", "reorder_point_max"]},
+        "inventory_assembly": {"requires": ["inventory_part-profile", "at-least-one-active-member"], "member_types": ["inventory_part", "non_inventory_part", "other_charge", "service", "inventory_assembly"], "derived": ["bill_of_material_cost"]},
+        "other_charge": {"requires": ["sales_enabled-or-purchase_enabled", "corresponding-income-or-expense-account"], "forbids": ["stored-form-level-percent"]},
+        "subtotal": {"requires": ["name", "description"], "forbids": ["accounts", "money", "tax", "vendor_profiles", "unit", "reorder_points", "members"]},
+        "group": {"requires": ["at-least-one-active-member", "print_members"], "forbids": ["posting-accounts", "stored-group-price"], "zero_member_quantity": "later-form-prompt"},
+        "discount": {"requires": ["exactly-one-discount_amount-or-discount_percent", "one-income-or-expense-account", "sales_tax_code_id"], "effect": "positive value reduces preceding line or subtotal"},
+        "payment": {"requires": ["description", "exactly-one-deposit_account_id-or-use_undeposited_funds"], "allows": ["payment_method_id"]},
+        "sales_tax_item": {"requires": ["tax_percent", "active-flagged-tax-agency-vendor", "sales-tax-payable-liability-account"]},
+        "sales_tax_group": {"requires": ["at-least-one-active-member", "all-members-active-sales-tax-items"], "derived": ["combined_percent"], "effect": "liability remains attributable per agency"},
+        "fixed_asset": {"requires": ["asset_number", "description", "purchase_date", "original_cost", "fixed-asset-account", "location", "serial_number", "warranty_expiration", "disposal_status", "disposal_proceeds", "disposal_costs", "depreciation_method", "book_basis", "tax_basis"], "allows": ["vendor_id", "disposal_date", "accumulated_depreciation_account_id", "depreciation_expense_account_id", "gain_loss_account_id", "useful_life_months"], "rules": ["disposal-date-required-outside-in_service", "proceeds-only-when-sold", "useful-life-positive"]}
+      },
+      "query": {"search": ["name", "full_name", "description", "purchase_description", "manufacturer_part_number", "barcode", "category", "vendor_item_identifiers", "notes", "$custom-searchable"], "filters": ["active", "type", "parent_id", "category_id", "sales_enabled", "purchase_enabled", "sales_tax_code_id", "preferred_vendor_id", "unit_of_measure_set_id", "default_class_id"], "sorts": ["type", "full_name", "price", "cost", "quantity_on_hand", "preferred_vendor", "category", "updated_at"], "default_sort": ["type", "full_name", "id"], "default_columns": ["type", "full_name", "price", "cost", "quantity_on_hand", "preferred_vendor", "active"], "additional_columns": ["category", "tax_code", "all-account-references", "reorder_points", "unit_set", "manufacturer_part_number", "barcode", "default_class", "average_cost", "inventory_value", "inventory_values_available", "$custom", "$common", "$stored"], "w": "query"},
+      "actions": [{"id": "item.lifecycle", "command": "item create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}],
+      "deferred": ["opening-quantity-and-value", "assembly-builds", "cost-layers", "available-to-promise", "inventory-sites-bins", "serial-lot-instances", "landed-cost", "costing-method-selection", "stock-transfers", "item-images", "fixed-asset-calculations-and-journals"]
+    },
+    "item-category": {
+      "bp": "design/blueprint.md#118-item-categories-and-classes", "table": "item_categories", "service": "profiles", "selector": "id|full_name", "hierarchical": true, "custom_fields": false,
+      "fields": [{"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "parent_id", "t": "ulid", "null": true, "w": "field"}, {"n": "usage_count", "t": "integer", "io": "output", "default": "zero-unavailable", "w": "derived"}],
+      "query": {"search": ["name", "full_name"], "filters": ["active", "parent_id"], "sorts": ["full_name", "updated_at"], "default_sort": ["full_name", "id"], "default_columns": ["full_name", "parent", "active"], "additional_columns": ["usage_count", "$common"], "w": "query"},
+      "actions": [{"id": "item-category.lifecycle", "command": "item-category create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["functional-usage-count", "spreadsheet-batch-edit"]
+    },
+    "class": {
+      "bp": "design/blueprint.md#118-item-categories-and-classes", "table": "classes", "service": "profiles", "selector": "id|full_name", "hierarchical": true, "custom_fields": false,
+      "fields": [{"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "parent_id", "t": "ulid", "null": true, "w": "field"}, {"n": "usage_count", "t": "integer", "io": "output", "default": "zero-unavailable", "w": "derived"}],
+      "query": {"search": ["name", "full_name"], "filters": ["active", "parent_id"], "sorts": ["full_name", "updated_at"], "default_sort": ["full_name", "id"], "default_columns": ["full_name", "parent", "active"], "additional_columns": ["usage_count", "$common"], "w": "query"},
+      "actions": [{"id": "class.lifecycle", "command": "class create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["functional-usage-count", "transaction-class-prompting"]
+    },
+    "term": {
+      "bp": "design/blueprint.md#119-terms", "table": "terms", "service": "profiles", "selector": "id|name", "hierarchical": false, "custom_fields": false,
+      "fields": [
+        {"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "kind", "t": "enum", "enum": ["standard", "date_driven"], "req": true, "w": "field"},
+        {"n": "due_days", "t": "integer", "null": true, "v": ["standard-only", "0..365"], "w": "field"}, {"n": "discount_days", "t": "integer", "null": true, "v": ["standard-only", "0..365", "paired-with-percent"], "w": "field"},
+        {"n": "due_day_of_month", "t": "integer", "null": true, "v": ["date-driven-only", "1..31"], "w": "field"}, {"n": "due_next_month_if_within_days", "t": "integer", "null": true, "v": ["date-driven-only", "0..31"], "w": "field"},
+        {"n": "discount_day_of_month", "t": "integer", "null": true, "v": ["date-driven-only", "1..31", "paired-with-percent"], "w": "field"}, {"n": "discount_percent", "shape": "exact_percent", "null": true, "v": ["0..100", "paired-with-discount-day"], "w": "field"},
+        {"n": "due_rule_summary", "t": "string", "io": "output", "w": "derived"}, {"n": "discount_rule_summary", "t": "string", "io": "output", "w": "derived"}
+      ],
+      "validations": [{"id": "term.compute", "rule": "computes due date and optional discount deadline without writing; day beyond month resolves to last calendar day", "w": "rule"}, {"id": "term.discriminator", "rule": "fields from the other kind are forbidden", "error": "E_VALIDATION", "w": "rule"}],
+      "query": {"search": ["name"], "filters": ["active", "kind"], "sorts": ["name", "kind", "updated_at"], "default_sort": ["name", "id"], "default_columns": ["name", "kind", "due_rule_summary", "discount_rule_summary", "active"], "additional_columns": ["$stored", "$common"], "w": "query"},
+      "actions": [{"id": "term.lifecycle", "command": "term create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}],
+      "seeds": [{"id": "terms.v1", "values": ["Due on receipt", "Net 15", "Net 30", "Net 60", "1% 10 Net 30", "2% 10 Net 30"], "w": "seed"}], "deferred": ["transaction-term-application"]
+    },
+    "payment-method": {
+      "bp": "design/blueprint.md#1110-payment-methods", "table": "payment_methods", "service": "profiles", "selector": "id|name", "hierarchical": false, "custom_fields": false,
+      "fields": [{"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "kind", "t": "enum", "enum": ["cash", "check", "credit_card", "debit_card", "gift_card", "e_check", "ach", "other"], "req": true, "w": "field"}],
+      "validations": [{"id": "payment-method.no-credential", "rule": "stores classification only and never a credential", "w": "rule"}],
+      "query": {"search": ["name"], "filters": ["active", "kind"], "sorts": ["name", "kind", "updated_at"], "default_sort": ["name", "id"], "default_columns": ["name", "kind", "active"], "additional_columns": ["$common"], "w": "query"},
+      "actions": [{"id": "payment-method.lifecycle", "command": "payment-method create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}],
+      "seeds": [{"id": "payment-methods.v1", "values": ["Cash", "Check", "Visa", "MasterCard", "American Express", "Discover", "Debit Card", "Gift Card", "Electronic Check", "Bank Transfer", "Other"], "w": "seed"}], "deferred": ["receipt-and-deposit-classification", "payment-credentials"]
+    },
+    "sales-tax-code": {
+      "bp": "design/blueprint.md#1111-sales-tax-codes", "table": "sales_tax_codes", "service": "profiles", "selector": "id|code", "hierarchical": false, "custom_fields": false,
+      "fields": [{"n": "code", "t": "string", "req": true, "v": ["length-1..3", "normalized-unique"], "w": "field"}, {"n": "description", "t": "string", "null": true, "w": "field"}, {"n": "taxable", "t": "boolean", "req": true, "w": "field"}],
+      "validations": [{"id": "sales-tax-code.effect", "rule": "nontaxable customer code forces later lines nontaxable; taxable customer code delegates to item; enabling tax never mutates existing records", "w": "rule"}],
+      "query": {"search": ["code", "description"], "filters": ["active", "taxable"], "sorts": ["code", "taxable", "updated_at"], "default_sort": ["code", "id"], "default_columns": ["code", "description", "taxable", "active"], "additional_columns": ["$common"], "w": "query"},
+      "actions": [{"id": "sales-tax-code.lifecycle", "command": "sales-tax-code create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}],
+      "seeds": [{"id": "sales-tax-codes.v1", "values": ["Tax", "Non"], "w": "seed"}], "deferred": ["tax-calculation", "batch-customer-item-marking"]
+    },
+    "customer-type": {
+      "bp": "design/blueprint.md#1112-supporting-profile-lists", "table": "customer_types", "service": "profiles", "selector": "id|full_name", "hierarchical": true, "custom_fields": false,
+      "fields": [{"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "parent_id", "t": "ulid", "null": true, "w": "field"}],
+      "query": {"search": ["name", "full_name"], "filters": ["active", "parent_id"], "sorts": ["full_name", "updated_at"], "default_sort": ["full_name", "id"], "default_columns": ["full_name", "parent", "active"], "additional_columns": ["$common"], "w": "query"}, "actions": [{"id": "customer-type.lifecycle", "command": "customer-type create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["transaction-report-segmentation"]
+    },
+    "vendor-type": {
+      "bp": "design/blueprint.md#1112-supporting-profile-lists", "table": "vendor_types", "service": "profiles", "selector": "id|full_name", "hierarchical": true, "custom_fields": false,
+      "fields": [{"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "parent_id", "t": "ulid", "null": true, "w": "field"}],
+      "query": {"search": ["name", "full_name"], "filters": ["active", "parent_id"], "sorts": ["full_name", "updated_at"], "default_sort": ["full_name", "id"], "default_columns": ["full_name", "parent", "active"], "additional_columns": ["$common"], "w": "query"}, "actions": [{"id": "vendor-type.lifecycle", "command": "vendor-type create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["transaction-report-segmentation"]
+    },
+    "job-type": {
+      "bp": "design/blueprint.md#1112-supporting-profile-lists", "table": "job_types", "service": "profiles", "selector": "id|full_name", "hierarchical": true, "custom_fields": false,
+      "fields": [{"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "parent_id", "t": "ulid", "null": true, "w": "field"}],
+      "query": {"search": ["name", "full_name"], "filters": ["active", "parent_id"], "sorts": ["full_name", "updated_at"], "default_sort": ["full_name", "id"], "default_columns": ["full_name", "parent", "active"], "additional_columns": ["$common"], "w": "query"}, "actions": [{"id": "job-type.lifecycle", "command": "job-type create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["transaction-report-segmentation"]
+    },
+    "sales-rep": {
+      "bp": "design/blueprint.md#1112-supporting-profile-lists", "table": "sales_reps", "service": "profiles", "selector": "id|name", "hierarchical": false, "custom_fields": false,
+      "fields": [{"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "initials", "t": "string", "req": true, "v": ["max-5", "company-unique-casefold"], "w": "field"}, {"n": "name_type", "t": "enum", "enum": ["employee", "vendor", "other_name"], "req": true, "w": "field"}, {"n": "name_id", "t": "ulid", "req": true, "v": ["active-record-matching-name-type"], "w": "field"}, {"n": "source_display_name", "t": "string", "io": "output", "use": "derived live from stable source id", "w": "derived"}],
+      "query": {"search": ["name", "initials", "source_name"], "filters": ["active", "source_type"], "sorts": ["name", "initials", "updated_at"], "default_sort": ["name", "id"], "default_columns": ["initials", "source_name", "source_type", "active"], "additional_columns": ["name", "$common"], "w": "query"}, "actions": [{"id": "sales-rep.lifecycle", "command": "sales-rep create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["later-sales-form-and-report-use"]
+    },
+    "ship-method": {
+      "bp": "design/blueprint.md#1112-supporting-profile-lists", "table": "ship_methods", "service": "profiles", "selector": "id|name", "hierarchical": false, "custom_fields": false,
+      "fields": [{"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "display_order", "t": "integer", "default": 0, "v": ["nonnegative"], "w": "field"}],
+      "query": {"search": ["name"], "filters": ["active"], "sorts": ["display_order", "name", "updated_at"], "default_sort": ["display_order", "name", "id"], "default_columns": ["display_order", "name", "active"], "additional_columns": ["$common"], "w": "query"}, "actions": [{"id": "ship-method.lifecycle", "command": "ship-method create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}],
+      "seeds": [{"id": "ship-methods.v1", "values": ["Delivery", "Federal Express", "UPS", "USPS", "Other"], "w": "seed"}], "deferred": ["shipping-execution", "later-sales-form-use"]
+    },
+    "customer-message": {
+      "bp": "design/blueprint.md#1112-supporting-profile-lists", "table": "customer_messages", "service": "profiles", "selector": "id|name", "hierarchical": false, "custom_fields": false,
+      "fields": [{"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "text", "t": "string", "req": true, "v": ["max-101"], "w": "field"}, {"n": "display_order", "t": "integer", "default": 0, "v": ["nonnegative"], "w": "field"}],
+      "query": {"search": ["name", "text"], "filters": ["active"], "sorts": ["display_order", "name", "updated_at"], "default_sort": ["display_order", "name", "id"], "default_columns": ["display_order", "name", "text", "active"], "additional_columns": ["$common"], "w": "query"}, "actions": [{"id": "customer-message.lifecycle", "command": "customer-message create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}],
+      "seeds": [{"id": "customer-messages.v1", "values": ["Thank you for your business.", "We appreciate your prompt payment.", "Please remit payment at your earliest convenience."], "w": "seed"}], "deferred": ["message-send", "later-sales-form-use"]
+    },
+    "price-level": {
+      "bp": "design/blueprint.md#1113-price-levels", "table": "price_levels", "child_table": "price_level_items", "service": "pricing", "selector": "id|name", "hierarchical": false, "custom_fields": false,
+      "fields": [
+        {"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "kind", "t": "enum", "enum": ["fixed_percent", "per_item"], "req": true, "w": "field"},
+        {"n": "currency", "t": "iso-4217", "null": true, "default": "company.home_currency", "w": "field"}, {"n": "rounding_mode", "t": "enum", "enum": ["nearest", "up", "down"], "default": "nearest", "w": "field"},
+        {"n": "rounding_increment", "shape": "money", "default": "smallest-currency-unit", "v": ["at-least-one-minor-unit"], "w": "field"}, {"n": "rounding_offset", "shape": "money", "default": "0", "v": ["signed"], "w": "field"},
+        {"n": "percent", "shape": "exact_percent", "null": true, "v": ["fixed-percent-only", "-100..1000000"], "w": "field"},
+        {"n": "items", "t": "array", "fields": ["id", "item_id", "price", "percent", "adjustment_basis", "active"], "enum": {"adjustment_basis": ["standard_price", "cost", "current_custom_price"]}, "v": ["per-item-only", "active-item-on-create", "unique-active-item", "exactly-one-price-or-percent", "fixed-price-uses-level-or-home-currency"], "w": "child_field"},
+        {"n": "item_count", "t": "integer", "io": "output", "w": "derived"}, {"n": "rounding_summary", "t": "string", "io": "output", "w": "derived"}
+      ],
+      "validations": [{"id": "price-level.order", "rule": "percentage adjustment precedes rounding; definition/assignment only and no implicit creation from forms", "w": "rule"}],
+      "query": {"search": ["name", "per_item_item_names"], "filters": ["active", "kind", "currency"], "sorts": ["name", "kind", "percent", "item_count", "currency", "updated_at"], "default_sort": ["name", "id"], "default_columns": ["name", "kind", "fixed_percent_or_item_count", "currency", "rounding_summary", "active"], "additional_columns": ["$stored", "per_item_summary", "$common"], "w": "query"},
+      "actions": [{"id": "price-level.lifecycle", "command": "price-level create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}],
+      "deferred": ["actual-price-application", "conditional-date-quantity-location-group-custom-rules", "stacking", "margin-guardrails"]
+    },
+    "unit-of-measure": {
+      "bp": "design/blueprint.md#1114-units-of-measure", "table": "units_of_measure", "child_table": "unit_conversions", "service": "units", "selector": "id|name", "hierarchical": false, "custom_fields": false,
+      "fields": [
+        {"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "default_purchase_unit_id", "t": "ulid", "null": true, "w": "field"}, {"n": "default_sales_unit_id", "t": "ulid", "null": true, "w": "field"}, {"n": "default_shipping_unit_id", "t": "ulid", "null": true, "w": "field"},
+        {"n": "units", "t": "array", "fields": ["id", "name", "abbreviation", "is_base", "base_factor", "active"], "v": ["all-units-including-base-are-children", "exactly-one-active-base", "base-factor-one-for-base", "positive-nano-unit-factor", "active-name-and-abbreviation-unique"], "w": "child_field"},
+        {"n": "base_unit", "t": "child-summary", "io": "output", "w": "derived"}, {"n": "related_unit_count", "t": "integer", "io": "output", "w": "derived"}
+      ],
+      "validations": [
+        {"id": "unit.defaults", "rule": "purchase/sales/shipping defaults reference active children in the same set", "w": "rule"},
+        {"id": "unit.conversion", "rule": "target = source * source factor / target factor with exact decimal arithmetic and one half-even rounding to six decimals", "w": "rule"},
+        {"id": "unit.immutability", "rule": "factor becomes immutable after a posted transaction reference; unused units may deactivate", "w": "rule"}
+      ],
+      "query": {"search": ["name", "unit_names", "unit_abbreviations"], "filters": ["active", "base_unit"], "sorts": ["name", "base_unit", "default_purchase_unit", "default_sales_unit", "default_shipping_unit", "related_unit_count", "updated_at"], "default_sort": ["name", "id"], "default_columns": ["name", "base", "purchase", "sales", "shipping", "related_unit_count", "active"], "additional_columns": ["every_conversion", "$common"], "w": "query"},
+      "actions": [{"id": "unit-of-measure.lifecycle", "command": "unit-of-measure create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["posted-transaction-factor-lock-witness-until-ledger", "transaction-unit-selection"]
+    },
+    "custom-field": {
+      "bp": "design/blueprint.md#1115-custom-fields", "table": "custom_field_defs", "child_table": "custom_field_scopes|custom_field_choices|custom_field_values", "service": "custom_fields", "selector": "id|unique-current-name", "hierarchical": false, "custom_fields": false,
+      "fields": [
+        {"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "kind", "t": "enum", "enum": ["text", "number", "date", "bool", "choice"], "req": true, "w": "field"},
+        {"n": "scopes", "t": "array", "fields": ["id", "record_type", "definition_name", "definition_name_key", "definition_active", "active"], "enum": ["customer", "vendor", "employee", "other_name", "item", "journal_entry", "invoice", "sales_receipt", "credit_memo", "payment", "deposit", "bill", "bill_payment", "check", "credit_card_charge", "transfer", "inventory_adjustment", "vendor_credit", "estimate", "sales_order", "purchase_order", "item_receipt", "statement"], "v": ["active-normalized-name-unique-per-record-type", "projection-sync-on-rename-activation"], "w": "child_field"},
+        {"n": "choices", "t": "array", "fields": ["id", "value", "active"], "v": ["ordered", "choice-kind-only", "in-use-removal-blocked"], "w": "child_field"},
+        {"n": "position", "t": "integer", "default": 0, "v": ["nonnegative"], "w": "field"}, {"n": "required", "t": "boolean", "default": false, "w": "field"},
+        {"n": "default", "t": "typed-by-kind", "null": true, "default": null, "w": "field"},
+        {"n": "values", "t": "map", "fields": ["id", "def_id", "record_type", "record_id", "active", "canonical_text", "typed_value", "current_name", "kind"], "v": ["unique-definition-record-type-record-id", "applicable-active-definition", "typed-value", "choice-membership"], "w": "child_field"}
+      ],
+      "validations": [
+        {"id": "custom-field.capacity", "rule": "at least 45 active definitions may apply to one record type", "w": "rule"},
+        {"id": "custom-field.identity", "rule": "wire mapping keys are stable definition ids only; current unique name may select the definition record but is never a mapping key; unknown id is E_RECORD_NOT_FOUND and inactive changed id is E_INACTIVE_REFERENCE; rename preserves values", "error": "E_RECORD_NOT_FOUND|E_INACTIVE_REFERENCE", "w": "rule"},
+        {"id": "custom-field.lifecycle", "rule": "kind and scopes freeze after first value; clear deactivates and later set reuses value row; inactive definition preserves readable/searchable values and rejects new/changed values", "error": "E_RECORD_IN_USE", "w": "rule"},
+        {"id": "custom-field.patch", "rule": "absent definition id preserves, explicit null clears, empty map changes nothing; create fills applicable non-null defaults and rejects required missing without default; unrelated later updates do not retroactively fail", "w": "rule"},
+        {"id": "custom-field.required", "rule": "a required populated value cannot be cleared; explicitly cleared values remain in audit but not current projection", "error": "E_VALIDATION", "w": "rule"},
+        {"id": "custom-field.number", "rule": "canonical decimal string has at most nine fractional digits and signed-64-bit nano-unit coefficient; zero is 0 and insignificant zeroes are removed", "w": "rule"},
+        {"id": "custom-field.secret-boundary", "rule": "not a credential, full tax identifier, health, or payroll-secret store regardless of label", "error": "E_VALIDATION", "w": "rule"},
+        {"id": "custom-field.concurrency", "rule": "definition edits use definition version and owner values use one logical path per definition id", "w": "rule"},
+        {"id": "custom-field.runtime", "rule": "static mapping on programmatic schemas plus authorized runtime form provider using stable-id control names; service retains all authority", "w": "rule"}
+      ],
+      "query": {"search": ["name", "target_type", "choice_labels"], "filters": ["active", "target_type", "kind", "required"], "sorts": ["position", "name", "kind", "target_type", "updated_at"], "default_sort": ["position", "name", "id"], "default_columns": ["position", "name", "target_types", "kind", "required", "active"], "additional_columns": ["$stored", "choice_summary", "$common"], "w": "query"},
+      "actions": [{"id": "custom-field.lifecycle", "command": "custom-field create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["transaction-target-values-until-corresponding-form"]
+    }
+  },
+  "special_commands": [
+    {"id": "chart.list", "command": "chart list", "scope": "hub-authenticated-read", "options": ["json", "data_root"], "output": ["template_id", "version", "display_name", "description", "account_count"], "rules": ["no-company-selection", "packaged-data-only"], "w": "action"},
+    {"id": "chart.show", "command": "chart show", "scope": "hub-authenticated-read", "positionals": ["template_id"], "options": ["json", "data_root"], "output": ["template_id", "version", "display_name", "description", "ordered_account_tree", "system_role_assignments"], "w": "action"},
+    {"id": "chart.apply", "command": "chart apply", "scope": "company-admin-write", "positionals": ["template_id"], "options": ["company", "idempotency_key", "dry_run", "reason", "directive_id", "source_ref"], "defaults": {}, "validations": ["null-chart-identity", "complete-manifest-plus-existing-ordinary-accounts-before-mutation", "existing-ordinary-accounts-untouched", "all-manifest-name-number-parent-path-and-system-role-insertions-conflict-free", "exactly-one-each-required-system-role", "valid-parent-order-type-currency"], "errors": ["E_CHART_INVALID", "E_CHART_EXISTS"], "output": ["template_id", "version", "prospective_or_created_ids", "created_account_count", "dry_run", "warnings"], "audit": "one event: company_info then each created account parent-first", "undoable": false, "w": "action"},
+    {"id": "profile.list", "command": "profile list", "scope": "hub-authenticated-read", "options": ["json", "data_root"], "output": ["manifest_id", "version", "display_name", "description", "record_counts"], "rules": ["no-company-selection", "packaged-data-only"], "w": "action"},
+    {"id": "profile.show", "command": "profile show", "scope": "hub-authenticated-read", "positionals": ["manifest_id"], "options": ["json", "data_root"], "output": ["manifest_id", "version", "ordered_terms", "ordered_payment_methods", "ordered_sales_tax_codes", "ordered_ship_methods", "ordered_customer_messages", "seed_keys"], "w": "action"},
+    {"id": "profile.apply", "command": "profile apply", "scope": "company-admin-write", "positionals": ["manifest_id"], "options": ["company", "idempotency_key", "dry_run", "reason", "directive_id", "source_ref"], "enum": {"manifest_id": ["standard"]}, "validations": ["complete-versioned-manifest-before-mutation", "insert-only-absent-seed-keys", "preserve-renamed-edited-inactive-seeded-rows"], "output": ["manifest_id", "version", "inserted_by_list", "preserved_by_list", "dry_run", "warnings"], "audit": "one deterministic company event with inserted list records", "undoable": false, "w": "action"},
+    {"id": "customer.link-vendor", "command": "customer link-vendor", "scope": "company-write", "positionals": ["customer", "vendor"], "options": ["expected_customer_version", "expected_vendor_version", "expected_link_version_if-existing", "dry_run", "reason", "directive_id", "source_ref"], "validations": ["both-active", "same-company", "one-active-link-per-endpoint", "all-versions-before-write"], "output": ["customer", "vendor", "link", "versions", "dry_run", "warnings"], "audit": "one event ordered customer, vendor, link with action link and counterparty_link endpoint fields", "w": "action"},
+    {"id": "customer.unlink-vendor", "command": "customer unlink-vendor", "scope": "company-write", "positionals": ["customer"], "options": ["vendor", "expected_customer_version", "expected_vendor_version", "expected_link_version", "dry_run", "reason", "directive_id", "source_ref"], "validations": ["existing-active-identical-link", "all-versions-before-write"], "output": ["customer", "vendor", "inactive_link", "versions", "dry_run", "warnings"], "audit": "one event ordered link, customer, vendor; undo plans inverse dependency order", "w": "action"},
+    {"id": "other-name.convert", "command": "other-name convert", "scope": "company-write", "positionals": ["other_name"], "options": ["to", "expected_version", "idempotency_key", "dry_run", "reason", "directive_id", "source_ref"], "enum": {"to": ["customer", "vendor", "employee"]}, "validations": ["source-active-unconverted", "target-name-absent", "target-capability", "applicable-custom-field-scopes", "no-overwrite-or-history-rewrite"], "mapping": ["name", "company_and_person_identity", "address", "contact_points", "account_number", "default_class", "notes", "applicable_custom_values"], "retained": ["inapplicable-source-values"], "target_defaults": ["customer_or_vendor_defaults-null", "employee_hire_and_emergency-null"], "output": ["preview_mapped", "preview_retained", "source", "target", "dry_run", "warnings"], "audit": "one event creates target, deactivates source, records conversion link", "w": "action"},
+    {"id": "undo", "command": "undo", "scope": "company-write", "positionals": ["event_id"], "options": ["idempotency_key", "dry_run", "reason", "directive_id", "source_ref"], "eligible": ["create", "update", "activate", "deactivate", "cascade", "link", "unlink", "conversion", "reparent", "nested-child", "custom-value"], "ineligible": ["ledger", "migration", "rollout", "chart-application", "profile-application", "undo", "non-list"], "validations": ["admin-plus-highest-original-role-threshold", "current-dependencies", "hierarchy", "references", "types", "system-rules", "current-value-equals-original-after-value-for-overlap", "changed-away-and-back-is-eligible", "all-inverses-before-write"], "errors": ["E_NOT_UNDOABLE", "E_ALREADY_UNDONE", "E_UNDO_CONFLICT"], "output": ["original_event_id", "undo_event_id", "affected_records", "versions", "dry_run", "warnings"], "audit": "one event preserving caller reason/directive, carrying unique undo_of_event_id, summary naming original, and dependency-safe entries", "idempotency": "same key/input replays; any new request for compensated event rejects", "w": "action"}
+  ],
+  "chart_manifests": {
+    "template_ids": ["general", "service", "product", "contractor", "retail", "nonprofit"],
+    "version": 1,
+    "selection_default": "general",
+    "explicit_none": "chartless",
+    "required_system_roles": ["accounts_receivable", "accounts_payable", "undeposited_funds", "opening_balance_equity", "retained_earnings", "sales_tax_payable", "inventory_asset", "cost_of_goods_sold", "exchange_gain_loss"],
+    "account_tuple": ["key", "number", "name", "type", "system_role"],
+    "common_accounts": [
+      ["checking", "1000", "Checking", "bank", null],
+      ["accounts_receivable", "1100", "Accounts Receivable", "accounts_receivable", "accounts_receivable"],
+      ["undeposited_funds", "1200", "Undeposited Funds", "other_current_asset", "undeposited_funds"],
+      ["inventory_asset", "1300", "Inventory Asset", "other_current_asset", "inventory_asset"],
+      ["accounts_payable", "2000", "Accounts Payable", "accounts_payable", "accounts_payable"],
+      ["sales_tax_payable", "2100", "Sales Tax Payable", "other_current_liability", "sales_tax_payable"],
+      ["opening_balance_equity", "3000", "Opening Balance Equity", "equity", "opening_balance_equity"],
+      ["retained_earnings", "3100", "Retained Earnings", "equity", "retained_earnings"],
+      ["cost_of_goods_sold", "5000", "Cost of Goods Sold", "cost_of_goods_sold", "cost_of_goods_sold"],
+      ["exchange_gain_loss", "9000", "Exchange Gain/Loss", "other_income", "exchange_gain_loss"]
+    ],
+    "template_account_tuple": ["number", "name", "type"],
+    "template_accounts": {
+      "general": [
+        ["4000", "Sales Income", "income"], ["4100", "Service Income", "income"], ["6000", "Advertising", "expense"],
+        ["6100", "Bank Fees", "expense"], ["6200", "Insurance", "expense"], ["6300", "Office Supplies", "expense"],
+        ["6400", "Professional Fees", "expense"], ["6500", "Rent", "expense"], ["6600", "Repairs and Maintenance", "expense"],
+        ["6700", "Utilities", "expense"], ["6800", "Payroll Expenses", "expense"], ["8000", "Other Income", "other_income"],
+        ["9100", "Other Expense", "other_expense"]
+      ],
+      "service": [
+        ["4000", "Service Income", "income"], ["4100", "Reimbursed Expenses", "income"], ["5100", "Subcontractors", "cost_of_goods_sold"],
+        ["6000", "Advertising", "expense"], ["6100", "Bank Fees", "expense"], ["6200", "Insurance", "expense"],
+        ["6300", "Office Supplies", "expense"], ["6400", "Professional Fees", "expense"], ["6500", "Rent", "expense"],
+        ["6600", "Repairs and Maintenance", "expense"], ["6700", "Utilities", "expense"], ["6800", "Payroll Expenses", "expense"],
+        ["8000", "Other Income", "other_income"], ["9100", "Other Expense", "other_expense"]
+      ],
+      "product": [
+        ["4000", "Product Sales", "income"], ["4010", "Sales Returns and Allowances", "income"], ["5100", "Freight and Delivery", "cost_of_goods_sold"],
+        ["5200", "Inventory Adjustments", "cost_of_goods_sold"], ["6000", "Advertising", "expense"], ["6100", "Bank Fees", "expense"],
+        ["6200", "Insurance", "expense"], ["6300", "Office Supplies", "expense"], ["6400", "Professional Fees", "expense"],
+        ["6500", "Rent", "expense"], ["6700", "Utilities", "expense"], ["6800", "Payroll Expenses", "expense"],
+        ["8000", "Other Income", "other_income"], ["9100", "Other Expense", "other_expense"]
+      ],
+      "contractor": [
+        ["4000", "Construction Income", "income"], ["4100", "Service Income", "income"], ["5100", "Job Materials", "cost_of_goods_sold"],
+        ["5200", "Subcontractors", "cost_of_goods_sold"], ["5300", "Equipment Rental", "cost_of_goods_sold"], ["5400", "Permits", "cost_of_goods_sold"],
+        ["6000", "Advertising", "expense"], ["6100", "Bank Fees", "expense"], ["6200", "Insurance", "expense"],
+        ["6300", "Office Supplies", "expense"], ["6400", "Professional Fees", "expense"], ["6500", "Vehicle Expense", "expense"],
+        ["6600", "Repairs and Maintenance", "expense"], ["6700", "Utilities", "expense"], ["6800", "Payroll Expenses", "expense"],
+        ["8000", "Other Income", "other_income"], ["9100", "Other Expense", "other_expense"]
+      ],
+      "retail": [
+        ["4000", "Merchandise Sales", "income"], ["4010", "Sales Returns and Allowances", "income"], ["5100", "Freight-In", "cost_of_goods_sold"],
+        ["5200", "Inventory Shrinkage", "cost_of_goods_sold"], ["6000", "Advertising", "expense"], ["6100", "Bank Fees", "expense"],
+        ["6200", "Insurance", "expense"], ["6300", "Merchant Fees", "expense"], ["6400", "Office Supplies", "expense"],
+        ["6500", "Rent", "expense"], ["6700", "Utilities", "expense"], ["6800", "Payroll Expenses", "expense"],
+        ["8000", "Other Income", "other_income"], ["9100", "Other Expense", "other_expense"]
+      ],
+      "nonprofit": [
+        ["4000", "Contributions", "income"], ["4100", "Grants", "income"], ["4200", "Program Service Revenue", "income"],
+        ["6000", "Program Services", "expense"], ["6100", "Fundraising", "expense"], ["6200", "Management and General", "expense"],
+        ["6300", "Bank Fees", "expense"], ["6400", "Professional Fees", "expense"], ["6500", "Rent", "expense"],
+        ["6700", "Utilities", "expense"], ["6800", "Payroll Expenses", "expense"], ["8000", "Other Income", "other_income"],
+        ["9100", "Other Expense", "other_expense"]
+      ]
+    },
+    "omitted_account_field_defaults": {"parent_id": null, "currency": "company.home_currency", "all-other-nullable-fields": null},
+    "w": "seed"
+  },
+  "profile_manifests": {
+    "manifest_ids": ["standard"],
+    "version": 1,
+    "lists": ["term", "payment-method", "sales-tax-code", "ship-method", "customer-message"],
+    "records": {
+      "term": [
+        {"seed_key": "term.due-on-receipt", "name": "Due on receipt", "kind": "standard", "due_days": 0},
+        {"seed_key": "term.net-15", "name": "Net 15", "kind": "standard", "due_days": 15},
+        {"seed_key": "term.net-30", "name": "Net 30", "kind": "standard", "due_days": 30},
+        {"seed_key": "term.net-60", "name": "Net 60", "kind": "standard", "due_days": 60},
+        {"seed_key": "term.1-10-net-30", "name": "1% 10 Net 30", "kind": "standard", "due_days": 30, "discount_days": 10, "discount_percent": "1"},
+        {"seed_key": "term.2-10-net-30", "name": "2% 10 Net 30", "kind": "standard", "due_days": 30, "discount_days": 10, "discount_percent": "2"}
+      ],
+      "payment-method": [
+        {"seed_key": "payment.cash", "name": "Cash", "kind": "cash"}, {"seed_key": "payment.check", "name": "Check", "kind": "check"},
+        {"seed_key": "payment.visa", "name": "Visa", "kind": "credit_card"}, {"seed_key": "payment.mastercard", "name": "MasterCard", "kind": "credit_card"},
+        {"seed_key": "payment.american-express", "name": "American Express", "kind": "credit_card"}, {"seed_key": "payment.discover", "name": "Discover", "kind": "credit_card"},
+        {"seed_key": "payment.debit-card", "name": "Debit Card", "kind": "debit_card"}, {"seed_key": "payment.gift-card", "name": "Gift Card", "kind": "gift_card"},
+        {"seed_key": "payment.electronic-check", "name": "Electronic Check", "kind": "e_check"}, {"seed_key": "payment.bank-transfer", "name": "Bank Transfer", "kind": "ach"},
+        {"seed_key": "payment.other", "name": "Other", "kind": "other"}
+      ],
+      "sales-tax-code": [
+        {"seed_key": "tax-code.tax", "code": "Tax", "description": "Taxable", "taxable": true},
+        {"seed_key": "tax-code.non", "code": "Non", "description": "Nontaxable", "taxable": false}
+      ],
+      "ship-method": [
+        {"seed_key": "ship.delivery", "name": "Delivery", "display_order": 0}, {"seed_key": "ship.federal-express", "name": "Federal Express", "display_order": 1},
+        {"seed_key": "ship.ups", "name": "UPS", "display_order": 2}, {"seed_key": "ship.usps", "name": "USPS", "display_order": 3},
+        {"seed_key": "ship.other", "name": "Other", "display_order": 4}
+      ],
+      "customer-message": [
+        {"seed_key": "message.thank-you", "name": "Thank you for your business.", "text": "Thank you for your business.", "display_order": 0},
+        {"seed_key": "message.prompt-payment", "name": "We appreciate your prompt payment.", "text": "We appreciate your prompt payment.", "display_order": 1},
+        {"seed_key": "message.remit", "name": "Please remit payment at your earliest convenience.", "text": "Please remit payment at your earliest convenience.", "display_order": 2}
+      ]
+    },
+    "application": "independent of chart selection; available to upgraded and chartless companies; inserts absent seed keys and preserves user edits and inactive state",
+    "w": "seed"
+  },
+  "deferred_entries": [
+    {"id": "opening-balances", "owner": "ledger transactions", "state": "not writable", "w": "deferred"},
+    {"id": "posted-balances", "owner": "ledger and forms", "state": "zero/unavailable", "w": "deferred"},
+    {"id": "provider-balance-refresh", "owner": "bank-feed pass", "state": "nullable display only", "w": "deferred"},
+    {"id": "registers", "owner": "ledger/browser workflow", "state": "unavailable", "w": "deferred"},
+    {"id": "open-overdue-filters", "owner": "ledger/forms", "state": "not offered as functional", "w": "deferred"},
+    {"id": "transaction-panes", "owner": "ledger/forms", "state": "visibly unavailable", "w": "deferred"},
+    {"id": "related-transaction-actions", "owner": "transaction forms", "state": "absent/unavailable", "w": "deferred"},
+    {"id": "delivery-send", "owner": "delivery form pass", "state": "preference only; sends nothing", "w": "deferred"},
+    {"id": "notes-attachments-activity", "owner": "Row 6", "state": "no integration in Row 5", "w": "deferred"},
+    {"id": "purpose-built-customer-center", "owner": "later list-center/browser pass", "state": "generated shell only", "w": "deferred"},
+    {"id": "protected-payment-store", "owner": "security/provider pass", "state": "opaque ref null and non-null rejected", "w": "deferred"},
+    {"id": "financial-filters", "owner": "ledger/forms", "state": "not functional", "w": "deferred"},
+    {"id": "last-purchase-derived-values", "owner": "purchase transactions", "state": "null/unavailable", "w": "deferred"},
+    {"id": "billing-rate-list", "owner": "time billing", "state": "opaque ref null and non-null rejected", "w": "deferred"},
+    {"id": "protected-tax-store", "owner": "identity/tax/payroll security", "state": "opaque ref null and non-null rejected", "w": "deferred"},
+    {"id": "full-tax-id", "owner": "identity/tax/payroll security", "state": "never accepted or returned", "w": "deferred"},
+    {"id": "prior-transaction-recall-effect", "owner": "purchase forms", "state": "preference only", "w": "deferred"},
+    {"id": "birth-date-gender-marital-status", "owner": "role-gated payroll profile", "state": "explicitly absent from general Row 5 employee master data", "w": "deferred"},
+    {"id": "full-tax-identifiers", "owner": "protected payroll storage", "state": "last-four display only", "w": "deferred"},
+    {"id": "payroll-withholding", "owner": "payroll pass", "state": "rejected", "w": "deferred"},
+    {"id": "earnings-deductions", "owner": "payroll pass", "state": "rejected", "w": "deferred"},
+    {"id": "paid-time-off", "owner": "payroll pass", "state": "rejected", "w": "deferred"},
+    {"id": "workers-compensation", "owner": "payroll pass", "state": "rejected", "w": "deferred"},
+    {"id": "pay-schedules", "owner": "payroll pass", "state": "rejected", "w": "deferred"},
+    {"id": "direct-deposit", "owner": "payroll/provider pass", "state": "rejected", "w": "deferred"},
+    {"id": "payroll-transaction-pane", "owner": "payroll/forms", "state": "unavailable", "w": "deferred"},
+    {"id": "later-check-card-charge-time-entry-use", "owner": "transaction/time forms", "state": "profile exists but no form use", "w": "deferred"},
+    {"id": "transaction-pane", "owner": "ledger/forms", "state": "unavailable", "w": "deferred"},
+    {"id": "opening-quantity-and-value", "owner": "dated inventory transactions", "state": "zero/unavailable and rejected as input", "w": "deferred"},
+    {"id": "assembly-builds", "owner": "inventory transaction pass", "state": "BOM definition only", "w": "deferred"},
+    {"id": "cost-layers", "owner": "inventory transaction pass", "state": "absent", "w": "deferred"},
+    {"id": "available-to-promise", "owner": "inventory transaction pass", "state": "zero/unavailable", "w": "deferred"},
+    {"id": "inventory-sites-bins", "owner": "inventory pass", "state": "absent", "w": "deferred"},
+    {"id": "serial-lot-instances", "owner": "inventory pass", "state": "absent", "w": "deferred"},
+    {"id": "landed-cost", "owner": "inventory pass", "state": "absent", "w": "deferred"},
+    {"id": "costing-method-selection", "owner": "inventory pass", "state": "absent", "w": "deferred"},
+    {"id": "stock-transfers", "owner": "inventory pass", "state": "absent", "w": "deferred"},
+    {"id": "item-images", "owner": "attachments pass", "state": "absent", "w": "deferred"},
+    {"id": "fixed-asset-calculations-and-journals", "owner": "ledger/fixed-asset transaction pass", "state": "profile only", "w": "deferred"},
+    {"id": "functional-usage-count", "owner": "referencing transactions", "state": "zero/unavailable", "w": "deferred"},
+    {"id": "spreadsheet-batch-edit", "owner": "section 14.1", "state": "absent", "w": "deferred"},
+    {"id": "transaction-class-prompting", "owner": "transaction browser forms", "state": "settings/profile only", "w": "deferred"},
+    {"id": "transaction-term-application", "owner": "transaction forms", "state": "pure date computation only", "w": "deferred"},
+    {"id": "receipt-and-deposit-classification", "owner": "transaction forms", "state": "classification profile only", "w": "deferred"},
+    {"id": "payment-credentials", "owner": "protected provider store", "state": "never stored", "w": "deferred"},
+    {"id": "tax-calculation", "owner": "sales forms", "state": "classification/settings only", "w": "deferred"},
+    {"id": "batch-customer-item-marking", "owner": "later reversible batch operation", "state": "absent", "w": "deferred"},
+    {"id": "transaction-report-segmentation", "owner": "forms/reports", "state": "classification profile only", "w": "deferred"},
+    {"id": "later-sales-form-and-report-use", "owner": "sales forms/reports", "state": "profile only", "w": "deferred"},
+    {"id": "shipping-execution", "owner": "sales/delivery forms", "state": "sends nothing", "w": "deferred"},
+    {"id": "later-sales-form-use", "owner": "sales forms", "state": "profile only", "w": "deferred"},
+    {"id": "message-send", "owner": "sales/delivery forms", "state": "sends nothing", "w": "deferred"},
+    {"id": "actual-price-application", "owner": "sales-form pricing pass", "state": "definition only", "w": "deferred"},
+    {"id": "conditional-date-quantity-location-group-custom-rules", "owner": "sales-form pricing pass", "state": "absent", "w": "deferred"},
+    {"id": "stacking", "owner": "sales-form pricing pass", "state": "absent", "w": "deferred"},
+    {"id": "margin-guardrails", "owner": "sales-form pricing pass", "state": "absent", "w": "deferred"},
+    {"id": "posted-transaction-factor-lock-witness-until-ledger", "owner": "ledger", "state": "rule declared; no posted reference exists in Row 5", "w": "deferred"},
+    {"id": "transaction-unit-selection", "owner": "transaction forms", "state": "set/default profile only", "w": "deferred"},
+    {"id": "transaction-target-values-until-corresponding-form", "owner": "corresponding transaction form", "state": "definition may exist; value input unavailable", "w": "deferred"},
+    {"id": "csv-import-export-saved-mappings-merge", "owner": "section 14.1", "state": "absent; collisions never merge implicitly", "w": "deferred"},
+    {"id": "memorized-transactions-and-todos", "owner": "forms/scheduler/activity", "state": "not Row 5 nouns", "w": "deferred"},
+    {"id": "purpose-built-list-centers", "owner": "later browser workflow", "state": "generated workbench only", "w": "deferred"},
+    {"id": "mcp-adapter", "owner": "Row 9", "state": "same registry schemas and parity corpus reserved", "w": "deferred"}
+  ],
+  "browser_and_documentation": {
+    "ui_group_assignments": {
+      "Company": ["company"],
+      "Customers and sales": ["customer", "customer-type", "job-type", "sales-rep", "price-level", "ship-method", "customer-message"],
+      "Vendors and purchases": ["vendor", "vendor-type"],
+      "Employees": ["employee", "other-name"],
+      "Items": ["item", "item-category", "unit-of-measure"],
+      "Accounting": ["account", "class", "term", "payment-method", "sales-tax-code", "chart"],
+      "Settings": ["custom-field", "profile"],
+      "Audit": ["audit", "undo"]
+    },
+    "fields": [
+      {"n": "route_slug", "t": "string", "w": "field"}, {"n": "labels", "t": "object", "w": "field"}, {"n": "selector", "t": "descriptor", "w": "field"},
+      {"n": "editable_output_path", "t": "json-path", "w": "field"}, {"n": "display_field", "t": "string", "w": "field"}, {"n": "ui_group", "t": "enum", "enum": ["Company", "Customers and sales", "Vendors and purchases", "Employees", "Items", "Accounting", "Settings", "Audit"], "w": "field"},
+      {"n": "primary_collection_action", "t": "command-ref", "w": "field"}, {"n": "collection_actions", "t": "array<command-ref>", "w": "field"}, {"n": "record_actions", "t": "array<command-ref>", "w": "field"},
+      {"n": "hierarchy_presentation", "t": "descriptor", "w": "field"}, {"n": "columns", "t": "array<descriptor>", "w": "field"}, {"n": "filters", "t": "array<typed-descriptor>", "w": "field"},
+      {"n": "reference_descriptors", "t": "array<same-company-suggestion-descriptor>", "w": "field"}, {"n": "runtime_fields", "t": "provider-ref", "null": true, "w": "field"}
+    ],
+    "validations": [
+      {"id": "browser.metadata", "rule": "authoritative list definition owns behavior; registry only references/projects it and rejects incomplete metadata or misplaced actions", "w": "rule"},
+      {"id": "browser.company-context", "rule": "persistent selected-company identity and last-company cookie refreshed on every authorized company page", "w": "rule"},
+      {"id": "browser.list", "rule": "query/typed filters/active state/sort use command input; URL-only column selection never enters commands; empty tables still render declared columns", "w": "rule"},
+      {"id": "browser.form", "rule": "one typed descriptor renders and decodes JSON paths, exact strings, clear controls, same-company suggestions, repeated nested children, previews, conflicts, and stable-id runtime fields", "w": "rule"},
+      {"id": "browser.discriminated-form", "rule": "account type, item type, term kind, and price-level kind are chosen first; the shell rerenders only that profile's leaves and pins stored discriminators except for explicitly permitted transitions", "w": "rule"},
+      {"id": "browser.attempt", "rule": "attempted values survive preview/validation separately from authoritative original/version snapshot", "w": "rule"},
+      {"id": "browser.responsive", "rule": "viewport declared; navigation collapses without losing company identity; forms become single-column; only table containers scroll at 360x800 and 1280x800", "w": "rule"},
+      {"id": "docs.coverage", "rule": "six ordinary commands per noun plus charts, profiles, links, conversion, and undo have typed validated examples, Python/CLI/HTTP reachability, generated pages, and packaged resources", "w": "rule"},
+      {"id": "fresh-agent", "rule": "source-blind wheel trial discovers a custom-field id, creates an inventory item with that value, creates a nested job under a customer with contacts/addresses, handles a stale conflict, and exercises every special family through Python/CLI/HTTP", "w": "rule"}
+    ],
+    "human_gate": {"machine_acceptance": "Navigator/Builder plus focused Reviewer accept inventory structure and mechanical coverage before co0003", "when": "after the machine inventory has gated co0003 and the complete Row 5 build is running on an isolated demo root", "checks": ["human browser-product taste", "human side-by-side list fields", "options", "defaults", "validations", "filters", "sorts", "columns", "lifecycle behavior"], "effect": "a missing anchor behavior updates this inventory, the contract, and the implementation before Row 5 closes", "w": "rule"},
+    "deferred": ["mcp-adapter", "purpose-built-list-centers", "csv-import-export-saved-mappings-merge", "memorized-transactions-and-todos"]
+  },
+  "coverage_assertions": {
+    "required_nouns": ["account", "customer", "vendor", "employee", "other-name", "item", "item-category", "class", "term", "payment-method", "sales-tax-code", "customer-type", "vendor-type", "job-type", "sales-rep", "ship-method", "customer-message", "price-level", "unit-of-measure", "custom-field"],
+    "ordinary_verbs_per_noun": ["create", "update", "show", "list", "activate", "deactivate"],
+    "required_special_ids": ["chart.list", "chart.show", "chart.apply", "profile.list", "profile.show", "profile.apply", "customer.link-vendor", "customer.unlink-vendor", "other-name.convert", "undo"],
+    "required_company_action_ids": ["company.show.row5-settings", "company.update.row5-settings", "company.new.row5-rollout", "demo.reset.row5"],
+    "required_witness_dimensions": ["blueprint", "schema", "model", "service", "output", "docs", "form", "test"],
+    "rule": "A test expands reusable shapes and inherited witness templates, then fails for an absent required noun/action/category, an entry without a resolvable witness template, a deferred reference without a matching deferred entry, a query field absent from list metadata, or a declared field absent from its discriminated schema/model/output/form matrices."
+  }
+}
