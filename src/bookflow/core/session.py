@@ -46,17 +46,21 @@ class Session:
     pending_config: bool = False
     company_tz: str | None = None
     hub_migrated: tuple | None = None
-    completed_moves: list = field(default_factory=list)
+    completed_moves: list = field(default_factory=list)  # ids whose pending move this command finished on open
     directive_code: str | None = None
     hub_touched: list = field(default_factory=list)  # entries the dispatcher adds to the command's hub event (migrations, projection repair)
     company_touched: list = field(default_factory=list)
-    company_info_row: dict | None = None  # ids whose pending move this command finished on open
+    company_info_row: dict | None = None
+    company_opener: Any = None  # host hook: (row, writable, db_path) -> a Database the host owns; never closed here
+    company_releaser: Any = None  # host hook: called with the company id when the session lets go of it
 
     def close_company(self) -> None:
         cm = getattr(self, '_co_cm', None)
         if cm is not None:
             cm.__exit__(None, None, None)
             self._co_cm = None
+        elif self.company is not None and self.company_releaser is not None:
+            self.company_releaser(self.company_id)
         self.company = None
 
     @property

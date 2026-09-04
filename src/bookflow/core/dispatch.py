@@ -94,6 +94,15 @@ def _load_actor(s: Session) -> None:
     access.load_memberships(s)
 
 
+def _load_actor_by_id(s: Session, user_id: str) -> None:
+    """The host's actor resolution: a credential already named the user; memberships load the same way as the CLI's."""
+    row = s.hub.conn.execute(sa.select(h.users).where(h.users.c.id == user_id, h.users.c.active.is_(True))).mappings().first()
+    if row is None:
+        raise BookflowError("E_UNAUTHENTICATED", details={"reason": "user"})
+    s.actor = Actor(id=row["id"], kind=row["kind"], username=row["username"], display_name=row["display_name"], hub_admin=bool(row["hub_admin"]), timezone=row["timezone"])
+    access.load_memberships(s)
+
+
 def resolve_company(s: Session, selector: str | None, source: str) -> dict[str, Any]:
     """Blueprint 5.3. Returns the hub company row or raises E_COMPANY_NOT_FOUND / E_COMPANY_AMBIGUOUS."""
     if selector is None:
@@ -252,8 +261,12 @@ def open_company(s: Session, ctx: Context, writable: bool) -> None:
             raise BookflowError("E_SCHEMA_UNKNOWN", details={"revision": rev, "path": str(db_path)})
         if state != "head":
             raise BookflowError("E_SCHEMA_BEHIND", details={"revision": rev, "head": HEADS["company"], "path": str(db_path)}, message="The company database schema is behind this version of Bookflow; run `bookflow upgrade`, or ask a user with write access to.")
-    s._co_cm = open_database(db_path, writable)  # type: ignore[attr-defined]
-    s.company = s._co_cm.__enter__()  # type: ignore[attr-defined]
+    if s.company_opener is not None:
+        s.company = s.company_opener(row, writable, db_path)
+        s._co_cm = None  # type: ignore[attr-defined]
+    else:
+        s._co_cm = open_database(db_path, writable)  # type: ignore[attr-defined]
+        s.company = s._co_cm.__enter__()  # type: ignore[attr-defined]
     s.company_id = row["id"]
     s.company_tz = None
     from bookflow.company.info import read_info, write_display_name_copy
@@ -295,13 +308,13 @@ def _complete_trash(s: Session, row: dict[str, Any]) -> None:
 
 
 def _close(s: Session) -> None:
-    for attr in ("_co_cm", "_hub_cm"):
-        cm = getattr(s, attr, None)
-        if cm is not None:
-            try:
-                cm.__exit__(None, None, None)
-            finally:
-                setattr(s, attr, None)
+    s.close_company()
+    cm = getattr(s, "_hub_cm", None)
+    if cm is not None:
+        try:
+            cm.__exit__(None, None, None)
+        finally:
+            s._hub_cm = None  # type: ignore[attr-defined]
 
 
 def guard(fn, allowed=False):
