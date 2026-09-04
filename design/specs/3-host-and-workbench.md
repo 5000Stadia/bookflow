@@ -2,7 +2,7 @@
 
 ## What this row adds
 
-`bookflow serve`: the HTTP host that exposes every routed command over loopback with the same inputs, outputs, and errors as the CLI, browser login and a company picker, generated workbench pages for every routed noun and verb, the server-sent event feed, and the local hand-off by which a CLI or library call on the host's machine runs through the host instead of waiting on the lock.
+`bookflow serve`: the HTTP host that exposes every routed command over loopback with the same inputs, outputs, and errors as the CLI, browser login landing in a company (the picker only when the company is ambiguous), generated workbench pages for every routed noun and verb, the server-sent event feed, and the local hand-off by which a CLI or library call on the host's machine runs through the host instead of waiting on the lock.
 
 ## One core entry point, one boundary
 
@@ -67,7 +67,7 @@ Status codes, each with the `{code, message, details}` document: 200; 401 `E_UNA
 
 Server-rendered HTML with HTMX; no build step; one stylesheet. Workbench requests are recorded with interface `http` and `client_name` `bookflow-workbench`. Page URLs carry company ids; nothing but the token is stored in the session.
 
-- `/login`, `/logout`; `/`: the company picker from `company list`, showing a company's schema state and linking to `upgrade` when it is behind.
+- `/login` (with `next`, a path on this host, so a deep link returns to where it was going), `/logout`; `/`: lands in a company without a click: the only company the user can see, else the company this browser used last (a per-browser cookie set on every company index visit, carrying no identity), else the picker; `/companies`: the picker from `company list`, showing a company's schema state and linking to `upgrade` when it is behind.
 - `/c/{company_id}/`: nouns with company-scope commands; `/hub/`: hub nouns; every routed command has a page.
 - `/c/{company_id}/{noun}`: the `list` output as a table with the shared preferred columns and an "include inactive" toggle where the input has it; each row links to the record page by `NOUN_META`'s identifier.
 - `/c/{company_id}/{noun}/{id}`: the `show` output as a field view, `editing_by` at the top, the record's audit events below, a button per verb the actor's role permits, an HTMX heartbeat calling `presence set` every 30 seconds and `presence clear` on leave, rendered only for record types the presence input model accepts and for members of role `standard` or above.

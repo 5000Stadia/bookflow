@@ -18,6 +18,7 @@ from bookflow.core.errors import BookflowError
 from bookflow.core.models import list_columns
 
 HERE = Path(__file__).parent
+LAST_COMPANY = "bookflow_company"
 env = Environment(loader=FileSystemLoader(str(HERE / "templates")), autoescape=select_autoescape(["html"]))
 
 
@@ -25,8 +26,9 @@ def _nouns(scope: str) -> list[str]:
     return sorted({c.noun for c in registry.routed_commands() if c.scope == scope})
 
 
-def _verbs(noun: str) -> list[registry.Command]:
-    return [c for c in registry.routed_commands() if c.noun == noun]
+def _verbs(noun: str, scope: str | None = None) -> list[registry.Command]:
+    """A noun's routed commands; on a hub page only hub-scoped ones, on a company page only company-scoped ones."""
+    return [c for c in registry.routed_commands() if c.noun == noun and (scope is None or c.scope == scope)]
 
 
 def _presence_types() -> set[str]:
@@ -48,7 +50,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
 
     def page_error(request: Request, err: BookflowError, **ctx: Any) -> HTMLResponse:
         if err.code in ("E_UNAUTHENTICATED", "E_LOGIN_FAILED"):
-            return RedirectResponse("/login", status_code=303)
+            from urllib.parse import quote
+            target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+            return RedirectResponse("/login" + (f"?next={quote(target, safe='')}" if request.method == "GET" and target not in ("/", "/login") else ""), status_code=303)
         status = STATUS.get(err.code, 400)
         return render("error.html", request, status_code=status, error=err.to_dict(), status=status, **ctx)
 
@@ -72,9 +76,28 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
 
     @app.get("/login", response_class=HTMLResponse)
     def login_page(request: Request):
-        return render("login.html", request, error=None)
+        nxt = request.query_params.get("next", "")
+        if not nxt.startswith("/") or nxt.startswith("//"):
+            nxt = ""  # only a path on this host; never an off-site redirect
+        return render("login.html", request, error=None, next=nxt)
 
     @app.get("/", response_class=HTMLResponse)
+    def home(request: Request):
+        """Land in a company: the only one you can see, else the one this browser used last, else the picker."""
+        try:
+            out = run(request, "company list", {}, None)
+        except BookflowError as e:
+            return page_error(request, e)
+        items = out["items"]
+        ids = {c["company_id"] for c in items}
+        last = request.cookies.get(LAST_COMPANY)
+        if len(items) == 1:
+            return RedirectResponse(f"/c/{items[0]['company_id']}/", status_code=303)
+        if last in ids:
+            return RedirectResponse(f"/c/{last}/", status_code=303)
+        return render("picker.html", request, companies=items, columns=list_columns(items))
+
+    @app.get("/companies", response_class=HTMLResponse)
     def picker(request: Request):
         try:
             out = run(request, "company list", {}, None)
@@ -88,7 +111,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             credential(request)
         except BookflowError as e:
             return page_error(request, e)
-        return render("index.html", request, company=None, nouns=[(n, _verbs(n)) for n in _nouns("hub")])
+        return render("index.html", request, company=None, nouns=[(n, _verbs(n, "hub")) for n in _nouns("hub")])
 
     @app.get("/c/{company_id}/", response_class=HTMLResponse)
     def company_index(company_id: str, request: Request):
@@ -96,16 +119,24 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             show = run(request, "company show", {}, company_id)
         except BookflowError as e:
             return page_error(request, e)
-        return render("index.html", request, company=show, nouns=[(n, _verbs(n)) for n in _nouns("company")])
+        resp = render("index.html", request, company=show, company_id=show["company_id"], nouns=[(n, _verbs(n, "company")) for n in _nouns("company")])
+        resp.set_cookie(LAST_COMPANY, show["company_id"], samesite="lax", secure=secure_cookies, max_age=90 * 86400, path="/")  # a per-browser convenience, no identity in it
+        return resp
 
     def noun_page(request: Request, company_id: str | None, noun: str):
+        if noun in ("audit", "hub audit"):
+            return audit_common(request, company_id if noun == "audit" else None)
         cmd = registry.get(f"{noun} list")
         if cmd is None:
             single = registry.get(noun)  # a single-word command such as `upgrade`: the noun's page is its form
             if single is not None and not single.local_only:
                 return form_page(request, company_id, noun, "", None)
         if cmd is None or cmd.local_only:
-            return page_error(request, BookflowError("E_USAGE", message=f"`{noun}` has no list command"))
+            if not _verbs(noun, "company" if company_id else "hub"):
+                return page_error(request, BookflowError("E_USAGE", message=f"no such noun `{noun}`"))
+            # a noun without a list (presence) still has a page: its actions
+            return render("list.html", request, has_show=registry.get(f"{noun} show") is not None, company_id=company_id, noun=noun, items=[], columns=[], meta=registry.noun_meta(noun),
+                          has_inactive=False, include=False, verbs=_verbs(noun, "company" if company_id else "hub"), extra={"note": "this noun has no list; use its actions"})
         include = request.query_params.get("include_inactive") == "1"
         raw = {"include_inactive": True} if include and "include_inactive" in cmd.input_model.model_fields else {}
         try:
@@ -114,8 +145,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return page_error(request, e)
         meta = registry.noun_meta(noun)
         items = out.get("items", [])
-        return render("list.html", request, company_id=company_id, noun=noun, items=items, columns=list_columns(items), meta=meta,
-                      has_inactive="include_inactive" in cmd.input_model.model_fields, include=include, verbs=_verbs(noun), extra={k: v for k, v in out.items() if k != "items"})
+        return render("list.html", request, has_show=registry.get(f"{noun} show") is not None, company_id=company_id, noun=noun, items=items, columns=list_columns(items), meta=meta,
+                      has_inactive="include_inactive" in cmd.input_model.model_fields, include=include, verbs=_verbs(noun, "company" if company_id else "hub"), extra={k: v for k, v in out.items() if k != "items"})
 
     @app.get("/c/{company_id}/{noun}", response_class=HTMLResponse)
     def company_noun(company_id: str, noun: str, request: Request):
@@ -139,7 +170,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 audit = run(request, "audit list", {"record_type": meta["record_type"], "record_id": rid, "limit": 20}, company_id)["items"]
         except BookflowError as e:
             return page_error(request, e)
-        verbs = [c for c in _verbs(noun) if c.verb not in ("list", "show", "new")]
+        verbs = [c for c in _verbs(noun, "company" if company_id else "hub") if c.verb not in ("list", "show", "new")]
         return render("record.html", request, company_id=company_id, noun=noun, record_id=record_id, record=out, audit=audit, meta=meta, verbs=verbs,
                       presence=(meta["record_type"] in _presence_types()) and company_id is not None, editing=out.get("editing_by") or [])
 
@@ -173,6 +204,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return page_error(request, BookflowError("E_USAGE", message="open this update from a record page"))
         return render("form.html", request, company_id=company_id, noun=noun, verb=verb, cmd=cmd, leaves=F.leaves(cmd.input_model), originals=originals or {},
                       record_id=record_id, ctx_fields=F.context_fields(cmd), result=result, error=error, preview=preview, get=F.get_path)
+
+    @app.get("/hub/{noun}/{record_id}/{verb}", response_class=HTMLResponse)
+    def hub_record_form(noun: str, record_id: str, verb: str, request: Request):
+        return form_page(request, None, noun.replace("-", " "), verb, record_id)
 
     @app.get("/c/{company_id}/{noun}/{record_id}/{verb}", response_class=HTMLResponse)
     def company_record_form(company_id: str, noun: str, record_id: str, verb: str, request: Request):
@@ -212,6 +247,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     @app.post("/c/{company_id}/{noun}/{record_id}/{verb}")
     async def company_record_submit(company_id: str, noun: str, record_id: str, verb: str, request: Request):
         return await run_in_threadpool(submit, request, company_id, noun, verb, record_id, await form_of(request))
+
+    @app.post("/hub/{noun}/{record_id}/{verb}")
+    async def hub_record_submit(noun: str, record_id: str, verb: str, request: Request):
+        return await run_in_threadpool(submit, request, None, noun.replace("-", " "), verb, record_id, await form_of(request))
 
     @app.post("/hub/{noun}/{verb}")
     async def hub_submit(noun: str, verb: str, request: Request):

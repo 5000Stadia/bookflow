@@ -1052,3 +1052,52 @@ def test_an_agent_token_with_a_principal_acts_on_behalf_of_that_person(hosted, r
     # without a reason or directive the agent's write is refused (the reason gate applies over HTTP too)
     r = bot.post(f"/companies/{hosted.company_id}/commands/company.update", json={"phone": "555-0198"}, headers={"Authorization": f"Bearer {issued['secret']}"})
     assert r.status_code == 400 and r.json()["code"] == "E_REASON_REQUIRED"
+
+
+def test_login_lands_in_a_company_without_a_click(hosted):
+    """Human taste gate (2026-09-04): no picker step when the company is not in doubt; deep links return through login."""
+    c = TestClient(hosted.handle.app, follow_redirects=False)
+    # a deep link before login goes to /login?next=<the link>
+    r = c.get(f"/c/{hosted.company_id}/directive")
+    assert r.status_code == 303 and r.headers["location"] == f"/login?next=%2Fc%2F{hosted.company_id}%2Fdirective"
+    page = c.get(f"/login?next=%2Fc%2F{hosted.company_id}%2Fdirective")
+    assert f'/c/{hosted.company_id}/directive' in page.text
+    assert "https://" not in c.get("/login?next=https://evil.example/").text  # off-site targets are dropped
+    # an outsider who can see exactly one company lands there from /
+    other = TestClient(hosted.handle.app, follow_redirects=False)
+    assert other.post("/login", json={"username": "outsider", "password": OUTSIDER_PASSWORD}).status_code == 200
+    visible = other.post("/commands/company.list", json={}, headers=WB).json()["items"]
+    r = other.get("/")
+    if len(visible) == 1:
+        assert r.status_code == 303 and r.headers["location"] == f"/c/{visible[0]['company_id']}/"
+    else:
+        assert r.status_code == 200
+    # the picker is always reachable; visiting a company remembers it for this browser
+    assert other.get("/companies").status_code == 200
+    assert c.post("/login", json={"username": hosted.login, "password": PASSWORD}).status_code == 200
+    r = c.get(f"/c/{hosted.company_id}/")
+    assert r.status_code == 200 and "bookflow_company" in r.headers.get("set-cookie", "")
+    r = c.get("/")
+    assert r.status_code == 303 and r.headers["location"] == f"/c/{hosted.company_id}/", r.headers
+
+
+def test_every_link_the_workbench_renders_resolves(hosted):
+    """Human taste gate (2026-09-04): the company index linked to /c//company because the page never got the id."""
+    import re
+    c = TestClient(hosted.handle.app, follow_redirects=True)
+    assert c.post("/login", json={"username": hosted.login, "password": PASSWORD}).status_code == 200
+    seen, queue = set(), ["/companies", "/hub/", f"/c/{hosted.company_id}/"]
+    while queue:
+        url = queue.pop()
+        if url in seen or url.startswith("/static/"):
+            continue
+        seen.add(url)
+        r = c.get(url)
+        assert "//" not in url.replace("http://", ""), url
+        assert r.status_code == 200, (url, r.status_code, r.text[:200])
+        assert "Not Found" not in r.text[:300], url
+        for href in re.findall(r'href="([^"]+)"', r.text):
+            if href.startswith("/") and not href.startswith("/static/") and "?" not in href:
+                queue.append(href)
+    assert len(seen) > 15, sorted(seen)
+    assert f"/c/{hosted.company_id}/directive" in seen and "/hub/hub-audit" in seen and "/hub/organization/new" in seen
