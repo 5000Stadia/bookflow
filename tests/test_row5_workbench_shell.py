@@ -103,3 +103,18 @@ def test_aggregate_form_preserves_attempted_json_after_validation(hosted):
     assert failed.status_code == 200
     assert "E_VALIDATION" in failed.text
     assert attempted in html.unescape(failed.text)
+
+
+def test_list_update_form_prefills_the_declared_editable_output(hosted):
+    browser = _browser(hosted)
+    term = hosted.ok(
+        "term list",
+        {"query": "Net 30"},
+        company=hosted.company_id,
+    )["items"][0]
+    page = browser.get(f"/c/{hosted.company_id}/term/{term['id']}/update")
+
+    assert page.status_code == 200
+    assert '<option value="standard" selected>standard</option>' in page.text
+    assert 'name="f:due_days" value="30"' in page.text
+    assert f'name="f:expected_version" value="{term["version"]}"' in page.text

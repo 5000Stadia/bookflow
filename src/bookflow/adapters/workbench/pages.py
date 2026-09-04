@@ -150,6 +150,20 @@ def _output_identifier(noun: str, meta: dict[str, Any], output: dict[str, Any]) 
     return None
 
 
+def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
+    """Project the authoritative editable object from a show result."""
+    definition = registry.noun_meta(noun).get("definition")
+    path = definition.editable_output_path if definition is not None else ()
+    current: Any = shown
+    for part in path:
+        if not isinstance(current, dict):
+            return {}
+        current = current.get(part)
+    if not path and definition is None and isinstance(shown.get("info"), dict):
+        current = shown["info"]
+    return dict(current) if isinstance(current, dict) else {}
+
+
 def _success_target(cmd: registry.Command, company_id: str | None, noun: str, record_id: str | None,
                     output: dict[str, Any]) -> str:
     route_noun = noun.replace(" ", "-")
@@ -435,7 +449,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 shown = authorized_company if show_name == "company show" and not raw else run(request, show_name, raw, company_id)
             except BookflowError as e:
                 return page_error(request, e)
-            originals = {**shown.get("info", {}), "expected_version": shown.get(field)}
+            originals = {**_editable_values(noun, shown), "expected_version": shown.get(field)}
         elif cmd.version_source and record_id is None:
             return page_error(request, BookflowError("E_USAGE", message="open this update from a record page"))
         return render("form.html", request, company_id=company_id, noun=noun, verb=verb, cmd=cmd, leaves=F.leaves(cmd.input_model), originals=originals or {},
