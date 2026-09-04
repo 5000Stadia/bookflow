@@ -160,3 +160,14 @@ def current_writer_from_entries(db, record_type: str, record_id: str, version: i
     if r is None:
         return None
     return HistoryEntry(version_after=version, changed_columns=None, updated_by=r["actor_id"], on_behalf_of=r["on_behalf_of"], updated_via=r["interface"], at=r["at"])
+
+
+def current_writer(db, record_type: str, record_id: str, row: dict[str, Any]) -> HistoryEntry | None:
+    """The write that produced the row's current version: its audit entry when one exists, else the row's own updated_* columns
+    (a record baselined by a migration has no writer entry, but its previous writer is still named on the row)."""
+    found = current_writer_from_entries(db, record_type, record_id, row["version"])
+    if found is not None:
+        return found
+    if row.get("updated_by") is None:
+        return None
+    return HistoryEntry(version_after=row["version"], changed_columns=None, updated_by=row["updated_by"], on_behalf_of=None, updated_via=row.get("updated_via"), at=row.get("updated_at"))

@@ -433,8 +433,9 @@ def test_snapshot_secrets_and_boundaries():
     d = decode_snapshot(small)
     assert d["password_hash"].startswith("sha256:") and d["token_hash"].startswith("sha256:") and d["tax_id"].startswith("sha256:")
     assert "argon2" not in small.decode("latin1") and "deadbeef" not in small.decode("latin1")
-    big = encode_snapshot({"k": "v" * 400})
-    assert big[:1] == ZIP and decode_snapshot(big) == {"k": "v" * 400}
+    assert encode_snapshot({"k": "v" * 400})[:1] == RAW, "the boundary is 512 bytes"
+    big = encode_snapshot({"k": "v" * 600})
+    assert big[:1] == ZIP and decode_snapshot(big) == {"k": "v" * 600}
 
 
 def test_audit_filter_matrix(client, root):
@@ -469,19 +470,28 @@ def test_migration_entries_are_not_writers(client, root, tmp_path, monkeypatch):
     import shutil
     dst = r2 / "organizations" / "Demo Holdings LLC" / "Demo Plumbing Co"
     shutil.copytree(src["path"], dst)
-    c2.company.attach(path=str(dst))
     # rewind the copy to the first company revision so the attach path migrates it and writes a baseline
+    import sqlite3
     from tests.test_migration_chain import _downgrade_copy
-    v = c2.company.show(company="Demo Plumbing Co")["info_version"]
+    from bookflow.storage.migrate import current_revision_raw
+    db = dst / "company.db"
+    cols = [r[1] for r in sqlite3.connect(str(db)).execute("PRAGMA table_info(company_info)").fetchall()]
+    _downgrade_copy(db, "company", {"company_info": cols, "principals": ["user_id", "username", "display_name", "kind", "first_seen_at", "last_seen_at"]})
+    assert current_revision_raw(db) == "co0001"
+    before = sqlite3.connect(str(db)).execute("SELECT version, updated_by FROM company_info").fetchone()
+    c2.company.attach(path=str(dst))
+    shown = c2.company.show(company="Demo Plumbing Co")
+    assert shown["schema_revision"] != "co0001", "attach migrated the copy"
+    assert shown["info_version"] == before[0], "a migration never bumps the record version"
+    events = c2.audit.list(company="Demo Plumbing Co")["items"]
+    assert any(e["command"] == "upgrade" and e["actor_name"] == "System" for e in events), "the migration is audited in the company as the system user"
     out = c2.company.update(phone="after-migration", company="Demo Plumbing Co")
-    assert out["previous_updated_by_name"] != "System" and (out["seconds_since_previous_update"] or 0) < 100000
-    conflict = None
-    try:
-        c2.company.update(phone="x", expected_version=max(1, v - 1), company="Demo Plumbing Co")
-    except BookflowError as e:
-        conflict = e
-    if conflict is not None:
-        assert "schema_revision" not in (conflict.details.get("changed_fields") or []) and "from" not in (conflict.details.get("changed_fields") or [])
+    assert out["previous_updated_by"] == before[1], "the blind write names the legacy row's real writer, not the migration's system user"
+    assert out["previous_updated_by_name"] not in (None, "System") and (out["seconds_since_previous_update"] or 0) < 100000
+    with pytest.raises(BookflowError) as e:
+        c2.company.update(phone="x", expected_version=before[0], company="Demo Plumbing Co")
+    assert e.value.code == "E_VERSION_CONFLICT" and e.value.details["changed_fields"] == ["phone"], "the migration's own entries never count as writes"
+    assert e.value.details["updated_by_name"] == "mover"
 
 
 def test_hub_log_has_no_empty_company_update_events(client):

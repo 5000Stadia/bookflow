@@ -96,7 +96,14 @@ def command(name: str, *, scope: str, description: str, input_model: type[BaseMo
     bad = set(input_model.model_fields) & CONTEXT_FIELD_NAMES
     if bad:
         raise ValueError(f"{name}: input model declares context field(s) {sorted(bad)}")
-    for code in error_codes or []:
+    error_codes = list(error_codes or [])
+    # codes the pipeline itself can raise for this command (idempotency lookup, directive resolution) are part of its contract
+    if accepts_idempotency_key:
+        error_codes.append("E_IDEMPOTENCY_MISMATCH")
+    if scope == "company" and (kind or ("write" if writes else "read")) in ("write", "advisory") and writes:
+        error_codes += ["E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE"]
+    error_codes = list(dict.fromkeys(error_codes))
+    for code in error_codes:
         if code not in ALL_CODES:
             raise ValueError(f"{name}: unknown error code {code}")
     if scope not in ("hub", "company"):

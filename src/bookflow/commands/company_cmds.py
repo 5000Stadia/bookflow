@@ -132,7 +132,7 @@ from pydantic import field_validator
 
 from bookflow.commands.hub_cmds import Address, _TAX_SHAPES, _empty_to_none
 from bookflow.core.models import ListOutput, WriteOutput as _WriteOutput
-from bookflow.core.versioning import check_update, current_writer_from_entries, history_from_entries
+from bookflow.core.versioning import check_update, current_writer, history_from_entries
 
 versioning_audit = lazy("bookflow.core.audit")
 directives = lazy("bookflow.company.directives")
@@ -252,7 +252,7 @@ def plan_company_update(inp: CompanyUpdateInput, ctx: Context, s: Session) -> Pl
     if changed:
         _validate_merged(new)
     window = current.get("recent_activity_window_seconds", 60)
-    writer = current_writer_from_entries(s.company, "company_info", current["id"], current["version"])
+    writer = current_writer(s.company, "company_info", current["id"], current)
     names = cinfo.principal_names(s.company, {x for x in ((writer.updated_by, writer.on_behalf_of) if writer else ()) if x})
     if writer:
         writer.updated_by_name = names.get(writer.updated_by)

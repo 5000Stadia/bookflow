@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -139,19 +141,26 @@ def migrate_to_head(db: Database, chain: str, backups_dir: Path | None) -> tuple
             raise BookflowError("E_MIGRATION_FAILED", details={"chain": chain, "from": before, "to": HEADS[chain], "cause": "foreign key check", "rows": len(problems)})
         db.raw.execute("COMMIT")
     except BaseException as e:
+        recovery: dict[str, Any] = {}
         try:
             if db.raw.in_transaction:
                 db.raw.execute("ROLLBACK")
-        except sqlite3.Error:
-            pass
+        except sqlite3.Error as re:
+            recovery["rollback_failed"] = str(re)
         if saved is not None:
             try:
                 restore(db.path, saved)
-            except (sqlite3.Error, OSError):
-                pass
-        if isinstance(e, BookflowError):
-            raise
-        raise BookflowError("E_MIGRATION_FAILED", details={"chain": chain, "from": before, "to": HEADS[chain], "cause": type(e).__name__, "path": str(db.path)})
+                recovery["restored_from"] = str(saved)
+            except (sqlite3.Error, OSError) as re:
+                recovery["restore_failed"] = str(re)
+                recovery["backup"] = str(saved)
+        details = e.details if isinstance(e, BookflowError) else {"chain": chain, "from": before, "to": HEADS[chain], "cause": type(e).__name__, "path": str(db.path)}
+        details = {**details, **recovery}
+        message = None
+        if "restore_failed" in recovery or "rollback_failed" in recovery:
+            message = f"The migration failed and recovery also failed; the database may be partially migrated. Restore it by hand from {saved} before running again." if saved else "The migration failed and the rollback also failed; the database may be partially migrated."
+        code = e.code if isinstance(e, BookflowError) else "E_MIGRATION_FAILED"
+        raise BookflowError(code, message=message, details=details) from (e if not isinstance(e, BookflowError) else None)
     finally:
         db.raw.execute("PRAGMA foreign_keys=ON")
     return before, HEADS[chain]

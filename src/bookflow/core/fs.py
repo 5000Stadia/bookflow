@@ -8,10 +8,10 @@ from pathlib import Path
 
 from bookflow.core.errors import BookflowError
 
+# The blueprint's allowlist (3.2), exactly: block-device filesystems the kernel serves itself.
 LOCAL_TYPES = frozenset({
     "ext2", "ext3", "ext4", "xfs", "btrfs", "f2fs", "zfs", "tmpfs", "overlay",
-    "apfs", "hfs", "hfsplus", "ntfs", "ntfs3", "fuseblk", "exfat", "vfat", "fat32", "refs", "msdos",
-    "ecryptfs", "bcachefs", "jfs", "reiserfs",
+    "apfs", "hfs", "ntfs", "ntfs3", "exfat", "vfat", "fat32", "refs",
 })
 
 

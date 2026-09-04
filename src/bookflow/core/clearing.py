@@ -51,10 +51,15 @@ def apply_clears(cmd, raw: dict[str, Any], names: list[str]) -> None:
         node = raw
         present = True
         for p in parts[:-1]:
+            if p in node and node[p] is None:
+                problems.append({"field": name, "problem": f"{p} is given as null, which already clears it"}); present = None
+                break
             if not isinstance(node.get(p), dict):
                 present = False
                 break
             node = node[p]
+        if present is None:
+            continue
         if present and node.get(parts[-1]) is not None and (not nested or parts[-1] in node):
             problems.append({"field": name, "problem": "given both a value and a clear"}); continue
         node = raw

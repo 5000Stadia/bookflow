@@ -451,3 +451,46 @@ def test_fuse_types_refused(tmp_path):
         with pytest.raises(BookflowError) as e:
             check_local(tmp_path, fs_type=t)
         assert e.value.code == "E_NETWORK_SHARE"
+
+
+def test_recheck_findings(client, root, tmp_path, monkeypatch):
+    """Codex recheck of rows 1 and 2 (2026-09-04): each numbered finding has a witness here."""
+    from bookflow.core.audit import RAW, ZIP, encode_snapshot
+    from bookflow.core.clearing import apply_clears
+    from bookflow.core import registry
+    # 3. compression boundary is 512 bytes
+    assert encode_snapshot({"k": "v" * 300})[:1] == RAW and encode_snapshot({"k": "v" * 520})[:1] == ZIP
+    # 2. a child clear under a parent given as null is a named validation error, not a TypeError
+    cmd = registry.get("company update")
+    with pytest.raises(BookflowError) as e:
+        apply_clears(cmd, {"address": None}, ["address.line1"])
+    assert e.value.code == "E_VALIDATION" and e.value.details["fields"][0]["field"] == "address.line1"
+    # 8. help enumerates the pipeline's own codes for the command
+    assert {"E_IDEMPOTENCY_MISMATCH", "E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE"} <= set(registry.get("directive add").error_codes)
+    assert "E_DIRECTIVE_NOT_FOUND" not in registry.get("directive list").error_codes
+    # 4. the locality allowlist is the blueprint's; fuseblk is not on it
+    from bookflow.core.fs import LOCAL_TYPES
+    assert "fuseblk" not in LOCAL_TYPES and "ext4" in LOCAL_TYPES
+    # 7. an organization member without admin gets the capability named
+    from tests.conftest import as_user, make_actor
+    org = client.organization.list()["items"][0]
+    make_actor(root, "ro7", org_role=(org["organization_id"], "readonly"))
+    with pytest.raises(BookflowError) as e7:
+        as_user(root, "ro7").company.new(legal_name="Nope Co", home_currency="USD", organization=org["display_name"], timezone="UTC")
+    assert e7.value.code == "E_PERMISSION" and e7.value.details["capability"] == "company" and e7.value.details["required_role"] == "admin"
+    # 1. company new with a key and no timezone: the in-progress row must match dispatch's hash on retry
+    import bookflow.hub.companies as companies
+    calls = {"n": 0}
+    real = companies.register
+    def boom(*a, **k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("injected registration failure")
+        return real(*a, **k)
+    monkeypatch.setattr(companies, "register", boom)
+    with pytest.raises(BookflowError) as e:
+        client.company.new(legal_name="Keyed Two Co", home_currency="USD", organization=org["display_name"], idempotency_key="keyed-two")
+    assert e.value.code == "E_ROLLOUT_INCOMPLETE"
+    with pytest.raises(BookflowError) as e2:
+        client.company.new(legal_name="Keyed Two Co", home_currency="USD", organization=org["display_name"], idempotency_key="keyed-two")
+    assert e2.value.code != "E_IDEMPOTENCY_MISMATCH", e2.value.to_dict()

@@ -451,7 +451,7 @@ def _resolve_org_for_new(s: Session, selector: str | None) -> dict[str, Any]:
             raise BookflowError("E_ORGANIZATION_REQUIRED", details={"visible": len(rows)})
         row = rows[0]
     if not access.role_satisfies(access.org_role(s, row["id"]), "organization", "admin", s.is_hub_admin):
-        raise BookflowError("E_PERMISSION")
+        raise BookflowError("E_PERMISSION", details={"capability": "company", "required_role": "admin", "role": access.org_role(s, row["id"]), "organization": row["display_name"]})
     return row
 
 
@@ -462,6 +462,7 @@ company_new = command("company new", scope="hub", description="Create a company 
 
 @company_new
 def plan_company_new(inp: CompanyNewInput, ctx: Context, s: Session) -> Plan:
+    validated = inp.model_dump(mode="json")  # what dispatch hashed; defaults applied below must not change the key's hash
     orow = _resolve_org_for_new(s, inp.organization)
     if inp.display_name is None and "/" in inp.legal_name:
         raise BookflowError("E_VALIDATION", details={"fields": [{"field": "display_name", "problem": "defaults to legal_name, which contains '/'; give display_name"}]})
@@ -477,7 +478,7 @@ def plan_company_new(inp: CompanyNewInput, ctx: Context, s: Session) -> Plan:
     folder = choose_folder_name(org_folder, display)
     cid = new_id()
     preview = CompanyNewOutput(company_id=cid, organization_id=orow["id"], display_name=display, path=str(org_folder / folder))
-    return Plan(preview=preview, data={"org": orow, "display": display, "info": _info_columns(inp), "company_id": cid, "validated": inp.model_dump(mode="json")})
+    return Plan(preview=preview, data={"org": orow, "display": display, "info": _info_columns(inp), "company_id": cid, "validated": validated})
 
 
 @company_new.applier
@@ -647,8 +648,6 @@ def _tighten_modes(folder: Path) -> int:
     Never follows a symlink: a link inside the folder is refused, so nothing outside it is ever touched.
     """
     import os, stat
-    if os.name != "posix":  # pragma: no cover
-        return 0
     n = 0
     for p in [folder, *folder.rglob("*")]:
         st = os.lstat(p)
@@ -656,7 +655,7 @@ def _tighten_modes(folder: Path) -> int:
             raise BookflowError("E_ATTACH_INVALID", details={"check": "symlink", "path": str(p)}, message="The folder contains a symbolic link; Bookflow refuses to attach folders that point outside themselves.")
         mode = stat.S_IMODE(st.st_mode)
         want = 0o700 if stat.S_ISDIR(st.st_mode) else 0o600
-        if mode & 0o077:
+        if os.name == "posix" and mode & 0o077:
             os.chmod(p, want, follow_symlinks=False) if os.chmod in os.supports_follow_symlinks else os.chmod(p, want)
             n += 1
     return n
