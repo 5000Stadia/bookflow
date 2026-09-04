@@ -77,6 +77,9 @@ def type_name(annotation: Any) -> str:
 def _default(field: Any) -> str:
     if field.is_required():
         return "—"
+    extra = field.json_schema_extra if isinstance(field.json_schema_extra, dict) else {}
+    if extra.get("generated"):
+        return "generated"
     if field.default is not PydanticUndefined:
         value = field.default
     elif field.default_factory is not None:
@@ -197,7 +200,8 @@ def sample_model(model: type[BaseModel]) -> dict[str, Any]:
             if field.default is not PydanticUndefined:
                 value = field.default
             elif field.default_factory is not None:
-                value = field.default_factory()
+                extra = field.json_schema_extra if isinstance(field.json_schema_extra, dict) else {}
+                value = sample_value(field.annotation, name) if extra.get("generated") else field.default_factory()
             else:
                 value = sample_value(field.annotation, name)
         else:

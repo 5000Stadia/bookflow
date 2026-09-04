@@ -577,6 +577,7 @@ def _read_calls(hosted):
         "profile show": ({"profile_id": "standard"}, None),
     }
     create_inputs = {
+        "custom-field": {"name": "HTTP parity field", "kind": "text", "scopes": ["customer"]},
         "item-category": {"name": "HTTP parity category"},
         "class": {"name": "HTTP parity class"},
         "customer-type": {"name": "HTTP parity customer type"},
@@ -603,7 +604,7 @@ def _read_calls(hosted):
     )
 
     supporting = (
-        "item-category", "class", "term", "payment-method", "sales-tax-code",
+        "custom-field", "item-category", "class", "term", "payment-method", "sales-tax-code",
         "customer-type", "vendor-type", "job-type", "sales-rep", "ship-method",
         "customer-message",
     )

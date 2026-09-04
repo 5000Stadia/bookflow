@@ -68,6 +68,7 @@ EXAMPLES.update({
 
 
 _SUPPORTING_CREATE_INPUTS = {
+    "custom-field": {"name": "Work order", "kind": "text", "scopes": ["customer"]},
     "item-category": {"name": "Services"},
     "class": {"name": "Field work"},
     "term": {"name": "Net 45", "kind": "standard", "due_days": 45},

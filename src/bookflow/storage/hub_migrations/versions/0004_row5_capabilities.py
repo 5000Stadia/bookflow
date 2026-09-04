@@ -23,6 +23,8 @@ CAPABILITY_REQUIREMENTS = (
     ("company", "authenticated"),
     ("company", "hub_admin"),
     ("company", "member"),
+    ("custom-field", "admin"),
+    ("custom-field", "member"),
     ("customer-message", "member"),
     ("customer-message", "standard"),
     ("customer-type", "member"),

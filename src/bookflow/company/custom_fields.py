@@ -193,7 +193,7 @@ def _model_choice_label(value: str) -> str:
 class CustomFieldChoiceInput(StrictModel):
     """One stable ordered choice in a choice definition."""
 
-    id: StrictStr = Field(default_factory=new_id)
+    id: StrictStr = Field(default_factory=new_id, json_schema_extra={"generated": True})
     value: StrictStr
     active: StrictBool = True
 
@@ -211,7 +211,7 @@ class CustomFieldChoiceInput(StrictModel):
 class CustomFieldDefinitionCreate(StrictModel):
     """Strict definition-create input independent of a command adapter."""
 
-    id: StrictStr = Field(default_factory=new_id)
+    id: StrictStr = Field(default_factory=new_id, json_schema_extra={"generated": True})
     name: StrictStr
     kind: CustomFieldKind
     scopes: tuple[CustomFieldScope, ...] = Field(min_length=1)

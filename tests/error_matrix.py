@@ -45,7 +45,7 @@ MATRIX = {
 }
 
 _SUPPORTING_LIST_NOUNS = (
-    "item-category", "class", "term", "payment-method", "sales-tax-code",
+    "custom-field", "item-category", "class", "term", "payment-method", "sales-tax-code",
     "customer-type", "vendor-type", "job-type", "sales-rep", "ship-method",
     "customer-message",
 )
