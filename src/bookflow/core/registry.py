@@ -64,6 +64,8 @@ class Command:
     ledger: bool = False
     capability: str = ""  # dotted area a membership may be granted or denied (blueprint 4.3b); derived from the noun
     feature: str | None = None  # a per-company unlockable service this command needs (blueprint 4.3b)
+    local_only: bool = False  # acts on the calling process or its OS login; never routed over HTTP
+    version_source: tuple[str, str | None, str] | None = None  # (show command, identifying positional or None, output field) for expected_version
 
     @property
     def is_write(self) -> bool:
@@ -88,7 +90,8 @@ def command(name: str, *, scope: str, description: str, input_model: type[BaseMo
             writes: set[str] | frozenset[str] = frozenset(), required_role: Role | None = None,
             positional: list[str] | None = None, error_codes: list[str] | None = None, bootstrap: bool = False,
             kind: str | None = None, truth: str | None = None, accepts_idempotency_key: bool = False,
-            clearable: bool = False, streams: bool = False, capability: str | None = None, feature: str | None = None):
+            clearable: bool = False, streams: bool = False, capability: str | None = None, feature: str | None = None,
+            local_only: bool = False, version_source: tuple[str, str | None, str] | None = None):
     """Register ``plan`` (and, via ``.apply``, the apply function) under ``name``."""
     bad = set(input_model.model_fields) & CONTEXT_FIELD_NAMES
     if bad:
@@ -116,7 +119,7 @@ def command(name: str, *, scope: str, description: str, input_model: type[BaseMo
                       plan=plan_fn, apply=None, writes=frozenset(writes), required_role=required_role,
                       positional=list(positional or []), error_codes=list(error_codes or []), bootstrap=bootstrap,
                       kind=kind, truth=truth, accepts_idempotency_key=accepts_idempotency_key, clearable=clearable, streams=streams,
-                      capability=capability or name.split(" ")[0], feature=feature)
+                      capability=capability or name.split(" ")[0], feature=feature, local_only=local_only, version_source=version_source)
         REGISTRY[name] = cmd
 
         def applier(apply_fn: Callable[..., Applied]) -> Callable[..., Applied]:
@@ -169,3 +172,26 @@ def load_all(target: str | None = None) -> None:
 
 def all_nouns() -> list[str]:
     return sorted({n for nouns in NOUN_MODULES.values() for n in nouns})
+
+
+# Overrides where a noun's record type or identifier differs from the derivation (record type = noun; identifier = the
+# show command's first positional). `company show` takes no positional: the record is the selected company.
+NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
+    "company": {"record_type": "company_info", "identifier": None},
+    "audit": {"record_type": "audit_event", "identifier": "event"},
+    "hub audit": {"record_type": "audit_event", "identifier": "event"},
+}
+
+
+def noun_meta(noun: str) -> dict[str, str | None]:
+    """Record type and identifying positional for a noun, derived from the registry with the overrides above."""
+    if noun in NOUN_META_OVERRIDES:
+        return dict(NOUN_META_OVERRIDES[noun])
+    show = REGISTRY.get(f"{noun} show")
+    identifier = show.positional[0] if show and show.positional else None
+    return {"record_type": noun.replace(" ", "_"), "identifier": identifier}
+
+
+def routed_commands() -> list[Command]:
+    """Commands an HTTP host exposes: everything but local-only ones."""
+    return [c for c in all_commands() if not c.local_only]

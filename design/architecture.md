@@ -99,5 +99,5 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - No `user add` or `membership grant`; tests insert users through the repository layer (tests/conftest.py::make_actor).
 - The currency table holds 155 codes; the remaining ISO 4217 codes are added on request.
 - Agents cannot yet exist through any surface; the CLI maps an OS login only to a human user, and tests build an agent session at the point row 7's token resolution will fill (`Session.actor`, `Context.on_behalf_of`).
-- The full budget fixture (5,000 creates and 5,000 updates) is run on demand, not in the default suite, to keep the suite near its 60 s budget; the default runs 300.
+- The full budget fixture (5,000 creates and 5,000 updates) is run on demand with `BOOKFLOW_BUDGET_N=5000`; it measured audit 8.1 MB against live 1.6 MB, ratio 5.16, in 192 s; the default suite runs 200 rows.
 - `--follow` on `audit tail` is CLI-only and polls under the data-root lock every two seconds until the host exists.

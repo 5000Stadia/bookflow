@@ -49,3 +49,17 @@ def redact_paths(obj: Any, allowed: bool) -> Any:
     if isinstance(obj, list):
         return [redact_paths(v, allowed) for v in obj]
     return obj
+
+
+# Column preferences every adapter shares when rendering a list (blueprint 2: no adapter reads another adapter's tables).
+COMMON_FIELDS = {"id", "version", "created_at", "created_by", "created_via", "updated_at", "updated_by", "updated_via"}
+PREFERRED_COLUMNS = ["id", "seq", "display_name", "organization_name", "legal_name", "home_currency", "access", "role", "at", "command", "actor_name", "interface", "reason", "summary", "company_id", "organization_id", "entry_count", "code", "text", "active"]
+HIDDEN_COLUMNS = COMMON_FIELDS | {"path", "schema_revision", "entries", "session_id", "request_id", "client_version", "client_host", "client_name", "actor_id", "actor_kind", "on_behalf_of", "directive_id", "source_ref", "registered_by_name", "is_demo", "entry_count", "editing_by"}
+
+
+def list_columns(items: list[dict]) -> list[str] | None:
+    if not items:
+        return None
+    hidden = HIDDEN_COLUMNS - ({"id"} if "seq" in items[0] else set())
+    keys = [k for k in items[0] if k not in hidden and not isinstance(items[0][k], (dict, list))]
+    return [k for k in PREFERRED_COLUMNS if k in keys] + [k for k in keys if k not in PREFERRED_COLUMNS]

@@ -304,54 +304,84 @@ def _close(s: Session) -> None:
                 setattr(s, attr, None)
 
 
+def guard(fn, allowed=False):
+    """The one error boundary: named errors redacted for non-admins; OS and SQLite failures become E_IO.
+
+    ``allowed`` may be a callable evaluated when the error happens, since the actor is known only part-way through run().
+    """
+    def ok() -> bool:
+        return bool(allowed()) if callable(allowed) else bool(allowed)
+    try:
+        return fn()
+    except BookflowError as e:
+        raise redact_error(e, ok())
+    except (OSError, sqlite3.Error) as e:
+        raise redact_error(io_error("command", e, getattr(e, "filename", None)), ok())
+    except sa.exc.DBAPIError as e:
+        raise redact_error(io_error("command", e.orig if isinstance(e.orig, sqlite3.Error) else e), ok())
+
+
+def execute(cmd: Command, raw_input: dict[str, Any], ctx: Context, s: Session, *, company_selector: str | None = None,
+            company_source: str = "option", dry_run: bool = False) -> dict[str, Any]:
+    """Validate and run a command inside an open, locked session with a loaded actor: the entry point every adapter shares."""
+    def body():
+        if dry_run and not cmd.is_write:
+            raise BookflowError("E_USAGE", message=f"`{cmd.name}` does not write; --dry-run does not apply.")
+        if company_selector is not None and cmd.scope != "company":
+            raise BookflowError("E_USAGE", message=f"`{cmd.name}` is not a company-scoped command; --company does not apply.")
+        inp = validate_input(cmd, raw_input)
+        validate_context(ctx)
+        if s.hub is not None and s.hub.writable and not dry_run:
+            _complete_pending_organizations(s, ctx)
+        return run_in_session(cmd, inp, ctx, s, company_selector=company_selector, company_source=company_source, dry_run=dry_run)
+    return guard(body, s.is_hub_admin)
+
+
 def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str | None = None,
         company_selector: str | None = None, company_source: str = "option", dry_run: bool = False,
         _login: str | None = None) -> dict[str, Any]:
-    """Execute a command and return its output as a dict (redacted for the actor)."""
+    """Execute a command from a fresh process: data root, hand-off to a live host, lock, hub, actor, migration, execute."""
     if dry_run and not cmd.is_write:
         raise BookflowError("E_USAGE", message=f"`{cmd.name}` does not write; --dry-run does not apply.")
-    if company_selector is not None and cmd.scope != "company" and not _accepts_selector(cmd):
+    if company_selector is not None and cmd.scope != "company":
         raise BookflowError("E_USAGE", message=f"`{cmd.name}` is not a company-scoped command; --company does not apply.")
-    inp = validate_input(cmd, raw_input)
+    validate_input(cmd, raw_input)
     validate_context(ctx)
-    allowed = False
-    try:
+
+    def before_lock():
         root = resolve_data_root(data_root)
         if root.exists() and not root.is_dir():
             raise BookflowError("E_IO", details={"operation": "data_root", "errno": "ENOTDIR", "path": str(root)})
         check_local(root)
         s = Session(data_root=root, os_login=_login or os_login(), config=Config(root / "config.toml"), dry_run=dry_run)
         if cmd.bootstrap:
-            return _run_bootstrap(cmd, inp, ctx, s)
+            return _run_bootstrap(cmd, validate_input(cmd, raw_input), ctx, s), None
         if not (root / "hub.db").exists():
             raise BookflowError("E_NOT_INITIALIZED", details={"data_root": str(root)})
-    except BookflowError as e:
-        raise redact_error(e, allowed)
-    except (OSError, sqlite3.Error) as e:
-        raise redact_error(io_error("command", e), allowed)
-    except sa.exc.DBAPIError as e:
-        raise redact_error(io_error("command", e.orig if isinstance(e.orig, sqlite3.Error) else e), allowed)
-    try:
-        with private_umask(), RootLock(root, cmd.name):
+        return None, s
+    done, s = guard(before_lock, False)
+    if done is not None:
+        return done
+    if not cmd.local_only:
+        from bookflow.core.forward import try_forward
+        forwarded = try_forward(s.data_root, cmd, raw_input, ctx, company_selector, company_source, dry_run)
+        if forwarded is not None:
+            return forwarded
+
+    def under_lock():
+        with private_umask(), RootLock(s.data_root, cmd.name):
             try:
-                s.config = Config.load(root / "config.toml")
+                s.config = Config.load(s.data_root / "config.toml")
                 needs_hub_write = (bool(cmd.writes & {"hub", "config"}) or cmd.kind == "advisory" or (cmd.scope == "company" and "company" in cmd.writes)) and not dry_run
                 _open_hub(s, needs_hub_write, ctx, skip_head_check=(dry_run and cmd.name == "upgrade"))
                 _load_actor(s)
-                allowed = s.is_hub_admin
-                ctx = ctx.model_copy(update={"actor_id": s.actor.id, "actor_kind": ActorKind(s.actor.kind)})
+                ctx2 = ctx.model_copy(update={"actor_id": s.actor.id, "actor_kind": ActorKind(s.actor.kind)})
                 if s.hub.writable:
-                    _migrate_hub(s, ctx)
-                    _complete_pending_organizations(s, ctx)
-                return run_in_session(cmd, inp, ctx, s, company_selector=company_selector, company_source=company_source, dry_run=dry_run)
+                    _migrate_hub(s, ctx2)
+                return execute(cmd, raw_input, ctx2, s, company_selector=company_selector, company_source=company_source, dry_run=dry_run)
             finally:
                 _close(s)
-    except BookflowError as e:
-        raise redact_error(e, allowed)
-    except (OSError, sqlite3.Error) as e:
-        raise redact_error(io_error("command", e, getattr(e, "filename", None)), allowed)
-    except sa.exc.DBAPIError as e:
-        raise redact_error(io_error("command", e.orig if isinstance(e.orig, sqlite3.Error) else e), allowed)
+    return guard(under_lock, lambda: s.is_hub_admin)
 
 
 def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, company_selector: str | None = None,

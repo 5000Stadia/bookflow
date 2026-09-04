@@ -238,7 +238,7 @@ def _validate_merged(new: dict[str, Any]) -> None:
 
 company_update = command("company update", scope="company", description="Update the selected company's information; versioned, blind, or merged per the concurrency rules.",
                          input_model=CompanyUpdateInput, output_model=UpdateOutput, writes={"company", "hub"}, required_role="admin", truth="company", clearable=True,
-                         error_codes=["E_VERSION_CONFLICT", "E_PARTIAL_WRITE", "E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE"])
+                         error_codes=["E_VERSION_CONFLICT", "E_PARTIAL_WRITE", "E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE"], version_source=("company show", None, "info_version"))
 
 
 @company_update

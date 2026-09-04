@@ -7,6 +7,7 @@ import sys
 from typing import Any
 
 from bookflow.core.errors import BookflowError
+from bookflow.core.models import list_columns
 
 
 def emit_error(err: BookflowError, as_json: bool) -> int:
@@ -67,11 +68,7 @@ def render_output(out: dict[str, Any], as_json: bool) -> str:
         return json.dumps(out, default=str)
     if "items" in out and isinstance(out["items"], list):
         items = out["items"]
-        cols = None
-        if items:
-            hidden = HIDDEN - ({"id"} if "seq" in items[0] else set())  # audit events: the id is the handle `show` takes
-            keys = [k for k in items[0] if k not in hidden and not isinstance(items[0][k], (dict, list))]
-            cols = [k for k in PREFERRED if k in keys] + [k for k in keys if k not in PREFERRED]
+        cols = list_columns(items)
         text = render_table(items, cols)
         extra = {k: v for k, v in out.items() if k != "items"}
         return text + "\n" + " ".join(f"{k}={_cell(v)}" for k, v in extra.items())

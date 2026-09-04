@@ -66,7 +66,7 @@ def _plan_init(inp: InitInput, ctx: Context, s: Session) -> Plan:  # never calle
 
 
 init_cmd = command("init", scope="hub", description="Create the data root, the system user, and the first hub-admin user mapped from the OS login.",
-                   input_model=InitInput, output_model=InitOutput, writes={"hub", "config"}, error_codes=["E_INIT_CONFLICT"], bootstrap=True)(_plan_init)
+                   input_model=InitInput, output_model=InitOutput, writes={"hub", "config"}, error_codes=["E_INIT_CONFLICT"], bootstrap=True, local_only=True)(_plan_init)
 
 
 def run_init(cmd, inp: InitInput, ctx: Context, s: Session) -> dict[str, Any]:
@@ -527,7 +527,7 @@ class CompanyUseOutput(WriteOutput):
 
 
 company_use = command("company use", scope="hub", description="Save a company as this login's default for later commands.",
-                      input_model=CompanySelector, output_model=CompanyUseOutput, writes={"config"}, positional=["company"])
+                      input_model=CompanySelector, output_model=CompanyUseOutput, writes={"config"}, positional=["company"], local_only=True)
 
 
 @company_use

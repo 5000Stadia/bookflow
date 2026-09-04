@@ -28,6 +28,7 @@ INFRASTRUCTURE_CODES: dict[str, str] = {
     "E_IO": "A filesystem operation failed.",
     "E_REASON_REQUIRED": "Writes by an agent need --reason or --directive.",
     "E_FEATURE_DISABLED": "This feature is not enabled for the company.",
+    "E_UNAUTHENTICATED": "No valid credential: log in, or send a bearer token.",
     "E_INTERNAL": "Internal failure.",
 }
 
@@ -51,6 +52,10 @@ COMMAND_CODES: dict[str, str] = {
     "E_IDEMPOTENCY_MISMATCH": "That idempotency key was used for a different command or input.",
     "E_RECORD_NOT_FOUND": "No such record.",
     "E_PARTIAL_WRITE": "The write completed in one database but not the other.",
+    "E_LOGIN_FAILED": "Login failed.",
+    "E_WORKBENCH_HEADER": "Cookie-authenticated writes need the X-Bookflow-Workbench header.",
+    "E_VERSION_MISMATCH": "The running host and this client are different Bookflow versions; stop the host or upgrade the client.",
+    "E_NETWORK_NOT_ALLOWED": "Binding outside loopback needs --allow-network.",
 }
 
 ALL_CODES: dict[str, str] = {**INFRASTRUCTURE_CODES, **COMMAND_CODES}

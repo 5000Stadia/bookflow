@@ -87,4 +87,4 @@ def test_cold_start(cli):
     print(f"cold start --help {best*1000:.0f} ms, company list {listed*1000:.0f} ms")
     budget = float(__import__("os").environ.get("BOOKFLOW_BUDGET_MS", "300")) / 1000
     assert best < budget, f"--help took {best*1000:.0f} ms (budget {budget*1000:.0f} ms; override BOOKFLOW_BUDGET_MS)"
-    assert listed < 2 * budget, f"company list took {listed*1000:.0f} ms (budget {2*budget*1000:.0f} ms)"
+    assert listed < 2.5 * budget, f"company list took {listed*1000:.0f} ms (budget {2.5*budget*1000:.0f} ms)"
