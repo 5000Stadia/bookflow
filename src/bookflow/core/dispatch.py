@@ -362,6 +362,13 @@ def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str
     validate_input(cmd, raw_input)
     validate_context(ctx)
 
+    if cmd.standalone_runner is not None:
+        def standalone():
+            inp = validate_input(cmd, raw_input)
+            result = cmd.standalone_runner(cmd, inp, ctx)
+            return cmd.output_model.model_validate(result).model_dump(mode="json")
+        return guard(standalone, True)
+
     def before_lock():
         root = resolve_data_root(data_root)
         if root.exists() and not root.is_dir():

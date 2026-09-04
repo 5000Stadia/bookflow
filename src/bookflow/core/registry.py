@@ -62,14 +62,30 @@ class Command:
     clearable: bool = False  # update commands whose fields may be set to null (--clear)
     streams: bool = False  # commands with a CLI-only --follow form
     ledger: bool = False
-    capability: str = ""  # dotted area a membership may be granted or denied (blueprint 4.3b); derived from the noun
+    capability: str | None = ""  # dotted area a membership may be granted or denied; None for standalone local tooling
     feature: str | None = None  # a per-company unlockable service this command needs (blueprint 4.3b)
     local_only: bool = False  # acts on the calling process or its OS login; never routed over HTTP
     version_source: tuple[str, str | None, str] | None = None  # (show command, identifying positional or None, output field) for expected_version
+    standalone_runner: Callable[..., dict[str, Any]] | None = None  # explicit rootless runner: no data root, lock, actor, or forwarding
+    authorization: str | None = None  # exact human-readable rule when required_role alone cannot express it
 
     @property
     def is_write(self) -> bool:
         return self.kind == "write"
+
+    @property
+    def standalone(self) -> bool:
+        return self.standalone_runner is not None
+
+    @property
+    def permissioned(self) -> bool:
+        return not self.standalone
+
+    @property
+    def authorization_requirement(self) -> str:
+        if self.standalone:
+            return "none"
+        return self.authorization or self.required_role or "authenticated"
 
     @property
     def noun(self) -> str:
@@ -91,7 +107,8 @@ def command(name: str, *, scope: str, description: str, input_model: type[BaseMo
             positional: list[str] | None = None, error_codes: list[str] | None = None, bootstrap: bool = False,
             kind: str | None = None, truth: str | None = None, accepts_idempotency_key: bool = False,
             clearable: bool = False, streams: bool = False, capability: str | None = None, feature: str | None = None,
-            local_only: bool = False, version_source: tuple[str, str | None, str] | None = None):
+            local_only: bool = False, version_source: tuple[str, str | None, str] | None = None,
+            standalone_runner: Callable[..., dict[str, Any]] | None = None, authorization: str | None = None):
     """Register ``plan`` (and, via ``.apply``, the apply function) under ``name``."""
     bad = set(input_model.model_fields) & CONTEXT_FIELD_NAMES
     if bad:
@@ -120,16 +137,29 @@ def command(name: str, *, scope: str, description: str, input_model: type[BaseMo
         truth = "company" if scope == "company" and "company" in writes else "hub"
     if truth not in ("hub", "company"):
         raise ValueError(f"{name}: bad truth {truth}")
+    if standalone_runner is not None:
+        if not bootstrap or not local_only:
+            raise ValueError(f"{name}: a standalone command must be bootstrap and local-only")
+        if scope != "hub":
+            raise ValueError(f"{name}: a standalone command must use the hub scope without company selection")
+        if writes or required_role is not None or capability is not None or feature is not None or authorization is not None:
+            raise ValueError(f"{name}: a standalone command cannot declare database writes, a role, a capability, or a feature")
+        if any((accepts_idempotency_key, clearable, streams, version_source is not None)):
+            raise ValueError(f"{name}: a standalone command cannot declare database command behavior")
 
     def register(plan_fn: Callable[..., Plan]) -> Command:
+        resolved_capability = None if standalone_runner is not None else (capability or name.split(" ")[0])
         cmd = Command(name=name, scope=scope, description=description, input_model=input_model, output_model=output_model,
                       plan=plan_fn, apply=None, writes=frozenset(writes), required_role=required_role,
                       positional=list(positional or []), error_codes=list(error_codes or []), bootstrap=bootstrap,
                       kind=kind, truth=truth, accepts_idempotency_key=accepts_idempotency_key, clearable=clearable, streams=streams,
-                      capability=capability or name.split(" ")[0], feature=feature, local_only=local_only, version_source=version_source)
+                      capability=resolved_capability, feature=feature, local_only=local_only, version_source=version_source,
+                      standalone_runner=standalone_runner, authorization=authorization)
         REGISTRY[name] = cmd
 
         def applier(apply_fn: Callable[..., Applied]) -> Callable[..., Applied]:
+            if cmd.standalone:
+                raise ValueError(f"{name}: a standalone command cannot declare an apply function")
             cmd.apply = apply_fn
             return apply_fn
 
@@ -150,8 +180,13 @@ def get(name: str) -> Command | None:
     return cmd
 
 
-def all_commands() -> list[Command]:
-    return [REGISTRY[k] for k in sorted(REGISTRY)]
+def all_commands(*, include_standalone: bool = False) -> list[Command]:
+    """Registered database commands, plus rootless local tooling when explicitly requested.
+
+    Standalone commands do not participate in database role-capability seeds or routed surfaces.
+    The CLI and documentation reference request them explicitly.
+    """
+    return [REGISTRY[k] for k in sorted(REGISTRY) if include_standalone or not REGISTRY[k].standalone]
 
 
 # Which module registers which nouns. The CLI loads only the module it needs, so cold start does not grow
@@ -161,6 +196,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.company_cmds": ["company", "directive", "presence"],
     "bookflow.commands.audit_cmds": ["audit", "hub audit"],
     "bookflow.commands.host_cmds": ["serve", "user", "token"],
+    "bookflow.commands.docs_cmds": ["docs"],
 }
 
 _loaded: set[str] = set()

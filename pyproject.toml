@@ -1,7 +1,7 @@
 [project]
 name = "bookflow-core"
 version = "0.0.1"
-description = "Multi-company double-entry accounting core with a command set exposed through a CLI, an HTTP host, a web workbench, and an MCP server."
+description = "Multi-company double-entry accounting core with a command set exposed through a CLI, an HTTP host, and a browser workbench."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }

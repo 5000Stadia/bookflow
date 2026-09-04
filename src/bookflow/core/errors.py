@@ -56,6 +56,7 @@ COMMAND_CODES: dict[str, str] = {
     "E_WORKBENCH_HEADER": "Cookie-authenticated writes need the X-Bookflow-Workbench header.",
     "E_VERSION_MISMATCH": "The running host and this client are different Bookflow versions; stop the host or upgrade the client.",
     "E_NETWORK_NOT_ALLOWED": "Binding outside loopback needs --allow-network.",
+    "E_DOCS_STALE": "Generated documentation differs from the current command and schema definitions.",
     "E_USER_NOT_FOUND": "No such user.",
     "E_TOKEN_NOT_FOUND": "No such token.",
 }

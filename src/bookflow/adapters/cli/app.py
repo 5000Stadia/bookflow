@@ -119,7 +119,8 @@ def _build_command(cmd: registry.Command):
             annotation = str | None
         params.append(inspect.Parameter(pname, inspect.Parameter.KEYWORD_ONLY, default=default, annotation=annotation))
     params.append(inspect.Parameter("json_", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--json", help="Print the output as one JSON object"), annotation=bool))
-    params.append(inspect.Parameter("data_root", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--data-root", help="Data root; else BOOKFLOW_DATA_ROOT, else ~/.bookflow", metavar="TEXT"), annotation=str | None))
+    if not cmd.standalone:
+        params.append(inspect.Parameter("data_root", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--data-root", help="Data root; else BOOKFLOW_DATA_ROOT, else ~/.bookflow", metavar="TEXT"), annotation=str | None))
     if cmd.is_write:
         params.append(inspect.Parameter("dry_run", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--dry-run", help="Validate and preview; write nothing"), annotation=bool))
         params.append(inspect.Parameter("reason", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--reason", help="Why, in one short phrase (at most 140 characters)", metavar="TEXT"), annotation=str | None))
@@ -140,9 +141,14 @@ def _build_command(cmd: registry.Command):
         ctx_obj = click_globals.get_current_context().obj or {}
         as_json = kw.pop("json_", False) or ctx_obj.get("json", False)
         local_root = kw.pop("data_root", None)
-        if local_root and ctx_obj.get("data_root") and local_root != ctx_obj["data_root"]:
-            raise BookflowError("E_USAGE", message="--data-root was given twice with different values")
-        data_root = local_root or ctx_obj.get("data_root")
+        if cmd.standalone:
+            if local_root is not None or ctx_obj.get("data_root") is not None:
+                raise BookflowError("E_USAGE", message=f"--data-root does not apply to `{cmd.name}`")
+            data_root = None
+        else:
+            if local_root and ctx_obj.get("data_root") and local_root != ctx_obj["data_root"]:
+                raise BookflowError("E_USAGE", message="--data-root was given twice with different values")
+            data_root = local_root or ctx_obj.get("data_root")
 
         def merged(name: str, local: Any, applicable: bool) -> Any:
             root_v = ctx_obj.get(name)
@@ -317,7 +323,7 @@ def build_app(target: str | None = None, full: bool = False) -> typer.Typer:
 
     single = {"init": "Create the data root, the system user, and the first hub-admin user mapped from the OS login.", "upgrade": "Migrate the hub database and every company database the acting user may write to the current schema revision."}
     built = set()
-    for cmd in registry.all_commands():
+    for cmd in registry.all_commands(include_standalone=True):
         fn = _build_command(cmd)
         if not cmd.verb:
             app.command(cmd.noun, help=cmd.description, epilog=fn.__epilog__)(fn)

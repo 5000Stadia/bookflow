@@ -1,6 +1,6 @@
 # Bookflow — architecture
 
-What is built, module by module: package skeleton, registry, data root, hub, organizations, companies, demo, CLI, company audit, versioned writes, presence, idempotency, directives, the event feed, the host process, HTTP routes, tokens, the POSIX local hand-off, and the workbench.
+What is built, module by module: package skeleton, registry, data root, hub, organizations, companies, demo, CLI, company audit, versioned writes, presence, idempotency, directives, the event feed, the host process, HTTP routes, tokens, the POSIX local hand-off, the workbench, and generated command and schema documentation.
 
 ## Layout
 
@@ -9,7 +9,7 @@ src/bookflow/
   __init__.py            lazy exports: connect, Client, BookflowError, Money (nothing heavy imports at package load)
   client.py              Client.run / use_company / attribute form; builds Context with interface "python"
   core/
-    registry.py          Command, Plan, Applied, Touched, @command, REGISTRY, load_all()
+    registry.py          Command, Plan, Applied, Touched, @command, REGISTRY, load_all(); exact authorization text and rootless standalone runners
     dispatch.py          run(): data root, locality, root lock, umask 077, hub open, actor, company, roles, plan/apply, audit, config
     context.py           Context (blueprint 5.2); CONTEXT_FIELD_NAMES
     session.py           Session (open databases, actor, memberships), Actor, now_iso(), localize()
@@ -37,7 +37,7 @@ src/bookflow/
     company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit tables, presence, idempotency_keys, directives, sequences)
     migrate.py           + migrate_company(): the one owner of company migrations: migrate entry by the system user, baseline entry, marker, hub projection entry
   hub/
-    schema.py            users, api_tokens, organizations, companies, memberships, role_capabilities, features, audit_events, audit_entries
+    schema.py            users, api_tokens, organizations, companies, memberships, role_capabilities, features, audit_events, audit_entries; co-located table and column descriptions
     users.py             bootstrap users, common() field helper, user_names()
     access.py            memberships, org_role(), company_role() -> (access, role), visibility filters, role_satisfies()
     organizations.py     create (folder + marker + row), get, bump
@@ -45,7 +45,7 @@ src/bookflow/
     audit.py             write_event() with prefixed/compressed snapshots, decode, visible_record_ids() and visible_event_ids_filter() (per-entry visibility)
     moves.py             complete_company_move() / complete_org_move(): finish a pending move from any state with a version bump and a move event; effective_path() and display_path() for read-only opens
   company/
-    schema.py            company_info (9.1 inventory), principals
+    schema.py            company_info (9.1 inventory), principals; co-located table and column descriptions
     info.py              read_info, upsert_principal/upsert_actor, principal_names, write_display_name_copy (raw)
     rollout.py           create_company_folder(): stages 2-4 with cleanup; writes the company_info create entry
     presence.py          set/clear/live_for/prune; 90 s TTL; never audited
@@ -56,6 +56,12 @@ src/bookflow/
     company_cmds.py      company show (+ info_version, editing_by), company rename, company update, directive add/list/show/deactivate, presence set/clear
     audit_cmds.py        audit list/show/tail (company) and hub audit list/show/tail, one implementation over either database; seq cursors; per-entry visibility
     host_cmds.py         serve (bootstrap path run_serve, bind parsing, the --allow-network gate), start_serving()/ServeHandle, migrate_everything(), make_local_handler(), user_for_login(); user set-password; token issue/list/revoke
+    docs_cmds.py         standalone docs generate/check command; imports the renderer only when invoked
+  documentation/
+    generate.py          deterministic command/schema/resource projection; complete-tree freshness comparison; sibling staging and atomic swap with rollback
+    introspection.py     recursive Pydantic field facts, deterministic valid output samples, and SQLAlchemy column facts
+    examples.py          exactly one model-valid deterministic invocation per registered command
+    resources/           packaged concepts.md and executable agent-guide.md sources copied into each generated tree
   demo/seed.toml         Demo Holdings LLC / Demo Plumbing Co
   adapters/cli/app.py    Typer app generated from the registry; nested fields -> --a-b flags; global options per scope; --interactive; error rendering
   adapters/cli/render.py tables, field views, JSON, errors on stderr
@@ -67,7 +73,7 @@ src/bookflow/
 
 Multi-word nouns (`hub audit`) become nested CLI groups and attribute chains on the client (`client.hub.audit.list()`).
 
-Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the module for the invoked noun (root help loads none), which keeps cold start flat. `Command` carries kind (read/write/advisory), truth (which database commits first and holds the idempotency row), accepts_idempotency_key, clearable, streams, capability, feature.
+Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the module for the invoked noun (root help loads none), which keeps cold start flat. `Command` carries kind (read/write/advisory), truth (which database commits first and holds the idempotency row), accepts_idempotency_key, clearable, streams, capability, feature, exact authorization text, and an optional standalone runner. Standalone commands are omitted from database capability projections and routed surfaces unless a caller explicitly requests them.
 
 ## Runtime facts
 
@@ -88,8 +94,9 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - Session and bearer liveness refreshes are throttled to five minutes. A browser session's database expiry and cookie `Max-Age` renew together; SSE does not renew the cookie. Password changes revoke every other session for the target and preserve bearer tokens.
 - Hub schema `hub0003` declares nullable membership grants/denies, the frozen role-capability projection, and inert feature rows. Its seeded capability rows are registry projections for compatibility, not current authorization promises; row 7 replaces or refines planner-sensitive and bootstrap rows before enabling enforcement. Enforcement remains role-based until then; company head remains `co0002`.
 - A single-word command (`upgrade`) has no verb: its noun page is its form, and it submits to `/hub/<noun>`.
+- `docs generate` is a rootless standalone command: no data root, lock, actor, capability, forwarding, or HTTP route. It renders all registered commands including standalone tooling, validates examples and schema descriptions, and copies packaged prose resources. Generation accepts only an absent, empty, or exactly marked real directory; it refuses symlinks and unrelated trees, validates a sibling stage, swaps it atomically, and restores the previous complete tree if publication fails. `--check` performs a read-only byte/path comparison and reports sorted missing, extra, and changed paths as `E_DOCS_STALE`.
 - The cold-start test budgets `bookflow --help` below 300 ms; neither root help nor command discovery imports FastAPI, uvicorn, or the workbench.
-- The suite is 260 tests in 164.68 s on this machine (Linux, ext4, Python 3.12). Duration is diagnostic rather than a release budget. The host/workbench/local group contains 87 tests.
+- The suite is 287 tests in 167.57 s on this machine (Linux, ext4, Python 3.12). Duration is diagnostic rather than a release budget. The host/workbench/local group contains 87 tests.
 
 ## Verified on this machine (Linux, ext4, Python 3.12)
 
@@ -99,6 +106,7 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - File modes under umask 022: every file 0600, every directory 0700.
 - Cold start: `bookflow --help` remains inside its 300 ms test budget on this machine (root help loads no command module); `BOOKFLOW_BUDGET_MS` overrides the test on slower machines, and SQLAlchemy is not imported for help.
 - Names containing `#`, `%`, `?`, and spaces in company, organization, and data-root names; a `bookflow-core` wheel built with `uv build` carries the `bookflow` import package, currency table, and `bookflow` console entry point.
+- The same wheel carries the hand-authored documentation resources and can import the generator directly from the wheel archive to reproduce the complete 35-file tree without a source checkout.
 - Migration of a behind-head company with a synthetic revision: backup, `migrate` event, marker and projection updated (tests/test_hardening.py::test_synthetic_migration).
 - Demo reset repeated on one root; trash accumulates one folder per reset.
 
@@ -117,6 +125,13 @@ HTTP host, local hand-off, and workbench verification in `tests/test_row3_host.p
 - A company rewound to `co0001` is migrated at startup, and the company's audit shows the `upgrade` event by the system user with the serving hub admin as `on_behalf_of`.
 - After 300 company updates through the writer with a reader attached, the company WAL is under 4 MB once the idle checkpoint runs; `checkpoint_now()` logs a result per connection and `sweep_now()` deletes only sessions expired more than a day, as one `session sweep` event by System with the token hash absent.
 - A host built with sub-second timers checkpoints and sweeps on its own, and both threads stop with the host.
+
+Generated-documentation verification in `tests/test_docs_generation.py`, `tests/test_docs_command.py`, `tests/test_docs_schema_metadata.py`, and `tests/test_agent_guide.py`:
+
+- Every registered command, nested input leaf, recursive output field, CLI/context option, exact authorization rule, capability, feature, HTTP locality/route/header, and declared error is projected into its noun page. One input and complete output example per command validates through the corresponding Pydantic model.
+- Every current hub and company table and column has a non-empty co-located description. The rendered SQL type, nullability, defaults, keys, indexes, references, and meaning match SQLAlchemy metadata, and the current metadata structure matches databases created from the frozen migration chains.
+- Generation is byte-identical across working directories. Freshness detects changed, missing, and extra files without writing; symlink, unrelated-tree, stage-failure, and swap-failure witnesses preserve the original destination.
+- The literal standard-library agent-guide program runs against a real ephemeral host and proves an authenticated directive-citing update, overlap conflict without overwrite, retry from the current version, audited actor/interface/directive facts, cursor polling, and SSE resumption. Its bootstrap covers installed and source-checkout invocation, isolated-root and port selection, token capture, HTTP readiness, rerun behavior, receipt verification, orderly shutdown, and guarded cleanup guidance.
 
 ## Not verified on hardware
 

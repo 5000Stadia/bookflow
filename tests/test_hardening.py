@@ -299,8 +299,33 @@ def test_wheel_contains_data(tmp_path):
         metadata = archive.read(metadata_name).decode()
         entry_points = archive.read(entry_points_name).decode()
     assert "bookflow/data/currencies.csv" in names
+    assert "bookflow/documentation/resources/concepts.md" in names
+    assert "bookflow/documentation/resources/agent-guide.md" in names
     assert "Name: bookflow-core\n" in metadata
     assert "bookflow = bookflow.adapters.cli.app:main" in entry_points
+
+    generated = tmp_path / "wheel-docs"
+    script = """
+import json
+import sys
+sys.path.insert(0, sys.argv[1])
+import bookflow
+assert '.whl/' in bookflow.__file__.replace('\\\\', '/')
+from bookflow.documentation.generate import generate_docs
+print(json.dumps(generate_docs(sys.argv[2], False)))
+"""
+    reproduced = subprocess.run(
+        [sys.executable, "-c", script, str(wheel), str(generated)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert reproduced.returncode == 0, reproduced.stderr
+    assert json.loads(reproduced.stdout) == sorted(
+        path.relative_to(generated).as_posix()
+        for path in generated.rglob("*")
+        if path.is_file()
+    )
 
 
 def test_sibling_companies_hidden_in_hub_audit(client, root):

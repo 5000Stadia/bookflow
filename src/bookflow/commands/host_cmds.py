@@ -88,7 +88,8 @@ serve_cmd = command("serve", scope="hub",
                     description="Serve every routed command over HTTP and the loopback socket, holding the data-root lock until interrupted.",
                     input_model=ServeInput, output_model=ServeOutput,
                     bootstrap=True, local_only=True,
-                    error_codes=["E_NETWORK_NOT_ALLOWED", "E_VERSION_MISMATCH", "E_COMPANY_MISSING"])(_plan_serve)
+                    error_codes=["E_NETWORK_NOT_ALLOWED", "E_VERSION_MISMATCH", "E_COMPANY_MISSING"],
+                    authorization="human hub administrator")(_plan_serve)
 
 
 def parse_bind(bind: str) -> tuple[str, int]:
@@ -411,7 +412,8 @@ user_set_password = command("user set-password", scope="hub",
                             description="Set a user's password so they can log in to the workbench.",
                             input_model=SetPasswordInput, output_model=SetPasswordOutput, writes={"hub"},
                             positional=["username"],
-                            error_codes=["E_USER_NOT_FOUND", "E_VALIDATION", "E_PERMISSION"])
+                            error_codes=["E_USER_NOT_FOUND", "E_VALIDATION", "E_PERMISSION"],
+                            authorization="human self-service; a human hub administrator may reset another human")
 
 
 @user_set_password
@@ -528,7 +530,8 @@ def _target_user(s: Session, selector: str | None) -> dict[str, Any]:
 token_issue = command("token issue", scope="hub",
                       description="Issue a bearer token a program can send to the host; the secret is shown once.",
                       input_model=TokenIssueInput, output_model=TokenIssueOutput, writes={"hub"},
-                      error_codes=["E_USER_NOT_FOUND", "E_VALIDATION", "E_PERMISSION"])
+                      error_codes=["E_USER_NOT_FOUND", "E_VALIDATION", "E_PERMISSION"],
+                      authorization="human self-service; a human hub administrator may issue for another user")
 
 
 @token_issue
@@ -569,7 +572,8 @@ def apply_token_issue(plan: Plan, ctx: Context, s: Session) -> Applied:
 
 
 token_list = command("token list", scope="hub", description="List the bearer tokens you may see; hub admins see everyone's.",
-                     input_model=TokenListInput, output_model=ListOutput[TokenOut], error_codes=["E_USER_NOT_FOUND", "E_PERMISSION"])
+                     input_model=TokenListInput, output_model=ListOutput[TokenOut], error_codes=["E_USER_NOT_FOUND", "E_PERMISSION"],
+                     authorization="own tokens; a hub administrator may list another user's tokens")
 
 
 @token_list
@@ -597,7 +601,8 @@ def _token_out(s: Session, row: dict[str, Any], names: dict[str, str]) -> TokenO
 
 token_revoke = command("token revoke", scope="hub", description="Revoke a bearer token so it stops working immediately.",
                        input_model=TokenSelector, output_model=TokenRevokeOutput, writes={"hub"},
-                       positional=["token"], error_codes=["E_TOKEN_NOT_FOUND"])
+                       positional=["token"], error_codes=["E_TOKEN_NOT_FOUND"],
+                       authorization="own tokens; a hub administrator may revoke another user's token")
 
 
 @token_revoke

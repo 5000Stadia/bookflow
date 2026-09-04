@@ -66,7 +66,8 @@ def _plan_init(inp: InitInput, ctx: Context, s: Session) -> Plan:  # never calle
 
 
 init_cmd = command("init", scope="hub", description="Create the data root, the system user, and the first hub-admin user mapped from the OS login.",
-                   input_model=InitInput, output_model=InitOutput, writes={"hub", "config"}, error_codes=["E_INIT_CONFLICT"], bootstrap=True, local_only=True)(_plan_init)
+                   input_model=InitInput, output_model=InitOutput, writes={"hub", "config"}, error_codes=["E_INIT_CONFLICT"], bootstrap=True, local_only=True,
+                   authorization="none; the local operating-system login becomes or maps to the first hub administrator")(_plan_init)
 
 
 def run_init(cmd, inp: InitInput, ctx: Context, s: Session) -> dict[str, Any]:
@@ -458,7 +459,8 @@ def _resolve_org_for_new(s: Session, selector: str | None) -> dict[str, Any]:
 
 company_new = command("company new", scope="hub", description="Create a company inside an organization: its folder, database, and company information.",
                       input_model=CompanyNewInput, output_model=CompanyNewOutput, writes={"hub", "company"}, accepts_idempotency_key=True,
-                      error_codes=["E_ORGANIZATION_REQUIRED", "E_NAME_TAKEN", "E_ROLLOUT_INCOMPLETE", "E_ORGANIZATION_NOT_FOUND", "E_IDEMPOTENCY_MISMATCH"])
+                      error_codes=["E_ORGANIZATION_REQUIRED", "E_NAME_TAKEN", "E_ROLLOUT_INCOMPLETE", "E_ORGANIZATION_NOT_FOUND", "E_IDEMPOTENCY_MISMATCH"],
+                      authorization="administrator of the selected organization; hub administrators qualify")
 
 
 @company_new
