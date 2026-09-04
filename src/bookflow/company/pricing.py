@@ -138,9 +138,9 @@ class PriceLevelOutput(StrictModel):
     active: bool
     seed_key: str | None = None
     name: str
-    # Put the zero-child valid discriminator first so generated output examples
-    # remain model-valid without inventing a percentage.
-    kind: Literal["per_item", "fixed_percent"]
+    kind: Literal["fixed_percent", "per_item"] = Field(
+        json_schema_extra={"sample": "per_item"}
+    )
     currency: str | None
     resolved_currency: str
     rounding_mode: Literal["nearest", "up", "down"]

@@ -196,11 +196,13 @@ def sample_value(annotation: Any, name: str) -> Any:
 def sample_model(model: type[BaseModel]) -> dict[str, Any]:
     values: dict[str, Any] = {}
     for name, field in model.model_fields.items():
-        if not field.is_required():
+        extra = field.json_schema_extra if isinstance(field.json_schema_extra, dict) else {}
+        if "sample" in extra:
+            value = extra["sample"]
+        elif not field.is_required():
             if field.default is not PydanticUndefined:
                 value = field.default
             elif field.default_factory is not None:
-                extra = field.json_schema_extra if isinstance(field.json_schema_extra, dict) else {}
                 value = sample_value(field.annotation, name) if extra.get("generated") else field.default_factory()
             else:
                 value = sample_value(field.annotation, name)
