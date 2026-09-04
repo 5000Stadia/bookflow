@@ -78,17 +78,42 @@ def backup(path: Path, backups_dir: Path, prefix: str = "", from_revision: str |
     while target.exists():
         n += 1
         target = backups_dir / f"{prefix}{stamp}-{n}{suffix}.db"
+    tmp = target.with_suffix(".db.partial")
     try:
         src = sqlite3.connect(sqlite_uri(path, "ro"), uri=True)
-        dst = sqlite3.connect(sqlite_uri(target, "rwc"), uri=True)
+        dst = sqlite3.connect(sqlite_uri(tmp, "rwc"), uri=True)
         try:
             src.backup(dst)
+            ok = dst.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+            rev = None
+            try:
+                rev = dst.execute("SELECT version_num FROM alembic_version").fetchone()
+            except sqlite3.OperationalError:
+                pass
         finally:
             dst.close()
             src.close()
+        if not ok or (from_revision and (rev is None or rev[0] != from_revision)):
+            raise sqlite3.DatabaseError("backup verification failed")
+        tmp.replace(target)
     except (sqlite3.Error, OSError) as e:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
         raise io_error("backup", e, target)
     return target
+
+
+def restore(path: Path, backup_path: Path) -> None:
+    """Put the backup's contents back into ``path`` with the backup API (used when a migration fails)."""
+    src = sqlite3.connect(sqlite_uri(backup_path, "ro"), uri=True)
+    dst = sqlite3.connect(sqlite_uri(path, "rw"), uri=True)
+    try:
+        src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
 
 
 def migrate_to_head(db: Database, chain: str, backups_dir: Path | None) -> tuple[str | None, str]:
@@ -99,19 +124,33 @@ def migrate_to_head(db: Database, chain: str, backups_dir: Path | None) -> tuple
         raise BookflowError("E_SCHEMA_UNKNOWN", details={"revision": before, "path": str(db.path)})
     if state == "head":
         return before, before
+    saved = None
     if state == "behind" and backups_dir is not None:
-        backup(db.path, backups_dir, prefix="hub-" if chain == "hub" else "", from_revision=before)
+        saved = backup(db.path, backups_dir, prefix="hub-" if chain == "hub" else "", from_revision=before)
     from alembic import command
-    # SQLite batch rewrites drop and recreate tables; foreign keys must be off for the duration (the pragma is ignored inside a transaction)
+    # SQLite batch rewrites drop and recreate tables; foreign keys must be off for the duration (the pragma is ignored inside a transaction).
+    # The whole chain runs in one transaction so a failing step leaves nothing behind; the verified backup is the second line.
     db.raw.execute("PRAGMA foreign_keys=OFF")
+    db.raw.execute("BEGIN IMMEDIATE")
     try:
         command.upgrade(_config(chain, db.conn), HEADS[chain])  # HEADS is the target, so the constants are the single truth
         problems = db.raw.execute("PRAGMA foreign_key_check").fetchall()
         if problems:
             raise BookflowError("E_MIGRATION_FAILED", details={"chain": chain, "from": before, "to": HEADS[chain], "cause": "foreign key check", "rows": len(problems)})
-    except BookflowError:
-        raise
-    except Exception as e:  # noqa: BLE001 - any Alembic or SQLite failure is named as a migration failure
+        db.raw.execute("COMMIT")
+    except BaseException as e:
+        try:
+            if db.raw.in_transaction:
+                db.raw.execute("ROLLBACK")
+        except sqlite3.Error:
+            pass
+        if saved is not None:
+            try:
+                restore(db.path, saved)
+            except (sqlite3.Error, OSError):
+                pass
+        if isinstance(e, BookflowError):
+            raise
         raise BookflowError("E_MIGRATION_FAILED", details={"chain": chain, "from": before, "to": HEADS[chain], "cause": type(e).__name__, "path": str(db.path)})
     finally:
         db.raw.execute("PRAGMA foreign_keys=ON")

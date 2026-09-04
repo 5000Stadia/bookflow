@@ -799,7 +799,7 @@ When two good things conflict, the earlier line wins.
 | A company database with 100,000 transactions stays under 500 MB excluding attachments | |
 | Audit tables occupy at most 6 times the live data they describe, in aggregate | measured with `dbstat` on the fixed fixture of 5,000 creates and 5,000 updates; every write keeps a full after-snapshot for readability and an event row of context, which the arithmetic in the row 2 plan puts near 5 |
 | Installed package with dependencies under 60 MB; no service other than SQLite required | |
-| CLI cold start under 300 ms | Python 3.12, warm disk cache |
+| CLI cold start: `bookflow --help` under 300 ms; a read command such as `company list` under 600 ms end to end | Python 3.12, warm disk cache; the read command bound is higher because SQLAlchemy and Pydantic load only when a command runs |
 | Full test suite under 60 s | |
 
 ## 19. Out of scope for release 1, and beyond

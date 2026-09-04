@@ -388,3 +388,66 @@ def test_client_signature_has_no_actor_parameter():
     from bookflow.client import Client, connect
     for fn in (Client.__init__, connect):
         assert not {"login", "act_as", "user", "actor"} & set(inspect.signature(fn).parameters)
+
+
+def test_attach_never_follows_symlinks(client, root, tmp_path, monkeypatch):
+    src = client.company.show(company="Demo Plumbing Co")["path"]
+    r2 = tmp_path / "r2"
+    monkeypatch.setenv("BOOKFLOW_DATA_ROOT", str(r2))
+    c2 = bookflow.connect(data_root=str(r2)); c2.init(); c2.organization.new(name="Demo Holdings LLC")
+    dst = r2 / "organizations" / "Demo Holdings LLC" / "Demo Plumbing Co"
+    shutil.copytree(src, dst)
+    outside = tmp_path / "outside.txt"; outside.write_text("x"); outside.chmod(0o644)
+    (dst / "exports" / "link").symlink_to(outside)
+    with pytest.raises(BookflowError) as e:
+        c2.company.attach(path=str(dst))
+    assert e.value.code == "E_ATTACH_INVALID" and e.value.details["check"] == "symlink"
+    import stat
+    assert stat.S_IMODE(outside.stat().st_mode) == 0o644, "nothing outside the folder was touched"
+
+
+def test_failed_migration_leaves_database_unchanged(tmp_path):
+    from alembic import command as _cmd
+    import bookflow.storage.migrate as migrate
+    from tests.test_migration_chain import _make_first_revision
+    p = tmp_path / "hub.db"
+    _make_first_revision(p, "hub", lambda conn: conn.execute("INSERT INTO users (id, version, created_at, created_by, created_via, updated_at, updated_by, updated_via, kind, username, display_name, owner_user_id, password_hash, hub_admin, timezone, active) VALUES ('U1',1,'t','U1','cli','t','U1','cli','human','k','k',NULL,NULL,1,NULL,1)"))
+    real = _cmd.upgrade
+    def half(cfg, target):
+        conn = cfg.attributes["connection"]
+        conn.exec_driver_sql("CREATE TABLE half_done (x INTEGER)")
+        raise RuntimeError("boom after partial DDL")
+    import unittest.mock as um
+    with um.patch.object(_cmd, "upgrade", half):
+        with open_database(p, writable=True) as db:
+            with pytest.raises(BookflowError) as e:
+                migrate.migrate_to_head(db, "hub", tmp_path / "backups")
+            assert e.value.code == "E_MIGRATION_FAILED" and e.value.details["chain"] == "hub" and e.value.details["from"] == "hub0001"
+    conn = sqlite3.connect(str(p))
+    names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "half_done" not in names and conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "hub0001"
+    conn.close()
+    backups = list((tmp_path / "backups").glob("*.db"))
+    assert len(backups) == 1 and not list((tmp_path / "backups").glob("*.partial"))
+
+
+def test_failed_backup_is_not_kept(tmp_path, monkeypatch):
+    """A backup that cannot be finalized leaves no artifact that a retry could mistake for a good backup."""
+    import bookflow.storage.migrate as migrate
+    p = tmp_path / "x.db"
+    conn = sqlite3.connect(str(p)); conn.execute("CREATE TABLE t (x)"); conn.commit(); conn.close()
+    def boom(self, target):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(Path, "replace", boom)
+    with pytest.raises(BookflowError) as e:
+        migrate.backup(p, tmp_path / "b", from_revision=None)
+    monkeypatch.undo()
+    assert e.value.code == "E_IO" and list((tmp_path / "b").glob("*")) == []
+
+
+def test_fuse_types_refused(tmp_path):
+    from bookflow.core.fs import check_local
+    for t in ("fuse.gocryptfs", "fuse.sshfs", "autofs"):
+        with pytest.raises(BookflowError) as e:
+            check_local(tmp_path, fs_type=t)
+        assert e.value.code == "E_NETWORK_SHARE"

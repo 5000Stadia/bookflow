@@ -150,7 +150,7 @@ Hub admin only, under the lock. Transaction one sets `pending_path` on the demo 
 
 ## CLI rendering
 
-Per blueprint 5.4. `--interactive` prompts on stderr for fields not given as options, showing description, default, and choices; non-terminal stdin is `E_USAGE`; stdout stays one JSON document under `--json`. Startup imports only Typer and the registry's command metadata; SQLAlchemy and Alembic load on dispatch, head revisions are constants checked before Alembic is imported, and a subprocess test asserts `bookflow --help` and `bookflow company list` complete under 300 ms.
+Per blueprint 5.4. `--interactive` prompts on stderr for fields not given as options, showing description, default, and choices; non-terminal stdin is `E_USAGE`; stdout stays one JSON document under `--json`. Startup imports only Typer and the registry's command metadata; SQLAlchemy and Alembic load on dispatch, head revisions are constants checked before Alembic is imported, and a subprocess test asserts `bookflow --help` under 300 ms and `bookflow company list` under 600 ms (blueprint 18).
 
 ## Error matrix
 

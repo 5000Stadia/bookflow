@@ -642,16 +642,22 @@ def apply_company_attach(plan: Plan, ctx: Context, s: Session) -> Applied:
 
 
 def _tighten_modes(folder: Path) -> int:
-    """Blueprint 3.2: everything Bookflow keeps is 0700/0600; restored copies often arrive wider."""
+    """Blueprint 3.2: everything Bookflow keeps is 0700/0600; restored copies often arrive wider.
+
+    Never follows a symlink: a link inside the folder is refused, so nothing outside it is ever touched.
+    """
     import os, stat
     if os.name != "posix":  # pragma: no cover
         return 0
     n = 0
     for p in [folder, *folder.rglob("*")]:
-        mode = stat.S_IMODE(p.stat().st_mode)
-        want = 0o700 if p.is_dir() else 0o600
+        st = os.lstat(p)
+        if stat.S_ISLNK(st.st_mode):
+            raise BookflowError("E_ATTACH_INVALID", details={"check": "symlink", "path": str(p)}, message="The folder contains a symbolic link; Bookflow refuses to attach folders that point outside themselves.")
+        mode = stat.S_IMODE(st.st_mode)
+        want = 0o700 if stat.S_ISDIR(st.st_mode) else 0o600
         if mode & 0o077:
-            os.chmod(p, want)
+            os.chmod(p, want, follow_symlinks=False) if os.chmod in os.supports_follow_symlinks else os.chmod(p, want)
             n += 1
     return n
 

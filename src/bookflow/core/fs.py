@@ -11,7 +11,7 @@ from bookflow.core.errors import BookflowError
 LOCAL_TYPES = frozenset({
     "ext2", "ext3", "ext4", "xfs", "btrfs", "f2fs", "zfs", "tmpfs", "overlay",
     "apfs", "hfs", "hfsplus", "ntfs", "ntfs3", "fuseblk", "exfat", "vfat", "fat32", "refs", "msdos",
-    "ecryptfs", "bcachefs", "jfs", "reiserfs", "fuse.gocryptfs", "fuse.encfs",
+    "ecryptfs", "bcachefs", "jfs", "reiserfs",
 })
 
 
