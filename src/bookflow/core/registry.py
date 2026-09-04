@@ -206,6 +206,9 @@ NOUN_MODULES: dict[str, list[str]] = {
         "sales-rep", "ship-method", "customer-message",
     ],
     "bookflow.commands.unit_pricing_cmds": ["price-level", "unit-of-measure"],
+    "bookflow.commands.party_cmds": ["customer", "vendor", "employee", "other-name"],
+    "bookflow.commands.item_cmds": ["item"],
+    "bookflow.commands.undo_cmds": ["undo"],
 }
 
 _loaded: set[str] = set()

@@ -69,11 +69,15 @@ EXAMPLES.update({
 
 _SUPPORTING_CREATE_INPUTS = {
     "account": {"name": "Example service income", "number": "4099", "type": "income"},
+    "customer": {"name": "Example customer", "company_name": "Example Customer LLC"},
     "custom-field": {"name": "Work order", "kind": "text", "scopes": ["customer"]},
+    "employee": {"name": "Example employee", "first_name": "Morgan", "last_name": "Lee"},
+    "item": {"name": "Example subtotal", "type": "subtotal", "description": "Subtotal"},
     "item-category": {"name": "Services"},
     "class": {"name": "Field work"},
     "term": {"name": "Net 45", "kind": "standard", "due_days": 45},
     "payment-method": {"name": "Mobile wallet", "kind": "other"},
+    "other-name": {"name": "Example payee"},
     "price-level": {"name": "Preferred customers", "kind": "fixed_percent", "percent": "-5"},
     "sales-tax-code": {"code": "EX", "description": "Example taxable code", "taxable": True},
     "customer-type": {"name": "Commercial"},
@@ -86,6 +90,7 @@ _SUPPORTING_CREATE_INPUTS = {
         "name": "Count",
         "units": [{"name": "Each", "abbreviation": "ea", "is_base": True, "base_factor": "1"}],
     },
+    "vendor": {"name": "Example vendor", "company_name": "Example Vendor LLC"},
 }
 
 for _noun, _create_input in _SUPPORTING_CREATE_INPUTS.items():
@@ -109,3 +114,26 @@ for _noun, _create_input in _SUPPORTING_CREATE_INPUTS.items():
             {_selector: ID, "expected_version": 1},
         ),
     })
+
+
+EXAMPLES.update({
+    "customer link-vendor": Example(
+        f'bookflow customer link-vendor {ID} {ID} --expected-customer-version 1 '
+        f'--expected-vendor-version 1 --company "Demo Plumbing Co" --json',
+        {"customer": ID, "vendor": ID, "expected_customer_version": 1, "expected_vendor_version": 1},
+    ),
+    "customer unlink-vendor": Example(
+        f'bookflow customer unlink-vendor {ID} --expected-customer-version 2 '
+        f'--expected-vendor-version 2 --expected-link-version 1 --company "Demo Plumbing Co" --json',
+        {"customer": ID, "expected_customer_version": 2, "expected_vendor_version": 2, "expected_link_version": 1},
+    ),
+    "other-name convert": Example(
+        f'bookflow other-name convert {ID} --to vendor --expected-version 1 '
+        f'--company "Demo Plumbing Co" --json',
+        {"other_name": ID, "to": "vendor", "expected_version": 1},
+    ),
+    "undo": Example(
+        f'bookflow undo {ID} --company "Demo Plumbing Co" --reason "Correct duplicate setup" --json',
+        {"event_id": ID},
+    ),
+})

@@ -45,7 +45,8 @@ MATRIX = {
 }
 
 _SUPPORTING_LIST_NOUNS = (
-    "account", "custom-field", "item-category", "class", "term", "payment-method", "price-level",
+    "account", "customer", "vendor", "employee", "other-name", "item",
+    "custom-field", "item-category", "class", "term", "payment-method", "price-level",
     "sales-tax-code", "unit-of-measure",
     "customer-type", "vendor-type", "job-type", "sales-rep", "ship-method",
     "customer-message",
@@ -77,6 +78,51 @@ _LIFECYCLE_ERRORS = {
 for _noun in _SUPPORTING_LIST_NOUNS:
     for _verb, _codes in _LIFECYCLE_ERRORS.items():
         MATRIX[f"{_noun} {_verb}"] = {code: "shared Row 5 lifecycle rule" for code in _codes}
+
+MATRIX.update({
+    "customer link-vendor": {
+        "E_RECORD_NOT_FOUND": "customer, vendor, or prior link is absent",
+        "E_INACTIVE_REFERENCE": "customer or vendor is inactive",
+        "E_RECORD_IN_USE": "either endpoint already has another active link",
+        "E_VERSION_CONFLICT": "an endpoint or prior link version is stale",
+        "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+        "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+        "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+    },
+    "customer unlink-vendor": {
+        "E_RECORD_NOT_FOUND": "customer or active link is absent",
+        "E_VERSION_CONFLICT": "the customer, vendor, or link version is stale",
+        "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+        "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+        "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+    },
+    "other-name convert": {
+        "E_RECORD_NOT_FOUND": "source or mapped reference is absent",
+        "E_RECORD_IN_USE": "source was already converted",
+        "E_NAME_TAKEN": "the target list already has that name",
+        "E_INACTIVE_REFERENCE": "a mapped reference is inactive",
+        "E_VERSION_CONFLICT": "the source version is stale",
+        "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+        "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+        "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+    },
+    "undo": {
+        "E_EVENT_NOT_FOUND": "the company audit event is absent",
+        "E_NOT_UNDOABLE": "the event or one of its entries is not eligible",
+        "E_ALREADY_UNDONE": "another undo already compensates the event",
+        "E_UNDO_CONFLICT": "current data or dependencies reject the inverse",
+        "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+        "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+        "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+    },
+})
+
+# Item projections validate graph state during reads/activation in addition to
+# the shared lifecycle rules.
+MATRIX["item create"]["E_HIERARCHY_CYCLE"] = "submitted member graph is cyclic"
+MATRIX["item list"]["E_RECORD_NOT_FOUND"] = "a referenced item disappeared during projection"
+MATRIX["item activate"]["E_HIERARCHY_CYCLE"] = "stored hierarchy or member graph is cyclic"
+MATRIX["other-name activate"]["E_RECORD_IN_USE"] = "a converted source cannot be reactivated directly"
 
 # Standalone local tooling has no actor, database role, or membership capability,
 # so it is kept out of the database command matrix and its frozen capability seed.

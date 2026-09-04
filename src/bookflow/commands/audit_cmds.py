@@ -83,6 +83,10 @@ class AuditEventOut(BaseModel):
     directive_code: str | None
     directive_text: str | None
     source_ref: str | None
+    undo_of_event_id: str | None = Field(
+        None,
+        description="Original company audit event compensated by this event; null otherwise",
+    )
     summary: str
     entry_count: int = Field(description="Number of records touched by this event")
     entries: list[AuditEntryOut] | None = Field(
