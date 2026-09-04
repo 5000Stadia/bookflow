@@ -11,6 +11,15 @@ from bookflow.company.lists import LIST_DEFINITIONS
 COMPANY = "Demo Plumbing Co"
 
 
+@pytest.mark.parametrize("noun", LIST_DEFINITIONS)
+def test_query_from_fresh_cli_matches_shared_contract(cli, client, noun):
+    for projection in ("summary", "reference"):
+        actual = cli.json(noun, "query", "--company", COMPANY, "--limit", "2", "--projection", projection)
+        expected = client.run(f"{noun} query", {"limit": 2, "projection": projection}, company=COMPANY)
+        assert actual == expected
+        assert actual["count"] == len(actual["items"]) <= 2
+
+
 def _db_path(client):
     from pathlib import Path
     return Path(client.company.show(company=COMPANY)["path"]) / "company.db"

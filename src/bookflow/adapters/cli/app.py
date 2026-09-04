@@ -100,6 +100,20 @@ def _set_path(d: dict[str, Any], path: str, value: Any) -> None:
     d[parts[-1]] = value
 
 
+def _input_value(annotation: Any, value: Any, path: str) -> Any:
+    """Translate integer flag text without weakening the command's model."""
+    if not isinstance(value, str) or _leaf_type(annotation)[0] is not int:
+        return value
+    text = value.strip()
+    digits = text[1:] if text.startswith(("+", "-")) else text
+    try:
+        if not digits or not digits.isascii() or not digits.isdecimal():
+            raise ValueError
+        return int(text)
+    except ValueError:
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": path, "problem": "expected an integer"}]}) from None
+
+
 def _build_command(cmd: registry.Command):
     leaves = _flatten(cmd.input_model)
     params: list[inspect.Parameter] = []
@@ -171,7 +185,7 @@ def _build_command(cmd: registry.Command):
         for path, flag, ann, help_, required, dflt in leaves:
             v = kw.get("f__" + path.replace(".", "__"))
             if v is not None:
-                _set_path(raw, path, v)
+                _set_path(raw, path, _input_value(ann, v, path))
         if clears:
             from bookflow.core.clearing import apply_clears
             apply_clears(cmd, raw, list(clears))
@@ -205,7 +219,7 @@ def _build_command(cmd: registry.Command):
                     label += f" [default: {dflt}]"
                 v = click_termui.prompt(label, default="", show_default=False, err=True, type=str)
                 if v != "":
-                    _set_path(raw, path, v)
+                    _set_path(raw, path, _input_value(ann, v, path))
         source = "option"
         if cmd.scope == "company" and company is None:
             env = os.environ.get("BOOKFLOW_COMPANY")
@@ -323,7 +337,15 @@ def build_app(target: str | None = None, full: bool = False) -> typer.Typer:
 
     single = {"init": "Create the data root, the system user, and the first hub-admin user mapped from the OS login.", "upgrade": "Migrate the hub database and every company database the acting user may write to the current schema revision."}
     built = set()
-    for cmd in registry.all_commands(include_standalone=True):
+    commands = registry.all_commands(include_standalone=True)
+    if target is not None and not full:
+        # Concrete invocation/help only needs its own parser; positional values
+        # may follow the registered command name. Noun and unknown targets keep
+        # the complete applicable command surface for help and usage errors.
+        selected = [cmd for cmd in commands if target == cmd.name or target.startswith(cmd.name + " ")]
+        if selected:
+            commands = [max(selected, key=lambda cmd: len(cmd.name))]
+    for cmd in commands:
         fn = _build_command(cmd)
         if not cmd.verb:
             app.command(cmd.noun, help=cmd.description, epilog=fn.__epilog__)(fn)

@@ -67,7 +67,7 @@ src/bookflow/
     examples.py          exactly one model-valid deterministic invocation per registered command
     resources/           packaged concepts.md and executable agent-guide.md sources copied into each generated tree
   demo/seed.toml         Demo Holdings LLC / Demo Plumbing Co
-  adapters/cli/app.py    Typer app generated from the registry; nested fields -> --a-b flags; global options per scope; --interactive; error rendering
+  adapters/cli/app.py    Typer app generated from the registry; concrete invocations construct only their command parser, noun help includes its full surface; nested fields -> --a-b flags; declared integer flags parsed at the adapter boundary; global options per scope; --interactive; error rendering
   adapters/cli/render.py tables, field views, JSON, errors on stderr
   adapters/http/app.py   FastAPI app from the registry: /commands/<noun.verb>, authoritative /companies/{id}/commands/<noun.verb>, /login, /logout, async /companies/{id}/events and /hub-events, exact generated /openapi.json, /health; credential/cookie handling and the same error documents as the CLI with HTTP statuses
   adapters/http/auth.py  argon2 passwords (constant-time on unknown users), bearer and session tokens stored as sha256, liveness refresh, login throttle

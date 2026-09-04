@@ -58,7 +58,7 @@ def _register(noun: str) -> None:
 
 def _load_target(target: str | None = None) -> None:
     for noun in LIST_DEFINITIONS:
-        if target is None or target == noun:
+        if target is None or target == noun or target.startswith(noun + " ") or noun.startswith(target + " "):
             _register(noun)
 
 

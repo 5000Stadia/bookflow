@@ -44,6 +44,40 @@ def test_help_lists_only_applicable_options(cli):
     assert "--dry-run" in h and "--reason" in h and "--interactive" in h and "--address-line1" in h and "--legal-address-city" in h
 
 
+def test_concrete_cli_only_flattens_its_selected_input(monkeypatch):
+    from bookflow.adapters.cli import app
+    from bookflow.core import registry
+    flattened = []
+    original = app._flatten
+    def capture(model, prefix=""):
+        flattened.append(model)
+        return original(model, prefix)
+    monkeypatch.setattr(app, "_flatten", capture)
+    app.build_app("customer list")
+    assert flattened == [registry.get("customer list").input_model]
+
+
+def test_query_noun_help_command_help_and_positional_routing(cli, client):
+    help_text = cli.run("customer", "--help").stdout
+    for verb in ("query", "list", "show", "create", "update", "activate", "deactivate"):
+        assert verb in help_text
+    query_help = cli.run("customer", "query", "--help").stdout
+    for flag in ("--limit", "--cursor", "--projection", "--company"):
+        assert flag in query_help
+    first = client.customer.list(company="Demo Plumbing Co")["items"][0]
+    shown = cli.json("customer", "show", first["id"], "--company", "Demo Plumbing Co")
+    assert shown["id"] == first["id"]
+    page = cli.json("--company", "Demo Plumbing Co", "customer", "query", "--limit", "2")
+    assert page["count"] == 2
+
+
+def test_query_integer_flags_are_typed_at_the_cli_boundary(cli):
+    assert cli.json("customer", "query", "--company", "Demo Plumbing Co", "--limit", "2")["count"] == 2
+    for invalid in ("1.0", "not-an-integer", "0", "201"):
+        error, code = cli.error("customer", "query", "--company", "Demo Plumbing Co", "--limit", invalid)
+        assert code == 1 and error["code"] == "E_VALIDATION"
+
+
 def test_reason_recorded(cli):
     cli.json("organization", "new", "--name", "Reasoned", "--reason", "testing reasons", "--source-ref", "ticket-1")
     ev = cli.json("hub", "audit", "list", "--command", "organization new")["items"][0]

@@ -40,24 +40,36 @@ def test_multi_noun_modules_load_incrementally_for_one_cli_target():
     import sys
 
     witness = """
+import sys
 from bookflow.core import registry
 
 registry.load_all('customer list')
 assert 'customer show' in registry.REGISTRY
 assert 'vendor show' not in registry.REGISTRY
 assert 'term show' not in registry.REGISTRY
+assert 'bookflow.commands.query_cmds' not in sys.modules
+
+registry.load_all('customer query')
+assert 'customer query' in registry.REGISTRY
+assert 'vendor query' not in registry.REGISTRY
 
 registry.load_all('vendor list')
 assert 'vendor show' in registry.REGISTRY
 assert 'employee show' not in registry.REGISTRY
+assert 'vendor query' not in registry.REGISTRY
 
 registry.load_all('term list')
 assert 'term show' in registry.REGISTRY
 assert 'payment-method show' not in registry.REGISTRY
+assert 'term query' not in registry.REGISTRY
+
+registry.load_all('term')
+assert 'term query' in registry.REGISTRY
 
 registry.load_all()
 assert 'employee show' in registry.REGISTRY
 assert 'payment-method show' in registry.REGISTRY
+assert 'payment-method query' in registry.REGISTRY
 """
     completed = subprocess.run(
         [sys.executable, "-c", witness],

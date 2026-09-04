@@ -216,6 +216,12 @@ NOUN_MODULES: dict[str, list[str]] = {
     ],
 }
 
+# Additive verb modules need not be imported for a concrete sibling command.
+# Full registry loads and noun-level help still include every declared verb.
+MODULE_VERBS: dict[str, frozenset[str]] = {
+    "bookflow.commands.query_cmds": frozenset({"query"}),
+}
+
 _loaded: set[str] = set()
 _loading_target: str | None = None
 
@@ -237,6 +243,13 @@ def load_all(target: str | None = None) -> None:
     global _loading_target
     for module, nouns in NOUN_MODULES.items():
         if target is not None and not any(target == n or target.startswith(n + " ") or n.startswith(target + " ") for n in nouns):
+            continue
+        verbs = MODULE_VERBS.get(module)
+        if target is not None and verbs is not None and not any(
+            target == noun or noun.startswith(target + " ") or any(
+                target == f"{noun} {verb}" or target.startswith(f"{noun} {verb} ") for verb in verbs
+            ) for noun in nouns
+        ):
             continue
         previous = _loading_target
         _loading_target = target

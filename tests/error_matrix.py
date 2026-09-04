@@ -123,6 +123,7 @@ MATRIX.update({
 # the shared lifecycle rules.
 MATRIX["item create"]["E_HIERARCHY_CYCLE"] = "submitted member graph is cyclic"
 MATRIX["item list"]["E_RECORD_NOT_FOUND"] = "a referenced item disappeared during projection"
+MATRIX["item query"]["E_RECORD_NOT_FOUND"] = "a referenced item is absent during projection"
 MATRIX["item activate"]["E_HIERARCHY_CYCLE"] = "stored hierarchy or member graph is cyclic"
 MATRIX["other-name activate"]["E_RECORD_IN_USE"] = "a converted source cannot be reactivated directly"
 
