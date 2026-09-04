@@ -21,3 +21,6 @@ build/
 # editors
 .vscode/
 .idea/
+
+# harness settings and agent worktrees
+.claude/
