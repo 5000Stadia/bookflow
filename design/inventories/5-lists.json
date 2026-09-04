@@ -353,7 +353,7 @@
       ],
       "query": {"search": ["name", "full_name", "number", "description", "institution_name", "institution_account_last4", "note"], "filters": ["active", "type", "parent_id", "currency", "tax_line", "is_system", "default_class_id", "track_reimbursable_expenses"], "sorts": ["full_name", "number", "type", "balance", "updated_at", "hierarchy_order"], "default_sort": ["number:asc:nulls-last", "full_name:asc", "id:asc"], "default_columns": ["number", "full_name", "type", "balance", "currency", "active"], "additional_columns": ["parent", "description", "currency", "tax_line", "institution_name", "next_check_number", "default_class_id", "track_reimbursable_expenses", "reimbursable_income_account_id", "system_role", "is_system", "available_balance", "updated_at", "$common"], "w": "query"},
       "actions": [{"id": "account.lifecycle", "command": "account create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}],
-      "deferred": ["opening-balances", "posted-balances", "provider-balance-refresh", "registers"]
+      "deferred": ["opening-balances", "posted-balances", "provider-balance-refresh", "registers", "apply-account-change-existing-transactions"]
     },
     "customer": {
       "bp": "design/blueprint.md#112-customers-and-jobs", "table": "customers", "child_table": "customer_addresses|customer_contacts|customer_contact_points", "service": "parties", "selector": "id|full_name", "hierarchical": true, "custom_fields": true,
@@ -769,6 +769,7 @@
     "w": "seed"
   },
   "deferred_entries": [
+    {"id": "apply-account-change-existing-transactions", "owner": "ledger/form workflow", "state": "account edits affect future defaults only in Row 5", "w": "deferred"},
     {"id": "opening-balances", "owner": "ledger transactions", "state": "not writable", "w": "deferred"},
     {"id": "posted-balances", "owner": "ledger and forms", "state": "zero/unavailable", "w": "deferred"},
     {"id": "provider-balance-refresh", "owner": "bank-feed pass", "state": "nullable display only", "w": "deferred"},
