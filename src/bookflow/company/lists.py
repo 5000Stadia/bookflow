@@ -302,7 +302,7 @@ _add(_define(
     default_sort=("full_name", "id"),
     default_columns=("full_name", "company_name", "primary_contact", "phone", "current_balance", "customer_type", "sales_rep", "active"),
     additional_columns=("account_number", "postal_code", "email", "payment_method", "terms", "credit_limit", "price_level", "tax_code", "tax_item", "job_status", "job_dates", "delivery_method", "ship_method", "linked_vendor", "$custom", "$common"),
-    references=_refs(("parent_id", "customer", "hard"), ("customer_type_id", "customer-type", "soft"), ("job_type_id", "job-type", "soft"), ("sales_rep_id", "sales-rep", "soft"), ("price_level_id", "price-level", "soft"), ("sales_tax_code_id", "sales-tax-code", "soft"), ("preferred_payment_method_id", "payment-method", "soft"), ("terms_id", "term", "soft"), ("preferred_ship_method_id", "ship-method", "soft"), ("default_class_id", "class", "soft"), ("linked_vendor_id", "vendor", "explicit")),
+    references=_refs(("parent_id", "customer", "hard"), ("customer_type_id", "customer-type", "soft"), ("job_type_id", "job-type", "soft"), ("sales_rep_id", "sales-rep", "soft"), ("job_sales_rep_id", "sales-rep", "soft"), ("price_level_id", "price-level", "soft"), ("sales_tax_code_id", "sales-tax-code", "soft"), ("sales_tax_item_id", "item", "soft"), ("preferred_payment_method_id", "payment-method", "soft"), ("terms_id", "term", "soft"), ("preferred_ship_method_id", "ship-method", "soft"), ("default_class_id", "class", "soft"), ("linked_vendor_id", "vendor", "explicit")),
     dependents=("customer",), aggregates=("addresses", "contacts", "custom_fields", "vendor_link"), custom_fields=True,
 ))
 _add(_define(
@@ -338,7 +338,7 @@ _add(_define(
     sorts=("type", "full_name", "price", "cost", "quantity_on_hand", "preferred_vendor", "category", "updated_at"), default_sort=("type", "full_name", "id"),
     default_columns=("type", "full_name", "price", "cost", "quantity_on_hand", "preferred_vendor", "active"),
     additional_columns=("category", "tax_code", "all-account-references", "reorder_points", "unit_set", "manufacturer_part_number", "barcode", "default_class", "average_cost", "inventory_value", "inventory_values_available", "$custom", "$common", "$stored"),
-    references=_refs(("parent_id", "item", "hard"), ("category_id", "item-category", "soft"), ("sales_tax_code_id", "sales-tax-code", "soft"), ("preferred_vendor_id", "vendor", "hard"), ("unit_of_measure_set_id", "unit-of-measure", "hard"), ("default_class_id", "class", "soft"), ("account_ids", "account", "hard", True), ("member_item_ids", "item", "hard", True)),
+    references=_refs(("parent_id", "item", "hard"), ("category_id", "item-category", "soft"), ("sales_tax_code_id", "sales-tax-code", "soft"), ("preferred_vendor_id", "vendor", "hard"), ("payment_method_id", "payment-method", "soft"), ("tax_agency_vendor_id", "vendor", "hard"), ("vendor_id", "vendor", "soft"), ("unit_of_measure_set_id", "unit-of-measure", "hard"), ("default_class_id", "class", "soft"), ("account_ids", "account", "hard", True), ("member_item_ids", "item", "hard", True)),
     dependents=("item", "price-level"), aggregates=("members", "vendor_profiles", "custom_fields"), custom_fields=True,
 ))
 

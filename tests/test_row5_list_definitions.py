@@ -92,8 +92,14 @@ def test_reference_descriptors_resolve_to_known_nouns():
     assert sales_rep.references[0].field == "name_id"
     assert sales_rep.references[0].target_nouns == ("employee", "vendor", "other-name")
     customer_fields = {reference.field for reference in LIST_DEFINITIONS["customer"].references}
-    assert "preferred_ship_method_id" in customer_fields
+    assert {
+        "preferred_ship_method_id",
+        "sales_tax_item_id",
+        "job_sales_rep_id",
+    } <= customer_fields
     assert "default_ship_method_id" not in customer_fields
+    item_fields = {reference.field for reference in LIST_DEFINITIONS["item"].references}
+    assert {"payment_method_id", "tax_agency_vendor_id", "vendor_id"} <= item_fields
 
 
 def test_registry_projects_list_metadata_without_duplicating_it():
