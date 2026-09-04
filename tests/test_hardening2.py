@@ -458,8 +458,8 @@ def test_recheck_findings(client, root, tmp_path, monkeypatch):
     from bookflow.core.audit import RAW, ZIP, encode_snapshot
     from bookflow.core.clearing import apply_clears
     from bookflow.core import registry
-    # 3. compression boundary is 512 bytes
-    assert encode_snapshot({"k": "v" * 300})[:1] == RAW and encode_snapshot({"k": "v" * 520})[:1] == ZIP
+    # 3. compression boundary is 200 bytes, the documented one (re-recheck F1: 512 broke the 6x budget)
+    assert encode_snapshot({"k": "v" * 150})[:1] == RAW and encode_snapshot({"k": "v" * 250})[:1] == ZIP
     # 2. a child clear under a parent given as null is a named validation error, not a TypeError
     cmd = registry.get("company update")
     with pytest.raises(BookflowError) as e:
@@ -494,3 +494,71 @@ def test_recheck_findings(client, root, tmp_path, monkeypatch):
     with pytest.raises(BookflowError) as e2:
         client.company.new(legal_name="Keyed Two Co", home_currency="USD", organization=org["display_name"], idempotency_key="keyed-two")
     assert e2.value.code != "E_IDEMPOTENCY_MISMATCH", e2.value.to_dict()
+
+
+def test_re_recheck_findings(client, root, tmp_path, monkeypatch):
+    """Codex re-recheck (2026-09-04, F2-F4)."""
+    from bookflow.core import registry
+    from bookflow.core.dispatch import redact_error
+    # F4: advisory commands never advertise directive codes; writes do
+    assert not {"E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE"} & set(registry.get("presence set").error_codes)
+    assert {"E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE"} <= set(registry.get("company rename").error_codes)
+    # F2: a migration whose recovery also fails reports it without a path reaching a non-admin, in message or details
+    import shutil
+    from bookflow.storage import migrate as M
+    from bookflow.storage.engine import open_database
+    src = Path(client.company.show(company="Demo Plumbing Co")["path"]) / "company.db"
+    work = tmp_path / "secret-root-name" / "company.db"
+    work.parent.mkdir(parents=True)
+    shutil.copy(src, work)
+    from tests.test_migration_chain import _downgrade_copy
+    cols = [r[1] for r in sqlite3.connect(str(work)).execute("PRAGMA table_info(company_info)").fetchall()]
+    _downgrade_copy(work, "company", {"company_info": cols, "principals": ["user_id", "username", "display_name", "kind", "first_seen_at", "last_seen_at"]})
+    from alembic import command as alembic_command
+    def partial_then_fail(cfg, target):
+        cfg.attributes["connection"].exec_driver_sql("CREATE TABLE half_migrated (x INTEGER)")
+        raise RuntimeError("injected migration failure")
+    monkeypatch.setattr(alembic_command, "upgrade", partial_then_fail)
+    monkeypatch.setattr(M, "restore", lambda path, backup: (_ for _ in ()).throw(OSError("injected restore failure")))
+    backups = tmp_path / "secret-root-name" / "backups"; backups.mkdir()
+    with open_database(work, writable=True) as db:
+        with pytest.raises(BookflowError) as e:
+            M.migrate_to_head(db, "company", backups)
+    assert "secret-root-name" in e.value.details["backup_path"], "hub admins see where the backup is"
+    err = redact_error(e.value, False)
+    assert err.code == "E_MIGRATION_FAILED" and err.details["restore_failed"] == "OSError" and "partially migrated" in err.message
+    blob = json.dumps(err.to_dict())
+    assert "secret-root-name" not in blob, blob
+    # F3: an agent without a principal recording a directive is refused with the capability named
+    from bookflow.core.context import Context, Interface
+    from bookflow.core.dispatch import run_in_session, _open_hub
+    from bookflow.core.session import Actor, Session
+    from bookflow.core.config import Config
+    from bookflow.core.locks import RootLock
+    from bookflow.core.perms import private_umask
+    from bookflow.core.ids import new_id
+    from bookflow.core import clock
+    from bookflow.hub.users import common
+    owner = client.init()["user_id"]
+    with open_database(root / "hub.db", writable=True) as db:
+        aid = new_id()
+        db.raw.execute("BEGIN IMMEDIATE")
+        db.conn.execute(h.users.insert().values(id=aid, kind="agent", username="lone-agent", display_name="Lone Agent", owner_user_id=owner, password_hash=None, hub_admin=False, timezone=None, active=True, **common(owner, "system")))
+        org = db.conn.execute(sa.select(h.organizations)).mappings().first()
+        db.conn.execute(h.memberships.insert().values(id=new_id(), user_id=aid, scope_type="organization", scope_id=org["id"], role="admin", granted_by=owner, granted_at=clock.now_iso(), revoked_at=None))
+        db.raw.execute("COMMIT")
+    cmd = registry.get("directive add")
+    ctx = Context.new(Interface.mcp, "lone", reason="standing order")
+    s = Session(data_root=root, os_login="k", config=Config.load(root / "config.toml"))
+    with private_umask(), RootLock(root, "lone"):
+        _open_hub(s, True, ctx)
+        s.actor = Actor(id=aid, kind="agent", username="lone-agent", display_name="Lone Agent", hub_admin=False)
+        from bookflow.hub import access
+        access.load_memberships(s)
+        ctx = ctx.model_copy(update={"actor_id": aid, "actor_kind": "agent"})
+        try:
+            with pytest.raises(BookflowError) as e3:
+                run_in_session(cmd, cmd.input_model(text="x"), ctx, s, company_selector="Demo Plumbing Co")
+        finally:
+            s.close_company(); s._hub_cm.__exit__(None, None, None)
+    assert e3.value.code == "E_PERMISSION" and e3.value.details["capability"] == "directive"

@@ -364,7 +364,7 @@ def plan_directive_add(inp: DirectiveAddInput, ctx: Context, s: Session) -> Plan
     elif ctx.on_behalf_of:
         given_by = ctx.on_behalf_of
     else:
-        raise BookflowError("E_PERMISSION", message="An agent without a principal cannot record a directive.")
+        raise BookflowError("E_PERMISSION", message="An agent without a principal cannot record a directive.", details={"capability": "directive", "required_role": "standard", "reason": "agent without a principal"})
     n = s.company.conn.execute(sa.select(cschema.sequences.c.next_number).where(cschema.sequences.c.name == "directive")).scalar_one()
     row = {"id": new_id(), "code": f"SI-{n}", "text": inp.text, "given_by": given_by, "recorded_by": s.actor.id, "active": True, "deactivated_at": None, "deactivated_by": None,
            "version": 1, "created_at": now_iso(), "created_by": s.actor.id, "created_via": ctx.interface.value, "updated_at": now_iso(), "updated_by": s.actor.id, "updated_via": ctx.interface.value}

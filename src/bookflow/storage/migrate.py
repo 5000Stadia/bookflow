@@ -146,19 +146,20 @@ def migrate_to_head(db: Database, chain: str, backups_dir: Path | None) -> tuple
             if db.raw.in_transaction:
                 db.raw.execute("ROLLBACK")
         except sqlite3.Error as re:
-            recovery["rollback_failed"] = str(re)
+            recovery["rollback_failed"] = type(re).__name__
         if saved is not None:
             try:
                 restore(db.path, saved)
-                recovery["restored_from"] = str(saved)
+                recovery["restored_from_path"] = str(saved)
             except (sqlite3.Error, OSError) as re:
-                recovery["restore_failed"] = str(re)
-                recovery["backup"] = str(saved)
+                recovery["restore_failed"] = type(re).__name__
+                recovery["backup_path"] = str(saved)
         details = e.details if isinstance(e, BookflowError) else {"chain": chain, "from": before, "to": HEADS[chain], "cause": type(e).__name__, "path": str(db.path)}
         details = {**details, **recovery}
         message = None
         if "restore_failed" in recovery or "rollback_failed" in recovery:
-            message = f"The migration failed and recovery also failed; the database may be partially migrated. Restore it by hand from {saved} before running again." if saved else "The migration failed and the rollback also failed; the database may be partially migrated."
+            message = ("The migration failed and recovery also failed; the database may be partially migrated. Restore it by hand from the backup in details.backup_path (shown to hub admins) before running again."
+                       if saved else "The migration failed and the rollback also failed; the database may be partially migrated.")
         code = e.code if isinstance(e, BookflowError) else "E_MIGRATION_FAILED"
         raise BookflowError(code, message=message, details=details) from (e if not isinstance(e, BookflowError) else None)
     finally:

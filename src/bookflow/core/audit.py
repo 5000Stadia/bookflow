@@ -30,7 +30,7 @@ def encode_snapshot(data: dict[str, Any] | None) -> bytes | None:
         return None
     clean = {k: (_mask(v) if k in SECRET_FIELDS else v) for k, v in data.items()}
     raw = json.dumps(clean, sort_keys=True, default=str).encode("utf-8")
-    if len(raw) > 512:
+    if len(raw) > 200:  # measured boundary (blueprint 6.4): zlib pays above this on the row 2 fixture and keeps audit under 6x live
         return ZIP + zlib.compress(raw, 6)
     return RAW + raw
 

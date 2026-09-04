@@ -26,8 +26,16 @@ MATRIX = {
     "directive list": {},
     "directive show": {"E_DIRECTIVE_NOT_FOUND": "unknown id or code"},
     "directive deactivate": {"E_DIRECTIVE_NOT_FOUND": "unknown id or code", "E_DIRECTIVE_INACTIVE": "deactivated --directive", "E_PERMISSION": "readonly member"},
-    "presence set": {"E_RECORD_NOT_FOUND": "unknown record id", "E_VALIDATION": "unknown record type", "E_DIRECTIVE_NOT_FOUND": "unknown --directive", "E_DIRECTIVE_INACTIVE": "deactivated --directive"},
-    "presence clear": {"E_VALIDATION": "unknown record type", "E_RECORD_NOT_FOUND": "unknown record id", "E_DIRECTIVE_NOT_FOUND": "unknown --directive", "E_DIRECTIVE_INACTIVE": "deactivated --directive"},
+    "presence set": {"E_RECORD_NOT_FOUND": "unknown record id", "E_VALIDATION": "unknown record type"},
+    "presence clear": {"E_VALIDATION": "unknown record type", "E_RECORD_NOT_FOUND": "unknown record id"},
+    "serve": {"E_NETWORK_NOT_ALLOWED": "--bind outside loopback without --allow-network", "E_VERSION_MISMATCH": "a forwarded call from another Bookflow version",
+              "E_COMPANY_MISSING": "registered folder absent (reported per company, never fatal)", "E_DB_BUSY": "another command or host holds the data-root lock",
+              "E_NOT_INITIALIZED": "no hub database", "E_NO_ACTOR": "the OS login maps to no user", "E_PERMISSION": "the OS login is not a hub admin",
+              "E_VALIDATION": "--bind is not host:port"},
+    "user set-password": {"E_USER_NOT_FOUND": "no such username", "E_PERMISSION": "non hub admin", "E_VALIDATION": "no password given, or a non-human user"},
+    "token issue": {"E_USER_NOT_FOUND": "--user names nobody (hub admins only)", "E_PERMISSION": "a non-admin naming another user", "E_VALIDATION": "--principal on a non-agent user, or a non-human principal"},
+    "token list": {"E_USER_NOT_FOUND": "--user names nobody (hub admins only)", "E_PERMISSION": "a non-admin naming another user"},
+    "token revoke": {"E_TOKEN_NOT_FOUND": "unknown token id", "E_PERMISSION": "another user's token, as a non-admin"},
 }
 
 INFRASTRUCTURE = ["E_USAGE", "E_VALIDATION", "E_CONTEXT_IN_INPUT", "E_NOT_INITIALIZED", "E_NO_ACTOR", "E_PERMISSION", "E_COMPANY_NOT_FOUND",

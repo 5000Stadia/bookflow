@@ -433,9 +433,9 @@ def test_snapshot_secrets_and_boundaries():
     d = decode_snapshot(small)
     assert d["password_hash"].startswith("sha256:") and d["token_hash"].startswith("sha256:") and d["tax_id"].startswith("sha256:")
     assert "argon2" not in small.decode("latin1") and "deadbeef" not in small.decode("latin1")
-    assert encode_snapshot({"k": "v" * 400})[:1] == RAW, "the boundary is 512 bytes"
-    big = encode_snapshot({"k": "v" * 600})
-    assert big[:1] == ZIP and decode_snapshot(big) == {"k": "v" * 600}
+    assert encode_snapshot({"k": "v" * 150})[:1] == RAW, "the boundary is 200 bytes"
+    big = encode_snapshot({"k": "v" * 400})
+    assert big[:1] == ZIP and decode_snapshot(big) == {"k": "v" * 400}
 
 
 def test_audit_filter_matrix(client, root):

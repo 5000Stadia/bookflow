@@ -100,7 +100,7 @@ def command(name: str, *, scope: str, description: str, input_model: type[BaseMo
     # codes the pipeline itself can raise for this command (idempotency lookup, directive resolution) are part of its contract
     if accepts_idempotency_key:
         error_codes.append("E_IDEMPOTENCY_MISMATCH")
-    if scope == "company" and (kind or ("write" if writes else "read")) in ("write", "advisory") and writes:
+    if scope == "company" and writes and (kind or "write") == "write":  # advisory commands reject a directive as E_USAGE
         error_codes += ["E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE"]
     error_codes = list(dict.fromkeys(error_codes))
     for code in error_codes:

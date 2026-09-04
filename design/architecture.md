@@ -1,6 +1,6 @@
 # Bookflow — architecture
 
-What is built, module by module. Rows 1 and 2 (package skeleton, registry, data root, hub, organizations, companies, demo, CLI; company audit, versioned writes, presence, idempotency, directives, the event feed) are the current state.
+What is built, module by module. Rows 1 to 3 (package skeleton, registry, data root, hub, organizations, companies, demo, CLI; company audit, versioned writes, presence, idempotency, directives, the event feed; the host process, HTTP routes, tokens, the local hand-off, and the workbench) are the current state.
 
 ## Layout
 
@@ -27,6 +27,8 @@ src/bookflow/
     versioning.py        check_update(): versioned, blind, and disjoint-field merge rules; history_from_entries() folds audit diffs to top-level fields
     idempotency.py       input_hash(), lookup() (mismatch, expiry), store() with in-progress state
     audit.py             write_event_to() over either database with seq; snapshot codec; secrets stored as sha256 prefixes
+    host.py              Host: holds the root lock as "serve", one writer thread with pooled writable connections, per-request read-only sessions, commit signals for event streams, host.json descriptor
+    forward.py           stdlib only: socket_path(), read_descriptor(), call_host(), try_forward() (run() sends a call to a live host over its Unix socket; never for local_only commands)
   storage/
     paths.py             data root resolution; display-name normalization and name_key; folder derivation, collision choice, reservation; markers
     engine.py            Database (sqlite3 + SQLAlchemy Core on one connection); percent-encoded file URIs; read-only (query_only) and writable (WAL, checkpoint on close) opens; create=True only for init and rollout; io_error() translation
@@ -56,6 +58,10 @@ src/bookflow/
   demo/seed.toml         Demo Holdings LLC / Demo Plumbing Co
   adapters/cli/app.py    Typer app generated from the registry; nested fields -> --a-b flags; global options per scope; --interactive; error rendering
   adapters/cli/render.py tables, field views, JSON, errors on stderr
+  adapters/http/app.py   FastAPI app from the registry: /commands/<noun.verb>, /companies/{id}/commands/<noun.verb>, /login, /logout, /companies/{id}/events and /hub-events (SSE), /openapi.json, /health; context from headers; the same error documents as the CLI with HTTP statuses
+  adapters/http/auth.py  argon2 passwords (constant-time on unknown users), bearer and session tokens stored as sha256, liveness refresh, login throttle
+  adapters/http/local.py LocalListener on the Unix socket: peer identity from SO_PEERCRED, envelope identity fields discarded
+  adapters/workbench/    pages.py (picker, hub and company indexes, generated list/record/form/audit pages), forms.py (input model -> leaves; form -> command JSON with originals, tri-state booleans, clears, Preview), templates/, static/ (vendored htmx, stylesheet)
 ```
 
 Multi-word nouns (`hub audit`) become nested CLI groups and attribute chains on the client (`client.hub.audit.list()`).
