@@ -13,6 +13,7 @@ from bookflow.storage.engine import open_database, sqlite_uri
 from bookflow.storage.migrate import HEADS, current_revision_raw, migrate_to_head
 
 HUB0003 = importlib.import_module("bookflow.storage.hub_migrations.versions.0003_capabilities_features")
+HUB0004 = importlib.import_module("bookflow.storage.hub_migrations.versions.0004_row5_capabilities")
 CO0002 = importlib.import_module("bookflow.storage.company_migrations.versions.0002_contract")
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -128,8 +129,8 @@ def test_fresh_init_has_current_compatibility_schema(tmp_path):
     root = tmp_path / "fresh"
     bookflow.connect(data_root=str(root)).init()
 
-    assert current_revision_raw(root / "hub.db") == "hub0003"
-    assert HEADS == {"hub": "hub0003", "company": "co0003"}
+    assert current_revision_raw(root / "hub.db") == "hub0004"
+    assert HEADS == {"hub": "hub0004", "company": "co0003"}
     assert str(hub_schema.memberships.c.grants.type) == "TEXT" and hub_schema.memberships.c.grants.nullable
     assert str(hub_schema.memberships.c.denies.type) == "TEXT" and hub_schema.memberships.c.denies.nullable
     assert [column.name for column in hub_schema.role_capabilities.primary_key.columns] == [
@@ -149,12 +150,12 @@ def test_fresh_init_has_current_compatibility_schema(tmp_path):
         assert {"role_capabilities", "features"} <= tables
         assert _pk_columns(conn, "role_capabilities") == ["role", "capability", "required_role"]
         assert _pk_columns(conn, "features") == ["scope_type", "scope_id", "feature"]
-        assert seeded == HUB0003.ROLE_CAPABILITY_SEED
+        assert seeded == HUB0004.ROLE_CAPABILITY_SEED
         assert conn.execute("SELECT count(*) FROM features").fetchone()[0] == 0
 
 
 def test_frozen_role_capability_seed_matches_registry():
-    assert HUB0003.ROLE_CAPABILITY_SEED == _registry_role_capability_projection()
+    assert HUB0004.ROLE_CAPABILITY_SEED == _registry_role_capability_projection()
 
 
 def test_populated_hub0002_upgrade_adds_compatibility_schema_and_verified_backup(tmp_path):
@@ -182,7 +183,7 @@ def test_populated_hub0002_upgrade_adds_compatibility_schema_and_verified_backup
 
     backups = tmp_path / "backups"
     with open_database(hub, writable=True) as db:
-        assert migrate_to_head(db, "hub", backups) == ("hub0002", "hub0003")
+        assert migrate_to_head(db, "hub", backups) == ("hub0002", "hub0004")
         membership = db.raw.execute(
             "SELECT id, user_id, scope_type, scope_id, role, grants, denies FROM memberships WHERE id='M1'"
         ).fetchone()
@@ -190,7 +191,7 @@ def test_populated_hub0002_upgrade_adds_compatibility_schema_and_verified_backup
             "SELECT role, capability, required_role FROM role_capabilities ORDER BY role, capability, required_role"
         ))
         assert membership == ("M1", "U1", "organization", "O1", "owner", None, None)
-        assert seeded == HUB0003.ROLE_CAPABILITY_SEED
+        assert seeded == HUB0004.ROLE_CAPABILITY_SEED
         assert db.raw.execute("SELECT count(*) FROM features").fetchone()[0] == 0
         assert db.raw.execute("PRAGMA foreign_key_check").fetchall() == []
 

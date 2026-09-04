@@ -197,6 +197,12 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.audit_cmds": ["audit", "hub audit"],
     "bookflow.commands.host_cmds": ["serve", "user", "token"],
     "bookflow.commands.docs_cmds": ["docs"],
+    "bookflow.commands.chart_cmds": ["chart"],
+    "bookflow.commands.profile_cmds": [
+        "profile", "item-category", "class", "term", "payment-method",
+        "sales-tax-code", "customer-type", "vendor-type", "job-type",
+        "sales-rep", "ship-method", "customer-message",
+    ],
 }
 
 _loaded: set[str] = set()

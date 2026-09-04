@@ -6,6 +6,8 @@ hand-off is exercised by the CLI in a subprocess and by one hand-built envelope.
 """
 
 import json
+from pathlib import Path
+import sqlite3
 import threading
 import time
 
@@ -555,7 +557,7 @@ def _read_calls(hosted):
     hub_event = hosted.ok("hub.audit.list", {"limit": 1})["items"][0]["id"]
     directive = hosted.ok("directive.list", {}, company=cid)["items"][0]
     org = hosted.ok("organization.list")["items"][0]
-    return {
+    calls = {
         "audit list": ({"limit": 5}, cid),
         "audit show": ({"event": event}, cid),
         "audit tail": ({"limit": 5}, cid),
@@ -569,7 +571,48 @@ def _read_calls(hosted):
         "organization list": ({}, None),
         "organization show": ({"organization": org["organization_id"]}, None),
         "token list": ({}, None),
+        "chart list": ({}, None),
+        "chart show": ({"template_id": "general"}, None),
+        "profile list": ({}, None),
+        "profile show": ({"profile_id": "standard"}, None),
     }
+    create_inputs = {
+        "item-category": {"name": "HTTP parity category"},
+        "class": {"name": "HTTP parity class"},
+        "customer-type": {"name": "HTTP parity customer type"},
+        "vendor-type": {"name": "HTTP parity vendor type"},
+        "job-type": {"name": "HTTP parity job type"},
+    }
+    for noun, body in create_inputs.items():
+        hosted.ok(f"{noun}.create", body, company=cid)
+
+    company_db = Path(hosted.info()["path"]) / "company.db"
+    with sqlite3.connect(company_db) as conn:
+        actor_id = conn.execute("SELECT created_by FROM company_info").fetchone()[0]
+        source_id = "01ARZ3NDEKTSV4RRFFQ69G5FAA"
+        at = "2026-09-04T00:00:00.000Z"
+        conn.execute(
+            "INSERT INTO employees (id,version,created_at,created_by,created_via,updated_at,updated_by,updated_via,active,seed_key,name,name_key) "
+            "VALUES (?,1,?,?, 'system',?,?, 'system',1,NULL,?,?)",
+            (source_id, at, actor_id, at, actor_id, "HTTP parity employee", "http parity employee"),
+        )
+    hosted.ok(
+        "sales-rep.create",
+        {"name": "HTTP parity rep", "initials": "HP", "name_type": "employee", "name_id": source_id},
+        company=cid,
+    )
+
+    supporting = (
+        "item-category", "class", "term", "payment-method", "sales-tax-code",
+        "customer-type", "vendor-type", "job-type", "sales-rep", "ship-method",
+        "customer-message",
+    )
+    for noun in supporting:
+        listed = hosted.ok(f"{noun}.list", company=cid)
+        assert listed["items"]
+        calls[f"{noun} list"] = ({}, cid)
+        calls[f"{noun} show"] = ({noun.replace("-", "_"): listed["items"][0]["id"]}, cid)
+    return calls
 
 
 def test_every_routed_read_returns_the_same_document_over_http_as_in_the_library(hosted, root):

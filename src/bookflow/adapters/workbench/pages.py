@@ -353,7 +353,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 "capability": cmd.capability, "required_role": cmd.required_role,
             }))
         originals = None
-        if cmd.version_source and record_id is not None:
+        generic_selector_form = record_id == "self" and cmd.version_source and cmd.version_source[0] != "company show"
+        if cmd.version_source and record_id is not None and not generic_selector_form:
             show_name, ident, field = cmd.version_source
             raw = {ident: record_id} if ident else {}
             try:

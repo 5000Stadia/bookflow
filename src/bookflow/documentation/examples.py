@@ -49,3 +49,56 @@ EXAMPLES: dict[str, Example] = {
     "upgrade": Example("bookflow upgrade --json", {}),
     "user set-password": Example('bookflow user set-password "$USER" --password "$BOOKFLOW_PASSWORD" --json', {"username": "example-user", "password": "correct-horse-battery"}),
 }
+
+
+EXAMPLES.update({
+    "chart list": Example("bookflow chart list --json", {}),
+    "chart show": Example("bookflow chart show general --json", {"template_id": "general"}),
+    "chart apply": Example(
+        'bookflow chart apply general --company "Demo Plumbing Co" --json',
+        {"template_id": "general"},
+    ),
+    "profile list": Example("bookflow profile list --json", {}),
+    "profile show": Example("bookflow profile show standard --json", {"profile_id": "standard"}),
+    "profile apply": Example(
+        'bookflow profile apply standard --company "Demo Plumbing Co" --json',
+        {"profile_id": "standard"},
+    ),
+})
+
+
+_SUPPORTING_CREATE_INPUTS = {
+    "item-category": {"name": "Services"},
+    "class": {"name": "Field work"},
+    "term": {"name": "Net 45", "kind": "standard", "due_days": 45},
+    "payment-method": {"name": "Mobile wallet", "kind": "other"},
+    "sales-tax-code": {"code": "EX", "description": "Example taxable code", "taxable": True},
+    "customer-type": {"name": "Commercial"},
+    "vendor-type": {"name": "Materials"},
+    "job-type": {"name": "Installation"},
+    "sales-rep": {"name": "Example rep", "initials": "ER", "name_type": "employee", "name_id": ID},
+    "ship-method": {"name": "Local courier", "display_order": 20},
+    "customer-message": {"name": "Thanks", "text": "Thank you for your business.", "display_order": 20},
+}
+
+for _noun, _create_input in _SUPPORTING_CREATE_INPUTS.items():
+    _selector = _noun.replace("-", "_")
+    _prefix = f'bookflow {_noun}'
+    _company = '--company "Demo Plumbing Co" --json'
+    EXAMPLES.update({
+        f"{_noun} create": Example(f"{_prefix} create {_company}", _create_input),
+        f"{_noun} show": Example(f"{_prefix} show {ID} {_company}", {_selector: ID}),
+        f"{_noun} list": Example(f"{_prefix} list {_company}", {}),
+        f"{_noun} update": Example(
+            f"{_prefix} update {ID} --expected-version 1 {_company}",
+            {_selector: ID, "expected_version": 1},
+        ),
+        f"{_noun} activate": Example(
+            f"{_prefix} activate {ID} --expected-version 2 {_company}",
+            {_selector: ID, "expected_version": 2},
+        ),
+        f"{_noun} deactivate": Example(
+            f"{_prefix} deactivate {ID} --expected-version 1 {_company}",
+            {_selector: ID, "expected_version": 1},
+        ),
+    })

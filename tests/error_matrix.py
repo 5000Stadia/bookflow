@@ -8,6 +8,12 @@ MATRIX = {
     "organization rename": {"E_NAME_TAKEN": "existing name", "E_RENAME_INCOMPLETE": "move failed", "E_PERMISSION": "non hub admin"},
     "company new": {"E_ORGANIZATION_REQUIRED": "several visible organizations", "E_NAME_TAKEN": "existing name", "E_ROLLOUT_INCOMPLETE": "registration failed after folder creation", "E_IDEMPOTENCY_MISMATCH": "same key, different input",
                     "E_ORGANIZATION_NOT_FOUND": "absent or invisible organization", "E_PERMISSION": "standard member", "E_VALIDATION": "bad currency, email, tax id, month, timezone, or unknown field"},
+    "chart list": {},
+    "chart show": {"E_RECORD_NOT_FOUND": "unknown packaged chart id"},
+    "chart apply": {"E_RECORD_NOT_FOUND": "unknown packaged chart id", "E_CHART_INVALID": "manifest conflicts with existing accounts", "E_CHART_EXISTS": "company already has a chart", "E_IDEMPOTENCY_MISMATCH": "same key, different input", "E_DIRECTIVE_NOT_FOUND": "unknown --directive", "E_DIRECTIVE_INACTIVE": "deactivated --directive"},
+    "profile list": {},
+    "profile show": {"E_RECORD_NOT_FOUND": "unknown packaged profile id"},
+    "profile apply": {"E_RECORD_NOT_FOUND": "unknown packaged profile id", "E_IDEMPOTENCY_MISMATCH": "same key, different input", "E_DIRECTIVE_NOT_FOUND": "unknown --directive", "E_DIRECTIVE_INACTIVE": "deactivated --directive"},
     "company use": {"E_COMPANY_NOT_FOUND": "absent or invisible company", "E_VALIDATION": "missing positional"},
     "company attach": {"E_NOT_IN_ORGANIZATION_DIR": "path outside organizations", "E_INCOMPLETE_COMPANY": "marker state creating", "E_ALREADY_ATTACHED": "id registered",
                        "E_NAME_TAKEN": "name in use", "E_ATTACH_INVALID": "marker or database missing or mismatched, wide mode", "E_SCHEMA_UNKNOWN": "unknown revision", "E_PERMISSION": "non hub admin"},
@@ -37,6 +43,36 @@ MATRIX = {
     "token list": {"E_USER_NOT_FOUND": "--user names nobody (hub admins only)", "E_PERMISSION": "a non-admin naming another user"},
     "token revoke": {"E_TOKEN_NOT_FOUND": "unknown token id", "E_PERMISSION": "another user's token, as a non-admin"},
 }
+
+_SUPPORTING_LIST_NOUNS = (
+    "item-category", "class", "term", "payment-method", "sales-tax-code",
+    "customer-type", "vendor-type", "job-type", "sales-rep", "ship-method",
+    "customer-message",
+)
+_LIFECYCLE_ERRORS = {
+    "create": {
+        "E_NAME_TAKEN", "E_RECORD_NOT_FOUND", "E_INACTIVE_REFERENCE", "E_HIERARCHY_DEPTH",
+        "E_IDEMPOTENCY_MISMATCH", "E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE",
+    },
+    "update": {
+        "E_RECORD_NOT_FOUND", "E_NAME_TAKEN", "E_VERSION_CONFLICT", "E_INACTIVE_REFERENCE",
+        "E_HIERARCHY_CYCLE", "E_HIERARCHY_DEPTH", "E_TYPE_CHANGE",
+        "E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE",
+    },
+    "show": {"E_RECORD_NOT_FOUND"},
+    "list": {"E_LIST_FILTER"},
+    "activate": {
+        "E_RECORD_NOT_FOUND", "E_VERSION_CONFLICT", "E_INACTIVE_REFERENCE", "E_NAME_TAKEN",
+        "E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE",
+    },
+    "deactivate": {
+        "E_RECORD_NOT_FOUND", "E_VERSION_CONFLICT", "E_ACTIVE_DEPENDENTS", "E_RECORD_IN_USE",
+        "E_SYSTEM_RECORD", "E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE",
+    },
+}
+for _noun in _SUPPORTING_LIST_NOUNS:
+    for _verb, _codes in _LIFECYCLE_ERRORS.items():
+        MATRIX[f"{_noun} {_verb}"] = {code: "shared Row 5 lifecycle rule" for code in _codes}
 
 # Standalone local tooling has no actor, database role, or membership capability,
 # so it is kept out of the database command matrix and its frozen capability seed.
