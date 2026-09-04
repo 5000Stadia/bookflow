@@ -535,7 +535,7 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
                 originals is not None
                 and projected_original == v
                 and not leaf["required"]
-                and not path.startswith("expected_")
+                and (not path.startswith("expected_") or path == "expected_version")
             ):
                 continue
             set_path(raw, path, v)
@@ -578,7 +578,7 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
             and original is not None
             and original == v
             and not leaf["required"]
-            and not path.startswith("expected_")
+            and (not path.startswith("expected_") or path == "expected_version")
         ):
             continue
         set_path(raw, path, v)
