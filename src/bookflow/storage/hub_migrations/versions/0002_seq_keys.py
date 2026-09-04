@@ -7,10 +7,24 @@ Revises: hub0001
 import sqlalchemy as sa
 from alembic import op
 
-from bookflow.hub.schema import idempotency_keys
-
 revision = "hub0002"
 down_revision = "hub0001"
+
+
+def _idempotency_keys() -> sa.Table:
+    metadata = sa.MetaData()
+    return sa.Table(
+        "idempotency_keys",
+        metadata,
+        sa.Column("actor_id", sa.String(26), primary_key=True),
+        sa.Column("key", sa.String(128), primary_key=True),
+        sa.Column("command", sa.String(64), nullable=False),
+        sa.Column("input_hash", sa.String(64), nullable=False),
+        sa.Column("state", sa.String(12), nullable=False),
+        sa.Column("request_id", sa.String(26), nullable=False),
+        sa.Column("output", sa.Text, nullable=True),
+        sa.Column("created_at", sa.String(32), nullable=False),
+    )
 
 
 def upgrade() -> None:
@@ -22,7 +36,7 @@ def upgrade() -> None:
     ids = [r[0] for r in conn.execute(sa.text("SELECT id FROM audit_events ORDER BY id")).fetchall()]
     for n, event_id in enumerate(ids, start=1):
         conn.execute(sa.text("UPDATE audit_events SET seq = :n WHERE id = :i"), {"n": n, "i": event_id})
-    idempotency_keys.create(conn, checkfirst=True)
+    _idempotency_keys().create(conn, checkfirst=True)
 
 
 def downgrade() -> None:

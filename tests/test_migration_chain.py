@@ -1,7 +1,9 @@
 """The shipped migration chains upgrade populated older databases (a fresh root never exercises this)."""
 
+import ast
 import importlib
 import inspect
+import json
 import sqlite3
 from pathlib import Path
 
@@ -12,6 +14,7 @@ from bookflow.storage.migrate import HEADS, current_revision_raw, migrate_to_hea
 
 HUB0003 = importlib.import_module("bookflow.storage.hub_migrations.versions.0003_capabilities_features")
 CO0002 = importlib.import_module("bookflow.storage.company_migrations.versions.0002_contract")
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def _make_revision(path: Path, chain: str, revision: str, populate) -> None:
@@ -45,6 +48,47 @@ def _pk_columns(conn: sqlite3.Connection, table: str) -> list[str]:
     return [row[1] for row in sorted(conn.execute(f"PRAGMA table_info({table})"), key=lambda row: row[5]) if row[5]]
 
 
+def _normalized_schema(conn: sqlite3.Connection) -> list[dict[str, str | None]]:
+    return [
+        {
+            "type": object_type,
+            "name": name,
+            "table": table_name,
+            "sql": " ".join(sql.split()) if sql else None,
+        }
+        for object_type, name, table_name, sql in conn.execute(
+            "SELECT type, name, tbl_name, sql FROM sqlite_schema "
+            "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+        )
+    ]
+
+
+def _assigned_literal(tree: ast.Module, name: str):
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == name for target in node.targets
+        ):
+            return ast.literal_eval(node.value)
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == name:
+            return ast.literal_eval(node.value)
+    raise AssertionError(f"migration source has no {name} assignment")
+
+
+def _live_schema_imports(tree: ast.Module, chain: str) -> list[str]:
+    module = f"bookflow.{chain}.schema"
+    parent = f"bookflow.{chain}"
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found.extend(alias.name for alias in node.names if alias.name == module)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module == module:
+                found.append(module)
+            elif node.module == parent and any(alias.name == "schema" for alias in node.names):
+                found.append(module)
+    return found
+
+
 def test_company_co0002_is_frozen_revision_local_ddl(tmp_path):
     assert "bookflow.company.schema" not in inspect.getsource(CO0002)
     path = tmp_path / "co0002.db"
@@ -56,12 +100,36 @@ def test_company_co0002_is_frozen_revision_local_ddl(tmp_path):
     assert "undo_of_event_id" not in audit_columns
 
 
+def test_company_co0002_matches_frozen_shipped_schema(tmp_path):
+    expected = json.loads((FIXTURES / "company_co0002_schema.json").read_text())
+    path = tmp_path / "co0002.db"
+    _make_revision(path, "company", "co0002", lambda _conn: None)
+    with sqlite3.connect(path) as conn:
+        assert _normalized_schema(conn) == expected
+
+
+def test_non_initial_migrations_do_not_import_live_schema():
+    storage = Path(bookflow.__file__).parent / "storage"
+    violations = []
+    for chain in ("hub", "company"):
+        versions = storage / f"{chain}_migrations" / "versions"
+        for path in sorted(versions.glob("*.py")):
+            if path.name == "__init__.py":
+                continue
+            tree = ast.parse(path.read_text(), filename=str(path))
+            if _assigned_literal(tree, "down_revision") is None:
+                continue
+            if _live_schema_imports(tree, chain):
+                violations.append(str(path.relative_to(storage)))
+    assert violations == []
+
+
 def test_fresh_init_has_current_compatibility_schema(tmp_path):
     root = tmp_path / "fresh"
     bookflow.connect(data_root=str(root)).init()
 
     assert current_revision_raw(root / "hub.db") == "hub0003"
-    assert HEADS == {"hub": "hub0003", "company": "co0002"}
+    assert HEADS == {"hub": "hub0003", "company": "co0003"}
     assert str(hub_schema.memberships.c.grants.type) == "TEXT" and hub_schema.memberships.c.grants.nullable
     assert str(hub_schema.memberships.c.denies.type) == "TEXT" and hub_schema.memberships.c.denies.nullable
     assert [column.name for column in hub_schema.role_capabilities.primary_key.columns] == [
@@ -138,6 +206,37 @@ def test_populated_hub0002_upgrade_adds_compatibility_schema_and_verified_backup
         ).fetchone()[0] == 0
 
 
+def test_fresh_and_populated_hub0002_paths_have_identical_schema(tmp_path):
+    fresh = tmp_path / "fresh-hub.db"
+    upgraded = tmp_path / "upgraded-hub.db"
+
+    _make_revision(fresh, "hub", HEADS["hub"], lambda _conn: None)
+
+    def populate(conn):
+        common = "'t','U1','cli','t','U1','cli'"
+        conn.execute(
+            "INSERT INTO users (id, version, created_at, created_by, created_via, updated_at, updated_by, updated_via, "
+            "kind, username, display_name, owner_user_id, password_hash, hub_admin, timezone, active) "
+            f"VALUES ('U1', 1, {common}, 'human', 'k', 'K', NULL, NULL, 1, NULL, 1)"
+        )
+        conn.execute(
+            "INSERT INTO organizations (id, version, created_at, created_by, created_via, updated_at, updated_by, updated_via, "
+            "display_name, name_key, path, pending_path, is_demo) "
+            f"VALUES ('O1', 1, {common}, 'Org', 'org', '/old/org', NULL, 0)"
+        )
+        conn.execute(
+            "INSERT INTO memberships (id, user_id, scope_type, scope_id, role, granted_by, granted_at, revoked_at) "
+            "VALUES ('M1', 'U1', 'organization', 'O1', 'owner', 'U1', 't', NULL)"
+        )
+
+    _make_revision(upgraded, "hub", "hub0002", populate)
+    with open_database(upgraded, writable=True) as db:
+        migrate_to_head(db, "hub", tmp_path / "hub-schema-backups")
+
+    with sqlite3.connect(fresh) as left, sqlite3.connect(upgraded) as right:
+        assert _normalized_schema(left) == _normalized_schema(right)
+
+
 def test_populated_hub_and_company_upgrade(tmp_path):
     hub = tmp_path / "hub.db"
     def pop_hub(conn):
@@ -173,7 +272,8 @@ def _downgrade_copy(src: Path, chain: str, tables: dict[str, list[str]], revisio
         command.upgrade(_config(chain, db.conn), revision or f"{'hub' if chain == 'hub' else 'co'}0001")
         db.raw.execute(f"ATTACH DATABASE '{src}' AS cur")
         for table, cols in tables.items():
-            collist = ", ".join(cols)
+            target_columns = {row[1] for row in db.raw.execute(f"PRAGMA table_info({table})")}
+            collist = ", ".join(column for column in cols if column in target_columns)
             db.raw.execute(f"INSERT INTO {table} ({collist}) SELECT {collist} FROM cur.{table}")
         db.raw.execute("DETACH DATABASE cur")
     src.unlink()

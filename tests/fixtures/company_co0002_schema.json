@@ -1,0 +1,68 @@
+[
+  {
+    "name": "ix_co_audit_entries_event",
+    "sql": "CREATE INDEX ix_co_audit_entries_event ON audit_entries (event_id)",
+    "table": "audit_entries",
+    "type": "index"
+  },
+  {
+    "name": "ix_co_audit_entries_record",
+    "sql": "CREATE INDEX ix_co_audit_entries_record ON audit_entries (record_type, record_id)",
+    "table": "audit_entries",
+    "type": "index"
+  },
+  {
+    "name": "alembic_version",
+    "sql": "CREATE TABLE alembic_version ( version_num VARCHAR(32) NOT NULL, CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num) )",
+    "table": "alembic_version",
+    "type": "table"
+  },
+  {
+    "name": "audit_entries",
+    "sql": "CREATE TABLE audit_entries ( id VARCHAR(26) NOT NULL, event_id VARCHAR(26) NOT NULL, record_type VARCHAR(32) NOT NULL, record_id VARCHAR(26) NOT NULL, action VARCHAR(12) NOT NULL, version_before INTEGER, version_after INTEGER, \"after\" BLOB, \"before\" BLOB, PRIMARY KEY (id), FOREIGN KEY(event_id) REFERENCES audit_events (id) )",
+    "table": "audit_entries",
+    "type": "table"
+  },
+  {
+    "name": "audit_events",
+    "sql": "CREATE TABLE audit_events ( id VARCHAR(26) NOT NULL, seq INTEGER, at VARCHAR(32) NOT NULL, command VARCHAR(64) NOT NULL, actor_id VARCHAR(26), actor_kind VARCHAR(8), on_behalf_of VARCHAR(26), interface VARCHAR(16) NOT NULL, client_name VARCHAR(64) NOT NULL, client_version VARCHAR(32) NOT NULL, client_host VARCHAR(255) NOT NULL, session_id VARCHAR(26) NOT NULL, request_id VARCHAR(26) NOT NULL, idempotency_key VARCHAR(128), reason VARCHAR(140), directive_id VARCHAR(26), directive_code VARCHAR(16), source_ref VARCHAR(512), summary VARCHAR(512) NOT NULL, PRIMARY KEY (id), UNIQUE (seq) )",
+    "table": "audit_events",
+    "type": "table"
+  },
+  {
+    "name": "company_info",
+    "sql": "CREATE TABLE company_info ( id VARCHAR(26) NOT NULL, version INTEGER NOT NULL, created_at VARCHAR(32) NOT NULL, created_by VARCHAR(26) NOT NULL, created_via VARCHAR(16) NOT NULL, updated_at VARCHAR(32) NOT NULL, updated_by VARCHAR(26) NOT NULL, updated_via VARCHAR(16) NOT NULL, legal_name VARCHAR(200) NOT NULL, display_name VARCHAR(200) NOT NULL, tax_id_kind VARCHAR(3) NOT NULL, tax_id VARCHAR(16), entity_type VARCHAR(24) NOT NULL, income_tax_form VARCHAR(24) NOT NULL, industry VARCHAR(128), contact_name VARCHAR(128), address_line1 VARCHAR(200), address_line2 VARCHAR(200), address_city VARCHAR(200), address_state VARCHAR(200), address_postal_code VARCHAR(200), address_country VARCHAR(200), legal_address_line1 VARCHAR(200), legal_address_line2 VARCHAR(200), legal_address_city VARCHAR(200), legal_address_state VARCHAR(200), legal_address_postal_code VARCHAR(200), legal_address_country VARCHAR(200), ship_address_line1 VARCHAR(200), ship_address_line2 VARCHAR(200), ship_address_city VARCHAR(200), ship_address_state VARCHAR(200), ship_address_postal_code VARCHAR(200), ship_address_country VARCHAR(200), phone VARCHAR(64), fax VARCHAR(64), email VARCHAR(254), website VARCHAR(254), fiscal_year_start_month INTEGER NOT NULL, tax_year_start_month INTEGER NOT NULL, report_basis VARCHAR(8) NOT NULL, home_currency VARCHAR(3) NOT NULL, timezone VARCHAR(64) NOT NULL, closing_date VARCHAR(10), recent_activity_window_seconds INTEGER NOT NULL, default_chart VARCHAR(64), PRIMARY KEY (id) )",
+    "table": "company_info",
+    "type": "table"
+  },
+  {
+    "name": "directives",
+    "sql": "CREATE TABLE directives ( id VARCHAR(26) NOT NULL, version INTEGER NOT NULL, created_at VARCHAR(32) NOT NULL, created_by VARCHAR(26) NOT NULL, created_via VARCHAR(16) NOT NULL, updated_at VARCHAR(32) NOT NULL, updated_by VARCHAR(26) NOT NULL, updated_via VARCHAR(16) NOT NULL, code VARCHAR(16) NOT NULL, text VARCHAR(1000) NOT NULL, given_by VARCHAR(26) NOT NULL, recorded_by VARCHAR(26) NOT NULL, active BOOLEAN NOT NULL, deactivated_at VARCHAR(32), deactivated_by VARCHAR(26), PRIMARY KEY (id), UNIQUE (code) )",
+    "table": "directives",
+    "type": "table"
+  },
+  {
+    "name": "idempotency_keys",
+    "sql": "CREATE TABLE idempotency_keys ( actor_id VARCHAR(26) NOT NULL, \"key\" VARCHAR(128) NOT NULL, command VARCHAR(64) NOT NULL, input_hash VARCHAR(64) NOT NULL, state VARCHAR(12) NOT NULL, request_id VARCHAR(26) NOT NULL, output TEXT, created_at VARCHAR(32) NOT NULL, PRIMARY KEY (actor_id, \"key\") )",
+    "table": "idempotency_keys",
+    "type": "table"
+  },
+  {
+    "name": "presence",
+    "sql": "CREATE TABLE presence ( record_type VARCHAR(32) NOT NULL, record_id VARCHAR(26) NOT NULL, user_id VARCHAR(26) NOT NULL, interface VARCHAR(16) NOT NULL, started_at VARCHAR(32) NOT NULL, heartbeat_at VARCHAR(32) NOT NULL, PRIMARY KEY (record_type, record_id, user_id, interface) )",
+    "table": "presence",
+    "type": "table"
+  },
+  {
+    "name": "principals",
+    "sql": "CREATE TABLE principals ( user_id VARCHAR(26) NOT NULL, username VARCHAR(64) NOT NULL, display_name VARCHAR(128) NOT NULL, kind VARCHAR(8) NOT NULL, first_seen_at VARCHAR(32) NOT NULL, last_seen_at VARCHAR(32) NOT NULL, PRIMARY KEY (user_id) )",
+    "table": "principals",
+    "type": "table"
+  },
+  {
+    "name": "sequences",
+    "sql": "CREATE TABLE sequences ( name VARCHAR(32) NOT NULL, next_number INTEGER NOT NULL, PRIMARY KEY (name) )",
+    "table": "sequences",
+    "type": "table"
+  }
+]
