@@ -6,18 +6,22 @@ The bootstrap bearer belongs to the human who issued it. The current command reg
 
 ## Operator bootstrap
 
-Install the `bookflow-core` distribution first. Use `BOOKFLOW=(bookflow)` for an installed distribution. In a source checkout, use `BOOKFLOW=(uv run bookflow)` instead. Every command below uses that array, so the rest of the instructions are identical in both environments.
+Install the `bookflow-core` distribution first. Use `BOOKFLOW=(bookflow)` for an installed distribution. In a source checkout, run from the checkout root and use `BOOKFLOW=(uv run --no-sync bookflow)` instead; `--no-sync` prevents the guide from changing that checkout's shared environment. Every command below uses that array, so the rest of the instructions are identical in both environments.
 
-Run these commands on the host. They create an isolated temporary data root, choose a currently unused loopback port, issue and extract a one-day token, start the host in the background, and wait for `GET /health` to return HTTP 200. The port probe and host bind are separate operations; if the host reports `E_IO` because another process claimed the port between them, run the block again with a fresh temporary root.
+Run this as one Bash block on the host. It creates a specifically named temporary data root, chooses a currently unused loopback port, issues and extracts a one-day token, starts a detached host, records its client environment and process id in an owner-only state file inside that root, and waits for `GET /health` to return HTTP 200. It prints the state-file path, never the token. If an agent runner starts a fresh shell for each step, source that exact state file before running the executable journey or cleanup.
+
+The port probe and host bind are separate operations. If the host reports `E_IO` because another process claimed the port between them, keep the initialized temporary root, choose another port, update `BOOKFLOW_BIND` and `BOOKFLOW_URL`, and retry only the host launch and state-file write.
 
 <!-- bookflow-example: illustrative -->
-```sh
+```bash
 BOOKFLOW=(bookflow)
-# In a source checkout, use this line instead:
-# BOOKFLOW=(uv run bookflow)
+# From the source-checkout root, use this line instead:
+# BOOKFLOW=(uv run --no-sync bookflow)
 "${BOOKFLOW[@]}" --help >/dev/null
 
-export BOOKFLOW_DATA_ROOT="$(mktemp -d)"
+umask 077
+export BOOKFLOW_DATA_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/bookflow-agent-guide.XXXXXX")"
+export BOOKFLOW_STATE="$BOOKFLOW_DATA_ROOT/agent-guide.env"
 BOOKFLOW_PORT="$(python - <<'PY'
 import socket
 with socket.socket() as probe:
@@ -31,8 +35,18 @@ export BOOKFLOW_URL="http://$BOOKFLOW_BIND"
 "${BOOKFLOW[@]}" demo reset --json
 TOKEN_DOCUMENT="$("${BOOKFLOW[@]}" token issue --label agent-guide --days 1 --json)"
 export BOOKFLOW_TOKEN="$(printf '%s' "$TOKEN_DOCUMENT" | python -c 'import json,sys; print(json.load(sys.stdin)["secret"])')"
-"${BOOKFLOW[@]}" serve --bind "$BOOKFLOW_BIND" >"$BOOKFLOW_DATA_ROOT/host.out" 2>"$BOOKFLOW_DATA_ROOT/host.err" &
+nohup "${BOOKFLOW[@]}" serve --bind "$BOOKFLOW_BIND" </dev/null >"$BOOKFLOW_DATA_ROOT/host.out" 2>"$BOOKFLOW_DATA_ROOT/host.err" &
 BOOKFLOW_HOST_PID=$!
+
+{
+    printf 'export BOOKFLOW_DATA_ROOT=%q\n' "$BOOKFLOW_DATA_ROOT"
+    printf 'export BOOKFLOW_STATE=%q\n' "$BOOKFLOW_STATE"
+    printf 'export BOOKFLOW_URL=%q\n' "$BOOKFLOW_URL"
+    printf 'export BOOKFLOW_TOKEN=%q\n' "$BOOKFLOW_TOKEN"
+    printf 'export BOOKFLOW_HOST_PID=%q\n' "$BOOKFLOW_HOST_PID"
+} >"$BOOKFLOW_STATE"
+chmod 600 "$BOOKFLOW_STATE"
+printf 'BOOKFLOW_STATE=%s\n' "$BOOKFLOW_STATE" >&2
 
 python - <<'PY'
 import os
@@ -54,7 +68,7 @@ else:
 PY
 ```
 
-For an agent in another process or on another machine, transfer `BOOKFLOW_URL` and `BOOKFLOW_TOKEN` through the operator's normal secret channel instead of writing the bearer token into the repository, command history, or logs. The token secret is returned only at issuance. Do not print `TOKEN_DOCUMENT` or `BOOKFLOW_TOKEN` after capture.
+For a later shell on the same machine, source the exact `BOOKFLOW_STATE` path printed by bootstrap; the containing data root is mode 0700 and the state file is mode 0600. For an agent on another machine, transfer `BOOKFLOW_URL` and `BOOKFLOW_TOKEN` through the operator's normal secret channel instead. Never put the bearer token in the repository, command history, or logs. The token secret is returned only at issuance. Do not print `TOKEN_DOCUMENT` or `BOOKFLOW_TOKEN` after capture, and delete the temporary state file during cleanup.
 
 ## Executable journey
 
@@ -267,9 +281,21 @@ The journey expects exactly one fresh demo company. To rerun it from the beginni
 For the background host started above, send it SIGINT and wait for orderly shutdown:
 
 <!-- bookflow-example: illustrative -->
-```sh
-kill -INT "$BOOKFLOW_HOST_PID"
-wait "$BOOKFLOW_HOST_PID"
+```bash
+# In a fresh shell, first run: source '/exact/BOOKFLOW_STATE/path/printed/by/bootstrap'
+kill -INT "$BOOKFLOW_HOST_PID" 2>/dev/null || true
+if ! wait "$BOOKFLOW_HOST_PID" 2>/dev/null; then
+    for _ in {1..100}; do
+        kill -0 "$BOOKFLOW_HOST_PID" 2>/dev/null || break
+        sleep 0.05
+    done
+fi
+kill -0 "$BOOKFLOW_HOST_PID" 2>/dev/null && { echo "host did not stop" >&2; exit 1; }
+python - <<'PY'
+import os
+from pathlib import Path
+Path(os.environ["BOOKFLOW_STATE"]).unlink(missing_ok=True)
+PY
 unset BOOKFLOW_TOKEN TOKEN_DOCUMENT
 ```
 

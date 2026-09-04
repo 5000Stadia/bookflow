@@ -2,8 +2,10 @@
 
 # Bookflow documentation
 
-- [Concepts](concepts.md)
-- [Agent guide](agent-guide.md)
+Start with the agent guide for a complete authenticated HTTP write. Read concepts for the shared behavior behind every command surface, then use the generated references for exact inputs and outputs.
+
+- [Agent guide](agent-guide.md) — install or select the command, start an isolated host, and complete a versioned audited write.
+- [Concepts](concepts.md) — selection, context, concurrency, audit, identity, money, and error behavior.
 
 ## Command reference
 

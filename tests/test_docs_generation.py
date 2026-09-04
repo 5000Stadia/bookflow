@@ -56,6 +56,9 @@ def test_render_tree_is_deterministic_complete_and_model_valid(monkeypatch, tmp_
     serve_page = first["cli/serve.md"].decode()
     assert "readiness line is written to stderr" in serve_page
     assert "handed to the running host through its local socket" in serve_page
+    index = first["index.md"].decode()
+    assert "Start with the agent guide" in index
+    assert "complete authenticated HTTP write" in index
 
 
 def test_generate_check_and_stale_diagnostics_are_exact_and_read_only(tmp_path):

@@ -62,18 +62,21 @@ def test_every_hand_authored_fence_is_classified():
     for name in ("concepts.md", "agent-guide.md"):
         fences.extend(classified_fences(resource_text(name)))
     assert [(fence.classification, fence.language) for fence in fences] == [
-        ("illustrative", "sh"),
+        ("illustrative", "bash"),
         ("executable", "python"),
-        ("illustrative", "sh"),
+        ("illustrative", "bash"),
     ]
 
 
 def test_agent_guide_covers_a_source_checkout_and_the_complete_trial_lifecycle():
     guide = resource_text("agent-guide.md")
     for expected in (
-        "BOOKFLOW=(uv run bookflow)",
+        "BOOKFLOW=(uv run --no-sync bookflow)",
         '"${BOOKFLOW[@]}" init --json',
         '"${BOOKFLOW[@]}" demo reset --json',
+        'export BOOKFLOW_STATE="$BOOKFLOW_DATA_ROOT/agent-guide.env"',
+        "nohup",
+        "chmod 600",
         'response.status == 200',
         'kill -INT "$BOOKFLOW_HOST_PID"',
         "To rerun it from the beginning",
