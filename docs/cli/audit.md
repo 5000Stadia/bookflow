@@ -82,8 +82,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].directive_text` | string \| null | yes | yes | — | — |
 | `items[].source_ref` | string \| null | yes | yes | — | — |
 | `items[].summary` | string | yes | no | — | — |
-| `items[].entry_count` | integer | yes | no | — | — |
-| `items[].entries` | array[object] \| null | no | yes | null | — |
+| `items[].entry_count` | integer | yes | no | — | Number of records touched by this event |
+| `items[].entries` | array[object] \| null | no | yes | null | Touched-record details returned by audit show; null in list and tail results |
 | `items[].entries[].id` | string | yes | no | — | — |
 | `items[].entries[].record_type` | string | yes | no | — | — |
 | `items[].entries[].record_id` | string | yes | no | — | — |
@@ -201,8 +201,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `directive_text` | string \| null | yes | yes | — | — |
 | `source_ref` | string \| null | yes | yes | — | — |
 | `summary` | string | yes | no | — | — |
-| `entry_count` | integer | yes | no | — | — |
-| `entries` | array[object] \| null | no | yes | null | — |
+| `entry_count` | integer | yes | no | — | Number of records touched by this event |
+| `entries` | array[object] \| null | no | yes | null | Touched-record details returned by audit show; null in list and tail results |
 | `entries[].id` | string | yes | no | — | — |
 | `entries[].record_type` | string | yes | no | — | — |
 | `entries[].record_id` | string | yes | no | — | — |
@@ -329,7 +329,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
-| `items` | array[object] | yes | no | — | — |
+| `items` | array[object] | yes | no | — | Matching events newer than the request cursor, in sequence order |
 | `items[].id` | string | yes | no | — | — |
 | `items[].seq` | integer \| null | yes | yes | — | — |
 | `items[].at` | string | yes | no | — | — |
@@ -351,8 +351,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].directive_text` | string \| null | yes | yes | — | — |
 | `items[].source_ref` | string \| null | yes | yes | — | — |
 | `items[].summary` | string | yes | no | — | — |
-| `items[].entry_count` | integer | yes | no | — | — |
-| `items[].entries` | array[object] \| null | no | yes | null | — |
+| `items[].entry_count` | integer | yes | no | — | Number of records touched by this event |
+| `items[].entries` | array[object] \| null | no | yes | null | Touched-record details returned by audit show; null in list and tail results |
 | `items[].entries[].id` | string | yes | no | — | — |
 | `items[].entries[].record_type` | string | yes | no | — | — |
 | `items[].entries[].record_id` | string | yes | no | — | — |
@@ -362,9 +362,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].entries[].before` | object[string, any] \| null | yes | yes | — | — |
 | `items[].entries[].after` | object[string, any] \| null | yes | yes | — | — |
 | `items[].entries[].diff` | object[string, any] \| null | no | yes | null | — |
-| `count` | integer | yes | no | — | — |
-| `next_after` | integer \| null | yes | yes | — | — |
-| `high_water` | integer \| null | yes | yes | — | — |
+| `count` | integer | yes | no | — | Number of events returned |
+| `next_after` | integer \| null | yes | yes | — | Sequence of the last returned event; null when this response has no events |
+| `high_water` | integer \| null | yes | yes | — | Lower-bound cursor used for this request: the supplied after value, or the newest visible sequence when after was omitted |
 
 Example JSON output:
 

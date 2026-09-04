@@ -59,6 +59,9 @@ def test_render_tree_is_deterministic_complete_and_model_valid(monkeypatch, tmp_
     index = first["index.md"].decode()
     assert "Start with the agent guide" in index
     assert "complete authenticated HTTP write" in index
+    audit_page = first["cli/audit.md"].decode()
+    assert "Lower-bound cursor used for this request" in audit_page
+    assert "Touched-record details returned by audit show" in audit_page
 
 
 def test_generate_check_and_stale_diagnostics_are_exact_and_read_only(tmp_path):

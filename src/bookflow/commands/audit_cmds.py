@@ -84,8 +84,11 @@ class AuditEventOut(BaseModel):
     directive_text: str | None
     source_ref: str | None
     summary: str
-    entry_count: int
-    entries: list[AuditEntryOut] | None = None
+    entry_count: int = Field(description="Number of records touched by this event")
+    entries: list[AuditEntryOut] | None = Field(
+        None,
+        description="Touched-record details returned by audit show; null in list and tail results",
+    )
 
 
 class AuditListOutput(BaseModel):
@@ -95,10 +98,14 @@ class AuditListOutput(BaseModel):
 
 
 class AuditTailOutput(BaseModel):
-    items: list[AuditEventOut]
-    count: int
-    next_after: int | None
-    high_water: int | None
+    items: list[AuditEventOut] = Field(description="Matching events newer than the request cursor, in sequence order")
+    count: int = Field(description="Number of events returned")
+    next_after: int | None = Field(
+        description="Sequence of the last returned event; null when this response has no events"
+    )
+    high_water: int | None = Field(
+        description="Lower-bound cursor used for this request: the supplied after value, or the newest visible sequence when after was omitted"
+    )
 
 
 class EventSelector(BaseModel):

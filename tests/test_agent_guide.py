@@ -71,7 +71,9 @@ def test_every_hand_authored_fence_is_classified():
 def test_agent_guide_covers_a_source_checkout_and_the_complete_trial_lifecycle():
     guide = resource_text("agent-guide.md")
     for expected in (
-        "BOOKFLOW=(uv run --no-sync bookflow)",
+        "BOOKFLOW=(uv run --frozen --no-sync bookflow)",
+        "command -v bookflow",
+        "[ -f uv.lock ]",
         '"${BOOKFLOW[@]}" init --json',
         '"${BOOKFLOW[@]}" demo reset --json',
         'export BOOKFLOW_STATE="$BOOKFLOW_DATA_ROOT/agent-guide.env"',
@@ -82,6 +84,8 @@ def test_agent_guide_covers_a_source_checkout_and_the_complete_trial_lifecycle()
         "To rerun it from the beginning",
         "company show",
         "audit tail",
+        "items[0].seq == cursor",
+        "audit show",
         "X-Bookflow-Client-Name",
         "Idempotency-Key",
     ):

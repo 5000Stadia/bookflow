@@ -71,6 +71,8 @@ src/bookflow/
   adapters/workbench/    pages.py (picker, hub and company indexes, generated list/record/form/audit pages), forms.py (input model -> leaves; form -> command JSON with originals, tri-state booleans, clears, Preview), templates/, static/ (vendored htmx, stylesheet)
 ```
 
+The repository root carries `uv.lock`; source-checkout documentation trials use `uv run --frozen --no-sync` so reading and executing the guide does not update the lock or replace packages in a shared environment.
+
 Multi-word nouns (`hub audit`) become nested CLI groups and attribute chains on the client (`client.hub.audit.list()`).
 
 Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the module for the invoked noun (root help loads none), which keeps cold start flat. `Command` carries kind (read/write/advisory), truth (which database commits first and holds the idempotency row), accepts_idempotency_key, clearable, streams, capability, feature, exact authorization text, and an optional standalone runner. Standalone commands are omitted from database capability projections and routed surfaces unless a caller explicitly requests them.

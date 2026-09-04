@@ -40,7 +40,7 @@ Nested addresses merge as top-level fields: two changes within the same address 
 
 ## Audit, directives, and presence
 
-Successful durable mutations append audit events in the database that owns the changed record. Events identify the command, actor, optional principal, interface, client, session, request, reason, directive, source reference, summary, and touched record versions. Audit reads do not themselves create audit events. List pages move backward with `before`; tail polling moves forward with `after`. A first tail request without `after` returns the current `high_water` and only later requests return newer events. The HTTP event feed uses the same filters and resumes from `Last-Event-ID`.
+Successful durable mutations append audit events in the database that owns the changed record. Events identify the command, actor, optional principal, interface, client, session, request, reason, directive, source reference, summary, and touched record versions. Audit reads do not themselves create audit events. List pages move backward with `before`; tail polling moves forward with `after`. A first tail request without `after` returns no existing events and reports the newest visible sequence as `high_water`. When `after` is supplied, `high_water` echoes that lower-bound cursor, `next_after` is the last returned sequence, and an empty result has `next_after: null`. The HTTP event feed uses the same filters and resumes from `Last-Event-ID`.
 
 A directive is a company-scoped standing instruction with a stable code such as `SI-3`. Active directives can be cited by a company write instead of repeating a reason. Deactivation preserves history and prevents later citation. Audit events snapshot the directive code and expose its text from the directive record.
 

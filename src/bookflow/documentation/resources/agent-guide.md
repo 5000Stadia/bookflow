@@ -6,7 +6,7 @@ The bootstrap bearer belongs to the human who issued it. The current command reg
 
 ## Operator bootstrap
 
-Install the `bookflow-core` distribution first. Use `BOOKFLOW=(bookflow)` for an installed distribution. In a source checkout, run from the checkout root and use `BOOKFLOW=(uv run --no-sync bookflow)` instead; `--no-sync` prevents the guide from changing that checkout's shared environment. Every command below uses that array, so the rest of the instructions are identical in both environments.
+Install the `bookflow-core` distribution first, or prepare the source checkout's environment using its README. The block automatically uses an installed `bookflow` command when one is on `PATH`. Otherwise, from a source-checkout root containing `pyproject.toml` and the committed `uv.lock`, it uses `uv run --frozen --no-sync bookflow`; those flags prohibit lockfile updates and environment changes. Every later command uses the selected array, so the rest of the instructions are identical in both environments.
 
 Run this as one Bash block on the host. It creates a specifically named temporary data root, chooses a currently unused loopback port, issues and extracts a one-day token, starts a detached host, records its client environment and process id in an owner-only state file inside that root, and waits for `GET /health` to return HTTP 200. It prints the state-file path, never the token. If an agent runner starts a fresh shell for each step, source that exact state file before running the executable journey or cleanup.
 
@@ -14,15 +14,25 @@ The port probe and host bind are separate operations. If the host reports `E_IO`
 
 <!-- bookflow-example: illustrative -->
 ```bash
-BOOKFLOW=(bookflow)
-# From the source-checkout root, use this line instead:
-# BOOKFLOW=(uv run --no-sync bookflow)
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON=(python3)
+else
+    PYTHON=(python)
+fi
+if command -v bookflow >/dev/null 2>&1; then
+    BOOKFLOW=(bookflow)
+elif command -v uv >/dev/null 2>&1 && [ -f pyproject.toml ] && [ -f uv.lock ]; then
+    BOOKFLOW=(uv run --frozen --no-sync bookflow)
+else
+    echo "Install bookflow-core, or run from a prepared source-checkout root." >&2
+    exit 1
+fi
 "${BOOKFLOW[@]}" --help >/dev/null
 
 umask 077
 export BOOKFLOW_DATA_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/bookflow-agent-guide.XXXXXX")"
 export BOOKFLOW_STATE="$BOOKFLOW_DATA_ROOT/agent-guide.env"
-BOOKFLOW_PORT="$(python - <<'PY'
+BOOKFLOW_PORT="$("${PYTHON[@]}" - <<'PY'
 import socket
 with socket.socket() as probe:
     probe.bind(("127.0.0.1", 0))
@@ -34,7 +44,7 @@ export BOOKFLOW_URL="http://$BOOKFLOW_BIND"
 "${BOOKFLOW[@]}" init --json
 "${BOOKFLOW[@]}" demo reset --json
 TOKEN_DOCUMENT="$("${BOOKFLOW[@]}" token issue --label agent-guide --days 1 --json)"
-export BOOKFLOW_TOKEN="$(printf '%s' "$TOKEN_DOCUMENT" | python -c 'import json,sys; print(json.load(sys.stdin)["secret"])')"
+export BOOKFLOW_TOKEN="$(printf '%s' "$TOKEN_DOCUMENT" | "${PYTHON[@]}" -c 'import json,sys; print(json.load(sys.stdin)["secret"])')"
 nohup "${BOOKFLOW[@]}" serve --bind "$BOOKFLOW_BIND" </dev/null >"$BOOKFLOW_DATA_ROOT/host.out" 2>"$BOOKFLOW_DATA_ROOT/host.err" &
 BOOKFLOW_HOST_PID=$!
 
@@ -48,7 +58,7 @@ BOOKFLOW_HOST_PID=$!
 chmod 600 "$BOOKFLOW_STATE"
 printf 'BOOKFLOW_STATE=%s\n' "$BOOKFLOW_STATE" >&2
 
-python - <<'PY'
+"${PYTHON[@]}" - <<'PY'
 import os
 import time
 from urllib.error import URLError
@@ -272,7 +282,7 @@ print(json.dumps({
 }))
 ```
 
-The final line is a machine-readable receipt. The program has already verified that `version` is the company's resulting `info_version`, that `cursor` identifies the resumed audit event, and that `directive_code` is attached to each write. Retain those values if later work must continue from this run. Later verification can read the company with [`company show`](cli/company.md) and request events after the receipt cursor with [`audit tail`](cli/audit.md).
+The final line is a machine-readable receipt. The program has already verified that `version` is the company's resulting `info_version`, that `cursor` identifies the resumed audit event, and that `directive_code` is attached to each write. Retain those values if later work must continue from this run. Later verification can read the company with [`company show`](cli/company.md). To retrieve the event at the receipt cursor, call [`audit tail`](cli/audit.md) with `after` set to `cursor - 1` and `limit` set to 1, then require `items[0].seq == cursor`; `next_after` is the last sequence returned, while `high_water` is the lower-bound cursor used for that request. Use `audit show` with the returned event id when entry-level details are needed.
 
 The journey expects exactly one fresh demo company. To rerun it from the beginning, stop the host, run `demo reset` against the same root, issue a new short-lived token, and restart the host. The fixed directive idempotency key is then safe because the reset created a fresh demo database.
 
@@ -291,7 +301,7 @@ if ! wait "$BOOKFLOW_HOST_PID" 2>/dev/null; then
     done
 fi
 kill -0 "$BOOKFLOW_HOST_PID" 2>/dev/null && { echo "host did not stop" >&2; exit 1; }
-python - <<'PY'
+"${PYTHON[@]}" - <<'PY'
 import os
 from pathlib import Path
 Path(os.environ["BOOKFLOW_STATE"]).unlink(missing_ok=True)
