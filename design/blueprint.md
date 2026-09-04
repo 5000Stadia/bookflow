@@ -359,6 +359,7 @@ Two tables in company.db, plus the same pair in hub.db for hub commands. Hub com
 | interface, client_name, client_version, client_host | from context |
 | session_id, request_id, idempotency_key | from context |
 | reason, directive_id, directive_code, source_ref | from context; `directive_code` is stored so hub events can show it |
+| undo_of_event_id | company audit only: nullable original company event id, unique when present, so one event is compensated at most once |
 | summary | one line, returned by the command with its output, e.g. `posted invoice 1043 to Acme Plumbing for 1,250.00` |
 
 `audit_entries`: one row per record touched by the event.
@@ -382,7 +383,7 @@ Rules:
 - `activity <record_type> <record_id>` merges audit entries, notes, and attachment links for that record in time order. The hub has `hub audit list`, `hub audit show`, and `hub audit tail`, hub-scoped, with the same filters: hub admins see every event; other users see events whose entries reference an organization or company they can see, and `audit show` on any other event returns `E_EVENT_NOT_FOUND` exactly as for a nonexistent id. Snapshots inside entries are redacted like any output: fields named `path` or ending in `_path` are removed for non-hub-admins. `audit list` filters: `--since`, `--until` (dates in the viewer's zone), `--actor` (id or username), `--kind`, `--principal`, `--via`, `--command`, `--record-type`, `--record-id`, `--limit`; `list` pages older with `--before` and `tail` pages newer with `--after`.
 - Reads are not audited. Every write, including one that changes only `config.toml`, records an event. Presence (6.4) is advisory state, not a record, and its heartbeats are never audited.
 
-`undo <event_id>` reverses a list-record event by writing the entry's before-state as a new versioned write, itself audited with `reason` `undo of <event_id>`; it refuses events that touched the ledger (`E_NOT_UNDOABLE`), which are voided instead.
+`undo <event_id>` reverses eligible list-record fields with a compensating versioned write, itself audited with `reason` `undo of <event_id>` and a unique `undo_of_event_id`; section 11.16 defines conflict and dependency behavior. It refuses events that touched the ledger (`E_NOT_UNDOABLE`), which are voided instead.
 
 ### 7.1 Event feed
 
@@ -439,13 +440,26 @@ Table `company_info` in company.db, exactly one row. This table and the rollout 
 | timezone | IANA name |
 | closing_date | date, nullable; see 10.6 |
 | recent_activity_window_seconds | default 60 |
-| default_chart | which seeded chart was applied; null until one is applied with `chart apply` |
+| default_chart | id of the packaged chart template that was applied; null for an explicit chartless rollout or a legacy chartless upgrade |
+| default_chart_version | version of the applied chart-template manifest; null when `default_chart` is null |
+| use_account_numbers | whether ordinary forms, tables, and pickers display stored account numbers; default true |
+| show_lowest_subaccount_only | whether account pickers display leaf names instead of full names; default false |
+| required_employee_profile_fields | ordered registered non-secret field paths used by employee completeness output |
+| use_classes, prompt_for_class | whether later forms expose and require a class; both default false |
+| enable_price_levels | whether later sales forms expose price-level defaults; default false |
+| units_of_measure_mode | `disabled`, `single_unit_per_item`, or `multiple_related_units`; default `disabled` |
+| sales_tax_enabled | whether later sales forms calculate sales tax; default false |
+| default_sales_tax_item_id | nullable sales-tax item or group used by later forms |
+| sales_tax_liability_basis | `invoice_date` or `payment_receipt`; default `invoice_date` |
+| sales_tax_remittance_frequency | `monthly`, `quarterly`, or `annually`; default `quarterly` |
+| default_ship_method_id | nullable active ship-method default |
+| free_on_board | nullable default free-on-board location text for later sales forms |
 
 ### 9.2 Rollout
 
-`bookflow company new` takes every field above as options, or `--interactive` to prompt for each, plus `--organization` (id or name; defaulted when the actor can see exactly one) and `--chart` (a seeded chart name or `none`). Required: `legal_name`, `home_currency`. Defaults: `display_name` = `legal_name`; `fiscal_year_start_month` = 1; `tax_year_start_month` = `fiscal_year_start_month`; `timezone` = the machine's zone as reported by the `tzlocal` package; `country` = `US`; `entity_type` and `income_tax_form` = `other`; `tax_id_kind` = `ein`; `report_basis` = `accrual`; `recent_activity_window_seconds` = 60; `legal_address` and `ship_address` = `address`; `industry`, `contact_name`, `tax_id`, address lines, `phone`, `fax`, `email`, `website` = null; `closing_date` and `default_chart` = null. `closing_date` is not accepted at rollout; it is set with `company update`. The tax id, when given, must match the shape for its kind; email must contain one `@`; timezone must be an IANA name; months must be 1 to 12. Until charts exist, `--chart` accepts only `none`; `chart apply <name>` seeds a chart into a company whose `default_chart` is null. It creates the directory, the database, the `company_info` row, the seeded chart of accounts named by `--chart`, the standard terms, payment methods, and sales tax codes listed in section 11, and grants the creating user the owner role. Output is the company id and display name.
+`bookflow company new` takes every writable non-reference field above as options, or `--interactive` to prompt for each, plus `--organization` (id or name; defaulted when the actor can see exactly one) and `--chart` (a packaged chart-template id or `none`). Reference-valued list defaults are set by `company update` after rollout. Required: `legal_name`, `home_currency`. Defaults: `display_name` = `legal_name`; `fiscal_year_start_month` = 1; `tax_year_start_month` = `fiscal_year_start_month`; `timezone` = the machine's zone as reported by the `tzlocal` package; `country` = `US`; `entity_type` and `income_tax_form` = `other`; `tax_id_kind` = `ein`; `report_basis` = `accrual`; `recent_activity_window_seconds` = 60; `legal_address` and `ship_address` = `address`; `industry`, `contact_name`, `tax_id`, address lines, `phone`, `fax`, `email`, `website` = null; `closing_date` = null; `chart` = `general`; Row 5 settings use the defaults in the table. `closing_date` is not accepted at rollout; it is set with `company update`. The tax id, when given, must match the shape for its kind; email must contain one `@`; timezone must be an IANA name; months must be 1 to 12. Rollout applies the selected chart with the chart service in section 10.1 and grants the creating user the owner role. Standard terms, payment methods, sales-tax codes, and other profile seeds are installed by their own versioned seed manifests independently of the selected chart, including when `--chart none` is used. `--chart none` explicitly leaves `default_chart` and `default_chart_version` null. Output is the company id and display name.
 
-Seeded charts, chosen by `--chart`: `general`, `service`, `construction_trades`, `retail`, `nonprofit`. Each is a data file in the package. `general` is the default.
+Packaged chart-template ids, chosen by `--chart`: `general`, `service`, `product`, `contractor`, `retail`, `nonprofit`. Each is an immutable, versioned manifest in the package. `general` is the default.
 
 ### 9.3 Demo company
 
@@ -459,17 +473,35 @@ Seeded charts, chosen by `--chart`: `general`, `service`, `construction_trades`,
 
 ### 10.1 Accounts
 
-Table `accounts`.
+Table `accounts` carries the common list contract in section 11 and these fields:
 
-| Field | Meaning |
+| Field | Meaning and validation |
 |---|---|
-| name | unique among siblings |
-| number | text, optional, unique within the company when present |
-| type | one of the account types below |
-| parent_id | nullable; sub-accounts must share the parent's type |
-| description | |
-| active | |
-| is_system | true for accounts the core requires and will not let be deactivated |
+| `name` | trimmed display name, unique among siblings after NFC normalization and case folding |
+| `number` | optional text identifier, unique within the company after trimming and case folding |
+| `type` | one of the account types below |
+| `parent_id` | nullable account; the parent has the same `type` and the resulting tree has at most five levels |
+| `description` | nullable text, at most 200 characters |
+| `currency` | ISO 4217 code; defaults to the company's home currency; immutable after a ledger line references the account |
+| `tax_line` | nullable tax-form line code carried into tax preparation reports |
+| `institution_name` | nullable financial-institution display name |
+| `institution_account_last4` | nullable, protected display-only last four characters; a full account number is never stored here |
+| `routing_number_last4` | nullable, protected display-only last four characters; a full routing number is never stored here |
+| `provider_profile_ref` | nullable opaque reference to an existing protected provider profile; never returned by `list` and not writable until that provider exists |
+| `next_check_number` | nullable text used as the default by a later check transaction form |
+| `check_reorder_number` | nullable bank-only printable-check reorder identifier |
+| `order_printable_checks` | nullable bank-only preference; null means inherit the company setting |
+| `default_class_id` | nullable active class used as the account's form default |
+| `note` | nullable internal text |
+| `system_role` | nullable stable role key, unique within the company; only chart application sets it |
+| `is_system` | derived as `system_role != null` |
+| `balance` | derived posted balance in home-currency minor units; zero until ledger transactions exist |
+| `available_balance` | nullable provider-supplied balance in the account currency; bank-feed work owns updates |
+| `normal_balance` | derived from `type` using the table below |
+| `statement_family` | derived as `balance_sheet`, `profit_and_loss`, or `neither` |
+| `has_transactions` | derived false until a ledger line references the account |
+| `child_count` | derived number of direct children |
+| `active` | common list activation flag |
 
 Account types and their normal balance:
 
@@ -492,7 +524,27 @@ Account types and their normal balance:
 | other_expense | debit | P&L |
 | non_posting | none | neither |
 
-System accounts every company has: `Accounts Receivable`, `Accounts Payable`, `Undeposited Funds`, `Opening Balance Equity`, `Retained Earnings`, `Sales Tax Payable`, `Inventory Asset`, `Cost of Goods Sold`, `Exchange Gain/Loss`.
+Required system roles are `accounts_receivable`, `accounts_payable`, `undeposited_funds`, `opening_balance_equity`, `retained_earnings`, `sales_tax_payable`, `inventory_asset`, `cost_of_goods_sold`, and `exchange_gain_loss`. A chart template supplies exactly one active account for every role. A system account may be described and numbered, but its `name`, `type`, `parent_id`, `currency`, `system_role`, and active state cannot be changed. `E_SYSTEM_RECORD` names the protected fields or operation.
+
+`account create`, `account update`, `account show`, `account list`, `account activate`, and `account deactivate` use the shared list behavior in section 11. New accounts never accept `balance`, `available_balance`, `is_system`, or `system_role`. An account cannot be deactivated while it has active descendants, is referenced by another active master-data record, has transactions, or has a required system role. `--cascade` applies only to descendants; it never changes cross-list references. A parent change rejects a cycle, a sixth level, or a parent of another account type. Account `type` changes reject receivable/payable accounts, accounts with children, system accounts, incompatible currencies, and any change that would invalidate an existing master-data or ledger use.
+
+Company setting `use_account_numbers`, default true, controls whether stored numbers appear in ordinary forms, tables, and pickers. Company setting `show_lowest_subaccount_only`, default false, controls picker labels. Neither setting removes stored numbers or computed full names. Account create/update forms expose only fields allowed by the selected type: institution and printable-check fields are limited to bank, credit-card, asset, or liability types as applicable, and routing suffix plus printable-check fields are bank-only. A tax-line value is validated against the account type.
+
+Account lookup and tables use the following declared inventory:
+
+| Concern | Fields |
+|---|---|
+| Query search | `name`, `full_name`, `number`, `description`, `institution_name`, institution-account suffix, `note` |
+| Equality filters | `active`, `type`, `parent_id`, `currency`, `tax_line`, `is_system`, `default_class_id` |
+| Sort fields | `full_name`, `number`, `type`, `balance`, `updated_at` |
+| Default columns | `number`, `full_name`, `type`, `balance`, `currency`, `active` |
+| Additional selectable columns | parent, `description`, currency, `tax_line`, `institution_name`, `next_check_number`, `default_class_id`, `system_role`, `is_system`, `available_balance`, `updated_at`, every common field |
+
+The default sort is `number` ascending with unnumbered accounts after numbered accounts, then `full_name` ascending and `id` ascending. A hierarchy-order sort returns parents before children; flat sorts do not alter stored parentage. `show` includes every stored and derived field, `full_name`, `depth`, and `has_children`. Balances are informational outputs and are never accepted by Row 5 commands. Opening balances and all provider balance refresh behavior are deferred to their ledger and bank-feed passes.
+
+Packaged chart templates are immutable manifests with `template_id`, `version`, and a complete ordered account tree. The ids are `general`, `service`, `product`, `contractor`, `retail`, and `nonprofit`. `chart list` returns id, version, display name, description, and account count. `chart show <template>` returns the manifest account tree and system-role assignments. Both are authenticated hub-scoped reads of packaged data and are routed over HTTP; they require no company selection. `chart apply` is the company-scoped write.
+
+`chart apply <template>` is a company-scoped admin write. It requires a chartless company with no account rows, validates the complete manifest before the transaction begins, creates every account in manifest order, and writes `company_info.default_chart` and `default_chart_version` in the same transaction and audit event. It accepts an idempotency key. The event has one entry for `company_info` and one for every account in deterministic parent-first order. A missing role, duplicate role, invalid parent, duplicate sibling name, duplicate number, unsupported type, or invalid currency rejects the whole manifest with `E_CHART_INVALID`; a company that already has a chart or any account returns `E_CHART_EXISTS`. Dry run performs the same validation and returns the prospective ids and count without a migration, row, audit event, or idempotency write. `company new --chart` invokes this same service during rollout; an injected failure at any account leaves neither the company nor a partial chart registered. Legacy upgraded companies remain chartless and migrations never invent business records. Chart application and rollout events are not undoable.
 
 ### 10.2 Transactions
 
@@ -575,33 +627,128 @@ Each transaction type has a sequence in `sequences` (`type`, `next_number`, `pre
 
 ## 11. Lists
 
-All lists share the common fields of section 6.1, `active`, and the five verbs `create`, `update`, `show`, `list`, `activate`, `deactivate`. Names are unique within a list, case-insensitively. Hierarchical lists have `parent_id` and a computed `full_name` of the form `Parent:Child:Grandchild`. Hierarchy depth is limited to 5.
+### 11.1 Shared list contract
 
-### 11.1 Customers and jobs
+Every primary list record carries the common fields of section 6.1, `active`, and a normalized lookup key. The six shared verbs are `create`, `update`, `show`, `list`, `activate`, and `deactivate`. They apply to `account`, `customer`, `vendor`, `employee`, `other-name`, `item`, `item-category`, `class`, `term`, `payment-method`, `sales-tax-code`, `customer-type`, `vendor-type`, `job-type`, `sales-rep`, `ship-method`, `customer-message`, `price-level`, `unit-of-measure`, and `custom-field`. Every command is company-scoped.
 
-Table `customers`. A job is a customer with `parent_id` set; jobs may nest to depth 5.
+Record resolution tries a ULID first, then `full_name` for a hierarchical list or the noun's declared display key for a flat list, after trimming, NFC normalization, and case folding. Flat tables store a list-unique `name_key`. Hierarchical tables store a sibling-unique `name_key`, table-wide unique materialized `full_name` and `full_name_key`, integer `depth`, and an internal ULID path. A leaf name cannot contain `:`. Any normalized display-key, sibling-name, number, initials, code, or full-name collision returns `E_NAME_TAKEN`. Names in separate lists occupy separate namespaces; the same display name may identify a customer and a vendor. Polymorphic references always store record type and id.
 
-Fields: `name`, `company_name`, `salutation`, `first_name`, `last_name`, `bill_address` (line1, line2, city, state, postal_code, country), `ship_address` (same shape), `phone`, `alt_phone`, `fax`, `email`, `cc_email`, `website`, `contact`, `alt_contact`, `terms_id`, `sales_tax_code_id`, `sales_tax_item_id`, `resale_number`, `credit_limit`, `price_level_id`, `customer_type_id`, `sales_rep_id`, `preferred_payment_method_id`, `preferred_delivery_method` (`none`, `email`, `mail`), `account_number`, `job_status` (`none`, `pending`, `awarded`, `in_progress`, `closed`, `not_awarded`), `job_start`, `job_projected_end`, `job_end`, `job_description`, `job_type_id`, `linked_vendor_id` (nullable, see 11.3), `notes`.
+Hierarchical lists carry nullable `parent_id`; their colon-separated names and paths are projections of the tree. The root is level one and the maximum depth is five. Parent updates validate the complete resulting subtree, reject cycles with `E_HIERARCHY_CYCLE`, reject a result deeper than five with `E_HIERARCHY_DEPTH`, and enforce sibling and full-name uniqueness. Rename and reparent recompute every descendant's materialized name, key, depth, and path in the same transaction without incrementing descendant record versions or writing descendant audit entries; the command output names the affected descendant ids. A three-level hierarchy is present in the demo and is an acceptance witness; it does not lower the supported maximum.
 
-### 11.2 Vendors
+Shared write behavior is:
 
-Table `vendors`. Fields: `name`, `company_name`, `salutation`, `first_name`, `last_name`, `address`, `phone`, `alt_phone`, `fax`, `email`, `cc_email`, `website`, `contact`, `alt_contact`, `terms_id`, `account_number`, `tax_id`, `eligible_1099` (bool), `vendor_type_id`, `default_expense_account_ids` (up to three, in order), `billing_rate_level_id` (nullable, reserved), `linked_customer_id` (nullable), `notes`.
+- `create` accepts an idempotency key. `update`, `activate`, and `deactivate` use the version, disjoint-merge, blind-write, dry-run, reason, directive, and audit rules in sections 5–7.
+- Nullable update fields use absent to preserve and null to clear. The CLI represents explicit clearing with `--clear`.
+- References supplied by a new write must resolve to active records. Existing references to a record remain readable after it is deactivated. Default reference pickers omit inactive records.
+- `deactivate` on a hierarchical parent with active descendants returns `E_ACTIVE_DEPENDENTS`. `--cascade` deactivates the complete active subtree atomically and returns affected ids in deterministic parent-first order. Cross-list dependents are never cascaded; `E_RECORD_IN_USE` returns visible dependent record types and counts.
+- `activate` on a child requires every ancestor to be active and never activates an ancestor implicitly. The caller activates ancestors explicitly before the child.
+- Composite writes, including nested child changes, links, conversions, and cascades, use one database transaction and one audit event with an entry for every logically changed record; internal hierarchy-projection maintenance is not a descendant record change.
+- No list or nested child command hard-deletes data. Normalized child rows use stable ids but live inside the owning record's command model and audit snapshot. An omitted child collection is preserved; a supplied collection is the complete replacement, with retained ids identifying retained rows and absent prior rows retired in the same owner write.
+- Dry run performs all reference, dependency, hierarchy, version, and uniqueness checks and returns the prospective result without a row, audit event, migration, or idempotency write.
 
-### 11.3 Customer and vendor link
+Every list declares its own search fields, equality filters, sort fields, default columns, and additional selectable columns below. `list` accepts `query`, `include_inactive`, typed equality filters, `sort`, and `direction` (`asc` or `desc`). Active-only is the default; `include_inactive` returns active and inactive rows, and the typed `active: false` filter returns inactive rows only. Unknown filter or sort fields return `E_LIST_FILTER`. Text search uses trimmed, case-folded containment across the declared fields. The first declared sort field is the default unless the noun states another order. Each sort appends `id` ascending as a stable final key.
 
-A customer and a vendor may be linked when they are the same legal entity. `customer link-vendor <customer> <vendor>` sets both sides; `unlink` clears both. The link changes nothing about posting. `show` on either side includes the other. The GUI may offer to copy contact fields across the link; the core does not.
+JSON list output always returns the complete list output model. Column declarations control human CLI tables and workbench tables. The generated workbench exposes declared search and filter controls, sortable headings, a selectable and reorderable column list, and reset to the declared defaults. A selected record links to `show`; allowed write actions come from the registered commands and the actor's capabilities. Row 5 is the first human browser-product checkpoint: the shared shell has persistent company context, grouped primary navigation, a visible current section and primary action, responsive list/detail/form layouts, empty states, and success/error feedback. It remains generated from shared metadata rather than duplicating a bespoke interface for each noun. Spreadsheet editing, CSV import/export, save-and-new workflows, and purpose-built list centers are deferred to section 14.1 and later browser-workflow passes.
 
-### 11.4 Employees
+Money inputs in this section use the decimal-string API of section 5.6; outputs carry `amount`, `currency`, and `minor_units`, and company storage is integer minor units. Percentages store signed millionths of one percent, quantities store signed micro-units, and unit conversion factors store positive nano-units. Floats are rejected on every surface.
 
-Table `employees`. Fields: `name`, `first_name`, `middle_name`, `last_name`, `address`, `phone`, `email`, `ssn_last4`, `hire_date`, `release_date`, `notes`. Employees may be named on checks and on time entries. Payroll fields are absent by design and will be added to this table by a later migration.
+The list-specific errors are `E_RECORD_NOT_FOUND`, `E_NAME_TAKEN`, `E_VERSION_CONFLICT`, `E_ACTIVE_DEPENDENTS`, `E_RECORD_IN_USE`, `E_INACTIVE_REFERENCE`, `E_HIERARCHY_CYCLE`, `E_HIERARCHY_DEPTH`, `E_SYSTEM_RECORD`, `E_LIST_FILTER`, `E_TYPE_CHANGE`, `E_NOT_UNDOABLE`, and `E_UNDO_CONFLICT`. Not-found suggestions obey section 5.4 and never reveal inaccessible records.
 
-### 11.5 Other names
+### 11.2 Customers and jobs
 
-Table `other_names`. Fields: `name`, `company_name`, `address`, `phone`, `email`, `contact`, `account_number`, `notes`. Used for owners, partners, and payees that are neither customers nor vendors. Bookflow provides `other-name convert --to customer|vendor`, which creates the target, deactivates the other name, and rewrites `name_type` on its transactions in one audited event.
+Table `customers`. A top-level row is a customer. A row with `parent_id` is a job and may nest under a customer or job through the shared five-level maximum.
 
-### 11.6 Items
+Customer and job fields are:
 
-Table `items`. `type` is one of:
+| Group | Fields and behavior |
+|---|---|
+| Identity | `name`, `company_name`, `salutation`, `first_name`, `middle_name`, `last_name`, `job_title`; `name` is required and is the hierarchical display key |
+| Billing address | nullable structured `line1`, `line2`, `city`, `state`, `postal_code`, `country` |
+| Shipping addresses | ordered `customer_addresses` child rows with stable id, `label`, the structured address fields, `is_default`, and `active`; at most one active default per customer or job |
+| Contacts | ordered `customer_contacts` child rows with stable id, `role` (`primary`, `secondary`, `additional`), salutation, first, middle, last, job title, work/home/mobile/other phone, work/home fax, primary/secondary email, website, external handle, and `active` |
+| Convenience outputs | primary `contact`, `alt_contact`, `phone`, `alt_phone`, `fax`, `email`, `cc_email`, and `website`, derived from active contact rows and accepted as shortcuts that update the primary or secondary contact |
+| Commercial defaults | nullable active `terms_id`, `sales_tax_code_id`, `sales_tax_item_id`, `price_level_id`, `customer_type_id`, `sales_rep_id`, `preferred_payment_method_id`, and `preferred_ship_method_id` |
+| Tax and credit | nullable `resale_number`; `credit_limit` as exact home-currency money; the limit is a warning input to later sales forms, not a posting prohibition |
+| Delivery | `preferred_delivery_method` (`none`, `email`, `mail`), default `none`; it preselects a later delivery method and never sends by itself |
+| Account | nullable `account_number` |
+| Protected payment profile | nullable opaque `payment_profile_ref` to an existing protected profile plus display-only brand, last four, expiry month/year, and billing address; no security code or full account/card number is accepted, and the reference remains null until the protected provider exists |
+| Relationship | derived nullable `linked_vendor_id` from the one-to-one link in section 11.4 |
+| General | nullable `notes`, `default_class_id`, and typed `custom_fields` |
+| Balances | derived `current_balance` and `open_balance`; zero and unavailable until ledger support, never writable |
+
+A job also carries `job_status` (`none`, `pending`, `awarded`, `in_progress`, `closed`, `not_awarded`), nullable `job_type_id`, `job_start`, `job_projected_end`, `job_end`, `job_description`, and a job-specific sales-rep override. A projected or actual end cannot precede the start. Closing a job without an actual end succeeds with a warning.
+
+Jobs inherit address, contact, terms, tax, price-level, customer-type, sales-rep, payment-method, ship-method, delivery-method, and default-class values from the nearest ancestor when the stored override is null. `show` returns each stored override, each effective value, and the source record id for an inherited value. Updating an ancestor changes a descendant's effective value only where the descendant has no override.
+
+Customer lookup and tables use:
+
+| Concern | Fields |
+|---|---|
+| Query search | `name`, `full_name`, `company_name`, contact names and points, billing/shipping addresses, `account_number`, customer/job type, sales rep, `notes`, searchable custom fields |
+| Equality filters | `active`, `parent_id`, customer or job, `customer_type_id`, `job_type_id`, `job_status`, `sales_rep_id`, `price_level_id`, `sales_tax_code_id`, `preferred_payment_method_id`, `linked_vendor_id` |
+| Sort fields | `full_name`, `company_name`, primary contact, phone, `current_balance`, customer type, sales rep, job status, `updated_at` |
+| Default columns | `full_name`, `company_name`, primary contact, phone, `current_balance`, customer type, sales rep, `active` |
+| Additional selectable columns | account number, postal code, email, payment method, terms, credit limit, price level, tax code/item, job status/dates, delivery and ship method, linked vendor, every custom and common field |
+
+Open-balance and overdue filters, transaction panes, related-transaction actions, and balance links become functional with ledger and form rows. Contacts and address defaults exist in Row 5. Notes, attachments, and the merged activity feed integrate in Row 6. The generated workbench exposes current fields and visibly labels unavailable related panes; purpose-built tree/detail list centers are deferred.
+
+### 11.3 Vendors
+
+Table `vendors` carries `name`, `company_name`, `salutation`, `first_name`, `middle_name`, `last_name`, `job_title`, structured address, and ordered stable `vendor_contacts` child rows with the roles and contact fields declared for customers. Its convenience contact outputs and shortcuts follow the customer rules. It also carries nullable active `terms_id`, `vendor_type_id`, `default_class_id`, `billing_rate_level_id`, `account_number`, `print_name_on_check_as`, `credit_limit` as exact home-currency money, `eligible_1099`, `recall_last_transaction` as a nullable company-preference override, `notes`, and typed `custom_fields`.
+
+An ordered `vendor_expense_accounts` child collection holds at most three active expense or cost-of-goods-sold account references. `tax_id_kind` and `tax_id_last4` are display metadata; `tax_profile_ref` is an opaque reference to an existing protected profile and remains null until that store exists. A full tax identifier is not accepted or returned by Row 5. The full identifier and role-gated reveal/update behavior belong to the identity, tax, and payroll security pass. Vendor `current_balance` and `open_balance` are derived, unavailable until the ledger, and never writable. The one-to-one customer relationship is the derived `linked_customer_id` from section 11.4.
+
+`item_vendor_profiles` are stable child records keyed by item and vendor. Fields are `preferred_rank`, `vendor_item_name`, `purchase_cost` as exact home-currency money, `minimum_quantity` as a nonnegative exact decimal, `lead_time_days` as a nonnegative integer, `manufacturer_part_number`, `availability_notes`, and `active`. Rank one is the item's preferred vendor; ranks are unique per item and any number of alternates may exist. An item update owns reconciliation of these rows. Vendor and item `show` include the visible profiles. Last purchase date and cost are derived later from transactions.
+
+Vendor lookup and tables use:
+
+| Concern | Fields |
+|---|---|
+| Query search | `name`, `company_name`, person and contact fields, address, `account_number`, check name, vendor type, item-vendor identifiers, `notes`, searchable custom fields |
+| Equality filters | `active`, `vendor_type_id`, `terms_id`, `eligible_1099`, `default_class_id`, `linked_customer_id` |
+| Sort fields | `name`, `company_name`, primary contact, phone, `open_balance`, terms, vendor type, `updated_at` |
+| Default columns | `name`, `company_name`, primary contact, phone, `open_balance`, terms, vendor type, `active` |
+| Additional selectable columns | account number, check name, credit limit, tax-id last four, 1099 eligibility, email, postal code, default accounts, billing rate, linked customer, every custom and common field |
+
+Terms and account number populate later purchasing and payment forms. Credit limit and prior-transaction recall produce later form defaults or warnings; neither posts anything in Row 5. Financial filters and transaction panes become functional with ledger and form rows.
+
+### 11.4 Customer and vendor link
+
+Table `customer_vendor_links` carries `customer_id`, `vendor_id`, `active`, and the common fields. One active customer links to at most one active vendor and vice versa. `customer link-vendor <customer> <vendor>` requires both records active, accepts expected versions for both, and rejects an existing relationship on either side with `E_RECORD_IN_USE`. `customer unlink-vendor <customer>` accepts the customer, vendor, and link expected versions and deactivates the link. Link and unlink increment both endpoint versions in one transaction and produce one audited multi-entry event containing the link and both records. `show` on either record includes the counterpart. The link never changes posting behavior or silently synchronizes fields. A workbench contact-copy action previews and then submits ordinary versioned customer and vendor updates.
+
+### 11.5 Employees
+
+Table `employees` carries `name`, salutation, first, middle, and last name, job title, structured home/contact address, typed phone and email fields, hire date, release date, structured emergency-contact name/relationship/phone/email, `default_class_id`, `notes`, typed `custom_fields`, and display-only `tax_id_last4`. A release date cannot precede the hire date. A released employee may remain active for current non-payroll selection; deactivation is explicit.
+
+`profile_complete` and `missing_profile_fields` are derived from `company_info.required_employee_profile_fields` and are returned by `show` and `list`. The setting is an ordered list of registered non-secret employee field paths and defaults to first name, last name, address line 1, city, state, postal code, and either phone or email. Full tax identifiers, payroll withholding, earnings and deductions, paid time off, workers compensation, pay schedules, and direct-deposit data are not accepted in Row 5 and arrive with protected payroll storage.
+
+Employee lookup and tables use:
+
+| Concern | Fields |
+|---|---|
+| Query search | name, job title, address, phone/email, emergency contact, `notes`, searchable custom fields |
+| Equality filters | `active`, released or unreleased, `profile_complete`, `default_class_id` |
+| Sort fields | `name`, `hire_date`, `release_date`, `profile_complete`, `updated_at` |
+| Default columns | `name`, phone, email, `hire_date`, `release_date`, `profile_complete`, `active` |
+| Additional selectable columns | job title, address, emergency contact, default class, tax-id last four, every custom and common field |
+
+Employees may be referenced by sales reps and later checks and time entries. Payroll and transaction panes remain unavailable until their rows.
+
+### 11.6 Other names
+
+Table `other_names` carries `name`, `company_name`, salutation, first, middle, and last name, job title, structured address, typed contact fields, `contact`, `account_number`, `default_class_id`, `notes`, and typed `custom_fields`. It holds owners, partners, and payees that are neither customers nor vendors. It may be referenced by later checks, card charges, and time entries, but never substitutes for a customer or vendor on type-specific forms.
+
+`other-name convert <other-name> --to customer|vendor|employee` creates a new target from compatible fields, deactivates the source, and records `converted_to_type` and `converted_to_id` on the source in one audited event. It never rewrites an existing transaction, audit snapshot, or other historical reference. Future pickers select the target. It never merges into an existing target and returns `E_NAME_TAKEN` if the target name already exists. An already converted row cannot convert again. Undo restores the source, deactivates the created target, and clears the conversion link when no later conflicting dependency exists.
+
+Other-name search covers all identity, contact, address, account-number, notes, and searchable custom fields. Filters are `active`, converted or unconverted, conversion target, and default class. Default columns are `name`, `company_name`, contact, phone, email, and `active`; additional columns are address, account number, conversion target, default class, updated time, custom fields, and common fields.
+
+### 11.7 Items
+
+Table `items` carries the shared hierarchy plus an independent nullable `category_id`. Categories do not replace item parent/subitem hierarchy. Common item fields are `name`, `type`, `parent_id`, `category_id`, sales `description`, `purchase_description`, `sales_enabled`, `purchase_enabled`, `price`, `cost`, `income_account_id`, `expense_account_id`, `cogs_account_id`, `asset_account_id`, `deposit_account_id`, `liability_account_id`, `default_class_id`, `sales_tax_code_id`, `preferred_vendor_id`, `manufacturer_part_number`, `barcode`, `unit_of_measure_set_id`, `reorder_point_min`, `reorder_point_max`, `notes`, and typed `custom_fields`. Money uses exact home-currency values; quantities and percentages use exact decimal strings.
+
+`item_members` are ordered stable child rows with `owner_item_id`, `component_item_id`, exact `quantity`, nullable unit from the component item's unit set, position, and `active`. `preferred_vendor_id` is a shortcut that creates or promotes the corresponding item-vendor profile to rank one; clearing it leaves the active alternate profiles ranked after it. `item_vendor_profiles` use section 11.3. Parent and subitem types must match. Subtotal, group, payment, sales-tax-group, and fixed-asset items cannot have children. Group and assembly membership rejects self-reference and direct or indirect cycles.
+
+`type` is one of:
 
 | Type | Purpose | Accounts |
 |---|---|---|
@@ -615,50 +762,132 @@ Table `items`. `type` is one of:
 | payment | a payment recorded on an invoice | deposit-to |
 | sales_tax_item | one rate payable to one agency | Sales Tax Payable; agency is a vendor |
 | sales_tax_group | several sales tax items applied together | none |
-| inventory_assembly | built from other items | as inventory_part; reserved, not built in release 1 |
+| inventory_assembly | stocked item defined by an ordered bill of materials | income, COGS, asset |
+| fixed_asset | purchased long-lived asset profile | fixed asset; optional depreciation accounts |
 
-Fields: `name`, `type`, `parent_id`, `description`, `purchase_description`, `price` (amount or nullable), `cost`, `income_account_id`, `expense_account_id`, `asset_account_id`, `sales_tax_code_id`, `preferred_vendor_id`, `manufacturer_part_number`, `unit_of_measure`, `reorder_point`, `quantity_on_hand` (derived, never edited directly), `average_cost` (derived), `percent` (for discount and sales tax items), `tax_agency_vendor_id`, `group_members` (item id and quantity, for group and assembly).
+The create and update models are discriminated by type and enforce these fields:
 
-Inventory valuation is average cost. Quantity on hand and average cost are recomputed from inventory-affecting transactions and adjustments; they are never set by an `update`.
+| Type | Required and allowed profile |
+|---|---|
+| `service` | At least one of sales or purchase is enabled. Sales requires description/rate/tax code/income account. Purchase requires purchase description/cost/expense account and permits vendors. |
+| `non_inventory_part` | At least one of sales or purchase is enabled. Each enabled side requires its description, money value, and income or expense account. Resold parts may have both profiles. |
+| `inventory_part` | Sales and purchase profiles, income, COGS, and inventory-asset accounts, optional unit set, manufacturer/barcode values, vendors, and reorder points. |
+| `inventory_assembly` | The inventory-part profile plus at least one active bill-of-material member. Components may be inventory, non-inventory, other-charge, service, or another assembly; nested assemblies remain acyclic. `bill_of_material_cost` is the exact derived sum of component costs. |
+| `other_charge` | At least one of sales or purchase is enabled with the corresponding income or expense account. A form-level percentage is not stored on this type. |
+| `subtotal` | Name and sales description only; no account, money, tax, vendor, unit, reorder, or member field. |
+| `group` | At least one ordered member and `print_members`; no posting account or stored group price. A zero member quantity means a later form prompts for it. |
+| `discount` | Exactly one of `discount_amount` or `discount_percent`, plus one income or expense account and a tax code. A positive value reduces the preceding line or subtotal; later form tax treatment follows the tax code. |
+| `payment` | Description, nullable payment-method default, and exactly one deposit treatment: `deposit_account_id` or `use_undeposited_funds`. |
+| `sales_tax_item` | Exact `percent`, active tax-agency vendor, and sales-tax-payable liability account. |
+| `sales_tax_group` | At least one ordered member, every member an active sales-tax item; `combined_percent` is derived and liability remains attributable to each agency. |
+| `fixed_asset` | `asset_number`, description, purchase date, original exact cost, nullable vendor, fixed-asset account, location, serial number, warranty expiration, disposal status/date/proceeds/costs, and nullable accumulated-depreciation, depreciation-expense, and gain/loss accounts. Depreciation method, useful life, book basis, and tax basis are stored profile values; calculations and journal entries are deferred. |
 
-### 11.7 Classes
+Fields not allowed by the chosen type are rejected rather than ignored. Income references use income or other-income accounts; purchase/expense references use expense, other-expense, or cost-of-goods-sold accounts allowed by the item type; COGS references use cost-of-goods-sold; inventory assets use other-current-asset accounts bearing the inventory role; deposits use bank or undeposited-funds accounts; tax liability uses the sales-tax-payable role; and fixed assets use fixed-asset accounts. `reorder_point_min` and `reorder_point_max` are nonnegative and max is not below min. When unit mode is disabled an item unit set must be null; otherwise it may reference one active set. Item type updates are allowed only among service, non-inventory part, and other charge when the submitted target profile is complete. All changes into or out of inventory, assembly, aggregate, payment, tax, discount, and fixed-asset types return `E_TYPE_CHANGE`; later explicit conversion commands own their accounting effects.
 
-Table `classes`. Fields: `name`, `parent_id`. Company setting `use_classes` controls whether forms prompt for one.
+`quantity_on_hand`, `quantity_available`, `quantity_committed`, `quantity_on_order`, `quantity_pending_build`, `average_cost`, and `inventory_value` are derived outputs. Row 5 returns zero with `inventory_values_available: false`; none is writable. Inventory opening quantities and values are later dated transactions. Assembly definitions and bills of material exist in Row 5; assembly build transactions, cost layers, and available-to-promise are deferred.
 
-### 11.8 Terms
+Item lookup and tables use:
 
-Table `terms`. Fields: `name`, `kind` (`standard` or `date_driven`), `due_days`, `discount_days`, `discount_percent`, `due_day_of_month`, `discount_day_of_month`, `due_next_month_if_within_days`. Seeded: `Due on receipt`, `Net 15`, `Net 30`, `Net 60`, `1% 10 Net 30`, `2% 10 Net 30`.
+| Concern | Fields |
+|---|---|
+| Query search | `name`, `full_name`, sales/purchase descriptions, manufacturer part number, barcode, category, vendor item identifiers, `notes`, searchable custom fields |
+| Equality filters | `active`, `type`, `parent_id`, `category_id`, sales/purchase enabled, tax code, preferred vendor, unit set, default class |
+| Sort fields | `type`, `full_name`, `price`, `cost`, quantity on hand, preferred vendor, category, `updated_at` |
+| Default columns | `type`, `full_name`, `price`, `cost`, `quantity_on_hand`, preferred vendor, `active` |
+| Additional selectable columns | category, tax code, all account references, reorder points, unit set, manufacturer number, barcode, default class, average cost, inventory value/availability, every custom and common field |
 
-### 11.9 Payment methods
+The default sort is type then full name. Inactive items remain visible on historical forms and disappear from new-form pickers. Account, tax, class, unit, category, and vendor changes affect future transactions only. Historical transaction snapshots never change through an item update. Inventory sites and bins, serial and lot instances, landed cost, selectable costing methods, stock transfers, and item images are deferred to inventory and attachment passes.
 
-Table `payment_methods`. Fields: `name`, `kind` (`cash`, `check`, `credit_card`, `debit_card`, `ach`, `other`). Seeded: `Cash`, `Check`, `Visa`, `MasterCard`, `American Express`, `Discover`, `ACH`, `Other`.
+### 11.8 Item categories and classes
 
-### 11.10 Sales tax codes
+Tables `item_categories` and `classes` carry `name`, `parent_id`, materialized `full_name`, and the shared five-level hierarchy. Categories classify items independently of their subitem structure. Classes classify later transaction headers and lines and do not replace account, item, customer, vendor, or job types.
 
-Table `sales_tax_codes`. Fields: `code` (three characters), `description`, `taxable` (bool). Seeded: `Tax` taxable, `Non` non-taxable. Sales tax items and groups live in `items`.
+Company settings `use_classes` and `prompt_for_class` control later form visibility and warnings without removing class values. Accounts, customers/jobs, vendors, employees, other names, and items may carry an overridable default class. Both lists search name/full name, filter by active state and parent, sort by full name or updated time, and default to full name, parent, and active columns. Usage count is a derived selectable column that is zero and unavailable before referencing transactions exist.
 
-### 11.11 Supporting lists
+### 11.9 Terms
 
-Each is a table with the common fields, `name`, and `active`, plus the fields listed.
+Table `terms` carries `name`, `kind` (`standard` or `date_driven`), and active. Standard terms require `due_days` from 0 through 365 and may carry `discount_days` from 0 through 365 plus an exact `discount_percent` from 0 through 100. Date-driven terms require `due_day_of_month` from 1 through 31 and `due_next_month_if_within_days` from 0 through 31, and may carry `discount_day_of_month` from 1 through 31 plus the exact percentage. Fields from the other kind are forbidden; discount day and percentage are supplied together. A day beyond the target calendar month's length resolves to that month's last day.
 
-| Table | Extra fields | Used by |
+The term model computes a due date and optional early-discount deadline from any transaction date without writing. Later customer/vendor forms use the selected term as an overridable default. Search covers name; filters are active state and kind; sorts are name, kind, and updated time. Default columns are name, kind, a computed due-rule summary, a computed discount-rule summary, and active. Seeded terms are `Due on receipt`, `Net 15`, `Net 30`, `Net 60`, `1% 10 Net 30`, and `2% 10 Net 30`.
+
+### 11.10 Payment methods
+
+Table `payment_methods` carries `name`, `kind` (`cash`, `check`, `credit_card`, `debit_card`, `gift_card`, `e_check`, `ach`, `other`), and active. It supplies customer and payment-item defaults and later classifies receipts and deposits; it stores no credential. Search covers name; filters are active state and kind; sorts are name, kind, and updated time; default columns are name, kind, and active. Seeded methods are `Cash`, `Check`, `Visa`, `MasterCard`, `American Express`, `Discover`, `Debit Card`, `Gift Card`, `Electronic Check`, `Bank Transfer`, and `Other`.
+
+### 11.11 Sales tax codes
+
+Table `sales_tax_codes` carries `code`, the list's required display key of one through three characters, `description`, `taxable`, and active. The normalized code is unique. A nontaxable customer code makes later sales lines nontaxable; a taxable customer code delegates to each item's code. Additional nontaxable codes may classify exemption reasons. Sales-tax items and groups are item types in section 11.7.
+
+Company tax profile fields introduced with this list are `sales_tax_enabled`, nullable active `default_sales_tax_item_id`, `sales_tax_liability_basis` (`invoice_date` or `payment_receipt`), and `sales_tax_remittance_frequency` (`monthly`, `quarterly`, `annually`). Defaults are false, null, `invoice_date`, and `quarterly`. Enabling tax never silently changes existing customers or items. A later batch operation may preview and mark selected records in one reversible event.
+
+Search covers code and description; filters are active state and taxable; sorts are code, taxable, and updated time; default columns are code, description, taxable, and active. Seeded codes are `Tax` and `Non`.
+
+### 11.12 Supporting profile lists
+
+Each table carries the common fields, `name`, normalized name key, and active, plus the fields and behavior below.
+
+| Table | Extra fields and validation | Use, search, filters, and default columns |
 |---|---|---|
-| `customer_types` | `parent_id` | customers |
-| `vendor_types` | `parent_id` | vendors |
-| `job_types` | `parent_id` | customers (jobs) |
-| `sales_reps` | `initials` (unique, up to 5 characters), `name_type` and `name_id` pointing at an employee, vendor, or other name | customers (default rep), sales forms, sales by rep reports, commission tracking |
-| `ship_methods` | | sales forms |
-| `customer_messages` | `text` | sales forms |
-| `price_levels` | `kind` (`fixed_percent` or `per_item`), `percent` (signed), `per_item_prices` (item id and price or percent) | customers, sales forms |
-| `units_of_measure` | `base_unit`, `related_units` (name, conversion factor), `default_purchase_unit`, `default_sales_unit`, `default_shipping_unit` | items |
-| `memorized_transactions` | `transaction_type`, `template` (the form input as JSON), `schedule_id` (nullable), `group_name` | forms; see 13.3 |
-| `to_dos` | `text`, `due_at`, `done`, `record_type`, `record_id` | any record |
+| `customer_types` | `parent_id`; shared five-level hierarchy | customer segmentation; search name/full name; filter active/parent; columns full name, parent, active |
+| `vendor_types` | `parent_id`; shared five-level hierarchy | vendor segmentation; search name/full name; filter active/parent; columns full name, parent, active |
+| `job_types` | `parent_id`; shared five-level hierarchy | job segmentation; search name/full name; filter active/parent; columns full name, parent, active |
+| `sales_reps` | `initials`, unique after case folding and at most five characters; `name_type` and `name_id` restricted to an active employee, vendor, or other name | customer/job defaults and later sales forms/reports; search name, initials, source name; filter active/source type; columns initials, source name/type, active |
+| `ship_methods` | `display_order`, a nonnegative integer | company/customer defaults and later sales forms; search name; filter active; columns display order, name, active |
+| `customer_messages` | `text`, required and at most 101 characters; `display_order` | reusable later sales-form text; search name/text; filter active; columns display order, name, text, active |
 
-### 11.12 Custom fields
+The source record behind a sales rep remains a stable id; source renaming changes only the derived display name. A ship method or customer message sends nothing by itself. Common carrier and mail choices are seeded as ordinary editable rows.
 
-Table `custom_field_defs`: `list_name` (customers, vendors, employees, items, or any transaction type), `name`, `kind` (`text`, `number`, `date`, `bool`, `choice`), `choices`, `position`, `active`. Table `custom_field_values`: `def_id`, `record_type`, `record_id`, `value` as text, parsed by kind on read. Every list and form input model accepts `custom_fields` as a mapping of definition name to value, and every `show` output returns it. The workbench renders them as ordinary fields.
+Memorized transaction templates and to-dos are not Row 5 list nouns. Their complete lifecycle remains with the forms and scheduler/activity passes in sections 13 and 14.
 
-### 11.13 Completeness rule
+### 11.13 Price levels
+
+Table `price_levels` carries `name`, `kind` (`fixed_percent` or `per_item`), nullable ISO currency code, rounding mode (`nearest`, `up`, `down`), positive exact rounding increment, exact signed rounding offset, and active. Company setting `enable_price_levels`, default false, controls form and picker visibility without deleting definitions or customer assignments.
+
+A fixed-percent level requires exactly one signed exact `percent`: a negative value decreases the standard price and a positive value increases it. The value may not be below -100. A per-item level has stable ordered `price_level_items` child rows, unique by item, each with exactly one of an exact fixed `price` or signed exact `percent`, plus `adjustment_basis` (`standard_price`, `cost`, `current_custom_price`). A fixed price uses the level currency or company home currency; the referenced item is active at creation. Rounding applies after the percentage adjustment. Defaults are `nearest`, the smallest home-currency unit as increment, and zero offset.
+
+Customer assignment supplies the default level on later sales forms and each transaction line may override it. No form creates a price level implicitly. Conditional rules over dates, quantities, locations, groups, custom fields, stacking, margins, and guardrails are deferred to the sales-form pricing pass.
+
+Price-level search covers name and per-item item names. Filters are active state, kind, and currency. Sorts are name, kind, percent, item count, currency, and updated time. Default columns are name, kind, fixed percent or item count, currency, rounding summary, and active; every stored field and per-item summary is selectable.
+
+### 11.14 Units of measure
+
+Table `units_of_measure` carries `name`, base-unit name and abbreviation, nullable default purchase, sales, and shipping unit ids, and active. Stable ordered `unit_conversions` child rows carry unit name, abbreviation, and a positive exact decimal `base_factor`, defined as base units per one related unit. The base unit has factor exactly 1. Names and abbreviations are each unique within the set after normalization; every default belongs to the same active set.
+
+Company mode `units_of_measure_mode` is `disabled`, `single_unit_per_item`, or `multiple_related_units`, default `disabled`. Items reference a set, never free text. Later forms start with the context default and may choose another unit from the same set. Conversion uses exact decimal arithmetic: `target_quantity = source_quantity * source_base_factor / target_base_factor`; no float enters storage or output. A factor referenced by a posted transaction becomes immutable, while new units may be added and unused units deactivated.
+
+Search covers set and unit names/abbreviations. Filters are active state and base unit. Sorts are name, base unit, each default unit, related-unit count, and updated time. Default columns are name, base, purchase, sales, shipping, related-unit count, and active; detail includes every conversion.
+
+### 11.15 Custom fields
+
+Table `custom_field_defs` carries `name`, one or more registered `record_types`, `kind` (`text`, `number`, `date`, `bool`, `choice`), ordered choices, nonnegative `position`, `required`, typed nullable default, and active. Name is unique among active definitions whose record-type scopes overlap. Record types available in Row 5 are customer, vendor, employee, other name, and item; transaction types may be registered before their forms exist. There is no application limit lower than 45 active definitions for one record type.
+
+Table `custom_field_values` carries `def_id`, `record_type`, `record_id`, and canonical text storage. The unique key is definition plus record type plus record id. Inputs and outputs use typed values: exact decimal string for number, ISO date, JSON boolean, or string/choice. A value must match an active applicable definition and, for choice fields, one of its declared choices. Every supported list create/update input accepts `custom_fields` by definition name and every `show` returns active and preserved inactive-definition values with definition id, name, kind, and typed value.
+
+Definition target types and kind become immutable after the first value. Renaming preserves values by id. Removing a choice in use returns `E_RECORD_IN_USE`. Deactivating a definition hides new-entry controls and rejects new or changed values while preserving existing values in show, history, search, filters, and selectable columns. Each definition has its own expected version; definition edits and value edits conflict only with later writes to that definition or value. Transaction-target definitions may be created and listed in Row 5; values wait for the corresponding form.
+
+Registered command schemas expose `custom_fields` as a typed static mapping for programmatic clients. The workbench also loads the current active definitions through a runtime field provider and names controls by stable definition id, never by mutable label. The provider translates those ids into the same static command mapping before dispatch; adapters contain no custom-field business logic.
+
+Custom-field search covers definition name, target type, and choice labels. Filters are active state, target type, kind, and required. Sorts are position, name, kind, target type, and updated time. Default columns are position, name, target types, kind, required, and active. Active searchable list values participate in their owner's query; active definitions are available as typed owner-list filters and selectable columns.
+
+### 11.16 Undo
+
+`undo <event_id>` applies only to a company audit event whose entries are all Row 5 list records. Update, activate, deactivate, cascade, link, unlink, conversion, reparent, and nested-child events receive one atomic compensating write. Undoing a create deactivates the created record and never deletes it. For an update, every field changed by the original event is restored to its before-value when its current value still equals the original after-value; fields changed later but disjoint from the original diff are preserved. A later overlapping field change returns `E_UNDO_CONFLICT` with record, field, current version, and conflicting event details. Current dependency, hierarchy, reference, type, and system-record rules are rechecked and may also return a conflict.
+
+Ledger, migration, rollout, chart-application, undo, and non-list events return `E_NOT_UNDOABLE`. Undo itself is one audited event with `reason` `undo of <event_id>` and unique `undo_of_event_id`; a compensated event cannot be undone again. Authorization requires the undo capability and every capability represented by the original event.
+
+### 11.17 Explicit staging
+
+Row 5 stores master-data profiles, list operations, generated CLI/HTTP/workbench surfaces, and derived placeholders. It does not accept an unsupported future field and does not represent deferred data as complete.
+
+- Opening balances are later transactions, never mutable account, customer, vendor, or item balances. Posted/current/open/overdue values, transaction panes, registers, and usage reports become functional with the ledger and forms.
+- Assembly definitions and bills of material are current. Build transactions, quantity/cost calculation, inventory sites and bins, serials and lots, landed cost, costing layers/method choices, transfers, and available-to-promise belong to the inventory transaction passes.
+- Spreadsheet batch editing, CSV import/export, saved mappings, and merge operations that reassign references belong to section 14.1. Row 5 list tables still declare the fields and columns those operations consume.
+- Advanced conditional price rules and actual price application belong to the sales-form pricing pass. Row 5 includes fixed-percent and per-item price levels and customer assignments.
+- Notes, files, images, and activity tabs integrate in Row 6. Related transaction creation, delivery, class prompting, tax calculation, and term application arrive with their transaction and browser-workflow rows.
+- Full employee tax identifiers, payment-card or bank credentials, provider tokens, role-gated secret access, payroll, withholding, paid time off, and workers compensation require their security/provider/payroll passes. Row 5 stores only opaque protected references and safe display suffixes.
+- Memorized transactions and to-dos remain with forms, scheduling, and activity. Purpose-built list-center workspaces are deferred; the generated workbench exposes every current command and field.
+
+### 11.18 Completeness rule
 
 Before a list, form, or report is built, its blueprint section is completed to name every field, option, and behavior the anchor offers on the equivalent screen or report, including defaults, validations, filters, columns, and what each field is used by. The section is the inventory; the row is built against it; the artifact critic checks the built thing against the section. Reports are designed as one set with shared parameters, filters, column conventions, and drill-down, never one at a time. Improvements beyond the anchor, such as commission rates on sales reps tied to employees, are added as separate fields marked as such in the section, after the anchor's set is complete.
 
@@ -721,7 +950,7 @@ Dependency updates for the whole project, including the optional email package, 
 
 Every report reads `transaction_lines`, `transactions`, and `applications` only. Every report takes `--from`, `--to`, `--basis accrual|cash`, `--json`, and `--csv`. Cash basis treats income and expense as occurring when payment applies, using `applications`.
 
-Release 2 reports: trial balance, general ledger, profit and loss (standard, detail, by class, year to date comparison), balance sheet (standard, detail), statement of cash flows, AR aging summary and detail, AP aging summary and detail, customer balance summary and detail, vendor balance summary and detail, open invoices, unpaid bills, collections, sales by customer and by item summary and detail, purchases by vendor and by item, inventory valuation summary and detail, inventory stock status, job profitability summary and detail, estimates versus actuals, unbilled costs by job, time by job, sales tax liability, transaction list by date, transaction detail by account, check detail, deposit detail, missing checks, reconciliation summary and detail, budget versus actual, 1099 summary and detail, audit trail. The full set is inventoried from the anchor's report guides before the release is planned (11.13).
+Release 2 reports: trial balance, general ledger, profit and loss (standard, detail, by class, year to date comparison), balance sheet (standard, detail), statement of cash flows, AR aging summary and detail, AP aging summary and detail, customer balance summary and detail, vendor balance summary and detail, open invoices, unpaid bills, collections, sales by customer and by item summary and detail, purchases by vendor and by item, inventory valuation summary and detail, inventory stock status, job profitability summary and detail, estimates versus actuals, unbilled costs by job, time by job, sales tax liability, transaction list by date, transaction detail by account, check detail, deposit detail, missing checks, reconciliation summary and detail, budget versus actual, 1099 summary and detail, audit trail. The full set is inventoried from the anchor's report guides before the release is planned (11.18).
 
 Trial balance and general ledger ship with the ledger in release 1.
 
@@ -747,20 +976,20 @@ Browser sessions: `POST /login` with username and password sets an HTTP-only, `S
 
 ### 15.2a Workbench
 
-The workbench is the browser interface used to exercise every command. It is generated from the registry and is complete by construction: when a command is registered, its page exists.
+The workbench is the browser interface used to exercise every command. It is generated from the registry and is complete by construction: when a command is registered, its page exists. Its shared shell preserves the selected company and grouped primary navigation on every page; list, detail, and form pages expose a consistent title, context trail, primary action, empty state, and result feedback. Row 5 is the first human checkpoint for this browser shape. Individual list nouns do not fork their own navigation or visual language.
 
 | Page | Content |
 |---|---|
 | `/login` | username and password; successful HTMX submission returns a validated same-host `HX-Redirect` to `next` or `/` |
 | `/` | the only visible company, else the last company this browser visited when still visible, else the company picker |
-| `/c/<company_id>/` | the noun index: one link per noun that has commands |
-| `/c/<company_id>/<noun>` | the `list` output as a table with `--include-inactive` toggle; one row link to `show` |
+| `/c/<company_id>/` | the company home and persistent navigation, grouping registered nouns under Company, Customers and sales, Vendors and purchases, Employees, Items, Accounting, and Settings, with Audit always visible |
+| `/c/<company_id>/<noun>` | the `list` output as a table with the noun's declared query, typed filters, active/inactive view, sortable headings, selectable/reorderable columns with reset, and one row link to `show` |
 | `/c/<company_id>/<noun>/<id>` | the `show` output as a field table, the record's activity feed, its notes and attachments, and buttons for each verb the role permits |
 | `/c/<company_id>/<noun>/<verb>` | a role-authorized form generated from the input model: one input per field, typed, with the field description, a clear box per nullable field, and `reason` and `directive` fields on writes; an update form carries `expected_version` from the show it rendered; preview renders in place; submit redirects to the record/list target with a session-bound, one-use, 60-second opaque result flash |
 | `/c/<company_id>/audit` | `audit list` with its filters, each event expanding to its entries and diffs |
 | `/c/<company_id>/reports/<name>` | report parameters form, then the report as a table with a CSV link |
 
-Workbench requests are recorded with interface `http` and client name `bookflow-workbench`. The workbench has no styling beyond a readable default stylesheet. It exists so that a person can verify every function works. The polished product interface is browser-based and uses the same HTTP routes. Its first task-specific workflow is register-style entry alongside the general ledger; it may keep the generated workbench forms for rarely used commands.
+Workbench requests are recorded with interface `http` and client name `bookflow-workbench`. The shared responsive stylesheet establishes the browser product's navigation, hierarchy, tables, detail pages, forms, and feedback states without bespoke decoration per command. Task-specific workflows use the same HTTP routes. The first such workflow is register-style entry alongside the general ledger; rarely used commands may retain generated forms.
 
 ### 15.3 MCP server
 
@@ -809,7 +1038,7 @@ When two good things conflict, the earlier line wins.
 
 ## 19. Out of scope for release 1, and beyond
 
-Not in release 1: transaction forms other than journal entries, reports beyond trial balance and general ledger, work orders, time entries, scheduler, price levels, ship methods, inventory assemblies, polished browser workflows beyond register entry, a desktop wrapper, rate fetching, email, bank feeds, encryption at rest.
+Not in release 1: transaction forms other than journal entries, reports beyond trial balance and general ledger, work orders, time entries, scheduler, assembly build transactions, bespoke per-list browser centers, a desktop wrapper, rate fetching, email, bank feeds, encryption at rest.
 
 Four outside-facing integrations are designed as their own passes, each behind a provider interface so the churn of outside services never reaches the core. They come after the internal systems that grow out of the accounting core (CRM, work orders, inventory and receiving, assemblies, shipping), which are the product's priority:
 
@@ -820,7 +1049,7 @@ Four outside-facing integrations are designed as their own passes, each behind a
 
 Never in scope without a new design pass: multi-currency ledgers, non-US tax regimes.
 
-Later releases, each designed as its own pass against this blueprint: customer relationship management (lead generation and tracking, contacts, follow-ups, communication history, pipeline reporting), purchase orders and receiving, inventory assemblies and build orders, shipping with printable labels, customer letters and statements, marketing lists and mailings, scheduled automated billing and late-payment notices with delivery of delinquent invoices after a set age, calendar integration with work orders and multi-phase project schedules spanning days, an employee time clock (clock in and out per employee, feeding time entries), payroll. Each is a set of lists, transaction types, and reports registered through the same command registry.
+Later releases, each designed as its own pass against this blueprint: customer relationship management (lead generation and tracking, contacts, follow-ups, communication history, pipeline reporting), purchase orders and receiving, assembly build orders and posting, shipping with printable labels, customer letters and statements, marketing lists and mailings, scheduled automated billing and late-payment notices with delivery of delinquent invoices after a set age, calendar integration with work orders and multi-phase project schedules spanning days, an employee time clock (clock in and out per employee, feeding time entries), payroll. Each is a set of lists, transaction types, and reports registered through the same command registry.
 
 ## 20. Risks
 
