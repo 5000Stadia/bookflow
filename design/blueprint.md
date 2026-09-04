@@ -172,7 +172,7 @@ Roles and what they may do:
 | admin | yes | yes | yes | yes | yes except delete |
 | owner | yes | yes | yes | yes | yes |
 
-An agent's memberships are granted by a human with admin or owner role on that organization or company. An agent never inherits its owner's memberships.
+An agent's memberships and capabilities are granted exactly as a human's are, by a human with admin or owner role on that organization or company; an agent never inherits its owner's memberships. When an agent acts on behalf of a principal, its effective permission on every check is the intersection of its own grant and the principal's: acting for a more restricted person never widens what the agent can do, and `E_PERMISSION` names which side refused. This is an accountability rule, not a security boundary between principals: an agent that serves two people carries what it learned for one into its work for the other, which is outside Bookflow's control. `token issue` for an agent prints that warning, the docs repeat it, and the recommended shape is one agent identity per principal.
 
 ### 4.3a Configuration file
 
