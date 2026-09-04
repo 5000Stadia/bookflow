@@ -15,7 +15,15 @@ ROLE_FOR_REQUIRED = {"member": 0, "standard": 1, "admin": 2, "owner": 3}
 
 def load_memberships(s: Session) -> list[dict[str, Any]]:
     assert s.hub and s.actor
-    rows = s.hub.conn.execute(sa.select(h.memberships).where(h.memberships.c.user_id == s.actor.id, h.memberships.c.revoked_at.is_(None))).mappings().all()
+    # Select only the legacy fields this row consumes. A writable open loads the
+    # actor before migrations run, so newly declared inert columns must not make
+    # an older, otherwise upgradeable hub unreadable.
+    columns = [h.memberships.c[name] for name in (
+        "id", "user_id", "scope_type", "scope_id", "role", "granted_by", "granted_at", "revoked_at",
+    )]
+    rows = s.hub.conn.execute(sa.select(*columns).where(
+        h.memberships.c.user_id == s.actor.id, h.memberships.c.revoked_at.is_(None),
+    )).mappings().all()
     s.memberships = [dict(r) for r in rows]
     return s.memberships
 

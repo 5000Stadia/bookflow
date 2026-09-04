@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
 import socket
+import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -17,6 +19,50 @@ from bookflow.core.errors import BookflowError
 DESCRIPTOR = "host.json"
 
 
+def _runtime_directory_error(errno_name: str) -> BookflowError:
+    return BookflowError(
+        "E_IO",
+        message="The local hand-off runtime directory is unavailable.",
+        details={"operation": "runtime_socket", "errno": errno_name, "path": None},
+    )
+
+
+def _errno_name(error: OSError) -> str:
+    return errno.errorcode.get(error.errno or 0, "EIO")
+
+
+def _prepare_runtime_directory(path: Path) -> None:
+    """Create an owner-private runtime directory, refusing pre-existing unsafe paths."""
+    if not hasattr(os, "getuid"):  # pragma: no cover - Windows transport is not implemented yet
+        path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        return
+
+    created = False
+    try:
+        path.mkdir(mode=0o700)
+        created = True
+    except FileExistsError:
+        pass
+    except OSError as e:
+        raise _runtime_directory_error(_errno_name(e))
+
+    try:
+        info = path.lstat()
+    except OSError as e:
+        raise _runtime_directory_error(_errno_name(e))
+    if not stat.S_ISDIR(info.st_mode):
+        raise _runtime_directory_error("ENOTDIR")
+    if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) & 0o077:
+        raise _runtime_directory_error("EACCES")
+    if created or stat.S_IMODE(info.st_mode) != 0o700:
+        try:
+            os.chmod(path, 0o700, follow_symlinks=False)
+        except (NotImplementedError, OSError) as e:
+            if isinstance(e, NotImplementedError):
+                raise _runtime_directory_error("EIO")
+            raise _runtime_directory_error(_errno_name(e))
+
+
 def socket_path(data_root: Path) -> Path:
     digest = hashlib.sha256(str(data_root.resolve()).encode("utf-8")).hexdigest()[:16]
     base = os.environ.get("XDG_RUNTIME_DIR")
@@ -24,7 +70,7 @@ def socket_path(data_root: Path) -> Path:
         d = Path(base) / "bookflow"
     else:
         d = Path(tempfile.gettempdir()) / f"bookflow-{os.getuid() if hasattr(os, 'getuid') else 'user'}"
-    d.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _prepare_runtime_directory(d)
     return d / f"{digest}.sock"
 
 

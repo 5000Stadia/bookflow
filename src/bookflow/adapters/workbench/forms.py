@@ -10,7 +10,6 @@ from typing import Any, Literal, Union, get_args, get_origin
 from pydantic import BaseModel
 
 from bookflow.core import registry
-from bookflow.core.errors import BookflowError
 
 
 def _base(ann):
@@ -77,8 +76,6 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
         value = form.get(f"f:{path}")
         original = get_path(originals, path) if originals is not None else None
         if clear:
-            if value not in (None, ""):
-                raise BookflowError("E_VALIDATION", details={"fields": [{"field": path, "problem": "given both a value and a clear"}]})
             set_path(raw, path, None)
             continue
         if value is None or value == "":

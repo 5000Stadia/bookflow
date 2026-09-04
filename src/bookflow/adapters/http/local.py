@@ -47,34 +47,50 @@ class LocalListener:
         self._stopping = False
 
     def start(self) -> None:
+        self._stopping = False
         try:
             self.path.unlink()
         except OSError:
             pass
         sk = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sk.bind(str(self.path))
-        os.chmod(self.path, 0o600)
-        sk.listen(16)
-        sk.settimeout(0.5)
+        try:
+            sk.bind(str(self.path))
+            os.chmod(self.path, 0o600)
+            sk.listen(16)
+            sk.settimeout(0.5)
+        except BaseException:
+            sk.close()
+            raise
         self._sock = sk
         self._thread = threading.Thread(target=self._loop, name="bookflow-local", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
         self._stopping = True
-        if self._thread is not None:
-            self._thread.join(timeout=5)
-        if self._sock is not None:
-            self._sock.close()
+        sk = self._sock
+        if sk is not None:
+            try:
+                sk.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            sk.close()
+        thread = self._thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=5)
+        self._sock = None
+        self._thread = None
         try:
             self.path.unlink()
         except OSError:
             pass
 
     def _loop(self) -> None:
+        sk = self._sock
+        if sk is None:
+            return
         while not self._stopping:
             try:
-                conn, _ = self._sock.accept()
+                conn, _ = sk.accept()
             except socket.timeout:
                 continue
             except OSError:
@@ -84,16 +100,13 @@ class LocalListener:
     def _serve_one(self, conn: socket.socket) -> None:
         with conn:
             try:
-                head = conn.recv(4)
-                if len(head) < 4:
+                head = _recv_exact(conn, 4)
+                if head is None:
                     return
                 size = int.from_bytes(head, "big")
-                body = b""
-                while len(body) < size:
-                    chunk = conn.recv(min(65536, size - len(body)))
-                    if not chunk:
-                        return
-                    body += chunk
+                body = _recv_exact(conn, size)
+                if body is None:
+                    return
                 envelope = json.loads(body.decode("utf-8"))
                 login = peer_login(conn)
                 try:
@@ -109,10 +122,21 @@ class LocalListener:
                 pass
 
 
+def _recv_exact(conn: socket.socket, size: int) -> bytes | None:
+    """Read one complete frame component, or return ``None`` on an early EOF."""
+    data = bytearray()
+    while len(data) < size:
+        chunk = conn.recv(min(65536, size - len(data)))
+        if not chunk:
+            return None
+        data.extend(chunk)
+    return bytes(data)
+
+
 def context_from_envelope(envelope: dict[str, Any]) -> Context:
     """The caller's context with every identity field discarded; the host rebuilds those from the peer."""
     raw = dict(envelope.get("context") or {})
     for k in IDENTITY_FIELDS:
         raw.pop(k, None)
-    raw.setdefault("interface", Interface.cli.value)
+    raw["interface"] = Interface.cli.value
     return Context.model_validate(raw)

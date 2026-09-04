@@ -165,7 +165,45 @@ def test_a_non_admin_cannot_issue_for_anyone_else(hosted):
     assert r.status_code == 404 and r.json()["code"] == "E_TOKEN_NOT_FOUND"
 
 
-def test_set_password_is_local_only_and_validated(root):
+def test_password_reset_over_http_preserves_only_the_calling_session_and_bearers(hosted):
+    first = TestClient(hosted.handle.app)
+    second = TestClient(hosted.handle.app)
+    assert first.post("/login", json={"username": hosted.login, "password": PASSWORD}).status_code == 200
+    assert second.post("/login", json={"username": hosted.login, "password": PASSWORD}).status_code == 200
+    old_second = second.cookies["bookflow_session"]
+
+    changed = first.post("/commands/user.set-password", json={
+        "username": hosted.login, "password": "a-new-long-password",
+    }, headers=WB)
+    assert changed.status_code == 200 and changed.json()["changed"] is True
+    assert first.post("/commands/company.list", json={}, headers=WB).status_code == 200
+    replay = hosted.api.post("/commands/company.list", json={}, headers={
+        **WB, "Cookie": f"bookflow_session={old_second}",
+    })
+    assert replay.status_code == 401 and replay.json()["details"]["reason"] == "revoked"
+    assert hosted.call("company.list").status_code == 200, "password resets leave bearer tokens alone"
+
+
+def test_non_admin_password_targets_are_non_enumerating(hosted):
+    other = TestClient(hosted.handle.app)
+    assert other.post("/login", json={"username": "outsider", "password": OUTSIDER_PASSWORD}).status_code == 200
+    real = other.post("/commands/user.set-password", json={"username": hosted.login, "password": PASSWORD}, headers=WB)
+    ghost = other.post("/commands/user.set-password", json={"username": "nobody-at-all", "password": PASSWORD}, headers=WB)
+    assert real.status_code == ghost.status_code == 403
+    assert real.content == ghost.content
+    assert real.json()["details"] == {"capability": "user", "required_role": "self"}
+
+
+def test_token_list_hides_expired_tokens_by_default(hosted):
+    issued = hosted.ok("token.issue", {"label": "already-expired", "days": 1})
+    hosted.handle.host.submit(lambda: hosted.handle.host._hub.raw.execute(
+        "UPDATE api_tokens SET expires_at = '2001-01-01T00:00:00.000Z' WHERE id = ?", (issued["token_id"],)))
+    visible = {row["token_id"] for row in hosted.ok("token.list")["items"]}
+    complete = {row["token_id"] for row in hosted.ok("token.list", {"include_revoked": True})["items"]}
+    assert issued["token_id"] not in visible and issued["token_id"] in complete
+
+
+def test_set_password_is_self_service_and_validated(root):
     c = bookflow.connect(data_root=str(root))
     with pytest.raises(BookflowError) as e:
         c.run("user set-password", {"username": os_login()})
@@ -184,6 +222,8 @@ def test_set_password_is_local_only_and_validated(root):
     with pytest.raises(BookflowError) as e:
         as_user(root, "plain").run("user set-password", {"username": os_login(), "password": PASSWORD})
     assert e.value.code == "E_PERMISSION"
+    assert e.value.details == {"capability": "user", "required_role": "self"}
+    assert as_user(root, "plain").run("user set-password", {"username": "plain", "password": PASSWORD})["changed"]
 
 
 # ---------------------------------------------------------------- commands over HTTP
@@ -210,7 +250,7 @@ def test_context_in_the_body_and_local_only_names_are_refused(hosted):
     bad = hosted.call("company.update", {"reason": "no"}, company=hosted.company_id)
     assert bad.status_code == 400 and bad.json()["code"] == "E_CONTEXT_IN_INPUT"
     assert "X-Bookflow-Reason" in bad.json()["message"]
-    for name in ("company.use", "serve", "user.set-password", "company.frobnicate"):
+    for name in ("company.use", "serve", "company.frobnicate"):
         r = hosted.call(name)
         assert r.status_code == 400 and r.json()["code"] == "E_USAGE", name
 
@@ -226,12 +266,25 @@ def test_a_non_member_cannot_see_another_company(hosted):
 
 
 def test_openapi_lists_the_routed_commands_only(hosted):
+    from bookflow.core import registry
     doc = hosted.api.get("/openapi.json").json()
-    assert "/commands/company.list" in doc["paths"]
-    assert "/companies/{company_id}/commands/company.update" in doc["paths"]
-    assert "/commands/token.issue" in doc["paths"]
-    assert "/commands/serve" not in doc["paths"] and "/commands/user.set-password" not in doc["paths"]
-    assert doc["paths"]["/commands/company.list"]["post"]["summary"].endswith(".")
+    registry.load_all()
+    expected = {
+        (f"/commands/{cmd.name.replace(' ', '.')}" if cmd.scope == "hub" else
+         f"/companies/{{company_id}}/commands/{cmd.name.replace(' ', '.')}")
+        for cmd in registry.all_commands() if not cmd.local_only
+    }
+    actual = {path for path, methods in doc["paths"].items() if path != "/login" and "post" in methods}
+    assert actual == expected
+    assert "/commands/serve" not in doc["paths"] and "/commands/user.set-password" in doc["paths"]
+    for path in expected:
+        op = doc["paths"][path]["post"]
+        assert op["summary"].endswith(".") and op["security"] == [{"bearer": []}, {"cookie": []}]
+        assert "E_UNAUTHENTICATED" in op["x-bookflow-error-codes"]
+        assert op["requestBody"]["required"] is True
+        if "/companies/" in path:
+            company = next(p for p in op["parameters"] if p["name"] == "X-Bookflow-Company")
+            assert "must be the same company id" in company["description"]
 
 
 def test_the_event_stream_delivers_a_write_as_it_happens(hosted, live):
@@ -305,16 +358,18 @@ def test_a_second_host_reports_the_lock_holder(hosted, root):
 
 # ---------------------------------------------------------------- serve itself
 
-def test_serve_dry_run_and_bind_validation(root):
+def test_serve_is_not_a_write_command_and_bind_validation(root, cli):
     c = bookflow.connect(data_root=str(root))
-    out = c.run("serve", {}, dry_run=True)
-    assert out["dry_run"] and out["bind"] == "127.0.0.1:8765" and out["socket"].endswith(".sock")
+    with pytest.raises(BookflowError) as e:
+        c.run("serve", {}, dry_run=True)
+    assert e.value.code == "E_USAGE"
+    help_text = cli.run("serve", "--help").stdout
+    assert "--dry-run" not in help_text and "--reason" not in help_text and "--source-ref" not in help_text
     for bind, code in (("127.0.0.1", "E_VALIDATION"), ("127.0.0.1:0", "E_VALIDATION"),
                        ("10.1.2.3:9000", "E_NETWORK_NOT_ALLOWED")):
         with pytest.raises(BookflowError) as e:
-            c.run("serve", {"bind": bind}, dry_run=True)
+            c.run("serve", {"bind": bind})
         assert e.value.code == code, bind
-    assert c.run("serve", {"bind": "10.1.2.3:9000", "allow_network": True}, dry_run=True)["dry_run"]
     assert parse_bind("[::1]:8765") == ("::1", 8765) and parse_bind("localhost:1") == ("localhost", 1)
 
 
@@ -322,11 +377,11 @@ def test_serve_needs_a_hub_admin_and_an_initialized_root(root, tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()
     with pytest.raises(BookflowError) as e:
-        bookflow.connect(data_root=str(empty)).run("serve", {}, dry_run=True)
+        bookflow.connect(data_root=str(empty)).run("serve", {})
     assert e.value.code == "E_NOT_INITIALIZED"
     make_actor(root, "plain")
     with pytest.raises(BookflowError) as e:
-        as_user(root, "plain").run("serve", {}, dry_run=True)
+        as_user(root, "plain").run("serve", {})
     assert e.value.code == "E_PERMISSION"
 
 
@@ -554,9 +609,27 @@ def test_a_member_of_one_company_cannot_reach_another_by_id_header_or_page(hoste
     by_ghost = api.post(f"/companies/{GHOST}/commands/company.show", json={}, headers=hdr)
     by_header = api.post(f"/companies/{hosted.company_id}/commands/company.show", json={},
                          headers={**hdr, "X-Bookflow-Company": beta})
-    for r in (by_path, by_ghost, by_header):
+    by_ghost_header = api.post(f"/companies/{GHOST}/commands/company.show", json={},
+                               headers={**hdr, "X-Bookflow-Company": beta})
+    for r in (by_path, by_ghost):
         assert r.status_code == 404 and r.json()["code"] == "E_COMPANY_NOT_FOUND"
-    assert by_path.json() == by_ghost.json() == by_header.json()
+    assert by_path.json() == by_ghost.json()
+    assert by_header.status_code == 422 and by_header.json()["code"] == "E_VALIDATION"
+    assert by_header.json() == by_ghost_header.json(), "a path/header mismatch does not look either company up"
+
+    before_a = hosted.info()
+    before_b = hosted.ok("company.show", company=beta)
+    rejected_write = api.post(
+        f"/companies/{hosted.company_id}/commands/company.update",
+        json={"phone": "555-NEVER"},
+        headers={**hdr, "X-Bookflow-Company": beta},
+    )
+    assert rejected_write.status_code == 422 and rejected_write.json() == by_header.json()
+    after_a = hosted.info()
+    after_b = hosted.ok("company.show", company=beta)
+    assert after_a["info_version"] == before_a["info_version"]
+    assert after_b["info_version"] == before_b["info_version"]
+    assert after_a["info"].get("phone") != "555-NEVER" and after_b["info"].get("phone") != "555-NEVER"
 
     assert api.post(f"/companies/{hosted.company_id}/commands/company.show", json={}, headers=hdr).status_code == 200
     assert api.post("/commands/company.list", json={}, headers=hdr).json()["count"] == 1
@@ -641,12 +714,20 @@ def test_a_stale_descriptor_falls_back_to_the_lock_path(root):
 
 # ---------------------------------------------------------------- concurrency
 
-def test_two_reads_are_not_held_up_by_a_long_write(hosted, live):
+def test_two_reads_are_not_held_up_by_a_long_write(hosted, live, monkeypatch):
     import concurrent.futures
 
     import httpx
     host = hosted.handle.host
     gate = threading.Event()
+    write_calls = []
+    real_run_write = host.run_write
+
+    def counted_run_write(*args, **kwargs):
+        write_calls.append(1)
+        return real_run_write(*args, **kwargs)
+
+    monkeypatch.setattr(host, "run_write", counted_run_write)
 
     def slow():
         gate.set()
@@ -660,14 +741,21 @@ def test_two_reads_are_not_held_up_by_a_long_write(hosted, live):
         json={"fax": "555-3000"}, headers=hosted.bearer, timeout=20.0), daemon=True)
     writer.start()
     time.sleep(0.15)  # the write is now queued behind the slow job
-    began = time.monotonic()
+    reads_ready = threading.Barrier(3)
+
+    def read():
+        reads_ready.wait(timeout=3)
+        return httpx.post(f"{live}/commands/company.list", json={}, headers=hosted.bearer, timeout=10.0)
+
     with concurrent.futures.ThreadPoolExecutor(2) as pool:
-        reads = [pool.submit(httpx.post, f"{live}/commands/company.list", json={}, headers=hosted.bearer, timeout=10.0)
-                 for _ in range(2)]
+        reads = [pool.submit(read) for _ in range(2)]
+        reads_ready.wait(timeout=3)
+        began = time.monotonic()
         results = [f.result() for f in reads]
     elapsed = time.monotonic() - began
     assert all(r.status_code == 200 for r in results), [r.status_code for r in results]
     assert elapsed < 1.0, f"the reads waited {elapsed:.2f}s behind the write"
+    assert len(write_calls) == 1, "a routed read went through the single writer"
     blocker.join(timeout=5)
     writer.join(timeout=15)
 
@@ -702,6 +790,41 @@ def test_a_read_enqueues_at_most_one_throttled_refresh(hosted, root):
     assert len(set(seen)) == 1, f"five quick reads refreshed more than once: {seen}"
 
 
+def test_a_stale_credential_does_not_wait_for_the_writer(hosted, monkeypatch):
+    from bookflow.adapters.http import auth
+    host = hosted.handle.host
+    host.submit(lambda: host._hub.raw.execute(
+        "UPDATE api_tokens SET last_used_at = '2001-01-01T00:00:00.000Z' WHERE id = ?", (hosted.token,)))
+    original = auth.refresh_token
+    refreshed = []
+
+    def counted(*args, **kwargs):
+        refreshed.append(args[1])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(auth, "refresh_token", counted)
+    entered, release = threading.Event(), threading.Event()
+
+    def occupy_writer():
+        entered.set()
+        assert release.wait(5)
+
+    blocker = threading.Thread(target=lambda: host.submit(occupy_writer), daemon=True)
+    blocker.start()
+    assert entered.wait(3)
+    began = time.monotonic()
+    for _ in range(5):
+        assert hosted.call("company.list").status_code == 200
+    assert time.monotonic() - began < 1.0
+    assert host._refresh_pending == {hosted.token}
+    release.set()
+    blocker.join(timeout=5)
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline and host._refresh_pending:
+        time.sleep(0.01)
+    assert refreshed == [hosted.token]
+
+
 # ---------------------------------------------------------------- login, logout, credentials
 
 def test_login_and_logout_are_both_audited(hosted):
@@ -718,6 +841,56 @@ def test_login_and_logout_are_both_audited(hosted):
     assert api.post("/commands/company.list", json={}, headers=WB).json()["details"]["reason"] == "no credential"
     replayed = api.post("/commands/company.list", json={}, headers={**WB, "Cookie": f"bookflow_session={cookie}"})
     assert replayed.status_code == 401 and replayed.json()["details"]["reason"] == "revoked"
+
+
+def test_cookie_renews_only_with_the_throttled_refresh_and_dead_logout_clears(hosted):
+    from bookflow.adapters.http import auth
+    api = TestClient(hosted.handle.app)
+    login = api.post("/login", json={"username": hosted.login, "password": PASSWORD})
+    secret = login.cookies["bookflow_session"]
+    token_id = hosted.handle.host.submit(lambda: hosted.handle.host._hub.raw.execute(
+        "SELECT id FROM api_tokens WHERE token_hash = ?", (auth.token_hash(secret),)).fetchone()[0])
+    hosted.handle.host.submit(lambda: hosted.handle.host._hub.raw.execute(
+        "UPDATE api_tokens SET last_used_at = '2001-01-01T00:00:00.000Z' WHERE id = ?", (token_id,)))
+    renewed = api.post("/commands/company.list", json={}, headers=WB)
+    assert renewed.status_code == 200 and "Max-Age=43200" in renewed.headers.get("set-cookie", "")
+    assert len(renewed.headers.get_list("content-length")) == 1
+    assert int(renewed.headers["content-length"]) == len(renewed.content)
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline and token_id in hosted.handle.host._refresh_pending:
+        time.sleep(0.01)
+    fresh = api.post("/commands/company.list", json={}, headers=WB)
+    assert "bookflow_session" not in fresh.headers.get("set-cookie", "")
+
+    hosted.handle.host.submit(lambda: hosted.handle.host._hub.raw.execute(
+        "UPDATE api_tokens SET expires_at = '2001-01-01T00:00:00.000Z' WHERE id = ?", (token_id,)))
+    no_csrf = api.post("/logout")
+    assert no_csrf.status_code == 403 and no_csrf.json()["code"] == "E_WORKBENCH_HEADER"
+    dead = api.post("/logout", headers=WB)
+    assert dead.status_code == 200 and "bookflow_session" in dead.headers.get("set-cookie", "")
+    assert "Max-Age=0" in dead.headers["set-cookie"]
+
+
+def test_an_sse_response_never_renews_the_browser_cookie(hosted, live):
+    from bookflow.adapters.http import auth
+    import httpx
+
+    with httpx.Client(base_url=live, timeout=10.0) as browser:
+        login = browser.post("/login", json={"username": hosted.login, "password": PASSWORD})
+        assert login.status_code == 200
+        secret = browser.cookies["bookflow_session"]
+        token_id = hosted.handle.host.submit(lambda: hosted.handle.host._hub.raw.execute(
+            "SELECT id FROM api_tokens WHERE token_hash = ?", (auth.token_hash(secret),)).fetchone()[0])
+        hosted.handle.host.submit(lambda: hosted.handle.host._hub.raw.execute(
+            "UPDATE api_tokens SET last_used_at = '2001-01-01T00:00:00.000Z' WHERE id = ?", (token_id,)))
+        with browser.stream("GET", "/hub-events") as response:
+            assert response.status_code == 200
+            assert "bookflow_session" not in response.headers.get("set-cookie", "")
+
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline and hosted.handle.host._subscriptions:
+        time.sleep(0.02)
+    assert hosted.handle.host._subscriptions == {}
 
 
 def test_every_unauthenticated_shape_names_its_reason(hosted, root):
@@ -802,6 +975,111 @@ def test_the_stream_ends_with_an_error_when_its_credential_is_revoked(hosted, li
     assert kind == "error" and payload["code"] == "E_UNAUTHENTICATED", ended
 
 
+def test_invalid_stream_cursors_are_ordinary_validation_documents(hosted):
+    for headers, query in ((hosted.bearer, "after=not-an-int"),
+                           ({**hosted.bearer, "Last-Event-ID": "not-an-int"}, "after=0")):
+        r = hosted.api.get(f"/companies/{hosted.company_id}/events?{query}", headers=headers)
+        assert r.status_code == 422
+        assert r.json()["code"] == "E_VALIDATION" and r.json()["details"]["fields"][0]["field"] == "after"
+
+
+def test_lowercase_company_streams_use_the_canonical_commit_key(hosted, live):
+    import httpx
+    cid = hosted.company_id
+    start = hosted.ok("audit.tail", {"limit": 1}, company=cid)["high_water"] or 0
+
+    def write_later():
+        time.sleep(0.3)
+        httpx.post(f"{live}/companies/{cid}/commands/company.update", json={"fax": "555-6060"},
+                   headers=hosted.bearer, timeout=10.0)
+
+    threading.Thread(target=write_later, daemon=True).start()
+    began = time.monotonic()
+    seen = _collect(live, f"/companies/{cid.lower()}/events?after={start}", hosted.bearer, 1, timeout=10)
+    assert seen[0][0] == "audit" and time.monotonic() - began < 5
+
+
+def test_stream_disconnect_closes_its_buffered_reader_and_subscription(hosted, live):
+    cid = hosted.company_id
+    start = hosted.ok("audit.tail", {"limit": 1}, company=cid)["high_water"] or 0
+    for i in range(8):
+        hosted.ok("company.update", {"phone": f"555-88{i:02d}"}, company=cid)
+    assert _collect(live, f"/companies/{cid}/events?after={start}", hosted.bearer, 1)
+    deadline = time.monotonic() + 3
+    host = hosted.handle.host
+    while time.monotonic() < deadline and (host._readers_attached or host._subscriptions):
+        time.sleep(0.02)
+    assert host._readers_attached == 0 and host._subscriptions == {}
+
+
+def test_more_than_forty_idle_streams_do_not_exhaust_read_workers(hosted, live):
+    import httpx
+    count = 44
+    ready = 0
+    lock = threading.Lock()
+    release = threading.Event()
+
+    def idle():
+        nonlocal ready
+        try:
+            with httpx.stream("GET", f"{live}/hub-events", headers=hosted.bearer, timeout=30.0) as response:
+                assert response.status_code == 200
+                with lock:
+                    ready += 1
+                release.wait(15)
+        except Exception:  # noqa: BLE001 - assertions below report readiness and cleanup
+            return
+
+    threads = [threading.Thread(target=idle, daemon=True) for _ in range(count)]
+    for thread in threads:
+        thread.start()
+    deadline = time.monotonic() + 12
+    while time.monotonic() < deadline:
+        with lock:
+            if ready == count:
+                break
+        time.sleep(0.02)
+    try:
+        assert ready == count
+        began = time.monotonic()
+        assert httpx.post(f"{live}/commands/company.list", json={}, headers=hosted.bearer, timeout=5).status_code == 200
+        assert time.monotonic() - began < 2
+    finally:
+        release.set()
+        for thread in threads:
+            thread.join(timeout=3)
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline and hosted.handle.host._subscriptions:
+        time.sleep(0.02)
+    assert hosted.handle.host._subscriptions == {}
+
+
+def test_commit_between_first_drain_and_subscription_is_not_missed(hosted, live, root, monkeypatch):
+    from bookflow.core import registry
+    from bookflow.core.context import Context, Interface
+    from bookflow.core.dispatch import execute
+    host, cid = hosted.handle.host, hosted.company_id
+    start = hosted.ok("audit.tail", {"limit": 1}, company=cid)["high_water"] or 0
+    original = host.subscribe
+    raced = False
+
+    def subscribe_after_commit(key, loop, event):
+        nonlocal raced
+        if not raced:
+            raced = True
+            ctx = Context.new(Interface.http, "race-witness")
+            host.run_write(_admin_id(root), "", lambda s: execute(
+                registry.get("company update"), {"fax": "555-5151"}, ctx, s,
+                company_selector=cid, company_source="option"))
+        return original(key, loop, event)
+
+    monkeypatch.setattr(host, "subscribe", subscribe_after_commit)
+    began = time.monotonic()
+    seen = _collect(live, f"/companies/{cid}/events?after={start}", hosted.bearer, 1, timeout=10)
+    assert raced and seen[0][0] == "audit"
+    assert time.monotonic() - began < 5, "the stream waited for its 15-second keepalive"
+
+
 # ---------------------------------------------------------------- the workbench
 
 def _page_url(cmd, company_id):
@@ -871,15 +1149,89 @@ def test_preview_writes_nothing_and_a_submit_renders_a_result_that_links_back(ho
 
 # ---------------------------------------------------------------- serve itself
 
-def test_allow_network_gates_the_bind_and_reports_the_cookie_decision(root):
-    c = bookflow.connect(data_root=str(root))
-    with pytest.raises(BookflowError) as e:
-        c.run("serve", {"bind": "0.0.0.0:8765"}, dry_run=True)
-    assert e.value.code == "E_NETWORK_NOT_ALLOWED" and e.value.details["bind"] == "0.0.0.0:8765"
-    opened = c.run("serve", {"bind": "0.0.0.0:8765", "allow_network": True}, dry_run=True)
-    assert opened["dry_run"] and opened["secure_cookies"] is True
-    assert c.run("serve", {}, dry_run=True)["secure_cookies"] is False
-    assert c.run("serve", {"secure_cookies": True}, dry_run=True)["secure_cookies"] is True
+def test_cookie_security_default_and_explicit_override():
+    from bookflow.commands.host_cmds import cookie_security
+    assert cookie_security("127.0.0.1", None) is False
+    assert cookie_security("0.0.0.0", None) is True
+    assert cookie_security("0.0.0.0", False) is False
+    assert cookie_security("127.0.0.1", True) is True
+
+
+def test_busy_serve_port_has_a_deliberate_redacted_error(root):
+    import socket
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    sock.listen(1)
+    bind = f"127.0.0.1:{sock.getsockname()[1]}"
+    try:
+        with pytest.raises(BookflowError) as caught:
+            bookflow.connect(data_root=str(root)).run("serve", {"bind": bind})
+    finally:
+        sock.close()
+    assert caught.value.code == "E_IO"
+    assert caught.value.details["operation"] == "bind" and caught.value.details["address"] == bind
+    assert "path" not in caught.value.details
+
+
+def test_sigint_wakes_a_live_stream_and_cleans_the_host(root):
+    import os
+    import signal
+    import socket
+    import subprocess
+    from pathlib import Path
+
+    import httpx
+    from tests.conftest import BIN
+
+    client = bookflow.connect(data_root=str(root))
+    issued = client.token.issue(label="shutdown-witness")
+    start = client.run("hub audit tail", {"limit": 1})["high_water"] or 0
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    env = {**os.environ, "BOOKFLOW_DATA_ROOT": str(root)}
+    proc = subprocess.Popen([str(BIN), "serve", "--bind", f"127.0.0.1:{port}"],
+                            env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    descriptor = root / "host.json"
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and not descriptor.exists() and proc.poll() is None:
+        time.sleep(0.03)
+    assert descriptor.exists(), proc.communicate(timeout=2)
+    socket_file = json.loads(descriptor.read_text())["socket"]
+    connected = threading.Event()
+    ended = []
+
+    def follow():
+        try:
+            with httpx.stream("GET", f"http://127.0.0.1:{port}/hub-events?after={start}", headers={
+                "Authorization": f"Bearer {issued['secret']}",
+            }, timeout=15) as response:
+                connected.set()
+                for line in response.iter_lines():
+                    if line.startswith("event: error"):
+                        ended.append(line)
+                        break
+        except Exception as e:  # noqa: BLE001 - surfaced in the assertions and process stderr
+            ended.append(repr(e))
+
+    follower = threading.Thread(target=follow, daemon=True)
+    follower.start()
+    assert connected.wait(5), "the event stream never connected"
+    began = time.monotonic()
+    proc.send_signal(signal.SIGINT)
+    try:
+        proc.wait(timeout=8)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=3)
+    follower.join(timeout=3)
+    stderr = proc.stderr.read() if proc.stderr else ""
+    assert proc.returncode == 0, stderr
+    assert time.monotonic() - began < 8
+    assert not descriptor.exists() and not Path(socket_file).exists()
+    assert ended, "the idle stream was not woken during shutdown"
 
 
 def test_startup_migration_is_attributed_to_the_serving_admin(root):
@@ -898,7 +1250,18 @@ def test_startup_migration_is_attributed_to_the_serving_admin(root):
     _downgrade_copy(db, "company", {"company_info": columns,
                                     "principals": ["user_id", "username", "display_name", "kind", "first_seen_at", "last_seen_at"]})
     _hub_sql(root, "UPDATE companies SET schema_revision = 'co0001' WHERE id = ?", (cid,))
-    assert current_revision_raw(db) == "co0001"
+    common = ["id", "version", "created_at", "created_by", "created_via", "updated_at", "updated_by", "updated_via"]
+    _downgrade_copy(root / "hub.db", "hub", {
+        "users": common + ["kind", "username", "display_name", "owner_user_id", "password_hash", "hub_admin", "timezone", "active"],
+        "api_tokens": common + ["user_id", "on_behalf_of", "kind", "token_hash", "label", "expires_at", "last_used_at", "revoked_at"],
+        "organizations": common + ["display_name", "name_key", "path", "pending_path", "is_demo"],
+        "companies": common + ["organization_id", "display_name", "name_key", "path", "pending_path", "legal_name", "home_currency", "schema_revision", "is_demo"],
+        "memberships": ["id", "user_id", "scope_type", "scope_id", "role", "granted_by", "granted_at", "revoked_at"],
+        "audit_events": ["id", "seq", "at", "command", "actor_id", "actor_kind", "on_behalf_of", "interface", "client_name", "client_version", "client_host", "session_id", "request_id", "idempotency_key", "reason", "directive_id", "directive_code", "source_ref", "summary"],
+        "audit_entries": ["id", "event_id", "record_type", "record_id", "action", "version_before", "version_after", "after", "before"],
+        "idempotency_keys": ["actor_id", "key", "command", "input_hash", "state", "request_id", "output", "created_at"],
+    }, revision="hub0002")
+    assert current_revision_raw(db) == "co0001" and current_revision_raw(root / "hub.db") == "hub0002"
 
     handle = start_serving(root, client_version(), bind="127.0.0.1:8771")
     try:
@@ -911,6 +1274,12 @@ def test_startup_migration_is_attributed_to_the_serving_admin(root):
         assert items, "the startup migration is in the company's audit"
         assert items[0]["actor_kind"] == "system" and items[0]["on_behalf_of"] == admin
         assert items[0]["on_behalf_of_name"] and items[0]["interface"] == "system"
+        hub_events = api.post("/commands/hub.audit.list", json={"command": "upgrade", "limit": 5}, headers=hdr)
+        assert hub_events.status_code == 200, hub_events.text
+        hub_items = hub_events.json()["items"]
+        assert hub_items and hub_items[0]["actor_kind"] == "system"
+        assert hub_items[0]["on_behalf_of"] == admin and hub_items[0]["on_behalf_of_name"]
+        assert hub_items[0]["interface"] == "system"
     finally:
         handle.stop()
 
@@ -964,6 +1333,30 @@ def test_checkpoint_now_logs_every_connection_it_restarts(hosted, caplog):
     assert all(row is not None and row[0] == 0 for row in result.values()), result
     logged = [r.getMessage() for r in caplog.records if "idle checkpoint" in r.getMessage()]
     assert any("hub" in m for m in logged) and any(hosted.company_id in m for m in logged), logged
+
+
+def test_each_write_runs_a_passive_checkpoint_and_a_discarded_hub_reopens(hosted):
+    host, cid = hosted.handle.host, hosted.company_id
+    hosted.ok("company.update", {"fax": "555-4040"}, company=cid)
+    traced = []
+    host.submit(lambda: host._companies[cid].raw.set_trace_callback(traced.append))
+    try:
+        hosted.ok("company.update", {"fax": "555-4041"}, company=cid)
+    finally:
+        host.submit(lambda: host._companies[cid].raw.set_trace_callback(None))
+    assert any("wal_checkpoint(PASSIVE)" in statement for statement in traced)
+
+    old = host._hub
+    host.submit(lambda: host._discard(old))
+    assert host._hub is None
+    assert hosted.ok("token.issue", {"label": "after-reopen"})["secret"]
+    assert host._hub is not None and host._hub is not old
+
+
+def test_nested_path_redaction_is_recursive():
+    from bookflow.core.models import redact_paths
+    value = {"outer": {"path": "/private/one", "items": [{"backup_path": "/private/two", "safe": "yes"}]}}
+    assert redact_paths(value, False) == {"outer": {"path": None, "items": [{"backup_path": None, "safe": "yes"}]}}
 
 
 def test_the_sweep_deletes_stale_sessions_as_one_system_event(hosted, root):
@@ -1038,12 +1431,28 @@ def test_an_agent_token_with_a_principal_acts_on_behalf_of_that_person(hosted, r
     def insert():
         hub = hosted.handle.host._hub
         hub.raw.execute("BEGIN IMMEDIATE")
-        hub.conn.execute(h.users.insert().values(id=aid, kind="agent", username="ledger-bot", display_name="Ledger Bot", owner_user_id=admin["id"], password_hash=None, hub_admin=False, timezone=None, active=True, **common(admin["id"], "system")))
+        hub.conn.execute(h.users.insert().values(id=aid, kind="agent", username="ledger-bot", display_name="Ledger Bot", owner_user_id=admin["id"], password_hash=None, hub_admin=True, timezone=None, active=True, **common(admin["id"], "system")))
         hub.conn.execute(h.memberships.insert().values(id=new_id(), user_id=aid, scope_type="organization", scope_id=org_id, role="admin", granted_by=admin["id"], granted_at=clock.now_iso(), revoked_at=None))
         hub.raw.execute("COMMIT")
     hosted.handle.host.submit(insert)
+    faceless = hosted.call("token.issue", {"user": "ledger-bot", "label": "faceless"})
+    assert faceless.status_code == 422 and faceless.json()["details"]["fields"][0]["field"] == "principal"
     issued = hosted.ok("token.issue", {"user": "ledger-bot", "label": "bot-token", "principal": hosted.login})
     bot = TestClient(hosted.handle.app)
+    refused = bot.post("/commands/token.issue", json={"label": "self-issued", "principal": hosted.login}, headers={
+        "Authorization": f"Bearer {issued['secret']}", "X-Bookflow-Reason": "trying to mint another credential",
+    })
+    switched = bot.post("/commands/token.issue", json={"label": "switched", "principal": "outsider"}, headers={
+        "Authorization": f"Bearer {issued['secret']}", "X-Bookflow-Reason": "trying another principal",
+    })
+    assert refused.status_code == switched.status_code == 403
+    assert refused.content == switched.content
+    assert refused.json()["details"] == {"capability": "token", "required_role": "human"}
+    password = bot.post("/commands/user.set-password", json={"username": hosted.login, "password": PASSWORD}, headers={
+        "Authorization": f"Bearer {issued['secret']}", "X-Bookflow-Reason": "trying an administrator reset",
+    })
+    assert password.status_code == 403
+    assert password.json()["details"] == {"capability": "user", "required_role": "human"}
     r = bot.post(f"/companies/{hosted.company_id}/commands/company.update", json={"phone": "555-0199"},
                  headers={"Authorization": f"Bearer {issued['secret']}", "X-Bookflow-Reason": "owner asked by text"})
     assert r.status_code == 200, r.text

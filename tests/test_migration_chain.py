@@ -1,19 +1,128 @@
-"""The shipped migration chains upgrade populated first-revision databases (a fresh root never exercises this)."""
+"""The shipped migration chains upgrade populated older databases (a fresh root never exercises this)."""
 
+import importlib
 import sqlite3
 from pathlib import Path
 
 import bookflow
-from bookflow.storage.engine import open_database
+from bookflow.hub import schema as hub_schema
+from bookflow.storage.engine import open_database, sqlite_uri
 from bookflow.storage.migrate import HEADS, current_revision_raw, migrate_to_head
 
+HUB0003 = importlib.import_module("bookflow.storage.hub_migrations.versions.0003_capabilities_features")
 
-def _make_first_revision(path: Path, chain: str, populate) -> None:
+
+def _make_revision(path: Path, chain: str, revision: str, populate) -> None:
     from alembic import command
     from bookflow.storage.migrate import _config
     with open_database(path, writable=True, create=True) as db:
-        command.upgrade(_config(chain, db.conn), f"{'hub' if chain == 'hub' else 'co'}0001")
+        command.upgrade(_config(chain, db.conn), revision)
         populate(db.raw)
+
+
+def _make_first_revision(path: Path, chain: str, populate) -> None:
+    _make_revision(path, chain, f"{'hub' if chain == 'hub' else 'co'}0001", populate)
+
+
+def _registry_role_capability_projection() -> tuple[tuple[str, str, str], ...]:
+    from bookflow.core.registry import all_commands, load_all
+
+    load_all()
+    role_rank = {"readonly": 0, "standard": 1, "admin": 2, "owner": 3, "hub_admin": 4}
+    required_rank = {"authenticated": 0, "member": 0, "standard": 1, "admin": 2, "owner": 3, "hub_admin": 4}
+    requirements = {(command.capability, command.required_role or "authenticated") for command in all_commands()}
+    return tuple(sorted(
+        (role, capability, required_role)
+        for capability, required_role in requirements
+        for role, rank in role_rank.items()
+        if rank >= required_rank[required_role]
+    ))
+
+
+def _pk_columns(conn: sqlite3.Connection, table: str) -> list[str]:
+    return [row[1] for row in sorted(conn.execute(f"PRAGMA table_info({table})"), key=lambda row: row[5]) if row[5]]
+
+
+def test_fresh_init_has_current_compatibility_schema(tmp_path):
+    root = tmp_path / "fresh"
+    bookflow.connect(data_root=str(root)).init()
+
+    assert current_revision_raw(root / "hub.db") == "hub0003"
+    assert HEADS == {"hub": "hub0003", "company": "co0002"}
+    assert str(hub_schema.memberships.c.grants.type) == "TEXT" and hub_schema.memberships.c.grants.nullable
+    assert str(hub_schema.memberships.c.denies.type) == "TEXT" and hub_schema.memberships.c.denies.nullable
+    assert [column.name for column in hub_schema.role_capabilities.primary_key.columns] == [
+        "role", "capability", "required_role",
+    ]
+    assert [column.name for column in hub_schema.features.primary_key.columns] == [
+        "scope_type", "scope_id", "feature",
+    ]
+    with sqlite3.connect(root / "hub.db") as conn:
+        membership_columns = {row[1]: row for row in conn.execute("PRAGMA table_info(memberships)")}
+        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        seeded = tuple(conn.execute(
+            "SELECT role, capability, required_role FROM role_capabilities ORDER BY role, capability, required_role"
+        ))
+        assert membership_columns["grants"][2:4] == ("TEXT", 0)
+        assert membership_columns["denies"][2:4] == ("TEXT", 0)
+        assert {"role_capabilities", "features"} <= tables
+        assert _pk_columns(conn, "role_capabilities") == ["role", "capability", "required_role"]
+        assert _pk_columns(conn, "features") == ["scope_type", "scope_id", "feature"]
+        assert seeded == HUB0003.ROLE_CAPABILITY_SEED
+        assert conn.execute("SELECT count(*) FROM features").fetchone()[0] == 0
+
+
+def test_frozen_role_capability_seed_matches_registry():
+    assert HUB0003.ROLE_CAPABILITY_SEED == _registry_role_capability_projection()
+
+
+def test_populated_hub0002_upgrade_adds_compatibility_schema_and_verified_backup(tmp_path):
+    hub = tmp_path / "hub.db"
+
+    def populate(conn):
+        common = "'t','U1','cli','t','U1','cli'"
+        conn.execute(
+            "INSERT INTO users (id, version, created_at, created_by, created_via, updated_at, updated_by, updated_via, "
+            "kind, username, display_name, owner_user_id, password_hash, hub_admin, timezone, active) "
+            f"VALUES ('U1', 1, {common}, 'human', 'k', 'K', NULL, NULL, 1, NULL, 1)"
+        )
+        conn.execute(
+            "INSERT INTO organizations (id, version, created_at, created_by, created_via, updated_at, updated_by, updated_via, "
+            "display_name, name_key, path, pending_path, is_demo) "
+            f"VALUES ('O1', 1, {common}, 'Org', 'org', '/old/org', NULL, 0)"
+        )
+        conn.execute(
+            "INSERT INTO memberships (id, user_id, scope_type, scope_id, role, granted_by, granted_at, revoked_at) "
+            "VALUES ('M1', 'U1', 'organization', 'O1', 'owner', 'U1', 't', NULL)"
+        )
+
+    _make_revision(hub, "hub", "hub0002", populate)
+    assert current_revision_raw(hub) == "hub0002"
+
+    backups = tmp_path / "backups"
+    with open_database(hub, writable=True) as db:
+        assert migrate_to_head(db, "hub", backups) == ("hub0002", "hub0003")
+        membership = db.raw.execute(
+            "SELECT id, user_id, scope_type, scope_id, role, grants, denies FROM memberships WHERE id='M1'"
+        ).fetchone()
+        seeded = tuple(db.raw.execute(
+            "SELECT role, capability, required_role FROM role_capabilities ORDER BY role, capability, required_role"
+        ))
+        assert membership == ("M1", "U1", "organization", "O1", "owner", None, None)
+        assert seeded == HUB0003.ROLE_CAPABILITY_SEED
+        assert db.raw.execute("SELECT count(*) FROM features").fetchone()[0] == 0
+        assert db.raw.execute("PRAGMA foreign_key_check").fetchall() == []
+
+    saved = list(backups.glob("hub-*-from-hub0002.db"))
+    assert len(saved) == 1
+    with sqlite3.connect(sqlite_uri(saved[0], "ro"), uri=True) as conn:
+        assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "hub0002"
+        assert conn.execute("SELECT id, role FROM memberships WHERE id='M1'").fetchone() == ("M1", "owner")
+        assert "grants" not in {row[1] for row in conn.execute("PRAGMA table_info(memberships)")}
+        assert conn.execute(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('role_capabilities', 'features')"
+        ).fetchone()[0] == 0
 
 
 def test_populated_hub_and_company_upgrade(tmp_path):
@@ -42,13 +151,13 @@ def test_populated_hub_and_company_upgrade(tmp_path):
     assert {"audit_events", "directives", "presence", "idempotency_keys", "sequences"} <= names
 
 
-def _downgrade_copy(src: Path, chain: str, tables: dict[str, list[str]]) -> None:
-    """Rebuild ``src`` at the first revision with the rows of the given tables (columns that existed then)."""
+def _downgrade_copy(src: Path, chain: str, tables: dict[str, list[str]], revision: str | None = None) -> None:
+    """Rebuild ``src`` at an older revision with the rows of the given tables."""
     from alembic import command
     from bookflow.storage.migrate import _config
     tmp = src.with_suffix(".old")
     with open_database(tmp, writable=True, create=True) as db:
-        command.upgrade(_config(chain, db.conn), f"{'hub' if chain == 'hub' else 'co'}0001")
+        command.upgrade(_config(chain, db.conn), revision or f"{'hub' if chain == 'hub' else 'co'}0001")
         db.raw.execute(f"ATTACH DATABASE '{src}' AS cur")
         for table, cols in tables.items():
             collist = ", ".join(cols)

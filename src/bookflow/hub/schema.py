@@ -83,10 +83,30 @@ memberships = sa.Table(
     sa.Column("scope_type", sa.String(12), nullable=False),
     sa.Column("scope_id", sa.String(26), nullable=False),
     sa.Column("role", sa.String(12), nullable=False),
+    sa.Column("grants", sa.Text, nullable=True),
+    sa.Column("denies", sa.Text, nullable=True),
     sa.Column("granted_by", sa.String(26), nullable=False),
     sa.Column("granted_at", sa.String(32), nullable=False),
     sa.Column("revoked_at", sa.String(32), nullable=True),
     sa.UniqueConstraint("user_id", "scope_type", "scope_id", name="uq_membership"),
+)
+
+role_capabilities = sa.Table(
+    "role_capabilities", metadata,
+    sa.Column("role", sa.String(12), primary_key=True),
+    sa.Column("capability", sa.String(128), primary_key=True),
+    sa.Column("required_role", sa.String(16), primary_key=True),
+)
+
+features = sa.Table(
+    "features", metadata,
+    sa.Column("scope_type", sa.String(12), primary_key=True),
+    sa.Column("scope_id", sa.String(26), primary_key=True),
+    sa.Column("feature", sa.String(128), primary_key=True),
+    sa.Column("enabled", sa.Boolean, nullable=False),
+    sa.Column("enabled_by", sa.String(26), sa.ForeignKey("users.id"), nullable=False),
+    sa.Column("enabled_at", sa.String(32), nullable=False),
+    sa.Column("source", sa.String(32), nullable=False),
 )
 
 audit_events = sa.Table(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import socket as _socket
@@ -17,7 +18,7 @@ from bookflow.adapters.http import auth
 from bookflow.core import registry
 from bookflow.core.context import Context, Interface
 from bookflow.core.errors import ALL_CODES, INFRASTRUCTURE_CODES, BookflowError
-from bookflow.core.ids import new_id
+from bookflow.core.ids import is_ulid, new_id, normalize_ulid
 from bookflow.core.session import Session
 from bookflow.hub import schema as h
 
@@ -30,6 +31,32 @@ CONTEXT_HEADERS = {"reason": "X-Bookflow-Reason", "directive_id": "X-Bookflow-Di
                    "idempotency_key": "Idempotency-Key", "client_name": "X-Bookflow-Client-Name", "client_version": "X-Bookflow-Client-Version"}
 COOKIE = "bookflow_session"
 WORKBENCH_HEADER = "x-bookflow-workbench"
+
+
+class CookieRenewalMiddleware:
+    """Append a sliding-expiry cookie without BaseHTTPMiddleware buffering streams."""
+
+    def __init__(self, app, *, secure_cookies: bool):
+        self.app = app
+        self.secure_cookies = secure_cookies
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_cookie(message):
+            if message["type"] == "http.response.start":
+                secret = scope.get("state", {}).get("renew_session_cookie")
+                if secret:
+                    holder = Response()
+                    holder.set_cookie(COOKIE, secret, httponly=True, samesite="lax", secure=self.secure_cookies,
+                                      max_age=auth.SESSION_HOURS * 3600, path="/")
+                    cookie_headers = [header for header in holder.raw_headers if header[0].lower() == b"set-cookie"]
+                    message["headers"] = [*message.get("headers", []), *cookie_headers]
+            await send(message)
+
+        await self.app(scope, receive, send_with_cookie)
 
 
 def route_name(command_name: str) -> str:
@@ -45,16 +72,20 @@ def error_response(err: BookflowError) -> JSONResponse:
 
 
 class Credential:
-    def __init__(self, user_id: str, token_id: str, kind: str, label: str | None, login: str = "", on_behalf_of: str | None = None):
-        self.user_id, self.token_id, self.kind, self.label, self.login, self.on_behalf_of = user_id, token_id, kind, label, login, on_behalf_of
+    def __init__(self, user_id: str, token_id: str, kind: str, label: str | None, login: str = "",
+                 on_behalf_of: str | None = None, actor_kind: str = "human", hub_admin: bool = False):
+        self.user_id, self.token_id, self.kind, self.label = user_id, token_id, kind, label
+        self.login, self.on_behalf_of = login, on_behalf_of
+        self.actor_kind, self.hub_admin = actor_kind, hub_admin
 
 
 def create_app(host, *, secure_cookies: bool) -> FastAPI:
     registry.load_all()
     app = FastAPI(title="Bookflow", version=host.version, docs_url=None, redoc_url=None, openapi_url=None)
+    app.add_middleware(CookieRenewalMiddleware, secure_cookies=secure_cookies)
 
     # ------------------------------------------------------------ credentials
-    def credential(request: Request) -> Credential:
+    def credential(request: Request, *, renew_cookie: bool = True) -> Credential:
         header = request.headers.get("authorization", "")
         secret = None
         via_cookie = False
@@ -69,9 +100,17 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
             raise BookflowError("E_WORKBENCH_HEADER")
         with _reader_hub(host) as db:
             row = auth.resolve_token(db, secret)
+            user = db.conn.execute(sa.select(h.users.c.kind, h.users.c.hub_admin).where(
+                h.users.c.id == row["user_id"], h.users.c.active.is_(True),
+            )).mappings().first()
+            if user is None:
+                raise BookflowError("E_UNAUTHENTICATED", details={"reason": "user"})
             if auth.needs_refresh(row):
-                host.submit(lambda: auth.refresh_token(host._hub, row["id"], row["kind"]))
-        return Credential(row["user_id"], row["id"], row["kind"], row["label"], on_behalf_of=row.get("on_behalf_of"))
+                queued = host.enqueue_token_refresh(row["id"], row["kind"])
+                if queued and via_cookie and renew_cookie:
+                    request.state.renew_session_cookie = secret
+        return Credential(row["user_id"], row["id"], row["kind"], row["label"], on_behalf_of=row.get("on_behalf_of"),
+                          actor_kind=user["kind"], hub_admin=bool(user["hub_admin"]))
 
     def secret_of(request: Request) -> str:
         header = request.headers.get("authorization", "")
@@ -135,20 +174,31 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
 
     def selector_of(request: Request, company_id: str | None) -> tuple[str | None, str]:
         header = request.headers.get("x-bookflow-company")
+        if company_id is not None:
+            path_value = company_id.strip()
+            if not is_ulid(path_value):
+                raise BookflowError("E_VALIDATION", details={"fields": [{
+                    "field": "company_id", "problem": "must be a ULID company id",
+                }]})
+            path_literal = normalize_ulid(path_value)
+            if header:
+                header_value = header.strip()
+                header_literal = normalize_ulid(header_value) if is_ulid(header_value) else header_value
+                if header_literal != path_literal:
+                    raise BookflowError("E_VALIDATION", details={"fields": [{
+                        "field": "X-Bookflow-Company",
+                        "problem": "must equal the company id in the request path",
+                    }]})
+            return path_literal, "option"
         if header:
             return header, "option"
-        if company_id:
-            return company_id, "option"
         return None, "none"
 
     def serve_command(route: str, request: Request, raw: dict[str, Any], company_id: str | None):
         cmd = lookup(route)
+        selector, source = selector_of(request, company_id)
         cred = credential(request)
         dry = request.query_params.get("dry_run") in ("1", "true")
-        if company_id is None:
-            selector, source = request.headers.get("x-bookflow-company"), "option"
-        else:
-            selector, source = selector_of(request, company_id)
         return run_command(cmd, raw, make_context(request, cred), cred, selector, source, dry)
 
     @app.post("/commands/{route}")
@@ -163,11 +213,11 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
 
     # ------------------------------------------------------------ login / logout
     @app.post("/login")
-    async def login(request: Request, response: Response):
+    async def login(request: Request):
         data = await body_of(request) if request.headers.get("content-type", "").startswith("application/json") else dict(await request.form())
         return await run_in_threadpool(do_login, request, data)
 
-    def do_login(request: Request, data: dict[str, Any]) -> Response:
+    def do_login(request: Request, data: dict[str, Any]) -> JSONResponse:
         username, password = str(data.get("username", "")), str(data.get("password", ""))
         source = request.client.host if request.client else "?"
         auth.throttle_login(source)
@@ -190,57 +240,117 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
         return await run_in_threadpool(do_logout, request)
 
     def do_logout(request: Request) -> Response:
-        cred = credential(request)
-        host.run_write(cred.user_id, "", lambda s: _revoke(s, cred.token_id, "logout"))
+        is_cookie = not request.headers.get("authorization", "").lower().startswith("bearer ") and COOKIE in request.cookies
+        try:
+            cred = credential(request, renew_cookie=False)
+        except BookflowError as e:
+            if not is_cookie or e.code != "E_UNAUTHENTICATED":
+                raise
+        else:
+            host.run_write(cred.user_id, "", lambda s: _revoke(s, cred.token_id, "logout"))
         resp = JSONResponse({"ok": True})
         resp.delete_cookie(COOKIE, path="/")
         return resp
 
     # ------------------------------------------------------------ events
     def stream(request: Request, company_id: str | None):
-        cred = credential(request)
-        secret = secret_of(request)
-        from bookflow.core.dispatch import _close, execute
+        from bookflow.core.dispatch import _close, execute, validate_input
         name = "audit tail" if company_id else "hub audit tail"
         cmd = registry.get(name)
-        after = request.headers.get("last-event-id") or request.query_params.get("after")
-        filters = {k: v for k, v in request.query_params.items() if k not in ("after",)}
-        key = company_id or "hub"
+        assert cmd is not None
+        selector, _ = selector_of(request, company_id)
+        after = request.headers.get("last-event-id")
+        if after is None:
+            after = request.query_params.get("after")
+        raw = {k: v for k, v in request.query_params.items() if k != "after"}
+        if after is not None:
+            raw["after"] = after
+        validated = validate_input(cmd, raw)
+        values = validated.model_dump(mode="json", exclude_none=True)
+        cursor = values.pop("after", None)
+        values.pop("limit", None)
+        cred = credential(request, renew_cookie=False)
+        secret = secret_of(request)
+        ctx = make_context(request, cred)
+        def resolve_again() -> None:
+            with _reader_hub(host) as hub_db:
+                row = auth.resolve_token(hub_db, secret)
+                if auth.needs_refresh(row):
+                    host.enqueue_token_refresh(row["id"], row["kind"])
 
-        def gen():
-            nonlocal after
-            cursor = int(after) if after is not None else None
-            checked = True  # the credential was resolved when the request arrived
-            while True:
+        def drain(start: int | None) -> tuple[list[str], int, str]:
+            frames: list[str] = []
+            next_cursor = start
+            s = host.reader_session(cred.user_id, cred.login)
+            try:
+                while True:
+                    command_input = {**values, **({"after": next_cursor} if next_cursor is not None else {}), "limit": 100}
+                    out = execute(cmd, command_input, ctx, s, company_selector=selector, company_source="option")
+                    for item in out["items"]:
+                        frames.append(f"id: {item['seq']}\nevent: audit\ndata: {json.dumps(item, default=str)}\n\n")
+                    if out["next_after"] is not None:
+                        next_cursor = out["next_after"]
+                    elif next_cursor is None:
+                        next_cursor = out.get("high_water") or 0
+                    if out["count"] < 100:
+                        break
+            finally:
+                _close(s)
+                host.reader_done()
+            canonical_key = s.company_row["id"] if s.company_row is not None else "hub"
+            return frames, next_cursor or 0, canonical_key
+
+        async def gen():
+            nonlocal cursor
+            event = asyncio.Event()
+            subscription = None
+            try:
                 try:
-                    if not checked:  # a revoked or expired credential ends the stream with an error event
-                        with _reader_hub(host) as hub_db:
-                            auth.resolve_token(hub_db, secret)
-                    checked = False
-                    s = host.reader_session(cred.user_id, cred.login)
-                    try:
-                        while True:
-                            raw = {**filters, **({"after": cursor} if cursor is not None else {}), "limit": 100}
-                            out = execute(cmd, raw, make_context(request, cred), s, company_selector=company_id, company_source="option")
-                            for item in out["items"]:
-                                yield f"id: {item['seq']}\nevent: audit\ndata: {json.dumps(item, default=str)}\n\n"
-                            if out["next_after"] is not None:
-                                cursor = out["next_after"]
-                            elif cursor is None:
-                                cursor = out.get("high_water") or 0
-                            if out["count"] < 100:
-                                break
-                    finally:
-                        _close(s)
-                        host.reader_done()
+                    frames, cursor, key = await run_in_threadpool(drain, cursor)
                 except BookflowError as e:
                     yield f"event: error\ndata: {json.dumps(e.to_dict())}\n\n"
                     return
-                if host._stopping:
-                    yield "event: error\ndata: {\"code\": \"E_DB_BUSY\", \"message\": \"the host is stopping\"}\n\n"
-                    return
-                host.wait_for_commit(key, 15.0)
-                yield ": keep-alive\n\n"
+                subscription, _ = host.subscribe(key, asyncio.get_running_loop(), event)
+                for frame in frames:
+                    yield frame
+                # Drain once after registration. This closes the only unobservable
+                # window: a commit after the first drain but before subscription.
+                while True:
+                    if host._stopping:
+                        yield "event: error\ndata: {\"code\": \"E_DB_BUSY\", \"message\": \"the host is stopping\", \"details\": {}}\n\n"
+                        return
+                    event.clear()
+                    before = host.stream_sequence(key)
+                    try:
+                        await run_in_threadpool(resolve_again)
+                        frames, cursor, canonical_key = await run_in_threadpool(drain, cursor)
+                    except BookflowError as e:
+                        yield f"event: error\ndata: {json.dumps(e.to_dict())}\n\n"
+                        return
+                    if canonical_key != key:  # pragma: no cover - ids are immutable while a route is open
+                        raise RuntimeError("the event stream's company identity changed")
+                    for frame in frames:
+                        yield frame
+                    if host._stopping:
+                        yield "event: error\ndata: {\"code\": \"E_DB_BUSY\", \"message\": \"the host is stopping\", \"details\": {}}\n\n"
+                        return
+                    latest = host.stream_sequence(key)
+                    if latest != before or event.is_set():
+                        continue
+                    keepalive_at = asyncio.get_running_loop().time() + 15.0
+                    while not event.is_set():
+                        remaining = keepalive_at - asyncio.get_running_loop().time()
+                        if remaining <= 0:
+                            yield ": keep-alive\n\n"
+                            break
+                        try:
+                            await asyncio.wait_for(event.wait(), timeout=min(0.5, remaining))
+                        except TimeoutError:
+                            if await request.is_disconnected():
+                                return
+            finally:
+                if subscription is not None:
+                    host.unsubscribe(subscription)
 
         return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
@@ -304,14 +414,16 @@ def build_openapi(version: str) -> dict[str, Any]:
     params = [{"name": hdr, "in": "header", "required": False, "schema": {"type": "string"}} for hdr in CONTEXT_HEADERS.values()]
     for cmd in registry.routed_commands():
         path = f"/commands/{route_name(cmd.name)}" if cmd.scope == "hub" else f"/companies/{{company_id}}/commands/{route_name(cmd.name)}"
+        errors = list(dict.fromkeys([*cmd.error_codes, *INFRASTRUCTURE_CODES]))
         op = {
             "summary": cmd.description,
-            "parameters": params + ([{"name": "company_id", "in": "path", "required": True, "schema": {"type": "string"}}, {"name": "X-Bookflow-Company", "in": "header", "required": False, "schema": {"type": "string"}, "description": "A company id, display name, or Organization/Company; overrides the path id"}] if cmd.scope == "company" else [])
+            "parameters": params + ([{"name": "company_id", "in": "path", "required": True, "schema": {"type": "string", "pattern": "^[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$"}}, {"name": "X-Bookflow-Company", "in": "header", "required": False, "schema": {"type": "string"}, "description": "If supplied, this must be the same company id as the path (ULID case is normalized)."}] if cmd.scope == "company" else [])
                           + ([{"name": "dry_run", "in": "query", "required": False, "schema": {"type": "boolean"}}] if cmd.is_write else []),
-            "requestBody": {"content": {"application/json": {"schema": cmd.input_model.model_json_schema()}}},
+            "requestBody": {"required": True, "content": {"application/json": {"schema": cmd.input_model.model_json_schema()}}},
             "responses": {"200": {"content": {"application/json": {"schema": cmd.output_model.model_json_schema()}}},
-                          "4XX": {"description": "Error document; codes: " + ", ".join(cmd.error_codes + list(INFRASTRUCTURE_CODES)), "content": {"application/json": {"schema": error_schema}}}},
-            "x-bookflow-error-codes": cmd.error_codes,
+                          "4XX": {"description": "Error document; codes: " + ", ".join(errors), "content": {"application/json": {"schema": error_schema}}}},
+            "security": [{"bearer": []}, {"cookie": []}],
+            "x-bookflow-error-codes": errors,
         }
         paths[path] = {"post": op}
     paths["/login"] = {"post": {"summary": "Log in with username and password; sets the session cookie.", "requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {"username": {"type": "string"}, "password": {"type": "string", "format": "password"}}}}}}}}

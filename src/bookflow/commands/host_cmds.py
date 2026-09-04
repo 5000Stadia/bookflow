@@ -66,16 +66,17 @@ class ServeInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     bind: str = Field(DEFAULT_BIND, description="Address to listen on, host:port", max_length=128)
     allow_network: bool = Field(False, description="Allow a bind address outside loopback")
-    secure_cookies: bool = Field(False, description="Set Secure on the session cookie; the default is on for non-loopback binds")
+    secure_cookies: bool | None = Field(None, description="Set Secure on the session cookie; defaults on for non-loopback binds")
 
 
-class ServeOutput(WriteOutput):
+class ServeOutput(BaseModel):
     bind: str
     socket: str | None
     pid: int
     secure_cookies: bool
     companies_migrated: list[str]
     companies_failed: list[dict[str, str]]
+    warnings: list[str] = Field(default_factory=list)
 
 
 def _plan_serve(inp: ServeInput, ctx: Context, s: Session) -> Plan:  # never called; bootstrap has its own path
@@ -84,7 +85,7 @@ def _plan_serve(inp: ServeInput, ctx: Context, s: Session) -> Plan:  # never cal
 
 serve_cmd = command("serve", scope="hub",
                     description="Serve every routed command over HTTP and the loopback socket, holding the data-root lock until interrupted.",
-                    input_model=ServeInput, output_model=ServeOutput, writes={"hub", "company"}, required_role="hub_admin",
+                    input_model=ServeInput, output_model=ServeOutput,
                     bootstrap=True, local_only=True,
                     error_codes=["E_NETWORK_NOT_ALLOWED", "E_VERSION_MISMATCH", "E_COMPANY_MISSING"])(_plan_serve)
 
@@ -126,6 +127,11 @@ def is_loopback(host: str) -> bool:
         return False
 
 
+def cookie_security(host: str, explicit: bool | None) -> bool:
+    """Resolve the tri-state cookie option without losing an explicit false."""
+    return not is_loopback(host) if explicit is None else explicit
+
+
 def _serve_actor(s: Session) -> dict[str, Any]:
     """The OS login's hub-admin user, read before the lock is taken. Never migrates."""
     from bookflow.core.config import Config
@@ -149,17 +155,11 @@ def _serve_actor(s: Session) -> dict[str, Any]:
 
 def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
     """The bootstrap path for `serve` (dispatch._run_bootstrap): no lock path, no plan/apply."""
-    from bookflow.core.forward import socket_path
     host_name, port = parse_bind(inp.bind)
     if not inp.allow_network and not is_loopback(host_name):
         raise BookflowError("E_NETWORK_NOT_ALLOWED", details={"bind": inp.bind})
-    actor = _serve_actor(s)
-    secure = inp.secure_cookies or not is_loopback(host_name)
-    if s.dry_run:
-        out = ServeOutput(dry_run=True, bind=inp.bind, socket=str(socket_path(s.data_root)), pid=os.getpid(),
-                          secure_cookies=secure, companies_migrated=[], companies_failed=[],
-                          warnings=[f"would serve as {actor['username']} and hold the data-root lock until interrupted"])
-        return out.model_dump(mode="json")
+    _serve_actor(s)
+    secure = cookie_security(host_name, inp.secure_cookies)
     import socket as _socket
     import uvicorn
     tcp = _socket.socket(_socket.AF_INET6 if ":" in host_name else _socket.AF_INET, _socket.SOCK_STREAM)
@@ -167,15 +167,41 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
     try:
         tcp.bind((host_name, port))
         tcp.listen(128)
-    except OSError:
+    except OSError as e:
         tcp.close()
-        raise
+        raise BookflowError(
+            "E_IO",
+            message=f"Could not listen on {inp.bind}; choose another address or stop the process already using it.",
+            details={"operation": "bind", "address": inp.bind, "errno": e.errno},
+        )
     handle = None
     try:
         handle = start_serving(s.data_root, client_version(), bind=inp.bind, secure_cookies=secure)
         log.warning("bookflow host listening on %s (socket %s)", inp.bind, handle.socket)
         server = uvicorn.Server(uvicorn.Config(handle.app, log_level="warning", access_log=False))
-        server.run(sockets=[tcp])
+        import signal
+        import threading
+        from contextlib import nullcontext
+        previous: dict[Any, Any] = {}
+
+        def request_shutdown(signum, frame) -> None:  # noqa: ARG001 - signal handler signature
+            handle.host.begin_shutdown()
+            server.should_exit = True
+
+        if threading.current_thread() is threading.main_thread():
+            # Uvicorn releases have used both mechanisms. Disable whichever is
+            # present so Bookflow's handler can wake idle streams before the
+            # server begins waiting for active requests to finish.
+            server.install_signal_handlers = lambda: None
+            server.capture_signals = lambda: nullcontext()
+            for signum in (signal.SIGINT, signal.SIGTERM):
+                previous[signum] = signal.getsignal(signum)
+                signal.signal(signum, request_shutdown)
+        try:
+            server.run(sockets=[tcp])
+        finally:
+            for signum, handler in previous.items():
+                signal.signal(signum, handler)
     finally:
         if handle is not None:
             handle.stop()
@@ -367,14 +393,18 @@ class SetPasswordOutput(WriteOutput):
 user_set_password = command("user set-password", scope="hub",
                             description="Set a user's password so they can log in to the workbench.",
                             input_model=SetPasswordInput, output_model=SetPasswordOutput, writes={"hub"},
-                            required_role="hub_admin", positional=["username"], local_only=True,
-                            error_codes=["E_USER_NOT_FOUND"])
+                            positional=["username"],
+                            error_codes=["E_USER_NOT_FOUND", "E_VALIDATION", "E_PERMISSION"])
 
 
 @user_set_password
 def plan_set_password(inp: SetPasswordInput, ctx: Context, s: Session) -> Plan:
+    if s.actor.kind != "human":
+        raise BookflowError("E_PERMISSION", details={"capability": "user", "required_role": "human"})
+    if not s.is_hub_admin and not _is_self(s, inp.username):
+        raise BookflowError("E_PERMISSION", details={"capability": "user", "required_role": "self"})
     row = _find_user(s, inp.username)
-    if row is None or row["username"] != inp.username:
+    if row is None:
         raise BookflowError("E_USER_NOT_FOUND", details={"username": inp.username})
     if row["kind"] != "human":
         raise BookflowError("E_VALIDATION", details={"fields": [{"field": "username", "problem": "only human users have passwords"}]})
@@ -392,8 +422,20 @@ def apply_set_password(plan: Plan, ctx: Context, s: Session) -> Applied:
              "updated_at": at, "updated_by": s.actor.id, "updated_via": VIA(ctx)}
     s.hub.conn.execute(h.users.update().where(h.users.c.id == row["id"]).values(
         password_hash=after["password_hash"], version=after["version"], updated_at=at, updated_by=s.actor.id, updated_via=VIA(ctx)))
-    touched = Touched("user", row["id"], "update", row["version"], after["version"], after, before=row)
-    return Applied(SetPasswordOutput(user_id=row["id"], username=row["username"], changed=True), [touched],
+    touched = [Touched("user", row["id"], "update", row["version"], after["version"], after, before=row)]
+    sessions = [dict(r) for r in s.hub.conn.execute(sa.select(h.api_tokens).where(
+        h.api_tokens.c.user_id == row["id"], h.api_tokens.c.kind == "session",
+        h.api_tokens.c.revoked_at.is_(None), h.api_tokens.c.id != ctx.session_id,
+    )).mappings().all()]
+    for token in sessions:
+        token_after = {**token, "revoked_at": at, "version": token["version"] + 1,
+                       "updated_at": at, "updated_by": s.actor.id, "updated_via": VIA(ctx)}
+        s.hub.conn.execute(h.api_tokens.update().where(h.api_tokens.c.id == token["id"]).values(
+            revoked_at=at, version=token_after["version"], updated_at=at, updated_by=s.actor.id, updated_via=VIA(ctx)))
+        touched.append(Touched("api_token", token["id"], "update", token["version"], token_after["version"],
+                               {k: v for k, v in token_after.items() if k != "token_hash"},
+                               before={k: v for k, v in token.items() if k != "token_hash"}))
+    return Applied(SetPasswordOutput(user_id=row["id"], username=row["username"], changed=True), touched,
                    f"set the password for {row['username']}")
 
 
@@ -469,13 +511,17 @@ def _target_user(s: Session, selector: str | None) -> dict[str, Any]:
 token_issue = command("token issue", scope="hub",
                       description="Issue a bearer token a program can send to the host; the secret is shown once.",
                       input_model=TokenIssueInput, output_model=TokenIssueOutput, writes={"hub"},
-                      error_codes=["E_USER_NOT_FOUND"])
+                      error_codes=["E_USER_NOT_FOUND", "E_VALIDATION", "E_PERMISSION"])
 
 
 @token_issue
 def plan_token_issue(inp: TokenIssueInput, ctx: Context, s: Session) -> Plan:
+    if s.actor.kind != "human":
+        raise BookflowError("E_PERMISSION", details={"capability": "token", "required_role": "human"})
     target = _target_user(s, inp.user)
     obo = None
+    if target["kind"] == "agent" and inp.principal is None:
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "principal", "problem": "required for an agent token"}]})
     if inp.principal is not None:
         if target["kind"] != "agent":
             raise BookflowError("E_VALIDATION", details={"fields": [{"field": "principal", "problem": "only an agent's token acts on behalf of someone"}]})
@@ -506,7 +552,7 @@ def apply_token_issue(plan: Plan, ctx: Context, s: Session) -> Applied:
 
 
 token_list = command("token list", scope="hub", description="List the bearer tokens you may see; hub admins see everyone's.",
-                     input_model=TokenListInput, output_model=ListOutput[TokenOut], error_codes=["E_USER_NOT_FOUND"])
+                     input_model=TokenListInput, output_model=ListOutput[TokenOut], error_codes=["E_USER_NOT_FOUND", "E_PERMISSION"])
 
 
 @token_list
@@ -517,7 +563,8 @@ def plan_token_list(inp: TokenListInput, ctx: Context, s: Session) -> Plan:
     elif not s.is_hub_admin:
         q = q.where(h.api_tokens.c.user_id == s.actor.id)
     if not inp.include_revoked:
-        q = q.where(h.api_tokens.c.revoked_at.is_(None))
+        q = q.where(h.api_tokens.c.revoked_at.is_(None),
+                    sa.or_(h.api_tokens.c.expires_at.is_(None), h.api_tokens.c.expires_at >= now_iso()))
     rows = [dict(r) for r in s.hub.conn.execute(q).mappings().all()]
     names = users.user_names(s, {r["user_id"] for r in rows})
     items = [_token_out(s, r, names) for r in rows]

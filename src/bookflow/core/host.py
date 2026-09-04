@@ -9,18 +9,17 @@ import queue
 import sqlite3
 import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, Callable
 
 from bookflow.core.config import Config
-from bookflow.core.context import ActorKind, Context
-from bookflow.core.errors import BookflowError
+from bookflow.core.context import Context
 from bookflow.core.fs import check_local
 from bookflow.core.locks import RootLock
-from bookflow.core.perms import private_umask
-from bookflow.core.session import Actor, Session
+from bookflow.core.session import Session
 from bookflow.storage.engine import Database
 
 log = logging.getLogger("bookflow.host")
@@ -49,8 +48,11 @@ class Host:
         self._hub: Database | None = None  # writer's writable hub
         self._hub_cm = None  # the context manager that owns the hub connection; it closes the database when it is released
         self._companies: dict[str, Database] = {}  # writer's writable company connections by id
-        self._signals: dict[str, threading.Condition] = {}
         self._seq: dict[str, int] = {}
+        self._subscriptions: dict[str, tuple[str, Any, Any]] = {}
+        self._subscriptions_lock = threading.Lock()
+        self._refresh_pending: set[str] = set()
+        self._refresh_lock = threading.Lock()
         self._readers_attached = 0
         self._readers_lock = threading.Lock()
         self._stopping = False
@@ -71,7 +73,7 @@ class Host:
         self._timer.start()
 
     def stop(self) -> None:
-        self._stopping = True
+        self.begin_shutdown()
         # the timers submit to the writer, so they stop first: a job enqueued after the sentinel never completes
         self._timer_stop.set()
         if self._timer.is_alive():
@@ -90,7 +92,8 @@ class Host:
         """Run ``fn`` on the writer thread and return its result; exceptions propagate to the caller."""
         job = _Job(fn)
         self._queue.put(job)
-        job.done.wait(timeout)
+        if not job.done.wait(timeout):
+            raise TimeoutError("the Bookflow writer did not finish the submitted job in time")
         if job.error is not None:
             raise job.error
         return job.result
@@ -137,7 +140,9 @@ class Host:
 
     def _open_hub_on_writer(self) -> None:
         from bookflow.core.dispatch import _open_hub
-        s = self._writer_session()
+        s = Session(data_root=self.data_root, os_login="", config=Config.load(self.data_root / "config.toml"))
+        s.company_opener = self._company_for_writer
+        s.company_releaser = lambda cid: None
         _open_hub(s, True, self._system_ctx())
         # the session's context manager owns the connection: hold it for the host's life, or the database
         # closes as soon as the session is collected and the writer finds itself without a hub.
@@ -145,8 +150,14 @@ class Host:
         self._hub = s.hub
         s._hub_cm = None  # type: ignore[attr-defined]
 
+    def _ensure_hub_on_writer(self) -> Database:
+        """Reopen a discarded writer hub before the next queued database operation."""
+        if self._hub is None:
+            self._open_hub_on_writer()
+        assert self._hub is not None
+        return self._hub
+
     def _shutdown_on_writer(self) -> None:
-        from bookflow.company import schema as c
         for cid, db in list(self._companies.items()):
             try:
                 db.raw.execute("DELETE FROM presence WHERE interface = 'http'")
@@ -173,6 +184,7 @@ class Host:
         return Context.new(Interface.system, "bookflow-host")
 
     def _writer_session(self) -> Session:
+        self._ensure_hub_on_writer()
         s = Session(data_root=self.data_root, os_login="", config=Config.load(self.data_root / "config.toml"))
         s.hub = self._hub
         s.company_opener = self._company_for_writer
@@ -234,11 +246,67 @@ class Host:
             except sqlite3.Error:
                 continue
             seq = row[0] or 0
-            if seq != self._seq.get(name):
+            with self._subscriptions_lock:
+                changed = seq != self._seq.get(name)
                 self._seq[name] = seq
-                cond = self._signals.setdefault(name, threading.Condition())
-                with cond:
-                    cond.notify_all()
+            if changed:
+                self._wake_subscribers(name)
+
+    # ---------------------------------------------------------------- async stream notifications
+    def subscribe(self, key: str, loop: Any, event: Any) -> tuple[str, int]:
+        """Register an asyncio event without making the host thread depend on an event loop."""
+        token = uuid.uuid4().hex
+        with self._subscriptions_lock:
+            self._subscriptions[token] = (key, loop, event)
+            sequence = self._seq.get(key, 0)
+        return token, sequence
+
+    def unsubscribe(self, token: str) -> None:
+        with self._subscriptions_lock:
+            self._subscriptions.pop(token, None)
+
+    def stream_sequence(self, key: str) -> int:
+        with self._subscriptions_lock:
+            return self._seq.get(key, 0)
+
+    def _wake_subscribers(self, key: str | None = None) -> None:
+        with self._subscriptions_lock:
+            subscribers = list(self._subscriptions.values())
+        for subscribed_key, loop, event in subscribers:
+            if key is not None and subscribed_key != key:
+                continue
+            try:
+                loop.call_soon_threadsafe(event.set)
+            except RuntimeError:
+                # A disconnected client may have closed its event loop before its
+                # generator's finally block removes the subscription.
+                pass
+
+    def begin_shutdown(self) -> None:
+        """Make shutdown observable immediately and wake every idle event stream."""
+        self._stopping = True
+        self._wake_subscribers()
+
+    # ---------------------------------------------------------------- credential liveness
+    def enqueue_token_refresh(self, token_id: str, kind: str) -> bool:
+        """Queue at most one unaudited liveness refresh per token, without blocking a reader."""
+        with self._refresh_lock:
+            if self._stopping or token_id in self._refresh_pending:
+                return False
+            self._refresh_pending.add(token_id)
+
+        def refresh() -> None:
+            try:
+                from bookflow.adapters.http import auth
+                auth.refresh_token(self._ensure_hub_on_writer(), token_id, kind)
+            except BaseException as e:  # noqa: BLE001 - a liveness bump never kills the host
+                log.warning("credential refresh failed: %s", e)
+            finally:
+                with self._refresh_lock:
+                    self._refresh_pending.discard(token_id)
+
+        self._queue.put(_Job(refresh))
+        return True
 
     # ---------------------------------------------------------------- timers
     def _timer_loop(self) -> None:
@@ -298,9 +366,7 @@ class Host:
         from bookflow.core.audit import write_event_to
         from bookflow.core.registry import Touched
         from bookflow.hub import schema as h
-        db = self._hub
-        if db is None:
-            return 0
+        db = self._ensure_hub_on_writer()
         cutoff = (clock.now() - timedelta(days=1)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
         rows = [dict(r) for r in db.conn.execute(sa.select(h.api_tokens).where(
             h.api_tokens.c.kind == "session", h.api_tokens.c.expires_at.isnot(None),
@@ -324,11 +390,6 @@ class Host:
         log.info("session sweep removed %d expired session token(s)", len(rows))
         self._after_write()
         return len(rows)
-
-    def wait_for_commit(self, key: str, timeout: float) -> None:
-        cond = self._signals.setdefault(key, threading.Condition())
-        with cond:
-            cond.wait(timeout)
 
     # ---------------------------------------------------------------- descriptor
     def write_descriptor(self, bind: str, socket_path: str) -> None:
