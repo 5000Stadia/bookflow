@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% block title %}{{ noun }} {{ verb }}{% endblock %}{% block body %}
+{% set base = ("/c/" ~ company_id ~ "/" ~ noun) if company_id else ("/hub/" ~ noun.replace(" ", "-")) %}
+{% set action = ((base ~ "/" ~ record_id) if record_id else base) ~ (("/" ~ verb) if verb else "") %}
+<nav class="crumbs"><a href="{{ base }}">{{ noun }}</a> / {{ verb }}</nav><h1>{{ noun }} {{ verb }}</h1><p class="muted">{{ cmd.description }}</p>
+{% if error %}<div class="error"><b>{{ error.code }}</b> {{ error.message }}{% if error.details.fields %}<ul>{% for f in error.details.fields %}<li>{{ f.field }}: {{ f.problem }}</li>{% endfor %}</ul>{% endif %}{% if error.details.suggestions %}<p>Did you mean: {{ error.details.suggestions | join(", ") }}</p>{% endif %}</div>{% endif %}
+{% if result %}<div class="{{ 'warn' if preview else 'field' }}"><b>{{ "Preview (nothing written)" if preview else "Result" }}</b><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></div>{% endif %}
+<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML">
+<input type="hidden" name="originals" value='{{ json.dumps(originals, default=str) | e }}'>
+{% for l in leaves %}<div class="row"><label>{{ l.path }}{% if l.required %} *{% endif %}<small>{{ l.description }}{% if l.choices %} One of: {{ l.choices | join(", ") }}.{% endif %}{% if l.default not in (none, "", false) %} Default: {{ l.default }}.{% endif %}</small></label>
+{% set cur = get(originals, l.path) %}
+{% if l.kind == "choice" %}<select name="f:{{ l.path }}"><option value="">(unchanged)</option>{% for c in l.choices %}<option value="{{ c }}" {% if cur == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+{% elif l.kind == "bool" %}<select name="f:{{ l.path }}"><option value="unset">(unset)</option><option value="true" {% if cur == true %}selected{% endif %}>true</option><option value="false" {% if cur == false %}selected{% endif %}>false</option></select>
+{% elif l.kind == "secret" %}<input type="password" name="f:{{ l.path }}">
+{% else %}<input name="f:{{ l.path }}" value="{{ cur if cur is not none else '' }}" {% if l.kind == "number" %}inputmode="numeric"{% endif %}>{% endif %}
+<span>{% if cmd.clearable and l.nullable %}<label><input type="checkbox" name="clear:{{ l.path }}" value="1"> clear</label>{% endif %}</span></div>{% endfor %}
+{% for c in ctx_fields %}<div class="row"><label>{{ c }}<small>context, sent as a header</small></label><input name="ctx:{{ c }}"><span></span></div>{% endfor %}
+<div class="row"><span></span><span>{% if cmd.is_write %}<button name="action" value="preview">Preview</button>{% endif %}<button name="action" value="submit">Submit</button></span></div></form>
+{% endblock %}

@@ -74,8 +74,13 @@ def call_host(sock_path: str, envelope: dict[str, Any], timeout: float = 30.0) -
 
 def try_forward(data_root: Path, cmd, raw_input: dict[str, Any], ctx: Context, company_selector: str | None,
                 company_source: str, dry_run: bool) -> dict[str, Any] | None:
-    """Return the host's output when a live host serves this data root; None to proceed locally."""
-    if cmd.local_only:
+    """Return the host's output when a live host serves this data root; None to proceed locally.
+
+    ``local_only`` keeps a command off the HTTP routes; it does not keep it off the local socket, where
+    the peer's OS login is known, so `company use` and `user set-password` reach a running host. Only the
+    bootstrap commands (`init`, `serve`), which own the process and the lock, are never forwarded.
+    """
+    if cmd.bootstrap:
         return None
     desc = read_descriptor(data_root)
     if not desc or desc.get("pid") == os.getpid() or not _pid_alive(int(desc.get("pid", 0))):

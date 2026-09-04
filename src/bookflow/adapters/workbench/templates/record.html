@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block title %}{{ noun }} {{ record_id }}{% endblock %}{% block body %}
+{% set base = ("/c/" ~ company_id ~ "/" ~ noun) if company_id else ("/hub/" ~ noun.replace(" ", "-")) %}
+<nav class="crumbs"><a href="{{ base }}">{{ noun }}</a> / {{ record_id }}</nav>
+{% if editing %}<div class="warn">Editing now: {% for e in editing %}{{ e.name or e.user_id }} ({{ e.interface }}, since {{ e.since }}){% if not loop.last %}, {% endif %}{% endfor %}</div>{% endif %}
+{% if presence %}<div hx-post="/c/{{ company_id }}/presence/set/{{ meta.record_type }}/{{ record.id if noun != 'company' else record.company_id }}" hx-trigger="load, every 30s" hx-swap="none"></div>
+<script>addEventListener('pagehide',()=>navigator.sendBeacon&&fetch('/c/{{ company_id }}/presence/clear/{{ meta.record_type }}/{{ record.id if noun != 'company' else record.company_id }}',{method:'POST',headers:{'X-Bookflow-Workbench':'1'},keepalive:true}))</script>{% endif %}
+<h1>{{ record.display_name or record.code or record.summary or record_id }}</h1>
+<p class="actions">{% for v in verbs %}{% if v.is_write %}<a href="{{ base }}/{{ record_id }}/{{ v.verb }}">{{ v.verb }}</a>{% endif %}{% endfor %}</p>
+{% macro fields(obj, prefix) %}{% for k, v in obj.items() %}{% if v is mapping %}<div class="field"><b>{{ prefix }}{{ k }}</b><span></span></div>{{ fields(v, prefix ~ k ~ ".") }}{% elif v is sequence and v is not string and v and v[0] is mapping %}<div class="field"><b>{{ prefix }}{{ k }}</b><pre>{{ json.dumps(v, indent=1, default=str) }}</pre></div>{% else %}<div class="field"><b>{{ prefix }}{{ k }}</b><span>{{ v if v is not none else "" }}</span></div>{% endif %}{% endfor %}{% endmacro %}
+{{ fields(record, "") }}
+{% if audit is not none %}<h3>Audit</h3><table><tr><th>at</th><th>command</th><th>actor</th><th>interface</th><th>reason</th><th>summary</th></tr>
+{% for e in audit %}<tr><td>{{ e.at }}</td><td>{{ e.command }}</td><td>{{ e.actor_name or e.actor_id }}</td><td>{{ e.interface }}</td><td>{{ e.reason or "" }}{% if e.directive_code %} ({{ e.directive_code }}){% endif %}</td><td>{{ e.summary }}</td></tr>{% endfor %}</table>{% endif %}
+{% endblock %}

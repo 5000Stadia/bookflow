@@ -160,6 +160,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.hub_cmds": ["init", "upgrade", "organization", "company", "demo"],
     "bookflow.commands.company_cmds": ["company", "directive", "presence"],
     "bookflow.commands.audit_cmds": ["audit", "hub audit"],
+    "bookflow.commands.host_cmds": ["serve", "user", "token"],
 }
 
 _loaded: set[str] = set()

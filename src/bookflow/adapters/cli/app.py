@@ -61,6 +61,24 @@ def _flatten(model: type[BaseModel], prefix: str = "") -> list[tuple[str, str, A
     return out
 
 
+def _secret_leaves(model: type[BaseModel], prefix: str = "") -> set[str]:
+    """Paths of fields flagged ``secret`` in the registry: never echoed, asked for twice on a terminal."""
+    out: set[str] = set()
+    for name, f in model.model_fields.items():
+        base = f.annotation
+        origin = get_origin(base)
+        if origin is Union or origin is types.UnionType:
+            args = [a for a in get_args(base) if a is not type(None)]
+            base = args[0] if args else str
+        if inspect.isclass(base) and issubclass(base, BaseModel):
+            out |= _secret_leaves(base, prefix + name + ".")
+            continue
+        extra = f.json_schema_extra if isinstance(f.json_schema_extra, dict) else {}
+        if extra.get("secret"):
+            out.add(prefix + name)
+    return out
+
+
 def _help_text(help_: str, py_t: type, choices: list[str] | None, required: bool, default: Any) -> str:
     parts = [help_.rstrip(".") + "."] if help_ else []
     if choices:
@@ -151,11 +169,23 @@ def _build_command(cmd: registry.Command):
         if clears:
             from bookflow.core.clearing import apply_clears
             apply_clears(cmd, raw, list(clears))
+        secret_paths = _secret_leaves(cmd.input_model)
+        if secret_paths and sys.stdin.isatty():
+            import getpass
+            for path in sorted(secret_paths):
+                if kw.get("f__" + path.replace(".", "__")) is not None:
+                    continue
+                first = getpass.getpass(f"{path}: ")
+                if first == "":
+                    continue
+                if first != getpass.getpass(f"{path} (again): "):
+                    raise BookflowError("E_VALIDATION", details={"fields": [{"field": path, "problem": "the two entries did not match"}]})
+                _set_path(raw, path, first)
         if interactive:
             if not sys.stdin.isatty():
                 raise BookflowError("E_USAGE", message="--interactive needs a terminal")
             for path, flag, ann, help_, required, dflt in leaves:
-                if kw.get("f__" + path.replace(".", "__")) is not None:
+                if kw.get("f__" + path.replace(".", "__")) is not None or path in secret_paths:
                     continue
                 py_t, choices = _leaf_type(ann)
                 label = path

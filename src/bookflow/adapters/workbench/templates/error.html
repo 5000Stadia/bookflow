@@ -1,0 +1,2 @@
+{% extends "base.html" %}{% block title %}Error{% endblock %}{% block body %}
+<div class="error"><b>{{ error.code }}</b> ({{ status }}) {{ error.message }}{% if error.details %}<pre>{{ json.dumps(error.details, indent=1, default=str) }}</pre>{% endif %}</div><p><a href="/">home</a></p>{% endblock %}

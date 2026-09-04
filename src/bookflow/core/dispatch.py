@@ -375,11 +375,10 @@ def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str
     done, s = guard(before_lock, False)
     if done is not None:
         return done
-    if not cmd.local_only:
-        from bookflow.core.forward import try_forward
-        forwarded = try_forward(s.data_root, cmd, raw_input, ctx, company_selector, company_source, dry_run)
-        if forwarded is not None:
-            return forwarded
+    from bookflow.core.forward import try_forward  # try_forward decides what may travel; bootstrap commands never do
+    forwarded = try_forward(s.data_root, cmd, raw_input, ctx, company_selector, company_source, dry_run)
+    if forwarded is not None:
+        return forwarded
 
     def under_lock():
         with private_umask(), RootLock(s.data_root, cmd.name):
@@ -601,5 +600,9 @@ def _upsert_principals(s: Session, ctx: Context) -> None:
 
 
 def _run_bootstrap(cmd: Command, inp: BaseModel, ctx: Context, s: Session) -> dict[str, Any]:
+    """Commands with their own path: they take the lock themselves, or hold it for their whole run."""
+    if cmd.name == "serve":
+        from bookflow.commands.host_cmds import run_serve
+        return run_serve(cmd, inp, ctx, s)
     from bookflow.commands.hub_cmds import run_init
     return run_init(cmd, inp, ctx, s)

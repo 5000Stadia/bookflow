@@ -1,0 +1,570 @@
+"""The host process and the credentials it serves: `serve`, `user set-password`, `token issue/list/revoke`.
+
+Nothing here imports FastAPI, uvicorn, or the workbench at module scope: the CLI loads this module for
+`bookflow token --help` and `bookflow serve --help`, and cold start must not grow (row 3 plan, Edges).
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from bookflow.commands.common import CommonOut, WriteOutput, common_out
+from bookflow.core.context import Context, client_version
+from bookflow.core.errors import BookflowError
+from bookflow.core.ids import is_ulid, normalize_ulid
+from bookflow.core.lazy import lazy
+from bookflow.core.models import ListOutput
+from bookflow.core.registry import Applied, Plan, Touched, command
+from bookflow.core.session import Session, localize, now_iso
+
+sa = lazy("sqlalchemy")
+h = lazy("bookflow.hub.schema")
+users = lazy("bookflow.hub.users")
+audit = lazy("bookflow.hub.audit")
+auth = lazy("bookflow.adapters.http.auth")
+
+log = logging.getLogger("bookflow.host")
+
+VIA = lambda ctx: ctx.interface.value  # noqa: E731
+
+DEFAULT_BIND = "127.0.0.1:8765"
+
+
+# ---------------------------------------------------------------- shared lookups
+
+def _find_user(s: Session, selector: str) -> dict[str, Any] | None:
+    """A user by id or username; inactive users are not found."""
+    row = None
+    if is_ulid(selector):
+        row = users.find_user(s, id=normalize_ulid(selector))
+    if row is None:
+        row = users.find_user(s, username=selector)
+    return row if row and row["active"] else None
+
+
+def _is_self(s: Session, selector: str) -> bool:
+    a = s.actor
+    return bool(a and (selector == a.id or selector == a.username or (is_ulid(selector) and normalize_ulid(selector) == a.id)))
+
+
+def _actor_row(s: Session) -> dict[str, Any]:
+    row = users.find_user(s, id=s.actor.id)
+    if row is None:  # pragma: no cover - the session could not have been built
+        raise BookflowError("E_USER_NOT_FOUND", details={"user": s.actor.id})
+    return row
+
+
+# ---------------------------------------------------------------- serve
+
+class ServeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    bind: str = Field(DEFAULT_BIND, description="Address to listen on, host:port", max_length=128)
+    allow_network: bool = Field(False, description="Allow a bind address outside loopback")
+    secure_cookies: bool = Field(False, description="Set Secure on the session cookie; the default is on for non-loopback binds")
+
+
+class ServeOutput(WriteOutput):
+    bind: str
+    socket: str | None
+    pid: int
+    secure_cookies: bool
+    companies_migrated: list[str]
+    companies_failed: list[dict[str, str]]
+
+
+def _plan_serve(inp: ServeInput, ctx: Context, s: Session) -> Plan:  # never called; bootstrap has its own path
+    raise NotImplementedError
+
+
+serve_cmd = command("serve", scope="hub",
+                    description="Serve every routed command over HTTP and the loopback socket, holding the data-root lock until interrupted.",
+                    input_model=ServeInput, output_model=ServeOutput, writes={"hub", "company"}, required_role="hub_admin",
+                    bootstrap=True, local_only=True,
+                    error_codes=["E_NETWORK_NOT_ALLOWED", "E_VERSION_MISMATCH", "E_COMPANY_MISSING"])(_plan_serve)
+
+
+def parse_bind(bind: str) -> tuple[str, int]:
+    """`host:port`, with `[::1]:8765` for a bracketed IPv6 literal."""
+    text = (bind or "").strip()
+    host, port = "", ""
+    if text.startswith("["):
+        host, sep, rest = text[1:].partition("]")
+        port = rest[1:] if rest.startswith(":") else ""
+        if not sep:
+            host = ""
+    elif ":" in text:
+        host, _, port = text.rpartition(":")
+    bad = None
+    if not host or not port:
+        bad = "give an address as host:port"
+    else:
+        try:
+            number = int(port)
+        except ValueError:
+            bad = "the port is not a number"
+        else:
+            if not 1 <= number <= 65535:
+                bad = "the port is outside 1-65535"
+    if bad:
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "bind", "problem": bad}]})
+    return host, int(port)
+
+
+def is_loopback(host: str) -> bool:
+    import ipaddress
+    if host in ("localhost", "localhost.localdomain"):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _serve_actor(s: Session) -> dict[str, Any]:
+    """The OS login's hub-admin user, read before the lock is taken. Never migrates."""
+    from bookflow.core.config import Config
+    from bookflow.storage.engine import open_database
+    root = s.data_root
+    if not (root / "hub.db").exists():
+        raise BookflowError("E_NOT_INITIALIZED", details={"data_root": str(root)})
+    s.config = Config.load(root / "config.toml")
+    table = s.config.user_table(s.os_login)
+    if not table or not isinstance(table.get("user_id"), str):
+        raise BookflowError("E_NO_ACTOR")
+    with open_database(root / "hub.db", writable=False) as db:
+        row = db.raw.execute("SELECT id, kind, username, display_name, hub_admin, active FROM users WHERE id = ?", (table["user_id"],)).fetchone()
+    if row is None or not row[5]:
+        raise BookflowError("E_NO_ACTOR", details={"mapped_user_id": table["user_id"]})
+    if not row[4]:
+        raise BookflowError("E_PERMISSION", details={"capability": "serve", "required_role": "hub_admin"},
+                            message="Only a hub admin can run the host.")
+    return {"id": row[0], "kind": row[1], "username": row[2], "display_name": row[3], "hub_admin": bool(row[4])}
+
+
+def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
+    """The bootstrap path for `serve` (dispatch._run_bootstrap): no lock path, no plan/apply."""
+    from bookflow.core.forward import socket_path
+    host_name, port = parse_bind(inp.bind)
+    if not inp.allow_network and not is_loopback(host_name):
+        raise BookflowError("E_NETWORK_NOT_ALLOWED", details={"bind": inp.bind})
+    actor = _serve_actor(s)
+    secure = inp.secure_cookies or not is_loopback(host_name)
+    if s.dry_run:
+        out = ServeOutput(dry_run=True, bind=inp.bind, socket=str(socket_path(s.data_root)), pid=os.getpid(),
+                          secure_cookies=secure, companies_migrated=[], companies_failed=[],
+                          warnings=[f"would serve as {actor['username']} and hold the data-root lock until interrupted"])
+        return out.model_dump(mode="json")
+    import socket as _socket
+    import uvicorn
+    tcp = _socket.socket(_socket.AF_INET6 if ":" in host_name else _socket.AF_INET, _socket.SOCK_STREAM)
+    tcp.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+    try:
+        tcp.bind((host_name, port))
+        tcp.listen(128)
+    except OSError:
+        tcp.close()
+        raise
+    handle = None
+    try:
+        handle = start_serving(s.data_root, client_version(), bind=inp.bind, secure_cookies=secure)
+        log.warning("bookflow host listening on %s (socket %s)", inp.bind, handle.socket)
+        server = uvicorn.Server(uvicorn.Config(handle.app, log_level="warning", access_log=False))
+        server.run(sockets=[tcp])
+    finally:
+        if handle is not None:
+            handle.stop()
+        try:
+            tcp.close()
+        except OSError:  # pragma: no cover
+            pass
+    out = ServeOutput(bind=inp.bind, socket=str(handle.socket), pid=os.getpid(), secure_cookies=secure,
+                      companies_migrated=list(handle.companies_migrated), companies_failed=list(handle.companies_failed))
+    return out.model_dump(mode="json")
+
+
+# ---------------------------------------------------------------- the running host
+
+@dataclass
+class ServeHandle:
+    """Everything `serve` starts, so a test can drive the app without uvicorn."""
+
+    host: Any
+    app: Any
+    listener: Any
+    socket: Path
+    bind: str
+    companies_migrated: list[str] = field(default_factory=list)
+    companies_failed: list[dict[str, str]] = field(default_factory=list)
+    stopped: bool = False
+
+    def stop(self) -> None:
+        if self.stopped:
+            return
+        self.stopped = True
+        try:
+            self.listener.stop()
+        finally:
+            self.host.remove_descriptor()
+            self.host.stop()
+
+
+def start_serving(data_root: Path | str, version: str, *, bind: str = DEFAULT_BIND, secure_cookies: bool = False) -> ServeHandle:
+    """Take the lock, migrate everything, build the app, listen on the socket, and write host.json."""
+    from bookflow.adapters.http.app import create_app
+    from bookflow.adapters.http.local import LocalListener
+    from bookflow.core.forward import socket_path
+    from bookflow.core.host import Host
+    root = Path(data_root)
+    host = Host(root, version=version)
+    try:
+        host.start()
+    except BaseException as e:
+        if host._writer.is_alive():
+            host.stop()
+        elif host._lock is not None:  # the hub failed to open after the lock was taken
+            host._lock.__exit__(None, None, None)
+            host._lock = None
+        if isinstance(e, BookflowError) and e.code == "E_DB_BUSY":
+            held = e.details.get("command")
+            raise BookflowError("E_DB_BUSY", details=e.details, message=(
+                "Another Bookflow host is already serving this data root; stop it before starting another."
+                if held == "serve" else
+                f"`{held}` holds the data-root lock; the host takes it for its whole run, so wait for that command to finish."))
+        raise
+    try:
+        migrated, failed = migrate_everything(host)
+        app = create_app(host, secure_cookies=secure_cookies)
+        sock = socket_path(root)
+        listener = LocalListener(host, sock, make_local_handler(host, version))
+        listener.start()
+        host.write_descriptor(bind, str(sock))
+    except BaseException:
+        host.stop()
+        raise
+    return ServeHandle(host=host, app=app, listener=listener, socket=sock, bind=bind,
+                       companies_migrated=migrated, companies_failed=failed)
+
+
+def migrate_everything(host) -> tuple[list[str], list[dict[str, str]]]:
+    """Migrate the hub and every registered company to head on the writer thread, attributed to the serve user.
+
+    A company that will not migrate is logged and left behind; the host keeps serving the others.
+    """
+    from bookflow.core.config import Config, os_login
+    from bookflow.core.context import ActorKind, Interface
+    login = os_login()
+    table = Config.load(host.data_root / "config.toml").user_table(login) or {}
+    if not isinstance(table.get("user_id"), str):
+        raise BookflowError("E_NO_ACTOR")
+    ctx = Context.new(Interface.system, "bookflow-host")
+
+    def job(s: Session):
+        from bookflow.core.dispatch import _migrate_hub, resolve_company_folder
+        from bookflow.storage.migrate import migrate_company
+        c2 = ctx.model_copy(update={"actor_id": s.actor.id, "actor_kind": ActorKind(s.actor.kind)})
+        _migrate_hub(s, c2)
+        migrated: list[str] = []
+        failed: list[dict[str, str]] = []
+        rows = [dict(r) for r in s.hub.conn.execute(sa.select(h.companies)).mappings().all()]
+        for row in rows:
+            s.hub_touched = []
+            try:
+                folder = resolve_company_folder(s, c2, dict(row), True)
+                db_path = folder / "company.db"
+                if not db_path.exists():
+                    raise BookflowError("E_COMPANY_MISSING", details={"company_id": row["id"]})
+                db = host._company_for_writer(row, True, db_path)
+                before, after = migrate_company(s, c2, db, folder, row)
+                if before == after:
+                    host.release_company(row["id"])
+                    continue
+                s.hub.raw.execute("BEGIN IMMEDIATE")
+                s.hub.conn.execute(h.companies.update().where(h.companies.c.id == row["id"]).values(schema_revision=after))
+                audit.write_event(s, c2, "serve", f"migrated company {row['display_name']} from {before} to {after}", list(s.hub_touched))
+                s.hub.raw.execute("COMMIT")
+                migrated.append(row["id"])
+            except BookflowError as e:
+                if s.hub.raw.in_transaction:
+                    s.hub.raw.execute("ROLLBACK")
+                host.release_company(row["id"])
+                log.warning("serve: company %s was not migrated (%s); it is served as it is", row["id"], e.code)
+                failed.append({"company_id": row["id"], "code": e.code})
+        return migrated, failed
+
+    return host.run_write(table["user_id"], login, job)
+
+
+def make_local_handler(host, version: str):
+    """The LocalListener handler: the peer's OS login is the identity, never the envelope's."""
+    from bookflow.adapters.http.local import context_from_envelope
+
+    def handler(login: str, envelope: dict[str, Any]) -> dict[str, Any]:
+        from bookflow.core import registry
+        from bookflow.core.dispatch import _close, execute
+        ctx = context_from_envelope(envelope)
+        sent = envelope.get("version") or ctx.client_version
+        if sent != version:
+            raise BookflowError("E_VERSION_MISMATCH", details={"host": version, "client": sent},
+                                message="The running host and this client are different Bookflow versions; stop the host or upgrade the client.")
+        name = envelope.get("command")
+        cmd = registry.get(name) if isinstance(name, str) else None
+        if cmd is None:
+            raise BookflowError("E_USAGE", message=f"unknown command {name!r}")
+        if cmd.bootstrap:
+            raise BookflowError("E_USAGE", message=f"`{cmd.name}` runs in the calling process; it is never forwarded to the host.")
+        user_id = user_for_login(host, login)
+        raw = envelope.get("input") or {}
+        selector = envelope.get("company_selector")
+        source = envelope.get("company_source") or "option"
+        dry_run = bool(envelope.get("dry_run"))
+        if (cmd.is_write and not dry_run) or cmd.kind == "advisory":
+            return host.run_write(user_id, login, lambda s: execute(cmd, raw, ctx, s, company_selector=selector, company_source=source, dry_run=dry_run))
+        s = host.reader_session(user_id, login)
+        try:
+            return execute(cmd, raw, ctx, s, company_selector=selector, company_source=source, dry_run=dry_run)
+        finally:
+            _close(s)
+            host.reader_done()
+
+    return handler
+
+
+def user_for_login(host, login: str) -> str:
+    """config.toml maps an OS login to a user id, exactly as dispatch._load_actor does."""
+    from bookflow.core.config import Config
+    table = Config.load(host.data_root / "config.toml").user_table(login)
+    if not isinstance(table, dict) or not isinstance(table.get("user_id"), str):
+        raise BookflowError("E_UNAUTHENTICATED", details={"reason": "this login is not mapped to a Bookflow user"})
+    return table["user_id"]
+
+
+# ---------------------------------------------------------------- user set-password
+
+class SetPasswordInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    username: str = Field(description="Username of the user whose password is being set", max_length=64)
+    password: str | None = Field(None, description="The new password; on a terminal the CLI asks for it twice instead",
+                                 max_length=1024, json_schema_extra={"secret": True})
+
+    @field_validator("username")
+    @classmethod
+    def _strip(cls, v: str) -> str:
+        return v.strip()
+
+
+class SetPasswordOutput(WriteOutput):
+    user_id: str
+    username: str
+    changed: bool
+
+
+user_set_password = command("user set-password", scope="hub",
+                            description="Set a user's password so they can log in to the workbench.",
+                            input_model=SetPasswordInput, output_model=SetPasswordOutput, writes={"hub"},
+                            required_role="hub_admin", positional=["username"], local_only=True,
+                            error_codes=["E_USER_NOT_FOUND"])
+
+
+@user_set_password
+def plan_set_password(inp: SetPasswordInput, ctx: Context, s: Session) -> Plan:
+    row = _find_user(s, inp.username)
+    if row is None or row["username"] != inp.username:
+        raise BookflowError("E_USER_NOT_FOUND", details={"username": inp.username})
+    if row["kind"] != "human":
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "username", "problem": "only human users have passwords"}]})
+    if not inp.password:
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "password", "problem": "required"}]})
+    return Plan(preview=SetPasswordOutput(user_id=row["id"], username=row["username"], changed=True),
+                data={"row": row, "password": inp.password})
+
+
+@user_set_password.applier
+def apply_set_password(plan: Plan, ctx: Context, s: Session) -> Applied:
+    row = plan.data["row"]
+    at = now_iso()
+    after = {**row, "password_hash": auth.hash_password(plan.data["password"]), "version": row["version"] + 1,
+             "updated_at": at, "updated_by": s.actor.id, "updated_via": VIA(ctx)}
+    s.hub.conn.execute(h.users.update().where(h.users.c.id == row["id"]).values(
+        password_hash=after["password_hash"], version=after["version"], updated_at=at, updated_by=s.actor.id, updated_via=VIA(ctx)))
+    touched = Touched("user", row["id"], "update", row["version"], after["version"], after, before=row)
+    return Applied(SetPasswordOutput(user_id=row["id"], username=row["username"], changed=True), [touched],
+                   f"set the password for {row['username']}")
+
+
+# ---------------------------------------------------------------- tokens
+
+class TokenIssueInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    user: str | None = Field(None, description="Username or id of the user the token acts as; defaults to you")
+    label: str = Field(description="What the token is for; it names the client in the audit trail", min_length=1, max_length=128)
+    days: int | None = Field(None, ge=1, le=3650, description="Days until it expires; omitted means it never expires")
+    principal: str | None = Field(None, description="The human an agent token acts on behalf of; only for agent users")
+
+
+class TokenIssueOutput(WriteOutput):
+    token_id: str
+    user_id: str
+    username: str
+    label: str | None
+    expires_at: str | None
+    secret: str
+    message: str
+
+
+class TokenOut(CommonOut):
+    token_id: str
+    user_id: str
+    username: str | None
+    on_behalf_of: str | None
+    kind: str
+    label: str | None
+    expires_at: str | None
+    last_used_at: str | None
+    revoked_at: str | None
+
+
+class TokenListInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    user: str | None = Field(None, description="Username or id whose tokens to list; hub admins only, for anyone but themselves")
+    include_revoked: bool = Field(False, description="Also list revoked and expired tokens")
+
+
+class TokenSelector(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    token: str = Field(description="Token id, as `token list` reports it")
+
+
+class TokenRevokeOutput(WriteOutput):
+    token_id: str
+    user_id: str
+    username: str | None
+    label: str | None
+    revoked_at: str | None
+    changed: bool
+
+
+SHOWN_ONCE = "This secret is shown once; only its hash is stored. Copy it now."
+
+
+def _target_user(s: Session, selector: str | None) -> dict[str, Any]:
+    """The user a token command acts on. A non-admin naming anyone else is E_PERMISSION, existing or not."""
+    if selector is None:
+        return _actor_row(s)
+    if _is_self(s, selector):
+        return _actor_row(s)
+    if not s.is_hub_admin:
+        raise BookflowError("E_PERMISSION", details={"capability": "token", "required_role": "hub_admin"})
+    row = _find_user(s, selector)
+    if row is None:
+        raise BookflowError("E_USER_NOT_FOUND", details={"user": selector})
+    return row
+
+
+token_issue = command("token issue", scope="hub",
+                      description="Issue a bearer token a program can send to the host; the secret is shown once.",
+                      input_model=TokenIssueInput, output_model=TokenIssueOutput, writes={"hub"},
+                      error_codes=["E_USER_NOT_FOUND"])
+
+
+@token_issue
+def plan_token_issue(inp: TokenIssueInput, ctx: Context, s: Session) -> Plan:
+    target = _target_user(s, inp.user)
+    obo = None
+    if inp.principal is not None:
+        if target["kind"] != "agent":
+            raise BookflowError("E_VALIDATION", details={"fields": [{"field": "principal", "problem": "only an agent's token acts on behalf of someone"}]})
+        principal = _find_user(s, inp.principal)
+        if principal is None:
+            raise BookflowError("E_USER_NOT_FOUND", details={"user": inp.principal})
+        if principal["kind"] != "human":
+            raise BookflowError("E_VALIDATION", details={"fields": [{"field": "principal", "problem": "the principal must be a human user"}]})
+        obo = principal["id"]
+    preview = TokenIssueOutput(token_id="", user_id=target["id"], username=target["username"], label=inp.label,
+                               expires_at=None, secret="", message="A dry run issues nothing.")
+    return Plan(preview=preview, data={"target": target, "label": inp.label, "days": inp.days, "on_behalf_of": obo})
+
+
+@token_issue.applier
+def apply_token_issue(plan: Plan, ctx: Context, s: Session) -> Applied:
+    target = plan.data["target"]
+    row, secret = auth.issue_token(s.hub, user_id=target["id"], kind="bearer", label=plan.data["label"],
+                                   days=plan.data["days"], via=VIA(ctx), actor_id=s.actor.id)
+    if plan.data["on_behalf_of"]:
+        row = {**row, "on_behalf_of": plan.data["on_behalf_of"]}
+        s.hub.conn.execute(h.api_tokens.update().where(h.api_tokens.c.id == row["id"]).values(on_behalf_of=row["on_behalf_of"]))
+    after = {k: v for k, v in row.items() if k != "token_hash"}
+    out = TokenIssueOutput(token_id=row["id"], user_id=target["id"], username=target["username"], label=row["label"],
+                           expires_at=localize(s, row["expires_at"]), secret=secret, message=SHOWN_ONCE)
+    return Applied(out, [Touched("api_token", row["id"], "create", None, 1, after)],
+                   f"issued a bearer token for {target['username']} labelled {row['label']}")
+
+
+token_list = command("token list", scope="hub", description="List the bearer tokens you may see; hub admins see everyone's.",
+                     input_model=TokenListInput, output_model=ListOutput[TokenOut], error_codes=["E_USER_NOT_FOUND"])
+
+
+@token_list
+def plan_token_list(inp: TokenListInput, ctx: Context, s: Session) -> Plan:
+    q = sa.select(h.api_tokens).order_by(h.api_tokens.c.created_at.desc())
+    if inp.user is not None:
+        q = q.where(h.api_tokens.c.user_id == _target_user(s, inp.user)["id"])
+    elif not s.is_hub_admin:
+        q = q.where(h.api_tokens.c.user_id == s.actor.id)
+    if not inp.include_revoked:
+        q = q.where(h.api_tokens.c.revoked_at.is_(None))
+    rows = [dict(r) for r in s.hub.conn.execute(q).mappings().all()]
+    names = users.user_names(s, {r["user_id"] for r in rows})
+    items = [_token_out(s, r, names) for r in rows]
+    return Plan(preview=ListOutput[TokenOut](items=items, count=len(items)))
+
+
+def _token_out(s: Session, row: dict[str, Any], names: dict[str, str]) -> TokenOut:
+    return TokenOut(**common_out(s, row), token_id=row["id"], user_id=row["user_id"], username=names.get(row["user_id"]),
+                    on_behalf_of=row["on_behalf_of"], kind=row["kind"], label=row["label"],
+                    expires_at=localize(s, row["expires_at"]), last_used_at=localize(s, row["last_used_at"]),
+                    revoked_at=localize(s, row["revoked_at"]))
+
+
+token_revoke = command("token revoke", scope="hub", description="Revoke a bearer token so it stops working immediately.",
+                       input_model=TokenSelector, output_model=TokenRevokeOutput, writes={"hub"},
+                       positional=["token"], error_codes=["E_TOKEN_NOT_FOUND"])
+
+
+@token_revoke
+def plan_token_revoke(inp: TokenSelector, ctx: Context, s: Session) -> Plan:
+    row = None
+    if is_ulid(inp.token):
+        found = s.hub.conn.execute(sa.select(h.api_tokens).where(h.api_tokens.c.id == normalize_ulid(inp.token))).mappings().first()
+        row = dict(found) if found else None
+    if row is None:
+        raise BookflowError("E_TOKEN_NOT_FOUND", details={"token": inp.token})
+    if row["user_id"] != s.actor.id and not s.is_hub_admin:
+        raise BookflowError("E_TOKEN_NOT_FOUND", details={"token": inp.token})  # the same answer as for no such token: nothing to enumerate
+    names = users.user_names(s, {row["user_id"]})
+    preview = TokenRevokeOutput(token_id=row["id"], user_id=row["user_id"], username=names.get(row["user_id"]), label=row["label"],
+                                revoked_at=localize(s, row["revoked_at"]) or now_iso(), changed=row["revoked_at"] is None)
+    return Plan(preview=preview, data={"row": row, "names": names})
+
+
+@token_revoke.applier
+def apply_token_revoke(plan: Plan, ctx: Context, s: Session) -> Applied:
+    row, names = plan.data["row"], plan.data["names"]
+    if row["revoked_at"] is not None:
+        out = TokenRevokeOutput(token_id=row["id"], user_id=row["user_id"], username=names.get(row["user_id"]), label=row["label"],
+                                revoked_at=localize(s, row["revoked_at"]), changed=False)
+        return Applied(out, [], "already revoked")
+    at = now_iso()
+    after = {k: v for k, v in row.items() if k != "token_hash"} | {"revoked_at": at, "version": row["version"] + 1,
+                                                                  "updated_at": at, "updated_by": s.actor.id, "updated_via": VIA(ctx)}
+    s.hub.conn.execute(h.api_tokens.update().where(h.api_tokens.c.id == row["id"]).values(
+        revoked_at=at, version=after["version"], updated_at=at, updated_by=s.actor.id, updated_via=VIA(ctx)))
+    out = TokenRevokeOutput(token_id=row["id"], user_id=row["user_id"], username=names.get(row["user_id"]), label=row["label"],
+                            revoked_at=localize(s, at), changed=True)
+    return Applied(out, [Touched("api_token", row["id"], "update", row["version"], after["version"], after)],
+                   f"revoked the token labelled {row['label']}")

@@ -9,13 +9,17 @@ from tests.error_matrix import INFRASTRUCTURE, MATRIX
 
 
 def test_matrix_matches_registry():
+    """Both directions: every registered command has a matrix row covering its declared codes, and every matrix row names a registered command with real codes."""
     registry.load_all()
+    names = {cmd.name for cmd in registry.all_commands()}
     for cmd in registry.all_commands():
         declared = set(cmd.error_codes)
         listed = set(MATRIX.get(cmd.name, {}))
         assert declared <= listed | set(INFRASTRUCTURE), (cmd.name, declared - listed)
-        for code in listed:
-            assert code in ALL_CODES
+    orphan_rows = sorted(set(MATRIX) - names)
+    assert not orphan_rows, f"matrix rows for commands that do not exist: {orphan_rows}"
+    orphan_codes = sorted({code for row in MATRIX.values() for code in row if code not in ALL_CODES})
+    assert not orphan_codes, f"matrix codes that do not exist: {orphan_codes}"
     assert set(INFRASTRUCTURE) == set(INFRASTRUCTURE_CODES)
 
 

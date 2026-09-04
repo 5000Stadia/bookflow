@@ -10,6 +10,7 @@ import sqlite3
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Callable
 
@@ -36,13 +37,17 @@ class _Job:
 class Host:
     """Owns the data-root lock and every connection while it runs. One writer thread; readers per request."""
 
-    def __init__(self, data_root: Path, *, version: str):
+    def __init__(self, data_root: Path, *, version: str, idle_checkpoint_seconds: float = 30.0,
+                 sweep_seconds: float = 3600.0):
         self.data_root = data_root
         self.version = version
+        self.idle_checkpoint_seconds = idle_checkpoint_seconds
+        self.sweep_seconds = sweep_seconds
         self._lock: RootLock | None = None
         self._queue: "queue.Queue[_Job | None]" = queue.Queue()
         self._writer = threading.Thread(target=self._writer_loop, name="bookflow-writer", daemon=True)
         self._hub: Database | None = None  # writer's writable hub
+        self._hub_cm = None  # the context manager that owns the hub connection; it closes the database when it is released
         self._companies: dict[str, Database] = {}  # writer's writable company connections by id
         self._signals: dict[str, threading.Condition] = {}
         self._seq: dict[str, int] = {}
@@ -50,6 +55,10 @@ class Host:
         self._readers_lock = threading.Lock()
         self._stopping = False
         self._umask_old: int | None = None
+        self._last_write = time.monotonic()  # when the writer last committed; the idle checkpoint waits on it
+        self._checkpointed_write = 0.0  # the _last_write value the last idle checkpoint answered, so one write earns one checkpoint
+        self._timer_stop = threading.Event()
+        self._timer = threading.Thread(target=self._timer_loop, name="bookflow-host-timers", daemon=True)
 
     # ---------------------------------------------------------------- lifecycle
     def start(self) -> None:
@@ -59,9 +68,14 @@ class Host:
         self._lock.__enter__()
         self._writer.start()
         self.submit(self._open_hub_on_writer)
+        self._timer.start()
 
     def stop(self) -> None:
         self._stopping = True
+        # the timers submit to the writer, so they stop first: a job enqueued after the sentinel never completes
+        self._timer_stop.set()
+        if self._timer.is_alive():
+            self._timer.join(timeout=10)
         self.submit(self._shutdown_on_writer)
         self._queue.put(None)
         self._writer.join(timeout=30)
@@ -109,17 +123,25 @@ class Host:
         for cid, d in list(self._companies.items()):
             if d is db:
                 self._companies.pop(cid, None)
+        cm = self._hub_cm if db is self._hub else None
         try:
-            db.close()
+            if cm is not None:
+                cm.__exit__(None, None, None)  # the context manager closes the database; closing it twice raises
+            else:
+                db.close()
         except Exception:  # noqa: BLE001
             pass
         if db is self._hub:
             self._hub = None
+            self._hub_cm = None
 
     def _open_hub_on_writer(self) -> None:
         from bookflow.core.dispatch import _open_hub
         s = self._writer_session()
         _open_hub(s, True, self._system_ctx())
+        # the session's context manager owns the connection: hold it for the host's life, or the database
+        # closes as soon as the session is collected and the writer finds itself without a hub.
+        self._hub_cm = getattr(s, "_hub_cm", None)
         self._hub = s.hub
         s._hub_cm = None  # type: ignore[attr-defined]
 
@@ -138,7 +160,11 @@ class Host:
                 self._hub.raw.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             except sqlite3.Error as e:
                 log.warning("shutdown checkpoint for hub: %s", e)
-            self._hub.close()
+            if self._hub_cm is not None:
+                self._hub_cm.__exit__(None, None, None)
+                self._hub_cm = None
+            else:
+                self._hub.close()
             self._hub = None
 
     # ---------------------------------------------------------------- sessions
@@ -198,6 +224,7 @@ class Host:
         return self.submit(job)
 
     def _after_write(self) -> None:
+        self._last_write = time.monotonic()
         for name, db in [("hub", self._hub), *self._companies.items()]:
             if db is None:
                 continue
@@ -212,6 +239,91 @@ class Host:
                 cond = self._signals.setdefault(name, threading.Condition())
                 with cond:
                     cond.notify_all()
+
+    # ---------------------------------------------------------------- timers
+    def _timer_loop(self) -> None:
+        """One daemon thread for both timers; every database touch is submitted to the writer."""
+        tick = max(0.05, min(1.0, self.idle_checkpoint_seconds, self.sweep_seconds))
+        last_sweep = time.monotonic()
+        while not self._timer_stop.wait(tick):
+            now = time.monotonic()
+            with self._readers_lock:
+                no_readers = self._readers_attached == 0
+            if (no_readers and self._last_write > self._checkpointed_write
+                    and now - self._last_write >= self.idle_checkpoint_seconds):
+                self._checkpointed_write = self._last_write
+                try:
+                    self.checkpoint_now()
+                except BaseException as e:  # noqa: BLE001 - a timer never kills the host
+                    log.warning("idle checkpoint: %s", e)
+            if now - last_sweep >= self.sweep_seconds:
+                last_sweep = now
+                try:
+                    self.sweep_now()
+                except BaseException as e:  # noqa: BLE001
+                    log.warning("session sweep: %s", e)
+
+    def checkpoint_now(self) -> dict[str, Any]:
+        """RESTART checkpoint the hub and every pooled company connection, on the writer. Results are logged."""
+        if not self._writer.is_alive():
+            return {}
+        return self.submit(self._checkpoint_on_writer)
+
+    def _checkpoint_on_writer(self) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        for name, db in [("hub", self._hub), *self._companies.items()]:
+            if db is None:
+                continue
+            try:
+                row = db.raw.execute("PRAGMA wal_checkpoint(RESTART)").fetchone()
+            except sqlite3.Error as e:
+                log.warning("idle checkpoint of %s failed: %s", name, e)
+                out[name] = None
+                continue
+            result = tuple(row) if row is not None else None
+            log.info("idle checkpoint of %s: %s", name, result)
+            out[name] = result
+        return out
+
+    def sweep_now(self) -> int:
+        """Delete session tokens expired more than a day, as one system audit event. Returns how many went."""
+        if not self._writer.is_alive():
+            return 0
+        return self.submit(self._sweep_on_writer)
+
+    def _sweep_on_writer(self) -> int:
+        import sqlalchemy as sa
+
+        from bookflow.core import clock
+        from bookflow.core.audit import write_event_to
+        from bookflow.core.registry import Touched
+        from bookflow.hub import schema as h
+        db = self._hub
+        if db is None:
+            return 0
+        cutoff = (clock.now() - timedelta(days=1)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        rows = [dict(r) for r in db.conn.execute(sa.select(h.api_tokens).where(
+            h.api_tokens.c.kind == "session", h.api_tokens.c.expires_at.isnot(None),
+            h.api_tokens.c.expires_at < cutoff)).mappings().all()]
+        if not rows:
+            return 0
+        system = db.conn.execute(sa.select(h.users).where(h.users.c.kind == "system")).mappings().first()
+        touched = [Touched("api_token", r["id"], "delete", r["version"], None, None,
+                           before={k: v for k, v in r.items() if k != "token_hash"}) for r in rows]
+        ctx = self._system_ctx()
+        db.raw.execute("BEGIN IMMEDIATE")
+        try:
+            db.conn.execute(h.api_tokens.delete().where(h.api_tokens.c.id.in_([r["id"] for r in rows])))
+            write_event_to(db, ctx, "session sweep", f"swept {len(rows)} expired browser session(s)", touched,
+                           actor_id=system["id"] if system else None, actor_kind="system")
+            db.raw.execute("COMMIT")
+        except BaseException:
+            if db.raw.in_transaction:
+                db.raw.execute("ROLLBACK")
+            raise
+        log.info("session sweep removed %d expired session token(s)", len(rows))
+        self._after_write()
+        return len(rows)
 
     def wait_for_commit(self, key: str, timeout: float) -> None:
         cond = self._signals.setdefault(key, threading.Condition())

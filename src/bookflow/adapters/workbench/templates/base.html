@@ -1,0 +1,10 @@
+<!doctype html><html><head><meta charset="utf-8"><title>{% block title %}Bookflow{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css"><script src="/static/htmx.min.js"></script></head>
+<body hx-headers='{"X-Bookflow-Workbench": "1"}'>
+<header><a href="/"><strong>Bookflow</strong></a>
+{% if company_id %}<a href="/c/{{ company_id }}/">company</a><a href="/c/{{ company_id }}/audit">audit</a>{% endif %}
+<a href="/hub/">hub</a><a href="/hub/audit">hub audit</a>
+<span style="margin-left:auto"><form method="post" action="/logout" hx-post="/logout" hx-swap="none" hx-on::after-request="window.location='/login'" style="display:inline"><button>log out</button></form></span></header>
+<main>{% block body %}{% endblock %}</main>
+<p class="muted">Forms submit through HTMX with the workbench header; plain form submission without JavaScript is not supported.</p>
+</body></html>

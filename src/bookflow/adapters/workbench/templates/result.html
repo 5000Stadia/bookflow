@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% block title %}{{ noun }} {{ verb }}{% endblock %}{% block body %}
+<h1>{{ noun }} {{ verb }}: done</h1>{% if result.warnings %}<div class="warn">{% for w in result.warnings %}{{ w }}<br>{% endfor %}</div>{% endif %}
+<pre>{{ json.dumps(result, indent=1, default=str) }}</pre><p><a href="{{ target }}">continue</a></p>
+<meta http-equiv="refresh" content="4;url={{ target }}">{% endblock %}

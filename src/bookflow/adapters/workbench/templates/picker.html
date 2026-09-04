@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% block title %}Companies{% endblock %}{% block body %}
+<h1>Companies</h1><table><tr>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr>
+{% for it in companies %}<tr>{% for c in columns %}<td>{% if c == "display_name" %}<a href="/c/{{ it.company_id }}/">{{ it[c] }}</a>{% else %}{{ it[c] if it[c] is not none else "" }}{% endif %}</td>{% endfor %}</tr>{% endfor %}</table>
+<p><a href="/hub/">Hub commands</a></p>{% endblock %}

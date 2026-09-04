@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}{{ company.display_name if company else "Hub" }}{% endblock %}{% block body %}
+<h1>{{ company.display_name if company else "Hub" }}</h1>
+{% for noun, verbs in nouns %}<h3>{{ noun }}</h3><p class="actions">
+{% set base = ("/c/" ~ company_id ~ "/" ~ noun) if company else ("/hub/" ~ noun.replace(" ", "-")) %}
+{% for v in verbs %}{% if v.verb == "list" %}<a href="{{ base }}">list</a>{% elif v.verb == "show" and not v.positional %}<a href="{{ base }}/self">show</a>{% elif not v.version_source %}<a href="{{ base }}/{{ v.verb }}">{{ v.verb }}</a>{% endif %}{% endfor %}</p>{% endfor %}
+{% endblock %}

@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% block title %}Log in{% endblock %}{% block body %}
+<h1>Log in</h1>{% if error %}<div class="error">{{ error }}</div>{% endif %}
+<form hx-post="/login" hx-ext="json-enc" hx-swap="none" hx-on::after-request="if(event.detail.successful){window.location='/'}else{document.getElementById('err').textContent='Login failed.'}">
+<div class="row"><label>username</label><input name="username" autofocus></div>
+<div class="row"><label>password</label><input name="password" type="password"></div>
+<div class="row"><span></span><button>log in</button></div></form><div id="err" class="muted"></div>
+<p class="muted">No password yet? Run <code>bookflow user set-password</code> on the host.</p>
+{% endblock %}
