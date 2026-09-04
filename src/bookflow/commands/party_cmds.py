@@ -1120,7 +1120,9 @@ _load_target(loading_target())
 
 
 class CustomerVendorLinkInput(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)
+    model_config = ConfigDict(
+        extra="forbid", strict=True, str_strip_whitespace=True, defer_build=True
+    )
     customer: str
     vendor: str
     expected_customer_version: int = Field(ge=1)
@@ -1129,7 +1131,9 @@ class CustomerVendorLinkInput(BaseModel):
 
 
 class CustomerVendorUnlinkInput(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)
+    model_config = ConfigDict(
+        extra="forbid", strict=True, str_strip_whitespace=True, defer_build=True
+    )
     customer: str
     expected_customer_version: int = Field(ge=1)
     expected_vendor_version: int = Field(ge=1)
@@ -1137,6 +1141,8 @@ class CustomerVendorUnlinkInput(BaseModel):
 
 
 class CustomerVendorLinkOutput(WriteOutput):
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
     customer_id: str
     customer_version: int
     vendor_id: str
@@ -1299,13 +1305,17 @@ def apply_customer_unlink_vendor(plan: Plan, ctx: Context, s: Session) -> Applie
 
 
 class OtherNameConvertInput(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)
+    model_config = ConfigDict(
+        extra="forbid", strict=True, str_strip_whitespace=True, defer_build=True
+    )
     other_name: str
     to: Literal["customer", "vendor", "employee"]
     expected_version: int = Field(ge=1)
 
 
 class OtherNameConvertOutput(WriteOutput):
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
     source_id: str
     source_version: int
     target_type: Literal["customer", "vendor", "employee"]
