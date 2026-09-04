@@ -74,6 +74,7 @@ _SUPPORTING_CREATE_INPUTS = {
     "class": {"name": "Field work"},
     "term": {"name": "Net 45", "kind": "standard", "due_days": 45},
     "payment-method": {"name": "Mobile wallet", "kind": "other"},
+    "price-level": {"name": "Preferred customers", "kind": "fixed_percent", "percent": "-5"},
     "sales-tax-code": {"code": "EX", "description": "Example taxable code", "taxable": True},
     "customer-type": {"name": "Commercial"},
     "vendor-type": {"name": "Materials"},
@@ -81,6 +82,10 @@ _SUPPORTING_CREATE_INPUTS = {
     "sales-rep": {"name": "Example rep", "initials": "ER", "name_type": "employee", "name_id": ID},
     "ship-method": {"name": "Local courier", "display_order": 20},
     "customer-message": {"name": "Thanks", "text": "Thank you for your business.", "display_order": 20},
+    "unit-of-measure": {
+        "name": "Count",
+        "units": [{"name": "Each", "abbreviation": "ea", "is_base": True, "base_factor": "1"}],
+    },
 }
 
 for _noun, _create_input in _SUPPORTING_CREATE_INPUTS.items():

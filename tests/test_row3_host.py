@@ -583,6 +583,11 @@ def _read_calls(hosted):
         "customer-type": {"name": "HTTP parity customer type"},
         "vendor-type": {"name": "HTTP parity vendor type"},
         "job-type": {"name": "HTTP parity job type"},
+        "price-level": {"name": "HTTP parity pricing", "kind": "fixed_percent", "percent": "-2"},
+        "unit-of-measure": {
+            "name": "HTTP parity count",
+            "units": [{"name": "Each", "abbreviation": "ea", "is_base": True, "base_factor": "1"}],
+        },
     }
     for noun, body in create_inputs.items():
         hosted.ok(f"{noun}.create", body, company=cid)
@@ -604,7 +609,8 @@ def _read_calls(hosted):
     )
 
     supporting = (
-        "account", "custom-field", "item-category", "class", "term", "payment-method", "sales-tax-code",
+        "account", "custom-field", "item-category", "class", "term", "payment-method", "price-level",
+        "sales-tax-code", "unit-of-measure",
         "customer-type", "vendor-type", "job-type", "sales-rep", "ship-method",
         "customer-message",
     )
