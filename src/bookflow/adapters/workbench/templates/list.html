@@ -3,6 +3,12 @@
 <h1>{{ noun }}</h1>
 <p class="actions">{% for v in verbs %}{% if v.is_write and not v.version_source and not v.positional %}<a href="{{ base }}/{{ v.verb }}">{{ v.verb }}</a>{% endif %}{% endfor %}
 {% if has_inactive %}<a href="{{ base }}?include_inactive={{ '0' if include else '1' }}">{{ "hide" if include else "include" }} inactive</a>{% endif %}</p>
-<table><tr>{% for c in columns or [] %}<th>{{ c }}</th>{% endfor %}</tr>
+{% if meta.definition %}<form method="get" class="list-tools"><label>Search<input name="query" value="{{ query }}" placeholder="Search {{ meta.plural_label | lower }}"></label>
+<label>Filter<input name="filter" value="{{ filters[0] if filters else '' }}" placeholder="field=value"></label>
+<label>Sort<select name="sort"><option value="">Default</option>{% for sort in meta.definition.sorts %}<option value="{{ sort }}" {% if selected_sort == sort %}selected{% endif %}>{{ sort }}</option>{% endfor %}</select></label>
+<label>Direction<select name="direction"><option value="asc" {% if selected_direction == 'asc' %}selected{% endif %}>Ascending</option><option value="desc" {% if selected_direction == 'desc' %}selected{% endif %}>Descending</option></select></label>
+{% if include %}<input type="hidden" name="include_inactive" value="1">{% endif %}<button>Apply</button><a href="{{ base }}">Reset</a></form>{% endif %}
+<div class="table-wrap"><table><tr>{% for c in columns or [] %}<th>{{ c }}</th>{% endfor %}</tr>
 {% for it in items %}<tr>{% for c in columns %}<td>{% if loop.first and has_show and meta.identifier and it.get(meta.identifier) %}<a href="{{ base }}/{{ it[meta.identifier] }}">{{ it[c] }}</a>{% elif loop.first and noun == "company" and it.get("company_id") %}<a href="/c/{{ it.company_id }}/company/self">{{ it[c] }}</a>{% elif loop.first and has_show and it.get("id") %}<a href="{{ base }}/{{ it.id }}">{{ it[c] }}</a>{% else %}{{ it[c] if it[c] is not none else "" }}{% endif %}</td>{% endfor %}</tr>{% endfor %}</table>
+</div>
 <p class="muted">{% for k, v in extra.items() %}{{ k }}={{ v }} {% endfor %}</p>{% endblock %}

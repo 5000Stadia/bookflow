@@ -70,6 +70,43 @@ def _verbs(noun: str, scope: str | None = None) -> list[registry.Command]:
     return [c for c in registry.routed_commands() if c.noun == noun and (scope is None or c.scope == scope)]
 
 
+_GROUP_ORDER = (
+    "Company",
+    "Customers and sales",
+    "Vendors and purchases",
+    "Employees",
+    "Items",
+    "Accounting",
+    "Settings",
+    "Audit",
+    "Hub",
+)
+
+
+def _grouped_nouns(noun_rows: list[tuple[str, list[registry.Command]]], *, company: bool) -> list[tuple[str, list[tuple[str, list[registry.Command]]]]]:
+    grouped: dict[str, list[tuple[str, list[registry.Command]]]] = {}
+    for noun, verbs in noun_rows:
+        meta = registry.noun_meta(noun)
+        if meta.get("ui_group"):
+            group = str(meta["ui_group"])
+        elif noun == "company":
+            group = "Company"
+        elif noun in ("audit", "hub audit", "undo"):
+            group = "Audit"
+        elif noun in ("profile",):
+            group = "Settings"
+        elif noun in ("chart",):
+            group = "Accounting"
+        else:
+            group = "Hub"
+        grouped.setdefault(group, []).append((noun, verbs))
+    order = {name: index for index, name in enumerate(_GROUP_ORDER)}
+    return [
+        (group, sorted(rows, key=lambda row: (registry.noun_meta(row[0]).get("ui_order", 999), row[0])))
+        for group, rows in sorted(grouped.items(), key=lambda item: (order.get(item[0], 999), item[0]))
+    ]
+
+
 def _presence_types() -> set[str]:
     cmd = registry.get("presence set")
     if cmd is None:
@@ -222,9 +259,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             cred = credential(request)
         except BookflowError as e:
             return page_error(request, e)
-        return render("index.html", request, company=None,
-                      nouns=[(n, [cmd for cmd in _verbs(n, "hub") if _role_allows(cmd, {}, hub_admin=cred.hub_admin)])
-                             for n in _nouns("hub")])
+        nouns = [
+            (n, [cmd for cmd in _verbs(n, "hub") if _role_allows(cmd, {}, hub_admin=cred.hub_admin)])
+            for n in _nouns("hub")
+        ]
+        return render("index.html", request, company=None, groups=_grouped_nouns(nouns, company=False))
 
     @app.get("/c/{company_id}/", response_class=HTMLResponse)
     def company_index(company_id: str, request: Request):
@@ -233,9 +272,17 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         except BookflowError as e:
             return page_error(request, e)
         is_hub_admin = credential(request).hub_admin
-        resp = render("index.html", request, company=show, company_id=show["company_id"],
-                      nouns=[(n, [cmd for cmd in _verbs(n, "company")
-                                  if _role_allows(cmd, show, hub_admin=is_hub_admin)]) for n in _nouns("company")])
+        nouns = [
+            (n, [cmd for cmd in _verbs(n, "company") if _role_allows(cmd, show, hub_admin=is_hub_admin)])
+            for n in _nouns("company")
+        ]
+        resp = render(
+            "index.html",
+            request,
+            company=show,
+            company_id=show["company_id"],
+            groups=_grouped_nouns(nouns, company=True),
+        )
         resp.set_cookie(LAST_COMPANY, show["company_id"], samesite="lax", secure=secure_cookies, max_age=90 * 86400, path="/")  # a per-browser convenience, no identity in it
         return resp
 
@@ -271,15 +318,42 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return render("list.html", request, has_show=registry.get(f"{noun} show") is not None, company_id=company_id, noun=noun, items=[], columns=[], meta=registry.noun_meta(noun),
                           has_inactive=False, include=False, verbs=page_verbs, extra={"note": "this noun has no list; use its actions"})
         include = request.query_params.get("include_inactive") == "1"
-        raw = {"include_inactive": True} if include and "include_inactive" in cmd.input_model.model_fields else {}
+        raw: dict[str, Any] = {}
+        for field in ("query", "sort", "direction"):
+            value = request.query_params.get(field)
+            if value and field in cmd.input_model.model_fields:
+                raw[field] = value
+        filters = request.query_params.getlist("filter")
+        if filters and "filter" in cmd.input_model.model_fields:
+            raw["filter"] = filters
+        if include and "include_inactive" in cmd.input_model.model_fields:
+            raw["include_inactive"] = True
         try:
             out = run(request, cmd.name, raw, company_id if cmd.scope == "company" else None)
         except BookflowError as e:
             return page_error(request, e)
         meta = registry.noun_meta(noun)
         items = out.get("items", [])
-        return render("list.html", request, has_show=registry.get(f"{noun} show") is not None, company_id=company_id, noun=noun, items=items, columns=list_columns(items), meta=meta,
-                      has_inactive="include_inactive" in cmd.input_model.model_fields, include=include, verbs=page_verbs, extra={k: v for k, v in out.items() if k != "items"})
+        definition = meta.get("definition")
+        columns = list(definition.default_columns) if definition is not None else list_columns(items)
+        return render(
+            "list.html",
+            request,
+            has_show=registry.get(f"{noun} show") is not None,
+            company_id=company_id,
+            noun=noun,
+            items=items,
+            columns=columns,
+            meta=meta,
+            has_inactive="include_inactive" in cmd.input_model.model_fields,
+            include=include,
+            verbs=page_verbs,
+            query=raw.get("query", ""),
+            filters=filters,
+            selected_sort=raw.get("sort", ""),
+            selected_direction=raw.get("direction", "asc"),
+            extra={k: v for k, v in out.items() if k != "items"},
+        )
 
     @app.get("/c/{company_id}/{noun}", response_class=HTMLResponse)
     def company_noun(company_id: str, noun: str, request: Request):
