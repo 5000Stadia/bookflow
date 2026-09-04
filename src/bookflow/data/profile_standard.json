@@ -1,0 +1,173 @@
+{
+  "manifest_id": "standard",
+  "version": 1,
+  "lists": [
+    "term",
+    "payment-method",
+    "sales-tax-code",
+    "ship-method",
+    "customer-message"
+  ],
+  "records": {
+    "term": [
+      {
+        "seed_key": "term.due-on-receipt",
+        "name": "Due on receipt",
+        "kind": "standard",
+        "due_days": 0
+      },
+      {
+        "seed_key": "term.net-15",
+        "name": "Net 15",
+        "kind": "standard",
+        "due_days": 15
+      },
+      {
+        "seed_key": "term.net-30",
+        "name": "Net 30",
+        "kind": "standard",
+        "due_days": 30
+      },
+      {
+        "seed_key": "term.net-60",
+        "name": "Net 60",
+        "kind": "standard",
+        "due_days": 60
+      },
+      {
+        "seed_key": "term.1-10-net-30",
+        "name": "1% 10 Net 30",
+        "kind": "standard",
+        "due_days": 30,
+        "discount_days": 10,
+        "discount_percent": "1"
+      },
+      {
+        "seed_key": "term.2-10-net-30",
+        "name": "2% 10 Net 30",
+        "kind": "standard",
+        "due_days": 30,
+        "discount_days": 10,
+        "discount_percent": "2"
+      }
+    ],
+    "payment-method": [
+      {
+        "seed_key": "payment.cash",
+        "name": "Cash",
+        "kind": "cash"
+      },
+      {
+        "seed_key": "payment.check",
+        "name": "Check",
+        "kind": "check"
+      },
+      {
+        "seed_key": "payment.visa",
+        "name": "Visa",
+        "kind": "credit_card"
+      },
+      {
+        "seed_key": "payment.mastercard",
+        "name": "MasterCard",
+        "kind": "credit_card"
+      },
+      {
+        "seed_key": "payment.american-express",
+        "name": "American Express",
+        "kind": "credit_card"
+      },
+      {
+        "seed_key": "payment.discover",
+        "name": "Discover",
+        "kind": "credit_card"
+      },
+      {
+        "seed_key": "payment.debit-card",
+        "name": "Debit Card",
+        "kind": "debit_card"
+      },
+      {
+        "seed_key": "payment.gift-card",
+        "name": "Gift Card",
+        "kind": "gift_card"
+      },
+      {
+        "seed_key": "payment.electronic-check",
+        "name": "Electronic Check",
+        "kind": "e_check"
+      },
+      {
+        "seed_key": "payment.bank-transfer",
+        "name": "Bank Transfer",
+        "kind": "ach"
+      },
+      {
+        "seed_key": "payment.other",
+        "name": "Other",
+        "kind": "other"
+      }
+    ],
+    "sales-tax-code": [
+      {
+        "seed_key": "tax-code.tax",
+        "code": "Tax",
+        "description": "Taxable",
+        "taxable": true
+      },
+      {
+        "seed_key": "tax-code.non",
+        "code": "Non",
+        "description": "Nontaxable",
+        "taxable": false
+      }
+    ],
+    "ship-method": [
+      {
+        "seed_key": "ship.delivery",
+        "name": "Delivery",
+        "display_order": 0
+      },
+      {
+        "seed_key": "ship.federal-express",
+        "name": "Federal Express",
+        "display_order": 1
+      },
+      {
+        "seed_key": "ship.ups",
+        "name": "UPS",
+        "display_order": 2
+      },
+      {
+        "seed_key": "ship.usps",
+        "name": "USPS",
+        "display_order": 3
+      },
+      {
+        "seed_key": "ship.other",
+        "name": "Other",
+        "display_order": 4
+      }
+    ],
+    "customer-message": [
+      {
+        "seed_key": "message.thank-you",
+        "name": "Thank you for your business.",
+        "text": "Thank you for your business.",
+        "display_order": 0
+      },
+      {
+        "seed_key": "message.prompt-payment",
+        "name": "We appreciate your prompt payment.",
+        "text": "We appreciate your prompt payment.",
+        "display_order": 1
+      },
+      {
+        "seed_key": "message.remit",
+        "name": "Please remit payment at your earliest convenience.",
+        "text": "Please remit payment at your earliest convenience.",
+        "display_order": 2
+      }
+    ]
+  }
+}
