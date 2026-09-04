@@ -773,14 +773,14 @@ The reader is an agent that has never seen Bookflow and cannot read the source. 
 | Location | Content | Produced by |
 |---|---|---|
 | `README.md` | what it is, install, the one command to run, where the docs are | hand |
-| `docs/cli/<noun>.md` | every command of that noun: purpose in one sentence, every flag with type and default, output fields, error codes, one example invocation and its JSON output | `bookflow docs generate`, from command definitions |
-| `docs/schema/<table>.md` | every field with type, nullability, meaning, and references | `bookflow docs generate`, from models |
+| `docs/cli/<noun>.md` | every command of that noun: purpose in one sentence, every flag with type and default, output fields, error codes, one example invocation and its JSON output; a long-running command states its lifecycle instead of pretending to return immediately | `bookflow docs generate`, from command definitions |
+| `docs/schema/<database>/<table>.md` | every field with type, nullability, meaning, and references; the database directory distinguishes same-named hub and company tables | `bookflow docs generate`, from models and their completeness-checked description metadata |
 | `docs/concepts.md` | the command contract, context, concurrency rules, money, company selection, exit codes, stated declaratively | hand, verified by tests where possible |
-| `docs/agent-guide.md` | one page for an agent: authenticate, pick a company, record and cite a directive, post, read the event feed, handle `E_VERSION_CONFLICT`; every example runnable against the demo company | hand, examples verified by a test |
+| `docs/agent-guide.md` | one page for an agent: authenticate, pick a company, record and cite a directive, perform an audited write, read the event feed, handle `E_VERSION_CONFLICT`; every example runnable against the demo company | hand, examples verified by a test |
 | `docs/index.md` | the entry point; lists every page | generated |
 | `design/architecture.md` | what is built, module by module, with what was verified on real hardware and what was not; written by whoever builds, for the next builder | hand |
 
-A test regenerates the docs and fails when the result differs from the committed files.
+`bookflow docs generate` is a local standalone command: it needs no data root and is never exposed over HTTP. Hand-authored pages live as packaged generator resources, so an installed wheel can reproduce the complete marked `docs/` tree. A test regenerates the docs and fails when the result differs from the committed files.
 
 ## 17. Decision hierarchy
 
