@@ -138,11 +138,13 @@ versioning_audit = lazy("bookflow.core.audit")
 directives = lazy("bookflow.company.directives")
 presence = lazy("bookflow.company.presence")
 cschema = lazy("bookflow.company.schema")
+users = lazy("bookflow.hub.users")
 
 ADDRESS_FIELDS = ("line1", "line2", "city", "state", "postal_code", "country")
 
 
 class UpdateOutput(_WriteOutput):
+    company_id: str
     version: int
     changed_fields: list[str]
     merged_over_versions: list[int]
@@ -187,6 +189,7 @@ class CompanyUpdateInput(BaseModel):
 
 
 SCALARS = [f for f in CompanyUpdateInput.model_fields if f not in ("expected_version", "address", "legal_address", "ship_address")]
+NOT_NULLABLE = {"legal_name", "tax_id_kind", "entity_type", "income_tax_form", "fiscal_year_start_month", "tax_year_start_month", "report_basis", "timezone", "recent_activity_window_seconds"}
 
 
 def _merged_row(current: dict[str, Any], inp: CompanyUpdateInput) -> tuple[dict[str, Any], set[str]]:
@@ -235,12 +238,15 @@ def _validate_merged(new: dict[str, Any]) -> None:
 
 company_update = command("company update", scope="company", description="Update the selected company's information; versioned, blind, or merged per the concurrency rules.",
                          input_model=CompanyUpdateInput, output_model=UpdateOutput, writes={"company", "hub"}, required_role="admin", truth="company", clearable=True,
-                         error_codes=["E_VERSION_CONFLICT", "E_PARTIAL_WRITE"])
+                         error_codes=["E_VERSION_CONFLICT", "E_PARTIAL_WRITE", "E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE"])
 
 
 @company_update
 def plan_company_update(inp: CompanyUpdateInput, ctx: Context, s: Session) -> Plan:
     current = cinfo.read_info(s.company)
+    nulled = [f for f in inp.model_fields_set if f not in ("expected_version",) and getattr(inp, f) is None and f in NOT_NULLABLE]
+    if nulled:
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": f, "problem": "cannot be cleared; it always has a value"} for f in nulled]})
     new, fields_set = _merged_row(current, inp)
     changed = {f for f in fields_set if any(new.get(col) != current.get(col) for col in ([f] if f not in ("address", "legal_address", "ship_address") else [f"{f}_{c}" for c in ADDRESS_FIELDS]))}
     if changed:
@@ -262,7 +268,7 @@ def plan_company_update(inp: CompanyUpdateInput, ctx: Context, s: Session) -> Pl
         if meta.previous_on_behalf_of_name:
             who = f"{who} on behalf of {meta.previous_on_behalf_of_name}"
         warnings.append(f"{who} changed this record {meta.seconds_since_previous_update} s ago through {meta.previous_updated_via}")
-    preview = UpdateOutput(warnings=warnings, **{k: v for k, v in meta.as_dict().items()})
+    preview = UpdateOutput(company_id=current["id"], warnings=warnings, **{k: v for k, v in meta.as_dict().items()})
     return Plan(preview=preview, data={"current": current, "new": new, "changed": sorted(changed), "meta": meta, "warnings": warnings})
 
 
@@ -270,7 +276,7 @@ def plan_company_update(inp: CompanyUpdateInput, ctx: Context, s: Session) -> Pl
 def apply_company_update(plan: Plan, ctx: Context, s: Session) -> Applied:
     current, new, changed, meta = plan.data["current"], plan.data["new"], plan.data["changed"], plan.data["meta"]
     if not changed:
-        return Applied(UpdateOutput(**meta.as_dict()), [], "no change")
+        return Applied(UpdateOutput(company_id=current["id"], **meta.as_dict()), [], "no change")
     via = ctx.interface.value
     new = {**new, "version": meta.version, "updated_at": now_iso(), "updated_by": s.actor.id, "updated_via": via}
     cols = {k: v for k, v in new.items() if k in cschema.company_info.c}
@@ -278,7 +284,7 @@ def apply_company_update(plan: Plan, ctx: Context, s: Session) -> Applied:
     snap = {k: v for k, v in cols.items() if k != "display_name"}
     touched = [Touched("company_info", current["id"], "update", current["version"], meta.version, snap, db="company")]
     summary = "updated company info: " + ", ".join(changed)
-    return Applied(UpdateOutput(warnings=plan.data["warnings"], **meta.as_dict()), touched, summary)
+    return Applied(UpdateOutput(company_id=current["id"], warnings=plan.data["warnings"], **meta.as_dict()), touched, summary)
 
 
 # ---------------------------------------------------------------- directives
@@ -319,6 +325,7 @@ class DirectiveOut(BaseModel):
     deactivated_by_name: str | None
     access: str | None = None
     role: str | None = None
+    editing_by: list[dict[str, Any]] = []
 
 
 class DirectiveAddOutput(_WriteOutput):
@@ -326,12 +333,24 @@ class DirectiveAddOutput(_WriteOutput):
     directive: DirectiveOut
 
 
-def _directive_out(s: Session, row: dict[str, Any]) -> DirectiveOut:
-    names = cinfo.principal_names(s.company, {x for x in (row["given_by"], row["recorded_by"], row.get("deactivated_by")) if x})
+def _names(s: Session, ids: set[str]) -> dict[str, str]:
+    """Names through principals; the session's actor and principal are known even before their upsert (dry runs)."""
+    names = cinfo.principal_names(s.company, ids)
+    if s.actor and s.actor.id in ids and s.actor.id not in names:
+        names[s.actor.id] = s.actor.display_name
+    return names
+
+
+def _directive_out(s: Session, row: dict[str, Any], with_presence: bool = False) -> DirectiveOut:
+    names = _names(s, {x for x in (row["given_by"], row["recorded_by"], row.get("deactivated_by")) if x})
+    if row["given_by"] not in names:
+        hub_names = users.user_names(s, {row["given_by"]})
+        names.update(hub_names)
     from bookflow.hub import access
     acc, role = access.company_role(s, s.company_row["id"], s.company_row["organization_id"])
-    return DirectiveOut(**{k: (localize(s, row[k]) if k in ("created_at", "updated_at", "deactivated_at") else row[k]) for k in DirectiveOut.model_fields if k in row},
-                        given_by_name=names.get(row["given_by"]), recorded_by_name=names.get(row["recorded_by"]), deactivated_by_name=names.get(row.get("deactivated_by")), access=acc, role=role)
+    return DirectiveOut(**{k: (localize(s, row[k]) if k in ("created_at", "updated_at", "deactivated_at") else row[k]) for k in DirectiveOut.model_fields if k in row and k != "editing_by"},
+                        given_by_name=names.get(row["given_by"]), recorded_by_name=names.get(row["recorded_by"]), deactivated_by_name=names.get(row.get("deactivated_by")), access=acc, role=role,
+                        editing_by=_editing_by(s, "directive", row["id"]) if with_presence else [])
 
 
 directive_add = command("directive add", scope="company", description="Record a standing instruction that later writes can cite by code instead of repeating a reason.",
@@ -373,7 +392,7 @@ directive_show = command("directive show", scope="company", description="Show on
 
 @directive_show
 def plan_directive_show(inp: DirectiveSelector, ctx: Context, s: Session) -> Plan:
-    return Plan(preview=_directive_out(s, directives.resolve(s.company, inp.directive)))
+    return Plan(preview=_directive_out(s, directives.resolve(s.company, inp.directive), with_presence=True))
 
 
 class DirectiveDeactivateOutput(_WriteOutput):
@@ -388,7 +407,11 @@ directive_deactivate = command("directive deactivate", scope="company", descript
 @directive_deactivate
 def plan_directive_deactivate(inp: DirectiveSelector, ctx: Context, s: Session) -> Plan:
     row = directives.resolve(s.company, inp.directive)
-    preview = dict(row, active=False, deactivated_at=now_iso(), deactivated_by=s.actor.id, version=row["version"] + (1 if row["active"] else 0))
+    if not row["active"]:
+        preview = dict(row)  # already inactive: the real run changes nothing and returns the row as it is
+    else:
+        at = now_iso()
+        preview = dict(row, active=False, deactivated_at=at, deactivated_by=s.actor.id, version=row["version"] + 1, updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
     return Plan(preview=DirectiveDeactivateOutput(directive=_directive_out(s, preview)), data={"row": row})
 
 
@@ -419,13 +442,14 @@ class PresenceOutput(BaseModel):
     editing_by: list[dict[str, Any]]
 
 
-def _record_exists(s: Session, record_type: str, record_id: str) -> None:
+def _record_exists(s: Session, record_type: str, record_id: str) -> str:
+    """Validate the target and return its canonical id (a directive code becomes its id)."""
     if record_type == "company_info":
         if record_id.upper() != s.company_row["id"]:
             raise BookflowError("E_RECORD_NOT_FOUND", details={"record_type": record_type, "suggestions": [s.company_row["id"]]})
-        return
+        return s.company_row["id"]
     try:
-        directives.resolve(s.company, record_id)
+        return directives.resolve(s.company, record_id)["id"]
     except BookflowError as e:
         raise BookflowError("E_RECORD_NOT_FOUND", details={"record_type": record_type, "suggestions": e.details.get("suggestions", [])})
 
@@ -442,8 +466,8 @@ presence_set = command("presence set", scope="company", description="Say that yo
 
 @presence_set
 def plan_presence_set(inp: PresenceInput, ctx: Context, s: Session) -> Plan:
-    _record_exists(s, inp.record_type, inp.record_id)
-    return Plan(preview=PresenceOutput(record_type=inp.record_type, record_id=inp.record_id.upper(), editing_by=[]))
+    rid = _record_exists(s, inp.record_type, inp.record_id)
+    return Plan(preview=PresenceOutput(record_type=inp.record_type, record_id=rid, editing_by=[]))
 
 
 @presence_set.applier
@@ -454,12 +478,13 @@ def apply_presence_set(plan: Plan, ctx: Context, s: Session) -> Applied:
 
 
 presence_clear = command("presence clear", scope="company", description="Say that you stopped editing a record.",
-                         input_model=PresenceInput, output_model=PresenceOutput, writes={"company"}, kind="advisory", required_role="standard", positional=["record_type", "record_id"])
+                         input_model=PresenceInput, output_model=PresenceOutput, writes={"company"}, kind="advisory", required_role="standard", positional=["record_type", "record_id"], error_codes=["E_RECORD_NOT_FOUND"])
 
 
 @presence_clear
 def plan_presence_clear(inp: PresenceInput, ctx: Context, s: Session) -> Plan:
-    return Plan(preview=PresenceOutput(record_type=inp.record_type, record_id=inp.record_id.upper(), editing_by=[]))
+    rid = _record_exists(s, inp.record_type, inp.record_id)
+    return Plan(preview=PresenceOutput(record_type=inp.record_type, record_id=rid, editing_by=[]))
 
 
 @presence_clear.applier

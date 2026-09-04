@@ -335,7 +335,7 @@ def test_audit_table_shows_the_handle(cli):
 
 def test_org_new_output_has_write_fields(client):
     out = client.organization.new(name="Fields Org")
-    assert out["dry_run"] is False and out["warnings"] == []
+    assert out["dry_run"] is False and out["warnings"] == [] and out["idempotent_replay"] is False
 
 
 def test_rollout_failure_after_folder_is_named(client, root, monkeypatch):

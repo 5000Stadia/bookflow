@@ -106,7 +106,7 @@ def _build_command(cmd: registry.Command):
         params.append(inspect.Parameter("dry_run", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--dry-run", help="Validate and preview; write nothing"), annotation=bool))
         params.append(inspect.Parameter("reason", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--reason", help="Why, in one short phrase (at most 140 characters)", metavar="TEXT"), annotation=str | None))
         params.append(inspect.Parameter("source_ref", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--source-ref", help="What triggered this write, e.g. an email or attachment id", metavar="TEXT"), annotation=str | None))
-        params.append(inspect.Parameter("interactive", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--interactive", help="Prompt for fields not given as options"), annotation=bool))
+        params.append(inspect.Parameter("interactive", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--interactive", help="Prompt on stderr for fields not given as options; an empty answer leaves the field unchanged (use --clear to null one)"), annotation=bool))
         if cmd.scope == "company":
             params.append(inspect.Parameter("directive", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--directive", help="Standing instruction this write follows, by code (SI-3) or id", metavar="TEXT"), annotation=str | None))
     if cmd.accepts_idempotency_key:
@@ -148,19 +148,9 @@ def _build_command(cmd: registry.Command):
             v = kw.get("f__" + path.replace(".", "__"))
             if v is not None:
                 _set_path(raw, path, v)
-        known = {p for p, *_ in leaves} | {p.split(".")[0] for p, *_ in leaves}
-        for name in clears:
-            dotted = name.replace("-", ".", 1) if "." not in name and any(p.startswith(name.split("-")[0] + ".") for p in known) else name
-            dotted = dotted.replace("-", "_")
-            if dotted not in known:
-                raise BookflowError("E_VALIDATION", details={"fields": [{"field": name, "problem": "not a clearable field of this command"}]})
-            top = dotted.split(".")[0]
-            if top in raw and raw.get(top) is not None and (dotted == top or dotted in {k for k in raw}):
-                raise BookflowError("E_VALIDATION", details={"fields": [{"field": name, "problem": "given both a value and --clear"}]})
-            if "." in dotted:
-                _set_path(raw, dotted, None)
-            else:
-                raw[top] = None
+        if clears:
+            from bookflow.core.clearing import apply_clears
+            apply_clears(cmd, raw, list(clears))
         if interactive:
             if not sys.stdin.isatty():
                 raise BookflowError("E_USAGE", message="--interactive needs a terminal")
@@ -203,13 +193,14 @@ def _build_command(cmd: registry.Command):
                 except BookflowError as e:
                     if e.code != "E_DB_BUSY":
                         raise
-                    out = {"items": [], "next_after": after}
+                    out = {"items": [], "next_after": None, "high_water": None}
                 for item in out.get("items", []):
                     typer.echo(render_output(item, as_json) if as_json else render_output({"items": [item], "count": 1}, False))
+                # keep the high-water mark: the first poll without --after starts at the newest event and must stay there
                 if out.get("next_after") is not None:
                     after = out["next_after"]
-                elif after is None:
-                    after = raw.get("after") or 0
+                elif after is None and out.get("high_water") is not None:
+                    after = out["high_water"]
                 try:
                     _time.sleep(2)
                 except KeyboardInterrupt:

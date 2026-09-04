@@ -44,6 +44,7 @@ def _connect(path: Path, writable: bool, create: bool) -> sqlite3.Connection:
         conn.execute("PRAGMA busy_timeout=5000")
         if writable:
             conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")  # durable across process crashes in WAL mode; one fsync per checkpoint, not per commit
             conn.execute("PRAGMA foreign_keys=ON")
         else:
             conn.execute("PRAGMA query_only=ON")

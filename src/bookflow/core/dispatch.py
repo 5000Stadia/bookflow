@@ -368,17 +368,17 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
         if acc is None:
             raise BookflowError("E_COMPANY_NOT_FOUND", details={"source": company_source})
         if not access.role_satisfies(role, acc, cmd.required_role, s.is_hub_admin):
-            raise BookflowError("E_PERMISSION")
+            raise BookflowError("E_PERMISSION", details={"capability": cmd.capability, "required_role": cmd.required_role, "role": role})
         ctx = ctx.model_copy(update={"company_id": s.company_row["id"]})
         if s.company is None:
             open_company(s, ctx, "company" in cmd.writes and not dry_run)
     elif cmd.required_role == "hub_admin" and not s.is_hub_admin:
-        raise BookflowError("E_PERMISSION")
+        raise BookflowError("E_PERMISSION", details={"capability": cmd.capability, "required_role": "hub_admin"})
     # directive resolution and the reason gate (blueprint 5.8)
     s.directive_code = None
     if ctx.directive_id:
-        if cmd.scope != "company":
-            raise BookflowError("E_USAGE", message="--directive applies only to company-scoped commands.")
+        if cmd.scope != "company" or not cmd.is_write:
+            raise BookflowError("E_USAGE", message="--directive applies only to company-scoped writes.")
         from bookflow.company.directives import resolve as resolve_directive
         drow = resolve_directive(s.company, ctx.directive_id, include_inactive=False)
         ctx = ctx.model_copy(update={"directive_id": drow["id"]})
@@ -470,9 +470,16 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
         changed = bool(applied.touched) or applied.audited or bool(s.hub_touched) or s.pending_config
         output = applied.output.model_dump(mode="json")
         if not changed:
-            for db in (s.company, s.hub):
-                if db is not None and db.raw.in_transaction:
-                    db.raw.execute("ROLLBACK")
+            # a no-op records no event and bumps no version, but the principals mirror and the projection repair still apply
+            if s.company is not None and s.company.raw.in_transaction:
+                s.company.raw.execute("COMMIT")
+            if s.hub is not None and s.hub.writable:
+                repaired = _repair_projection(s, ctx)
+                if repaired:
+                    from bookflow.core.audit import write_event_to
+                    write_event_to(s.hub, ctx, cmd.name, "repaired the registry copy of company information", repaired, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
+                if s.hub.raw.in_transaction:
+                    s.hub.raw.execute("COMMIT")
             return applied
         if s.company is not None and cmd.truth == "company":
             if co_entries and not applied.audited and s.company.raw.in_transaction:
@@ -483,7 +490,7 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
                 s.company.raw.execute("COMMIT")
             try:
                 hub_entries += _repair_projection(s, ctx)
-                if hub_tx and (hub_entries or applied.summary) and not applied.audited and changed:
+                if hub_tx and hub_entries and not applied.audited and changed:
                     write_event_to(s.hub, ctx, cmd.name, applied.summary, hub_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
                 if key_db is s.hub and ihash and changed:
                     idempotency.store(s.hub, s.actor.id, ctx.idempotency_key, cmd.name, ihash, ctx.request_id, output)
@@ -492,7 +499,8 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
             except (BookflowError, OSError, sqlite3.Error, sa.exc.DBAPIError) as e:
                 if s.hub.raw.in_transaction:
                     s.hub.raw.execute("ROLLBACK")
-                raise BookflowError("E_PARTIAL_WRITE", details={"durable": sorted({t.record_type for t in co_entries}), "request_id": ctx.request_id, "cause": getattr(e, "code", "E_IO")})
+                durable = sorted({t.record_type for t in co_entries})
+                raise BookflowError("E_PARTIAL_WRITE", message=f"Saved {', '.join(durable)}; the registry copy was not updated and will be on the next write.", details={"durable": durable, "request_id": ctx.request_id, "cause": getattr(e, "code", "E_IO")})
         else:
             if hub_tx and not applied.audited and changed:
                 write_event_to(s.hub, ctx, cmd.name, applied.summary, hub_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
@@ -512,6 +520,8 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
                 except sqlite3.OperationalError:
                     pass
         raise
+    if applied.after_commit is not None:
+        applied.after_commit()
     if s.pending_config:
         s.config.save()
     return applied

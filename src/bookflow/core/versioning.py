@@ -50,6 +50,16 @@ class UpdateMeta:
         return self.__dict__.copy()
 
 
+def _conflict_message(details: dict, changed_fields: list[str] | None) -> str:
+    who = details.get("updated_by_name") or details.get("updated_by") or "someone"
+    if details.get("updated_on_behalf_of_name"):
+        who += f" on behalf of {details['updated_on_behalf_of_name']}"
+    what = ", ".join(changed_fields) if changed_fields else ("fields that cannot be determined" if changed_fields is None else "no fields")
+    ago = details.get("seconds_since_update")
+    when = f"{ago} s ago" if ago is not None else "since your read"
+    return f"{who} changed {what} {when} (now version {details['current_version']}); re-read and retry with expected_version {details['current_version']}."
+
+
 def _seconds_since(iso: str | None) -> float | None:
     if not iso:
         return None
@@ -94,14 +104,14 @@ def check_update(*, current_version: int, current_updated_at: str | None, curren
         "seconds_since_update": _seconds_since(current_updated_at),
     }
     if expected_version > current_version:
-        raise BookflowError("E_VERSION_CONFLICT", details={**details, "changed_fields": [], "expected_version": expected_version})
+        raise BookflowError("E_VERSION_CONFLICT", message=_conflict_message(details, []), details={**details, "changed_fields": [], "expected_version": expected_version})
     covered = {e.version_after for e in entries}
     missing = [v for v in range(expected_version + 1, current_version + 1) if v not in covered]
     if missing or any(e.changed_columns is None for e in entries):
-        raise BookflowError("E_VERSION_CONFLICT", details={**details, "changed_fields": None, "unknown_versions": missing or [e.version_after for e in entries if e.changed_columns is None]})
+        raise BookflowError("E_VERSION_CONFLICT", message=_conflict_message(details, None), details={**details, "changed_fields": [], "unknown_versions": missing or [e.version_after for e in entries if e.changed_columns is None]})
     changed_fields = sorted({fold_field(c) for e in entries for c in (e.changed_columns or [])})
     if changes & set(changed_fields):
-        raise BookflowError("E_VERSION_CONFLICT", details={**details, "changed_fields": changed_fields})
+        raise BookflowError("E_VERSION_CONFLICT", message=_conflict_message(details, changed_fields), details={**details, "changed_fields": changed_fields})
     return UpdateMeta(version=current_version + 1, changed_fields=sorted(changes), merged_over_versions=[e.version_after for e in entries])
 
 
@@ -117,14 +127,18 @@ def history_from_entries(db, record_type: str, record_id: str, since_version: in
          .join(c.audit_events, c.audit_events.c.id == c.audit_entries.c.event_id)
          .where(c.audit_entries.c.record_type == record_type, c.audit_entries.c.record_id == record_id, c.audit_entries.c.version_after > since_version)
          .order_by(c.audit_entries.c.version_after.asc()))
-    rows = db.conn.execute(q).mappings().all()
+    rows = [r for r in db.conn.execute(q).mappings().all() if r["action"] not in ("migrate",)]
     out: list[HistoryEntry] = []
     prev_after = None
     if rows:
         first = rows[0]
-        prev = db.conn.execute(sa.select(c.audit_entries.c.after).where(c.audit_entries.c.record_type == record_type, c.audit_entries.c.record_id == record_id, c.audit_entries.c.version_after == first["version_before"]).order_by(c.audit_entries.c.id.desc())).first()
-        prev_after = decode(prev[0]) if prev else None
+        if first["version_before"] is not None:
+            prev = db.conn.execute(sa.select(c.audit_entries.c.after).where(c.audit_entries.c.record_type == record_type, c.audit_entries.c.record_id == record_id, c.audit_entries.c.version_after == first["version_before"], c.audit_entries.c.action != "migrate").order_by(c.audit_entries.c.id.desc())).first()
+            prev_after = decode(prev[0]) if prev else None
     for r in rows:
+        if r["action"] == "baseline":
+            prev_after = decode(r["after"])
+            continue
         after = decode(r["after"])
         changed = None
         if prev_after is not None and after is not None:
@@ -139,7 +153,8 @@ def current_writer_from_entries(db, record_type: str, record_id: str, version: i
     from bookflow.company import schema as c
     q = (sa.select(c.audit_events.c.actor_id, c.audit_events.c.on_behalf_of, c.audit_events.c.interface, c.audit_events.c.at)
          .join(c.audit_events, c.audit_events.c.id == c.audit_entries.c.event_id)
-         .where(c.audit_entries.c.record_type == record_type, c.audit_entries.c.record_id == record_id, c.audit_entries.c.version_after == version)
+         .where(c.audit_entries.c.record_type == record_type, c.audit_entries.c.record_id == record_id, c.audit_entries.c.version_after == version,
+                c.audit_entries.c.action.in_(("create", "update", "deactivate", "activate")))
          .order_by(c.audit_entries.c.id.desc()))
     r = db.conn.execute(q).mappings().first()
     if r is None:

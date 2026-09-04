@@ -42,7 +42,10 @@ def resolve(db, selector: str, *, include_inactive: bool = True) -> dict[str, An
         raise BookflowError("E_DIRECTIVE_NOT_FOUND", details={"selector": selector, "suggestions": suggestions})
     row = dict(row)
     if not include_inactive and not row["active"]:
-        raise BookflowError("E_DIRECTIVE_INACTIVE", details={"code": row["code"], "deactivated_at": row["deactivated_at"], "deactivated_by": row["deactivated_by"]})
+        name_row = db.conn.execute(sa.select(c.principals.c.display_name).where(c.principals.c.user_id == row["deactivated_by"])).first()
+        who = name_row[0] if name_row else row["deactivated_by"]
+        raise BookflowError("E_DIRECTIVE_INACTIVE", message=f"Directive {row['code']} was deactivated by {who} on {row['deactivated_at']}.",
+                            details={"code": row["code"], "deactivated_at": row["deactivated_at"], "deactivated_by": row["deactivated_by"], "deactivated_by_name": name_row[0] if name_row else None})
     return row
 
 

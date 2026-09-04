@@ -213,8 +213,12 @@ class OrgRenameOutput(WriteOutput):
     moved: bool
 
 
+class OrganizationNewOutput(OrganizationOutput):
+    idempotent_replay: bool = False
+
+
 org_new = command("organization new", scope="hub", description="Create an organization, the business entity that holds one or more companies.",
-                  input_model=NameInput, output_model=OrganizationOutput, writes={"hub"}, required_role="hub_admin", error_codes=["E_NAME_TAKEN"])
+                  input_model=NameInput, output_model=OrganizationNewOutput, writes={"hub"}, required_role="hub_admin", error_codes=["E_NAME_TAKEN", "E_IDEMPOTENCY_MISMATCH"], accepts_idempotency_key=True)
 
 
 @org_new
@@ -225,13 +229,13 @@ def plan_org_new(inp: NameInput, ctx: Context, s: Session) -> Plan:
     folder = choose_folder_name(s.organizations_dir, name)
     at = now_iso()
     row = {"id": new_id(), "display_name": name, "name_key": name_key(name), "path": f"organizations/{folder}", "pending_path": None, "is_demo": False, **users.common(s.actor.id, VIA(ctx), at)}
-    return Plan(preview=organization_output(s, row), data={"name": name})
+    return Plan(preview=OrganizationNewOutput(**organization_output(s, row).model_dump()), data={"name": name})
 
 
 @org_new.applier
 def apply_org_new(plan: Plan, ctx: Context, s: Session) -> Applied:
     row, touched = org.create(s, plan.data["name"], VIA(ctx))
-    return Applied(organization_output(s, row), [touched], f"created organization {row['display_name']}")
+    return Applied(OrganizationNewOutput(**organization_output(s, row).model_dump()), [touched], f"created organization {row['display_name']}")
 
 
 org_list = command("organization list", scope="hub", description="List the organizations the acting user can see.",
@@ -397,6 +401,7 @@ class CompanyNewInput(BaseModel):
 
 
 class CompanyNewOutput(WriteOutput):
+    idempotent_replay: bool = False
     company_id: str
     organization_id: str
     display_name: str
@@ -451,8 +456,8 @@ def _resolve_org_for_new(s: Session, selector: str | None) -> dict[str, Any]:
 
 
 company_new = command("company new", scope="hub", description="Create a company inside an organization: its folder, database, and company information.",
-                      input_model=CompanyNewInput, output_model=CompanyNewOutput, writes={"hub", "company"},
-                      error_codes=["E_ORGANIZATION_REQUIRED", "E_NAME_TAKEN", "E_ROLLOUT_INCOMPLETE", "E_ORGANIZATION_NOT_FOUND"])
+                      input_model=CompanyNewInput, output_model=CompanyNewOutput, writes={"hub", "company"}, accepts_idempotency_key=True,
+                      error_codes=["E_ORGANIZATION_REQUIRED", "E_NAME_TAKEN", "E_ROLLOUT_INCOMPLETE", "E_ORGANIZATION_NOT_FOUND", "E_IDEMPOTENCY_MISMATCH"])
 
 
 @company_new
@@ -472,12 +477,19 @@ def plan_company_new(inp: CompanyNewInput, ctx: Context, s: Session) -> Plan:
     folder = choose_folder_name(org_folder, display)
     cid = new_id()
     preview = CompanyNewOutput(company_id=cid, organization_id=orow["id"], display_name=display, path=str(org_folder / folder))
-    return Plan(preview=preview, data={"org": orow, "display": display, "info": _info_columns(inp), "company_id": cid})
+    return Plan(preview=preview, data={"org": orow, "display": display, "info": _info_columns(inp), "company_id": cid, "validated": inp.model_dump(mode="json")})
 
 
 @company_new.applier
 def apply_company_new(plan: Plan, ctx: Context, s: Session) -> Applied:
     orow, display, cid = plan.data["org"], plan.data["display"], plan.data["company_id"]
+    if ctx.idempotency_key:
+        # the in-progress row lives in its own hub transaction before the folder exists (row 2 plan, Idempotency)
+        from bookflow.core import idempotency
+        ihash = idempotency.input_hash(plan.data["validated"], None)
+        idempotency.store(s.hub, s.actor.id, ctx.idempotency_key, "company new", ihash, ctx.request_id, {"path": plan.preview.path, "company_id": cid}, state="in_progress")
+        s.hub.raw.execute("COMMIT")
+        s.hub.raw.execute("BEGIN IMMEDIATE")
     folder = rollout.create_company_folder(s, s.abs_path(orow["path"]), cid, display, plan.data["info"], VIA(ctx), ctx)
     try:
         row, touched = co.register(s, company_id=cid, organization_id=orow["id"], display_name=display, rel_path=s.rel_path(folder),
@@ -738,8 +750,8 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
     folder = rollout.create_company_folder(s, s.abs_path(orow["path"]), cid, display, _info_columns(inp), VIA(ctx), ctx)
     row, t_co = co.register(s, company_id=cid, organization_id=orow["id"], display_name=display, rel_path=s.rel_path(folder), legal_name=inp.legal_name,
                             home_currency=inp.home_currency, schema_revision=migrate.HEADS["company"], via=VIA(ctx), is_demo=True)
-    _apply_seed_history(s, ctx, seed, row)
-    return Applied(DemoResetOutput(organization_id=orow["id"], company_id=cid, display_name=display, path=str(folder), trashed_path=trashed), [t_org, *t_co], f"reset demo: {orow['display_name']} / {display}")
+    out = DemoResetOutput(organization_id=orow["id"], company_id=cid, display_name=display, path=str(folder), trashed_path=trashed)
+    return Applied(out, [t_org, *t_co], f"reset demo: {orow['display_name']} / {display}", after_commit=lambda: _apply_seed_history(s, ctx, seed, row))
 
 
 
@@ -748,7 +760,6 @@ def _apply_seed_history(s: Session, ctx: Context, seed: dict[str, Any], row: dic
     """Seed directives and a visible update history through the same path as user writes (run_in_session)."""
     from bookflow.core import registry as _registry
     from bookflow.core.dispatch import open_company, run_in_session
-    s.hub.raw.execute("COMMIT")
     saved_row, saved_company = s.company_row, s.company
     s.company_row = dict(row)
     s.close_company()
@@ -770,4 +781,3 @@ def _apply_seed_history(s: Session, ctx: Context, seed: dict[str, Any], row: dic
     finally:
         s.close_company()
         s.company_row, s.company = saved_row, saved_company
-    s.hub.raw.execute("BEGIN IMMEDIATE")

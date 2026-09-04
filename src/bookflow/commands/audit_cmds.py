@@ -98,6 +98,7 @@ class AuditTailOutput(BaseModel):
     items: list[AuditEventOut]
     count: int
     next_after: int | None
+    high_water: int | None
 
 
 class EventSelector(BaseModel):
@@ -140,7 +141,7 @@ def _apply_filters(q, events, s: Session, hub: bool, inp: AuditFilters, entries)
     if inp.via:
         q = q.where(events.c.interface == inp.via)
     if inp.principal:
-        q = q.where(events.c.on_behalf_of == inp.principal.upper())
+        q = q.where(events.c.on_behalf_of == _resolve_actor(s, hub, inp.principal))
     if inp.command:
         q = q.where(events.c.command == inp.command)
     if inp.record_type or inp.record_id:
@@ -148,7 +149,13 @@ def _apply_filters(q, events, s: Session, hub: bool, inp: AuditFilters, entries)
         if inp.record_type:
             sub = sub.where(entries.c.record_type == inp.record_type)
         if inp.record_id:
-            sub = sub.where(entries.c.record_id == inp.record_id)
+            rid = inp.record_id
+            if not hub and inp.record_type == "directive" and not is_ulid(rid):
+                try:
+                    rid = directives.resolve(s.company, rid)["id"]
+                except BookflowError:
+                    pass
+            sub = sub.where(entries.c.record_id == rid.upper() if is_ulid(rid) else entries.c.record_id == rid)
         q = q.where(events.c.id.in_(sub))
     return q
 
@@ -170,7 +177,8 @@ def _event_out(s: Session, hub: bool, e: dict[str, Any], names: dict[str, str], 
             before, after = redact_paths(before, s.is_hub_admin), redact_paths(after, s.is_hub_admin)
             diff = None
             if before is not None and after is not None:
-                diff = {k: {"before": before.get(k), "after": after.get(k)} for k in sorted(set(before) | set(after)) if before.get(k) != after.get(k)}
+                skip = {"version", "updated_at", "updated_by", "updated_via"}
+                diff = {k: {"before": before.get(k), "after": after.get(k)} for k in sorted(set(before) | set(after)) if before.get(k) != after.get(k) and k not in skip}
                 if not s.is_hub_admin:
                     diff = {k: v for k, v in diff.items() if not (k == "path" or k.endswith("_path"))}
             out_entries.append(AuditEntryOut(id=r["id"], record_type=r["record_type"], record_id=r["record_id"], action=r["action"], version_before=r["version_before"], version_after=r["version_after"], before=before, after=after, diff=diff))
@@ -213,7 +221,7 @@ def _tail(s: Session, hub: bool, inp: AuditTailInput) -> AuditTailOutput:
     ids = {r["actor_id"] for r in rows if r["actor_id"]} | {r["on_behalf_of"] for r in rows if r.get("on_behalf_of")}
     names = resolver(ids)
     items = [_event_out(s, hub, r, names, False) for r in rows]
-    return AuditTailOutput(items=items, count=len(items), next_after=rows[-1]["seq"] if rows else None)
+    return AuditTailOutput(items=items, count=len(items), next_after=rows[-1]["seq"] if rows else None, high_water=after)
 
 
 def _show(s: Session, hub: bool, inp: EventSelector) -> AuditEventOut:

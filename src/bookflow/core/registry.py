@@ -39,6 +39,7 @@ class Applied:
     touched: list[Touched]
     summary: str
     audited: bool = False  # True when apply wrote its own audit events
+    after_commit: Callable[[], None] | None = None  # runs once the command's own transactions are durable (demo seed history)
 
 
 @dataclass
@@ -131,7 +132,12 @@ def command(name: str, *, scope: str, description: str, input_model: type[BaseMo
 
 
 def get(name: str) -> Command | None:
-    return REGISTRY.get(name)
+    """Look a command up, importing its module on a miss so a command that runs other commands never sees None."""
+    cmd = REGISTRY.get(name)
+    if cmd is None:
+        load_all(" ".join(name.split(" ")[:-1]) or name)
+        cmd = REGISTRY.get(name)
+    return cmd
 
 
 def all_commands() -> list[Command]:
