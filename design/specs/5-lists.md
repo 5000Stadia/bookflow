@@ -6,7 +6,7 @@ This row adds persistent company master data, its lifecycle invariants, the shar
 
 The row does not post opening balances or inventory quantities, calculate ledger balances, build assemblies, apply sales pricing or tax, store provider credentials, merge records, import spreadsheets, or build bespoke per-list centers. Those operations remain in their named later sections of the blueprint. Derived fields whose source does not exist yet return the unavailable/zero state declared there and are never accepted as input.
 
-Before `co0003` is written, a neutral machine-readable inventory is completed from the available anchor list documentation. It enumerates every Row 5 field, option, default, validation, filter, sort, column, lifecycle action, and explicitly deferred behavior, then maps each entry to the blueprint and its planned schema/model/service/output/docs/form/test witness. Storage does not freeze while an entry is absent or unmapped.
+Before `co0003` is written, a neutral machine-readable inventory is completed from this contract and the blueprint. It enumerates every declared Row 5 field, option, default, validation, filter, sort, column, lifecycle action, and explicitly deferred behavior, then maps each entry to its planned schema/model/service/output/docs/form/test witness. This artifact proves internal blueprint-to-witness coverage; it is not the proof that the anchor's surface is complete. The independent manual extract and human side-by-side comparison provide that proof before Row 5 closes. Storage does not freeze while an internally declared entry is absent or unmapped.
 
 ## Migration and storage
 
@@ -169,7 +169,7 @@ Demo reset seeds every primary and child table, every item type, active and inac
 ## Verification
 
 - Frozen migration and current metadata match on fresh and upgraded databases; injected failures recover without partial rows or capability drift.
-- A neutral machine-readable inventory maps every blueprint Row 5 field, option, default, validation, filter, sort, column, and behavior to its schema/model/service/output/docs/form/test witness; no inventory entry is unmapped.
+- A neutral machine-readable inventory maps every blueprint Row 5 field, option, default, validation, filter, sort, column, and behavior to its schema/model/service/output/docs/form/test witness; no inventory entry is unmapped. This is the internal coverage contract, while the independent manual extract and human side-by-side comparison remain the anchor-completeness gate.
 - Every declared noun has exactly six correctly permissioned lifecycle commands, typed examples, Python/CLI/HTTP routes, generated workbench routes, and fresh docs. Chart, link, unlink, conversion, and undo have the same reachability and authorization coverage.
 - All nouns pass a parametrized create/show/list/update/deactivate/hidden/include-inactive/activate lifecycle and idempotent-create replay.
 - Normalized collisions, ambiguous selectors, cross-company ids, inactive and wrong-type references, cycles, depth six, invalid reparenting, and unsafe system-account changes fail without writes. A same-shaped id from another company and a nonexistent id return byte-identical `E_RECORD_NOT_FOUND` documents with visible-only suggestions on every selector and reference path.

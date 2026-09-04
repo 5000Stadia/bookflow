@@ -8,6 +8,7 @@
     "design/blueprint.md#11-lists",
     "design/specs/5-lists.md"
   ],
+  "coverage_scope": "This inventory proves internal blueprint-to-witness coverage. It does not prove anchor completeness; the independent private-manual extract and human side-by-side comparison remain the Row 5 anchor-completeness gate.",
   "notation": {
     "entry_rule": "Every object in fields, validations, actions, seeds, and deferred_entries is an inventory entry. Every scalar member of an options, enum, search, filters, sorts, default_columns, or additional_columns array is also an entry and inherits the enclosing witness key w.",
     "keys": {

@@ -1,4 +1,4 @@
-"""The Row 5 coverage inventory is complete enough to freeze its storage contract."""
+"""The Row 5 internal blueprint-to-witness inventory gates its storage contract."""
 
 from __future__ import annotations
 
