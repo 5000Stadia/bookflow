@@ -103,7 +103,7 @@ Table `organizations` in hub.db: `id`, `display_name` and `name_key` (unique acr
 ### 3.2 Locality and locking
 
 - Before opening `hub.db`, any `company.db`, or an `attach` path, the core resolves symlinks and determines the filesystem type. Local types are an allowlist: `ext2`, `ext3`, `ext4`, `xfs`, `btrfs`, `f2fs`, `zfs`, `tmpfs`, `overlay`, `apfs`, `hfs`, `ntfs`, `ntfs3`, `exfat`, `vfat`, `fat32`, `refs`. On Linux the type comes from the mount table; on macOS from `statfs`; on Windows a UNC path or a drive whose type is remote is refused. Any other type, and any failure to determine the type, is refused: `E_NETWORK_SHARE` when the type is known and not local, `E_FS_UNKNOWN` when it cannot be determined.
-- **One lock per data root.** Every command, reading or writing, takes an exclusive lock on `root.lock` for its duration; the holder writes its hostname, pid, and command name into the file while it holds it. A process that cannot take the lock within 5 seconds (`BOOKFLOW_LOCK_TIMEOUT` overrides, for tests) fails with `E_DB_BUSY` whose details carry the holder's command name and how long it has held the lock, and nothing else, since the caller's role cannot be known before the lock is held. The lock file's contents are ephemeral and are not part of any data. Everything a command does, including resolving the actor and company, checking roles, opening databases, moving folders, and writing `config.toml`, happens under this lock, so nothing it resolved can change under it. Commands are short, so contention is rare; the host process (section 15.2) holds the lock for its lifetime and every other process on that machine finds the host's pid in the lock file and sends its command to the host instead. Row 3 builds that hand-off; until then a running host simply blocks other processes with `E_DB_BUSY`.
+- **One lock per data root.** Every command, reading or writing, takes an exclusive lock on `root.lock` for its duration; the holder writes its hostname, pid, and command name into the file while it holds it. A process that cannot take the lock within 5 seconds (`BOOKFLOW_LOCK_TIMEOUT` overrides, for tests) fails with `E_DB_BUSY` whose details carry the holder's command name and how long it has held the lock, and nothing else, since the caller's role cannot be known before the lock is held. The lock file's contents are ephemeral and are not part of any data. Everything a command does, including resolving the actor and company, checking roles, opening databases, moving folders, and writing `config.toml`, happens under this lock, so nothing it resolved can change under it. Commands are short, so contention is rare; the host process (section 15.2) holds the lock for its lifetime and another POSIX process on that machine finds the host's pid in the lock file and sends its command to the host instead. Other clients use the browser or bearer-authenticated HTTP API.
 - On closing a writable database, the WAL is checkpointed and truncated, so a folder no process has open is safe to copy with ordinary file tools.
 - Migrations run under the root lock. Before migrating an existing database, a backup is written with the SQLite backup API to the company's `backups/` or to `<data_root>/backups/` for the hub.
 - Read-only opens set `query_only` and never change the journal mode. A read-only open of a database behind the current revision returns `E_SCHEMA_BEHIND` whose message names `bookflow upgrade`, which migrates the hub and every company the actor may write, or tells a read-only user to ask someone with write access; any writable open also migrates. `upgrade` migrates one database at a time, each with its own audit event after it commits, reports migrated, skipped, missing, and failed databases, stops at the first failure, and converges on rerun.
@@ -155,7 +155,7 @@ Table `api_tokens` in hub.db. Tokens are for agents and for GUI or HTTP sessions
 | last_used_at | |
 | revoked_at | nullable |
 
-An agent acting for several people holds one token per person. The principal is fixed by the token, never chosen per call. In row 3, only a human may run `token issue`: a human may issue for itself, while a hub admin may issue for any user; an agent target requires `--principal <human>`, and an agent credential cannot issue tokens. Row 7 adds assigned principal sets and the shared-permission checks below. Revoked and expired tokens are hidden from the default token list.
+An agent acting for several people holds one token per person. The principal is fixed by the token, never chosen per call. Only a human may run `token issue`: a human may issue for itself, while a hub admin may issue for any user; an agent target requires `--principal <human>`, and an agent credential cannot issue tokens. Row 7 adds assigned principal sets and the shared-permission checks below. Revoked and expired tokens are hidden from the default token list.
 
 ### 4.3 Companies and memberships
 
@@ -803,7 +803,7 @@ When two good things conflict, the earlier line wins.
 | Posting a 20-line transaction completes in under 50 ms | same |
 | Trial balance over 100,000 lines returns in under 2 s | same |
 | A company database with 100,000 transactions stays under 500 MB excluding attachments | |
-| Audit tables occupy at most 6 times the live data they describe, in aggregate | measured with `dbstat` on the fixed fixture of 5,000 creates and 5,000 updates; every write keeps a full after-snapshot for readability and an event row of context, which the arithmetic in the row 2 plan puts near 5 |
+| Audit tables occupy at most 6 times the live data they describe, in aggregate | measured with `dbstat` on the fixed fixture of 5,000 creates and 5,000 updates; every write keeps a full after-snapshot for readability and an event row of context, and the current encoding measures near 5 |
 | Installed package with dependencies under 60 MB; no service other than SQLite required | |
 | CLI cold start: `bookflow --help` under 300 ms; a read command such as `company list` under 750 ms end to end | Python 3.12, warm disk cache; the read command bound is higher because SQLAlchemy and Pydantic load only when a command runs, and it measured 550 to 620 ms on the build machine |
 
@@ -836,7 +836,7 @@ Later releases, each designed as its own pass against this blueprint: customer r
 
 ## 21. Build order and the final checklist
 
-The build order is the spec list in `design/intention.md`, rows 1 to 9. That list is release 1.
+The remaining release 1 build order is the active spec list in `design/intention.md`; completed components are described in `design/architecture.md`.
 
 Release 1 is done when a stranger, given a fresh machine and the README, can: initialize a data root, create a company, log in to the workbench in a browser, add accounts and customers there, attach a receipt image to a customer, post a balanced journal entry from the workbench and another from the CLI, post a third over HTTP from a second process, list accounts from an MCP client, see all of it in the audit page with correct actors and interfaces, and reproduce all of it on a second copy of the company folder.
 

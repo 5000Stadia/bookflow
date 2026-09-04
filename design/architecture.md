@@ -1,6 +1,6 @@
 # Bookflow — architecture
 
-What is built, module by module. Rows 1 to 3 (package skeleton, registry, data root, hub, organizations, companies, demo, CLI; company audit, versioned writes, presence, idempotency, directives, the event feed; the host process, HTTP routes, tokens, the local hand-off, and the workbench) are the current state.
+What is built, module by module: package skeleton, registry, data root, hub, organizations, companies, demo, CLI, company audit, versioned writes, presence, idempotency, directives, the event feed, the host process, HTTP routes, tokens, the POSIX local hand-off, and the workbench.
 
 ## Layout
 
@@ -89,11 +89,11 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - Hub schema `hub0003` declares nullable membership grants/denies, the frozen role-capability projection, and inert feature rows. Its seeded capability rows are registry projections for compatibility, not current authorization promises; row 7 replaces or refines planner-sensitive and bootstrap rows before enabling enforcement. Enforcement remains role-based until then; company head remains `co0002`.
 - A single-word command (`upgrade`) has no verb: its noun page is its form, and it submits to `/hub/<noun>`.
 - The cold-start test budgets `bookflow --help` below 300 ms; neither root help nor command discovery imports FastAPI, uvicorn, or the workbench.
-- The suite is 260 tests in 164.68 s on this machine (Linux, ext4, Python 3.12). Duration is diagnostic rather than a release budget. The Row 3 host/workbench/local group contains 87 tests.
+- The suite is 260 tests in 164.68 s on this machine (Linux, ext4, Python 3.12). Duration is diagnostic rather than a release budget. The host/workbench/local group contains 87 tests.
 
 ## Verified on this machine (Linux, ext4, Python 3.12)
 
-- The row 1 done sequence through the library and the CLI, compared field by field (tests/test_row1_flow.py::test_library_and_cli_agree).
+- The complete initialization and company-rollout sequence through the library and the CLI, compared field by field (`tests/test_row1_flow.py::test_library_and_cli_agree`).
 - Folder copied to a second data root and attached: identical `company_info`, identical database dump, identical directory listing, original creator's name resolved through `principals`.
 - Second process during a command: `E_DB_BUSY` with the holder's command through the CLI and the library.
 - File modes under umask 022: every file 0600, every directory 0700.
@@ -102,7 +102,7 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - Migration of a behind-head company with a synthetic revision: backup, `migrate` event, marker and projection updated (tests/test_hardening.py::test_synthetic_migration).
 - Demo reset repeated on one root; trash accumulates one folder per reset.
 
-Row 3, in `tests/test_row3_host.py`, `tests/test_row3_local_hardening.py`, and `tests/test_row3_workbench_remediation.py` against a host running in the test process:
+HTTP host, local hand-off, and workbench verification in `tests/test_row3_host.py`, `tests/test_row3_local_hardening.py`, and `tests/test_row3_workbench_remediation.py` against a host running in the test process:
 
 - Every routed read command returns the same JSON over HTTP as through the library, compared field by field with ULIDs and timestamps replaced (`test_every_routed_read_returns_the_same_document_over_http_as_in_the_library`).
 - Write error documents and their statuses match the library's: `E_VALIDATION` 422, `E_PERMISSION` 403, `E_COMPANY_NOT_FOUND` 404, `E_VERSION_CONFLICT` 409.
@@ -126,7 +126,7 @@ Row 3, in `tests/test_row3_host.py`, `tests/test_row3_local_hardening.py`, and `
 - Windows local hand-off: named-pipe transport is deferred. The browser and bearer-authenticated HTTP API are the supported Windows paths; the portable forwarding envelope and host handler remain the seam for a later authenticated named-pipe adapter.
 - A non-loopback bind with TLS in front of it: the network gate and cookie decision are exercised without a real off-loopback listener or TLS terminator.
 
-- Row 2 done sequence: two admins updating company info through the library and the CLI (conflict on overlapping fields, merge on disjoint ones, blind-write warning naming the previous writer and principal, dry runs reporting the same), missing-history conflict, null and `--clear`, closing date needs admin, projection repair and `E_PARTIAL_WRITE`, agent reason gate and directives through a dispatch-level agent session, idempotent replay and mismatch, presence never audited, seq cursors, hashed tax id, principals on a copied folder, append-only across the codebase, and the budget fixture at a reduced size (`BOOKFLOW_BUDGET_N=5000` runs the full one; measured ratio printed).
+- Command-contract verification: two admins updating company info through the library and the CLI (conflict on overlapping fields, merge on disjoint ones, blind-write warning naming the previous writer and principal, dry runs reporting the same), missing-history conflict, null and `--clear`, closing date needs admin, projection repair and `E_PARTIAL_WRITE`, agent reason gate and directives through a dispatch-level agent session, idempotent replay and mismatch, presence never audited, seq cursors, hashed tax id, principals on a copied folder, append-only across the codebase, and the budget fixture at a reduced size (`BOOKFLOW_BUDGET_N=5000` runs the full one; measured ratio printed).
 
 ## Known gaps carried to later rows
 
