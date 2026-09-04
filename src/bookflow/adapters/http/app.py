@@ -8,6 +8,7 @@ import logging
 import socket as _socket
 import time
 from typing import Any
+from urllib.parse import urlsplit
 
 import sqlalchemy as sa
 from fastapi import FastAPI, Request, Response
@@ -31,6 +32,16 @@ CONTEXT_HEADERS = {"reason": "X-Bookflow-Reason", "directive_id": "X-Bookflow-Di
                    "idempotency_key": "Idempotency-Key", "client_name": "X-Bookflow-Client-Name", "client_version": "X-Bookflow-Client-Version"}
 COOKIE = "bookflow_session"
 WORKBENCH_HEADER = "x-bookflow-workbench"
+
+
+def safe_workbench_destination(value: Any) -> str:
+    """Return an application-local redirect target, or the workbench root."""
+    destination = str(value or "")
+    parsed = urlsplit(destination)
+    if (not destination.startswith("/") or destination.startswith("//") or "\\" in destination
+            or parsed.scheme or parsed.netloc or any(ord(char) < 32 or ord(char) == 127 for char in destination)):
+        return "/"
+    return destination
 
 
 class CookieRenewalMiddleware:
@@ -233,6 +244,8 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
             auth.release_login(source)
         resp = JSONResponse({"ok": True, "user_id": row["id"], "username": row["username"]})
         resp.set_cookie(COOKIE, secret, httponly=True, samesite="lax", secure=secure_cookies, max_age=auth.SESSION_HOURS * 3600, path="/")
+        if request.headers.get("hx-request", "").lower() == "true":
+            resp.headers["HX-Redirect"] = safe_workbench_destination(data.get("next"))
         return resp
 
     @app.post("/logout")

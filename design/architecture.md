@@ -89,7 +89,7 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - Hub schema `hub0003` declares nullable membership grants/denies, the frozen role-capability projection, and inert feature rows. Enforcement remains role-based until row 7; company head remains `co0002`.
 - A single-word command (`upgrade`) has no verb: its noun page is its form, and it submits to `/hub/<noun>`.
 - Cold start with row 3 present: `bookflow --help` about 230 ms and `bookflow serve --help` about 255 ms; neither imports FastAPI, uvicorn, or the workbench.
-- The suite is 253 tests in 149.14 s on this machine (Linux, ext4, Python 3.12). The Row 3 host/workbench/local group contains 80 tests.
+- The suite is 254 tests in 151.48 s on this machine (Linux, ext4, Python 3.12). The Row 3 host/workbench/local group contains 81 tests.
 
 ## Verified on this machine (Linux, ext4, Python 3.12)
 
@@ -102,13 +102,13 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - Migration of a behind-head company with a synthetic revision: backup, `migrate` event, marker and projection updated (tests/test_hardening.py::test_synthetic_migration).
 - Demo reset repeated on one root; trash accumulates one folder per reset.
 
-Row 3, all in tests/test_row3_host.py against a host running in the test process:
+Row 3, in `tests/test_row3_host.py`, `tests/test_row3_local_hardening.py`, and `tests/test_row3_workbench_remediation.py` against a host running in the test process:
 
 - Every routed read command returns the same JSON over HTTP as through the library, compared field by field with ULIDs and timestamps replaced (`test_every_routed_read_returns_the_same_document_over_http_as_in_the_library`).
 - Write error documents and their statuses match the library's: `E_VALIDATION` 422, `E_PERMISSION` 403, `E_COMPANY_NOT_FOUND` 404, `E_VERSION_CONFLICT` 409.
 - Context keys in a body are `E_CONTEXT_IN_INPUT` naming the header; unknown and local-only names are `E_USAGE` documents.
 - A member of one company asking for another by path id or through a workbench page gets the same 404 body as a nonexistent id. A mismatched path/header pair returns the same 422 without looking up either id. No error that member can provoke names a path on this machine.
-- Login sets the cookie, non-GET cookie requests need `X-Bookflow-Workbench: 1`, and login and logout are both hub events; the four `E_UNAUTHENTICATED` shapes (no credential, unknown, expired, revoked) each carry `details.reason`.
+- Login sets the cookie and returns a validated same-host `HX-Redirect` for workbench submissions; non-GET cookie requests need `X-Bookflow-Workbench: 1`; login and logout are both hub events; the four `E_UNAUTHENTICATED` shapes (no credential, unknown, expired, revoked) each carry `details.reason`.
 - A forwarded CLI call is recorded with interface `cli`; forged actor, principal, company, and interface fields are ignored; one-byte frame fragments are assembled; unsafe runtime directories are refused; a forwarded `company use` writes the caller's login table; another uid is refused; `serve` and `init` are never forwarded; a descriptor whose socket refuses, and one whose pid is dead, both fall back to the lock path; a pre-socket version mismatch is named.
 - Two reads pass a barrier and finish in under a second while a one-second writer job is active; mutation routing through the writer is detected. Two concurrent updates serialize into consecutive versions. A stale credential read remains non-blocking behind an occupied writer and five concurrent refresh attempts enqueue one job.
 - The async stream drains a burst, resumes from `Last-Event-ID`, validates bad cursors as ordinary 422 documents, wakes under lowercase ids, catches a real commit between first drain and subscription, closes readers/subscriptions after a mid-batch disconnect, and leaves the worker pool available with more than 40 idle subscribers. A live `serve` process with an idle stream exits promptly on SIGINT and removes its descriptor and socket.

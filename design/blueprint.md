@@ -745,7 +745,7 @@ The workbench is the browser interface used to exercise every command. It is gen
 
 | Page | Content |
 |---|---|
-| `/login` | username and password |
+| `/login` | username and password; successful HTMX submission returns a validated same-host `HX-Redirect` to `next` or `/` |
 | `/` | the only visible company, else the last company this browser visited when still visible, else the company picker |
 | `/c/<company_id>/` | the noun index: one link per noun that has commands |
 | `/c/<company_id>/<noun>` | the `list` output as a table with `--include-inactive` toggle; one row link to `show` |

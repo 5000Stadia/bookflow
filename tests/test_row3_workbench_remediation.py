@@ -251,4 +251,32 @@ def test_login_uses_available_htmx_and_points_to_self_service(hosted):
     page = TestClient(hosted.handle.app).get("/login")
     assert page.status_code == 200
     assert 'hx-ext="json-enc"' not in page.text
+    assert "event.detail.successful){window.location" not in page.text
+    assert 'name="next" value="/"' in page.text
     assert 'href="/hub/user/set-password"' in page.text
+
+
+def test_successful_htmx_login_redirects_to_a_safe_visible_destination(hosted):
+    client = TestClient(hosted.handle.app, follow_redirects=False)
+    destination = f"/c/{hosted.company_id}/directive"
+    response = client.post(
+        "/login",
+        data={"username": hosted.login, "password": PASSWORD, "next": destination},
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 200
+    assert response.headers["HX-Redirect"] == destination
+    assert response.cookies.get("bookflow_session")
+
+    for destination in ("//outside.example/path", "/\\outside.example/path", "https://outside.example/path"):
+        unsafe = TestClient(hosted.handle.app, follow_redirects=False).post(
+            "/login",
+            data={"username": hosted.login, "password": PASSWORD, "next": destination},
+            headers={"HX-Request": "true"},
+        )
+        assert unsafe.status_code == 200 and unsafe.headers["HX-Redirect"] == "/"
+
+    ordinary_api = TestClient(hosted.handle.app).post(
+        "/login", json={"username": hosted.login, "password": PASSWORD}
+    )
+    assert ordinary_api.status_code == 200 and "HX-Redirect" not in ordinary_api.headers

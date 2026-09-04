@@ -139,7 +139,7 @@ def _success_target(cmd: registry.Command, company_id: str | None, noun: str, re
 
 
 def mount_workbench(app: FastAPI, host, credential, make_context, run_command, secure_cookies: bool) -> None:
-    from bookflow.adapters.http.app import STATUS, error_response
+    from bookflow.adapters.http.app import STATUS, error_response, safe_workbench_destination
 
     flashes = _FlashStore()
 
@@ -189,9 +189,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
 
     @app.get("/login", response_class=HTMLResponse)
     def login_page(request: Request):
-        nxt = request.query_params.get("next", "")
-        if not nxt.startswith("/") or nxt.startswith("//"):
-            nxt = ""  # only a path on this host; never an off-site redirect
+        nxt = safe_workbench_destination(request.query_params.get("next"))
         return render("login.html", request, error=None, next=nxt)
 
     @app.get("/", response_class=HTMLResponse)
