@@ -64,14 +64,20 @@ def classify(chain: str, revision: str | None) -> str:
     return "unknown"
 
 
-def backup(path: Path, backups_dir: Path, prefix: str = "") -> Path:
+def backup(path: Path, backups_dir: Path, prefix: str = "", from_revision: str | None = None) -> Path:
+    """Copy the database with the backup API. One backup per source revision: a failed retry reuses it."""
     backups_dir.mkdir(mode=0o700, exist_ok=True)
+    if from_revision:
+        existing = sorted(backups_dir.glob(f"{prefix}*-from-{from_revision}.db"))
+        if existing:
+            return existing[-1]
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M%S")
-    target = backups_dir / f"{prefix}{stamp}.db"
+    suffix = f"-from-{from_revision}" if from_revision else ""
+    target = backups_dir / f"{prefix}{stamp}{suffix}.db"
     n = 1
     while target.exists():
         n += 1
-        target = backups_dir / f"{prefix}{stamp}-{n}.db"
+        target = backups_dir / f"{prefix}{stamp}-{n}{suffix}.db"
     try:
         src = sqlite3.connect(sqlite_uri(path, "ro"), uri=True)
         dst = sqlite3.connect(sqlite_uri(target, "rwc"), uri=True)
@@ -94,9 +100,21 @@ def migrate_to_head(db: Database, chain: str, backups_dir: Path | None) -> tuple
     if state == "head":
         return before, before
     if state == "behind" and backups_dir is not None:
-        backup(db.path, backups_dir, prefix="hub-" if chain == "hub" else "")
+        backup(db.path, backups_dir, prefix="hub-" if chain == "hub" else "", from_revision=before)
     from alembic import command
-    command.upgrade(_config(chain, db.conn), "head")
+    # SQLite batch rewrites drop and recreate tables; foreign keys must be off for the duration (the pragma is ignored inside a transaction)
+    db.raw.execute("PRAGMA foreign_keys=OFF")
+    try:
+        command.upgrade(_config(chain, db.conn), HEADS[chain])  # HEADS is the target, so the constants are the single truth
+        problems = db.raw.execute("PRAGMA foreign_key_check").fetchall()
+        if problems:
+            raise BookflowError("E_MIGRATION_FAILED", details={"chain": chain, "from": before, "to": HEADS[chain], "cause": "foreign key check", "rows": len(problems)})
+    except BookflowError:
+        raise
+    except Exception as e:  # noqa: BLE001 - any Alembic or SQLite failure is named as a migration failure
+        raise BookflowError("E_MIGRATION_FAILED", details={"chain": chain, "from": before, "to": HEADS[chain], "cause": type(e).__name__, "path": str(db.path)})
+    finally:
+        db.raw.execute("PRAGMA foreign_keys=ON")
     return before, HEADS[chain]
 
 

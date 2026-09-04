@@ -52,7 +52,7 @@ def _do_move(s: Session, old_rel: str, pending: str, moving_id: str, error_code:
         return
     src = s.abs_path(old_rel)
     if not src.exists():
-        raise BookflowError(error_code, details={id_key: row_id, "path": str(target)})
+        raise BookflowError("E_COMPANY_MISSING", details={id_key: row_id, "path": str(target)})
     try:
         move_dir(src, target, company_id=moving_id)
     except BookflowError as e:

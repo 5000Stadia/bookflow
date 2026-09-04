@@ -320,3 +320,71 @@ def test_open_hook_repairs_display_copy(client, root):
     conn = sqlite3.connect(str(p)); conn.execute("UPDATE company_info SET display_name = 'stale'"); conn.commit(); conn.close()
     client.company.update(industry="Repair", company=cid)  # a company write that does not touch the copy itself
     conn = sqlite3.connect(str(p)); assert conn.execute("SELECT display_name FROM company_info").fetchone()[0] == "Demo Plumbing Co"; conn.close()
+
+
+def test_help_lists_output_fields_and_errors(cli):
+    h = cli.run("company", "show", "--help").stdout
+    assert "Output fields:" in h and "info" in h and "E_COMPANY_MISSING" in h and "E_COMPANY_NOT_FOUND" in h
+
+
+def test_audit_table_shows_the_handle(cli):
+    out = cli.run("hub", "audit", "list").stdout
+    first = out.splitlines()[2].split()[0]
+    assert cli.json("hub", "audit", "show", first)["id"] == first
+
+
+def test_org_new_output_has_write_fields(client):
+    out = client.organization.new(name="Fields Org")
+    assert out["dry_run"] is False and out["warnings"] == []
+
+
+def test_rollout_failure_after_folder_is_named(client, root, monkeypatch):
+    import bookflow.hub.companies as companies
+    def boom(*a, **k):
+        raise sqlite3.OperationalError("disk I/O error")
+    monkeypatch.setattr(companies, "register", boom)
+    with pytest.raises(BookflowError) as e:
+        client.company.new(legal_name="Half Made Co", home_currency="USD", organization="Demo Holdings LLC", timezone="UTC")
+    assert e.value.code == "E_ROLLOUT_INCOMPLETE" and e.value.details["state"] == "unregistered" and e.value.details["path"].endswith("Half Made Co")
+    monkeypatch.undo()
+    out = client.company.attach(path=e.value.details["path"])
+    assert out["display_name"] == "Half Made Co"
+
+
+def test_attach_tightens_modes(client, root, tmp_path, monkeypatch):
+    src = client.company.show(company="Demo Plumbing Co")["path"]
+    r2 = tmp_path / "r2"
+    monkeypatch.setenv("BOOKFLOW_DATA_ROOT", str(r2))
+    c2 = bookflow.connect(data_root=str(r2)); c2.init(); c2.organization.new(name="Demo Holdings LLC")
+    dst = r2 / "organizations" / "Demo Holdings LLC" / "Demo Plumbing Co"
+    shutil.copytree(src, dst)
+    dst.chmod(0o755); (dst / "company.db").chmod(0o644)
+    out = c2.company.attach(path=str(dst))
+    assert out["warnings"] and "tightened" in out["warnings"][0]
+    import stat
+    assert stat.S_IMODE(dst.stat().st_mode) == 0o700 and stat.S_IMODE((dst / "company.db").stat().st_mode) == 0o600
+
+
+def test_stuck_org_move_warns_admin_only(client, root):
+    client.organization.new(name="Stuck Org")
+    with _hub(root) as db:
+        orow = dict(db.conn.execute(sa.select(h.organizations).where(h.organizations.c.display_name == "Stuck Org")).mappings().first())
+    _set_org_pending(root, orow["id"], "organizations/Stuck Moved")
+    shutil.move(root / orow["path"], root / "organizations" / "Parked Elsewhere")  # neither old nor new exists
+    out = client.organization.new(name="Unrelated Two")
+    assert out["warnings"] and "Stuck Org" in out["warnings"][0]
+    assert client.organization.list()["count"] >= 3
+
+
+def test_data_root_that_is_a_file(tmp_path):
+    f = tmp_path / "file"; f.write_text("x")
+    with pytest.raises(BookflowError) as e:
+        bookflow.connect(data_root=str(f)).company.list()
+    assert e.value.code == "E_IO" and e.value.details["errno"] == "ENOTDIR"
+
+
+def test_client_signature_has_no_actor_parameter():
+    import inspect
+    from bookflow.client import Client, connect
+    for fn in (Client.__init__, connect):
+        assert not {"login", "act_as", "user", "actor"} & set(inspect.signature(fn).parameters)

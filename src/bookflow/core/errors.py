@@ -24,6 +24,7 @@ INFRASTRUCTURE_CODES: dict[str, str] = {
     "E_SCHEMA_UNKNOWN": "The database schema revision is not known to this version of Bookflow; upgrade Bookflow.",
     "E_SCHEMA_BEHIND": "The database schema is behind this version of Bookflow; run `bookflow upgrade`.",
     "E_CONFIG_INVALID": "The configuration file could not be read.",
+    "E_MIGRATION_FAILED": "A schema migration failed; the database was backed up first and is unchanged.",
     "E_IO": "A filesystem operation failed.",
     "E_REASON_REQUIRED": "Writes by an agent need --reason or --directive.",
     "E_FEATURE_DISABLED": "This feature is not enabled for the company.",

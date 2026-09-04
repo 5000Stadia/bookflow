@@ -58,7 +58,7 @@ def render_fields(obj: dict[str, Any], indent: int = 0) -> str:
 
 
 COMMON = {"id", "version", "created_at", "created_by", "created_via", "updated_at", "updated_by", "updated_via"}
-PREFERRED = ["display_name", "organization_name", "legal_name", "home_currency", "access", "role", "at", "command", "actor_name", "interface", "reason", "summary", "company_id", "organization_id", "event_count"]
+PREFERRED = ["id", "seq", "display_name", "organization_name", "legal_name", "home_currency", "access", "role", "at", "command", "actor_name", "interface", "reason", "summary", "company_id", "organization_id", "event_count"]
 HIDDEN = COMMON | {"path", "schema_revision", "entries", "session_id", "request_id", "client_version", "client_host", "client_name", "actor_id", "actor_kind", "on_behalf_of", "directive_id", "source_ref", "registered_by_name", "is_demo", "entry_count"}
 
 
@@ -69,7 +69,8 @@ def render_output(out: dict[str, Any], as_json: bool) -> str:
         items = out["items"]
         cols = None
         if items:
-            keys = [k for k in items[0] if k not in HIDDEN and not isinstance(items[0][k], (dict, list))]
+            hidden = HIDDEN - ({"id"} if "seq" in items[0] else set())  # audit events: the id is the handle `show` takes
+            keys = [k for k in items[0] if k not in hidden and not isinstance(items[0][k], (dict, list))]
             cols = [k for k in PREFERRED if k in keys] + [k for k in keys if k not in PREFERRED]
         text = render_table(items, cols)
         extra = {k: v for k, v in out.items() if k != "items"}

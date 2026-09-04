@@ -483,8 +483,11 @@ def apply_company_new(plan: Plan, ctx: Context, s: Session) -> Applied:
         row, touched = co.register(s, company_id=cid, organization_id=orow["id"], display_name=display, rel_path=s.rel_path(folder),
                                    legal_name=plan.data["info"]["legal_name"], home_currency=plan.data["info"]["home_currency"],
                                    schema_revision=migrate.HEADS["company"], via=VIA(ctx))
-    except BookflowError as e:
-        raise BookflowError("E_ROLLOUT_INCOMPLETE", details={"state": "unregistered", "path": str(folder), "cause": e.code})
+    except BaseException as e:  # noqa: BLE001 - the folder exists; the caller must learn that (blueprint 3.1)
+        if isinstance(e, (KeyboardInterrupt, SystemExit)):
+            raise
+        code = getattr(e, "code", None) or engine.io_error("register", e).code
+        raise BookflowError("E_ROLLOUT_INCOMPLETE", details={"state": "unregistered", "path": str(folder), "cause": code}, message="Company creation did not finish; the folder exists but is not registered. `company attach` adopts it.")
     return Applied(CompanyNewOutput(company_id=cid, organization_id=orow["id"], display_name=display, path=str(folder)), touched, f"created company {display} in {orow['display_name']}")
 
 
@@ -580,8 +583,6 @@ def plan_company_attach(inp: AttachInput, ctx: Context, s: Session) -> Plan:
     if orow is None or not folder.is_dir():
         raise BookflowError("E_NOT_IN_ORGANIZATION_DIR", details={"path": str(folder)})
     check_local(folder)
-    if not is_private_dir(folder):
-        raise BookflowError("E_ATTACH_INVALID", details={"check": "mode", "path": str(folder)})
     marker = read_company_marker(folder)
     if marker["state"] != "ready":
         raise BookflowError("E_INCOMPLETE_COMPANY", details={"path": str(folder)})
@@ -609,6 +610,9 @@ def plan_company_attach(inp: AttachInput, ctx: Context, s: Session) -> Plan:
 @company_attach.applier
 def apply_company_attach(plan: Plan, ctx: Context, s: Session) -> Applied:
     folder, orow, raw, name = plan.data["folder"], plan.data["org"], plan.data["raw"], plan.data["name"]
+    tightened = _tighten_modes(folder)
+    if tightened:
+        s.warnings.append(f"tightened the modes of {tightened} entries in the folder to 0700/0600")
     row, touched = co.register(s, company_id=raw["id"], organization_id=orow["id"], display_name=name, rel_path=s.rel_path(folder),
                                legal_name=raw["legal_name"], home_currency=raw["home_currency"], schema_revision=raw["revision"] or migrate.HEADS["company"],
                                via=VIA(ctx), owner_membership=False)
@@ -623,6 +627,21 @@ def apply_company_attach(plan: Plan, ctx: Context, s: Session) -> Applied:
         except BookflowError as e:
             s.warnings.append(f"registered, but the database was not migrated ({e.code}); run `bookflow upgrade`")
     return Applied(AttachOutput(company_id=raw["id"], organization_id=orow["id"], display_name=name, path=str(folder)), touched, f"attached company {name} to {orow['display_name']}")
+
+
+def _tighten_modes(folder: Path) -> int:
+    """Blueprint 3.2: everything Bookflow keeps is 0700/0600; restored copies often arrive wider."""
+    import os, stat
+    if os.name != "posix":  # pragma: no cover
+        return 0
+    n = 0
+    for p in [folder, *folder.rglob("*")]:
+        mode = stat.S_IMODE(p.stat().st_mode)
+        want = 0o700 if p.is_dir() else 0o600
+        if mode & 0o077:
+            os.chmod(p, want)
+            n += 1
+    return n
 
 
 class DetachOutput(WriteOutput):

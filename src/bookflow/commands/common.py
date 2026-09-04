@@ -31,6 +31,8 @@ def common_out(s: Session, row: dict[str, Any]) -> dict[str, Any]:
 
 
 class OrganizationOutput(CommonOut):
+    dry_run: bool = False
+    warnings: list[str] = Field(default_factory=list)
     organization_id: str
     display_name: str
     access: str | None

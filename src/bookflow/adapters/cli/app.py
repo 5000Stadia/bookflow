@@ -222,7 +222,32 @@ def _build_command(cmd: registry.Command):
     run.__signature__ = inspect.Signature(params)  # type: ignore[attr-defined]
     run.__name__ = cmd.verb or cmd.noun
     run.__doc__ = cmd.description
+    run.__epilog__ = _help_epilog(cmd)  # type: ignore[attr-defined]
     return run
+
+
+def _output_fields(model: type[BaseModel], prefix: str = "", depth: int = 0) -> list[str]:
+    out = []
+    for name, f in model.model_fields.items():
+        ann = f.annotation
+        base = ann
+        origin = get_origin(ann)
+        if origin is Union or origin is types.UnionType:
+            args = [a_ for a_ in get_args(ann) if a_ is not type(None)]
+            base = args[0] if args else str
+        if inspect.isclass(base) and issubclass(base, BaseModel) and depth < 1:
+            out += _output_fields(base, prefix + name + ".", depth + 1)
+        else:
+            out.append(prefix + name)
+    return out
+
+
+def _help_epilog(cmd: registry.Command) -> str:
+    from bookflow.core.errors import INFRASTRUCTURE_CODES
+    fields = ", ".join(_output_fields(cmd.output_model))
+    codes = ", ".join(cmd.error_codes) if cmd.error_codes else "none beyond the infrastructure codes"
+    return (f"Output fields: {fields}.\n\nErrors this command can return: {codes}. "
+            f"Every command can also return: {', '.join(INFRASTRUCTURE_CODES)}.")
 
 
 def _target_noun(argv: list[str]) -> str | None:
@@ -272,11 +297,12 @@ def build_app(target: str | None = None, full: bool = False) -> typer.Typer:
     single = {"init": "Create the data root, the system user, and the first hub-admin user mapped from the OS login.", "upgrade": "Migrate the hub database and every company database the acting user may write to the current schema revision."}
     built = set()
     for cmd in registry.all_commands():
+        fn = _build_command(cmd)
         if not cmd.verb:
-            app.command(cmd.noun, help=cmd.description)(_build_command(cmd))
+            app.command(cmd.noun, help=cmd.description, epilog=fn.__epilog__)(fn)
             built.add(cmd.noun)
             continue
-        group_for(cmd.noun).command(cmd.verb, help=cmd.description)(_build_command(cmd))
+        group_for(cmd.noun).command(cmd.verb, help=cmd.description, epilog=fn.__epilog__)(fn)
         built.add(cmd.noun)
     for noun in registry.all_nouns():
         if noun in built:

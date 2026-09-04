@@ -118,7 +118,8 @@ def resolve_company(s: Session, selector: str | None, source: str) -> dict[str, 
     visible = s.hub.conn.execute(sa.select(h.companies.c.display_name, h.organizations.c.display_name.label("org")).join(h.organizations, h.organizations.c.id == h.companies.c.organization_id).where(vis)).all()
     if len(rows) > 1:
         raise BookflowError("E_COMPANY_AMBIGUOUS", details={"selector": selector, "suggestions": [f"{r.org}/{r.display_name}" for r in visible if name_key(r.display_name) == name_key(selector)][:3]})
-    raise BookflowError("E_COMPANY_NOT_FOUND", details={"source": source, "suggestions": _suggest(selector, [r.display_name for r in visible])})
+    names = [f"{r.org}/{r.display_name}" for r in visible] if "/" in selector else [r.display_name for r in visible]
+    raise BookflowError("E_COMPANY_NOT_FOUND", details={"source": source, "suggestions": _suggest(selector, names)})
 
 
 def _suggest(value: str, candidates: list[str]) -> list[str]:
@@ -178,8 +179,13 @@ def _complete_pending_organizations(s: Session, ctx: Context) -> None:
         org = dict(org)
         if org["pending_path"].startswith("trash/"):
             continue
-        complete_org_move(s, ctx, org, ctx.interface.value)
-        s.completed_moves.append(org["id"])
+        try:
+            complete_org_move(s, ctx, org, ctx.interface.value)
+            s.completed_moves.append(org["id"])
+        except BookflowError as e:
+            if s.hub.raw.in_transaction:
+                s.hub.raw.execute("ROLLBACK")
+            s.warnings.append(f"organization {org['display_name']} has an unfinished move that could not be completed ({e.code}); rerun `organization rename --move` on it")
 
 
 def _migrate_hub(s: Session, ctx: Context) -> None:
@@ -311,6 +317,8 @@ def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str
     allowed = False
     try:
         root = resolve_data_root(data_root)
+        if root.exists() and not root.is_dir():
+            raise BookflowError("E_IO", details={"operation": "data_root", "errno": "ENOTDIR", "path": str(root)})
         check_local(root)
         s = Session(data_root=root, os_login=_login or os_login(), config=Config(root / "config.toml"), dry_run=dry_run)
         if cmd.bootstrap:
@@ -351,7 +359,7 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
     """Run a command inside an open, locked session with a loaded actor. Used by run(), demo reset, and later the host."""
     from bookflow.core import idempotency
     s.dry_run = dry_run
-    s.hub_touched, s.company_touched, s.warnings = [], [], []
+    s.hub_touched, s.company_touched = [], []
     if cmd.scope == "company":
         if s.company_row is None or (company_selector is not None):
             s.close_company()

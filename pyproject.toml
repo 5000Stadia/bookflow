@@ -12,6 +12,7 @@ dependencies = [
     "typer>=0.12",
     "python-ulid>=2.7",
     "tzlocal>=5.2",
+    "tzdata>=2024.1",
 ]
 
 [project.scripts]
