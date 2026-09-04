@@ -14,6 +14,8 @@ down_revision = "hub0003"
 # Frozen command requirements for this revision. This revision-local literal is
 # projected to concrete stored roles without importing the live registry.
 CAPABILITY_REQUIREMENTS = (
+    ("account", "member"),
+    ("account", "standard"),
     ("audit", "member"),
     ("chart", "admin"),
     ("chart", "authenticated"),

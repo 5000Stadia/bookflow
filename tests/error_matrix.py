@@ -45,7 +45,7 @@ MATRIX = {
 }
 
 _SUPPORTING_LIST_NOUNS = (
-    "custom-field", "item-category", "class", "term", "payment-method", "sales-tax-code",
+    "account", "custom-field", "item-category", "class", "term", "payment-method", "sales-tax-code",
     "customer-type", "vendor-type", "job-type", "sales-rep", "ship-method",
     "customer-message",
 )
@@ -56,13 +56,15 @@ _LIFECYCLE_ERRORS = {
     },
     "update": {
         "E_RECORD_NOT_FOUND", "E_NAME_TAKEN", "E_VERSION_CONFLICT", "E_INACTIVE_REFERENCE",
-        "E_HIERARCHY_CYCLE", "E_HIERARCHY_DEPTH", "E_TYPE_CHANGE",
+        "E_HIERARCHY_CYCLE", "E_HIERARCHY_DEPTH", "E_TYPE_CHANGE", "E_RECORD_IN_USE",
+        "E_SYSTEM_RECORD",
         "E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE",
     },
     "show": {"E_RECORD_NOT_FOUND"},
     "list": {"E_LIST_FILTER"},
     "activate": {
         "E_RECORD_NOT_FOUND", "E_VERSION_CONFLICT", "E_INACTIVE_REFERENCE", "E_NAME_TAKEN",
+        "E_SYSTEM_RECORD",
         "E_DIRECTIVE_NOT_FOUND", "E_DIRECTIVE_INACTIVE",
     },
     "deactivate": {

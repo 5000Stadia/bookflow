@@ -604,7 +604,7 @@ def _read_calls(hosted):
     )
 
     supporting = (
-        "custom-field", "item-category", "class", "term", "payment-method", "sales-tax-code",
+        "account", "custom-field", "item-category", "class", "term", "payment-method", "sales-tax-code",
         "customer-type", "vendor-type", "job-type", "sales-rep", "ship-method",
         "customer-message",
     )

@@ -68,6 +68,7 @@ EXAMPLES.update({
 
 
 _SUPPORTING_CREATE_INPUTS = {
+    "account": {"name": "Example service income", "number": "4099", "type": "income"},
     "custom-field": {"name": "Work order", "kind": "text", "scopes": ["customer"]},
     "item-category": {"name": "Services"},
     "class": {"name": "Field work"},
