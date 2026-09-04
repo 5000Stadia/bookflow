@@ -54,8 +54,8 @@ ACTOR = "01J00000000000000000000000"
 def company_db(tmp_path: Path):
     path = tmp_path / "company.db"
     with open_database(path, writable=True, create=True) as db:
-        assert migrate_to_head(db, "company", None) == (None, "co0003")
-        assert current_revision(db) == "co0003"
+        assert migrate_to_head(db, "company", None) == (None, "co0004")
+        assert current_revision(db) == "co0004"
         yield db
 
 

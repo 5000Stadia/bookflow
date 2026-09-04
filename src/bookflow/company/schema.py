@@ -355,7 +355,7 @@ customers = _table(
     _column("preferred_ship_method_id", sa.String(26), "Preferred active shipping-method id; null when unset.", sa.ForeignKey("ship_methods.id", ondelete="RESTRICT"), nullable=True),
     _column("resale_number", sa.String(128), "Customer resale or exemption number; null when not recorded.", nullable=True),
     *_money("credit_limit", "Customer credit limit"),
-    _column("preferred_delivery_method", sa.String(8), "Preferred delivery method: none, email, or mail.", nullable=False, default="none"),
+    _column("preferred_delivery_method", sa.String(8), "Preferred delivery method override: none, email, or mail; null on a job means inherit.", nullable=True),
     _column("account_number", sa.String(128), "Customer account number; null when not recorded.", nullable=True),
     _column("payment_profile_ref", sa.String(255), "Opaque protected payment-profile reference; remains null in Row 5.", nullable=True),
     _column("payment_brand", sa.String(32), "Safe payment brand display metadata; null when unavailable.", nullable=True),

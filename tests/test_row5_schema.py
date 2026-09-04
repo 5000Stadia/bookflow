@@ -164,6 +164,7 @@ def test_row5_metadata_has_exact_primary_and_child_column_inventory():
         assert set(schema.metadata.tables[table_name].c.keys()) == expected, table_name
     assert ROW5_COMPANY_SETTINGS <= set(schema.company_info.c.keys())
     assert "undo_of_event_id" in schema.audit_events.c
+    assert schema.customers.c.preferred_delivery_method.nullable
 
 
 def test_co0003_contains_no_live_company_schema_import():
