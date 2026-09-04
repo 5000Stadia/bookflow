@@ -134,10 +134,18 @@ def test_fixed_price_level_lifecycle_is_exact_versioned_and_idempotent(client):
         company="Demo Plumbing Co",
     )
     assert off["changed"] is True and off["version"] == 3
-    assert client.run("price-level list", {}, company="Demo Plumbing Co")["count"] == 0
-    assert client.run(
-        "price-level list", {"include_inactive": True}, company="Demo Plumbing Co"
-    )["count"] == 1
+    active_ids = {
+        item["id"]
+        for item in client.run("price-level list", {}, company="Demo Plumbing Co")["items"]
+    }
+    assert created["id"] not in active_ids
+    all_ids = {
+        item["id"]
+        for item in client.run(
+            "price-level list", {"include_inactive": True}, company="Demo Plumbing Co"
+        )["items"]
+    }
+    assert created["id"] in all_ids
     on = client.run(
         "price-level activate",
         {"price_level": created["id"], "expected_version": 3},
@@ -246,8 +254,15 @@ def test_price_discriminator_money_and_ordered_child_reconciliation(client):
 
     with open_database(_company_db(client), writable=False) as db:
         events = db.conn.execute(
-            sa.select(schema.audit_events.c.id).where(
-                schema.audit_events.c.command == "price-level update"
+            sa.select(schema.audit_events.c.id)
+            .join(
+                schema.audit_entries,
+                schema.audit_entries.c.event_id == schema.audit_events.c.id,
+            )
+            .where(
+                schema.audit_events.c.command == "price-level update",
+                schema.audit_entries.c.record_type == "price_level",
+                schema.audit_entries.c.record_id == made["id"],
             )
         ).all()
         entries = db.conn.execute(

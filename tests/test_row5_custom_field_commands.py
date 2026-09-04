@@ -21,12 +21,17 @@ def test_custom_field_lifecycle_is_preview_safe_aggregate_audited_and_idempotent
         "kind": "choice",
         "scopes": ["customer", "vendor"],
         "choices": [
-            {"id": "01ARZ3NDEKTSV4RRFFQ69G5FAB", "value": "North"},
-            {"id": "01ARZ3NDEKTSV4RRFFQ69G5FAC", "value": "South"},
+            {"id": "01ARZ3NDEKTSV4RRFFQ69G5FAB", "value": "Test Alpha Sector"},
+            {"id": "01ARZ3NDEKTSV4RRFFQ69G5FAC", "value": "Test Omega Sector"},
         ],
         "required": False,
-        "default": "North",
+        "default": "Test Alpha Sector",
     }
+    with open_database(_database(client), writable=False) as db:
+        starting_count = db.conn.execute(
+            sa.select(sa.func.count()).select_from(schema.custom_field_defs)
+        ).scalar_one()
+
     preview = client.run(
         "custom-field create",
         payload,
@@ -34,7 +39,12 @@ def test_custom_field_lifecycle_is_preview_safe_aggregate_audited_and_idempotent
         dry_run=True,
     )
     with open_database(_database(client), writable=False) as db:
-        assert db.conn.execute(sa.select(sa.func.count()).select_from(schema.custom_field_defs)).scalar_one() == 0
+        assert (
+            db.conn.execute(
+                sa.select(sa.func.count()).select_from(schema.custom_field_defs)
+            ).scalar_one()
+            == starting_count
+        )
 
     created = client.run(
         "custom-field create",
@@ -51,17 +61,20 @@ def test_custom_field_lifecycle_is_preview_safe_aggregate_audited_and_idempotent
     assert replay == {**created, "idempotent_replay": True}
     assert created["id"] == preview["id"]
     assert created["target_types"] == ["customer", "vendor"]
-    assert [choice["value"] for choice in created["choices"]] == ["North", "South"]
+    assert [choice["value"] for choice in created["choices"]] == [
+        "Test Alpha Sector",
+        "Test Omega Sector",
+    ]
 
     shown = client.run(
         "custom-field show",
         {"custom_field": "Service zone"},
         company="Demo Plumbing Co",
     )
-    assert shown["id"] == created["id"] and shown["default"] == "North"
+    assert shown["id"] == created["id"] and shown["default"] == "Test Alpha Sector"
     listed = client.run(
         "custom-field list",
-        {"query": "south", "filter": ["target_type=vendor", "kind=choice"]},
+        {"query": "Test Omega Sector", "filter": ["target_type=vendor", "kind=choice"]},
         company="Demo Plumbing Co",
     )
     assert [item["id"] for item in listed["items"]] == [created["id"]]
