@@ -211,7 +211,7 @@ def test_presence(client, root, monkeypatch):
 
 
 def test_tail_and_cursors(client, cli):
-    first = client.audit.tail(company="Demo Plumbing Co", after=0)
+    first = client.audit.tail(company="Demo Plumbing Co", after=0, limit=1000)
     assert first["count"] >= 3 and [e["seq"] for e in first["items"]] == sorted(e["seq"] for e in first["items"])
     cursor = first["next_after"]
     assert client.audit.tail(company="Demo Plumbing Co")["count"] == 0, "no cursor means only new events"
@@ -286,6 +286,20 @@ def test_budget(client, root):
         _open_hub(s, True, ctx); _load_actor(s)
         ctx = ctx.model_copy(update={"actor_id": s.actor.id, "actor_kind": s.actor.kind})
         add, upd, deact = registry.get("directive add"), registry.get("company update"), registry.get("directive deactivate")
+        # The complete demo deliberately carries a large production-shaped audit
+        # history. Reset only that temporary fixture history so this witness
+        # measures the operations below rather than unrelated seeded commands.
+        run_in_session(
+            upd,
+            upd.input_model(phone="budget-baseline"),
+            ctx,
+            s,
+            company_selector=cid,
+        )
+        s.company.raw.execute("DELETE FROM audit_entries")
+        s.company.raw.execute("DELETE FROM audit_events")
+        s.company.raw.commit()
+        s.company.raw.execute("VACUUM")
         codes = []
         for i in range(n):
             out = run_in_session(add, add.input_model(text=f"Directive number {i} about receipts and invoices"), ctx, s, company_selector=cid)

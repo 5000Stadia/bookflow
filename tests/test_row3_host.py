@@ -609,7 +609,8 @@ def _read_calls(hosted):
     )
 
     supporting = (
-        "account", "custom-field", "item-category", "class", "term", "payment-method", "price-level",
+        "account", "customer", "vendor", "employee", "other-name", "item",
+        "custom-field", "item-category", "class", "term", "payment-method", "price-level",
         "sales-tax-code", "unit-of-measure",
         "customer-type", "vendor-type", "job-type", "sales-rep", "ship-method",
         "customer-message",
@@ -1258,8 +1259,18 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
         url = _page_url(cmd, hosted.company_id)
         page = api.get(url)
         assert page.status_code == 200, (cmd.name, url, page.status_code, page.text[:300])
+        definition = registry.noun_meta(cmd.noun).get("definition")
         for leaf in F.leaves(cmd.input_model):
-            assert page.text.count(f'name="f:{leaf["path"]}"') == 1, (cmd.name, leaf["path"])
+            if leaf["path"] == "custom_fields" and getattr(
+                definition, "runtime_field_provider", None
+            ) == "custom-fields":
+                assert 'name="f:custom_fields"' not in page.text, cmd.name
+                assert 'name="cf:' in page.text, cmd.name
+            else:
+                assert page.text.count(f'name="f:{leaf["path"]}"') == 1, (
+                    cmd.name,
+                    leaf["path"],
+                )
         assert 'name="originals"' in page.text, cmd.name
 
 
