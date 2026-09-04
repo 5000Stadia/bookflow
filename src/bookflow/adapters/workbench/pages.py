@@ -44,6 +44,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.http.app import COOKIE, STATUS, error_response
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
+        if not ctx.get("company_id") and request.cookies.get(LAST_COMPANY):
+            ctx.setdefault("header_company_id", request.cookies.get(LAST_COMPANY))  # hub pages keep the company links
         tpl = env.get_template(name)
         return HTMLResponse(tpl.render(request=request, hub_nouns=_nouns("hub"), company_nouns=_nouns("company"), json=json, **ctx),
                             status_code=status_code)
