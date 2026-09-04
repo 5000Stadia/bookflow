@@ -4,8 +4,8 @@
 {% if editing %}<div class="warn">Editing now: {% for e in editing %}{{ e.name or e.user_id }} ({{ e.interface }}, since {{ e.since }}){% if not loop.last %}, {% endif %}{% endfor %}</div>{% endif %}
 {% if presence %}<div hx-post="/c/{{ company_id }}/presence/set/{{ meta.record_type }}/{{ record.id if noun != 'company' else record.company_id }}" hx-trigger="load, every 30s" hx-swap="none"></div>
 <script>addEventListener('pagehide',()=>navigator.sendBeacon&&fetch('/c/{{ company_id }}/presence/clear/{{ meta.record_type }}/{{ record.id if noun != 'company' else record.company_id }}',{method:'POST',headers:{'X-Bookflow-Workbench':'1'},keepalive:true}))</script>{% endif %}
-<h1>{{ record.display_name or record.code or record.summary or record_id }}</h1>
-<p class="actions">{% for v in verbs %}{% if v.is_write %}<a href="{{ base }}/{{ record_id }}/{{ v.verb }}">{{ v.verb }}</a>{% endif %}{% endfor %}</p>
+<h1>{{ record_title }}</h1>
+<p class="actions">{% for v in verbs %}{% if v.is_write %}<a href="{{ base }}/{{ record_id }}/{{ v.verb }}">{{ v.verb }}</a>{% endif %}{% endfor %}{% if contact_copy %}<a href="{{ contact_copy.url }}">{{ contact_copy.label }}</a>{% endif %}</p>
 {% if audit_undo %}<section class="audit-undo" aria-label="Undo status">
 {% if audit_undo.eligible %}<form method="post" action="/c/{{ company_id }}/undo" hx-post="/c/{{ company_id }}/undo" hx-target="body" hx-swap="outerHTML" hx-confirm="Undo this audit event?">
 <input type="hidden" name="originals" value="{}"><input type="hidden" name="f:event_id" value="{{ audit_undo.event_id }}"><button name="action" value="submit">Undo this event</button></form>

@@ -22,6 +22,122 @@ def _base(ann):
     return ann, False
 
 
+_COLLECTION_ORIGINS = (list, tuple, set, frozenset)
+
+
+def _collection_item(ann: Any) -> tuple[Any, bool] | None:
+    """Return a collection's item annotation and nullability when it is form-shaped."""
+    base, nullable = _base(ann)
+    origin = get_origin(base)
+    if origin not in _COLLECTION_ORIGINS:
+        return None
+    args = get_args(base)
+    if not args:
+        return Any, nullable
+    item = args[0]
+    # A fixed heterogeneous tuple is still JSON-shaped.  All Row 5 owned
+    # collections are homogeneous (including ``tuple[T, ...]``).
+    if origin is tuple and len(args) > 1 and args[1] is not Ellipsis:
+        return None
+    return item, nullable
+
+
+def _scalar_descriptor(
+    annotation: Any,
+    *,
+    name: str,
+    description: str = "",
+    required: bool = False,
+) -> dict[str, Any]:
+    base, nullable = _base(annotation)
+    kind, choices = "text", None
+    if get_origin(base) is Literal:
+        kind, choices = "choice", [str(a) for a in get_args(base)]
+    elif inspect.isclass(base) and issubclass(base, Enum):
+        kind, choices = "choice", [str(e.value) for e in base]
+    elif base is bool:
+        kind = "bool"
+    elif base in (int, float):
+        kind = "number"
+    return {
+        "name": name,
+        "kind": kind,
+        "choices": choices,
+        "description": description,
+        "required": required,
+        "nullable": nullable,
+        "annotation": annotation,
+    }
+
+
+def collection_schema(annotation: Any) -> dict[str, Any] | None:
+    """Describe a homogeneous collection recursively for repeated controls."""
+    found = _collection_item(annotation)
+    if found is None:
+        return None
+    item_annotation, nullable = found
+    item_base, _ = _base(item_annotation)
+    nested_item = collection_schema(item_annotation)
+    if nested_item is not None:
+        item = {"kind": "collection", "collection": nested_item}
+    elif inspect.isclass(item_base) and issubclass(item_base, BaseModel):
+        fields: list[dict[str, Any]] = []
+        for name, field in item_base.model_fields.items():
+            nested = collection_schema(field.annotation)
+            if nested is not None:
+                fields.append({
+                    "name": name,
+                    "kind": "collection",
+                    "collection": nested,
+                    "description": field.description or "",
+                    "required": field.is_required(),
+                    "nullable": _base(field.annotation)[1],
+                    "annotation": field.annotation,
+                })
+            else:
+                fields.append(_scalar_descriptor(
+                    field.annotation,
+                    name=name,
+                    description=field.description or "",
+                    required=field.is_required(),
+                ))
+        item = {"kind": "object", "model": item_base, "fields": fields}
+    else:
+        item = _scalar_descriptor(item_annotation, name="value", required=True)
+    return {"kind": "collection", "nullable": nullable, "item": item}
+
+
+def _project_value(annotation: Any, value: Any) -> Any:
+    """Project rich show output back onto the exact command-input shape."""
+    if value is None:
+        return None
+    found = _collection_item(annotation)
+    if found is not None:
+        item_annotation, _ = found
+        if not isinstance(value, (list, tuple, set, frozenset)):
+            return value
+        return [_project_value(item_annotation, item) for item in value]
+    base, _ = _base(annotation)
+    if inspect.isclass(base) and issubclass(base, BaseModel) and isinstance(value, Mapping):
+        projected: dict[str, Any] = {}
+        for name, field in base.model_fields.items():
+            if name not in value or value[name] is None:
+                continue
+            projected[name] = _project_value(field.annotation, value[name])
+        return projected
+    # Exact-money outputs are richer than the input's decimal-string leaf.
+    if isinstance(value, Mapping) and "amount" in value:
+        return value["amount"]
+    return value
+
+
+def project_input_values(model: type[BaseModel], originals: dict[str, Any]) -> None:
+    """Project rich show values onto the command's exact typed input shape in place."""
+    for name, field in model.model_fields.items():
+        if name in originals:
+            originals[name] = _project_value(field.annotation, originals[name])
+
+
 def leaves(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
     """Describe each form leaf from the command model alone."""
     out = []
@@ -40,8 +156,12 @@ def leaves(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
             kind = "bool"
         elif base in (int, float):
             kind = "number"
-        elif get_origin(base) in (list, tuple, set, frozenset):
-            kind, json_shape = "json", "array"
+        elif get_origin(base) in _COLLECTION_ORIGINS:
+            kind, json_shape = (
+                ("collection", None)
+                if collection_schema(f.annotation) is not None
+                else ("json", "array")
+            )
         elif get_origin(base) is dict:
             kind, json_shape = "json", "object"
         extra = f.json_schema_extra if isinstance(f.json_schema_extra, dict) else {}
@@ -52,7 +172,8 @@ def leaves(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
         out.append({"path": path, "path_parts": tuple(path.split(".")), "kind": kind,
                     "json_shape": json_shape, "choices": choices,
                     "description": f.description or "", "default": default,
-                    "required": f.is_required(), "nullable": nullable})
+                    "required": f.is_required(), "nullable": nullable,
+                    "annotation": f.annotation})
     return out
 
 
@@ -140,6 +261,13 @@ def describe_fields(
         "sales-rep": "name_type",
     }
     for leaf in described:
+        if leaf["kind"] == "collection":
+            schema = collection_schema(leaf["annotation"])
+            assert schema is not None
+            leaf["collection"] = schema
+            leaf["collection"]["values"] = collection_form_value(
+                leaf["annotation"], leaf["path"], originals, attempted
+            )
         rule = rules.get(leaf["path"])
         if rule is not None:
             discriminator, values = rule
@@ -227,9 +355,155 @@ def form_value(
     value = get_path(originals, leaf["path"])
     if value is None and leaf.get("runtime"):
         value = leaf.get("default")
+    if leaf["kind"] == "collection":
+        return value
     if leaf["kind"] == "json" and value is not None:
         return json.dumps(value, indent=2, default=str)
     return value
+
+
+def _collection_prefix(path: tuple[str, ...]) -> str:
+    return "c:" + ":".join(path) + ":"
+
+
+def _coerce_scalar(annotation: Any, value: str) -> Any:
+    base, _ = _base(annotation)
+    if base is bool:
+        if value == "unset":
+            return None
+        return value == "true"
+    if base is int:
+        try:
+            return int(value)
+        except ValueError:
+            return value
+    if base is float:
+        try:
+            return float(value)
+        except ValueError:
+            return value
+    return value
+
+
+def _read_collection(
+    annotation: Any,
+    path: tuple[str, ...],
+    form: Mapping[str, str],
+    *,
+    coerce: bool,
+) -> list[Any]:
+    """Read rows in browser order; indexes are stable DOM identities, not ordering."""
+    found = _collection_item(annotation)
+    if found is None:
+        return []
+    item_annotation, _ = found
+    prefix = _collection_prefix(path)
+    marker_prefix = "collection:" + ":".join(path) + ":"
+    indexes: list[str] = []
+    for key in form:
+        matching_prefix = prefix if key.startswith(prefix) else marker_prefix if key.startswith(marker_prefix) else None
+        if matching_prefix is None:
+            continue
+        remainder = key[len(matching_prefix):]
+        index = remainder.split(":", 1)[0]
+        if index and index not in indexes:
+            indexes.append(index)
+    item_base, _ = _base(item_annotation)
+    rows: list[Any] = []
+    for index in indexes:
+        item_path = (*path, index)
+        if _collection_item(item_annotation) is not None:
+            rows.append(_read_collection(item_annotation, item_path, form, coerce=coerce))
+        elif inspect.isclass(item_base) and issubclass(item_base, BaseModel):
+            row: dict[str, Any] = {}
+            for name, field in item_base.model_fields.items():
+                nested = _collection_item(field.annotation)
+                if nested is not None:
+                    marker = "collection:" + ":".join((*item_path, name))
+                    nested_prefix = _collection_prefix((*item_path, name))
+                    if marker in form or any(key.startswith(nested_prefix) for key in form):
+                        row[name] = _read_collection(
+                            field.annotation, (*item_path, name), form, coerce=coerce
+                        )
+                    continue
+                key = "c:" + ":".join((*item_path, name))
+                if key not in form:
+                    continue
+                value = form[key]
+                if value in ("", "unset"):
+                    continue
+                row[name] = _coerce_scalar(field.annotation, value) if coerce else value
+            rows.append(row)
+        else:
+            key = "c:" + ":".join((*item_path, "value"))
+            if key not in form:
+                rows.append("")
+            else:
+                value = form[key]
+                rows.append(_coerce_scalar(item_annotation, value) if coerce else value)
+    return rows
+
+
+def collection_form_value(
+    annotation: Any,
+    path: str,
+    originals: Mapping[str, Any] | None,
+    attempted: Mapping[str, str] | None,
+) -> list[Any]:
+    """Return attempted repeated rows separately from the stored projection."""
+    marker = f"collection:{path}"
+    prefix = f"c:{path}:"
+    if attempted is not None and (
+        marker in attempted or any(key.startswith(prefix) for key in attempted)
+    ):
+        return _read_collection(annotation, (path,), attempted, coerce=False)
+    value = get_path(dict(originals) if originals is not None else None, path)
+    projected = _project_value(annotation, value)
+    return list(projected) if isinstance(projected, list) else []
+
+
+def collection_attempt(
+    annotation: Any,
+    path: str,
+    value: Any,
+    *,
+    omit_stable_ids: bool = False,
+) -> dict[str, str]:
+    """Encode a trusted projection as attempted repeated controls."""
+    projected = _project_value(annotation, value)
+    encoded: dict[str, str] = {}
+
+    def add(collection_annotation: Any, parts: tuple[str, ...], rows: Any) -> None:
+        encoded["collection:" + ":".join(parts)] = "1"
+        found = _collection_item(collection_annotation)
+        if found is None or not isinstance(rows, list):
+            return
+        item_annotation, _ = found
+        item_base, _ = _base(item_annotation)
+        for index, item in enumerate(rows):
+            item_parts = (*parts, str(index))
+            if _collection_item(item_annotation) is not None:
+                add(item_annotation, item_parts, item)
+            elif inspect.isclass(item_base) and issubclass(item_base, BaseModel):
+                if not isinstance(item, Mapping):
+                    continue
+                for name, field in item_base.model_fields.items():
+                    if omit_stable_ids and name == "id":
+                        continue
+                    if name not in item or item[name] is None:
+                        continue
+                    if _collection_item(field.annotation) is not None:
+                        add(field.annotation, (*item_parts, name), item[name])
+                        continue
+                    scalar = item[name]
+                    encoded["c:" + ":".join((*item_parts, name))] = (
+                        "true" if scalar is True else "false" if scalar is False else str(scalar)
+                    )
+            else:
+                encoded["c:" + ":".join((*item_parts, "value"))] = str(item)
+
+    add(annotation, (path,), projected)
+    return encoded
 
 
 def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, Any] | None) -> tuple[dict[str, Any], dict[str, str], bool]:
@@ -247,6 +521,24 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
         original = get_path(originals, path) if originals is not None else None
         if clear:
             set_path(raw, path, None)
+            continue
+        if leaf["kind"] == "collection":
+            marker = f"collection:{path}"
+            prefix = f"c:{path}:"
+            if marker not in form and not any(key.startswith(prefix) for key in form):
+                continue
+            v = _read_collection(
+                leaf["annotation"], (path,), form, coerce=True
+            )
+            projected_original = _project_value(leaf["annotation"], original)
+            if (
+                originals is not None
+                and projected_original == v
+                and not leaf["required"]
+                and not path.startswith("expected_")
+            ):
+                continue
+            set_path(raw, path, v)
             continue
         if value is None or value == "":
             continue
@@ -281,7 +573,13 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
                 v = value
         else:
             v = value
-        if originals is not None and original is not None and original == v:
+        if (
+            originals is not None
+            and original is not None
+            and original == v
+            and not leaf["required"]
+            and not path.startswith("expected_")
+        ):
             continue
         set_path(raw, path, v)
     custom_patch: dict[str, Any | None] = {}

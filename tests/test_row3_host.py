@@ -1266,6 +1266,11 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
             ) == "custom-fields":
                 assert 'name="f:custom_fields"' not in page.text, cmd.name
                 assert 'name="cf:' in page.text, cmd.name
+            elif leaf["kind"] == "collection":
+                assert page.text.count(
+                    f'name="collection:{leaf["path"]}"'
+                ) == 1, (cmd.name, leaf["path"])
+                assert f'name="f:{leaf["path"]}"' not in page.text, cmd.name
             else:
                 assert page.text.count(f'name="f:{leaf["path"]}"') == 1, (
                     cmd.name,

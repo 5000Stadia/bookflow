@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import html
 import json
+import re
+from urllib.parse import parse_qs, urlsplit
 
 from fastapi.testclient import TestClient
 
@@ -20,6 +22,26 @@ def _browser(hosted, *, follow_redirects: bool = False) -> TestClient:
         json={"username": hosted.login, "password": PASSWORD},
     ).status_code == 200
     return browser
+
+
+def _page_originals(page) -> dict:
+    matched = re.search(r'name="originals" value=\'([^\']*)\'', page.text)
+    assert matched is not None
+    return json.loads(html.unescape(matched.group(1)))
+
+
+def _encode_collection(path: str, rows: list[dict]) -> dict[str, str]:
+    encoded = {f"collection:{path}": "1"}
+    for index, row in enumerate(rows):
+        for field, value in row.items():
+            child_path = f"{path}:{index}:{field}"
+            if isinstance(value, list):
+                encoded.update(_encode_collection(child_path, value))
+            elif value is not None:
+                encoded[f"c:{child_path}"] = (
+                    "true" if value is True else "false" if value is False else str(value)
+                )
+    return encoded
 
 
 def test_typed_descriptors_expose_variant_fields_and_pin_immutable_kinds():
@@ -181,8 +203,8 @@ def test_reference_picker_is_bounded_active_company_scoped_and_retains_inactive_
     assert f'name="f:terms_id" value="{current["id"]}"' in page.text
     assert "Workbench inactive term" in page.text
     assert "(inactive; readable only)" in page.text
-    assert f'href="/c/{hosted.company_id}/term/create"' in page.text
-    assert 'target="_blank"' in page.text
+    assert f'href="/c/{hosted.company_id}/term/create?' in page.text
+    assert 'target="bookflow-add-' in page.text
 
     inactive = browser.get(
         f"/c/{hosted.company_id}/_references/customer/terms_id",
@@ -362,3 +384,679 @@ def test_audit_detail_offers_authorized_dry_run_checked_undo_and_company_route_s
     inverse = owner.get(f"/c/{hosted.company_id}/audit/{undo_event['id']}")
     assert f'/audit/{event["id"]}' in inverse.text
     assert "Undo this event" not in inverse.text
+
+
+def test_add_new_reference_preserves_caller_and_returns_created_stable_id(hosted):
+    browser = _browser(hosted)
+    caller = browser.get(f"/c/{hosted.company_id}/customer/create")
+    assert caller.status_code == 200
+    matched = re.search(
+        rf'href="([^"]*/c/{hosted.company_id}/term/create\?[^"]+)"[^>]*target="bookflow-add-([^"]+)"',
+        caller.text,
+    )
+    assert matched is not None
+    child_url = html.unescape(matched.group(1))
+    query = parse_qs(urlsplit(child_url).query)
+    token = query["return_token"][0]
+    assert query["return_target"] == ["term"]
+    assert matched.group(2) == token
+    assert "bookflow-reference-created" in caller.text
+    assert "input.value = event.data.id" in caller.text
+
+    child = browser.get(child_url)
+    assert child.status_code == 200
+    assert f'name="_return_token" value="{token}"' in child.text
+    assert 'name="_return_target" value="term"' in child.text
+    # Callback forms use a top-level submission in the child window so the
+    # returned script executes, while the caller's in-memory draft stays put.
+    form_tag = re.search(r'<form method="post"[^>]+data-generated-form>', child.text)
+    assert form_tag is not None and "hx-post" not in form_tag.group(0)
+
+    created = browser.post(
+        urlsplit(child_url).path,
+        headers=WB,
+        data={
+            "originals": "{}",
+            "_return_token": token,
+            "_return_target": "term",
+            "f:name": "Callback Net 12",
+            "f:kind": "standard",
+            "f:due_days": "12",
+            "action": "submit",
+        },
+    )
+    assert created.status_code == 200
+    assert f'"token": "{token}"' in created.text
+    assert '"version": 1' in created.text
+    assert 'window.opener.postMessage(message,location.origin)' in created.text
+    stable_id = re.search(r'"id": "([0-9A-Z]{26})"', created.text)
+    assert stable_id is not None
+    listed = hosted.ok(
+        "term list", {"query": "Callback Net 12"}, company=hosted.company_id
+    )["items"]
+    assert [row["id"] for row in listed] == [stable_id.group(1)]
+
+
+def test_nested_collection_references_are_scoped_search_controls_including_component_units(hosted):
+    unit_set = hosted.ok(
+        "unit-of-measure create",
+        {
+            "name": "Workbench Length",
+            "units": [
+                {"name": "Each", "abbreviation": "ea", "is_base": True, "base_factor": "1"},
+                {"name": "Pair", "abbreviation": "pr", "is_base": False, "base_factor": "2"},
+            ],
+        },
+        company=hosted.company_id,
+    )
+    hosted.ok(
+        "company update",
+        {"units_of_measure_mode": "multiple_related_units"},
+        company=hosted.company_id,
+    )
+    account = hosted.ok(
+        "account create",
+        {"name": "Workbench Nested Expense", "type": "expense"},
+        company=hosted.company_id,
+    )
+    purchased = {
+        "type": "service",
+        "purchase_enabled": True,
+        "purchase_description": "Nested reference service",
+        "cost": "1",
+        "expense_account_id": account["id"],
+    }
+    component = hosted.ok(
+        "item create",
+        {
+            "name": "Workbench Unit Component",
+            **purchased,
+            "unit_of_measure_set_id": unit_set["id"],
+        },
+        company=hosted.company_id,
+    )
+    no_set = hosted.ok(
+        "item create",
+        {"name": "Workbench No Unit Component", **purchased},
+        company=hosted.company_id,
+    )
+    vendor = hosted.ok(
+        "vendor create", {"name": "Workbench Nested Vendor"}, company=hosted.company_id
+    )
+    browser = _browser(hosted)
+
+    item_form = browser.get(f"/c/{hosted.company_id}/item/create")
+    assert item_form.status_code == 200
+    for path in (
+        "members.component_item_id",
+        "members.unit_id",
+        "vendor_profiles.vendor_id",
+    ):
+        assert f"/_references/item/{path}?target=" in item_form.text
+    assert 'hx-include="closest [data-collection-item]"' in item_form.text
+    assert 'name="c:members:__INDEX0__:component_item_id"' in item_form.text
+    assert 'name="c:members:__INDEX0__:unit_id"' in item_form.text
+
+    price_form = browser.get(f"/c/{hosted.company_id}/price-level/create")
+    expense_form = browser.get(f"/c/{hosted.company_id}/vendor/{vendor['id']}/update")
+    assert "/_references/price-level/items.item_id?target=item" in price_form.text
+    assert "/_references/vendor/expense_accounts.account_id?target=account" in expense_form.text
+
+    item_choices = browser.get(
+        f"/c/{hosted.company_id}/_references/price-level/items.item_id",
+        params={"target": "item", "c:items:0:item_id": "Workbench Unit Component"},
+    )
+    vendor_choices = browser.get(
+        f"/c/{hosted.company_id}/_references/item/vendor_profiles.vendor_id",
+        params={"target": "vendor", "c:vendor_profiles:0:vendor_id": "Workbench Nested Vendor"},
+    )
+    account_choices = browser.get(
+        f"/c/{hosted.company_id}/_references/vendor/expense_accounts.account_id",
+        params={"target": "account", "c:expense_accounts:0:account_id": "Workbench Nested Expense"},
+    )
+    assert component["id"] in item_choices.text
+    assert vendor["id"] in vendor_choices.text
+    assert account["id"] in account_choices.text
+    assert all(response.text.count("<option") <= 25 for response in (
+        item_choices, vendor_choices, account_choices,
+    ))
+
+    unit_choices = browser.get(
+        f"/c/{hosted.company_id}/_references/item/members.unit_id",
+        params=[
+            ("target", "unit-of-measure"),
+            ("c:members:0:component_item_id", component["id"]),
+            ("c:members:0:unit_id", "Pair"),
+        ],
+    )
+    pair = next(unit for unit in unit_set["units"] if unit["name"] == "Pair")
+    each = next(unit for unit in unit_set["units"] if unit["name"] == "Each")
+    assert unit_choices.status_code == 200
+    assert pair["id"] in unit_choices.text
+    assert each["id"] not in unit_choices.text
+    assert "Workbench Length · Pair (pr)" in unit_choices.text
+
+    no_set_choices = browser.get(
+        f"/c/{hosted.company_id}/_references/item/members.unit_id",
+        params=[
+            ("target", "unit-of-measure"),
+            ("c:members:0:component_item_id", no_set["id"]),
+            ("c:members:0:unit_id", "Each"),
+        ],
+    )
+    unresolved_choices = browser.get(
+        f"/c/{hosted.company_id}/_references/item/members.unit_id",
+        params=[
+            ("target", "unit-of-measure"),
+            ("c:members:0:component_item_id", "01ARZ3NDEKTSV4RRFFQ69G5FAZ"),
+            ("c:members:0:unit_id", "Each"),
+        ],
+    )
+    assert no_set_choices.status_code == unresolved_choices.status_code == 200
+    assert no_set_choices.text == unresolved_choices.text == ""
+
+
+def test_add_new_vendor_callback_populates_link_endpoint_version_protocol(hosted):
+    customer = hosted.ok(
+        "customer create", {"name": "Callback Link Customer"}, company=hosted.company_id
+    )
+    browser = _browser(hosted)
+    caller = browser.get(
+        f"/c/{hosted.company_id}/customer/{customer['id']}/link-vendor"
+    )
+    assert caller.status_code == 200
+    assert 'data-ref-version-field="expected_vendor_version"' in caller.text
+    assert "option.dataset.version = String(event.data.version)" in caller.text
+    matched = re.search(
+        rf'href="([^"]*/c/{hosted.company_id}/vendor/create\?[^"]+)"', caller.text
+    )
+    assert matched is not None
+    child_url = html.unescape(matched.group(1))
+    query = parse_qs(urlsplit(child_url).query)
+    token = query["return_token"][0]
+    callback = browser.post(
+        urlsplit(child_url).path,
+        headers=WB,
+        data={
+            "originals": "{}",
+            "_return_token": token,
+            "_return_target": "vendor",
+            "f:name": "Callback Created Vendor",
+            "action": "submit",
+        },
+    )
+    assert callback.status_code == 200
+    assert '"target": "vendor"' in callback.text
+    assert '"version": 1' in callback.text
+    assert re.search(r'"id": "[0-9A-Z]{26}"', callback.text)
+
+
+def test_nested_collections_render_typed_controls_and_round_trip_stable_order(hosted):
+    customer = hosted.ok(
+        "customer create",
+        {
+            "name": "Workbench nested contacts",
+            "contacts": [
+                {
+                    "role": "primary",
+                    "display_name": "First Contact",
+                    "points": [{"kind": "work_phone", "value": "555-0101"}],
+                },
+                {
+                    "role": "alternate",
+                    "display_name": "Second Contact",
+                    "points": [{"kind": "main_email", "value": "second@example.test"}],
+                },
+            ],
+        },
+        company=hosted.company_id,
+    )
+    shown = hosted.ok(
+        "customer show", {"customer": customer["id"]}, company=hosted.company_id
+    )
+    first_id, second_id = [contact["id"] for contact in shown["contacts"]]
+    first_point_id = shown["contacts"][0]["points"][0]["id"]
+
+    browser = _browser(hosted)
+    route = f"/c/{hosted.company_id}/customer/{customer['id']}/update"
+    page = browser.get(route)
+    assert page.status_code == 200
+    assert '<textarea name="f:contacts"' not in page.text
+    assert 'name="collection:contacts"' in page.text
+    assert 'name="c:contacts:0:id"' in page.text
+    assert 'name="collection:contacts:0:points"' in page.text
+    assert 'name="c:contacts:0:points:0:id"' in page.text
+    assert first_id in page.text and first_point_id in page.text
+    assert "data-collection-add" in page.text
+    assert "data-collection-remove" in page.text
+    assert "data-collection-up" in page.text and "data-collection-down" in page.text
+
+    originals = _page_originals(page)
+    update = registry.get("customer update")
+    assert update is not None
+    unchanged_form = _encode_collection("contacts", originals["contacts"])
+    unchanged, _, _ = forms.translate(update, unchanged_form, originals)
+    assert unchanged == {}
+
+    reordered = list(reversed(originals["contacts"]))
+    reordered_form = _encode_collection("contacts", reordered)
+    translated, _, _ = forms.translate(update, reordered_form, originals)
+    assert [row["id"] for row in translated["contacts"]] == [second_id, first_id]
+    assert translated["contacts"][1]["points"][0]["id"] == first_point_id
+    removed, _, _ = forms.translate(
+        update, _encode_collection("contacts", [originals["contacts"][1]]), originals
+    )
+    assert [row["id"] for row in removed["contacts"]] == [second_id]
+    added_rows = [
+        *originals["contacts"],
+        {"role": "additional", "display_name": "New Contact", "points": []},
+    ]
+    added, _, _ = forms.translate(
+        update, _encode_collection("contacts", added_rows), originals
+    )
+    assert added["contacts"][-1] == {
+        "role": "additional",
+        "display_name": "New Contact",
+        "points": [],
+    }
+
+    submitted = browser.post(
+        route,
+        headers=WB,
+        data={
+            "originals": json.dumps(originals),
+            "f:customer": customer["id"],
+            "f:expected_version": str(shown["version"]),
+            **reordered_form,
+            "action": "submit",
+        },
+    )
+    assert submitted.status_code == 303
+    after = hosted.ok(
+        "customer show", {"customer": customer["id"]}, company=hosted.company_id
+    )
+    assert [contact["id"] for contact in after["contacts"]] == [second_id, first_id]
+    assert after["contacts"][1]["points"][0]["id"] == first_point_id
+
+
+def test_money_outputs_prefill_as_exact_amounts_and_untouched_preview(hosted):
+    created = hosted.ok(
+        "customer create",
+        {"name": "Workbench Exact Money", "credit_limit": "123.45"},
+        company=hosted.company_id,
+    )
+    shown = hosted.ok(
+        "customer show", {"customer": created["id"]}, company=hosted.company_id
+    )
+    assert shown["credit_limit"]["currency"] == "USD"
+    browser = _browser(hosted)
+    route = f"/c/{hosted.company_id}/customer/{created['id']}/update"
+    page = browser.get(route)
+    assert page.status_code == 200
+    assert 'name="f:credit_limit" value="123.45"' in page.text
+    assert "{'amount':" not in page.text
+    originals = _page_originals(page)
+    assert originals["credit_limit"] == "123.45"
+    preview = browser.post(
+        route,
+        headers=WB,
+        data={
+            "originals": json.dumps(originals),
+            "f:customer": created["id"],
+            "f:expected_version": str(shown["version"]),
+            "f:credit_limit": "123.45",
+            "action": "preview",
+        },
+    )
+    assert preview.status_code == 200
+    assert "Preview (nothing written)" in preview.text
+    assert "not an amount" not in preview.text
+    unchanged = hosted.ok(
+        "customer show", {"customer": created["id"]}, company=hosted.company_id
+    )
+    assert unchanged["credit_limit"] == shown["credit_limit"]
+    assert unchanged["version"] == shown["version"]
+
+
+def test_linked_contact_copy_previews_and_submits_ordinary_versioned_update(hosted):
+    customer = hosted.ok(
+        "customer create",
+        {
+            "name": "Contact Copy Customer",
+            "contact": "Primary Contact",
+            "phone": "555-0199",
+            "email": "copy@example.test",
+        },
+        company=hosted.company_id,
+    )
+    vendor = hosted.ok(
+        "vendor create",
+        {"name": "Contact Copy Vendor", "phone": "555-0000"},
+        company=hosted.company_id,
+    )
+    linked = hosted.ok(
+        "customer link-vendor",
+        {
+            "customer": customer["id"],
+            "vendor": vendor["id"],
+            "expected_customer_version": customer["version"],
+            "expected_vendor_version": vendor["version"],
+        },
+        company=hosted.company_id,
+    )
+    browser = _browser(hosted)
+    detail = browser.get(f"/c/{hosted.company_id}/customer/{customer['id']}")
+    assert detail.status_code == 200
+    copy_url = f"/c/{hosted.company_id}/customer/{customer['id']}/copy-contact"
+    assert f'href="{copy_url}"' in detail.text
+
+    copy = browser.get(copy_url)
+    assert copy.status_code == 200
+    target_route = f"/c/{hosted.company_id}/vendor/{vendor['id']}/update"
+    assert f'action="{target_route}"' in copy.text
+    assert "ordinary versioned vendor update command" in copy.text
+    assert 'name="f:phone" value="555-0199"' in copy.text
+    assert 'name="f:email" value="copy@example.test"' in copy.text
+    assert 'name="c:contacts:0:role"' in copy.text
+    assert 'name="c:contacts:0:id" value=""' in copy.text
+    assert f'name="f:expected_version" value="{linked["vendor_version"]}"' in copy.text
+    originals = _page_originals(copy)
+    source = hosted.ok(
+        "customer show", {"customer": customer["id"]}, company=hosted.company_id
+    )
+    assert source["contacts"][0]["id"] not in copy.text
+    vendor_update = registry.get("vendor update")
+    assert vendor_update is not None
+    copied_contacts = forms.collection_attempt(
+        vendor_update.input_model.model_fields["contacts"].annotation,
+        "contacts",
+        source["contacts"],
+        omit_stable_ids=True,
+    )
+    form = {
+        "originals": json.dumps(originals),
+        "f:vendor": vendor["id"],
+        "f:expected_version": str(linked["vendor_version"]),
+        "f:contact": "Primary Contact",
+        "f:phone": "555-0199",
+        "f:email": "copy@example.test",
+        **copied_contacts,
+    }
+    preview = browser.post(target_route, headers=WB, data={**form, "action": "preview"})
+    assert preview.status_code == 200
+    assert "Preview (nothing written)" in preview.text
+    unchanged = hosted.ok(
+        "vendor show", {"vendor": vendor["id"]}, company=hosted.company_id
+    )
+    assert unchanged["phone"] == "555-0000"
+    assert unchanged["version"] == linked["vendor_version"]
+
+    submitted = browser.post(target_route, headers=WB, data={**form, "action": "submit"})
+    assert submitted.status_code == 303
+    copied = hosted.ok(
+        "vendor show", {"vendor": vendor["id"]}, company=hosted.company_id
+    )
+    assert copied["contact"] == "Primary Contact"
+    assert copied["phone"] == "555-0199"
+    assert copied["email"] == "copy@example.test"
+    assert copied["contacts"][0]["id"] != source["contacts"][0]["id"]
+
+
+def test_vendor_contact_copy_to_inheriting_job_explicitly_owns_complete_contacts(hosted):
+    parent = hosted.ok(
+        "customer create",
+        {"name": "Contact Copy Parent", "contact": "Inherited Parent"},
+        company=hosted.company_id,
+    )
+    job = hosted.ok(
+        "customer create",
+        {
+            "name": "Contact Copy Job",
+            "parent_id": parent["id"],
+            "address_mode": "inherit",
+            "contact_mode": "inherit",
+        },
+        company=hosted.company_id,
+    )
+    vendor = hosted.ok(
+        "vendor create",
+        {
+            "name": "Job Contact Source Vendor",
+            "contact": "Vendor Contact",
+            "phone": "555-0188",
+            "email": "vendor-to-job@example.test",
+        },
+        company=hosted.company_id,
+    )
+    linked = hosted.ok(
+        "customer link-vendor",
+        {
+            "customer": job["id"],
+            "vendor": vendor["id"],
+            "expected_customer_version": job["version"],
+            "expected_vendor_version": vendor["version"],
+        },
+        company=hosted.company_id,
+    )
+    browser = _browser(hosted)
+    copy_url = f"/c/{hosted.company_id}/vendor/{vendor['id']}/copy-contact"
+    copy = browser.get(copy_url)
+    assert copy.status_code == 200
+    target_route = f"/c/{hosted.company_id}/customer/{job['id']}/update"
+    assert f'action="{target_route}"' in copy.text
+    assert '<option value="own" selected>own</option>' in copy.text
+    assert 'name="c:contacts:0:role"' in copy.text
+
+    source = hosted.ok(
+        "vendor show", {"vendor": vendor["id"]}, company=hosted.company_id
+    )
+    customer_update = registry.get("customer update")
+    assert customer_update is not None
+    contacts = forms.collection_attempt(
+        customer_update.input_model.model_fields["contacts"].annotation,
+        "contacts",
+        source["contacts"],
+        omit_stable_ids=True,
+    )
+    post = {
+        "originals": json.dumps(_page_originals(copy)),
+        "f:customer": job["id"],
+        "f:expected_version": str(linked["customer_version"]),
+        "f:contact_mode": "own",
+        "f:contact": "Vendor Contact",
+        "f:phone": "555-0188",
+        "f:email": "vendor-to-job@example.test",
+        **contacts,
+    }
+    preview = browser.post(target_route, headers=WB, data={**post, "action": "preview"})
+    assert preview.status_code == 200
+    assert "Preview (nothing written)" in preview.text
+    assert "E_VALIDATION" not in preview.text
+    submitted = browser.post(target_route, headers=WB, data={**post, "action": "submit"})
+    assert submitted.status_code == 303
+    copied = hosted.ok(
+        "customer show", {"customer": job["id"]}, company=hosted.company_id
+    )
+    assert copied["contact_mode"] == "own"
+    assert copied["contact"] == "Vendor Contact"
+    assert copied["phone"] == "555-0188"
+    assert copied["contacts"][0]["id"] != source["contacts"][0]["id"]
+
+
+def test_relationship_and_conversion_forms_prefill_versions_and_reject_stale_writes(hosted):
+    customer = hosted.ok(
+        "customer create", {"name": "Version Form Customer"}, company=hosted.company_id
+    )
+    vendor = hosted.ok(
+        "vendor create", {"name": "Version Form Vendor"}, company=hosted.company_id
+    )
+    browser = _browser(hosted)
+    link_route = f"/c/{hosted.company_id}/customer/{customer['id']}/link-vendor"
+    link_form = browser.get(link_route, params={"vendor": vendor["id"]})
+    assert link_form.status_code == 200
+    assert f'name="f:customer" value="{customer["id"]}"' in link_form.text
+    assert f'name="f:vendor" value="{vendor["id"]}"' in link_form.text
+    assert f'name="f:expected_customer_version" value="{customer["version"]}"' in link_form.text
+    assert f'name="f:expected_vendor_version" value="{vendor["version"]}"' in link_form.text
+
+    unknown_vendor = "01ARZ3NDEKTSV4RRFFQ69G5FAA"
+    invalid_link = browser.post(
+        link_route,
+        headers=WB,
+        data={
+            "originals": json.dumps(_page_originals(link_form)),
+            "f:customer": customer["id"],
+            "f:vendor": unknown_vendor,
+            "f:expected_customer_version": str(customer["version"]),
+            "f:expected_vendor_version": "1",
+            "action": "preview",
+        },
+    )
+    assert invalid_link.status_code == 200
+    assert "E_RECORD_NOT_FOUND" in invalid_link.text
+    assert f'name="f:vendor" value="{unknown_vendor}"' in invalid_link.text
+
+    hosted.ok(
+        "customer update",
+        {
+            "customer": customer["id"],
+            "expected_version": customer["version"],
+            "notes": "concurrent edit",
+        },
+        company=hosted.company_id,
+    )
+    stale_link = browser.post(
+        link_route,
+        headers=WB,
+        data={
+            "originals": json.dumps(_page_originals(link_form)),
+            "f:customer": customer["id"],
+            "f:vendor": vendor["id"],
+            "f:expected_customer_version": str(customer["version"]),
+            "f:expected_vendor_version": str(vendor["version"]),
+            "action": "submit",
+        },
+    )
+    assert stale_link.status_code == 200 and "E_VERSION_CONFLICT" in stale_link.text
+    still_unlinked = hosted.ok(
+        "customer show", {"customer": customer["id"]}, company=hosted.company_id
+    )
+    assert still_unlinked["linked_vendor_id"] is None
+
+    linked = hosted.ok(
+        "customer link-vendor",
+        {
+            "customer": customer["id"],
+            "vendor": vendor["id"],
+            "expected_customer_version": still_unlinked["version"],
+            "expected_vendor_version": vendor["version"],
+        },
+        company=hosted.company_id,
+    )
+    unlink_route = f"/c/{hosted.company_id}/customer/{customer['id']}/unlink-vendor"
+    unlink_form = browser.get(unlink_route)
+    assert unlink_form.status_code == 200
+    assert f'name="f:expected_customer_version" value="{linked["customer_version"]}"' in unlink_form.text
+    assert f'name="f:expected_vendor_version" value="{linked["vendor_version"]}"' in unlink_form.text
+    assert f'name="f:expected_link_version" value="{linked["link_version"]}"' in unlink_form.text
+    hosted.ok(
+        "vendor update",
+        {
+            "vendor": vendor["id"],
+            "expected_version": linked["vendor_version"],
+            "notes": "concurrent vendor edit",
+        },
+        company=hosted.company_id,
+    )
+    stale_unlink = browser.post(
+        unlink_route,
+        headers=WB,
+        data={
+            "originals": json.dumps(_page_originals(unlink_form)),
+            "f:customer": customer["id"],
+            "f:expected_customer_version": str(linked["customer_version"]),
+            "f:expected_vendor_version": str(linked["vendor_version"]),
+            "f:expected_link_version": str(linked["link_version"]),
+            "action": "submit",
+        },
+    )
+    assert stale_unlink.status_code == 200 and "E_VERSION_CONFLICT" in stale_unlink.text
+    assert hosted.ok(
+        "customer show", {"customer": customer["id"]}, company=hosted.company_id
+    )["linked_vendor_id"] == vendor["id"]
+
+    current_customer = hosted.ok(
+        "customer show", {"customer": customer["id"]}, company=hosted.company_id
+    )
+    current_vendor = hosted.ok(
+        "vendor show", {"vendor": vendor["id"]}, company=hosted.company_id
+    )
+    unlinked = hosted.ok(
+        "customer unlink-vendor",
+        {
+            "customer": customer["id"],
+            "expected_customer_version": current_customer["version"],
+            "expected_vendor_version": current_vendor["version"],
+            "expected_link_version": linked["link_version"],
+        },
+        company=hosted.company_id,
+    )
+    reactivate_form = browser.get(link_route, params={"vendor": vendor["id"]})
+    assert reactivate_form.status_code == 200
+    assert f'name="f:expected_link_version" value="{unlinked["link_version"]}"' in reactivate_form.text
+    suggestions = browser.get(
+        f"/c/{hosted.company_id}/_references/customer/vendor",
+        params={"q": "Version Form Vendor", "f:customer": customer["id"]},
+    )
+    assert suggestions.status_code == 200
+    assert vendor["id"] in suggestions.text
+    assert f'data-link-version="{unlinked["link_version"]}"' in suggestions.text
+    reactivation_preview = browser.post(
+        link_route,
+        headers=WB,
+        data={
+            "originals": json.dumps(_page_originals(reactivate_form)),
+            "f:customer": customer["id"],
+            "f:vendor": vendor["id"],
+            "f:expected_customer_version": str(unlinked["customer_version"]),
+            "f:expected_vendor_version": str(unlinked["vendor_version"]),
+            "f:expected_link_version": str(unlinked["link_version"]),
+            "action": "preview",
+        },
+    )
+    assert reactivation_preview.status_code == 200
+    assert "Preview (nothing written)" in reactivation_preview.text
+
+    other = hosted.ok(
+        "other-name create", {"name": "Version Form Other"}, company=hosted.company_id
+    )
+    convert_route = f"/c/{hosted.company_id}/other-name/{other['id']}/convert"
+    convert_form = browser.get(convert_route)
+    assert convert_form.status_code == 200
+    assert f'name="f:other_name" value="{other["id"]}"' in convert_form.text
+    assert f'name="f:expected_version" value="{other["version"]}"' in convert_form.text
+    hosted.ok(
+        "other-name update",
+        {
+            "other_name": other["id"],
+            "expected_version": other["version"],
+            "notes": "concurrent other edit",
+        },
+        company=hosted.company_id,
+    )
+    stale_convert = browser.post(
+        convert_route,
+        headers=WB,
+        data={
+            "originals": json.dumps(_page_originals(convert_form)),
+            "f:other_name": other["id"],
+            "f:to": "customer",
+            "f:expected_version": str(other["version"]),
+            "action": "submit",
+        },
+    )
+    assert stale_convert.status_code == 200 and "E_VERSION_CONFLICT" in stale_convert.text
+    source = hosted.ok(
+        "other-name show", {"other_name": other["id"]}, company=hosted.company_id
+    )
+    assert source["converted_to_type"] is None
