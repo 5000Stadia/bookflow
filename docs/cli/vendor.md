@@ -110,6 +110,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `tax_id_kind` | literal["ein", "ssn"] \| null | no | yes | null | — |
 | `tax_id_last4` | string \| null | no | yes | null | — |
 | `linked_customer_id` | string \| null | no | yes | null | — |
+| `customer_links` | array[object] | no | no | [] | — |
+| `customer_links[].id` | string | yes | no | — | — |
+| `customer_links[].version` | integer | yes | no | — | — |
+| `customer_links[].customer_id` | string | yes | no | — | — |
+| `customer_links[].vendor_id` | string | yes | no | — | — |
+| `customer_links[].active` | boolean | yes | no | — | — |
 | `contacts` | array[object] | no | no | [] | — |
 | `contacts[].id` | string | yes | no | — | — |
 | `contacts[].role` | literal["primary", "alternate", "additional"] | yes | no | — | — |
@@ -210,6 +216,7 @@ Example JSON output:
     "minor_units": 1
   },
   "custom_fields": [],
+  "customer_links": [],
   "default_class": null,
   "default_class_id": null,
   "dry_run": false,
@@ -452,6 +459,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `tax_id_kind` | literal["ein", "ssn"] \| null | no | yes | null | — |
 | `tax_id_last4` | string \| null | no | yes | null | — |
 | `linked_customer_id` | string \| null | no | yes | null | — |
+| `customer_links` | array[object] | no | no | [] | — |
+| `customer_links[].id` | string | yes | no | — | — |
+| `customer_links[].version` | integer | yes | no | — | — |
+| `customer_links[].customer_id` | string | yes | no | — | — |
+| `customer_links[].vendor_id` | string | yes | no | — | — |
+| `customer_links[].active` | boolean | yes | no | — | — |
 | `contacts` | array[object] | no | no | [] | — |
 | `contacts[].id` | string | yes | no | — | — |
 | `contacts[].role` | literal["primary", "alternate", "additional"] | yes | no | — | — |
@@ -548,6 +561,7 @@ Example JSON output:
     "minor_units": 1
   },
   "custom_fields": [],
+  "customer_links": [],
   "default_class": null,
   "default_class_id": null,
   "dry_run": false,
@@ -737,6 +751,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `tax_id_kind` | literal["ein", "ssn"] \| null | no | yes | null | — |
 | `tax_id_last4` | string \| null | no | yes | null | — |
 | `linked_customer_id` | string \| null | no | yes | null | — |
+| `customer_links` | array[object] | no | no | [] | — |
+| `customer_links[].id` | string | yes | no | — | — |
+| `customer_links[].version` | integer | yes | no | — | — |
+| `customer_links[].customer_id` | string | yes | no | — | — |
+| `customer_links[].vendor_id` | string | yes | no | — | — |
+| `customer_links[].active` | boolean | yes | no | — | — |
 | `contacts` | array[object] | no | no | [] | — |
 | `contacts[].id` | string | yes | no | — | — |
 | `contacts[].role` | literal["primary", "alternate", "additional"] | yes | no | — | — |
@@ -837,6 +857,7 @@ Example JSON output:
     "minor_units": 1
   },
   "custom_fields": [],
+  "customer_links": [],
   "default_class": null,
   "default_class_id": null,
   "dry_run": false,
@@ -1020,6 +1041,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].tax_id_kind` | literal["ein", "ssn"] \| null | no | yes | null | — |
 | `items[].tax_id_last4` | string \| null | no | yes | null | — |
 | `items[].linked_customer_id` | string \| null | no | yes | null | — |
+| `items[].customer_links` | array[object] | no | no | [] | — |
+| `items[].customer_links[].id` | string | yes | no | — | — |
+| `items[].customer_links[].version` | integer | yes | no | — | — |
+| `items[].customer_links[].customer_id` | string | yes | no | — | — |
+| `items[].customer_links[].vendor_id` | string | yes | no | — | — |
+| `items[].customer_links[].active` | boolean | yes | no | — | — |
 | `items[].contacts` | array[object] | no | no | [] | — |
 | `items[].contacts[].id` | string | yes | no | — | — |
 | `items[].contacts[].role` | literal["primary", "alternate", "additional"] | yes | no | — | — |
@@ -1225,6 +1252,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `tax_id_kind` | literal["ein", "ssn"] \| null | no | yes | null | — |
 | `tax_id_last4` | string \| null | no | yes | null | — |
 | `linked_customer_id` | string \| null | no | yes | null | — |
+| `customer_links` | array[object] | no | no | [] | — |
+| `customer_links[].id` | string | yes | no | — | — |
+| `customer_links[].version` | integer | yes | no | — | — |
+| `customer_links[].customer_id` | string | yes | no | — | — |
+| `customer_links[].vendor_id` | string | yes | no | — | — |
+| `customer_links[].active` | boolean | yes | no | — | — |
 | `contacts` | array[object] | no | no | [] | — |
 | `contacts[].id` | string | yes | no | — | — |
 | `contacts[].role` | literal["primary", "alternate", "additional"] | yes | no | — | — |
@@ -1319,6 +1352,7 @@ Example JSON output:
     "minor_units": 1
   },
   "custom_fields": [],
+  "customer_links": [],
   "default_class": null,
   "default_class_id": null,
   "eligible_1099": false,
@@ -1555,6 +1589,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `tax_id_kind` | literal["ein", "ssn"] \| null | no | yes | null | — |
 | `tax_id_last4` | string \| null | no | yes | null | — |
 | `linked_customer_id` | string \| null | no | yes | null | — |
+| `customer_links` | array[object] | no | no | [] | — |
+| `customer_links[].id` | string | yes | no | — | — |
+| `customer_links[].version` | integer | yes | no | — | — |
+| `customer_links[].customer_id` | string | yes | no | — | — |
+| `customer_links[].vendor_id` | string | yes | no | — | — |
+| `customer_links[].active` | boolean | yes | no | — | — |
 | `contacts` | array[object] | no | no | [] | — |
 | `contacts[].id` | string | yes | no | — | — |
 | `contacts[].role` | literal["primary", "alternate", "additional"] | yes | no | — | — |
@@ -1656,6 +1696,7 @@ Example JSON output:
     "minor_units": 1
   },
   "custom_fields": [],
+  "customer_links": [],
   "default_class": null,
   "default_class_id": null,
   "dry_run": false,

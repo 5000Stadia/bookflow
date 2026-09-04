@@ -150,6 +150,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payment_billing_address.postal_code` | string \| null | no | yes | null | — |
 | `payment_billing_address.country` | string \| null | no | yes | null | — |
 | `linked_vendor_id` | string \| null | no | yes | null | — |
+| `vendor_links` | array[object] | no | no | [] | — |
+| `vendor_links[].id` | string | yes | no | — | — |
+| `vendor_links[].version` | integer | yes | no | — | — |
+| `vendor_links[].customer_id` | string | yes | no | — | — |
+| `vendor_links[].vendor_id` | string | yes | no | — | — |
+| `vendor_links[].active` | boolean | yes | no | — | — |
 | `stored_shipping_addresses` | array[object] | no | no | [] | — |
 | `stored_shipping_addresses[].line1` | string \| null | no | yes | null | — |
 | `stored_shipping_addresses[].line2` | string \| null | no | yes | null | — |
@@ -368,6 +374,7 @@ Example JSON output:
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
+  "vendor_links": [],
   "version": 1,
   "warnings": [],
   "website": null
@@ -631,6 +638,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payment_billing_address.postal_code` | string \| null | no | yes | null | — |
 | `payment_billing_address.country` | string \| null | no | yes | null | — |
 | `linked_vendor_id` | string \| null | no | yes | null | — |
+| `vendor_links` | array[object] | no | no | [] | — |
+| `vendor_links[].id` | string | yes | no | — | — |
+| `vendor_links[].version` | integer | yes | no | — | — |
+| `vendor_links[].customer_id` | string | yes | no | — | — |
+| `vendor_links[].vendor_id` | string | yes | no | — | — |
+| `vendor_links[].active` | boolean | yes | no | — | — |
 | `stored_shipping_addresses` | array[object] | no | no | [] | — |
 | `stored_shipping_addresses[].line1` | string \| null | no | yes | null | — |
 | `stored_shipping_addresses[].line2` | string \| null | no | yes | null | — |
@@ -845,6 +858,7 @@ Example JSON output:
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
+  "vendor_links": [],
   "version": 1,
   "warnings": [],
   "website": null
@@ -1035,6 +1049,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payment_billing_address.postal_code` | string \| null | no | yes | null | — |
 | `payment_billing_address.country` | string \| null | no | yes | null | — |
 | `linked_vendor_id` | string \| null | no | yes | null | — |
+| `vendor_links` | array[object] | no | no | [] | — |
+| `vendor_links[].id` | string | yes | no | — | — |
+| `vendor_links[].version` | integer | yes | no | — | — |
+| `vendor_links[].customer_id` | string | yes | no | — | — |
+| `vendor_links[].vendor_id` | string | yes | no | — | — |
+| `vendor_links[].active` | boolean | yes | no | — | — |
 | `stored_shipping_addresses` | array[object] | no | no | [] | — |
 | `stored_shipping_addresses[].line1` | string \| null | no | yes | null | — |
 | `stored_shipping_addresses[].line2` | string \| null | no | yes | null | — |
@@ -1253,6 +1273,7 @@ Example JSON output:
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
+  "vendor_links": [],
   "version": 1,
   "warnings": [],
   "website": null
@@ -1557,6 +1578,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].payment_billing_address.postal_code` | string \| null | no | yes | null | — |
 | `items[].payment_billing_address.country` | string \| null | no | yes | null | — |
 | `items[].linked_vendor_id` | string \| null | no | yes | null | — |
+| `items[].vendor_links` | array[object] | no | no | [] | — |
+| `items[].vendor_links[].id` | string | yes | no | — | — |
+| `items[].vendor_links[].version` | integer | yes | no | — | — |
+| `items[].vendor_links[].customer_id` | string | yes | no | — | — |
+| `items[].vendor_links[].vendor_id` | string | yes | no | — | — |
+| `items[].vendor_links[].active` | boolean | yes | no | — | — |
 | `items[].stored_shipping_addresses` | array[object] | no | no | [] | — |
 | `items[].stored_shipping_addresses[].line1` | string \| null | no | yes | null | — |
 | `items[].stored_shipping_addresses[].line2` | string \| null | no | yes | null | — |
@@ -1837,6 +1864,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payment_billing_address.postal_code` | string \| null | no | yes | null | — |
 | `payment_billing_address.country` | string \| null | no | yes | null | — |
 | `linked_vendor_id` | string \| null | no | yes | null | — |
+| `vendor_links` | array[object] | no | no | [] | — |
+| `vendor_links[].id` | string | yes | no | — | — |
+| `vendor_links[].version` | integer | yes | no | — | — |
+| `vendor_links[].customer_id` | string | yes | no | — | — |
+| `vendor_links[].vendor_id` | string | yes | no | — | — |
+| `vendor_links[].active` | boolean | yes | no | — | — |
 | `stored_shipping_addresses` | array[object] | no | no | [] | — |
 | `stored_shipping_addresses[].line1` | string \| null | no | yes | null | — |
 | `stored_shipping_addresses[].line2` | string \| null | no | yes | null | — |
@@ -2048,6 +2081,7 @@ Example JSON output:
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
+  "vendor_links": [],
   "version": 1,
   "website": null
 }
@@ -2424,6 +2458,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payment_billing_address.postal_code` | string \| null | no | yes | null | — |
 | `payment_billing_address.country` | string \| null | no | yes | null | — |
 | `linked_vendor_id` | string \| null | no | yes | null | — |
+| `vendor_links` | array[object] | no | no | [] | — |
+| `vendor_links[].id` | string | yes | no | — | — |
+| `vendor_links[].version` | integer | yes | no | — | — |
+| `vendor_links[].customer_id` | string | yes | no | — | — |
+| `vendor_links[].vendor_id` | string | yes | no | — | — |
+| `vendor_links[].active` | boolean | yes | no | — | — |
 | `stored_shipping_addresses` | array[object] | no | no | [] | — |
 | `stored_shipping_addresses[].line1` | string \| null | no | yes | null | — |
 | `stored_shipping_addresses[].line2` | string \| null | no | yes | null | — |
@@ -2644,6 +2684,7 @@ Example JSON output:
   "updated_at": "2026-01-01T00:00:00Z",
   "updated_by": "value",
   "updated_via": "cli",
+  "vendor_links": [],
   "version": 1,
   "warnings": [],
   "website": null
