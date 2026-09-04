@@ -404,7 +404,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return form_page(request, None, noun, record_id, None)
         return record_page(request, None, noun, record_id)
 
-    def form_page(request: Request, company_id: str | None, noun: str, verb: str, record_id: str | None, result: dict | None = None, error: dict | None = None, preview: bool = False):
+    def form_page(request: Request, company_id: str | None, noun: str, verb: str, record_id: str | None, result: dict | None = None, error: dict | None = None, preview: bool = False, attempted: dict[str, str] | None = None):
         cmd = registry.get(f"{noun} {verb}".strip())
         if cmd is None or cmd.local_only:
             return page_error(request, BookflowError("E_USAGE", message=f"unknown command {noun} {verb}"))
@@ -439,7 +439,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         elif cmd.version_source and record_id is None:
             return page_error(request, BookflowError("E_USAGE", message="open this update from a record page"))
         return render("form.html", request, company_id=company_id, noun=noun, verb=verb, cmd=cmd, leaves=F.leaves(cmd.input_model), originals=originals or {},
-                      record_id=record_id, ctx_fields=F.context_fields(cmd), result=result, error=error, preview=preview, get=F.get_path)
+                      attempted=attempted or {}, record_id=record_id,
+                      ctx_fields=F.context_fields(cmd), result=result, error=error,
+                      preview=preview, get=F.get_path, form_value=F.form_value)
 
     @app.get("/hub/{noun}/{record_id}/{verb}", response_class=HTMLResponse)
     def hub_record_form(noun: str, record_id: str, verb: str, request: Request):
@@ -468,9 +470,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             # without the workbench header would answer 200 and look accepted (row 3 plan, Authentication)
             if e.code in ("E_UNAUTHENTICATED", "E_WORKBENCH_HEADER"):
                 return page_error(request, e)
-            return form_page(request, company_id, noun, verb, record_id, error=e.to_dict())
+            return form_page(request, company_id, noun, verb, record_id, error=e.to_dict(), attempted=form)
         if preview:
-            return form_page(request, company_id, noun, verb, record_id, result=out, preview=True)
+            return form_page(request, company_id, noun, verb, record_id, result=out, preview=True, attempted=form)
         target = _success_target(cmd, company_id, noun, record_id, out)
         flash_id = flashes.put(session_token, {"command": cmd.name, "result": out})
         location = f"{target}?flash={flash_id}"

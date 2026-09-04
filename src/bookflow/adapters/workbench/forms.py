@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 import types
 from enum import Enum
 from typing import Any, Literal, Union, get_args, get_origin
@@ -10,6 +11,7 @@ from typing import Any, Literal, Union, get_args, get_origin
 from pydantic import BaseModel
 
 from bookflow.core import registry
+from bookflow.core.errors import BookflowError
 
 
 def _base(ann):
@@ -21,7 +23,7 @@ def _base(ann):
 
 
 def leaves(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
-    """One entry per leaf field: path, kind (text, number, bool, choice, secret), choices, description, default, required, nullable."""
+    """Describe each form leaf from the command model alone."""
     out = []
     for name, f in model.model_fields.items():
         base, nullable = _base(f.annotation)
@@ -29,6 +31,7 @@ def leaves(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
             out += leaves(base, prefix + name + ".")
             continue
         kind, choices = "text", None
+        json_shape = None
         if get_origin(base) is Literal:
             kind, choices = "choice", [str(a) for a in get_args(base)]
         elif inspect.isclass(base) and issubclass(base, Enum):
@@ -37,11 +40,18 @@ def leaves(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
             kind = "bool"
         elif base in (int, float):
             kind = "number"
+        elif get_origin(base) in (list, tuple, set, frozenset):
+            kind, json_shape = "json", "array"
+        elif get_origin(base) is dict:
+            kind, json_shape = "json", "object"
         extra = f.json_schema_extra if isinstance(f.json_schema_extra, dict) else {}
         if extra.get("secret"):
             kind = "secret"
         default = None if f.is_required() else f.default
-        out.append({"path": prefix + name, "kind": kind, "choices": choices, "description": f.description or "", "default": default,
+        path = prefix + name
+        out.append({"path": path, "path_parts": tuple(path.split(".")), "kind": kind,
+                    "json_shape": json_shape, "choices": choices,
+                    "description": f.description or "", "default": default,
                     "required": f.is_required(), "nullable": nullable})
     return out
 
@@ -60,6 +70,23 @@ def get_path(d: dict[str, Any] | None, path: str) -> Any:
             return None
         cur = cur.get(p)
     return cur
+
+
+def form_value(
+    leaf: dict[str, Any],
+    originals: dict[str, Any] | None,
+    attempted: dict[str, str] | None,
+) -> Any:
+    """Return attempted text separately from the authoritative original."""
+    if leaf["kind"] == "secret":
+        return ""
+    key = f"f:{leaf['path']}"
+    if attempted is not None and key in attempted:
+        return attempted[key]
+    value = get_path(originals, leaf["path"])
+    if leaf["kind"] == "json" and value is not None:
+        return json.dumps(value, indent=2, default=str)
+    return value
 
 
 def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, Any] | None) -> tuple[dict[str, Any], dict[str, str], bool]:
@@ -84,6 +111,26 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
             if value == "unset":
                 continue
             v: Any = value == "true"
+        elif leaf["kind"] == "json":
+            try:
+                v = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise BookflowError(
+                    "E_VALIDATION",
+                    details={"fields": [{
+                        "field": path,
+                        "problem": f"must be a JSON {leaf['json_shape']} ({exc.msg})",
+                    }]},
+                ) from None
+            expected = list if leaf["json_shape"] == "array" else dict
+            if not isinstance(v, expected):
+                raise BookflowError(
+                    "E_VALIDATION",
+                    details={"fields": [{
+                        "field": path,
+                        "problem": f"must be a JSON {leaf['json_shape']}",
+                    }]},
+                )
         elif leaf["kind"] == "number":
             try:
                 v = int(value) if value.lstrip("-").isdigit() else float(value)
@@ -91,7 +138,7 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
                 v = value
         else:
             v = value
-        if originals is not None and original is not None and str(original) == str(v):
+        if originals is not None and original is not None and original == v:
             continue
         set_path(raw, path, v)
     for name, header in (("reason", "X-Bookflow-Reason"), ("source_ref", "X-Bookflow-Source-Ref"), ("directive", "X-Bookflow-Directive"), ("idempotency_key", "Idempotency-Key")):

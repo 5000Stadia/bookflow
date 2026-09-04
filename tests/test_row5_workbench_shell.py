@@ -1,8 +1,16 @@
 """The Row 5 workbench shell groups and queries list nouns responsively."""
 
+import html
+
 from fastapi.testclient import TestClient
 
-from tests.test_row3_host import PASSWORD, hosted
+import pytest
+
+from bookflow.adapters.workbench import forms
+from bookflow.core import registry
+from bookflow.core.errors import BookflowError
+
+from tests.test_row3_host import PASSWORD, WB, hosted
 
 
 def _browser(hosted) -> TestClient:
@@ -54,3 +62,44 @@ def test_shell_declares_mobile_viewport_and_scopes_horizontal_scroll_to_tables(h
     assert 'class="table-wrap"' in page.text
     assert "@media (max-width:700px)" in css.text
     assert ".table-wrap{max-width:100%;overflow-x:auto}" in css.text
+
+
+def test_aggregate_form_fields_use_json_and_decode_the_command_shape():
+    command = registry.get("unit-of-measure create")
+    assert command is not None
+    descriptor = next(field for field in forms.leaves(command.input_model) if field["path"] == "units")
+    assert descriptor["path_parts"] == ("units",)
+    assert descriptor["kind"] == "json" and descriptor["json_shape"] == "array"
+
+    value = '[{"name":"Each","abbreviation":"ea","is_base":true,"base_factor":"1"}]'
+    raw, _, _ = forms.translate(
+        command,
+        {"f:name": "Count", "f:units": value, "action": "preview"},
+        None,
+    )
+    assert raw["units"] == [
+        {"name": "Each", "abbreviation": "ea", "is_base": True, "base_factor": "1"}
+    ]
+
+    with pytest.raises(BookflowError) as caught:
+        forms.translate(command, {"f:units": "not-json"}, None)
+    assert caught.value.code == "E_VALIDATION"
+    assert caught.value.details["fields"][0]["field"] == "units"
+
+
+def test_aggregate_form_preserves_attempted_json_after_validation(hosted):
+    browser = _browser(hosted)
+    route = f"/c/{hosted.company_id}/unit-of-measure/create"
+    page = browser.get(route)
+    assert page.status_code == 200
+    assert '<textarea name="f:units"' in page.text
+
+    attempted = '[{"name":"Each"'
+    failed = browser.post(
+        route,
+        headers=WB,
+        data={"originals": "{}", "f:name": "Count", "f:units": attempted, "action": "preview"},
+    )
+    assert failed.status_code == 200
+    assert "E_VALIDATION" in failed.text
+    assert attempted in html.unescape(failed.text)

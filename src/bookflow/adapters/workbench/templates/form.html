@@ -6,13 +6,14 @@
 {% if result %}<div class="{{ 'warn' if preview else 'field' }}"><b>{{ "Preview (nothing written)" if preview else "Result" }}</b><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></div>{% endif %}
 <form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML">
 <input type="hidden" name="originals" value='{{ json.dumps(originals, default=str) | e }}'>
-{% for l in leaves %}<div class="row"><label>{{ l.path }}{% if l.required %} *{% endif %}<small>{{ l.description }}{% if l.choices %} One of: {{ l.choices | join(", ") }}.{% endif %}{% if l.default not in (none, "", false) %} Default: {{ l.default }}.{% endif %}</small></label>
-{% set cur = get(originals, l.path) %}
+{% for l in leaves %}<div class="row"><label>{{ l.path }}{% if l.required %} *{% endif %}<small>{{ l.description }}{% if l.choices %} One of: {{ l.choices | join(", ") }}.{% endif %}{% if l.kind == "json" %} Enter a JSON {{ l.json_shape }}.{% endif %}{% if l.default not in (none, "", false) %} Default: {{ l.default }}.{% endif %}</small></label>
+{% set cur = form_value(l, originals, attempted) %}
 {% if l.kind == "choice" %}<select name="f:{{ l.path }}"><option value="">(unchanged)</option>{% for c in l.choices %}<option value="{{ c }}" {% if cur == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
 {% elif l.kind == "bool" %}<select name="f:{{ l.path }}"><option value="unset">(unset)</option><option value="true" {% if cur == true %}selected{% endif %}>true</option><option value="false" {% if cur == false %}selected{% endif %}>false</option></select>
 {% elif l.kind == "secret" %}<input type="password" name="f:{{ l.path }}">
+{% elif l.kind == "json" %}<textarea name="f:{{ l.path }}" rows="6" spellcheck="false">{{ cur if cur is not none else '' }}</textarea>
 {% else %}<input name="f:{{ l.path }}" value="{{ cur if cur is not none else '' }}" {% if l.kind == "number" %}inputmode="numeric"{% endif %}>{% endif %}
-<span>{% if cmd.clearable and l.nullable %}<label><input type="checkbox" name="clear:{{ l.path }}" value="1"> clear</label>{% endif %}</span></div>{% endfor %}
-{% for c in ctx_fields %}<div class="row"><label>{{ c }}<small>context, sent as a header</small></label><input name="ctx:{{ c }}"><span></span></div>{% endfor %}
+<span>{% if cmd.clearable and l.nullable and l.kind != "json" %}<label><input type="checkbox" name="clear:{{ l.path }}" value="1" {% if attempted.get("clear:" ~ l.path) == "1" %}checked{% endif %}> clear</label>{% endif %}</span></div>{% endfor %}
+{% for c in ctx_fields %}<div class="row"><label>{{ c }}<small>context, sent as a header</small></label><input name="ctx:{{ c }}" value="{{ attempted.get('ctx:' ~ c, '') }}"><span></span></div>{% endfor %}
 <div class="row"><span></span><span>{% if cmd.is_write %}<button name="action" value="preview">Preview</button>{% endif %}<button name="action" value="submit">Submit</button></span></div></form>
 {% endblock %}
