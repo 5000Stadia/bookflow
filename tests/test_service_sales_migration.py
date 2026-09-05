@@ -24,6 +24,13 @@ COMMON = dict(CREATED, version=1, updated_at=CREATED['created_at'], updated_by='
 SNAPSHOT = '{ "name": "Original café", "zero": 0, "false": false, "empty": "" }'
 
 
+@pytest.fixture(autouse=True)
+def sales_migration_target(monkeypatch):
+    """Keep these frozen co8→co9 witnesses scoped to their owning migration."""
+    from bookflow.storage.migrate import HEADS
+    monkeypatch.setitem(HEADS, 'company', 'co0009')
+
+
 def _populate(db):
     """Write real co0008 columns, including foreign replacement and void history."""
     conn = db.raw

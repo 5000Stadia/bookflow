@@ -637,6 +637,13 @@ def _read_calls(hosted):
         calls[f"{noun} query"] = ({"status": "posted", "limit": 2}, cid)
         calls[f"{noun} show"] = (selector, cid)
         calls[f"{noun} history"] = ({**selector, "limit": 2}, cid)
+    for noun in ("proposal", "estimate", "work-order"):
+        work = hosted.ok(f"{noun}.query", {"active": None}, company=cid)["items"]
+        assert work, noun
+        selector = {noun.replace("-", "_"): work[0]["id"]}
+        calls[f"{noun} query"] = ({"active": None, "limit": 2}, cid)
+        calls[f"{noun} show"] = (selector, cid)
+        calls[f"{noun} history"] = ({**selector, "limit": 2}, cid)
     journal = hosted.ok("journal.query", company=cid)["items"][0]
     calls.update({
         "journal query": ({}, cid),
@@ -1304,7 +1311,7 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
     from bookflow.core import registry
     registry.load_all()
     commercial_fields = {}
-    for noun in ("invoice", "sales-receipt"):
+    for noun in ("invoice", "sales-receipt", "proposal", "estimate", "work-order"):
         scope = noun.replace("-", "_")
         hosted.ok("custom-field.create", {
             "name": f"{noun} form ownership", "kind": "text", "scopes": [scope],
@@ -1325,11 +1332,12 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
                 getattr(definition, "runtime_field_provider", None) == "custom-fields"
                 or (cmd.noun in ("journal", "register", "invoice", "sales-receipt")
                     and cmd.verb in ("post", "update"))
+                or cmd.noun in ("proposal", "estimate", "work-order")
             ):
                 assert 'name="f:custom_fields"' not in page.text, cmd.name
                 assert 'name="cf:' in page.text, cmd.name
             elif leaf["path"] == "custom_field_kinds" and cmd.noun in (
-                "journal", "register", "invoice", "sales-receipt"
+                "journal", "register", "invoice", "sales-receipt", "proposal", "estimate", "work-order"
             ):
                 assert 'name="f:custom_field_kinds"' not in page.text, cmd.name
                 kinds = re.findall(r'name="cf-kind:([^"]+)"', page.text)
@@ -1337,7 +1345,8 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
                 assert kinds and sorted(kinds) == sorted(values), cmd.name
                 assert len(kinds) == len(set(kinds)), cmd.name
                 if cmd.noun in commercial_fields:
-                    assert set(values) == commercial_fields[cmd.noun], cmd.name
+                    destination = cmd.verb if cmd.name in ("proposal estimate", "estimate work-order") else cmd.noun
+                    assert set(values) == commercial_fields[destination], cmd.name
             elif leaf["path"] == "cursor" and cmd.name in (
                 "report balance-sheet", "report profit-and-loss"
             ):
