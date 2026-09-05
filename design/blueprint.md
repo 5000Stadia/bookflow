@@ -215,6 +215,13 @@ Every operation is a command. A command has a name, an input model, an output mo
 
 `<noun> <verb>`, nouns singular: `company new`, `customer create`, `invoice post`, `audit list`. Nouns are conventional bookkeeping names.
 
+Business workflow language stays close to the command vocabulary. An agent request
+such as "make and send an invoice" maps to explicit invoice creation/posting and
+delivery actions with a shared result, without requiring the user to describe
+ledger internals. Command documentation includes these ordinary-language examples.
+The planned customer-work workflow and its vocabulary are defined in
+[Customer work and billing](customer-work-and-billing.md).
+
 Verbs used across lists: `create`, `update`, `show`, `list`, `query`, `activate`, `deactivate`. Verbs used on transactions: `post`, `update`, `show`, `list`, `void`; an update appends a document revision and the correcting posting batches defined in 10.2–10.4. Reports use `report <name>`.
 
 Every command has a kind: `read`, `write`, or `advisory` (presence: opens the company writable, records no event, takes no context options). Every command has a scope. **Hub** commands act on the data root and take no company: `init`, `organization *`, `company new`, `company list`, `company use`, `company attach`, `company detach`, `company delete`, `demo reset`, `user *`, `token *`. **Company** commands act on the selected company (section 5.3): everything else, including `company show`, `company update`, `company rename`, `company backup`. A hub command that names a company takes it as a positional argument accepting an id or a display name.
@@ -1161,6 +1168,11 @@ Built after release 1. Designed here so release 1 leaves room.
 ### 13.1 Work orders
 
 Table `work_orders`: `number`, `customer_id` (customer or job), `title`, `description`, `status` (`draft`, `scheduled`, `in_progress`, `on_hold`, `complete`, `invoiced`, `cancelled`), `priority`, `scheduled_start`, `scheduled_end`, `actual_start`, `actual_end`, `site_address`, `assignees` (employee ids), `invoice_transaction_id` (nullable). Table `work_order_lines`: `item_id`, `description`, `quantity`, `rate`, `billable`. `work-order invoice <id>` creates an invoice from billable lines and links it. Work orders carry notes and attachments like any record, and the activity feed is their job log.
+
+Estimates, work orders and contractor proposals/statements of work form the linked
+customer-work workflow in [Customer work and billing](customer-work-and-billing.md).
+Completion can produce an invoice for money owed or a sales receipt for payment
+received. Source documents and their revisions remain available after conversion.
 
 ### 13.2 Time entries
 
