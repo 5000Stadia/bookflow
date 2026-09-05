@@ -18,6 +18,7 @@ from tests.test_service_sales_migration import _populate, _rows, _sale, COMMON, 
 
 MODULE = 'bookflow.storage.company_migrations.versions.0010_customer_work'
 NEW = ('work_documents', 'work_revisions', 'work_line_identities', 'work_lines', 'work_links')
+CHANGED = ('custom_field_scopes',)
 
 
 @pytest.fixture
@@ -33,6 +34,12 @@ def old(tmp_path, monkeypatch):
         _sale(db.raw)
         _sale(db.raw, 'receipt', 'sales_receipt')
         db.raw.execute('COMMIT')
+        from tests.test_row5_custom_fields import _definition
+        from bookflow.company.custom_fields import plan_owner_value_patch, apply_owner_value_plan
+        definition = _definition(db.conn, name='Retained field', scopes=('customer','estimate'))
+        apply_owner_value_plan(db, plan_owner_value_patch(db, record_type='customer',
+            record_id=new_id(), patch={definition['id']: 'Original café'}, creating=True))
+        _definition(db.conn, name='Inactive field', scopes=('vendor',), active=False)
     return path
 
 
@@ -98,6 +105,20 @@ def link(db, source, dest, relation='copy', **changes):
     return values['id']
 
 
+def assert_scope_only_schema_change(before, after):
+    """All old SQL is identical except the two enum entries and RENAME quoting."""
+    expected = []
+    for obj in before:
+        obj = dict(obj)
+        if obj['type'] == 'table' and obj['name'] == 'custom_field_scopes':
+            obj['sql'] = obj['sql'].replace('CREATE TABLE custom_field_scopes ',
+                'CREATE TABLE "custom_field_scopes" ').replace(
+                "'vendor_credit','estimate','sales_order'",
+                "'vendor_credit','proposal','work_order','estimate','sales_order'")
+        expected.append(obj)
+    assert after == expected
+
+
 def test_co9_upgrade_preserves_every_old_row_and_schema_object(old, tmp_path):
     with open_database(old, writable=True) as db:
         db.raw.execute('CREATE VIEW local_work_view AS SELECT id, number FROM transactions')
@@ -108,7 +129,7 @@ def test_co9_upgrade_preserves_every_old_row_and_schema_object(old, tmp_path):
         assert set(after) - set(before) == set(NEW)
         assert {k: after[k] for k in before} == before
         remaining = [o for o in _normalized_schema(db.raw) if o['table'] not in NEW]
-        assert remaining == objects
+        assert_scope_only_schema_change(objects, remaining)
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
         assert db.raw.execute('PRAGMA integrity_check').fetchone() == ('ok',)
         assert migrate_to_head(db, 'company', None) == ('co0010', 'co0010')
@@ -123,7 +144,7 @@ def test_fresh_frozen_ddl_matches_metadata_and_ignores_future_metadata(old, tmp_
     with open_database(fresh, writable=True, create=True) as db:
         migrate_to_head(db, 'company', None)
         fresh_objects = _normalized_schema(db.raw)
-        for name in NEW:
+        for name in NEW + CHANGED:
             actual = sa.Table(name, sa.MetaData(), autoload_with=db.conn)
             expected = schema.metadata.tables[name]
             assert [(c.name,str(c.type),c.nullable,c.primary_key) for c in actual.c] == [
@@ -144,12 +165,12 @@ def test_fresh_frozen_ddl_matches_metadata_and_ignores_future_metadata(old, tmp_
     assert all(isinstance(x,str) for x in ddl)
     assert 'bookflow.company' not in source
     monkeypatch.setattr(schema, 'metadata', sa.MetaData())
-    for name in NEW:
+    for name in NEW + CHANGED:
         monkeypatch.setattr(schema, name, None)
     with open_database(old, writable=True) as db:
         migrate_to_head(db, 'company', None)
-        assert [o for o in _normalized_schema(db.raw) if o['table'] in NEW] == [
-            o for o in fresh_objects if o['table'] in NEW]
+        assert [o for o in _normalized_schema(db.raw) if o['table'] in NEW + CHANGED] == [
+            o for o in fresh_objects if o['table'] in NEW + CHANGED]
 
 
 @pytest.mark.parametrize('backups', [False, True])
@@ -313,3 +334,67 @@ def test_hub_capabilities_additive_and_fresh(tmp_path):
     with open_database(tmp_path/'fresh-hub.db',writable=True,create=True) as db:
         migrate_to_head(db,'hub',None)
         assert _rows(db.raw) == after
+
+
+@pytest.mark.parametrize('failure', [None, 'drop', 'restore', 'foreign_key'])
+@pytest.mark.parametrize('backups', [False, True])
+def test_scope_rebuild_preserves_local_schema_and_rolls_back(old, tmp_path, failure, backups):
+    with open_database(old, writable=True) as db:
+        db.raw.execute('CREATE VIEW z_local_scopes AS SELECT id, record_type FROM custom_field_scopes')
+        db.raw.execute('CREATE VIEW "a local ""scopes" AS SELECT * FROM z_local_scopes')
+        db.raw.execute('CREATE INDEX "local scope index" ON custom_field_scopes(record_type) WHERE active=1')
+        db.raw.execute('''CREATE TRIGGER local_scope_guard BEFORE UPDATE ON custom_field_scopes
+            WHEN NEW.position=9876 BEGIN SELECT RAISE(ABORT, 'local scope guard'); END''')
+        db.raw.execute('''CREATE TRIGGER local_external_guard AFTER UPDATE ON accounts
+            WHEN NEW.name='local-blocked' BEGIN SELECT record_type FROM "a local ""scopes";
+            SELECT RAISE(ABORT, 'local external guard'); END''')
+        db.raw.execute('''CREATE TRIGGER local_view_guard INSTEAD OF UPDATE ON "a local ""scopes"
+            BEGIN SELECT RAISE(ABORT, 'local view guard'); END''')
+        if failure == 'foreign_key':
+            db.raw.execute('PRAGMA foreign_keys=OFF')
+            db.raw.execute("INSERT INTO custom_field_scopes SELECT 'orphan', 'missing', position, active, record_type, 'Orphan', 'orphan', definition_active FROM custom_field_scopes LIMIT 1")
+            db.raw.execute('PRAGMA foreign_keys=ON')
+        before, objects = _rows(db.raw), _normalized_schema(db.raw)
+        view_rows = db.raw.execute('SELECT * FROM "a local ""scopes" ORDER BY id').fetchall()
+        retained = db.raw.execute("SELECT name,sql FROM sqlite_schema WHERE sql IS NOT NULL AND type IN ('view','trigger','index') ORDER BY name").fetchall()
+        denied = []
+        def interrupt(action, name, *args):
+            if not denied and ((failure == 'drop' and action == sqlite3.SQLITE_DROP_TABLE and name == 'custom_field_scopes') or
+                (failure == 'restore' and action == sqlite3.SQLITE_CREATE_VIEW and name == 'a local "scopes')):
+                denied.append(name)
+                return sqlite3.SQLITE_DENY
+            return sqlite3.SQLITE_OK
+        db.raw.set_authorizer(interrupt)
+        try:
+            if failure:
+                with pytest.raises(BookflowError) as caught:
+                    migrate_to_head(db,'company',tmp_path/'backups' if backups else None)
+                assert caught.value.code == 'E_MIGRATION_FAILED'
+                assert _rows(db.raw) == before
+                assert _normalized_schema(db.raw) == objects
+                assert db.raw.execute('SELECT version_num FROM alembic_version').fetchone() == ('co0009',)
+                if failure in ('drop','restore'):
+                    assert len(denied) == 1
+            else:
+                assert migrate_to_head(db,'company',tmp_path/'backups' if backups else None) == ('co0009','co0010')
+                after = _rows(db.raw)
+                assert {k:after[k] for k in before} == before
+                assert_scope_only_schema_change(objects, [o for o in _normalized_schema(db.raw) if o['table'] not in NEW])
+        finally:
+            db.raw.set_authorizer(None)
+        for name,sql in retained:
+            assert db.raw.execute('SELECT sql FROM sqlite_schema WHERE name=?',(name,)).fetchone() == (sql,)
+        assert db.raw.execute('SELECT * FROM "a local ""scopes" ORDER BY id').fetchall() == view_rows
+        with pytest.raises(sqlite3.IntegrityError,match='local scope guard'):
+            db.raw.execute('UPDATE custom_field_scopes SET position=9876')
+        with pytest.raises(sqlite3.IntegrityError,match='local external guard'):
+            db.raw.execute("UPDATE accounts SET name='local-blocked' WHERE id='bank'")
+        with pytest.raises(sqlite3.IntegrityError,match='local view guard'):
+            db.raw.execute('UPDATE "a local ""scopes" SET record_type=record_type')
+        assert db.raw.execute('PRAGMA foreign_keys').fetchone() == (1,)
+        assert db.raw.execute('PRAGMA integrity_check').fetchone() == ('ok',)
+        foreign_keys = db.raw.execute('PRAGMA foreign_key_check').fetchall()
+        if failure == 'foreign_key':
+            assert len(foreign_keys) == 1  # the planted old orphan, restored unchanged
+        else:
+            assert foreign_keys == []

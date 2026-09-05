@@ -909,7 +909,7 @@ custom_field_scopes = _table(
     _column("definition_name_key", sa.String(400), "Synchronized normalized current definition-name key.", nullable=False),
     _column("definition_active", sa.Boolean, "Synchronized current definition active state.", nullable=False),
     sa.CheckConstraint(
-        "record_type IN ('customer','vendor','employee','other_name','item','journal_entry','invoice','sales_receipt','credit_memo','payment','deposit','bill','bill_payment','check','credit_card_charge','transfer','inventory_adjustment','vendor_credit','estimate','sales_order','purchase_order','item_receipt','statement')",
+        "record_type IN ('customer','vendor','employee','other_name','item','journal_entry','invoice','sales_receipt','credit_memo','payment','deposit','bill','bill_payment','check','credit_card_charge','transfer','inventory_adjustment','vendor_credit','proposal','work_order','estimate','sales_order','purchase_order','item_receipt','statement')",
         name="ck_custom_field_scopes_record_type",
     ),
     sa.Index("ux_custom_field_scopes_record_name", "record_type", "definition_name_key", unique=True, sqlite_where=sa.text("active = 1 AND definition_active = 1")),

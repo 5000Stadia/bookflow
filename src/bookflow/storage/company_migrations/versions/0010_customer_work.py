@@ -1,4 +1,4 @@
-"""Frozen additive customer-work schema; existing tables and rows remain unchanged."""
+"""Frozen customer-work schema and scope CHECK extension; existing rows are preserved."""
 from alembic import op
 
 revision = 'co0010'
@@ -8,6 +8,10 @@ depends_on = None
 
 # Literal revision-local DDL. Never import application metadata here.
 DDL = (
+    "CREATE TABLE _co0010_custom_field_scopes (\n\tid VARCHAR(26) NOT NULL, \n\tdefinition_id VARCHAR(26) NOT NULL, \n\tposition INTEGER NOT NULL, \n\tactive BOOLEAN NOT NULL, \n\trecord_type VARCHAR(32) NOT NULL, \n\tdefinition_name VARCHAR(200) NOT NULL, \n\tdefinition_name_key VARCHAR(400) NOT NULL, \n\tdefinition_active BOOLEAN NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_custom_field_defs_definition_id_position CHECK (position >= 0), \n\tCONSTRAINT ck_custom_field_scopes_record_type CHECK (record_type IN ('customer','vendor','employee','other_name','item','journal_entry','invoice','sales_receipt','credit_memo','payment','deposit','bill','bill_payment','check','credit_card_charge','transfer','inventory_adjustment','vendor_credit','proposal','work_order','estimate','sales_order','purchase_order','item_receipt','statement')), \n\tFOREIGN KEY(definition_id) REFERENCES custom_field_defs (id) ON DELETE RESTRICT\n)",
+    'INSERT INTO _co0010_custom_field_scopes (id, definition_id, position, active, record_type, definition_name, definition_name_key, definition_active) SELECT id, definition_id, position, active, record_type, definition_name, definition_name_key, definition_active FROM custom_field_scopes',
+    'DROP TABLE custom_field_scopes',
+    'ALTER TABLE _co0010_custom_field_scopes RENAME TO custom_field_scopes',
     "CREATE TABLE work_documents (\n\tid VARCHAR(26) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tcreated_at VARCHAR(32) NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tcreated_via VARCHAR(16) NOT NULL, \n\tupdated_at VARCHAR(32) NOT NULL, \n\tupdated_by VARCHAR(26) NOT NULL, \n\tupdated_via VARCHAR(16) NOT NULL, \n\tkind VARCHAR(16) NOT NULL, \n\tnumber VARCHAR(64) NOT NULL, \n\tcurrent_revision_id VARCHAR(26) NOT NULL, \n\tstatus VARCHAR(16) NOT NULL, \n\tactive BOOLEAN NOT NULL, \n\testimate_group_id VARCHAR(26), \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_work_kind_number UNIQUE (kind, number), \n\tCONSTRAINT ck_work_kind CHECK (kind IN ('proposal','estimate','work_order')), \n\tCONSTRAINT ck_work_group CHECK ((kind = 'estimate' AND estimate_group_id IS NOT NULL) OR (kind <> 'estimate' AND estimate_group_id IS NULL)), \n\tCONSTRAINT ck_work_status CHECK ((kind IN ('proposal','estimate') AND status IN ('draft','open','accepted','declined','superseded','cancelled')) OR (kind = 'work_order' AND status IN ('draft','scheduled','in_progress','on_hold','complete','cancelled'))), \n\tCONSTRAINT ck_work_active CHECK (active IN (0,1)), \n\tCONSTRAINT ck_work_version CHECK (typeof(version) = 'integer' AND version > 0), \n\tCONSTRAINT ck_work_number CHECK (length(trim(number)) BETWEEN 1 AND 64), \n\tCONSTRAINT fk_work_current_revision FOREIGN KEY(id, current_revision_id) REFERENCES work_revisions (document_id, id) DEFERRABLE INITIALLY DEFERRED, \n\tFOREIGN KEY(estimate_group_id) REFERENCES work_documents (id)\n)",
     "CREATE UNIQUE INDEX uq_work_accepted_group ON work_documents (estimate_group_id) WHERE kind = 'estimate' AND status = 'accepted'",
     "CREATE TABLE work_revisions (\n\tid VARCHAR(26) NOT NULL, \n\tdocument_id VARCHAR(26) NOT NULL, \n\trevision_number BIGINT NOT NULL, \n\tsupersedes_revision_id VARCHAR(26), \n\tdate VARCHAR(10) NOT NULL, \n\tnumber VARCHAR(64) NOT NULL, \n\ttitle VARCHAR(200) NOT NULL, \n\tstatus VARCHAR(16) NOT NULL, \n\tactive BOOLEAN NOT NULL, \n\tcustomer_id VARCHAR(26) NOT NULL, \n\tcurrency VARCHAR(3) NOT NULL, \n\tnet_minor_units BIGINT NOT NULL, \n\ttax_minor_units BIGINT NOT NULL, \n\tgross_minor_units BIGINT NOT NULL, \n\taccepted_revision_id VARCHAR(26), \n\taccepted_at VARCHAR(32), \n\taccepted_by VARCHAR(26), \n\tdecision_note VARCHAR(2000), \n\tfacts_snapshot TEXT NOT NULL, \n\tcustom_fields_snapshot TEXT NOT NULL, \n\taudit_event_id VARCHAR(26) NOT NULL, \n\tcreated_at VARCHAR(32) NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tcreated_via VARCHAR(16) NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_work_facts_snapshot CHECK (json_valid(facts_snapshot) AND json_type(facts_snapshot) = 'object'), \n\tCONSTRAINT ck_work_custom_fields_snapshot CHECK (json_valid(custom_fields_snapshot) AND json_type(custom_fields_snapshot) = 'object'), \n\tCONSTRAINT uq_work_revision_owner UNIQUE (document_id, id), \n\tCONSTRAINT uq_work_revision_number UNIQUE (document_id, revision_number), \n\tCONSTRAINT fk_work_supersedes FOREIGN KEY(document_id, supersedes_revision_id) REFERENCES work_revisions (document_id, id), \n\tCONSTRAINT fk_work_acceptance FOREIGN KEY(document_id, accepted_revision_id) REFERENCES work_revisions (document_id, id) DEFERRABLE INITIALLY DEFERRED, \n\tCONSTRAINT ck_work_revision_number CHECK (typeof(revision_number) = 'integer' AND revision_number > 0), \n\tCONSTRAINT ck_work_net_minor_units CHECK (typeof(net_minor_units) = 'integer' AND net_minor_units >= 0), \n\tCONSTRAINT ck_work_tax_minor_units CHECK (typeof(tax_minor_units) = 'integer' AND tax_minor_units >= 0), \n\tCONSTRAINT ck_work_gross_minor_units CHECK (typeof(gross_minor_units) = 'integer' AND gross_minor_units >= 0), \n\tCONSTRAINT ck_work_total CHECK (gross_minor_units = net_minor_units + tax_minor_units), \n\tCONSTRAINT ck_work_revision_active CHECK (active IN (0,1)), \n\tCONSTRAINT ck_work_title CHECK (length(trim(title)) BETWEEN 1 AND 200), \n\tCONSTRAINT ck_work_revision_number_text CHECK (length(trim(number)) BETWEEN 1 AND 64), \n\tCONSTRAINT ck_work_currency CHECK (length(currency) = 3), \n\tCONSTRAINT ck_work_acceptance_evidence CHECK ((accepted_revision_id IS NULL AND accepted_at IS NULL AND accepted_by IS NULL AND status <> 'accepted') OR (accepted_revision_id IS NOT NULL AND accepted_at IS NOT NULL AND accepted_by IS NOT NULL AND status = 'accepted')), \n\tFOREIGN KEY(document_id) REFERENCES work_documents (id), \n\tFOREIGN KEY(customer_id) REFERENCES customers (id), \n\tFOREIGN KEY(audit_event_id) REFERENCES audit_events (id)\n)",
@@ -37,8 +41,29 @@ DDL = (
 
 
 def upgrade() -> None:
+    connection = op.get_bind()
+    # As in co0009, SQLite RENAME validates dependent schema objects. Retain
+    # all persistent views and triggers (including those on other tables),
+    # and only the indexes belonging to the one rebuilt table. The migration
+    # runner encloses this entire operation in its transaction with FKs off.
+    retained = connection.exec_driver_sql(
+        "SELECT type, name, sql FROM sqlite_schema WHERE sql IS NOT NULL AND ("
+        "type IN ('view', 'trigger') OR (type = 'index' AND tbl_name = "
+        "'custom_field_scopes')) "
+        "ORDER BY CASE type WHEN 'view' THEN 0 WHEN 'index' THEN 1 ELSE 2 END, name"
+    ).all()
+    # INSTEAD OF triggers must be dropped before the views owning them.
+    for kind in ('trigger', 'view'):
+        for object_kind, name, _ in retained:
+            if object_kind == kind:
+                quoted = '"' + name.replace('"', '""') + '"'
+                connection.exec_driver_sql(f'DROP {kind.upper()} main.{quoted}')
     for statement in DDL:
         op.execute(statement)
+    for _, _, statement in retained:
+        connection.exec_driver_sql(statement)
+    if connection.exec_driver_sql('PRAGMA foreign_key_check').fetchone() is not None:
+        raise RuntimeError('co0010 foreign key check failed')
 
 
 def downgrade() -> None:
