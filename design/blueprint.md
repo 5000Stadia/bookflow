@@ -1186,6 +1186,13 @@ Browser sessions: `POST /login` with username and password sets an HTTP-only, `S
 
 ### 15.2a Workbench
 
+The generated workbench is the initial functional demo. Once the main accounting
+elements are available, the browser interface receives a comprehensive workflow
+and visual design pass covering navigation, page composition and interaction on
+desktop and phone. The production interface is organized around bookkeeping
+tasks; the demo's command cards do not define its final navigation or appearance.
+Working screen examples establish the human's direction for that pass.
+
 The workbench is the browser interface used to exercise every command. It is generated from the registry and is complete by construction: when a command is registered, its page exists. Its shared shell preserves the selected company and grouped primary navigation on every page; list, detail, and form pages expose a consistent title, context trail, primary action, empty state, and result feedback. Row 5 is the first human checkpoint for this browser shape. Individual list nouns do not fork their own navigation or visual language.
 
 | Page | Content |

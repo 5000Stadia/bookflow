@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import queue
 import sqlite3
@@ -23,6 +24,7 @@ from bookflow.core.locks import RootLock
 from bookflow.core.session import Session
 from bookflow.core import performance
 from bookflow.storage.engine import Database
+from bookflow.core.transfer_resources import TransferLease
 
 log = logging.getLogger("bookflow.host")
 
@@ -36,19 +38,31 @@ class _Job:
     trace_context: Any = None
     trace_wait: Any = None
     trace_mode: str = "maintenance"
+    resource: TransferLease | None = None
 
 
 class Host:
     """Owns the data-root lock and every connection while it runs. One writer thread; readers per request."""
 
     def __init__(self, data_root: Path, *, version: str, idle_checkpoint_seconds: float = 30.0,
-                 sweep_seconds: float = 3600.0, filesystem_wait_seconds: float = 5.0):
+                 sweep_seconds: float = 3600.0, filesystem_wait_seconds: float = 5.0,
+                 transfer_limit: int = 8, principal_transfer_limit: int = 2,
+                 transfer_lifetime_seconds: float = 300.0, shutdown_wait_seconds: float = 30.0):
+        if (type(transfer_limit) is not int or not 0 < transfer_limit <= 8
+                or type(principal_transfer_limit) is not int or not 0 < principal_transfer_limit <= 2
+                or not math.isfinite(transfer_lifetime_seconds) or not 0 < transfer_lifetime_seconds <= 300
+                or not math.isfinite(shutdown_wait_seconds) or not 0 < shutdown_wait_seconds <= 30):
+            raise ValueError("Host transfer and shutdown limits must be positive and within their ceilings.")
         self.data_root = data_root
         performance.protect_root(data_root)
         self.version = version
         self.idle_checkpoint_seconds = idle_checkpoint_seconds
         self.sweep_seconds = sweep_seconds
         self.filesystem_wait_seconds = filesystem_wait_seconds
+        self.transfer_limit = transfer_limit
+        self.principal_transfer_limit = principal_transfer_limit
+        self.transfer_lifetime_seconds = transfer_lifetime_seconds
+        self.shutdown_wait_seconds = shutdown_wait_seconds
         self._lock: RootLock | None = None
         self._queue: "queue.Queue[_Job | None]" = queue.Queue()
         self._writer = threading.Thread(target=self._writer_loop, name="bookflow-writer", daemon=True)
@@ -61,6 +75,7 @@ class Host:
         self._refresh_pending: set[str] = set()
         self._refresh_lock = threading.Lock()
         self._readers_attached = 0
+        self._transfers: set[TransferLease] = set()
         self._readers_lock = threading.Condition()
         self._stopping = False
         self._jobs_closed = False
@@ -86,36 +101,64 @@ class Host:
         # the timers submit to the writer, so they stop first: a job enqueued after the sentinel never completes
         self._timer_stop.set()
         if self._timer.is_alive():
-            self._timer.join(timeout=10)
+            self._timer.join(timeout=min(10, self.shutdown_wait_seconds))
+            if self._timer.is_alive():
+                raise BookflowError("E_DB_BUSY", message="Host timers are still closing; retry shutdown.")
+        self.retry_transfer_cleanup()
         # A read snapshot can prevent the final checkpoint. Keep the root
         # lock until admitted readers have actually closed their handles.
         with self._readers_lock:
-            if not self._readers_lock.wait_for(lambda: self._readers_attached == 0, timeout=30):
-                raise BookflowError("E_DB_BUSY", message="Host readers are still closing; retry shutdown.")
-        self.submit(self._shutdown_on_writer, _during_shutdown=True, _maintenance=True)
-        with self._readers_lock:
-            self._jobs_closed = True
-            self._queue.put(None)
-        self._writer.join(timeout=30)
+            if not self._readers_lock.wait_for(
+                    lambda: self._readers_attached == 0 and not self._transfers,
+                    timeout=self.shutdown_wait_seconds):
+                raise BookflowError("E_DB_BUSY", message="Host readers or transfers are still closing; retry shutdown.")
+        if not self._jobs_closed:
+            try:
+                self.submit(self._shutdown_on_writer, timeout=self.shutdown_wait_seconds,
+                            _during_shutdown=True, _maintenance=True)
+            except TimeoutError:
+                raise BookflowError("E_DB_BUSY", message="Host writer is still closing; retry shutdown.") from None
+            with self._readers_lock:
+                self._jobs_closed = True
+                self._queue.put(None)
+        self._writer.join(timeout=self.shutdown_wait_seconds)
+        if self._writer.is_alive():
+            raise BookflowError("E_DB_BUSY", message="Host writer is still closing; retry shutdown.")
         if self._lock is not None:
             self._lock.__exit__(None, None, None)
             self._lock = None
         if self._umask_old is not None:
             os.umask(self._umask_old)
+            self._umask_old = None
 
     # ---------------------------------------------------------------- writer thread
     @performance.measured("writer.submit")
     def submit(self, fn: Callable[[], Any], timeout: float | None = None, *, _during_shutdown: bool = False,
-               _maintenance: bool = False) -> Any:
-        """Run ``fn`` on the writer thread and return its result; exceptions propagate to the caller."""
-        job = _Job(fn)
-        with self._readers_lock:
-            if self._jobs_closed or (self._stopping and not _during_shutdown):
-                raise BookflowError("E_DB_BUSY", message="The host is stopping; retry after shutdown.")
-            job.trace_context = performance.current_context()
-            job.trace_wait = performance.begin_wait("writer.queue")
-            job.trace_mode = "maintenance" if _maintenance else "hosted"
-            self._queue.put(job)
+               _maintenance: bool = False, resource: TransferLease | None = None) -> Any:
+        """Run on the writer; an accepted job owns its resource beyond caller timeout."""
+        if resource is not None:
+            with self._readers_lock:
+                if not isinstance(resource, TransferLease) or resource not in self._transfers:
+                    raise BookflowError("E_VALIDATION", message="Transfer does not belong to this host.")
+            # Never take a lease lock under the host condition: cleanup calls
+            # back into the condition when it releases filesystem admission.
+            resource.handoff()
+        try:
+            job = _Job(fn, resource=resource)
+            with self._readers_lock:
+                if self._jobs_closed or (self._stopping and not _during_shutdown):
+                    raise BookflowError("E_DB_BUSY", message="The host is stopping; retry after shutdown.")
+                job.trace_context = performance.current_context()
+                job.trace_wait = performance.begin_wait("writer.queue")
+                job.trace_mode = "maintenance" if _maintenance else "hosted"
+                self._queue.put(job)
+        except BaseException:
+            if resource is not None:
+                try:
+                    resource.finish()
+                except BaseException:
+                    pass  # Retained in _transfers for explicit cleanup retry.
+            raise
         if not job.done.wait(timeout):
             raise TimeoutError("the Bookflow writer did not finish the submitted job in time")
         if job.error is not None:
@@ -132,6 +175,8 @@ class Host:
                 with performance.bind(job.trace_context), performance.span(
                         "writer.execute", mode=job.trace_mode):
                     try:
+                        if job.resource is not None:
+                            job.resource.check_start()
                         job.result = job.fn()
                     except BaseException as e:  # noqa: BLE001 - handed back to the submitter
                         job.error = e
@@ -151,6 +196,12 @@ class Host:
             except BaseException as e:  # handed back after recording the failed execution
                 job.error = e
             finally:
+                if job.resource is not None:
+                    try:
+                        job.resource.finish()
+                    except BaseException as e:
+                        if job.error is None:
+                            job.error = e
                 job.done.set()
 
     def _leave_clean(self) -> None:
@@ -255,9 +306,11 @@ class Host:
             self._filesystem_exclusive = True
             self._readers_lock.notify_all()
             with performance.span("reader.drain"):
-                drained = self._readers_lock.wait_for(lambda: self._readers_attached == 0, timeout=self.filesystem_wait_seconds)
+                drained = self._readers_lock.wait_for(
+                    lambda: self._readers_attached == 0 and not self._transfers,
+                    timeout=self.filesystem_wait_seconds)
             if not drained:
-                raise BookflowError("E_DB_BUSY", message="Company readers are still active; retry the folder operation after they finish.",
+                raise BookflowError("E_DB_BUSY", message="Company readers or transfers are still active; retry the folder operation after they finish.",
                                     details={"operation": "filesystem_change"})
         if company_id is None:
             return
@@ -298,7 +351,39 @@ class Host:
             self._readers_attached = max(0, self._readers_attached - 1)
             self._readers_lock.notify_all()
 
-    def run_write(self, user_id: str, login: str, fn: Callable[[Session], Any]) -> Any:
+    def acquire_transfer(self, principal_id: str, company_id: str) -> TransferLease:
+        """Reserve finite I/O and filesystem capacity after authorization, without a DB handle."""
+        if not principal_id or not company_id:
+            raise BookflowError("E_VALIDATION", message="Transfer principal and company are required.")
+        with self._readers_lock:
+            if self._stopping or self._jobs_closed or self._filesystem_exclusive:
+                raise BookflowError("E_DB_BUSY", message="Transfers are unavailable during shutdown or folder changes.")
+            count = sum(lease.principal_id == principal_id for lease in self._transfers)
+            if len(self._transfers) >= self.transfer_limit or count >= self.principal_transfer_limit:
+                raise BookflowError("E_DB_BUSY", message="Transfer capacity is busy; retry after a transfer finishes.")
+            lease = TransferLease(principal_id, company_id, self._release_transfer,
+                                  lifetime_seconds=self.transfer_lifetime_seconds)
+            self._transfers.add(lease)
+            return lease
+
+    def _release_transfer(self, lease: TransferLease) -> None:
+        with self._readers_lock:
+            self._transfers.discard(lease)
+            self._readers_lock.notify_all()
+
+    def retry_transfer_cleanup(self) -> None:
+        """Retry failed completed cleanup; never interrupt an active owner."""
+        with self._readers_lock:
+            leases = tuple(self._transfers)
+        for lease in leases:
+            if lease.cleanup_pending:
+                if lease.state == "writer":
+                    lease.finish()
+                else:
+                    lease.close()
+
+    def run_write(self, user_id: str, login: str, fn: Callable[[Session], Any], *,
+                  resource: TransferLease | None = None, timeout: float | None = None) -> Any:
         """Build the session on the writer, run ``fn(session)`` there, checkpoint passively, signal subscribers."""
         def job():
             from bookflow.core.dispatch import _load_actor_by_id
@@ -315,7 +400,7 @@ class Host:
                 # committed. Those durable events still need a checkpoint and
                 # must wake subscribers even though the command raises.
                 self._after_write()
-        return self.submit(job)
+        return self.submit(job, resource=resource, timeout=timeout)
 
     @performance.measured("writer.maintenance")
     def _after_write(self) -> None:
@@ -372,6 +457,9 @@ class Host:
         """Make shutdown observable immediately and wake every idle event stream."""
         with self._readers_lock:
             self._stopping = True
+            leases = tuple(self._transfers)
+        for lease in leases:
+            lease.cancel()
         self._wake_subscribers()
 
     # ---------------------------------------------------------------- credential liveness
