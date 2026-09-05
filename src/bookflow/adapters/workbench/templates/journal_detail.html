@@ -5,6 +5,7 @@
 <p><strong>{{ revision.date }}</strong> · {{ record.status|capitalize }} · Revision {{ revision.revision_number }} · {{ revision.currency }}</p>
 {% if revision.memo %}<p>{{ revision.memo }}</p>{% endif %}
 {% if record.void_reason %}<p class="warn">Voided: {{ record.void_reason }}. The original and reversing entries remain in the books.</p>{% endif %}
+{% if revision.custom_fields %}<h3>Custom fields</h3><dl style="overflow-wrap:anywhere">{% for f in revision.custom_fields %}<dt>{{ f.name }} · {{ f.kind }}</dt><dd>{{ f.choice_label if f.kind == 'choice' else ('true' if f.value is sameas true else 'false' if f.value is sameas false else f.value) }}</dd>{% endfor %}</dl>{% endif %}
 <nav class="actions" aria-label="Journal revisions">
 {% if revision.revision_number > 1 %}<a href="{{ base }}/{{ record_id }}?revision_number={{ revision.revision_number - 1 }}">Previous revision</a>{% endif %}
 {% if revision.id != record.current_revision_id %}<a href="{{ base }}/{{ record_id }}?revision_number={{ revision.revision_number + 1 }}">Next revision</a><a href="{{ base }}/{{ record_id }}">Current revision</a>{% endif %}

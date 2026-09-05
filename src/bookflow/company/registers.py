@@ -102,7 +102,6 @@ def _compatible(s, inp, header, selected):
                   and own[0]['class_id'] is None and own[0]['class_name'] is None
                   and own[0]['description'] == revision['memo']
                   and revision['name_type'] is None and revision['name_id'] is None
-                  and not json.loads(revision['custom_fields_snapshot'])
                   and all(line['kind'] == 'journal' and all(line[f] is None for f in journals.FACTS)
                           for line in lines))
     if not compatible:
@@ -142,7 +141,7 @@ def translate(inp, s, operation):
                 'amount_minor_units': amount.minor_units,
                 'allocation_net_minor_units': total, 'currency': currency,
             })
-    values = dict(date=inp.date, memo=inp.memo, lines=[main, *offsets])
+    values = dict(date=inp.date, memo=inp.memo, lines=[main, *offsets], custom_fields=inp.custom_fields)
     if inp.number is not None:
         values['number'] = inp.number
     if header:

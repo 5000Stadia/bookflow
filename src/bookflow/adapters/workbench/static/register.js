@@ -143,9 +143,91 @@
       return value;
     });
   }
+  let customState = {};
+  function customLoad(projection) {
+    const container = $('register-custom-fields');
+    if (!container) return;
+    container.replaceChildren(node('legend', 'Custom fields'));
+    const p = projection?.payload || {}, captured = projection?.custom_fields || [];
+    const facts = Object.fromEntries(captured.map(f => [f.definition_id, f]));
+    const controls = new Map((c.custom_fields || []).map(f => [f.definition_id, f]));
+    customState = structuredClone(projection?.customState || {});
+    for (const [id, value] of Object.entries(p.custom_fields || {})) {
+      if (!customState[id]) customState[id] = {state: value === null ? 'clear' : 'set', value,
+        kind: typeof value === 'boolean' ? 'bool' : controls.get(id)?.wire_kind || 'text', label: id};
+    }
+    const ids = new Set([...controls.keys(), ...Object.keys(customState)]);
+    for (const id of ids) {
+      const d = controls.get(id), fact = facts[id];
+      const saved = customState[id];
+      const kind = saved?.kind || d?.wire_kind || 'text';
+      const value = saved ? saved.value : fact ? fact.value : p.journal ? null : d?.creation_default;
+      const state = customState[id] = {state: saved?.state || 'keep', value, kind, label: saved?.label || d?.label || id, choice_id: saved?.choice_id || fact?.choice_id || null};
+      const box = node('div'); box.style.cssText = 'min-width:0;max-width:100%;margin-block:1rem';
+      const label = node('label', state.label + (d?.required ? ' *' : ''));
+      label.style.overflowWrap = 'anywhere';
+      const input = node(['bool', 'choice'].includes(kind) ? 'select' : 'input');
+      input.id = 'register-custom-' + id; label.htmlFor = input.id;
+      input.dataset.customField = id; input.style.cssText = 'width:100%;max-width:100%;box-sizing:border-box';
+      const text = v => v == null ? '' : String(v);
+      if (input.tagName === 'SELECT') {
+        const options = kind === 'bool' ? ['true', 'false'] : (d?.choices || []);
+        // Stable choice identity retains the selection through spelling-only
+        // changes while the original canonical value remains the wire value.
+        const selected = Object.entries(d?.choice_ids || {}).find(([, choiceId]) => choiceId === state.choice_id)?.[0]
+          ?? (!saved && fact && d?.selected != null ? d.selected : text(value));
+        if (!options.includes(selected)) {
+          const o = node('option', value == null ? '(choose)' : text(value) + ' — unavailable choice'); o.value = text(value); input.append(o);
+        }
+        for (const option of options) { const o = node('option', option); o.value = option === selected && value != null ? text(value) : option; if (d?.choice_ids?.[option]) o.dataset.choiceId = d.choice_ids[option]; input.append(o); }
+        input.value = text(value);
+        state.choice_id = input.selectedOptions[0]?.dataset.choiceId || state.choice_id;
+      } else {
+        const date = new Date(text(value) + 'T12:00:00Z');
+        const validDate = value == null || value === '' || (!Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value);
+        input.type = kind === 'date' && validDate ? 'date' : 'text';
+        if (kind === 'number') input.inputMode = 'decimal';
+        input.value = text(value);
+      }
+      const actionLabel = node('label', 'Action for ' + state.label), action = node('select');
+      action.dataset.customAction = id;
+      action.style.cssText = 'max-width:100%';
+      for (const [v, title] of [['keep', p.journal ? 'Keep stored value' : 'Use creation default / omit'], ['set', 'Set value (including empty text)'], ['clear', 'Clear']]) {
+        const option = node('option', title); option.value = v; action.append(option);
+      }
+      action.value = state.state; actionLabel.append(action);
+      input.addEventListener('input', () => {
+        state.value = kind === 'bool' && ['true', 'false'].includes(input.value) ? input.value === 'true' : input.value;
+        state.choice_id = input.selectedOptions?.[0]?.dataset.choiceId || null;
+        state.state = 'set'; action.value = 'set'; dirty = true;
+      });
+      action.addEventListener('change', () => {
+        state.state = action.value;
+        if (state.state === 'set') state.value = kind === 'bool' && ['true', 'false'].includes(input.value) ? input.value === 'true' : input.value;
+        dirty = true;
+      });
+      box.append(label, input, actionLabel);
+      if (!d || kind !== d.wire_kind) box.append(node('strong', 'Unavailable field attempt — change or clear explicitly.'));
+      if (!p.journal && d?.creation_default != null) box.append(node('small', ' Default: ' + text(d.creation_default)));
+      container.append(box);
+    }
+    for (const fact of captured) {
+      const value = fact.kind === 'choice' ? fact.choice_label : fact.value;
+      container.append(node('p', `${fact.name} (${fact.kind}, captured): ${String(value)}`));
+    }
+  }
+  function customPatch() {
+    const patch = {};
+    for (const [id, field] of Object.entries(customState)) {
+      if (field.state === 'clear') patch[id] = null;
+      else if (field.state === 'set') patch[id] = field.value;
+    }
+    return patch;
+  }
   function payload() {
     const value = {account: c.account, date: field('date').value.trim(), direction: field('direction').value,
       amount: field('amount').value.trim(), memo: field('memo').value === (edit?.memo ?? '') ? (edit?.memo ?? null) : (field('memo').value || null), payee: payee.value(), class_id: rowClass.value() || null};
+    value.custom_fields = customPatch();
     if (field('number').value.trim()) value.number = field('number').value.trim();
     if (splitMode) value.allocations = allocations(); else value.category = category.value();
     if (edit) { value.journal = edit.journal; value.expected_version = edit.expected_version; value.selected_line_id = edit.selected_line_id;
@@ -157,6 +239,7 @@
   function load(projection) {
     const p = projection?.payload || {}, labels = projection?.labels || {};
     edit = p.journal ? p : null;
+    customLoad(projection);
     field('date').value = p.date || c.today; field('direction').value = p.direction || c.directions[0][0];
     for (const name of ['number', 'memo', 'amount']) field(name).value = p[name] || '';
     payee.set(p.payee, labels.payee); category.set(p.category, labels.category); rowClass.set(p.class_id, labels.class_id);
@@ -184,7 +267,7 @@
   const identityChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('bookflow-register-identity') : null;
   identityChannel?.addEventListener('message', () => { clearProtected(); storageBlocked = true; pendingView(); });
   function logout() { identityChannel?.postMessage('logout'); clearProtected(); }
-  function clearProtected() { try { sessionStorage.removeItem(storageKey); } catch (_) { storageBlocked = true; } pending = null; initial = null; c.edit = null; configNode.textContent = '{}';
+  function clearProtected() { try { sessionStorage.removeItem(storageKey); } catch (_) { storageBlocked = true; } pending = null; initial = null; c.edit = null; c.custom_fields = []; customState = {}; configNode.textContent = '{}';
     $('register-receipt').replaceChildren(); $('register-receipt').hidden = true;
     if (form) { load(null); for (const name of ['reason', 'source_ref', 'directive_id']) field(name).value = ''; }
   }
@@ -218,10 +301,12 @@
     const page = new DOMParser().parseFromString(await response.text(), 'text/html');
     const config = page.getElementById('register-config');
     if (!config) throw {code: 'INVALID_RESPONSE', message: 'Identity response unreadable. Pending request retained.'};
-    if (JSON.parse(config.textContent).actor !== c.actor) {
+    const current = JSON.parse(config.textContent);
+    if (current.actor !== c.actor) {
       clearProtected(); storageBlocked = true; pendingView();
       throw {code: 'IDENTITY_CHANGED', message: 'Authentication changed. Protected draft cleared; reload to continue.'};
     }
+    c.custom_fields = current.custom_fields || [];
   }
   async function sendPending() {
     if (!pending || sending || storageBlocked || !c.writable || pending.actor !== c.actor || pending.company !== c.company || pending.account !== c.account || Date.now() - pending.time >= retention) return;
@@ -266,7 +351,7 @@
       const context = {};
       for (const [name, header] of [['reason', 'X-Bookflow-Reason'], ['source_ref', 'X-Bookflow-Source-Ref'], ['directive_id', 'X-Bookflow-Directive']]) if (field(name).value) context[header] = field(name).value;
       const intent = {actor: c.actor, company: c.company, account: c.account, command: edit ? 'register.update' : 'register.post',
-        payload: p, wire: JSON.stringify(p), labels: displayLabels(), context, key: intentKey(), time: Date.now(), possibly_sent: false};
+        payload: p, wire: JSON.stringify(p), labels: displayLabels(), customState: structuredClone(customState), custom_fields: initial?.custom_fields || [], context, key: intentKey(), time: Date.now(), possibly_sent: false};
       try { persist(intent); } catch (e) { error({message: `Not sent: ${e.message}`}); return; }
       pending = intent; $('register-error').textContent = ''; await sendPending();
     } catch (e) { error(e); }
@@ -390,7 +475,7 @@
         if (!value.key || !Number.isFinite(value.time) || !['register.post', 'register.update'].includes(value.command) || JSON.stringify(value.payload) !== value.wire) throw new Error('Recovery state is invalid.');
         pending = value;
         if (form && value.company === c.company && value.account === c.account) {
-          load({payload: value.payload, labels: value.labels});
+          load({payload: value.payload, labels: value.labels, customState: value.customState, custom_fields: value.custom_fields});
           for (const [name, header] of [['reason', 'X-Bookflow-Reason'], ['source_ref', 'X-Bookflow-Source-Ref'], ['directive_id', 'X-Bookflow-Directive']]) field(name).value = value.context[header] || '';
         }
       }

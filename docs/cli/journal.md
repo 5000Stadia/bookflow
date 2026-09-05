@@ -171,7 +171,7 @@ Example JSON output:
 
 ## `journal post`
 
-Post two through 200 balanced domestic journal lines with an explicit or automatically allocated number.
+Post two through 200 balanced domestic journal lines with an explicit or automatically allocated number and typed header custom fields.
 
 | Contract | Value |
 |---|---|
@@ -191,6 +191,7 @@ Post two through 200 balanced domestic journal lines with an explicit or automat
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `custom_fields.root` | `--custom-fields-root` | object[string, any \| null] | yes | no | — | — |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
@@ -335,7 +336,18 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.batches[].currency` | string | yes | no | — | — |
 | `revision.batches[].line_count` | integer | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, any] | yes | no | — | — |
-| `revision.custom_fields_snapshot` | object[string, any] | yes | no | — | — |
+| `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | Immutable typed values and captured definition metadata keyed by definition ID. |
+| `revision.custom_fields` | array[object] | yes | no | — | The same captured fields ordered by position, name and definition ID, without live definition lookups. |
+| `revision.custom_fields[].definition_id` | string | yes | no | — | — |
+| `revision.custom_fields[].value_id` | string | yes | no | — | — |
+| `revision.custom_fields[].name` | string | yes | no | — | — |
+| `revision.custom_fields[].kind` | literal["text", "number", "date", "bool", "choice"] | yes | no | — | — |
+| `revision.custom_fields[].value` | string \| boolean | yes | no | — | — |
+| `revision.custom_fields[].canonical_text` | string | yes | no | — | — |
+| `revision.custom_fields[].definition_version` | integer | yes | no | — | — |
+| `revision.custom_fields[].position` | integer | yes | no | — | — |
+| `revision.custom_fields[].choice_id` | string \| null | no | yes | null | — |
+| `revision.custom_fields[].choice_label` | string \| null | no | yes | null | — |
 | `revision.lines` | array[object] | yes | no | — | — |
 | `revision.lines[].id` | string | yes | no | — | — |
 | `revision.lines[].created_at` | string | yes | no | — | — |
@@ -413,6 +425,7 @@ Example JSON output:
       "minor_units": 1
     },
     "currency": "USD",
+    "custom_fields": [],
     "custom_fields_snapshot": {},
     "date": "2026-01-01",
     "debit_minor_units": 1,
@@ -634,7 +647,7 @@ Example JSON output:
 
 ## `journal show`
 
-Show a journal and its current or selected immutable revision, historical lines and posting batch totals.
+Show a journal and its current or selected immutable revision, historical lines, captured custom fields and posting batch totals.
 
 | Contract | Value |
 |---|---|
@@ -777,7 +790,18 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.batches[].currency` | string | yes | no | — | — |
 | `revision.batches[].line_count` | integer | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, any] | yes | no | — | — |
-| `revision.custom_fields_snapshot` | object[string, any] | yes | no | — | — |
+| `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | Immutable typed values and captured definition metadata keyed by definition ID. |
+| `revision.custom_fields` | array[object] | yes | no | — | The same captured fields ordered by position, name and definition ID, without live definition lookups. |
+| `revision.custom_fields[].definition_id` | string | yes | no | — | — |
+| `revision.custom_fields[].value_id` | string | yes | no | — | — |
+| `revision.custom_fields[].name` | string | yes | no | — | — |
+| `revision.custom_fields[].kind` | literal["text", "number", "date", "bool", "choice"] | yes | no | — | — |
+| `revision.custom_fields[].value` | string \| boolean | yes | no | — | — |
+| `revision.custom_fields[].canonical_text` | string | yes | no | — | — |
+| `revision.custom_fields[].definition_version` | integer | yes | no | — | — |
+| `revision.custom_fields[].position` | integer | yes | no | — | — |
+| `revision.custom_fields[].choice_id` | string \| null | no | yes | null | — |
+| `revision.custom_fields[].choice_label` | string \| null | no | yes | null | — |
 | `revision.lines` | array[object] | yes | no | — | — |
 | `revision.lines[].id` | string | yes | no | — | — |
 | `revision.lines[].created_at` | string | yes | no | — | — |
@@ -846,6 +870,7 @@ Example JSON output:
       "minor_units": 1
     },
     "currency": "USD",
+    "custom_fields": [],
     "custom_fields_snapshot": {},
     "date": "2026-01-01",
     "debit_minor_units": 1,
@@ -941,6 +966,7 @@ Append an immutable correction with an exact old-date reversal and a full new-da
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `custom_fields.root` | `--custom-fields-root` | object[string, any \| null] | yes | no | — | — |
 | `journal` | `JOURNAL` | string | yes | no | — | minimum length 1 |
 | `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
 | `date` | `--date` | string \| null | no | yes | null | — |
@@ -1089,7 +1115,18 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.batches[].currency` | string | yes | no | — | — |
 | `revision.batches[].line_count` | integer | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, any] | yes | no | — | — |
-| `revision.custom_fields_snapshot` | object[string, any] | yes | no | — | — |
+| `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | Immutable typed values and captured definition metadata keyed by definition ID. |
+| `revision.custom_fields` | array[object] | yes | no | — | The same captured fields ordered by position, name and definition ID, without live definition lookups. |
+| `revision.custom_fields[].definition_id` | string | yes | no | — | — |
+| `revision.custom_fields[].value_id` | string | yes | no | — | — |
+| `revision.custom_fields[].name` | string | yes | no | — | — |
+| `revision.custom_fields[].kind` | literal["text", "number", "date", "bool", "choice"] | yes | no | — | — |
+| `revision.custom_fields[].value` | string \| boolean | yes | no | — | — |
+| `revision.custom_fields[].canonical_text` | string | yes | no | — | — |
+| `revision.custom_fields[].definition_version` | integer | yes | no | — | — |
+| `revision.custom_fields[].position` | integer | yes | no | — | — |
+| `revision.custom_fields[].choice_id` | string \| null | no | yes | null | — |
+| `revision.custom_fields[].choice_label` | string \| null | no | yes | null | — |
 | `revision.lines` | array[object] | yes | no | — | — |
 | `revision.lines[].id` | string | yes | no | — | — |
 | `revision.lines[].created_at` | string | yes | no | — | — |
@@ -1167,6 +1204,7 @@ Example JSON output:
       "minor_units": 1
     },
     "currency": "USD",
+    "custom_fields": [],
     "custom_fields_snapshot": {},
     "date": "2026-01-01",
     "debit_minor_units": 1,
@@ -1408,7 +1446,18 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.batches[].currency` | string | yes | no | — | — |
 | `revision.batches[].line_count` | integer | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, any] | yes | no | — | — |
-| `revision.custom_fields_snapshot` | object[string, any] | yes | no | — | — |
+| `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | Immutable typed values and captured definition metadata keyed by definition ID. |
+| `revision.custom_fields` | array[object] | yes | no | — | The same captured fields ordered by position, name and definition ID, without live definition lookups. |
+| `revision.custom_fields[].definition_id` | string | yes | no | — | — |
+| `revision.custom_fields[].value_id` | string | yes | no | — | — |
+| `revision.custom_fields[].name` | string | yes | no | — | — |
+| `revision.custom_fields[].kind` | literal["text", "number", "date", "bool", "choice"] | yes | no | — | — |
+| `revision.custom_fields[].value` | string \| boolean | yes | no | — | — |
+| `revision.custom_fields[].canonical_text` | string | yes | no | — | — |
+| `revision.custom_fields[].definition_version` | integer | yes | no | — | — |
+| `revision.custom_fields[].position` | integer | yes | no | — | — |
+| `revision.custom_fields[].choice_id` | string \| null | no | yes | null | — |
+| `revision.custom_fields[].choice_label` | string \| null | no | yes | null | — |
 | `revision.lines` | array[object] | yes | no | — | — |
 | `revision.lines[].id` | string | yes | no | — | — |
 | `revision.lines[].created_at` | string | yes | no | — | — |
@@ -1486,6 +1535,7 @@ Example JSON output:
       "minor_units": 1
     },
     "currency": "USD",
+    "custom_fields": [],
     "custom_fields_snapshot": {},
     "date": "2026-01-01",
     "debit_minor_units": 1,

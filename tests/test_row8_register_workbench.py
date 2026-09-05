@@ -70,7 +70,7 @@ def test_projection_noop_full_ids_and_incompatible_fallback(hosted, register_rec
     selected_class = copy.deepcopy(first); selected_class['revision']['lines'][0]['class_id'] = 'some-class'; cases.append(selected_class)
     description = copy.deepcopy(first); description['revision']['lines'][0]['description'] = 'different'; cases.append(description)
     reordered = copy.deepcopy(first); reordered['revision']['lines'].reverse(); cases.append(reordered)
-    dimension = copy.deepcopy(first); dimension['revision']['custom_fields_snapshot'] = {'dimension': 'kept'}; cases.append(dimension)
+    dimension = copy.deepcopy(first); dimension['revision']['name_type'] = 'customer'; dimension['revision']['name_id'] = 'unsupported-header-party'; cases.append(dimension)
     for journal in cases:
         assert edit_projection(journal, bank, lambda row: row['full_name']) is None
     # One offset with a distinct description must remain a split, not a category.

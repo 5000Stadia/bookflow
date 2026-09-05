@@ -156,6 +156,11 @@
     const next = (current + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
     buttons[next]?.focus();
   });
+  document.addEventListener('input', event => {
+    if (!event.target.name?.startsWith('cf:')) return;
+    const form = event.target.closest('[data-generated-form]');
+    if (form) named(form, 'cf-state:' + event.target.name.slice(3)).value = 'set';
+  });
   document.addEventListener('change', event => {
     const form = event.target.closest('[data-generated-form]');
     if (!form) return;

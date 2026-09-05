@@ -7,6 +7,7 @@ from bookflow.company.journal_models import (
     _Input, _Date, _Number, _Selector, _Version, MoneyInput,
 )
 from bookflow.company.journal_outputs import JournalMoneyOutput, JournalWriteOutput
+from bookflow.company.custom_fields import CustomFieldValuePatch
 
 Direction = Literal['increase', 'decrease']
 JournalMoneyInput = MoneyInput
@@ -38,6 +39,10 @@ _Allocations = Annotated[list[RegisterAllocation], Field(min_length=1, max_lengt
 
 
 class _RegisterShape(_Input):
+    custom_fields: CustomFieldValuePatch = Field(
+        default_factory=lambda: CustomFieldValuePatch({}),
+        description="Journal header custom-field patch by definition ID. Omitted keys preserve values on update; null clears an optional value. Numbers are decimal strings.",
+    )
     account: _Selector
     date: _Date
     number: _Number | None = None

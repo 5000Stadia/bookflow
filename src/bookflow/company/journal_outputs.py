@@ -2,6 +2,7 @@
 from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 from bookflow.commands.common import CommonOut
+from bookflow.company.journal_custom_fields import SnapshotField
 from bookflow.core.models import WriteOutput
 
 
@@ -83,7 +84,8 @@ class JournalRevisionSummaryOutput(CreatedOutput):
 
 class JournalRevisionOutput(JournalRevisionSummaryOutput):
     issuer_snapshot: dict[str, Any]
-    custom_fields_snapshot: dict[str, Any]
+    custom_fields_snapshot: dict[str, SnapshotField] = Field(description="Immutable typed values and captured definition metadata keyed by definition ID.")
+    custom_fields: list[SnapshotField] = Field(description="The same captured fields ordered by position, name and definition ID, without live definition lookups.")
     lines: list[JournalLineOutput]
 
 

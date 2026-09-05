@@ -1,6 +1,6 @@
 # Bookflow
 
-A multi-company accounting system for small businesses, under development. A Python library with a CLI, an HTTP host, and a browser workbench over the same commands, so people and AI agents work with the same books. Company setup, supporting lists, domestic double-entry journals, corrections, voiding, account registers, and accrual ledger reports are available. Foreign-currency posting and an MCP adapter remain planned.
+A multi-company accounting system for small businesses, under development. A Python library with a CLI, an HTTP host, and a browser workbench over the same commands, so people and AI agents work with the same books. Company setup, supporting lists, domestic double-entry journals, corrections, voiding, account registers, typed journal custom fields with revision history, and accrual ledger reports are available. Foreign-currency posting and an MCP adapter remain planned.
 
 The Python distribution is `bookflow-core`; the import package and command are both `bookflow`.
 

@@ -56,6 +56,7 @@ CustomFieldScope = Literal[
 ]
 
 LIST_VALUE_SCOPES = frozenset({"customer", "vendor", "employee", "other_name", "item"})
+SUPPORTED_VALUE_SCOPES = LIST_VALUE_SCOPES | {"journal_entry"}
 TRANSACTION_SCOPES = frozenset(
     {
         "journal_entry",
@@ -575,6 +576,19 @@ def _has_any_value(connection: sa.Connection, definition_id: str) -> bool:
     ).first() is not None
 
 
+def choice_is_used(connection: sa.Connection, definition_id: str, choice: Mapping[str, Any]) -> bool:
+    """Match choice use by normalized key across every populated owner slot."""
+
+    key = _normalize_label(choice["value"], field="choices.value")[1]
+    values = connection.execute(
+        sa.select(c.custom_field_values.c.canonical_text).where(
+            c.custom_field_values.c.def_id == definition_id,
+            c.custom_field_values.c.active.is_(True),
+        )
+    ).scalars()
+    return any(_normalize_label(value, field="canonical_text")[1] == key for value in values)
+
+
 def update_definition(
     db: Database | sa.Connection,
     definition_id: str,
@@ -640,22 +654,10 @@ def update_definition(
                 raise _validation("choices.id", "belongs to another definition")
             continue
         old_is_retired = not choice.active or _normalize_label(choice.value, field="choices.value")[1] != old["value_key"]
-        if old_is_retired and connection.execute(
-            sa.select(c.custom_field_values.c.id).where(
-                c.custom_field_values.c.def_id == stable_id,
-                c.custom_field_values.c.active.is_(True),
-                c.custom_field_values.c.canonical_text == old["value"],
-            ).limit(1)
-        ).first():
+        if old["active"] and old_is_retired and choice_is_used(connection, stable_id, old):
             raise _in_use(stable_id, "an active value uses the choice", choice_id=old["id"], choice=old["value"])
     for old in old_choices:
-        if old["active"] and old["id"] not in submitted_ids and connection.execute(
-            sa.select(c.custom_field_values.c.id).where(
-                c.custom_field_values.c.def_id == stable_id,
-                c.custom_field_values.c.active.is_(True),
-                c.custom_field_values.c.canonical_text == old["value"],
-            ).limit(1)
-        ).first():
+        if old["active"] and old["id"] not in submitted_ids and choice_is_used(connection, stable_id, old):
             raise _in_use(stable_id, "an active value uses the choice", choice_id=old["id"], choice=old["value"])
 
     new_active = model.active if "active" in fields_set else bool(current["active"])
@@ -680,7 +682,12 @@ def update_definition(
     elif new_kind != current["kind"]:
         default = None
     else:
-        default = current["default_canonical_text"]
+        default = _canonical_default(
+            connection, definition_id=stable_id, kind=new_kind,
+            value=typed_value_from_canonical(new_kind, current["default_canonical_text"])
+            if current["default_canonical_text"] is not None else None,
+            pending_choices=choice_models,
+        )
 
     desired = {
         "name": name,
@@ -830,7 +837,7 @@ def plan_owner_value_patch(
 ) -> OwnerCustomFieldPlan:
     """Plan owner-value inserts/updates; absent keys preserve and null clears."""
 
-    if record_type not in LIST_VALUE_SCOPES:
+    if record_type not in SUPPORTED_VALUE_SCOPES:
         if record_type in TRANSACTION_SCOPES:
             raise _validation("record_type", "custom-field values for this transaction type are not available yet")
         raise _validation("record_type", "does not accept custom fields")
@@ -878,6 +885,8 @@ def plan_owner_value_patch(
             else:
                 continue
         elif requested is None:
+            if creating and definition["active"] and definition["required"]:
+                raise _validation(f"custom_fields.{definition_id}", "is required for a new record")
             if old is None or not old["active"]:
                 continue
             if not definition["active"]:
@@ -886,6 +895,9 @@ def plan_owner_value_patch(
                 raise _validation(f"custom_fields.{definition_id}", "a populated required value cannot be cleared")
             requested_canonical = None
         else:
+            if definition["kind"] == "choice" and old is not None and old["active"]:
+                if _normalize_label(requested, field=f"custom_fields.{definition_id}")[1] == _normalize_label(old["canonical_text"], field="canonical_text")[1]:
+                    continue
             choices = _active_choice_map(connection, definition_id) if definition["kind"] == "choice" else None
             requested_canonical = parse_typed_value(
                 definition["kind"],

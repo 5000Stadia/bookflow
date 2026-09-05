@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import sqlalchemy as sa
-from bookflow.company import schema as c, accounts, parties, list_service
+from bookflow.company import schema as c, accounts, parties, list_service, journal_custom_fields as custom
 from bookflow.company.journal_models import JournalLineInput, parse_domestic_amount, checked_sum
 from bookflow.company.journal_outputs import (
     JournalOutput, JournalWriteOutput, JournalRevisionOutput, JournalBatchOutput,
@@ -104,6 +104,7 @@ def revision_output(s, rev, pending=None, *, summary_only=False):
         lines = [l for l in lines if l['revision_id'] == rev['id']]
     return JournalRevisionOutput(**values, line_count=len(lines), batches=summaries,
         issuer_snapshot=json.loads(rev['issuer_snapshot']), custom_fields_snapshot=json.loads(rev['custom_fields_snapshot']),
+        custom_fields=custom.project(json.loads(rev['custom_fields_snapshot'])),
         lines=[dict(decoded(l), amount=Money(l['amount_minor_units'], l['currency']).to_dict()) for l in lines])
 
 
@@ -232,9 +233,13 @@ def prepare(s, ctx, inp, operation):
     h = dict(old_h) if old_h else dict(id=new_id(), **common(s.actor.id, ctx.interface.value, at), type='journal_entry', status='posted',
         voided_at=None, voided_by=None, void_reason=None, void_posting_batch_id=None)
     sequence = None
+    custom_plan = None
     old_lines = rows(s, c.document_lines, c.document_lines.c.revision_id == old_r['id'], order=c.document_lines.c.position) if old_r else []
     current_batch = rows(s, c.posting_batches, c.posting_batches.c.revision_id == old_r['id'], c.posting_batches.c.kind != 'reversal')[0] if old_r else None
     if operation != 'void':
+        custom_plan = custom.prepare(s.company, h['id'], inp.custom_fields,
+            json.loads(old_r['custom_fields_snapshot']) if old_r else {},
+            creating=old_h is None, refresh=getattr(inp, 'refresh_defaults', False))
         number, sequence = allocate(s, inp.number if inp.number is not None else (old_h['number'] if old_h else None), h['id'])
         currency = old_r['currency'] if old_r else company_info['home_currency']
         entered = inp.lines if inp.lines is not None else [existing_input(l) for l in old_lines]
@@ -255,13 +260,14 @@ def prepare(s, ctx, inp, operation):
         issuer = json.dumps({k: v for k, v in company_info.items() if k in ('id', 'legal_name', 'display_name', 'home_currency') or k.startswith(('address_', 'legal_address_', 'ship_address_'))}, sort_keys=True)
         if old_r and not inp.refresh_defaults:
             issuer = old_r['issuer_snapshot']
-        unchanged = old_r and (date, number, memo, issuer) == (old_r['date'], old_r['number'], old_r['memo'], old_r['issuer_snapshot']) and len(values) == len(old_lines) and all(
+        unchanged = old_r and not custom_plan.changed and (date, number, memo, issuer) == (old_r['date'], old_r['number'], old_r['memo'], old_r['issuer_snapshot']) and len(values) == len(old_lines) and all(
             key == old['line_id'] and all(value[k] == old[k] for k in value) for (key, value), old in zip(values, old_lines))
         if unchanged:
             return Plan(JournalWriteOutput(**summary(old_h, old_r), revision=revision_output(s, old_r), changed=False, warnings=warnings), {'input': inp, 'operation': operation, 'changed': False})
         r = dict(**created(), transaction_id=h['id'], revision_number=old_r['revision_number'] + 1 if old_r else 1,
             supersedes_revision_id=old_r['id'] if old_r else None, date=date, number=number, name_type=None, name_id=None,
-            memo=memo, total_minor_units=debit, currency=currency, issuer_snapshot=issuer, custom_fields_snapshot='{}', audit_event_id=event)
+            memo=memo, total_minor_units=debit, currency=currency, issuer_snapshot=issuer,
+            custom_fields_snapshot=json.dumps(custom_plan.snapshot, sort_keys=True, ensure_ascii=False), audit_event_id=event)
         pending['transaction_revisions'].append(r)
         h.update(number=number, current_revision_id=r['id'])
         for position, (key, value) in enumerate(values, 1):
@@ -296,15 +302,15 @@ def prepare(s, ctx, inp, operation):
             pending['posting_lines'].append(leg)
             pending['posting_line_sources'].append(dict(**created(), transaction_id=h['id'], posting_line_id=leg['id'],
                 revision_id=r['id'], document_line_id=line['id'], amount_minor_units=line['amount_minor_units'], currency=line['currency'], reversed_source_id=None))
-    validate_pending_aggregate(s, h, pending)
+    validate_pending_aggregate(s, h, pending, custom_plan)
     view_pending = pending if operation != 'void' else {k: v for k, v in pending.items() if k != 'document_lines'}
     output = JournalWriteOutput(**summary(h, r), revision=revision_output(s, r, view_pending), warnings=warnings,
         changed_fields=['journal'] if old_h else [])
     return Plan(output, dict(input=inp, operation=operation, changed=True, header=h, before=old_h,
-                            pending=pending, sequence=sequence, event=event))
+                            pending=pending, sequence=sequence, event=event, custom_plan=custom_plan))
 
 
-def validate_pending_aggregate(s, header, pending):
+def validate_pending_aggregate(s, header, pending, custom_plan=None):
     """Independently verify generated accounting effects before any audit or row write.
 
     Stored reversal targets are checked too: copying corrupt attribution must never
@@ -326,6 +332,12 @@ def validate_pending_aggregate(s, header, pending):
         require(all(value['transaction_id'] == document_id for value in values), 'cross-document ownership')
         return result
 
+    if pending['transaction_revisions']:
+        require(custom_plan is not None, 'missing custom-field plan for new revision')
+        for proposed in pending['transaction_revisions']:
+            custom.validate(s.company, custom_plan, document_id, json.loads(proposed['custom_fields_snapshot']))
+    else:
+        require(custom_plan is None, 'void cannot mutate custom fields')
     indexed = {table: index(pending[table]) for table in TABLES}
     batches = indexed['posting_batches']
     legs = indexed['posting_lines']
@@ -460,11 +472,14 @@ def persist_prepared(fresh, ctx, s, *, command_name):
         return Applied(fresh.preview, [], 'no change')
     d = fresh.data
     h, old, pending = d['header'], d['before'], d['pending']
-    validate_pending_aggregate(s, h, pending)
+    custom_plan = d.get('custom_plan')
+    validate_pending_aggregate(s, h, pending, custom_plan)
     touched = [Touched('transaction', h['id'], 'update' if old else 'create', old['version'] if old else None,
                        h['version'], h, old, db='company')]
     for table, kind in zip(TABLES, TYPES):
         touched.extend(Touched(kind, row['id'], 'create', None, 1, decoded(row), db='company') for row in pending[table])
+    if custom_plan is not None:
+        touched.extend(custom.touches(custom_plan))
     summary_text = f"{d['operation']} journal {h['number']}"
     audit.write_event_to(s.company, ctx, command_name, summary_text, touched,
         actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=getattr(s, 'directive_code', None), event_id=d['event'])
@@ -475,6 +490,8 @@ def persist_prepared(fresh, ctx, s, *, command_name):
     for table in TABLES:
         if pending[table]:
             s.company.conn.execute(getattr(c, table).insert(), pending[table])
+    if custom_plan is not None:
+        custom.apply(s.company, custom_plan)
     if d['sequence']:
         from sqlalchemy.dialects.sqlite import insert
         stmt = insert(c.sequences).values(**d['sequence'])

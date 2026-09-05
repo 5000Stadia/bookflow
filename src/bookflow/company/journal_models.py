@@ -9,6 +9,7 @@ from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
+from bookflow.company.custom_fields import CustomFieldValuePatch
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import INT64_MAX, _parse_scaled_decimal, _require_i64
 from bookflow.core.money import Money, is_currency, minor_units_of
@@ -149,6 +150,10 @@ _Lines = Annotated[list[JournalLineInput], Field(min_length=2, max_length=200)]
 
 
 class JournalPostInput(_Input):
+    custom_fields: CustomFieldValuePatch = Field(
+        default_factory=lambda: CustomFieldValuePatch({}),
+        description="Header values keyed by journal_entry custom-field definition ID. Omitted keys preserve values on update; null clears an optional value. Numbers are exact decimal strings.",
+    )
     date: _Date
     number: _Number | None = None
     memo: str | None = Field(default=None, max_length=2000)
@@ -162,6 +167,10 @@ class JournalPostInput(_Input):
 
 
 class JournalUpdateInput(_Input):
+    custom_fields: CustomFieldValuePatch = Field(
+        default_factory=lambda: CustomFieldValuePatch({}),
+        description="Header values keyed by journal_entry custom-field definition ID. Omitted keys preserve values on update; null clears an optional value. Numbers are exact decimal strings.",
+    )
     journal: _Selector
     expected_version: _Version | None = None
     date: _Date | None = None

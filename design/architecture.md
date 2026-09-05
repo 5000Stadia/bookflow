@@ -113,7 +113,7 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - Journal numbering, header pointers, principal snapshots, revisions, posting effects, audit and idempotency share the company transaction. Ledger services preallocate their audit ID and return `Applied(audited=True)` without committing. Dispatch rolls a ledger no-op back to its business savepoint before retaining its retry result, so a ledger no-op does not refresh company principals. Ordinary list no-ops retain their principal-mirroring and projection-repair behavior.
 - `company/ledger_reports.py` reads all effective posting batches, including reversals and replacements. Trial balance nets each account; general ledger pages opening/posting/closing rows with running balances computed before slicing. Lossless integer aggregation and numeric text collation avoid intermediate SQLite integer overflow and floating-point conversion. Public values outside signed 64-bit range fail with `E_VALUE_RANGE`. Report continuations authenticate complete state and first-page metadata with HMAC-SHA256 using a private company-local 32-byte key. Signature verification precedes decoded-account use. They bind filters, identity and relevant change watermarks, preserve first-page metadata, and restart with `E_QUERY_STALE` on relevant changes. The key is generated in migration, copied with the company, and excluded from commands, audit snapshots and annotation targets.
 - Account show/list/query derive the account's own normal-side balance from posting lines and real history dependencies. Descendants are not rolled up. A posted account cannot be deactivated. Journal browser pages display historical line snapshots, balanced totals, revision links and stable-header notes/files; generated update forms preserve line identities and shown versions.
-- The demo includes opening capital, a corrected service journal, an expense, a voided duplicate, bank payments and receipts, a credit-card charge and payment, and a corrected mixed split with a net payment of 10000 USD minor units. Its accrual trial balance as of 2026-12-31 is 663000 USD minor units on each side. Foreign-tagged posting, exchange-rate commands and transaction custom-field values remain following increments. Fine-grained identity and publication controls remain unfinished identity work.
+- The demo includes opening capital, a corrected service journal, an expense, a voided duplicate, bank payments and receipts, a credit-card charge and payment, and a corrected mixed split with a net payment of 10000 USD minor units. Its accrual trial balance as of 2026-12-31 is 663000 USD minor units on each side. Foreign-tagged posting and exchange-rate commands remain following increments. Fine-grained identity and publication controls remain unfinished identity work.
 - A single-word command (`upgrade`) has no verb: its noun page is its form, and it submits to `/hub/<noun>`.
 - `docs generate` is a rootless standalone command: no data root, lock, actor, capability, forwarding, or HTTP route. It renders all registered commands including standalone tooling, validates examples and schema descriptions, and copies packaged prose resources. Generation accepts only an absent, empty, or exactly marked real directory; it refuses symlinks and unrelated trees, validates a sibling stage, swaps it atomically, and restores the previous complete tree if publication fails. `--check` performs a read-only byte/path comparison and reports sorted missing, extra, and changed paths as `E_DOCS_STALE`.
 - The cold-start test budgets `bookflow --help` below 300 ms; neither root help nor command discovery imports FastAPI, uvicorn, or the workbench.
@@ -324,3 +324,25 @@ have a median of 1,140.13 ms and maximum of 1,154.92 ms. This fixture uses 500
 200-line journals posted through public commands and a bulk-created master-data
 fixture. Its database occupies 441,896,960 bytes. This is not the separate
 100,000-transaction storage-budget witness, which remains outstanding.
+
+
+## Journal custom fields
+
+`company/journal_custom_fields.py` plans and validates header values for the
+`journal_entry` scope through the shared custom-field owner-slot service.
+Journal and register writes accept patches keyed by definition ID. The writer
+checks the original revision, effective slots, captured metadata and typed values
+before writing any effects. Slot changes, the immutable revision, reversal and
+replacement postings, audit entries and the retry receipt commit together.
+
+Each revision captures the definition and value IDs, kind, name, position,
+definition version, canonical value and applicable choice ID and display label.
+Unchanged values retain those facts unless `refresh_defaults` explicitly captures
+current metadata. `journal show` and `journal history` project the selected
+revision without live definition lookups. Clearing retains an inactive value
+slot; setting it again reuses its ID. A custom-field-only correction creates a
+normal revision and balanced reversal/replacement with zero net account change.
+
+The demo includes Work order and Source values, a metadata rename with preserved
+historical labels, and a split payment whose work order is corrected, cleared
+and restored through the same value slot.

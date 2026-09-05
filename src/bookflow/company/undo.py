@@ -1489,6 +1489,14 @@ def _active_dependents(
                     )
                 ).scalar_one()
             )
+        # Journal slots remain dependencies when their document is voided.
+        count += int(connection.execute(
+            sa.select(sa.func.count()).select_from(schema.custom_field_values).where(
+                schema.custom_field_values.c.def_id == record_id,
+                schema.custom_field_values.c.record_type == "journal_entry",
+                schema.custom_field_values.c.active.is_(True),
+            )
+        ).scalar_one())
         if count:
             dependents.append({"record_type": "custom_field_value", "count": count})
     return dependents
@@ -1843,28 +1851,26 @@ def _validate_custom_definition(
             current_version=int(current["version"]),
             problem="definitions with values cannot change kind",
         )
+    if has_values and "scopes" in roots:
+        old_scopes = {item["record_type"] for item in current.get("scopes", []) if item.get("active", True)}
+        new_scopes = {item["record_type"] for item in desired.get("scopes", []) if item.get("active", True)}
+        if old_scopes != new_scopes:
+            raise _conflict(record_type="custom_field", record_id=record_id,
+                            field="scopes", current_version=int(current["version"]),
+                            problem="definitions with values cannot change scopes")
     if "choices" in roots:
-        active_values = set(
-            connection.execute(
-                sa.select(schema.custom_field_values.c.canonical_text).where(
-                    schema.custom_field_values.c.def_id == record_id,
-                    schema.custom_field_values.c.active.is_(True),
+        desired_choices = {item["id"]: item for item in desired.get("choices", []) if item.get("active", True)}
+        for choice in current.get("choices", []):
+            replacement = desired_choices.get(choice["id"])
+            retained = replacement is not None and custom_fields._normalize_label(
+                replacement["value"], field="choices.value"
+            )[1] == custom_fields._normalize_label(choice["value"], field="choices.value")[1]
+            if choice.get("active", True) and not retained and custom_fields.choice_is_used(connection, record_id, choice):
+                raise _conflict(
+                    record_type="custom_field", record_id=record_id, field="choices",
+                    current_version=int(current["version"]),
+                    problem="active values use a choice the inverse would retire",
                 )
-            ).scalars()
-        )
-        desired_choices = {
-            item["value"] for item in desired.get("choices", []) if item.get("active", True)
-        }
-        used_missing = sorted(active_values - desired_choices)
-        if used_missing:
-            raise _conflict(
-                record_type="custom_field",
-                record_id=record_id,
-                field="choices",
-                current_version=int(current["version"]),
-                problem="active values use a choice the inverse would retire",
-                values=used_missing,
-            )
 
 
 def _is_link_creation(entry: OriginalEntry) -> bool:

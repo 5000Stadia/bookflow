@@ -15,6 +15,20 @@ def test_demo_account_balances_and_reports_reconcile(client):
     service = next(j for j in journals if j['number'] == 'DEMO-SERVICE')
     assert service['version'] == 2
     assert len(client.journal.history(journal=service['id'], company=COMPANY)['items']) == 2
+    historical = client.journal.show(journal=service['id'], revision_number=1, company=COMPANY)['revision']['custom_fields']
+    work_order = next(field for field in historical if field['name'] == 'Work order')
+    source = next(field for field in historical if field['name'] == 'Source')
+    assert work_order['value'] == 'WO-101' and source['choice_label'] == 'Email'
+    assert client.run('custom-field show', {'custom_field':work_order['definition_id']}, company=COMPANY)['name'] == 'Work order reference'
+    split = next(j for j in journals if j['number'] == 'REG-SPLIT')
+    assert split['version'] == 4
+    old_split = client.journal.show(journal=split['id'], revision_number=1, company=COMPANY)['revision']['custom_fields_snapshot']
+    cleared = client.journal.show(journal=split['id'], revision_number=3, company=COMPANY)['revision']['custom_fields_snapshot']
+    current = client.journal.show(journal=split['id'], company=COMPANY)['revision']['custom_fields_snapshot']
+    key = work_order['definition_id']
+    assert key not in cleared and current[key]['value'] == 'WO-102-B'
+    assert current[key]['value_id'] == old_split[key]['value_id']
+
     tb = client.run('report trial-balance', {'date_to': '2026-12-31'}, company=COMPANY)
     assert tb['totals']['debit']['minor_units'] == tb['totals']['credit']['minor_units'] == 663000
     nets = {r['account_id']: r['signed_net']['minor_units'] for r in tb['rows']}

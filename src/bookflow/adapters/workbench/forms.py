@@ -5,7 +5,9 @@ from __future__ import annotations
 import inspect
 import json
 import types
+import unicodedata
 from enum import Enum
+from datetime import date
 from typing import Annotated, Any, Literal, Mapping, Union, get_args, get_origin
 
 from pydantic import BaseModel
@@ -121,6 +123,8 @@ def _project_value(annotation: Any, value: Any) -> Any:
             return value
         return [_project_value(item_annotation, item) for item in value]
     base, _ = _base(annotation)
+    if getattr(base, "__pydantic_root_model__", False):
+        return _project_value(base.model_fields["root"].annotation, value)
     if inspect.isclass(base) and issubclass(base, BaseModel) and isinstance(value, Mapping):
         projected: dict[str, Any] = {}
         for name, field in base.model_fields.items():
@@ -146,6 +150,8 @@ def leaves(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
     out = []
     for name, f in model.model_fields.items():
         base, nullable = _base(f.annotation)
+        if getattr(base, "__pydantic_root_model__", False):
+            base, nullable = _base(base.model_fields["root"].annotation)
         if inspect.isclass(base) and issubclass(base, BaseModel):
             out += leaves(base, prefix + name + ".")
             continue
@@ -299,32 +305,45 @@ def reference_for_path(definition: Any, path: str) -> Any | None:
     return None
 
 
-def custom_field_descriptors(definitions: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Project current definition records into stable-id form controls."""
-    out: list[dict[str, Any]] = []
-    for definition in definitions:
-        identifier = str(definition["id"])
-        kind = str(definition["kind"])
-        choices = [
-            str(choice["value"])
-            for choice in definition.get("choices", [])
-            if choice.get("active", True)
-        ]
-        out.append({
-            "path": f"custom_fields.{identifier}",
-            "path_parts": ("custom_fields", identifier),
-            "form_key": f"cf:{identifier}",
-            "definition_id": identifier,
-            "label": str(definition["name"]),
-            "kind": f"custom-{kind}",
-            "choices": choices if kind == "choice" else None,
-            "description": "Company custom field; its stable definition id is submitted.",
-            "default": definition.get("default"),
-            "required": bool(definition.get("required", False)),
-            "nullable": True,
-            "runtime": True,
-            "pinned": False,
-        })
+def custom_field_descriptors(
+    definitions: list[dict[str, Any]],
+    originals: Mapping[str, Any] | None = None,
+    attempted: Mapping[str, str] | None = None,
+    *, update: bool = False,
+) -> list[dict[str, Any]]:
+    """Current controls plus exact attempted IDs; presentation never grants validity."""
+    originals, attempted = originals or {}, attempted or {}
+    by_id = {str(d["id"]): d for d in definitions}
+    ids = list(by_id)
+    ids += [k[3:] for k in attempted if k.startswith("cf:") and k[3:] not in by_id]
+    out = []
+    for identifier in ids:
+        d = by_id.get(identifier)
+        kind = attempted.get(f"cf-kind:{identifier}", d["kind"] if d else "text")
+        value = attempted.get(f"cf:{identifier}", originals.get(identifier, None if update else d.get("default") if d else None))
+        choices = [str(c["value"]) for c in d.get("choices", []) if c.get("active", True)] if d else []
+        selected = value
+        if kind == "choice" and value is not None:
+            key = unicodedata.normalize("NFC", str(value)).strip().casefold()
+            selected = next((c for c in choices if unicodedata.normalize("NFC", c).strip().casefold() == key), value)
+        date_input = kind == "date"
+        if date_input and value not in (None, ""):
+            try:
+                date_input = isinstance(value, str) and date.fromisoformat(value).isoformat() == value
+            except ValueError:
+                date_input = False
+        state = attempted.get(f"cf-state:{identifier}", "set" if f"cf:{identifier}" in attempted else "keep")
+        if attempted.get(f"clear:custom_fields.{identifier}") == "1":
+            state = "clear"
+        out.append(dict(path=f"custom_fields.{identifier}", form_key=f"cf:{identifier}",
+            definition_id=identifier, label=d["name"] if d else attempted.get(f"cf-label:{identifier}", identifier),
+            kind=f"custom-{kind}", wire_kind=kind, choices=choices, selected=selected,
+            choice_ids={str(c["value"]): c["id"] for c in d.get("choices", []) if c.get("active", True) and c.get("id")} if d else {},
+            value=value, state=state, update=update, date_input=date_input, unavailable=d is None or kind != d["kind"],
+            description="Unavailable attempt — change or clear explicitly." if d is None else "Keep preserves the value; Set includes an empty text value; Clear removes it.",
+            creation_default=d.get("default") if d else None,
+            default=None if update or not d else d.get("default"), required=bool(d and d.get("required")),
+            nullable=True, runtime=True, pinned=False))
     return out
 
 
@@ -350,6 +369,8 @@ def form_value(
     attempted: dict[str, str] | None,
 ) -> Any:
     """Return attempted text separately from the authoritative original."""
+    if leaf.get("runtime"):
+        return leaf["value"]
     if leaf["kind"] == "secret":
         return ""
     key = leaf.get("form_key", f"f:{leaf['path']}")
@@ -516,6 +537,7 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
     Booleans are tri-state: unset, true, false. Context fields become headers.
     """
     raw: dict[str, Any] = {}
+    replacement = getattr(cmd, "name", "") == "register update"
     headers: dict[str, str] = {}
     for leaf in leaves(cmd.input_model):
         path = leaf["path"]
@@ -533,13 +555,14 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
             v = _read_collection(
                 leaf["annotation"], (path,), form, coerce=True
             )
-            # An untouched optional collection on a create form is absent, not
-            # an explicit replacement with an empty collection.
-            if cmd.verb in ("create", "new") and original is None and not leaf["required"] and not v:
+            # An empty optional control without an original remains absent,
+            # including generated post forms and missing update collections.
+            if original is None and not leaf["required"] and not v:
                 continue
             projected_original = _project_value(leaf["annotation"], original)
             if (
                 originals is not None
+                and not replacement
                 and projected_original == v
                 and not leaf["required"]
                 and (not path.startswith("expected_") or path == "expected_version")
@@ -548,6 +571,8 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
             set_path(raw, path, v)
             continue
         if value is None or value == "":
+            if replacement and value == "" and original == "":
+                set_path(raw, path, "")
             continue
         if leaf["kind"] == "bool":
             if value == "unset":
@@ -582,6 +607,7 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
             v = value
         if (
             originals is not None
+            and not replacement
             and original is not None
             and original == v
             and not leaf["required"]
@@ -599,11 +625,17 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
         if form.get(f"clear:custom_fields.{definition_id}") == "1":
             custom_patch[definition_id] = None
             continue
-        if value in ("", "unset"):
+        state = form.get(f"cf-state:{definition_id}")
+        if state in ("keep",):
+            continue
+        if state == "clear":
+            custom_patch[definition_id] = None
+            continue
+        if state is None and value in ("", "unset"):
             continue
         kind = form.get(f"cf-kind:{definition_id}")
-        parsed: Any = value == "true" if kind == "bool" else value
-        if original_custom.get(definition_id) != parsed:
+        parsed: Any = (value == "true") if kind == "bool" and value in ("true", "false") else value
+        if state == "set" or original_custom.get(definition_id) != parsed:
             custom_patch[definition_id] = parsed
     if custom_patch:
         raw["custom_fields"] = custom_patch

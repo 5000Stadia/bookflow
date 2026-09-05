@@ -72,7 +72,7 @@
 <div class="row form-field{% if l.runtime %} runtime-field{% endif %}" id="field-{{ index }}"
  {% if l.visible_when %}data-when-field="{{ l.visible_when.field }}" data-when-values='{{ json.dumps(l.visible_when["values"]) | e }}'{% if not l.visible %} hidden{% endif %}{% endif %}>
 <label for="control-{{ index }}">{{ l.label or l.path }}{% if l.required %} *{% endif %}
-<small>{{ l.description }}{% if l.choices and not l.runtime %} One of: {{ l.choices | join(", ") }}.{% endif %}{% if l.kind == "json" %} Enter a JSON {{ l.json_shape }}.{% endif %}{% if l.default not in (none, "", false) %} Default: {{ l.default }}.{% endif %}</small></label>
+<small>{{ l.description }}{% if l.choices and not l.runtime %} One of: {{ l.choices | join(", ") }}.{% endif %}{% if l.kind == "json" %} Enter a JSON {{ l.json_shape }}.{% endif %}{% if l.default is not none %} Default: {{ l.default }}.{% endif %}</small></label>
 <div class="control-stack">
 {% if l.pinned %}
 <input type="hidden" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"><select disabled aria-label="{{ l.path }} (fixed)"><option value="{{ cur }}" selected>{{ l.reference.current.label if l.reference and l.reference.current else cur }}</option></select><span class="pinned-value"><small>fixed for this record</small></span>
@@ -85,14 +85,24 @@
 {% elif l.kind == "secret" %}<input id="control-{{ index }}" type="password" name="{{ form_name }}">
 {% elif l.kind == "collection" %}{{ collection_control(l.collection, l.path, l.collection["values"], 0, l.path) }}
 {% elif l.kind == "json" %}<textarea name="{{ form_name }}" id="control-{{ index }}" rows="6" spellcheck="false">{{ cur if cur is not none else '' }}</textarea>
-{% elif l.kind == "custom-choice" %}<input type="hidden" name="cf-kind:{{ l.definition_id }}" value="choice"><select id="control-{{ index }}" name="{{ form_name }}"><option value="">(unchanged)</option>{% for c in l.choices %}<option value="{{ c }}"{% if cur == c %} selected{% endif %}>{{ c }}</option>{% endfor %}</select>
-{% elif l.kind == "custom-bool" %}<input type="hidden" name="cf-kind:{{ l.definition_id }}" value="bool"><select id="control-{{ index }}" name="{{ form_name }}"><option value="unset">(unchanged)</option><option value="true"{% if cur == true or cur == "true" %} selected{% endif %}>true</option><option value="false"{% if cur == false or cur == "false" %} selected{% endif %}>false</option></select>
-{% elif l.kind == "custom-date" %}<input type="hidden" name="cf-kind:{{ l.definition_id }}" value="date"><input id="control-{{ index }}" type="date" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}">
-{% elif l.kind == "custom-number" %}<input type="hidden" name="cf-kind:{{ l.definition_id }}" value="number"><input id="control-{{ index }}" inputmode="decimal" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}">
-{% elif l.kind == "custom-text" %}<input type="hidden" name="cf-kind:{{ l.definition_id }}" value="text"><input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}">
+{% elif l.runtime %}
+<input type="hidden" name="cf-kind:{{ l.definition_id }}" value="{{ l.wire_kind }}">
+<input type="hidden" name="cf-label:{{ l.definition_id }}" value="{{ l.label }}">
+<label>Action <select name="cf-state:{{ l.definition_id }}"><option value="keep"{% if l.state == 'keep' %} selected{% endif %}>{{ 'Keep stored value or absence' if l.update else 'Use creation default / omit' }}</option><option value="set"{% if l.state == 'set' %} selected{% endif %}>Set value (including empty text)</option><option value="clear"{% if l.state == 'clear' %} selected{% endif %}>Clear</option></select></label>
+{% if l.unavailable %}<strong role="alert">Unavailable field attempt</strong>{% endif %}
+{% if l.wire_kind in ('choice', 'bool') %}
+<select id="control-{{ index }}" name="{{ form_name }}" style="min-width:0;max-width:100%">
+{% if l.wire_kind == 'choice' %}
+{% if l.selected not in l.choices %}<option value="{{ cur if cur is not none else '' }}" selected>{{ (cur ~ ' — unavailable choice') if cur is not none else '(choose)' }}</option>{% endif %}
+{% for c in l.choices %}<option value="{{ cur if c == l.selected and cur is not none else c }}"{% if c == l.selected %} selected{% endif %}>{{ c }}</option>{% endfor %}
+{% else %}
+{% if cur not in (true, false, 'true', 'false') %}<option value="{{ cur if cur is not none else 'unset' }}" selected>{{ cur if cur is not none else '(choose)' }}</option>{% endif %}
+<option value="true"{% if cur is sameas true or cur == 'true' %} selected{% endif %}>true</option><option value="false"{% if cur is sameas false or cur == 'false' %} selected{% endif %}>false</option>
+{% endif %}</select>
+{% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"{% if l.date_input %} type="date"{% elif l.wire_kind == 'number' %} inputmode="decimal"{% endif %}>{% endif %}
 {% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}" {% if l.kind == "number" %}inputmode="numeric"{% endif %}>{% endif %}
 </div>
-<span>{% if (cmd.clearable or l.runtime) and l.nullable and l.kind != "json" %}<label class="clear-control"><input type="checkbox" name="clear:{{ l.path }}" value="1" {% if attempted.get("clear:" ~ l.path) == "1" %}checked{% endif %}> clear</label>{% endif %}</span>
+<span>{% if cmd.clearable and not l.runtime and l.nullable and l.kind != "json" %}<label class="clear-control"><input type="checkbox" name="clear:{{ l.path }}" value="1" {% if attempted.get("clear:" ~ l.path) == "1" %}checked{% endif %}> clear</label>{% endif %}</span>
 </div>
 {% endmacro %}
 
@@ -100,7 +110,8 @@
 <input type="hidden" name="originals" value='{{ json.dumps(originals, default=str) | e }}'>
 {% if return_context %}<input type="hidden" name="_return_token" value="{{ return_context.token }}"><input type="hidden" name="_return_target" value="{{ return_context.target }}">{% endif %}
 {% if form_groups %}{% for group in form_groups %}<details class="form-section"{% if group.open %} open{% endif %}><summary>{{ group.title }}</summary>{% for l in group.leaves %}{{ field(l, l.index) }}{% endfor %}</details>{% endfor %}{% else %}{% for l in leaves %}{{ field(l, loop.index) }}{% endfor %}{% endif %}
-{% if runtime_fields %}<fieldset class="runtime-fields"><legend>Custom fields</legend>{% for l in runtime_fields %}{{ field(l, "custom-" ~ loop.index) }}{% endfor %}</fieldset>{% endif %}
+{% if runtime_fields %}<fieldset class="runtime-fields" style="min-width:0;max-width:100%;overflow-wrap:anywhere"><legend>Custom fields</legend>{% for l in runtime_fields %}{{ field(l, "custom-" ~ loop.index) }}{% endfor %}</fieldset>{% endif %}
+{% if captured_custom_fields %}<details><summary>Captured custom fields (stored revision)</summary><dl>{% for f in captured_custom_fields %}<dt>{{ f.name }} · {{ f.kind }}</dt><dd>{{ f.choice_label if f.kind == 'choice' else ('true' if f.value is sameas true else 'false' if f.value is sameas false else f.value) }}</dd>{% endfor %}</dl></details>{% endif %}
 {% for c in ctx_fields %}<div class="row"><label>{{ c }}<small>context, sent as a header</small></label><input name="ctx:{{ c }}" value="{{ attempted.get('ctx:' ~ c, '') }}"><span></span></div>{% endfor %}
 <div class="row form-submit"><span></span><span>{% if cmd.is_write %}<button name="action" value="preview">Preview</button>{% endif %}<button name="action" value="submit">{{ 'Save ' ~ ('job' if originals.parent_id else 'customer') if noun == 'customer' and verb in ('create', 'update') else 'Submit' }}</button></span></div></form>
 

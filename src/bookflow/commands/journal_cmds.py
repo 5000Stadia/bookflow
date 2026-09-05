@@ -14,7 +14,7 @@ def _write(verb, model):
     def planner(inp, ctx, s):
         return journals.prepare(s, ctx, inp, verb)
     cmd = command('journal ' + verb, scope='company', description={
-        'post': 'Post two through 200 balanced domestic journal lines with an explicit or automatically allocated number.',
+        'post': 'Post two through 200 balanced domestic journal lines with an explicit or automatically allocated number and typed header custom fields.',
         'update': 'Append an immutable correction with an exact old-date reversal and a full new-date replacement.',
         'void': 'Void a journal with a required context reason and an exact reversal at its current accounting date.',
     }[verb], input_model=model, output_model=JournalWriteOutput, writes={'company'},
@@ -34,7 +34,7 @@ journal_update = _write('update', JournalUpdateInput)
 journal_void = _write('void', JournalVoidInput)
 
 
-@command('journal show', scope='company', description='Show a journal and its current or selected immutable revision, historical lines and posting batch totals.',
+@command('journal show', scope='company', description='Show a journal and its current or selected immutable revision, historical lines, captured custom fields and posting batch totals.',
          input_model=JournalShowInput, output_model=JournalOutput, required_role='member', capability='ledger.read',
          positional=['journal'], error_codes=['E_RECORD_NOT_FOUND'])
 def journal_show(inp, ctx, s):

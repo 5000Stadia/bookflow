@@ -595,6 +595,16 @@ input = { record_type = "account", record_id = "${income_account.id}", original_
 
 
 [[commands]]
+command = "custom-field create"
+capture = "journal_work_order"
+input = { name = "Work order", kind = "text", scopes = ["journal_entry"] }
+
+[[commands]]
+command = "custom-field create"
+capture = "journal_source"
+input = { name = "Source", kind = "choice", choices = [{ value = "Email" }, { value = "Phone" }], scopes = ["journal_entry"] }
+
+[[commands]]
 command = "journal post"
 capture = "opening_journal"
 input = { date = "2026-01-01", number = "DEMO-OPEN", memo = "Opening capital journal", lines = [{ account = "Checking", side = "debit", amount = "5000.00" }, { account = "Opening Balance Equity", side = "credit", amount = "5000.00" }] }
@@ -602,7 +612,7 @@ input = { date = "2026-01-01", number = "DEMO-OPEN", memo = "Opening capital jou
 [[commands]]
 command = "journal post"
 capture = "service_journal"
-input = { date = "2026-01-15", number = "DEMO-SERVICE", memo = "Domestic journal for completed service work received in cash", lines = [{ account = "Checking", side = "debit", amount = "1200.00" }, { account = "Service Income", side = "credit", amount = "1200.00" }] }
+input = { date = "2026-01-15", number = "DEMO-SERVICE", memo = "Domestic journal for completed service work received in cash", lines = [{ account = "Checking", side = "debit", amount = "1200.00" }, { account = "Service Income", side = "credit", amount = "1200.00" }], custom_fields = { "${journal_work_order.id}" = "WO-101", "${journal_source.id}" = "Email" } }
 
 [[commands]]
 command = "journal update"
@@ -657,7 +667,7 @@ input = { account = "${register_card.id}", date = "2026-05-15", number = "REG-CA
 [[commands]]
 command = "register post"
 capture = "split_register"
-input = { account = "Checking", date = "2026-06-01", number = "REG-SPLIT", memo = "Professional fees with a refund applied to the payment", direction = "decrease", amount = "100.00", allocations = [{ account = "Professional Fees", amount = "120.00", memo = "Current professional fees" }, { account = "Professional Fees", amount = "20.00", direction = "increase", memo = "Refund credited against the payment" }] }
+input = { account = "Checking", date = "2026-06-01", number = "REG-SPLIT", memo = "Professional fees with a refund applied to the payment", direction = "decrease", amount = "100.00", allocations = [{ account = "Professional Fees", amount = "120.00", memo = "Current professional fees" }, { account = "Professional Fees", amount = "20.00", direction = "increase", memo = "Refund credited against the payment" }], custom_fields = { "${journal_work_order.id}" = "WO-102", "${journal_source.id}" = "Email" } }
 
 [[commands]]
 command = "register calculate"
@@ -670,5 +680,29 @@ input = { account = "Checking", date_from = "2026-01-01", date_to = "2026-12-31"
 
 [[commands]]
 command = "register update"
-reason = "Clarify the split payment description"
-input = { journal = "${split_register.id}", expected_version = "${split_register.version}", selected_line_id = "${split_register.revision.lines.0.line_id}", account = "Checking", date = "2026-06-01", number = "REG-SPLIT", memo = "Professional fees net of the credited refund", direction = "decrease", amount = "100.00", allocations = [{ line_id = "${split_register.revision.lines.1.line_id}", account = "Professional Fees", amount = "120.00", memo = "Current professional fees" }, { line_id = "${split_register.revision.lines.2.line_id}", account = "Professional Fees", amount = "20.00", direction = "increase", memo = "Refund credited against the payment" }] }
+capture = "custom_split"
+reason = "Update the split payment work order and source"
+input = { journal = "${split_register.id}", expected_version = "${split_register.version}", selected_line_id = "${split_register.revision.lines.0.line_id}", account = "Checking", date = "2026-06-01", number = "REG-SPLIT", memo = "Professional fees with a refund applied to the payment", direction = "decrease", amount = "100.00", allocations = [{ line_id = "${split_register.revision.lines.1.line_id}", account = "Professional Fees", amount = "120.00", memo = "Current professional fees" }, { line_id = "${split_register.revision.lines.2.line_id}", account = "Professional Fees", amount = "20.00", direction = "increase", memo = "Refund credited against the payment" }], custom_fields = { "${journal_work_order.id}" = "WO-102-A", "${journal_source.id}" = "Phone" } }
+
+[[commands]]
+command = "journal update"
+capture = "cleared_work_order"
+reason = "Clear the optional work order reference"
+input = { journal = "${custom_split.id}", expected_version = "${custom_split.version}", custom_fields = { "${journal_work_order.id}" = "${null}" } }
+
+[[commands]]
+command = "journal update"
+reason = "Reuse the work order value slot with the final reference"
+input = { journal = "${custom_split.id}", expected_version = "${cleared_work_order.version}", custom_fields = { "${journal_work_order.id}" = "WO-102-B" } }
+
+[[commands]]
+command = "custom-field update"
+input = { custom_field = "${journal_work_order.id}", name = "Work order reference", expected_version = "${journal_work_order.version}" }
+
+[[commands]]
+command = "custom-field update"
+input = { custom_field = "${journal_source.id}", expected_version = "${journal_source.version}", choices = [{ id = "${journal_source.choices.0.id}", value = "EMAIL" }, { id = "${journal_source.choices.1.id}", value = "Phone" }] }
+
+[[commands]]
+command = "journal show"
+input = { journal = "${service_journal.id}", revision_number = 1 }

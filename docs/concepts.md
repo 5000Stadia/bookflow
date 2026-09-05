@@ -107,3 +107,52 @@ Malformed escapes, invalid UTF-8 and unknown encodings return E_VALIDATION befor
 command execution. A literal percent sign becomes `%25`; plus is not decoded as
 space. Browser register entry applies this transport automatically and retains
 the original context text with its pending request.
+
+
+## Journal custom fields
+
+Create definitions with scope `journal_entry`. Journal and register `post` and
+`update` accept `custom_fields`, an object keyed by definition ID. Values are
+text, exact decimal strings, ISO dates, booleans, or configured choice text,
+according to the definition's kind. JSON numbers are not accepted for decimal
+fields. Omit the object or a key to preserve a value on update. An explicit
+`null` clears an optional value; `false`, `"0"`, and `""` remain supplied values.
+The object itself cannot be `null`.
+
+Creation applies active defaults and enforces required fields. Updates do not
+apply newly added defaults or retroactively require absent values; a populated
+required value cannot be cleared. An unchanged inactive definition or retired
+choice remains captured. Choice matching uses trimmed, normalized,
+case-insensitive text and preserves the configured choice identity.
+
+Each revision stores its field names, kinds, values, ordering and choice labels.
+`revision.custom_fields_snapshot` maps those facts by definition ID;
+`revision.custom_fields` returns them in display order. Historical output never
+renames fields from the current definitions. `journal update` with
+`refresh_defaults=true` refreshes captured metadata while preserving canonical
+values and value/choice IDs. It does not apply new custom-field defaults. A
+custom-field-only correction appends a revision and a balanced reversal and
+replacement with zero net account change. Clearing and later setting a value
+reuses its original value ID. Voiding preserves the last captured values.
+
+With an initialized Python client and `company` selected, the definition ID
+returned by creation can be passed directly to a journal:
+
+<!-- bookflow-example: illustrative -->
+```python
+field = client.run("custom-field create", {
+    "name": "Work ticket", "kind": "text", "scopes": ["journal_entry"],
+}, company=company, reason="Track work tickets")
+journal = client.run("journal post", {
+    "date": "2026-06-01",
+    "lines": [
+        {"account": "Checking", "side": "debit", "amount": "25.00"},
+        {"account": "Service Income", "side": "credit", "amount": "25.00"},
+    ],
+    "custom_fields": {field["id"]: "WT-104"},
+}, company=company, reason="Record work ticket receipt")
+client.run("journal update", {
+    "journal": journal["id"], "expected_version": journal["version"],
+    "custom_fields": {field["id"]: None},
+}, company=company, reason="Clear optional ticket reference")
+```

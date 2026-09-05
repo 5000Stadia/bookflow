@@ -17,8 +17,14 @@ def edit_projection(journal: dict[str, Any], account: dict[str, Any], label) -> 
     """Losslessly expose an expressible current revision; never flatten journals."""
     revision = journal["revision"]
     lines = revision["lines"]
+    # A malformed/unprojected snapshot is still incompatible; valid header facts
+    # are preserved by omitted patches and rendered from the revision projection.
+    snapshot = revision.get("custom_fields_snapshot", {})
+    if snapshot and (not all(isinstance(v, dict) for v in snapshot.values())
+                     or set(snapshot) != {f["definition_id"] for f in revision.get("custom_fields", [])}):
+        return None
     if (journal["status"] != "posted" or revision["id"] != journal["current_revision_id"]
-            or revision.get("custom_fields_snapshot") or len(lines) < 2
+            or len(lines) < 2
             or lines[0]["account_id"] != account["id"]
             or any(line["account_id"] == account["id"] for line in lines[1:])
             or lines[0]["class_id"] is not None or lines[0].get("class_name") is not None
@@ -53,7 +59,7 @@ def edit_projection(journal: dict[str, Any], account: dict[str, Any], label) -> 
         labels["allocations"] = [dict(account=label(line["account_snapshot"]),
                                       party=line["party_name"] or "", class_id=line["class_name"] or "")
                                   for line in lines[1:]]
-    return {"payload": payload, "labels": labels}
+    return {"payload": payload, "labels": labels, "custom_fields": revision.get("custom_fields", [])}
 
 
 def install(app: FastAPI, *, render, run, credential, page_error) -> None:
@@ -84,7 +90,11 @@ def install(app: FastAPI, *, render, run, credential, page_error) -> None:
             directions = [("decrease", "Payment"), ("increase", "Deposit")] if account["type"] == "bank" else (
                 [("increase", "Charge"), ("decrease", "Payment")] if account["type"] == "credit_card" else
                 [("increase", "Increase"), ("decrease", "Decrease")])
-            config = dict(actor=cred.user_id, company=company_id, account=account["id"], today=today,
+            from bookflow.adapters.workbench.forms import custom_field_descriptors
+            definitions = run(request, "custom-field list", {"filter": ["target_type=journal_entry"]}, company_id).get("items", []) if may_write else []
+            captured = (edit or {}).get("custom_fields", [])
+            controls = custom_field_descriptors(definitions, {f["definition_id"]: f["value"] for f in captured}, update=bool(edit))
+            config = dict(custom_fields=controls, actor=cred.user_id, company=company_id, account=account["id"], today=today,
                           timezone=info["timezone"], currency=info["home_currency"], writable=may_write,
                           supported=supported, directions=directions, edit=edit,
                           date_from=request.query_params.get("date_from", today[:4] + "-01-01"),

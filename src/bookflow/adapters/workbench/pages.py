@@ -171,6 +171,7 @@ def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
         return {
             "number": revision.get("number"), "date": revision.get("date"),
             "memo": revision.get("memo"),
+            "custom_fields": _custom_value_map(revision.get("custom_fields")),
             "lines": [{
                 "line_id": line["line_id"], "account": line["account_id"],
                 "side": line["side"], "amount": line["amount"]["amount"],
@@ -931,6 +932,16 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         elif cmd.version_source and record_id is None:
             return page_error(request, BookflowError("E_USAGE", message="open this update from a record page"))
         originals = originals or {}
+        if noun == "register" and shown and shown.get("revision", {}).get("lines"):
+            from bookflow.adapters.workbench.register import edit_projection
+            try:
+                account = run(request, "account show", {"account": shown["revision"]["lines"][0]["account_id"]}, company_id)
+                projection = edit_projection(shown, account, lambda row: _reference_label("account", row, authorized_company or {}))
+            except BookflowError as err:
+                return page_error(request, err)
+            if projection:
+                originals = projection["payload"]
+            originals["custom_fields"] = _custom_value_map(shown["revision"].get("custom_fields"))
         if company_id is not None and cmd.name == "customer create" and request.query_params.get("parent") and not attempted:
             try:
                 parent = run(request, "customer show", {"customer": request.query_params["parent"]}, company_id)
@@ -1115,17 +1126,19 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     collect_references(leaf["collection"], leaf["collection"]["values"], leaf["path"])
         except BookflowError as err:
             return page_error(request, err)
-        if company_id is not None and definition is not None and definition.runtime_field_provider == "custom-fields":
+        runtime_scope = ("journal_entry" if noun in ("journal", "register") and verb in ("post", "update") else
+                         definition.record_type if definition is not None and definition.runtime_field_provider == "custom-fields" else None)
+        if company_id is not None and runtime_scope:
             try:
                 definitions = run(
                     request,
                     "custom-field list",
-                    {"filter": [f"target_type={definition.record_type}"]},
+                    {"filter": [f"target_type={runtime_scope}"]},
                     company_id,
                 ).get("items", [])
             except BookflowError as err:
                 return page_error(request, err)
-            runtime_fields = F.custom_field_descriptors(definitions)
+            runtime_fields = F.custom_field_descriptors(definitions, originals.get("custom_fields"), attempted, update=verb == "update")
             described = [leaf for leaf in described if leaf["path"] != "custom_fields"]
         return_token = attempted.get("_return_token") or request.query_params.get("return_token")
         return_target = attempted.get("_return_target") or request.query_params.get("return_target")
@@ -1139,6 +1152,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return_context = {"token": return_token, "target": return_target}
         return render("form.html", request, company_id=company_id, noun=noun, verb=verb, cmd=cmd, leaves=described, originals=originals,
                       attempted=attempted, record_id=record_id, runtime_fields=runtime_fields,
+                      captured_custom_fields=(shown or {}).get("revision", {}).get("custom_fields", []),
                       annotations=annotations(company_id, noun, record_id, shown, authorized_company, cred),
                       ctx_fields=F.context_fields(cmd), result=result, error=error,
                       preview=preview, get=F.get_path, form_value=F.form_value,

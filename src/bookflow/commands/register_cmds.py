@@ -16,7 +16,7 @@ def _write(verb, model):
     def planner(inp, ctx, s):
         return registers.prepare(s, ctx, inp, verb)
     cmd = command('register ' + verb, scope='company', description={
-        'post': 'Post a domestic account movement with a category or signed split allocations.',
+        'post': 'Post a domestic account movement with a category or signed split allocations and typed journal header custom fields.',
         'update': 'Replace the complete editable register entry while retaining selected and supplied allocation identities.',
     }[verb], input_model=model, output_model=RegisterWriteOutput, writes={'company'},
         required_role='standard', capability='ledger.post', accepts_idempotency_key=True,
