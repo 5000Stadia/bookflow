@@ -110,6 +110,7 @@ Send metadata in `X-Bookflow-Input`; this command does not use the ordinary JSON
 | `link.record_type` | string | yes | no | — | — |
 | `link.record_id` | string | yes | no | — | — |
 | `link.linked_by` | string | yes | no | — | — |
+| `link.linked_by_name` | string \| null | no | yes | null | — |
 | `link.linked_at` | string | yes | no | — | — |
 | `link.caption` | string | yes | no | — | — |
 | `link.active` | boolean | yes | no | — | — |
@@ -181,6 +182,7 @@ Example JSON output:
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "linked_at": "2026-01-01T00:00:00Z",
     "linked_by": "value",
+    "linked_by_name": null,
     "record_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "record_type": "value",
     "updated_at": "2026-01-01T00:00:00Z",
@@ -446,6 +448,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `link.record_type` | string | yes | no | — | — |
 | `link.record_id` | string | yes | no | — | — |
 | `link.linked_by` | string | yes | no | — | — |
+| `link.linked_by_name` | string \| null | no | yes | null | — |
 | `link.linked_at` | string | yes | no | — | — |
 | `link.caption` | string | yes | no | — | — |
 | `link.active` | boolean | yes | no | — | — |
@@ -517,6 +520,7 @@ Example JSON output:
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "linked_at": "2026-01-01T00:00:00Z",
     "linked_by": "value",
+    "linked_by_name": null,
     "record_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "record_type": "value",
     "updated_at": "2026-01-01T00:00:00Z",
@@ -624,6 +628,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].record_type` | string | yes | no | — | — |
 | `items[].record_id` | string | yes | no | — | — |
 | `items[].linked_by` | string | yes | no | — | — |
+| `items[].linked_by_name` | string \| null | no | yes | null | — |
 | `items[].linked_at` | string | yes | no | — | — |
 | `items[].caption` | string | yes | no | — | — |
 | `items[].active` | boolean | yes | no | — | — |
@@ -775,6 +780,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `link.record_type` | string | yes | no | — | — |
 | `link.record_id` | string | yes | no | — | — |
 | `link.linked_by` | string | yes | no | — | — |
+| `link.linked_by_name` | string \| null | no | yes | null | — |
 | `link.linked_at` | string | yes | no | — | — |
 | `link.caption` | string | yes | no | — | — |
 | `link.active` | boolean | yes | no | — | — |
@@ -846,6 +852,7 @@ Example JSON output:
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "linked_at": "2026-01-01T00:00:00Z",
     "linked_by": "value",
+    "linked_by_name": null,
     "record_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "record_type": "value",
     "updated_at": "2026-01-01T00:00:00Z",

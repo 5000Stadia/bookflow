@@ -94,6 +94,7 @@ class AttachmentLinkOut(CommonOut):
     record_type: str
     record_id: str
     linked_by: str
+    linked_by_name: str | None = None
     linked_at: str
     caption: str
     active: bool
@@ -118,8 +119,17 @@ def _out(s, row, model):
     return model(**{k: localize(s, v) if k in ("created_at", "updated_at", "uploaded_at", "linked_at", "collected_at") else v for k, v in row.items()})
 
 
-def _link_out(s, link, attachment):
-    return _out(s, dict(link, attachment=_out(s, attachment, AttachmentOut)), AttachmentLinkOut)
+def _link_names(s, links):
+    from bookflow.company.info import principal_names
+    names = principal_names(s.company, {link["linked_by"] for link in links})
+    names.setdefault(s.actor.id, s.actor.display_name)
+    return names
+
+
+def _link_out(s, link, attachment, names=None):
+    names = _link_names(s, [link]) if names is None else names
+    return _out(s, dict(link, linked_by_name=names.get(link["linked_by"]),
+                       attachment=_out(s, attachment, AttachmentOut)), AttachmentLinkOut)
 
 
 def _get(s, kind, key):
@@ -337,4 +347,5 @@ def plan_list(inp: AttachmentListInput, ctx: Context, s) -> Plan:
     rows = rows[:inp.limit]
     attachments = {r["id"]: dict(r) for r in s.company.conn.execute(sa.select(c.attachments).where(c.attachments.c.id.in_({r["attachment_id"] for r in rows}))).mappings()} if rows else {}
     cursor = base64.urlsafe_b64encode(_Cursor(**scope, before=rows[-1]["id"]).model_dump_json().encode()).decode().rstrip("=") if more else None
-    return Plan(AttachmentPage(items=[_link_out(s, r, attachments[r["attachment_id"]]) for r in rows], count=len(rows), has_more=more, next_cursor=cursor))
+    names = _link_names(s, rows)
+    return Plan(AttachmentPage(items=[_link_out(s, r, attachments[r["attachment_id"]], names) for r in rows], count=len(rows), has_more=more, next_cursor=cursor))

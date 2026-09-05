@@ -37,6 +37,7 @@ def test_http_upload_download_exact_and_activity(hosted):
     assert response.status_code == 200, response.text
     added = response.json()
     attachment = added['attachment']
+    assert added['link']['linked_by_name']
     assert attachment['sha256'] == hashlib.sha256(BODY).hexdigest()
     assert attachment['size_bytes'] == len(BODY)
     result = hosted.api.post(f'/companies/{hosted.company_id}/transfers/attachment.get',

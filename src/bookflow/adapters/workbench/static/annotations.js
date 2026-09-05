@@ -123,7 +123,7 @@
       const entry = el('article', undefined, 'annotation-entry'); entry.dataset.linkId = link.id;
       entry.append(el('strong', link.attachment.original_filename), el('p', link.caption, 'annotation-text'),
         el('p', `${link.attachment.size_bytes} bytes · ${link.attachment.media_type}`, 'muted'));
-      attribution(entry, link.linked_by, link.linked_at);
+      attribution(entry, link.linked_by_name || link.linked_by, link.linked_at);
       const status = el('p'); status.setAttribute('role', 'status');
       if (config.allowed['attachment get']) entry.append(button('Download file', () => download(link, entry, status)));
       if (config.allowed['attachment unlink']) entry.append(button('Unlink file', () => {
