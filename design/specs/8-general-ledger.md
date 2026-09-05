@@ -135,3 +135,5 @@ place. Its field inventory, split behavior and human usability checkpoint remain
 explicit work before row closure. Full agent isolation remains dependent on the
 unfinished identity integration. Invoice, payment, allocation, banking, inventory,
 commercial-tax and cash-basis workflows are outside this journal increment.
+
+Register field inventory and implementation contract: [8-register.md](8-register.md).

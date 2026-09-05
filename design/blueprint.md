@@ -698,6 +698,26 @@ Changing the closing date requires the admin or owner role and is audited. There
 
 Each transaction type has a sequence in `sequences` (`type`, `next_number`, `prefix`). Creating/posting a new business document takes the next number unless the caller supplies one. A supplied duplicate is rejected with `E_DUPLICATE_NUMBER`. Edits retain the number unless the caller explicitly changes it; number uniqueness includes voided documents. Document revisions, exact reversals, and replacement posting batches never consume business-document numbers. Internal ids, not editable numbers, join accounting history and applications.
 
+### 10.4 Account register inventory
+
+An account register shows prior account movements alongside an entry row. Balance-sheet accounts open registers from the chart and account detail; income and expense accounts open the account-filtered general ledger. Non-posting accounts accept no entry. The selected account header contains its name, permitted number, type, home currency and own balance, without descendants.
+
+| Area | Fields and actions |
+|---|---|
+| Entry | accounting date; journal number; typed payee; Payment and Deposit for bank accounts; Charge and Payment for credit cards; Increase and Decrease for other balance-sheet accounts; category or transfer account; memo; class; Splits; Record; Restore |
+| Splits | account, positive amount, direction relative to the main entry, memo, customer/job or other typed party, class; Add, Remove, Clear, Recalculate, Close |
+| History | accounting date, journal number, journal type, payee, category or Splits, memo, class, increase/decrease, normal-side running balance; Original/Reversal/Replacement effect and journal detail/history link |
+| Navigation | searchable selected account; date range; bounded previous movements; next page with restart on change; account general-ledger link; current journal edit and void |
+| Keyboard | selected Date on entry; Tab/Shift+Tab through row fields and actions; picker arrows/Enter/Escape; Tab to Record then Enter; T for company-local today and +/− for adjacent days; return to selected Date after posting |
+
+The initial register records journals. Journal number uses the journal sequence, including explicit unique numbers; it does not consume a check number or create a check, deposit or payment document. Selected money direction controls the account's normal-side movement. All arithmetic, split totals and journal translation run in the company service. Browser money stays decimal text. No balancing plug is inserted.
+
+The wider register inventory includes one-line display, date/order-entered sorting, remembered payee amounts and expense accounts, check/reference numbering and printing, Go to, report printing, bank-feed setup, cleared status and statement reconciliation, billing-related split attribution, and additional month/week/year date shortcuts and date preferences. These belong to their corresponding document, banking, billing, print and preference workflows. They are unavailable in the domestic journal register. The billing-related column's complete behavior and the sort/print/Go-to option inventories remain unspecified until those workflows are inventoried.
+
+Register history includes every accounting effect. An old effect opens the stable journal's current version for editing and its immutable revision for historical display. A journal with multiple selected-account lines or incompatible dimensions stays readable and opens the journal editor; the register does not flatten it. Closed-period and whole-document version checks apply to all register edits. A new current-period adjustment is a distinct journal with an explicit reason/source reference.
+
+On narrow displays the entry fields stack in keyboard order and history scrolls within its own labeled region. A successful post remains visible in a receipt even outside the selected period; balance refresh is a separate current read. An ambiguous save retains its exact request and idempotency key for retry. Stale reads restart without erasing the draft. Readonly users have history and authorized detail links, without entry/edit/void controls.
+
 ## 11. Lists
 
 ### 11.1 Shared list contract
