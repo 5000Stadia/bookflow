@@ -21,6 +21,7 @@ from bookflow.adapters.workbench import forms as F
 from bookflow.adapters.workbench import workflows as W
 from bookflow.adapters.workbench import statements as S
 from bookflow.adapters.workbench import sales as Sales
+from bookflow.adapters.workbench import work as Work
 from bookflow.core import registry
 from bookflow.core.errors import BookflowError
 from bookflow.core.models import list_columns
@@ -79,6 +80,7 @@ def _verbs(noun: str, scope: str | None = None) -> list[registry.Command]:
 _GROUP_ORDER = (
     "Company",
     "Customers and sales",
+    "Customer work",
     "Vendors and purchases",
     "Employees",
     "Items",
@@ -92,7 +94,7 @@ _GROUP_ORDER = (
 def _grouped_nouns(noun_rows: list[tuple[str, list[registry.Command]]], *, company: bool) -> list[tuple[str, list[tuple[str, list[registry.Command]]]]]:
     grouped: dict[str, list[tuple[str, list[registry.Command]]]] = {}
     for noun, verbs in noun_rows:
-        meta = registry.noun_meta(noun)
+        meta = _noun_meta(noun)
         if meta.get("ui_group"):
             group = str(meta["ui_group"])
         elif noun == "company":
@@ -108,7 +110,7 @@ def _grouped_nouns(noun_rows: list[tuple[str, list[registry.Command]]], *, compa
         grouped.setdefault(group, []).append((noun, verbs))
     order = {name: index for index, name in enumerate(_GROUP_ORDER)}
     return [
-        (group, sorted(rows, key=lambda row: (registry.noun_meta(row[0]).get("ui_order", 999), row[0])))
+        (group, sorted(rows, key=lambda row: (_noun_meta(row[0]).get("ui_order", 999), row[0])))
         for group, rows in sorted(grouped.items(), key=lambda item: (order.get(item[0], 999), item[0]))
     ]
 
@@ -166,8 +168,14 @@ def _output_version(noun: str, output: dict[str, Any]) -> int | None:
     return None
 
 
+def _noun_meta(noun):
+    return Work.meta(noun, registry.noun_meta(noun))
+
+
 def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
     """Project the authoritative editable object from a show result."""
+    if noun in Work.NOUNS:
+        return Work.editable_values(shown)
     if noun in ('invoice', 'sales-receipt'):
         return Sales.editable_values(shown)
     if noun == "journal":
@@ -184,7 +192,7 @@ def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
                 **{key: line[key] for key in ("name_type", "name_id", "class_id", "description") if line.get(key) is not None},
             } for line in revision.get("lines", [])],
         }
-    definition = registry.noun_meta(noun).get("definition")
+    definition = _noun_meta(noun).get("definition")
     path = definition.editable_output_path if definition is not None else ()
     current: Any = shown
     for part in path:
@@ -214,7 +222,7 @@ def _reference_label(
     row: dict[str, Any],
     company_view: dict[str, Any],
 ) -> str:
-    definition = registry.noun_meta(target).get("definition")
+    definition = _noun_meta(target).get("definition")
     display_field = definition.display_field if definition is not None else "name"
     label = next(
         (
@@ -249,7 +257,7 @@ def _reference_target(
 
 def _form_reference(definition: Any, noun: str, path: str) -> Any | None:
     """Project the domain's sole authoritative reference declarations."""
-    definition = definition or registry.noun_meta(noun).get('form_definition')
+    definition = definition or _noun_meta(noun).get('form_definition')
     return F.reference_for_path(definition, path)
 
 
@@ -275,6 +283,10 @@ def _decorate_collection_references(
         )
         return
     if item["kind"] != "object":
+        reference = _form_reference(definition, noun, path)
+        if reference and len(reference.target_nouns) == 1:
+            target = reference.target_nouns[0]
+            item["reference"] = {"target": target, "suggestion_url": f"/c/{company_id}/_references/{noun}/{path}?target={target}"}
         return
     for child in item["fields"]:
         child_path = f"{path}.{child['name']}"
@@ -346,13 +358,15 @@ def _success_target(cmd: registry.Command, company_id: str | None, noun: str, re
         return f"/c/{company_id}/rate/{output['id']}"
     if company_id and cmd.name in ("register post", "register update") and output.get("id"):
         return f"/c/{company_id}/journal/{output['id']}"
+    if noun in Work.NOUNS and output.get('kind') and output.get('id'):
+        return f"/c/{company_id}/{output['kind'].replace('_', '-')}/{output['id']}"
     if record_id is not None:
         base = f"/c/{company_id}/{noun}" if company_id else f"/hub/{route_noun}"
         return f"{base}/{record_id}"
     if cmd.scope == "company":
         if noun == "company":
             return f"/c/{company_id}/company/self"
-        found = _output_identifier(noun, registry.noun_meta(noun), output)
+        found = _output_identifier(noun, _noun_meta(noun), output)
         if found and registry.get(f"{noun} show") is not None:
             return f"/c/{company_id}/{noun}/{found}"
         if registry.get(f"{noun} list") is not None:
@@ -362,7 +376,7 @@ def _success_target(cmd: registry.Command, company_id: str | None, noun: str, re
         return "/companies"
     if cmd.name in ("company new", "company attach", "demo reset") and output.get("company_id"):
         return f"/c/{output['company_id']}/"
-    found = _output_identifier(noun, registry.noun_meta(noun), output)
+    found = _output_identifier(noun, _noun_meta(noun), output)
     if found and registry.get(f"{noun} show") is not None:
         return f"/hub/{route_noun}/{found}"
     return f"/hub/{route_noun}"
@@ -428,7 +442,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         if not company_id or not record_id:
             return None
         from bookflow.company.records import target_types
-        record_type = registry.noun_meta(noun).get("record_type")
+        record_type = _noun_meta(noun).get("record_type")
         if record_type not in target_types():
             return None
         shown = shown or {}
@@ -527,7 +541,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             company_view = run(request, "company show", {}, company_id)
         except BookflowError as err:
             return page_error(request, err)
-        definition = registry.noun_meta(owner_noun).get("definition")
+        definition = _noun_meta(owner_noun).get("definition")
         reference = _form_reference(definition, owner_noun, field)
         if reference is None:
             return page_error(request, BookflowError("E_USAGE", message="unknown form reference"))
@@ -538,7 +552,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         target = requested_target.replace("_", "-") if requested_target else (targets[0] if len(targets) == 1 else None)
         if target not in targets:
             return page_error(request, BookflowError("E_USAGE", message="invalid reference target"))
-        target_definition = registry.noun_meta(target).get("definition")
+        target_definition = _noun_meta(target).get("definition")
         list_command = registry.get(target_definition.query_command) if target_definition else None
         if list_command is None or list_command.local_only:
             return page_error(request, BookflowError("E_USAGE", message="reference target is not listable"))
@@ -588,7 +602,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     value
                     for key, value in request.query_params.multi_items()
                     if key.startswith("c:") and (key.endswith(":component_item_id") or
-                        (owner_noun in ('invoice', 'sales-receipt') and key.endswith(":item")))
+                        (owner_noun in ('invoice', 'sales-receipt', *Work.NOUNS) and key.endswith(":item")))
                 ),
                 None,
             )
@@ -654,7 +668,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     for link in customer.get("vendor_links", [])
                     if isinstance(link, dict)
                 }
-        target_definition = registry.noun_meta(target).get("definition")
+        target_definition = _noun_meta(target).get("definition")
         identifier = target_definition.identifier if target_definition is not None else "id"
         options = []
         for row in output.get("items", [])[:25]:
@@ -691,7 +705,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                           if not cmd.is_write or _role_allows(cmd, role_view, hub_admin=cred.hub_admin)]
         else:
             page_verbs = [cmd for cmd in page_verbs if _role_allows(cmd, {}, hub_admin=cred.hub_admin)]
-        meta = registry.noun_meta(noun)
+        meta = _noun_meta(noun)
         definition = meta.get("definition")
         cmd = registry.get(definition.query_command if definition is not None and company_id else f"{noun} list")
         if cmd is None:
@@ -707,7 +721,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             if not all_page_verbs:
                 return page_error(request, BookflowError("E_USAGE", message=f"no such noun `{noun}`"))
             # a noun without a list (presence) still has a page: its actions
-            return render("list.html", request, has_show=registry.get(f"{noun} show") is not None, company_id=company_id, noun=noun, items=[], columns=[], meta=registry.noun_meta(noun),
+            return render("list.html", request, has_show=registry.get(f"{noun} show") is not None, company_id=company_id, noun=noun, items=[], columns=[], meta=_noun_meta(noun),
                           has_inactive=False, include=False, verbs=page_verbs, extra={"note": "this noun has no list; use its actions"})
         include = request.query_params.get("include_inactive") == "1"
         raw: dict[str, Any] = {}
@@ -721,7 +735,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 raw["projection"] = "summary"
             if request.query_params.get("cursor"):
                 raw["cursor"] = request.query_params["cursor"]
-        for field in ("query", "sort", "direction", "date_from", "date_to", "status", "from_currency", "customer", "number"):
+        for field in ("query", "sort", "direction", "date_from", "date_to", "status", "from_currency", "customer", "number", "title", "active", "minimum_net", "maximum_net"):
             value = request.query_params.get(field)
             if value and field in cmd.input_model.model_fields:
                 raw[field] = value
@@ -737,10 +751,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 restart = request.url.path + "?" + urlencode([(k, v) for k, v in request.query_params.multi_items() if k != "cursor"])
                 return render("error.html", request, error={**e.to_dict(), "message": "The list changed while you were browsing. Restart to see current results."}, restart_url=restart)
             return page_error(request, e)
-        meta = registry.noun_meta(noun)
+        meta = _noun_meta(noun)
         items = out.get("items", [])
         definition = meta.get("definition")
         columns = (["number", "date", "memo", "total", "status"] if noun == "journal" else
+                   ["number", "date", "title", "customer_name", "total", "status"] if noun in Work.NOUNS else
                    ["number", "date", "customer_name", "due_date", "total", "status"] if noun in ('invoice', 'sales-receipt') else
                    ["date", "from_currency", "to_currency", "rate", "source", "version"] if noun == "rate" else
                    list(definition.summary_columns) if definition is not None else list_columns(items))
@@ -774,6 +789,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             verbs=page_verbs,
             query=raw.get("query", ""),
             rate_filters=raw if noun == "rate" else None,
+            work_filters=raw if noun in Work.NOUNS else None,
             sales_filters=raw if noun in ('invoice', 'sales-receipt') else None,
             filters=filters,
             selected_sort=raw.get("sort", ""),
@@ -793,18 +809,20 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
 
     def record_page(request: Request, company_id: str | None, noun: str, record_id: str):
         command_noun = "hub audit" if company_id is None and noun == "audit" else noun
-        meta = registry.noun_meta(command_noun)
+        meta = _noun_meta(command_noun)
         show = registry.get(f"{command_noun} show")
         if show is None:
             return page_error(request, BookflowError("E_USAGE", message=f"`{noun}` has no show command"))
         show_selector = _record_selector(show, command_noun)
         raw = {show_selector: record_id} if show_selector else {}
         try:
-            if command_noun in ("journal", "invoice", "sales-receipt") and request.query_params.get("revision_number"):
+            if command_noun in ("journal", "invoice", "sales-receipt", *Work.NOUNS) and request.query_params.get("revision_number"):
                 try:
                     raw["revision_number"] = int(request.query_params["revision_number"])
                 except ValueError:
                     raise BookflowError("E_VALIDATION", details={"fields": [{"field": "revision_number", "problem": "must be an integer"}]}) from None
+            if noun in Work.NOUNS and request.query_params.get('links_cursor') and 'links_cursor' in show.input_model.model_fields:
+                raw['links_cursor'] = request.query_params['links_cursor']
             out = run(request, show.name, raw, company_id if show.scope == "company" else None)
             cred = credential(request)
             role_view = out
@@ -816,6 +834,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 rid = out.get("company_id", record_id) if noun == "company" else out.get("id", record_id)
                 audit = run(request, "audit list", {"record_type": meta["record_type"], "record_id": rid, "limit": 20}, company_id)["items"]
         except BookflowError as e:
+            if noun in Work.NOUNS and e.code == 'E_QUERY_STALE':
+                restart = request.url.path + '?' + urlencode([(k, v) for k, v in request.query_params.multi_items() if k != 'links_cursor'])
+                return page_error(request, e, restart_url=restart)
             return page_error(request, e)
         verbs = [c for c in _verbs(command_noun, "company" if company_id else "hub")
                  if c.verb not in ("list", "show", "new", "create") and _role_allows(c, role_view, hub_admin=cred.hub_admin)]
@@ -859,7 +880,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             ),
             record_id,
         )
-        if command_noun in ("journal", "invoice", "sales-receipt"):
+        if command_noun in ("journal", "invoice", "sales-receipt", *Work.NOUNS):
             record_title = out["revision"]["number"]
         contact_copy = None
         if company_id is not None and command_noun in ("customer", "vendor"):
@@ -891,10 +912,18 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 "add_job": f"/c/{company_id}/customer/create?" + urlencode({"parent": out["id"]}) if create and out.get("active") and _role_allows(create, role_view, hub_admin=cred.hub_admin) else None,
                 "inheritance": [{"field": W.label(key.removesuffix("_source_id")), "id": value, "name": source_names[value]} for key, value in out.items() if key.endswith("_source_id") and value in source_names],
             }
+        annotation_context = annotations(company_id, noun, record_id, out, role_view, cred)
+        if noun in Work.NOUNS and request.query_params.get('annotation_line'):
+            line_id = request.query_params['annotation_line']
+            if line_id not in {line['line_id'] for line in out['revision']['lines']}:
+                return page_error(request, BookflowError('E_RECORD_NOT_FOUND'))
+            if annotation_context:
+                annotation_context['target'] = {'record_type': 'work_line', 'record_id': line_id}
         return render("record.html", request, company_id=company_id, noun=noun, record_id=record_id, record=visible_record, record_title=record_title, audit=audit, meta=meta, verbs=verbs,
+                      work=Work.detail_context(out, company_id) if noun in Work.NOUNS else None,
                       sale=Sales.detail_context(out, company_id) if command_noun in ('invoice', 'sales-receipt') else None,
                       audit_undo=audit_undo, contact_copy=contact_copy, workspace=workspace,
-                      annotations=annotations(company_id, noun, record_id, out, role_view, cred),
+                      annotations=annotation_context,
                       presence=(meta["record_type"] in _presence_types()) and company_id is not None
                                and _may_publish_presence(role_view, hub_admin=cred.hub_admin),
                       editing=(out.get("editing_by") or []) if _may_publish_presence(role_view, hub_admin=cred.hub_admin) else [])
@@ -973,7 +1002,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         elif cmd.version_source and record_id is None:
             return page_error(request, BookflowError("E_USAGE", message="open this update from a record page"))
         originals = originals or {}
-        if noun in ('invoice', 'sales-receipt') and verb == 'history' and record_id is not None:
+        if noun in Work.NOUNS and verb in ('copy', 'estimate', 'work-order', 'complete'):
+            originals = {k: v for k, v in originals.items() if k in (noun.replace('-', '_'), 'expected_version')}
+        if noun in Work.NOUNS and 'conversion_key' in cmd.input_model.model_fields and not attempted:
+            attempted['f:conversion_key'] = secrets.token_urlsafe(32)
+        if noun in ('invoice', 'sales-receipt', *Work.NOUNS) and verb == 'history' and record_id is not None:
             originals[noun.replace('-', '_')] = record_id
             if not attempted and result is None:
                 try:
@@ -1052,12 +1085,20 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     if relationship is not None:
                         originals["expected_link_version"] = relationship["version"]
         F.project_input_values(cmd.input_model, originals)
-        meta = registry.noun_meta(noun)
+        meta = _noun_meta(noun)
         definition = meta.get("definition")
         if definition is not None and definition.custom_fields:
             originals["custom_fields"] = _custom_value_map(originals.get("custom_fields"))
         described = F.describe_fields(noun, verb, cmd.input_model, originals, attempted)
-        sales_form = noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')
+        sales_form = (noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')) or (noun in Work.NOUNS and cmd.is_write)
+        if noun in Work.NOUNS:
+            described = Work.describe(described, noun)
+            workflow_note = 'Non-posting customer work. Cost estimates and notes are internal. Completion does not mean billed or paid. Choose one selling-price input per line; use defaults → unit_price returns to catalog.'
+            if verb == 'copy':
+                alternative = noun == 'estimate' and attempted.get('f:copy_mode', 'alternative') != 'independent'
+                workflow_note += (' This creates an alternative estimate in the same group.' if alternative else ' This creates a new independent scope.')
+            elif verb in ('estimate', 'work-order'):
+                workflow_note += ' This permanently links the selected source revision to the new draft. Retrying returns the same destination.'
         if sales_form:
             described = [leaf for leaf in described if leaf['path'] != 'expected_facts_fingerprint']
         if cmd.name in S.COMMANDS:
@@ -1079,7 +1120,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 for candidate in targets:
                     create_command = registry.get(f"{candidate} create")
                     if create_command is not None and _role_allows(create_command, authorized_company or {}, hub_admin=cred.hub_admin):
-                        target_definition = registry.noun_meta(candidate).get("definition")
+                        target_definition = _noun_meta(candidate).get("definition")
                         return_token = secrets.token_urlsafe(24)
                         choices.append({"target": candidate, "label": target_definition.singular_label if target_definition else candidate,
                                         "return_token": return_token,
@@ -1096,6 +1137,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                         create_targets=creation_targets,
                     )
             for leaf in described:
+                if leaf["kind"] == "collection":
+                    continue
                 reference = _form_reference(reference_definition, noun, leaf["path"])
                 if reference is None:
                     continue
@@ -1117,7 +1160,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                             if address:
                                 current = dict(id=value, label=' · '.join(str(address[key]) for key in ('label', 'line1', 'city') if address.get(key)), active=address.get('active', True))
                 elif target is not None and value:
-                    target_meta = registry.noun_meta(target)
+                    target_meta = _noun_meta(target)
                     show_command = registry.get(f"{target} show")
                     identifier = target_meta.get("identifier")
                     if show_command is not None and identifier:
@@ -1163,7 +1206,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         def current_reference(target: str, value: str) -> dict[str, Any]:
             key = (target, value)
             if key not in reference_cache:
-                target_meta = registry.noun_meta(target)
+                target_meta = _noun_meta(target)
                 try:
                     row = run(request, f"{target} show", {target_meta["identifier"]: value}, company_id)
                 except BookflowError as err:
@@ -1179,6 +1222,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             source_prefix = "c:" + source_path + ":"
             source_indexes = list(dict.fromkeys(key[len(source_prefix):].split(":", 1)[0] for key in presentation_attempt if key.startswith(source_prefix)))
             for index, value in enumerate(values):
+                if item.get('reference') and isinstance(value, str) and value:
+                    target = item['reference']['target']
+                    row = current_reference(target, value)
+                    reference_values[f'c:{wire_path}:{index}:value'] = {'label': _reference_label(target, row, authorized_company or {}) if row else value, 'active': row.get('active', True)}
                 if item["kind"] != "object" or not isinstance(value, dict):
                     continue
                 for child in item["fields"]:
@@ -1211,6 +1258,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         runtime_scope = (noun.replace('-', '_') if noun in ('invoice', 'sales-receipt') and verb in ('post', 'update') else
                          "journal_entry" if noun in ("journal", "register") and verb in ("post", "update") else
                          definition.record_type if definition is not None and definition.runtime_field_provider == "custom-fields" else None)
+        if noun in Work.NOUNS and 'custom_fields' in cmd.input_model.model_fields:
+            runtime_scope = 'estimate' if verb == 'estimate' else 'work_order' if verb == 'work-order' else noun.replace('-', '_')
         if company_id is not None and runtime_scope:
             try:
                 definitions = run(
@@ -1239,6 +1288,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       captured_foreign_lines=[line for line in (shown or {}).get("revision", {}).get("lines", []) if line.get("original_amount")],
                       annotations=annotations(company_id, noun, record_id, shown, authorized_company, cred),
                       ctx_fields=F.context_fields(cmd), result=result, error=error,
+                      work_form=noun in Work.NOUNS,
+                      work=Work.detail_context(result, company_id, preview=preview) if result and noun in Work.NOUNS and "revision" in result else None,
+                      work_history=result if noun in Work.NOUNS and verb == "history" else None,
+                      work_results=result if noun in Work.NOUNS and verb == "query" else None,
                       sales_form=sales_form, sales_scope=cred.token_id,
                       sales_fingerprint=(result.get('facts_fingerprint', '') if preview and result else
                           '' if error and error.get('code') == 'E_PREVIEW_STALE' else attempted.get('f:expected_facts_fingerprint', '')),
@@ -1249,7 +1302,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       preview=preview, get=F.get_path, form_value=F.form_value,
                       return_context=return_context, workflow_note=workflow_note,
                       reference_values=reference_values,
-                      form_groups=W.customer_form_groups(described) if noun == "customer" and verb in ("create", "update") else None)
+                      form_groups=Work.form_groups(described) if noun in Work.NOUNS and cmd.is_write else W.customer_form_groups(described) if noun == "customer" and verb in ("create", "update") else None)
 
     def contact_copy_page(
         request: Request,
@@ -1343,10 +1396,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             unresolved = [key.removeprefix("ref-state:") for key, value in form.items() if key.startswith("ref-state:") and value == "pending"]
             if unresolved:
                 raise BookflowError("E_VALIDATION", details={"fields": [{"field": key, "problem": "Choose a matching record by name, or use Clear."} for key in unresolved]})
-            raw, headers, preview = F.translate(cmd, form, originals if originals else None)
-            if noun in ('invoice', 'sales-receipt') and verb in ('post', 'update'):
+            translated_form = Work.price_controls(form) if noun in Work.NOUNS else form
+            comparison = Work.price_originals(originals, form) if noun in Work.NOUNS else originals
+            raw, headers, preview = F.translate(cmd, translated_form, comparison if comparison else None)
+            if (noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')) or (noun in Work.NOUNS and cmd.is_write):
                 if verb == 'update':
-                    raw = Sales.preserve_line_origins(raw, originals)
+                    raw = Sales.preserve_line_origins(raw, comparison)
                 if preview:
                     raw.pop('expected_facts_fingerprint', None)
                     headers.pop('Idempotency-Key', None)
@@ -1366,14 +1421,14 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return form_page(request, company_id, noun, verb, record_id, error=e.to_dict(), attempted=form)
         if preview:
             return form_page(request, company_id, noun, verb, record_id, result=out, preview=True, attempted=form)
-        if noun in ('invoice', 'sales-receipt') and verb in ('history', 'query'):
+        if noun in ('invoice', 'sales-receipt', *Work.NOUNS) and verb in ('history', 'query'):
             return form_page(request, company_id, noun, verb, record_id, result=out, attempted=form)
         if noun == "report" and not cmd.is_write:
             return form_page(request, company_id, noun, verb, record_id, result=out, attempted=form,
                              report_input=cmd.input_model.model_validate(raw).model_dump())
         return_token = form.get("_return_token")
         return_target = form.get("_return_target")
-        created_id = _output_identifier(noun, registry.noun_meta(noun), out)
+        created_id = _output_identifier(noun, _noun_meta(noun), out)
         created_version = _output_version(noun, out)
         if (
             verb == "create"

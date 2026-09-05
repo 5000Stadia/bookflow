@@ -1,6 +1,6 @@
 {% if annotations %}
 <section class="annotations workspace-card" aria-labelledby="annotations-title" data-annotations='{{ annotations | tojson }}'>
-<h2 id="annotations-title">Notes, files and activity</h2>
+<h2 id="annotations-title">{{ 'Internal line notes, files and activity' if annotations.target.record_type == 'work_line' else 'Internal work notes, files and activity' if annotations.target.record_type == 'work_document' else 'Notes, files and activity' }}</h2>
 <p class="muted">Changes here save independently of the record form.</p>
 <noscript>JavaScript is required to load notes, files and activity.</noscript>
 <div class="annotation-columns">
