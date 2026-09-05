@@ -741,7 +741,7 @@ On narrow displays the entry fields stack in keyboard order and history scrolls 
 
 ### 11.1 Shared list contract
 
-Every primary list noun provides `query` with typed `summary` and `reference` projections. Input preserves the noun's text search, typed filters, active/inactive selection and ordering, and adds strict `limit` 1–200 (default 50) and an optional opaque cursor. Output is `{projection, items, count, next_cursor}`; count is returned page size, not a total-result count. Reference rows have stable id, version, readable label and active state. Summary rows contain declared bounded display columns; full owned collections remain in `show`. Legacy `list` remains complete full-record enumeration and may be expensive. Filtering and ordering happen before pagination; projections do not call show once per result.
+Every primary list noun provides `query` with typed `summary` and `reference` projections. Input preserves the noun's text search, typed filters, active/inactive selection and ordering, and adds strict `limit` 1–200 (default 50) and an optional signed, base64-encoded JSON cursor (authenticated, not encrypted). Output is `{projection, items, count, next_cursor}`; count is returned page size, not a total-result count. Reference rows have stable id, version, readable label and active state. Summary rows contain declared bounded display columns; full owned collections remain in `show`. Legacy `list` remains complete full-record enumeration and may be expensive. Filtering and ordering happen before pagination; projections do not call show once per result.
 
 A continuation is bound to company, noun, query arguments and current actor/principal/effective permissions. It records the company audit watermark and next offset. Mismatched scope/arguments/permissions are validation errors. Any audited company write makes the continuation `E_QUERY_STALE` (HTTP 409); restart without the cursor, preserve search inputs, and discard accumulated pages. Presence does not invalidate it. Pages within an unchanged watermark enumerate deterministically with id as the final ascending tie-break. Each request reauthorizes; the cursor grants no authority. Customer inherited fields use fixed-depth indexed ancestor lookups, bounded by the five-level hierarchy, with no materialized inheritance cache.
 
@@ -1174,12 +1174,28 @@ Built after release 1. Designed here so release 1 leaves room.
 
 ### 13.1 Work orders
 
-Table `work_orders`: `number`, `customer_id` (customer or job), `title`, `description`, `status` (`draft`, `scheduled`, `in_progress`, `on_hold`, `complete`, `invoiced`, `cancelled`), `priority`, `scheduled_start`, `scheduled_end`, `actual_start`, `actual_end`, `site_address`, `assignees` (employee ids), `invoice_transaction_id` (nullable). Table `work_order_lines`: `item_id`, `description`, `quantity`, `rate`, `billable`. `work-order invoice <id>` creates an invoice from billable lines and links it. Work orders carry notes and attachments like any record, and the activity feed is their job log.
+The contractor work-order form and explicit estimate acceptance/history are approved
+Bookflow extensions; the available reference documents estimates and sales orders,
+without a comparable contractor work-order form. The non-posting owning plan is
+[Customer work documents](specs/16-customer-work.md): shared stable work-document
+identities, immutable revisions and line identities, exact quote prices/costs/taxes,
+proposal/SOW → alternative estimate → accepted estimate → work order. Operational
+status, completed quantities, billable eligibility, billing and payment are distinct.
+Completion creates no financial effect. Notes/files remain inspectable through source
+links, with internal content separated from customer-facing scope.
 
-Estimates, work orders and contractor proposals/statements of work form the linked
-customer-work workflow in [Customer work and billing](customer-work-and-billing.md).
-Completion can produce an invoice for money owed or a sales receipt for payment
-received. Source documents and their revisions remain available after conversion.
+Permanent conversion links support multiple destinations across the broader chain;
+financial conversion adds per-source-line allocation records, never a single invoice
+pointer. The next owning plan implements full/partial/progress invoice or genuinely
+paid sales-receipt conversion while preserving common billing roots and all sources.
+Paying an issued invoice uses customer payment, without creating a second sale.
+[Customer work and billing](customer-work-and-billing.md) owns the complete workflow.
+
+Stock sales orders are a separate planned document under inventory/fulfillment:
+ordered versus shipped/backordered quantities, selected billing, purchase-order
+sourcing, pick/pack/ship and partial-shipment policy. Contractor work-order completion
+cannot stand in for those inventory effects. Job-master dates remain authoritative
+for job-level reports; each work order has its own scheduled and actual dates.
 
 ### 13.2 Time entries
 
