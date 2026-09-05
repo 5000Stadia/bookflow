@@ -288,6 +288,30 @@ def browser_site(tmp_path, monkeypatch):
         handle.stop()
 
 
+def _assert_navigation_contained(browser: _Cdp) -> None:
+    overflow = browser.evaluate(
+        """
+        (() => {
+          const failures = [];
+          for (const card of document.querySelectorAll('.nav-group')) {
+            const bounds = card.getBoundingClientRect();
+            for (const element of card.querySelectorAll('h2,h3,a')) {
+              for (const box of element.getClientRects()) {
+                if (box.left < bounds.left || box.right > bounds.right
+                    || box.top < bounds.top || box.bottom > bounds.bottom
+                    || box.left < 0 || box.right > innerWidth) {
+                  failures.push({text: element.textContent.trim(), width: innerWidth});
+                }
+              }
+            }
+          }
+          return failures;
+        })()
+        """
+    )
+    assert overflow == [], overflow
+
+
 def _assert_rendered_page(
     browser: _Cdp, label: str, *, viewport: tuple[int, int]
 ) -> None:
@@ -331,6 +355,7 @@ def _assert_rendered_page(
     assert layout["outside"] == [], (label, layout)
     assert layout["unavailable"] == [], (label, layout)
     assert layout["errors"] == [], (label, layout)
+    _assert_navigation_contained(browser)
 
     broken = browser.evaluate(
         """
@@ -389,6 +414,16 @@ def test_row5_login_list_detail_form_preview_and_audit_in_real_chrome(
         browser.wait_for(f"location.href === {json.dumps(company_home)}")
         browser.wait_for("document.readyState === 'complete' && !!document.querySelector('.group-grid')")
         _assert_rendered_page(browser, "company home", viewport=viewport)
+        if width == 1280:
+            for home in (company_home, f"{browser_site.base_url}/hub/"):
+                browser.navigate(home)
+                browser.wait_for("document.readyState === 'complete' && !!document.querySelector('.group-grid')")
+                for card_width in (280, 320, 390, 700, 701, 820, 1024, 1280):
+                    browser.viewport(card_width, height)
+                    _assert_navigation_contained(browser)
+            browser.viewport(width, height)
+            browser.navigate(company_home)
+            browser.wait_for("document.readyState === 'complete' && !!document.querySelector('.group-grid')")
 
         customer_list = f"/c/{browser_site.company_id}/customer"
         browser.evaluate(

@@ -157,6 +157,8 @@ At `fb4ad0e`, focused verification measured process-cold customer list at 784.69
 - Migration of a behind-head company with a synthetic revision: backup, `migrate` event, marker and projection updated (tests/test_hardening.py::test_synthetic_migration).
 - Demo reset repeated on one root; trash accumulates one folder per reset.
 
+Company and hub navigation cards place wrapping action links below each noun label. Grid columns shrink to the available width. Real-Chrome checks in `tests/test_row5_browser_acceptance.py` assert that headings and links remain inside their cards at viewport widths from 280 to 1280 pixels.
+
 HTTP host, local hand-off, and workbench verification in `tests/test_row3_host.py`, `tests/test_row3_local_hardening.py`, and `tests/test_row3_workbench_remediation.py` against a host running in the test process:
 
 - Every routed read command returns the same JSON over HTTP as through the library, compared field by field with ULIDs and timestamps replaced (`test_every_routed_read_returns_the_same_document_over_http_as_in_the_library`).
