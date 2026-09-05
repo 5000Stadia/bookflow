@@ -34,6 +34,7 @@ INFRASTRUCTURE_CODES: dict[str, str] = {
 }
 
 COMMAND_CODES: dict[str, str] = {
+    "E_NO_EXCHANGE_RATE": "No exchange rate exists for the exact accounting date and currency pair.",
     "E_UNBALANCED_ENTRY": "Journal debits and credits must be equal.",
     "E_PERIOD_CLOSED": "An affected accounting date is in a closed period.",
     "E_DUPLICATE_NUMBER": "That document number is already used by this type.",
