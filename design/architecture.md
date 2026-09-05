@@ -37,8 +37,8 @@ src/bookflow/
     engine.py            Database (sqlite3 + SQLAlchemy Core); explicit read-only snapshots, verified WAL/FULL/foreign-key writers, writable-transaction detection and exception-safe cleanup; percent-encoded URIs; create=True only for init/rollout
     traced_sqlite.py      capture-enabled per-connection native subclasses; bounded statement classification, execute/fetch/transaction timing, caller factories preserved
     migrate.py           HEADS constants; classify(); backup via sqlite backup API; migrate_to_head(); Alembic loaded only when migrating
-    hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection), hub0007 (note capabilities), hub0008 (attachment/activity capabilities), hub0009 (agent principal assignments, authority epochs and credential conversion), hub0010 (ledger and report capabilities)
-    company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit/presence/directives), co0003 (20 supporting lists), co0004 (job delivery inheritance), co0005 (notes), co0006 (attachments, links, collection intent, byte limit), co0007 (journal identities, immutable revisions and postings, numbering prefix, private report cursor key)
+    hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection), hub0007 (note capabilities), hub0008 (attachment/activity capabilities), hub0009 (agent principal assignments, authority epochs and credential conversion), hub0010 (ledger and report capabilities), hub0011 (customer-work read/write role defaults)
+    company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit/presence/directives), co0003 (20 supporting lists), co0004 (job delivery inheritance), co0005 (notes), co0006 (attachments, links, collection intent, byte limit), co0007 (journal identities, immutable revisions and postings, numbering prefix, private report cursor key), co0008 (journal header custom ownership), co0009 (commercial sales), co0010 (nonposting customer work and preserving custom scope CHECK widening)
     migrate.py           + migrate_company(): the one owner of company migrations: migrate entry by the system user, baseline entry, marker, hub projection entry
   hub/
     schema.py            users, api_tokens, agent_principals, agent_authority, organizations, companies, memberships, role_capabilities, features, audit_events, audit_entries; co-located table and column descriptions
@@ -483,3 +483,41 @@ five measured reads after one warmup per report gave median/max 1182.77/1195.94 
 for trial balance, 897.67/899.82 ms for P&L and 1266.23/1283.83 ms for balance sheet.
 Company record/audit counts were unchanged. This is a bounded read sample, not
 the separate 100,000 transaction storage workload or a universal latency guarantee.
+
+## Customer work documents
+
+[Customer work](customer-work.md) owns the nonposting proposal, alternative
+estimate and work-order contract. The shared registry exposes21 commands; all
+three nouns have create/update/copy/show/query/history plus proposal estimate,
+estimate work-order and work-order complete. Structured browser forms and detail,
+history and source views cover desktop and phone. Work completion records quantities
+and operational times without posting a sale or claiming payment.
+
+company/work_models.py defines typed inputs; work_facts.py captures commercial and
+operational facts; work_defaults.py resolves captured and current selections;
+work.py builds/persists whole revisions and permanent conversions; work_validation.py
+independently verifies source ownership, original intent and exact aggregates.
+work_schema.py declares five work tables. Work profiles share commercial defaults
+with ordinary sales without requiring financial control accounts or changing old
+sales JSON. work_outputs.py and work_cmds.py project the shared contract.
+
+Company co0010 preserves the stored custom_field_scopes definition, local writable
+columns, generated values, constraints, indexes, views and triggers while widening
+the known record-type CHECK. Unsupported definitions reject before alteration.
+Immutable revision/line/root/link guards and composite foreign keys fence ownership.
+Hub0011 seeds all nine customer-work role/requirement combinations, matching the
+command registry. Granular capability overrides remain the Row7 authority target.
+
+Operational conversions append one same-facts source revision and one linked
+destination atomically. Company-wide permanent request identity survives cache
+expiry; matching cached conversion receipts refresh the current destination through
+a read-only command replay callback after ordinary authorization/input matching.
+Whole-version conflicts, retired line identities and accepted alternative selection
+remain enforced. Reopening normalizes the previous end timestamp before validating
+the new aggregate; invalid caller combinations return E_VALIDATION.
+
+Both seed manifests retain their previous171/76command prefixes byte-for-byte and
+append30/31commands covering all21work commands, alternative acceptance, completed
+quantities, permanent replay, independent copies, markup/amount/unknown-cost/zero
+pricing, nonbillable lines, custom false/clear/history and source notes/files.
+These operational extensions add no ledger effects.

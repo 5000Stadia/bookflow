@@ -1176,8 +1176,8 @@ Built after release 1. Designed here so release 1 leaves room.
 
 The contractor work-order form and explicit estimate acceptance/history are approved
 Bookflow extensions; the available reference documents estimates and sales orders,
-without a comparable contractor work-order form. The non-posting owning plan is
-[Customer work documents](specs/16-customer-work.md): shared stable work-document
+without a comparable contractor work-order form. The implemented non-posting contract is
+[Customer work documents](customer-work.md): shared stable work-document
 identities, immutable revisions and line identities, exact quote prices/costs/taxes,
 proposal/SOW → alternative estimate → accepted estimate → work order. Operational
 status, completed quantities, billable eligibility, billing and payment are distinct.
@@ -1186,8 +1186,10 @@ links, with internal content separated from customer-facing scope.
 
 Permanent conversion links support multiple destinations across the broader chain;
 financial conversion adds per-source-line allocation records, never a single invoice
-pointer. The next owning plan implements full/partial/progress invoice or genuinely
-paid sales-receipt conversion while preserving common billing roots and all sources.
+pointer. The [work-billing plan](specs/17-work-billing.md) covers whole-line invoice or
+genuinely paid sales-receipt conversion, preserving common billing roots and all
+sources. Partial quantity, amount and percentage billing remain the following
+increment.
 Paying an issued invoice uses customer payment, without creating a second sale.
 [Customer work and billing](customer-work-and-billing.md) owns the complete workflow.
 
