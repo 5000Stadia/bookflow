@@ -17,7 +17,10 @@ scope explicitly. No existing non-demo organization is adopted or reset.
 
 The typed output adds nullable `reference_company_id` and
 `reference_display_name`. Preview includes the reference company when requested
-and remains free of files, migrations, audit, configuration or database writes.
+and creates no company files, migrations, audit, configuration or database writes.
+The existing command path still acquires its ephemeral root lock and SQLite may
+create read-side WAL/shared-memory files; those are not seed or durable business
+data changes.
 Both companies use the same company rollout, chart, public seed command and
 permission paths. IDs and company-local data remain independent. Reference
 seeding uses explicit journal numbers and supplied audit reasons.
