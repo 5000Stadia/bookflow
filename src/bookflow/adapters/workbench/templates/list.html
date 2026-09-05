@@ -1,6 +1,12 @@
 {% extends "base.html" %}{% block title %}{{ noun }}{% endblock %}{% block body %}
 {% set base = ("/c/" ~ company_id ~ "/" ~ noun) if company_id else ("/hub/" ~ noun.replace(" ", "-")) %}
 <h1>{{ meta.plural_label or noun }}</h1>
+{% if noun == 'rate' %}<p><a href="{{ base }}/query">Query rates</a></p><form method="get" class="list-tools" aria-label="Rate filters">
+<label>From date<input type="date" name="date_from" value="{{ rate_filters.get('date_from', '') }}"></label>
+<label>Through date<input type="date" name="date_to" value="{{ rate_filters.get('date_to', '') }}"></label>
+<label>Original currency<input name="from_currency" value="{{ rate_filters.get('from_currency', '') }}" maxlength="3" placeholder="JPY"></label>
+<label>Page size<input name="limit" inputmode="numeric" value="{{ rate_filters.get('limit', 50) }}"></label>
+<button>Apply</button><a href="{{ base }}">Reset</a></form>{% endif %}
 <p class="actions">{% for v in verbs %}{% if v.is_write and not v.version_source and not v.positional %}<a href="{{ base }}/{{ v.verb }}">{{ v.verb }}</a>{% endif %}{% endfor %}
 {% if has_inactive %}<a href="{{ inactive_toggle }}">{{ "hide" if include else "include" }} inactive</a>{% endif %}</p>
 {% if meta.definition %}<form method="get" class="list-tools"><label>Search<input name="query" value="{{ query }}" placeholder="Search {{ meta.plural_label | lower }}"></label>

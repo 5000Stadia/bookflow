@@ -89,9 +89,9 @@ def test_create_update_noop_preview_retry_audit(client):
     assert client.rate.show(rate_id=first['id'], company=COMPANY)['rate'] == '0.007'
     assert client.rate.show(date='2026-01-12', from_currency='JPY', company=COMPANY)['id'] == first['id']
     with open_database(db_path, writable=False) as db:
-        events = db.raw.execute("SELECT actor_id, interface, reason FROM audit_events WHERE command='rate set' ORDER BY seq").fetchall()
+        events = db.raw.execute("SELECT e.actor_id, e.interface, e.reason FROM audit_events e JOIN audit_entries a ON a.event_id=e.id WHERE e.command='rate set' AND a.record_type='exchange_rate' AND a.record_id=? ORDER BY e.seq", (first['id'],)).fetchall()
         assert events == [(first['entered_by'], 'python', 'Manual dated rate'), (second['entered_by'], 'python', 'Revised quote')]
-        entries = db.raw.execute("SELECT version_before,version_after,before,after FROM audit_entries WHERE record_type='exchange_rate' ORDER BY version_after").fetchall()
+        entries = db.raw.execute("SELECT version_before,version_after,before,after FROM audit_entries WHERE record_type='exchange_rate' AND record_id=? ORDER BY version_after", (first['id'],)).fetchall()
         assert len(entries) == 2 and entries[0][:2] == (None, 1) and entries[1][:2] == (1, 2)
         assert decode_snapshot(entries[1][2])['rate'] == '0.0068'
         assert decode_snapshot(entries[1][3])['rate'] == '0.007'
@@ -170,8 +170,9 @@ def test_readonly_current_company_and_other_actor_cursor(client, root, cli):
     with pytest.raises(BookflowError) as err:
         outsider.rate.show(rate_id=first['id'], company=COMPANY)
     assert err.value.code == 'E_COMPANY_NOT_FOUND'
-    shown = cli.json('rate', 'show', '--rate-id', first['id'], '--company', COMPANY)
+    shown = cli.json('rate', 'show', first['id'], '--company', COMPANY)
     assert shown['id'] == first['id']
+    assert cli.json('rate', 'show', '--date', '2026-01-12', '--from-currency', 'JPY', '--company', COMPANY) == shown
 
 
 def fail_late(*args, **kwargs):

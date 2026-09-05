@@ -99,3 +99,39 @@ def test_original_amount_survives_post_preview_edit_and_explicit_refresh(registe
     assert _command(b, env.site, 'journal.show', {'journal':identifier,'revision_number':1})['total_minor_units']==1595
     assert b.evaluate('document.documentElement.scrollWidth <= innerWidth')
     (tmp_path/'foreign-detail.png').write_bytes(base64.b64decode(b.call('Page.captureScreenshot',{'format':'png'})['data']))
+
+
+@pytest.mark.parametrize('width', [1280, 390])
+def test_rate_navigation_filters_and_paging(register_browser, width):
+    env, b = register_browser, register_browser.browser
+    b.viewport(width, 900 if width == 1280 else 844)
+    for date, currency in ((DATE, 'JPY'), (DATE, 'EUR'), ('2026-03-12', 'JPY')):
+        _command(b, env.site, 'rate.set', {'date':date,'from_currency':currency,'rate':'0.0068'})
+    base = f'{env.site.base_url}/c/{env.site.company_id}'
+    b.navigate(base + '/')
+    b.wait_for('!!document.querySelector(".group-grid")')
+    link = b.evaluate("[...document.querySelectorAll('.nav-group a')].find(a=>a.getAttribute('href').endsWith('/rate/query')).href")
+    b.navigate(link)
+    b.wait_for('!!document.querySelector("[data-generated-form]")')
+    for key, value in {'from_currency':'JPY','date_from':DATE,'date_to':DATE,'limit':'1'}.items():
+        _set(b, 'f:'+key, value)
+    _click(b, 'submit')
+    b.wait_for("document.body.textContent.includes('audit_watermark')")
+    body = b.evaluate('document.body.textContent')
+    assert 'EUR' not in body and 'E_VALIDATION' not in body and 'E_USAGE' not in body
+    b.navigate(base + '/rate?from_currency=JPY&date_from=2026-03-11&date_to=2026-03-12&limit=1')
+    b.wait_for("!!document.querySelector('form.list-tools')")
+    body = b.evaluate('document.body.textContent')
+    assert DATE in body and 'EUR' not in body and '2026-03-12' not in body
+    assert b.evaluate("document.querySelector('[name=from_currency]').value") == 'JPY'
+    next_url = b.evaluate("document.querySelector('a[rel=next]').href")
+    assert 'from_currency=JPY' in next_url and 'limit=1' in next_url
+    b.navigate(next_url)
+    b.wait_for("document.body.textContent.includes('2026-03-12')")
+    assert not b.evaluate("!!document.querySelector('a[rel=next]')")
+    assert b.evaluate('document.documentElement.scrollWidth <= innerWidth')
+    _set(b, 'from_currency', 'EUR')
+    b.evaluate("document.querySelector('form.list-tools').requestSubmit()")
+    b.wait_for("!location.search.includes('cursor=') && document.body.textContent.includes('EUR')")
+    assert 'JPY' not in b.evaluate('document.body.textContent')
+    assert b.evaluate('document.documentElement.scrollWidth <= innerWidth')

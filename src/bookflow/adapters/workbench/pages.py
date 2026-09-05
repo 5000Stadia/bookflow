@@ -71,7 +71,7 @@ def _nouns(scope: str) -> list[str]:
 
 def _verbs(noun: str, scope: str | None = None) -> list[registry.Command]:
     """A noun's routed commands; on a hub page only hub-scoped ones, on a company page only company-scoped ones."""
-    return [c for c in registry.routed_commands() if c.noun == noun and c.verb != "query" and (scope is None or c.scope == scope)]
+    return [c for c in registry.routed_commands() if c.noun == noun and (c.verb != "query" or noun == "rate") and (scope is None or c.scope == scope)]
 
 
 _GROUP_ORDER = (
@@ -697,7 +697,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 raw["projection"] = "summary"
             if request.query_params.get("cursor"):
                 raw["cursor"] = request.query_params["cursor"]
-        for field in ("query", "sort", "direction", "date_from", "date_to", "status"):
+        for field in ("query", "sort", "direction", "date_from", "date_to", "status", "from_currency"):
             value = request.query_params.get(field)
             if value and field in cmd.input_model.model_fields:
                 raw[field] = value
@@ -717,6 +717,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         items = out.get("items", [])
         definition = meta.get("definition")
         columns = (["number", "date", "memo", "total", "status"] if noun == "journal" else
+                   ["date", "from_currency", "to_currency", "rate", "source", "version"] if noun == "rate" else
                    list(definition.summary_columns) if definition is not None else list_columns(items))
         column_text = request.query_params.get("columns", "")
         if column_text and definition is not None:
@@ -747,6 +748,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             inactive_toggle=_inactive_toggle(request.url.path, request, include=include),
             verbs=page_verbs,
             query=raw.get("query", ""),
+            rate_filters=raw if noun == "rate" else None,
             filters=filters,
             selected_sort=raw.get("sort", ""),
             selected_direction=raw.get("direction", "asc"),
