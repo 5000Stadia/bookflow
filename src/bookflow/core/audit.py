@@ -72,12 +72,13 @@ def write_event_to(db, ctx: Context, command: str, summary: str, touched: list[T
         request_id=ctx.request_id, idempotency_key=ctx.idempotency_key, reason=ctx.reason,
         directive_id=ctx.directive_id, directive_code=directive_code, source_ref=ctx.source_ref, summary=summary[:512],
     ))
-    for t in touched:
-        db.conn.execute(entries.insert().values(
-            id=new_id(), event_id=event_id, record_type=t.record_type, record_id=t.record_id, action=t.action,
-            version_before=t.version_before, version_after=t.version_after,
-            after=encode_snapshot(t.after), before=encode_snapshot(t.before),
-        ))
+    rows = [dict(
+        id=new_id(), event_id=event_id, record_type=t.record_type, record_id=t.record_id, action=t.action,
+        version_before=t.version_before, version_after=t.version_after,
+        after=encode_snapshot(t.after), before=encode_snapshot(t.before),
+    ) for t in touched]
+    if rows:
+        db.conn.execute(entries.insert(), rows)
     return event_id
 
 
