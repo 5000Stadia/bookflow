@@ -1,8 +1,8 @@
 # Invoice and sales receipt controls
 
 This inventory maps the eventual sales forms to the first service-sales slice in
-[the draft plan](../specs/15-service-sales.md). **First slice** means specified in
-that draft, not implemented or independently verified. **Staged** means outside
+[the supported service-sales contract](../service-sales.md). **First slice** means
+implemented and verified for that bounded contract. **Staged** means outside
 that slice; it does not imply a completed design. A row can contain both. The
 blueprint's transaction, application, customer, item, pricing, unit, custom-field,
 delivery and reporting sections remain the owning contracts.
@@ -24,13 +24,13 @@ requires a customer payment; another sales receipt would duplicate the sale.
 | H3 | Shipping destination; choose among saved locations or enter a transaction-specific address | First slice: effective default shipping address, active saved-address selection and typed override. Address ownership and inheritance follow the customer contract. |
 | H4 | Defaults and overrides for addresses, terms, representative, shipping, payment method, price level, tax and class | First slice: field origins distinguish defaults, explicit overrides and explicit clearing; return-to-default and refresh actions are visible in preview. Customer/item changes recalculate dependent defaulted facts. Staged: an explicit offer to update the customer/job master from an edited form. Ordinary form overrides do not change masters. |
 | H5 | Invoice or receipt date; current-date and remembered-date entry preferences | First slice: entered date and period validation. Staged: current-date/last-used-date preference and its entry shortcuts. |
-| H6 | Invoice number or sale number; automatic next number and manual entry | First slice: independent per-form sequences, manual numbers, duplicate checks and retention of voided numbers. Staged: keyboard number stepping and separate numbering by receivable account. The draft does not promise that entering a manual number resets the next automatic number. |
+| H6 | Invoice number or sale number; automatic next number and manual entry | First slice: independent per-form sequences, manual numbers, duplicate checks and retention of voided numbers. Staged: keyboard number stepping and separate numbering by receivable account. Entering a manual number does not reset the next automatic number. |
 | H7 | Invoice receivable account | First slice: select an active receivable account; omission is allowed only when exactly one is eligible. Staged: specialized contribution/pledge account presentations and associated numbering conventions. |
 | H8 | Customer purchase order reference | First slice: captured reference. Staged: placement choices in templates and automatic inclusion in delivery subjects. |
 | H9 | Payment terms, due date, offered discount percentage and deadline | First slice: standard day-based and monthly-date rules, customer defaults, overrides, month-end handling, and captured discount availability. The discount is information until a settlement applies it. Sales receipts reject invoice terms and due dates. |
 | H10 | Sales representative; header and line classes; missing-class reminder | First slice: captured representative, class defaults/overrides and feature-aware missing-class warnings. Staged: sales and commission reporting beyond captured attribution. |
 | H11 | Shipment date, shipping method and location where shipment responsibility transfers | First slice: date and method. Staged: shipment-responsibility location, its company default, and automatic current ship-date behavior. |
-| H12 | Customer account panel: net balance, open obligations, credit limit, recent transactions, notes, contact edit and drill-down | First slice: exact-party net receivable balance, separately labelled family balance, sales links, account detail and advisory invoice credit-limit/exposure warnings as specified in the draft. Staged: invoice-aging/open-obligation measures, broader in-form credit-limit display, recent activity panel and collapsible layout. A net account balance is not an aging total. The blueprint makes credit limits advisory. |
+| H12 | Customer account panel: net balance, open obligations, credit limit, recent transactions, notes, contact edit and drill-down | First slice: exact-party net receivable balance, separately labelled family balance, sales links, account detail and advisory invoice credit-limit/exposure warnings as specified in the supported contract. Staged: invoice-aging/open-obligation measures, broader in-form credit-limit display, recent activity panel and collapsible layout. A net account balance is not an aging total. The blueprint makes credit limits advisory. |
 | H13 | Available estimates, orders, unbilled time and costs offered on customer selection | Staged: source-document and billable-work selection, including declining to add available work to this sale. |
 | H14 | Custom header fields and customer/item facts carried to forms | First slice: typed sales-document custom values, defaults, required/clear behavior, historical labels and definition identities. Staged: arbitrary customer/item custom-field projection into printed headers or line columns; a document custom-field input alone does not supply those layouts. |
 

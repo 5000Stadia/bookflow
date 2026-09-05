@@ -1,8 +1,8 @@
 # Service invoices and sales receipts
 
-## Target
+## Supported implementation
 
-Row 15 adds home-currency service billing through the shared command registry:
+Home-currency service billing uses the shared command registry:
 invoice and sales-receipt post, show, query, history, update and void. Each sale
 has a real commercial profile and ordered item lines, immutable revision facts,
 independently balanced effects and exact source attribution. Desktop and phone
@@ -352,7 +352,7 @@ The warning names the limit owner, limit and proposed exposure in home money.
 A receipt does not add an AR obligation or trigger this invoice warning. The
 broader in-form credit/collections panel remains staged in the inventory.
 
-### Evidence additions
+### Browser and registry requirements
 
 At both1280/390 the browser witness must correct and void a posted sale, recover
 from stale version/default-fingerprint errors while preserving unsaved lines,
@@ -457,7 +457,6 @@ Actual migration from populated co0008 preserves journals/custom/foreign facts,
 audit/idempotency/history and copied-company reopen; test failure rollback and
 direct update/delete guards. Public Python/CLI/HTTP results and error parity;
 actual Chrome entry/preview/post/history at1280/390; readonly and sibling-company
-isolation. Existing focused journal/register/report checks stay green. Fresh plan
-review before code and independent artifact review with meaningful mutations in
-its own exact-commit checkout precede closure. Subsequent implementation is governed by its own spec, with the approved
-customer-work-and-billing workflow providing the next target.
+isolation. Existing focused journal/register/report checks stay green. Additional
+forms and conversions follow the customer-work-and-billing contract and their
+own detailed calculation and storage contracts.

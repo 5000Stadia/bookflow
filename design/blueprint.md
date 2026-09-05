@@ -658,6 +658,10 @@ An allowed `<type> update` performs the ordinary versioned document-edit workflo
 
 ### 10.3 Transaction types
 
+The supported home-currency invoice and paid-receipt forms, captured defaults,
+exact calculations, correcting history and migration rules are defined in
+[Service invoices and sales receipts](service-sales.md).
+
 Each type has its own document profile and a fixed posting rule. The table gives the accounting effects, not the shape or count of document lines. A subtotal or group heading posts nothing; a stocked sale line can produce revenue, receivable, tax, inventory, and cost effects with linked source attribution. Journal entries use entered debit/credit lines as their document profile and produce a distinct balanced posting batch.
 
 | Type | Command | Name | Accounting effects |
