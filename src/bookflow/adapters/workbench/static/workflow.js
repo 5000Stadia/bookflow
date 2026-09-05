@@ -162,7 +162,7 @@
     const form = button.closest('[data-generated-form]'), id = button.dataset.customAdopt;
     named(form, 'cf-kind:' + id).value = button.dataset.currentKind;
     named(form, 'cf-state:' + id).value = 'set';
-    form.requestSubmit(form.querySelector('button[value="preview"]'));
+    form.querySelector('button[value="preview"]').click();
   });
   document.addEventListener('input', event => {
     if (!event.target.name?.startsWith('cf:')) return;

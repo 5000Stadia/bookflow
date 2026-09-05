@@ -99,7 +99,9 @@ def test_draft_kind_drift_requires_explicit_user_correction(register_browser, wi
         _tab(b, '#register-record'); _key(b, 'Enter')
         b.wait_for("!document.querySelector('#register-receipt').hidden || !!document.querySelector('#register-error').textContent")
     else:
+        settled = b.evaluate('window.criticSettled')
         _tab(b, 'button[value="submit"]'); _key(b, 'Enter')
+        b.wait_for('window.criticSettled > ' + str(settled))
         b.wait_for("!document.querySelector('[data-generated-form]') || document.body.textContent.includes('E_VALIDATION')")
     shown = _command(b, env.site, 'journal.show', {'journal': journal['id']})
     evidence(name, dict(before_submit=before_submit, shown=shown,
@@ -118,7 +120,8 @@ def test_draft_kind_drift_requires_explicit_user_correction(register_browser, wi
         settled = b.evaluate('window.criticSettled')
         _tab(b, '[data-custom-adopt="' + field['id'] + '"]'); _key(b, 'Enter')
         b.wait_for('window.criticSettled > ' + str(settled))
-        assert b.evaluate('document.querySelector(' + json.dumps('[name="cf-kind:' + field['id'] + '"]') + ').value') == 'number'
+        b.wait_for('document.querySelector(' + json.dumps('[name="cf-kind:' + field['id'] + '"]') + ')?.value === "number" && document.body.textContent.includes("Preview (nothing written)")')
+        assert _command(b, env.site, 'journal.show', {'journal': journal['id']})['version'] == 1
         _tab(b, 'button[value="submit"]'); _key(b, 'Enter')
         b.wait_for("!document.querySelector('[data-generated-form]')")
     shown = _command(b, env.site, 'journal.show', {'journal': journal['id']})

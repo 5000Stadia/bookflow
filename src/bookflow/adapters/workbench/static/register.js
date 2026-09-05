@@ -213,6 +213,7 @@
         adopt.addEventListener('click', () => {
           state.kind = d.wire_kind; state.state = 'set';
           if (state.kind === 'bool' && ['true', 'false'].includes(String(state.value))) state.value = String(state.value) === 'true';
+          else if (state.kind !== 'bool') state.value = state.value == null ? '' : String(state.value);
           customLoad({payload: p, customState: structuredClone(customState), custom_fields: captured}); dirty = true;
         });
         box.append(adopt);
