@@ -20,7 +20,7 @@ from bookflow.company.sales_calculations import (
     adjusted_price, base_quantity, extension, nonnegative, selected_price, tax, total,
 )
 from bookflow.company.sales_facts import (
-    Account, Customer, Origin, Preferences, PriceRule, Reference, SalesLineProfile,
+    Account, CommercialProfile, Customer, Origin, Preferences, PriceRule, Reference, SalesLineProfile,
     SalesProfile, TaxCode, TaxRule, Term, Unit,
 )
 from bookflow.company.sales_models import Address, SalesLineInput, _invalid, money
@@ -180,7 +180,8 @@ def _tax_rules(db, selector, source=None):
 def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
                    old_date: str | None = None) -> tuple[SalesProfile, list[str]]:
     """Resolve a header without identities, audit, or database mutations."""
-    if doc_type not in ('invoice', 'sales_receipt'):
+    nonposting = doc_type in ('proposal', 'estimate', 'work_order')
+    if doc_type not in ('invoice', 'sales_receipt') and not nonposting:
         raise _invalid('type', 'expected invoice or sales_receipt')
     db = s.company
     info = _info(db)
@@ -217,7 +218,7 @@ def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
     if previous and prefs != previous.preferences:
         warnings.append('preferences: current company settings captured by refresh')
     for field in ('terms', 'ship_method', 'sales_rep', 'class_id', 'customer_tax_code', 'price_level', 'payment_method'):
-        if (field == 'terms' and doc_type != 'invoice') or (field == 'payment_method' and doc_type != 'sales_receipt'):
+        if (field == 'terms' and doc_type != 'invoice' and not nonposting) or (field == 'payment_method' and doc_type != 'sales_receipt'):
             continue
         enabled = info['use_classes'] if field == 'class_id' else info['enable_price_levels'] if field == 'price_level' else True
         if not enabled and field in fields.supplied and getattr(inp, field) is not None:
@@ -231,6 +232,7 @@ def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
         submitted_lines = getattr(inp, 'lines', None)
         if field == 'price_level' and submitted_lines and all(
             'unit_price' in line.model_fields_set or 'price_level' in line.model_fields_set
+            or (nonposting and bool(line.model_fields_set & {'markup_percent', 'net_amount'}))
             for line in submitted_lines
         ):
             needed = False
@@ -275,33 +277,34 @@ def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
                                                dependency=customer_changed, saved=saved_shipping)
     out['shipping_address_id'] = selected_id
 
-    control_field = 'ar_account' if doc_type == 'invoice' else 'deposit_to'
-    control_selector = getattr(inp, control_field, None)
-    old_control = previous.control_account if previous else None
-    if old_control and (control_field not in fields.supplied or _same(db, 'account', control_selector, old_control)) and not refresh:
-        control = old_control
-    else:
-        if control_selector is None and old_control:
-            control_selector = old_control.id
-        if control_selector is None and doc_type == 'invoice':
-            rows = db.conn.execute(sa.select(schema.accounts.c.id).where(
-                schema.accounts.c.type == 'accounts_receivable', schema.accounts.c.active.is_(True))).scalars().all()
-            if len(rows) != 1:
-                raise _invalid('ar_account', 'select an active AR account when there is not exactly one')
-            control_selector = rows[0]
-        if doc_type == 'invoice':
-            control = _account(db, control_selector, control_field, {'accounts_receivable'})
+    if not nonposting:
+        control_field = 'ar_account' if doc_type == 'invoice' else 'deposit_to'
+        control_selector = getattr(inp, control_field, None)
+        old_control = previous.control_account if previous else None
+        if old_control and (control_field not in fields.supplied or _same(db, 'account', control_selector, old_control)) and not refresh:
+            control = old_control
         else:
-            control = _account(db, control_selector, control_field, {'bank', 'other_current_asset'})
-            control_row = _row(db, 'account', control.id)
-            if control.type != 'bank' and control_row['system_role'] != 'undeposited_funds':
-                raise _invalid('deposit_to', 'select bank or system Undeposited Funds')
-    out['control_account'] = control
-    if control_field in fields.supplied or previous is None:
-        fields.origins[control_field] = Origin(kind='explicit' if control_field in fields.supplied else 'default',
-                                             source_id=None if control_field in fields.supplied else info['id'])
-    if doc_type == 'sales_receipt' and out['payment_method'] is None:
-        raise _invalid('payment_method', 'a resolved payment method is required')
+            if control_selector is None and old_control:
+                control_selector = old_control.id
+            if control_selector is None and doc_type == 'invoice':
+                rows = db.conn.execute(sa.select(schema.accounts.c.id).where(
+                    schema.accounts.c.type == 'accounts_receivable', schema.accounts.c.active.is_(True))).scalars().all()
+                if len(rows) != 1:
+                    raise _invalid('ar_account', 'select an active AR account when there is not exactly one')
+                control_selector = rows[0]
+            if doc_type == 'invoice':
+                control = _account(db, control_selector, control_field, {'accounts_receivable'})
+            else:
+                control = _account(db, control_selector, control_field, {'bank', 'other_current_asset'})
+                control_row = _row(db, 'account', control.id)
+                if control.type != 'bank' and control_row['system_role'] != 'undeposited_funds':
+                    raise _invalid('deposit_to', 'select bank or system Undeposited Funds')
+        out['control_account'] = control
+        if control_field in fields.supplied or previous is None:
+            fields.origins[control_field] = Origin(kind='explicit' if control_field in fields.supplied else 'default',
+                                                 source_id=None if control_field in fields.supplied else info['id'])
+        if doc_type == 'sales_receipt' and out['payment_method'] is None:
+            raise _invalid('payment_method', 'a resolved payment method is required')
 
     for field in ('ship_date', 'payment_reference', 'customer_purchase_order'):
         if hasattr(inp, field):
@@ -373,7 +376,7 @@ def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
                 raise
             out['sales_tax_item'], out['tax_rules'] = None, None
     out['origins'] = fields.origins
-    return SalesProfile(**out), warnings
+    return (CommercialProfile(**out) if nonposting else SalesProfile(**out)), warnings
 
 
 def _unit(db, item, selector, mode):
@@ -479,8 +482,12 @@ def _derived_price(profile):
 
 
 def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict | None = None,
-                 previous_header: SalesProfile | None = None, refresh: bool = False) -> tuple[dict, list[str]]:
+                 previous_header: SalesProfile | None = None, refresh: bool = False,
+                 nonposting: bool = False, price_override: Callable | None = None,
+                 net_override: int | None = None) -> tuple[dict, list[str]]:
     """Resolve one commercial line using preserved rules for ordinary edits."""
+    if not nonposting and (price_override is not None or net_override is not None):
+        raise _invalid('unit_price', 'price hooks require non-posting resolution')
     db = s.company
     info = _info(db)
     currency = info['home_currency']
@@ -580,7 +587,7 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
     level_changed = not _same(db, 'price_level', level_selector, old_level)
     unit_changed = old is not None and old.unit != profile.unit
     price_needs = fields.needs('unit_price', item_changed or unit_changed or level_changed or header_price_changed)
-    price_explicit = ('unit_price' in fields.supplied or
+    price_explicit = (price_override is not None or 'unit_price' in fields.supplied or
                       (old is not None and not fields.defaulted('unit_price') and 'unit_price' not in fields.defaults))
     if (level_changed or item_changed or refresh or 'price_level' in fields.defaults) and info['enable_price_levels'] and level_selector:
         # An explicit price makes a missing/inactive inherited level unused.
@@ -606,7 +613,10 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
         price_needs = price_needs or fields.defaulted('unit_price')
     elif old:
         profile.price_basis_minor_units = old.price_basis_minor_units
-    if 'unit_price' in fields.supplied:
+    if price_override is not None:
+        profile.origins = fields.origins
+        price = price_override(profile, factor)
+    elif 'unit_price' in fields.supplied:
         price = money(inp.unit_price, currency).minor_units
         fields.origins['unit_price'] = Origin(kind='explicit')
     elif price_needs and not price_explicit:
@@ -621,7 +631,7 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
         warnings.append('price_level: price levels disabled; standard/manual price is in use')
 
     profile.origins = fields.origins
-    net = extension(quantity, price)
+    net = nonnegative(net_override, 'line.net') if net_override is not None else extension(quantity, price)
     exempt = header.customer_tax_code is not None and not header.customer_tax_code.taxable
     taxable = profile.tax_code is not None and profile.tax_code.taxable and not exempt
     if not header.preferences.sales_tax_enabled:
@@ -634,7 +644,7 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
     if taxable:
         if not header.tax_rules:
             raise _invalid('sales_tax_item', 'taxable treatment requires a valid captured tax item; select one or use_defaults')
-        if header.preferences.sales_tax_liability_basis != 'invoice_date':
+        if not nonposting and header.preferences.sales_tax_liability_basis != 'invoice_date':
             raise _invalid('sales_tax_item', 'taxable sales require invoice_date liability policy')
         taxes = [dict(rule=rule, taxable_minor_units=net, tax_minor_units=tax(net, rule.rate_percent_millionths))
                  for rule in header.tax_rules]

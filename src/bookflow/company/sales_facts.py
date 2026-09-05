@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import Literal
-from pydantic import Field
+from pydantic import Field, model_serializer
 
 from bookflow.company.sales_models import Address, StrictModel
 from bookflow.core.exact import INT64_MAX
@@ -86,18 +86,14 @@ class Preferences(StrictModel):
     units_of_measure_mode: Literal["disabled", "single_unit_per_item", "multiple_related_units"]
 
 
-class SalesProfile(StrictModel):
+class CommercialProfile(StrictModel):
     schema_version: Literal[1] = 1
     customer: Customer
-    control_account: Account
     preferences: Preferences
     billing_address: Address | None = None
     shipping_address: Address | None = None
     shipping_address_id: str | None = None
     terms: Term | None = None
-    due_date: str | None = None
-    discount_date: str | None = None
-    discount_available: bool = False
     ship_date: str | None = None
     ship_method: Reference | None = None
     sales_rep: Reference | None = None
@@ -106,12 +102,34 @@ class SalesProfile(StrictModel):
     sales_tax_item: Reference | None = None
     tax_rules: list[TaxRule] | None = Field(default=None, max_length=200)
     price_level: Reference | None = None
-    payment_method: Reference | None = None
-    payment_reference: str | None = None
     customer_message: str | None = None
     customer_message_item: Reference | None = None
     customer_purchase_order: str | None = None
     origins: dict[str, Origin] = Field(default_factory=dict)
+
+
+class SalesProfile(CommercialProfile):
+    control_account: Account
+    due_date: str | None = None
+    discount_date: str | None = None
+    discount_available: bool = False
+    payment_method: Reference | None = None
+    payment_reference: str | None = None
+
+    @model_serializer(mode="wrap")
+    def legacy_order(self, handler):
+        values = handler(self)
+        # Preserve the existing sales wire representation, including key order.
+        order = (
+            'schema_version', 'customer', 'control_account', 'preferences',
+            'billing_address', 'shipping_address', 'shipping_address_id', 'terms',
+            'due_date', 'discount_date', 'discount_available', 'ship_date',
+            'ship_method', 'sales_rep', 'class_id', 'customer_tax_code',
+            'sales_tax_item', 'tax_rules', 'price_level', 'payment_method',
+            'payment_reference', 'customer_message', 'customer_message_item',
+            'customer_purchase_order', 'origins',
+        )
+        return {key: values[key] for key in order if key in values}
 
 
 class SalesLineProfile(StrictModel):
