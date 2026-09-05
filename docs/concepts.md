@@ -261,3 +261,67 @@ receivables, including credits and reversals; family balance also includes jobs.
 Credit limits produce advisory family-exposure warnings. Invoice settlement,
 deposits/retainers, inventory sales, progress billing and sending are separate
 workflows and are not performed by these commands.
+
+## Customer work documents
+
+Proposals and statements of work describe agreed scope. Estimates quote exact
+home-currency service, nonstock and fixed-charge lines. Work orders record planned
+and completed work. These documents do not post revenue, expenses, receivables,
+liabilities or cash. Estimated cost is an operational forecast, and completed
+quantity is separate from billable eligibility and eventual billed quantity.
+
+Each noun provides `create`, `update`, `copy`, `show`, `query` and `history`.
+`proposal estimate` creates a quoted alternative; `estimate work-order` creates
+one work order from an explicitly accepted estimate. `work-order complete` records
+actual times and completes the remaining ordered quantities. Completion neither
+issues a bill nor claims that the customer paid.
+
+A proposal can have several alternative estimates, but one alternative in its
+group can be accepted at a time. Record `status="accepted"` and a fresh
+`decision_note` through `estimate update`. Supersede the selected estimate explicitly
+before accepting another. Acceptance records the exact accepted revision, actor
+and time; it is not an electronic signature. Availability, decision, completion,
+billing and payment are separate states. Historical revisions remain inspectable.
+
+A line uses one authoritative price mode: catalog/price level, manual unit price,
+cost markup, or explicit net amount. For markup, provide `estimated_unit_cost` and
+`markup_percent`; an unknown cost is null and cannot support markup. An amount
+line accepts `net_amount` and shows a blank unit price. Changing quantity preserves
+an amount override; rate-based lines extend the new quantity. Explicitly supplying
+one mode clears the previous price mode. `use_defaults=["unit_price"]` returns to
+catalog pricing; `use_defaults=["estimated_unit_cost"]` restores catalog cost.
+Prices, quoted taxes and costs use exact minor-unit half-even arithmetic.
+
+Updates require the current `expected_version`. Dry-run writes resolve defaults
+and return a `facts_fingerprint`; pass it as `expected_facts_fingerprint` to reject
+changed defaults rather than silently accepting a different quote. A stale whole
+work version never merges, even when edits concern different fields. Browser forms
+require a fresh preview before saving.
+
+Copies create a draft with new line identities. Estimate copies default to an
+alternative in the same group; `copy_mode="independent"` starts separate scope.
+Copies and operational conversions keep captured commercial facts even when a
+referenced master later becomes inactive, with warnings. Destination custom fields
+follow current creation requirements: eligible values carry, explicit destination
+patches override them, current defaults fill missing values, and missing required
+values reject the entire creation. Source notes and attachments remain accessible
+through links and are not automatically customer-visible.
+
+Conversions require a `conversion_key` distinct from the ordinary request retry
+key. This company-wide key never expires. Repeating the same conversion intent
+returns the original destination in its current state, including when the ordinary
+request cache still exists or has expired. Different intent cannot reuse the key.
+The destination, source-link revision, lineage and audit commit together. First
+conversion advances the source version; replay does not. A converted estimate and
+its quoted work-order scope cannot be silently revised or assigned to another
+customer. Reopen completed work explicitly before changing scope or quantities.
+
+`show` includes bounded source/destination links with current states and birth
+revision identities. Use `next_links_cursor` as `links_cursor` on another `show`
+to continue. Query, history and source-link cursors are transparent, scope/permission
+hash checked, and invalidated by audited company writes; they grant no authority.
+
+Financial conversion and progress billing, invoice payments, formal change orders,
+reusable templates, rendering and delivery are staged separately. Stock sales orders
+and pick/pack/ship are a separate inventory workflow. An invoice that has been paid
+will be settled by a customer payment, not replaced with a second sales receipt.

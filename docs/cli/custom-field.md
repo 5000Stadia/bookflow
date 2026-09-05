@@ -177,7 +177,7 @@ Create a custom field.
 | `id` | `--id` | string | no | no | generated | — |
 | `name` | `--name` | string | yes | no | — | — |
 | `kind` | `--kind` | literal["text", "number", "date", "bool", "choice"] | yes | no | — | — |
-| `scopes` | `--scopes` | array[literal["customer", "vendor", "employee", "other_name", "item", "journal_entry", "invoice", "sales_receipt", "credit_memo", "payment", "deposit", "bill", "bill_payment", "check", "credit_card_charge", "transfer", "inventory_adjustment", "vendor_credit", "estimate", "sales_order", "purchase_order", "item_receipt", "statement"]] | yes | no | — | — |
+| `scopes` | `--scopes` | array[literal["customer", "vendor", "employee", "other_name", "item", "journal_entry", "invoice", "sales_receipt", "credit_memo", "payment", "deposit", "bill", "bill_payment", "check", "credit_card_charge", "transfer", "inventory_adjustment", "vendor_credit", "proposal", "work_order", "estimate", "sales_order", "purchase_order", "item_receipt", "statement"]] | yes | no | — | — |
 | `choices[].id` | inside `--choices` JSON array | string | no | no | generated | — |
 | `choices[].value` | inside `--choices` JSON array | string | yes | no | — | — |
 | `choices[].active` | inside `--choices` JSON array | boolean | no | no | true | — |
@@ -843,7 +843,7 @@ Update a custom field.
 |---|---|---|---|---|---|---|
 | `name` | `--name` | string \| null | no | yes | null | — |
 | `kind` | `--kind` | literal["text", "number", "date", "bool", "choice"] \| null | no | yes | null | — |
-| `scopes` | `--scopes` | array[literal["customer", "vendor", "employee", "other_name", "item", "journal_entry", "invoice", "sales_receipt", "credit_memo", "payment", "deposit", "bill", "bill_payment", "check", "credit_card_charge", "transfer", "inventory_adjustment", "vendor_credit", "estimate", "sales_order", "purchase_order", "item_receipt", "statement"]] \| null | no | yes | null | — |
+| `scopes` | `--scopes` | array[literal["customer", "vendor", "employee", "other_name", "item", "journal_entry", "invoice", "sales_receipt", "credit_memo", "payment", "deposit", "bill", "bill_payment", "check", "credit_card_charge", "transfer", "inventory_adjustment", "vendor_credit", "proposal", "work_order", "estimate", "sales_order", "purchase_order", "item_receipt", "statement"]] \| null | no | yes | null | — |
 | `choices[].id` | inside `--choices` JSON array | string | no | no | generated | — |
 | `choices[].value` | inside `--choices` JSON array | string | yes | no | — | — |
 | `choices[].active` | inside `--choices` JSON array | boolean | no | no | true | — |

@@ -324,3 +324,28 @@ unset BOOKFLOW_TOKEN TOKEN_DOCUMENT
 ```
 
 Confirm that the host has stopped before removing anything. If this was an isolated documentation trial, remove only the exact `BOOKFLOW_TRIAL_ROOT` created by `mktemp`; it contains the isolated data root and, for a source run, the isolated environment. Never remove a normal Bookflow data root or a source checkout. Cleanup is intentionally not a recursive copy-paste command because the trial-root path must be inspected by the operator first. If the data root is retained, revoke the short-lived guide token with [`token revoke`](cli/token.md) when it is no longer needed.
+
+## Customer-work vocabulary
+
+Use the same business nouns in conversation and commands:
+
+| Request | Operation |
+|---|---|
+| Write a proposal or statement of work | `proposal create` with customer, title and scope |
+| Make an estimate from that proposal | `proposal estimate` with the source version and a permanent conversion key |
+| Record the customer's accepted estimate | `estimate update` with `status="accepted"` and a fresh decision note |
+| Make a work order from that estimate | `estimate work-order` with the accepted source version and a permanent conversion key |
+| Mark the work complete | `work-order complete` with actual start/end; preview fills remaining completed quantities |
+| Find the customer's work and previous versions | Each noun's `query`, `show` and `history` |
+
+Preview writes and show the resolved scope, prices, cost visibility and destination.
+Use the returned fingerprint when the authorized action must match that preview.
+An operational conversion preserves its source; keep its conversion key for retries.
+Inspect the returned current destination instead of creating a second document.
+`estimate copy` normally means another alternative; independent new scope must be
+selected explicitly. No create/copy/complete operation sends anything.
+
+Existing `invoice post` creates an independent service invoice. Linked work-to-sale
+conversion and progress billing are the following implementation increment. Delivery
+is also staged: never report that an invoice or scope letter was sent when only its
+record was created, and never improvise an external send from a create-only request.

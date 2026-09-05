@@ -26,6 +26,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`directive`](cli/directive.md)
 - [`docs`](cli/docs.md)
 - [`employee`](cli/employee.md)
+- [`estimate`](cli/estimate.md)
 - [`hub audit`](cli/hub-audit.md)
 - [`init`](cli/init.md)
 - [`invoice`](cli/invoice.md)
@@ -40,6 +41,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`presence`](cli/presence.md)
 - [`price-level`](cli/price-level.md)
 - [`profile`](cli/profile.md)
+- [`proposal`](cli/proposal.md)
 - [`rate`](cli/rate.md)
 - [`register`](cli/register.md)
 - [`report`](cli/report.md)
@@ -56,6 +58,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`user`](cli/user.md)
 - [`vendor`](cli/vendor.md)
 - [`vendor-type`](cli/vendor-type.md)
+- [`work-order`](cli/work-order.md)
 
 ## Schema reference
 
@@ -117,6 +120,11 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`company/vendor_expense_accounts`](schema/company/vendor_expense_accounts.md)
 - [`company/vendor_types`](schema/company/vendor_types.md)
 - [`company/vendors`](schema/company/vendors.md)
+- [`company/work_documents`](schema/company/work_documents.md)
+- [`company/work_line_identities`](schema/company/work_line_identities.md)
+- [`company/work_lines`](schema/company/work_lines.md)
+- [`company/work_links`](schema/company/work_links.md)
+- [`company/work_revisions`](schema/company/work_revisions.md)
 - [`hub/agent_authority`](schema/hub/agent_authority.md)
 - [`hub/agent_principals`](schema/hub/agent_principals.md)
 - [`hub/api_tokens`](schema/hub/api_tokens.md)

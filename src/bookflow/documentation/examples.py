@@ -208,3 +208,24 @@ for _noun in ('invoice', 'sales-receipt'):
     EXAMPLES[_noun + ' void'] = Example(f'bookflow {_noun} void {ID} --expected-version 1 --reason "Duplicate sale" --company "Demo Plumbing Co" --json', {_selector: ID, 'expected_version': 1})
     EXAMPLES[_noun + ' query'] = Example(f'bookflow {_noun} query --date-from 2026-01-01 --date-to 2026-12-31 --limit 25 --company "Demo Plumbing Co" --json', {'date_from': '2026-01-01', 'date_to': '2026-12-31', 'limit': 25})
     EXAMPLES[_noun + ' history'] = Example(f'bookflow {_noun} history {ID} --limit 25 --company "Demo Plumbing Co" --json', {_selector: ID, 'limit': 25})
+
+
+for _noun in ('proposal', 'estimate', 'work-order'):
+    _selector = _noun.replace('-', '_')
+    _payload = {'date': '2026-09-01', 'title': 'Clear the main drain', 'customer': 'Riverside Apartments',
+                'scope': 'Inspect and clear the main drain; test normal flow.',
+                'lines': [{'item': 'Mainline Clearing', 'quantity': '1', 'unit_price': '125.00'}]}
+    _options = ' '.join('--' + key.replace('_', '-') + ' ' + _shlex.quote(_json.dumps(value) if isinstance(value, list) else value)
+                        for key, value in _payload.items())
+    EXAMPLES[_noun + ' create'] = Example('bookflow ' + _noun + ' create ' + _options + ' --company "Demo Plumbing Co" --reason "Prepare customer work" --json', _payload)
+    EXAMPLES[_noun + ' show'] = Example(f'bookflow {_noun} show {ID} --company "Demo Plumbing Co" --json', {_selector: ID})
+    EXAMPLES[_noun + ' update'] = Example(f'bookflow {_noun} update {ID} --memo "Site visit arranged" --expected-version 1 --company "Demo Plumbing Co" --reason "Record work note" --json', {_selector: ID, 'memo': 'Site visit arranged', 'expected_version': 1})
+    EXAMPLES[_noun + ' copy'] = Example(f'bookflow {_noun} copy {ID} --expected-version 1 --date 2026-09-02 --company "Demo Plumbing Co" --reason "Prepare another option" --json', {_selector: ID, 'expected_version': 1, 'date': '2026-09-02'})
+    EXAMPLES[_noun + ' query'] = Example(f'bookflow {_noun} query --customer "Riverside Apartments" --date-from 2026-01-01 --date-to 2026-12-31 --limit 25 --company "Demo Plumbing Co" --json', {'customer': 'Riverside Apartments', 'date_from': '2026-01-01', 'date_to': '2026-12-31', 'limit': 25})
+    EXAMPLES[_noun + ' history'] = Example(f'bookflow {_noun} history {ID} --limit 25 --company "Demo Plumbing Co" --json', {_selector: ID, 'limit': 25})
+
+EXAMPLES.update({
+    'proposal estimate': Example(f'bookflow proposal estimate {ID} --expected-version 1 --conversion-key "drain-quote-2026-09" --date 2026-09-02 --company "Demo Plumbing Co" --reason "Make an estimate from the scope" --json', {'proposal': ID, 'expected_version': 1, 'conversion_key': 'drain-quote-2026-09', 'date': '2026-09-02'}),
+    'estimate work-order': Example(f'bookflow estimate work-order {ID} --expected-version 2 --conversion-key "drain-dispatch-2026-09" --date 2026-09-03 --company "Demo Plumbing Co" --reason "Make a work order from the accepted estimate" --json', {'estimate': ID, 'expected_version': 2, 'conversion_key': 'drain-dispatch-2026-09', 'date': '2026-09-03'}),
+    'work-order complete': Example(f'bookflow work-order complete {ID} --expected-version 1 --actual-start 2026-09-03T10:00:00-05:00 --actual-end 2026-09-03T11:00:00-05:00 --company "Demo Plumbing Co" --reason "Customer work completed" --json', {'work_order': ID, 'expected_version': 1, 'actual_start': '2026-09-03T10:00:00-05:00', 'actual_end': '2026-09-03T11:00:00-05:00'}),
+})

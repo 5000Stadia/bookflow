@@ -400,13 +400,6 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.customer.email` | string \| null | no | yes | null | — |
 | `revision.profile.customer.phone` | string \| null | no | yes | null | — |
 | `revision.profile.customer.resale_number` | string \| null | no | yes | null | — |
-| `revision.profile.control_account` | object | yes | no | — | — |
-| `revision.profile.control_account.id` | string | yes | no | — | — |
-| `revision.profile.control_account.name` | string | yes | no | — | — |
-| `revision.profile.control_account.full_name` | string | yes | no | — | — |
-| `revision.profile.control_account.number` | string \| null | yes | yes | — | — |
-| `revision.profile.control_account.type` | string | yes | no | — | — |
-| `revision.profile.control_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.profile.preferences` | object | yes | no | — | — |
 | `revision.profile.preferences.sales_tax_enabled` | boolean | yes | no | — | — |
 | `revision.profile.preferences.sales_tax_liability_basis` | literal["invoice_date", "payment_receipt"] | yes | no | — | — |
@@ -440,9 +433,6 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.terms.due_next_month_if_within_days` | integer \| null | yes | yes | — | — |
 | `revision.profile.terms.discount_day_of_month` | integer \| null | yes | yes | — | — |
 | `revision.profile.terms.discount_percent_millionths` | integer \| null | yes | yes | — | — |
-| `revision.profile.due_date` | string \| null | no | yes | null | — |
-| `revision.profile.discount_date` | string \| null | no | yes | null | — |
-| `revision.profile.discount_available` | boolean | no | no | false | — |
 | `revision.profile.ship_date` | string \| null | no | yes | null | — |
 | `revision.profile.ship_method` | object \| null | no | yes | null | — |
 | `revision.profile.ship_method.id` | string | yes | no | — | — |
@@ -485,11 +475,6 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.price_level.id` | string | yes | no | — | — |
 | `revision.profile.price_level.label` | string | yes | no | — | — |
 | `revision.profile.price_level.version` | integer | yes | no | — | — |
-| `revision.profile.payment_method` | object \| null | no | yes | null | — |
-| `revision.profile.payment_method.id` | string | yes | no | — | — |
-| `revision.profile.payment_method.label` | string | yes | no | — | — |
-| `revision.profile.payment_method.version` | integer | yes | no | — | — |
-| `revision.profile.payment_reference` | string \| null | no | yes | null | — |
 | `revision.profile.customer_message` | string \| null | no | yes | null | — |
 | `revision.profile.customer_message_item` | object \| null | no | yes | null | — |
 | `revision.profile.customer_message_item.id` | string | yes | no | — | — |
@@ -497,6 +482,21 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.customer_message_item.version` | integer | yes | no | — | — |
 | `revision.profile.customer_purchase_order` | string \| null | no | yes | null | — |
 | `revision.profile.origins` | object[string, object] | no | no | {} | — |
+| `revision.profile.control_account` | object | yes | no | — | — |
+| `revision.profile.control_account.id` | string | yes | no | — | — |
+| `revision.profile.control_account.name` | string | yes | no | — | — |
+| `revision.profile.control_account.full_name` | string | yes | no | — | — |
+| `revision.profile.control_account.number` | string \| null | yes | yes | — | — |
+| `revision.profile.control_account.type` | string | yes | no | — | — |
+| `revision.profile.control_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.profile.due_date` | string \| null | no | yes | null | — |
+| `revision.profile.discount_date` | string \| null | no | yes | null | — |
+| `revision.profile.discount_available` | boolean | no | no | false | — |
+| `revision.profile.payment_method` | object \| null | no | yes | null | — |
+| `revision.profile.payment_method.id` | string | yes | no | — | — |
+| `revision.profile.payment_method.label` | string | yes | no | — | — |
+| `revision.profile.payment_method.version` | integer | yes | no | — | — |
+| `revision.profile.payment_reference` | string \| null | no | yes | null | — |
 | `revision.lines` | array[object] | yes | no | — | — |
 | `revision.lines[].id` | string | yes | no | — | — |
 | `revision.lines[].created_at` | string | yes | no | — | — |
@@ -803,7 +803,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_PREVIEW_STALE` | The resolved sale facts changed since preview; preview again before saving. |
+| `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -1128,13 +1128,6 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.customer.email` | string \| null | no | yes | null | — |
 | `revision.profile.customer.phone` | string \| null | no | yes | null | — |
 | `revision.profile.customer.resale_number` | string \| null | no | yes | null | — |
-| `revision.profile.control_account` | object | yes | no | — | — |
-| `revision.profile.control_account.id` | string | yes | no | — | — |
-| `revision.profile.control_account.name` | string | yes | no | — | — |
-| `revision.profile.control_account.full_name` | string | yes | no | — | — |
-| `revision.profile.control_account.number` | string \| null | yes | yes | — | — |
-| `revision.profile.control_account.type` | string | yes | no | — | — |
-| `revision.profile.control_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.profile.preferences` | object | yes | no | — | — |
 | `revision.profile.preferences.sales_tax_enabled` | boolean | yes | no | — | — |
 | `revision.profile.preferences.sales_tax_liability_basis` | literal["invoice_date", "payment_receipt"] | yes | no | — | — |
@@ -1168,9 +1161,6 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.terms.due_next_month_if_within_days` | integer \| null | yes | yes | — | — |
 | `revision.profile.terms.discount_day_of_month` | integer \| null | yes | yes | — | — |
 | `revision.profile.terms.discount_percent_millionths` | integer \| null | yes | yes | — | — |
-| `revision.profile.due_date` | string \| null | no | yes | null | — |
-| `revision.profile.discount_date` | string \| null | no | yes | null | — |
-| `revision.profile.discount_available` | boolean | no | no | false | — |
 | `revision.profile.ship_date` | string \| null | no | yes | null | — |
 | `revision.profile.ship_method` | object \| null | no | yes | null | — |
 | `revision.profile.ship_method.id` | string | yes | no | — | — |
@@ -1213,11 +1203,6 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.price_level.id` | string | yes | no | — | — |
 | `revision.profile.price_level.label` | string | yes | no | — | — |
 | `revision.profile.price_level.version` | integer | yes | no | — | — |
-| `revision.profile.payment_method` | object \| null | no | yes | null | — |
-| `revision.profile.payment_method.id` | string | yes | no | — | — |
-| `revision.profile.payment_method.label` | string | yes | no | — | — |
-| `revision.profile.payment_method.version` | integer | yes | no | — | — |
-| `revision.profile.payment_reference` | string \| null | no | yes | null | — |
 | `revision.profile.customer_message` | string \| null | no | yes | null | — |
 | `revision.profile.customer_message_item` | object \| null | no | yes | null | — |
 | `revision.profile.customer_message_item.id` | string | yes | no | — | — |
@@ -1225,6 +1210,21 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.customer_message_item.version` | integer | yes | no | — | — |
 | `revision.profile.customer_purchase_order` | string \| null | no | yes | null | — |
 | `revision.profile.origins` | object[string, object] | no | no | {} | — |
+| `revision.profile.control_account` | object | yes | no | — | — |
+| `revision.profile.control_account.id` | string | yes | no | — | — |
+| `revision.profile.control_account.name` | string | yes | no | — | — |
+| `revision.profile.control_account.full_name` | string | yes | no | — | — |
+| `revision.profile.control_account.number` | string \| null | yes | yes | — | — |
+| `revision.profile.control_account.type` | string | yes | no | — | — |
+| `revision.profile.control_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.profile.due_date` | string \| null | no | yes | null | — |
+| `revision.profile.discount_date` | string \| null | no | yes | null | — |
+| `revision.profile.discount_available` | boolean | no | no | false | — |
+| `revision.profile.payment_method` | object \| null | no | yes | null | — |
+| `revision.profile.payment_method.id` | string | yes | no | — | — |
+| `revision.profile.payment_method.label` | string | yes | no | — | — |
+| `revision.profile.payment_method.version` | integer | yes | no | — | — |
+| `revision.profile.payment_reference` | string \| null | no | yes | null | — |
 | `revision.lines` | array[object] | yes | no | — | — |
 | `revision.lines[].id` | string | yes | no | — | — |
 | `revision.lines[].created_at` | string | yes | no | — | — |
@@ -1754,13 +1754,6 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.customer.email` | string \| null | no | yes | null | — |
 | `revision.profile.customer.phone` | string \| null | no | yes | null | — |
 | `revision.profile.customer.resale_number` | string \| null | no | yes | null | — |
-| `revision.profile.control_account` | object | yes | no | — | — |
-| `revision.profile.control_account.id` | string | yes | no | — | — |
-| `revision.profile.control_account.name` | string | yes | no | — | — |
-| `revision.profile.control_account.full_name` | string | yes | no | — | — |
-| `revision.profile.control_account.number` | string \| null | yes | yes | — | — |
-| `revision.profile.control_account.type` | string | yes | no | — | — |
-| `revision.profile.control_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.profile.preferences` | object | yes | no | — | — |
 | `revision.profile.preferences.sales_tax_enabled` | boolean | yes | no | — | — |
 | `revision.profile.preferences.sales_tax_liability_basis` | literal["invoice_date", "payment_receipt"] | yes | no | — | — |
@@ -1794,9 +1787,6 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.terms.due_next_month_if_within_days` | integer \| null | yes | yes | — | — |
 | `revision.profile.terms.discount_day_of_month` | integer \| null | yes | yes | — | — |
 | `revision.profile.terms.discount_percent_millionths` | integer \| null | yes | yes | — | — |
-| `revision.profile.due_date` | string \| null | no | yes | null | — |
-| `revision.profile.discount_date` | string \| null | no | yes | null | — |
-| `revision.profile.discount_available` | boolean | no | no | false | — |
 | `revision.profile.ship_date` | string \| null | no | yes | null | — |
 | `revision.profile.ship_method` | object \| null | no | yes | null | — |
 | `revision.profile.ship_method.id` | string | yes | no | — | — |
@@ -1839,11 +1829,6 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.price_level.id` | string | yes | no | — | — |
 | `revision.profile.price_level.label` | string | yes | no | — | — |
 | `revision.profile.price_level.version` | integer | yes | no | — | — |
-| `revision.profile.payment_method` | object \| null | no | yes | null | — |
-| `revision.profile.payment_method.id` | string | yes | no | — | — |
-| `revision.profile.payment_method.label` | string | yes | no | — | — |
-| `revision.profile.payment_method.version` | integer | yes | no | — | — |
-| `revision.profile.payment_reference` | string \| null | no | yes | null | — |
 | `revision.profile.customer_message` | string \| null | no | yes | null | — |
 | `revision.profile.customer_message_item` | object \| null | no | yes | null | — |
 | `revision.profile.customer_message_item.id` | string | yes | no | — | — |
@@ -1851,6 +1836,21 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.customer_message_item.version` | integer | yes | no | — | — |
 | `revision.profile.customer_purchase_order` | string \| null | no | yes | null | — |
 | `revision.profile.origins` | object[string, object] | no | no | {} | — |
+| `revision.profile.control_account` | object | yes | no | — | — |
+| `revision.profile.control_account.id` | string | yes | no | — | — |
+| `revision.profile.control_account.name` | string | yes | no | — | — |
+| `revision.profile.control_account.full_name` | string | yes | no | — | — |
+| `revision.profile.control_account.number` | string \| null | yes | yes | — | — |
+| `revision.profile.control_account.type` | string | yes | no | — | — |
+| `revision.profile.control_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.profile.due_date` | string \| null | no | yes | null | — |
+| `revision.profile.discount_date` | string \| null | no | yes | null | — |
+| `revision.profile.discount_available` | boolean | no | no | false | — |
+| `revision.profile.payment_method` | object \| null | no | yes | null | — |
+| `revision.profile.payment_method.id` | string | yes | no | — | — |
+| `revision.profile.payment_method.label` | string | yes | no | — | — |
+| `revision.profile.payment_method.version` | integer | yes | no | — | — |
+| `revision.profile.payment_reference` | string \| null | no | yes | null | — |
 | `revision.lines` | array[object] | yes | no | — | — |
 | `revision.lines[].id` | string | yes | no | — | — |
 | `revision.lines[].created_at` | string | yes | no | — | — |
@@ -2157,7 +2157,7 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
 | `E_PERMISSION` | The acting user may not run this command here. |
-| `E_PREVIEW_STALE` | The resolved sale facts changed since preview; preview again before saving. |
+| `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -2354,13 +2354,6 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.customer.email` | string \| null | no | yes | null | — |
 | `revision.profile.customer.phone` | string \| null | no | yes | null | — |
 | `revision.profile.customer.resale_number` | string \| null | no | yes | null | — |
-| `revision.profile.control_account` | object | yes | no | — | — |
-| `revision.profile.control_account.id` | string | yes | no | — | — |
-| `revision.profile.control_account.name` | string | yes | no | — | — |
-| `revision.profile.control_account.full_name` | string | yes | no | — | — |
-| `revision.profile.control_account.number` | string \| null | yes | yes | — | — |
-| `revision.profile.control_account.type` | string | yes | no | — | — |
-| `revision.profile.control_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
 | `revision.profile.preferences` | object | yes | no | — | — |
 | `revision.profile.preferences.sales_tax_enabled` | boolean | yes | no | — | — |
 | `revision.profile.preferences.sales_tax_liability_basis` | literal["invoice_date", "payment_receipt"] | yes | no | — | — |
@@ -2394,9 +2387,6 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.terms.due_next_month_if_within_days` | integer \| null | yes | yes | — | — |
 | `revision.profile.terms.discount_day_of_month` | integer \| null | yes | yes | — | — |
 | `revision.profile.terms.discount_percent_millionths` | integer \| null | yes | yes | — | — |
-| `revision.profile.due_date` | string \| null | no | yes | null | — |
-| `revision.profile.discount_date` | string \| null | no | yes | null | — |
-| `revision.profile.discount_available` | boolean | no | no | false | — |
 | `revision.profile.ship_date` | string \| null | no | yes | null | — |
 | `revision.profile.ship_method` | object \| null | no | yes | null | — |
 | `revision.profile.ship_method.id` | string | yes | no | — | — |
@@ -2439,11 +2429,6 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.price_level.id` | string | yes | no | — | — |
 | `revision.profile.price_level.label` | string | yes | no | — | — |
 | `revision.profile.price_level.version` | integer | yes | no | — | — |
-| `revision.profile.payment_method` | object \| null | no | yes | null | — |
-| `revision.profile.payment_method.id` | string | yes | no | — | — |
-| `revision.profile.payment_method.label` | string | yes | no | — | — |
-| `revision.profile.payment_method.version` | integer | yes | no | — | — |
-| `revision.profile.payment_reference` | string \| null | no | yes | null | — |
 | `revision.profile.customer_message` | string \| null | no | yes | null | — |
 | `revision.profile.customer_message_item` | object \| null | no | yes | null | — |
 | `revision.profile.customer_message_item.id` | string | yes | no | — | — |
@@ -2451,6 +2436,21 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.customer_message_item.version` | integer | yes | no | — | — |
 | `revision.profile.customer_purchase_order` | string \| null | no | yes | null | — |
 | `revision.profile.origins` | object[string, object] | no | no | {} | — |
+| `revision.profile.control_account` | object | yes | no | — | — |
+| `revision.profile.control_account.id` | string | yes | no | — | — |
+| `revision.profile.control_account.name` | string | yes | no | — | — |
+| `revision.profile.control_account.full_name` | string | yes | no | — | — |
+| `revision.profile.control_account.number` | string \| null | yes | yes | — | — |
+| `revision.profile.control_account.type` | string | yes | no | — | — |
+| `revision.profile.control_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.profile.due_date` | string \| null | no | yes | null | — |
+| `revision.profile.discount_date` | string \| null | no | yes | null | — |
+| `revision.profile.discount_available` | boolean | no | no | false | — |
+| `revision.profile.payment_method` | object \| null | no | yes | null | — |
+| `revision.profile.payment_method.id` | string | yes | no | — | — |
+| `revision.profile.payment_method.label` | string | yes | no | — | — |
+| `revision.profile.payment_method.version` | integer | yes | no | — | — |
+| `revision.profile.payment_reference` | string \| null | no | yes | null | — |
 | `revision.lines` | array[object] | yes | no | — | — |
 | `revision.lines[].id` | string | yes | no | — | — |
 | `revision.lines[].created_at` | string | yes | no | — | — |
