@@ -175,7 +175,7 @@ def _require(condition: bool) -> None:
 def _validate(connection: sa.Connection, plan: JournalCustomFieldPlan, record_id: str, snapshot: dict, *, record_type: str) -> None:
     owner = plan.owner_plan
     _require(type(owner.creating) is bool and type(plan.refresh) is bool)
-    _require(record_type in {"journal_entry", "invoice", "sales_receipt"})
+    _require(record_type in {"journal_entry", "invoice", "sales_receipt", "proposal", "estimate", "work_order"})
     _require(owner.record_type == record_type and owner.record_id == record_id)
     _require(is_ulid(record_id) and normalize_ulid(record_id) == record_id)
     previous = json.loads(plan.previous_json)
@@ -187,7 +187,18 @@ def _validate(connection: sa.Connection, plan: JournalCustomFieldPlan, record_id
         _require(not slots and not previous)
     # When an aggregate exists, its selected immutable revision is the authority
     # for preserved labels, rather than the supplied preparation dictionary.
-    if sa.inspect(connection).has_table("transactions"):
+    if record_type in {"proposal", "estimate", "work_order"}:
+        header_type = connection.execute(sa.select(c.work_documents.c.kind).where(
+            c.work_documents.c.id == record_id)).scalar_one_or_none()
+        if header_type is not None:
+            _require(header_type == record_type)
+        source = connection.execute(sa.select(c.work_revisions.c.custom_fields_snapshot).select_from(
+            c.work_documents.join(c.work_revisions,
+                                  c.work_documents.c.current_revision_id == c.work_revisions.c.id)
+        ).where(c.work_documents.c.id == record_id)).scalar_one_or_none()
+        if source is not None:
+            _require(not owner.creating and json.loads(source) == previous)
+    elif sa.inspect(connection).has_table("transactions"):
         header_type = connection.execute(sa.select(c.transactions.c.type).where(
             c.transactions.c.id == record_id)).scalar_one_or_none()
         if header_type is not None:

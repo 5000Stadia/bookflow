@@ -279,7 +279,11 @@ quantity cache and not a single invoice pointer.
 
 ## Storage and integration
 
-Add co0010 with revision-local DDL, preserving every old row and table definition.
+Add co0010 with revision-local DDL, preserving every old row. The sole old-table
+definition change widens custom_field_scopes record_type CHECK to admit proposal
+and work_order. Preserve all columns, indexes, triggers, local views and existing
+scope rows through a transactional rebuild; rollback restores the original schema
+and rows on failure. All other old table definitions remain unchanged.
 Add work_documents (primary identity/kind/number/version/current revision/status/
 active/estimate group/provenance), work_revisions (immutable whole snapshots plus
 queryable date/customer/net/tax/gross and decision facts), work_line_identities
