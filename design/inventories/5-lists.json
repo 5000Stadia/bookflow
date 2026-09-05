@@ -353,7 +353,7 @@
       ],
       "query": {"search": ["name", "full_name", "number", "description", "institution_name", "institution_account_last4", "note"], "filters": ["active", "type", "parent_id", "currency", "tax_line", "is_system", "default_class_id", "track_reimbursable_expenses"], "sorts": ["full_name", "number", "type", "balance", "updated_at", "hierarchy_order"], "default_sort": ["number:asc:nulls-last", "full_name:asc", "id:asc"], "default_columns": ["number", "full_name", "type", "balance", "currency", "active"], "additional_columns": ["parent", "description", "currency", "tax_line", "institution_name", "next_check_number", "default_class_id", "track_reimbursable_expenses", "reimbursable_income_account_id", "system_role", "is_system", "available_balance", "updated_at", "$common"], "w": "query"},
       "actions": [{"id": "account.lifecycle", "command": "account create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}],
-      "deferred": ["opening-balances", "posted-balances", "provider-balance-refresh", "registers", "apply-account-change-existing-transactions"]
+      "deferred": ["opening-balances", "posted-balances", "provider-balance-refresh", "registers", "apply-account-change-existing-transactions", "activation-cascade"]
     },
     "customer": {
       "bp": "design/blueprint.md#112-customers-and-jobs", "table": "customers", "child_table": "customer_addresses|customer_contacts|customer_contact_points", "service": "parties", "selector": "id|full_name", "hierarchical": true, "custom_fields": true,
@@ -398,7 +398,7 @@
         {"id": "customer.lifecycle", "command": "customer create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"},
         {"id": "customer.contact-copy", "command": "workbench contact-copy preview then customer/vendor update", "rule": "preview only; submit ordinary versioned writes", "w": "action"}
       ],
-      "deferred": ["open-overdue-filters", "transaction-panes", "related-transaction-actions", "delivery-send", "notes-attachments-activity", "purpose-built-customer-center", "protected-payment-store"]
+      "deferred": ["open-overdue-filters", "transaction-panes", "related-transaction-actions", "delivery-send", "notes-attachments-activity", "purpose-built-customer-center", "protected-payment-store", "activation-cascade", "job-status-label-settings"]
     },
     "vendor": {
       "bp": "design/blueprint.md#113-vendors", "table": "vendors", "child_table": "vendor_contacts|vendor_contact_points|vendor_expense_accounts|item_vendor_profiles", "service": "parties", "selector": "id|name", "hierarchical": false, "custom_fields": true,
@@ -450,6 +450,7 @@
       "deferred": ["birth-date-gender-marital-status", "full-tax-identifiers", "payroll-withholding", "earnings-deductions", "paid-time-off", "workers-compensation", "pay-schedules", "direct-deposit", "payroll-transaction-pane"]
     },
     "other-name": {
+      "note": "conversion copies and deactivates; source history stays on the source (blueprint 11.6)",
       "bp": "design/blueprint.md#116-other-names", "table": "other_names", "service": "parties", "selector": "id|name", "hierarchical": false, "custom_fields": true,
       "fields": [
         {"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "company_name", "t": "string", "null": true, "w": "field"}, {"n": "person_identity", "shape": "person_identity", "w": "field"},
@@ -518,19 +519,20 @@
       },
       "query": {"search": ["name", "full_name", "description", "purchase_description", "manufacturer_part_number", "barcode", "category", "vendor_item_identifiers", "notes", "$custom-searchable"], "filters": ["active", "type", "parent_id", "category_id", "sales_enabled", "purchase_enabled", "sales_tax_code_id", "preferred_vendor_id", "unit_of_measure_set_id", "default_class_id"], "sorts": ["type", "full_name", "price", "cost", "quantity_on_hand", "preferred_vendor", "category", "updated_at"], "default_sort": ["type", "full_name", "id"], "default_columns": ["type", "full_name", "price", "cost", "quantity_on_hand", "preferred_vendor", "active"], "additional_columns": ["category", "tax_code", "all-account-references", "reorder_points", "unit_set", "manufacturer_part_number", "barcode", "default_class", "average_cost", "inventory_value", "inventory_values_available", "$custom", "$common", "$stored"], "w": "query"},
       "actions": [{"id": "item.lifecycle", "command": "item create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}],
-      "deferred": ["opening-quantity-and-value", "assembly-builds", "cost-layers", "available-to-promise", "inventory-sites-bins", "serial-lot-instances", "landed-cost", "costing-method-selection", "stock-transfers", "item-images", "fixed-asset-calculations-and-journals"]
+      "deferred": ["opening-quantity-and-value", "assembly-builds", "cost-layers", "available-to-promise", "inventory-sites-bins", "serial-lot-instances", "landed-cost", "costing-method-selection", "stock-transfers", "item-images", "fixed-asset-calculations-and-journals", "activation-cascade"]
     },
     "item-category": {
+      "note": "five levels is the shared project limit; the anchor allows four for categories; superset, never reduced",
       "bp": "design/blueprint.md#118-item-categories-and-classes", "table": "item_categories", "service": "profiles", "selector": "id|full_name", "hierarchical": true, "custom_fields": false,
       "fields": [{"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "parent_id", "t": "ulid", "null": true, "w": "field"}, {"n": "usage_count", "t": "integer", "io": "output", "default": "zero-unavailable", "w": "derived"}],
       "query": {"search": ["name", "full_name"], "filters": ["active", "parent_id"], "sorts": ["full_name", "updated_at"], "default_sort": ["full_name", "id"], "default_columns": ["full_name", "parent", "active"], "additional_columns": ["usage_count", "$common"], "w": "query"},
-      "actions": [{"id": "item-category.lifecycle", "command": "item-category create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["functional-usage-count", "spreadsheet-batch-edit"]
+      "actions": [{"id": "item-category.lifecycle", "command": "item-category create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["functional-usage-count", "spreadsheet-batch-edit", "activation-cascade"]
     },
     "class": {
       "bp": "design/blueprint.md#118-item-categories-and-classes", "table": "classes", "service": "profiles", "selector": "id|full_name", "hierarchical": true, "custom_fields": false,
       "fields": [{"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "parent_id", "t": "ulid", "null": true, "w": "field"}, {"n": "usage_count", "t": "integer", "io": "output", "default": "zero-unavailable", "w": "derived"}],
       "query": {"search": ["name", "full_name"], "filters": ["active", "parent_id"], "sorts": ["full_name", "updated_at"], "default_sort": ["full_name", "id"], "default_columns": ["full_name", "parent", "active"], "additional_columns": ["usage_count", "$common"], "w": "query"},
-      "actions": [{"id": "class.lifecycle", "command": "class create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["functional-usage-count", "transaction-class-prompting"]
+      "actions": [{"id": "class.lifecycle", "command": "class create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["functional-usage-count", "transaction-class-prompting", "class-prompt-default-linkage", "activation-cascade"]
     },
     "term": {
       "bp": "design/blueprint.md#119-terms", "table": "terms", "service": "profiles", "selector": "id|name", "hierarchical": false, "custom_fields": false,
@@ -567,36 +569,37 @@
     "customer-type": {
       "bp": "design/blueprint.md#1112-supporting-profile-lists", "table": "customer_types", "service": "profiles", "selector": "id|full_name", "hierarchical": true, "custom_fields": false,
       "fields": [{"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "parent_id", "t": "ulid", "null": true, "w": "field"}],
-      "query": {"search": ["name", "full_name"], "filters": ["active", "parent_id"], "sorts": ["full_name", "updated_at"], "default_sort": ["full_name", "id"], "default_columns": ["full_name", "parent", "active"], "additional_columns": ["$common"], "w": "query"}, "actions": [{"id": "customer-type.lifecycle", "command": "customer-type create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["transaction-report-segmentation"]
+      "query": {"search": ["name", "full_name"], "filters": ["active", "parent_id"], "sorts": ["full_name", "updated_at"], "default_sort": ["full_name", "id"], "default_columns": ["full_name", "parent", "active"], "additional_columns": ["$common"], "w": "query"}, "actions": [{"id": "customer-type.lifecycle", "command": "customer-type create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["transaction-report-segmentation", "activation-cascade"]
     },
     "vendor-type": {
       "bp": "design/blueprint.md#1112-supporting-profile-lists", "table": "vendor_types", "service": "profiles", "selector": "id|full_name", "hierarchical": true, "custom_fields": false,
       "fields": [{"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "parent_id", "t": "ulid", "null": true, "w": "field"}],
-      "query": {"search": ["name", "full_name"], "filters": ["active", "parent_id"], "sorts": ["full_name", "updated_at"], "default_sort": ["full_name", "id"], "default_columns": ["full_name", "parent", "active"], "additional_columns": ["$common"], "w": "query"}, "actions": [{"id": "vendor-type.lifecycle", "command": "vendor-type create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["transaction-report-segmentation"]
+      "query": {"search": ["name", "full_name"], "filters": ["active", "parent_id"], "sorts": ["full_name", "updated_at"], "default_sort": ["full_name", "id"], "default_columns": ["full_name", "parent", "active"], "additional_columns": ["$common"], "w": "query"}, "actions": [{"id": "vendor-type.lifecycle", "command": "vendor-type create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["transaction-report-segmentation", "activation-cascade"]
     },
     "job-type": {
       "bp": "design/blueprint.md#1112-supporting-profile-lists", "table": "job_types", "service": "profiles", "selector": "id|full_name", "hierarchical": true, "custom_fields": false,
       "fields": [{"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "parent_id", "t": "ulid", "null": true, "w": "field"}],
-      "query": {"search": ["name", "full_name"], "filters": ["active", "parent_id"], "sorts": ["full_name", "updated_at"], "default_sort": ["full_name", "id"], "default_columns": ["full_name", "parent", "active"], "additional_columns": ["$common"], "w": "query"}, "actions": [{"id": "job-type.lifecycle", "command": "job-type create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["transaction-report-segmentation"]
+      "query": {"search": ["name", "full_name"], "filters": ["active", "parent_id"], "sorts": ["full_name", "updated_at"], "default_sort": ["full_name", "id"], "default_columns": ["full_name", "parent", "active"], "additional_columns": ["$common"], "w": "query"}, "actions": [{"id": "job-type.lifecycle", "command": "job-type create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["transaction-report-segmentation", "activation-cascade"]
     },
     "sales-rep": {
       "bp": "design/blueprint.md#1112-supporting-profile-lists", "table": "sales_reps", "service": "profiles", "selector": "id|name", "hierarchical": false, "custom_fields": false,
       "fields": [{"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "initials", "t": "string", "req": true, "v": ["max-5", "company-unique-casefold"], "w": "field"}, {"n": "name_type", "t": "enum", "enum": ["employee", "vendor", "other_name"], "req": true, "w": "field"}, {"n": "name_id", "t": "ulid", "req": true, "v": ["active-record-matching-name-type"], "w": "field"}, {"n": "source_type", "t": "enum", "enum": ["employee", "vendor", "other_name"], "io": "output", "use": "projection of name_type", "w": "derived"}, {"n": "source_name", "t": "string", "io": "output", "use": "derived live from stable source id", "w": "derived"}],
-      "query": {"search": ["name", "initials", "source_name"], "filters": ["active", "source_type"], "sorts": ["name", "initials", "updated_at"], "default_sort": ["name", "id"], "default_columns": ["initials", "source_name", "source_type", "active"], "additional_columns": ["name", "$common"], "w": "query"}, "actions": [{"id": "sales-rep.lifecycle", "command": "sales-rep create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["later-sales-form-and-report-use"]
+      "query": {"search": ["name", "initials", "source_name"], "filters": ["active", "source_type"], "sorts": ["name", "initials", "updated_at"], "default_sort": ["name", "id"], "default_columns": ["initials", "source_name", "source_type", "active"], "additional_columns": ["name", "$common"], "w": "query"}, "actions": [{"id": "sales-rep.lifecycle", "command": "sales-rep create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["later-sales-form-and-report-use", "person-derived-rep-initials"]
     },
     "ship-method": {
       "bp": "design/blueprint.md#1112-supporting-profile-lists", "table": "ship_methods", "service": "profiles", "selector": "id|name", "hierarchical": false, "custom_fields": false,
       "fields": [{"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "display_order", "t": "integer", "default": 0, "v": ["nonnegative"], "w": "field"}],
       "query": {"search": ["name"], "filters": ["active"], "sorts": ["display_order", "name", "updated_at"], "default_sort": ["display_order", "name", "id"], "default_columns": ["display_order", "name", "active"], "additional_columns": ["$common"], "w": "query"}, "actions": [{"id": "ship-method.lifecycle", "command": "ship-method create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}],
-      "seeds": [{"id": "ship-methods.v1", "values": ["Delivery", "Federal Express", "UPS", "USPS", "Other"], "w": "seed"}], "deferred": ["shipping-execution", "later-sales-form-use"]
+      "seeds": [{"id": "ship-methods.v1", "values": ["Delivery", "Federal Express", "UPS", "USPS", "Other"], "note": "project choice, not the anchor's shipped carrier set", "w": "seed"}], "deferred": ["shipping-execution", "later-sales-form-use"]
     },
     "customer-message": {
       "bp": "design/blueprint.md#1112-supporting-profile-lists", "table": "customer_messages", "service": "profiles", "selector": "id|name", "hierarchical": false, "custom_fields": false,
       "fields": [{"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "text", "t": "string", "req": true, "v": ["max-101"], "w": "field"}, {"n": "display_order", "t": "integer", "default": 0, "v": ["nonnegative"], "w": "field"}],
       "query": {"search": ["name", "text"], "filters": ["active"], "sorts": ["display_order", "name", "updated_at"], "default_sort": ["display_order", "name", "id"], "default_columns": ["display_order", "name", "text", "active"], "additional_columns": ["$common"], "w": "query"}, "actions": [{"id": "customer-message.lifecycle", "command": "customer-message create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}],
-      "seeds": [{"id": "customer-messages.v1", "values": ["Thank you for your business.", "We appreciate your prompt payment.", "Please remit payment at your earliest convenience."], "w": "seed"}], "deferred": ["message-send", "later-sales-form-use"]
+      "seeds": [{"id": "customer-messages.v1", "values": ["Thank you for your business.", "We appreciate your prompt payment.", "Please remit payment at your earliest convenience."], "note": "project choice; the anchor ships no messages and identifies a message by text alone; name is a Bookflow addition", "w": "seed"}], "deferred": ["message-send", "later-sales-form-use"]
     },
     "price-level": {
+      "note": "live per-item percentages are a project extension; the anchor stores computed prices",
       "bp": "design/blueprint.md#1113-price-levels", "table": "price_levels", "child_table": "price_level_items", "service": "pricing", "selector": "id|name", "hierarchical": false, "custom_fields": false,
       "fields": [
         {"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "kind", "t": "enum", "enum": ["fixed_percent", "per_item"], "req": true, "w": "field"},
@@ -609,7 +612,7 @@
       "validations": [{"id": "price-level.order", "rule": "percentage adjustment precedes rounding; definition/assignment only and no implicit creation from forms", "w": "rule"}],
       "query": {"search": ["name", "per_item_item_names"], "filters": ["active", "kind", "currency"], "sorts": ["name", "kind", "percent", "item_count", "currency", "updated_at"], "default_sort": ["name", "id"], "default_columns": ["name", "kind", "fixed_percent_or_item_count", "currency", "rounding_summary", "active"], "additional_columns": ["$stored", "per_item_summary", "$common"], "w": "query"},
       "actions": [{"id": "price-level.lifecycle", "command": "price-level create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}],
-      "deferred": ["actual-price-application", "conditional-date-quantity-location-group-custom-rules", "stacking", "margin-guardrails"]
+      "deferred": ["actual-price-application", "conditional-date-quantity-location-group-custom-rules", "stacking", "margin-guardrails", "price-rounding-presets-and-bulk-adjust"]
     },
     "unit-of-measure": {
       "bp": "design/blueprint.md#1114-units-of-measure", "table": "units_of_measure", "child_table": "unit_conversions", "service": "units", "selector": "id|name", "hierarchical": false, "custom_fields": false,
@@ -624,9 +627,10 @@
         {"id": "unit.immutability", "rule": "factor becomes immutable after a posted transaction reference; unused units may deactivate", "w": "rule"}
       ],
       "query": {"search": ["name", "unit_names", "unit_abbreviations"], "filters": ["active", "base_unit"], "sorts": ["name", "base_unit", "default_purchase_unit", "default_sales_unit", "default_shipping_unit", "related_unit_count", "updated_at"], "default_sort": ["name", "id"], "default_columns": ["name", "base", "purchase", "sales", "shipping", "related_unit_count", "active"], "additional_columns": ["every_conversion", "$common"], "w": "query"},
-      "actions": [{"id": "unit-of-measure.lifecycle", "command": "unit-of-measure create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["posted-transaction-factor-lock-witness-until-ledger", "transaction-unit-selection"]
+      "actions": [{"id": "unit-of-measure.lifecycle", "command": "unit-of-measure create|update|show|list|activate|deactivate", "ref": "ordinary_lifecycle", "w": "action"}], "deferred": ["posted-transaction-factor-lock-witness-until-ledger", "transaction-unit-selection", "item-level-default-units"]
     },
     "custom-field": {
+      "note": "typed kinds are a project extension over text-only anchor fields",
       "bp": "design/blueprint.md#1115-custom-fields", "table": "custom_field_defs", "child_table": "custom_field_scopes|custom_field_choices|custom_field_values", "service": "custom_fields", "selector": "id|unique-current-name", "hierarchical": false, "custom_fields": false,
       "fields": [
         {"n": "name", "t": "string", "req": true, "w": "field"}, {"n": "kind", "t": "enum", "enum": ["text", "number", "date", "bool", "choice"], "req": true, "w": "field"},
@@ -637,7 +641,7 @@
         {"n": "values", "t": "map", "fields": ["id", "def_id", "record_type", "record_id", "active", "canonical_text", "typed_value", "current_name", "kind"], "v": ["unique-definition-record-type-record-id", "applicable-active-definition", "typed-value", "choice-membership"], "w": "child_field"}
       ],
       "validations": [
-        {"id": "custom-field.capacity", "rule": "at least 45 active definitions may apply to one record type", "w": "rule"},
+        {"id": "custom-field.capacity", "rule": "at least 45 active definitions may apply to one record type", "note": "project floor per record type; the anchor's published figure is product-wide; superset, never reduced", "w": "rule"},
         {"id": "custom-field.identity", "rule": "wire mapping keys are stable definition ids only; current unique name may select the definition record but is never a mapping key; unknown id is E_RECORD_NOT_FOUND and inactive changed id is E_INACTIVE_REFERENCE; rename preserves values", "error": "E_RECORD_NOT_FOUND|E_INACTIVE_REFERENCE", "w": "rule"},
         {"id": "custom-field.lifecycle", "rule": "kind and scopes freeze after first value; clear deactivates and later set reuses value row; inactive definition preserves readable/searchable values and rejects new/changed values", "error": "E_RECORD_IN_USE", "w": "rule"},
         {"id": "custom-field.patch", "rule": "absent definition id preserves, explicit null clears, empty map changes nothing; create fills applicable non-null defaults and rejects required missing without default; unrelated later updates do not retroactively fail", "w": "rule"},
@@ -834,7 +838,13 @@
     {"id": "csv-import-export-saved-mappings-merge", "owner": "section 14.1", "state": "absent; collisions never merge implicitly", "w": "deferred"},
     {"id": "memorized-transactions-and-todos", "owner": "forms/scheduler/activity", "state": "not Row 5 nouns", "w": "deferred"},
     {"id": "purpose-built-list-centers", "owner": "later browser workflow", "state": "generated workbench only", "w": "deferred"},
-    {"id": "mcp-adapter", "owner": "Row 9", "state": "same registry schemas and parity corpus reserved", "w": "deferred"}
+    {"id": "mcp-adapter", "owner": "Row 9", "state": "same registry schemas and parity corpus reserved", "w": "deferred"},
+    {"id": "item-level-default-units", "owner": "transaction unit-selection pass", "state": "defaults live on the unit set in Row 5; item-level purchase/sales/shipping defaults staged; set defaults not reduced", "w": "deferred"},
+    {"id": "price-rounding-presets-and-bulk-adjust", "owner": "sales-form pricing pass", "state": "named rounding presets and the per-item bulk percentage calculator staged; nearest/smallest-unit defaults are a project choice", "w": "deferred"},
+    {"id": "person-derived-rep-initials", "owner": "list-center pass", "state": "initials entered manually in Row 5; derivation from the source person and in-place source correction staged", "w": "deferred"},
+    {"id": "class-prompt-default-linkage", "owner": "transaction class-prompting pass", "state": "prompt_for_class requires use_classes but is not enabled automatically with it", "w": "deferred"},
+    {"id": "activation-cascade", "owner": "list-center pass", "state": "deactivate cascades; activate does not; rows are activated parents-first", "w": "deferred"},
+    {"id": "job-status-label-settings", "owner": "company settings pass, pending human decision", "state": "job_status vocabulary is a fixed enum; renamable labels staged", "w": "deferred"}
   ],
   "browser_and_documentation": {
     "ui_group_assignments": {

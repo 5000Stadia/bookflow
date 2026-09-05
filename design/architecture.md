@@ -284,6 +284,7 @@ Generated-documentation verification in `tests/test_docs_generation.py`, `tests/
 - `serve --bind <address>:0` is `E_VALIDATION` before the network gate is reached, because the port range is checked first.
 - `E_IDEMPOTENCY_MISMATCH` (409) and `E_INTERNAL` (500) are in the status map but are not exercised over HTTP.
 - The generated `/openapi.json` is asserted for shape and coverage, not validated against an OpenAPI schema validator.
+- Row 5 list documentation now marks deliberate divergences from the anchor as project choices rather than parity (blueprint 11.8, 11.12, 11.13, 11.15): the shipping-method and customer-message seed sets, the customer-message `name`, five-level categories, the 45-per-record-type custom-field floor, typed custom-field kinds, and live per-item price percentages. Still staged, with their owning passes named in the blueprint: item-level default units (11.14), rounding presets and the per-item bulk price calculator (11.13), person-derived sales-rep initials (11.12), automatic class-prompt linkage (11.8), an activate cascade (11.1), and renamable job-status labels (11.2, pending the human decision). The other-name conversion history consequence is stated in 11.6. None of these changes application behaviour or data.
 
 
 ### Account registers
@@ -320,6 +321,17 @@ of 39.29 ms. Host startup/shutdown are outside the samples; dispatch, current
 permission checks, writer validation, audit and durable commit are inside.
 Repeated offline library calls include per-call connection open/close and
 checkpoint work; their median is 63.37 ms, maximum 123.46 ms across twenty samples.
+
+Historic storage-correction cost (2026-09-04), an older and different workload from
+the ledger fixture above and not comparable to it: switching writable opens to
+`synchronous=FULL` with durable metadata replacement was measured on this machine
+against the pre-change tree using five fresh-root samples per operation and seven
+process-cold reads. Medians moved from 222.6 to 232.3 ms for a fresh-root `init`
+(+9.8 ms), 306.5 to 311.6 ms for `company new` with the general chart (+5.1 ms),
+1,361.4 to 1,434.1 ms for a first `demo reset` (+72.7 ms), 1,291.2 to 1,354.1 ms for
+a replacement `demo reset` (+62.9 ms), and 547.3 to 553.9 ms for a process-cold
+`company list --json` (+6.6 ms; slowest sample 571.2 ms against the 750 ms bound).
+These are whole-tree deltas, not isolated fsync attribution.
 
 Six library trial-balance reads over 100,514 posting lines return the independently
 expected 5,665,000 USD minor units on each side. The five subsequent warm samples
