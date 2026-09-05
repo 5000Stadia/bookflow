@@ -10,6 +10,8 @@ from bookflow.company import ledger_reports as ledger
 
 class ProfitAndLossInput(ledger.TrialBalanceInput):
     date_from: str = Field(min_length=10, max_length=10, description="Inclusive first accounting date, YYYY-MM-DD.")
+    date_to: str = Field(min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
+    include_zero: bool = Field(default=False, description="Include zero period nets, including inactive and never-posted income and expense accounts.")
 
     _date_from = field_validator("date_from")(ledger.iso_date)
 

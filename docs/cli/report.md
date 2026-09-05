@@ -427,9 +427,9 @@ Accrual income, costs and net profit for inclusive accounting dates. Own-account
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `date_to` | `--date-to` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
-| `include_zero` | `--include-zero` | boolean | no | no | false | Include zero ending balances, including inactive and never-posted accounts. |
+| `include_zero` | `--include-zero` | boolean | no | no | false | Include zero period nets, including inactive and never-posted income and expense accounts. |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 | `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |

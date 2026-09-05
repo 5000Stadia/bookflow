@@ -97,6 +97,18 @@ def test_zero_activity_accounts_do_not_duplicate_or_leak_nonposting(financial_le
     assert "z" not in {r.account_id for r in pl(s,include_zero=True).rows + bs(s,include_zero=True).rows}
 
 
+def test_profit_and_loss_zero_selection_uses_period_not_ending_net(financial_ledger):
+    s,batch,_=financial_ledger
+    batch("2025-12-31",100)
+    assert pl(s).rows==[]
+    assert next(r for r in pl(s,include_zero=True).rows if r.account_id=="b").amount.minor_units==0
+    assert bs(s).totals.prior_earnings.minor_units==100
+    batch("2026-01-01",100,debit="b",credit="a")
+    assert [(r.account_id,r.amount.minor_units) for r in pl(s).rows]==[("b",-100)]
+    assert bs(s).totals.current_year_income.minor_units==-100
+    assert bs(s).totals.assets.minor_units==0
+
+
 @pytest.mark.parametrize("sql", [
     "UPDATE company_info SET fiscal_year_start_month=7",
     "UPDATE company_info SET use_account_numbers=0",
