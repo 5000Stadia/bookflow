@@ -464,3 +464,10 @@ read results directly rather than a saved-write flash. GL drill-down carries the
 source watermark only as browser context, compares it with returned metadata and
 warns when the books changed. Both demo seed files execute both read commands.
 The reference-year guide supplies examples and independent annual totals.
+
+Warm resident-host reads at f009b49 on the retained local fixture of 10,000 accounts,
+104,194 posting lines and 713 transactions, normal GC and no concurrent test workers:
+five measured reads after one warmup per report gave median/max 1182.77/1195.94 ms
+for trial balance, 897.67/899.82 ms for P&L and 1266.23/1283.83 ms for balance sheet.
+Company record/audit counts were unchanged. This is a bounded read sample, not
+the separate 100,000 transaction storage workload or a universal latency guarantee.
