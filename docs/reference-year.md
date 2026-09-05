@@ -9,6 +9,7 @@ organization with the demo name causes `E_NAME_TAKEN`.
 
 Use a new local data root for this example:
 
+<!-- bookflow-example: illustrative -->
 ```sh
 ROOT=$(mktemp -d /tmp/bookflow-reference.XXXXXX)
 bookflow init --data-root "$ROOT" --json
@@ -108,6 +109,7 @@ picker. The reference Checking register shows `72550.00 USD`.
 
 Generation is rootless: no initialized data root, company or credentials are needed.
 
+<!-- bookflow-example: illustrative -->
 ```sh
 bookflow docs generate --output docs
 bookflow docs generate --output docs --check

@@ -59,12 +59,15 @@ def classified_fences(text: str) -> list[Fence]:
 
 def test_every_hand_authored_fence_is_classified():
     fences = []
-    for name in ("concepts.md", "agent-guide.md"):
+    for name in ("concepts.md", "agent-guide.md", "reference-year.md"):
         fences.extend(classified_fences(resource_text(name)))
     assert [(fence.classification, fence.language) for fence in fences] == [
+        ("illustrative", "python"),
         ("illustrative", "bash"),
         ("executable", "python"),
         ("illustrative", "bash"),
+        ("illustrative", "sh"),
+        ("illustrative", "sh"),
     ]
 
 
