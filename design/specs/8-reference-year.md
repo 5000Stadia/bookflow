@@ -36,7 +36,7 @@ organization and the running isolated human checkpoint are not used by tests.
 
 ## Source transactions
 
-All amounts below are USD minor units. Accounts use the contractor chart where
+All dates use the fixed calendar year 2026. All amounts below are USD minor units. Accounts use the contractor chart where
 available; missing reference accounts are created through account commands.
 
 | Date | Debit | Credit | Amount |
@@ -94,7 +94,9 @@ matches all twelve monthly checkpoints and the annual expected table. The
 ordinary demo still reconciles to its independent seed expectations.
 
 For each reference account, paged general ledger opening/period/closing totals
-and every returned source posting reconcile to its expected balance. Traversing
+and every returned source posting reconcile to its expected balance. Verify gross
+debits and credits independently, including the reversal pairs, and exercise
+July–December with the nonzero June 30 opening balances. Traversing
 small pages yields exactly the same posting IDs, order and amounts as a large
 page traversal. The May correction and November void include their original,
 reversal and replacement facts without multiplying financial sums. Company
