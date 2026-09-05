@@ -38,13 +38,23 @@ DDL = (
 
 def upgrade() -> None:
     connection = op.get_bind()
-    # Rebuilds drop attached objects. Retain their exact SQL, including any
-    # installation-local indexes/triggers, without deriving the successor DDL.
-    objects = connection.exec_driver_sql(
-        "SELECT sql FROM sqlite_schema WHERE type IN ('index', 'trigger') "
-        "AND tbl_name IN ('transactions', 'document_lines', 'posting_line_sources') "
-        "AND sql IS NOT NULL ORDER BY type, name"
-    ).scalars().all()
+    # SQLite validates the whole schema during RENAME. Temporarily remove views
+    # and triggers, including dependencies attached outside the rebuilt tables,
+    # so none refers to a table between its DROP and replacement RENAME. The
+    # outer migration transaction restores the old schema on any failure.
+    retained = connection.exec_driver_sql(
+        "SELECT type, name, sql FROM sqlite_schema WHERE sql IS NOT NULL AND ("
+        "type IN ('view', 'trigger') OR (type = 'index' AND tbl_name IN "
+        "('transactions', 'document_lines', 'posting_line_sources'))) "
+        "ORDER BY CASE type WHEN 'view' THEN 0 WHEN 'index' THEN 1 ELSE 2 END, name"
+    ).all()
+    objects = [row[2] for row in retained]
+    # INSTEAD OF triggers belong to views; drop them before their owning views.
+    for kind in ('trigger', 'view'):
+        for object_kind, name, _ in retained:
+            if object_kind == kind:
+                quoted = '"' + name.replace('"', '""') + '"'
+                connection.exec_driver_sql(f'DROP {kind.upper()} main.{quoted}')
     for statement in DDL:
         op.execute(statement)
     for statement in objects:

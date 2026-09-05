@@ -157,6 +157,66 @@ def test_frozen_ddl_matches_declared_columns_keys_checks(old, tmp_path, monkeypa
     assert _schema_semantics(old) == _schema_semantics(fresh)
 
 
+@pytest.mark.parametrize('fail', [False, True])
+@pytest.mark.parametrize('backups', [False, True])
+def test_dependent_views_and_external_triggers_survive_upgrade_or_rollback(old, tmp_path, fail, backups):
+    with open_database(old, writable=True) as db:
+        db.raw.execute('CREATE VIEW z_local_sales AS SELECT id, number FROM transactions')
+        # Alphabetical restoration sees this view before its dependency. Its
+        # quoted identifier also prevents using unquoted schema names in DROP.
+        db.raw.execute('CREATE VIEW "a local ""sales" AS SELECT * FROM z_local_sales')
+        db.raw.execute('''CREATE TRIGGER local_accounts_guard AFTER UPDATE ON accounts
+            WHEN NEW.name = 'local-blocked'
+            BEGIN SELECT number FROM "a local ""sales";
+            SELECT RAISE(ABORT, 'local account guard'); END''')
+        db.raw.execute('''CREATE TRIGGER local_view_guard INSTEAD OF UPDATE ON "a local ""sales"
+            BEGIN SELECT RAISE(ABORT, 'local view guard'); END''')
+        before, original_schema = _rows(db.raw), _normalized_schema(db.raw)
+        view_rows = db.raw.execute('SELECT * FROM "a local ""sales" ORDER BY id').fetchall()
+        objects = db.raw.execute("SELECT name,sql FROM sqlite_schema WHERE type IN ('view','trigger') ORDER BY name").fetchall()
+        if fail:
+            denied = []
+            def interrupt(action, name, *args):
+                if action == sqlite3.SQLITE_CREATE_VIEW and name == 'a local "sales' and not denied:
+                    denied.append(name)
+                    return sqlite3.SQLITE_DENY
+                return sqlite3.SQLITE_OK
+            db.raw.set_authorizer(interrupt)
+            try:
+                with pytest.raises(BookflowError) as raised:
+                    migrate_to_head(db, 'company', tmp_path / 'backups' if backups else None)
+            finally:
+                db.raw.set_authorizer(None)
+            assert denied == ['a local "sales']
+            assert raised.value.code == 'E_MIGRATION_FAILED'
+            assert _rows(db.raw) == before
+            assert _normalized_schema(db.raw) == original_schema
+            assert db.raw.execute('SELECT version_num FROM alembic_version').fetchone() == ('co0008',)
+        else:
+            assert migrate_to_head(db, 'company', tmp_path / 'backups' if backups else None) == ('co0008', 'co0009')
+            for table, (columns, values) in before.items():
+                actual = db.raw.execute(f'SELECT {", ".join(columns)} FROM "{table}" ORDER BY 1, 2').fetchall()
+                assert actual == values if table != 'sequences' else set(values) <= set(actual)
+        for name, sql in objects:
+            assert db.raw.execute('SELECT sql FROM sqlite_schema WHERE name=?', (name,)).fetchone() == (sql,)
+        assert db.raw.execute('SELECT * FROM "a local ""sales" ORDER BY id').fetchall() == view_rows
+        with pytest.raises(sqlite3.IntegrityError, match='local account guard'):
+            db.raw.execute("UPDATE accounts SET name='local-blocked' WHERE id='bank'")
+        with pytest.raises(sqlite3.IntegrityError, match='local view guard'):
+            db.raw.execute('UPDATE "a local ""sales" SET number=number')
+        assert db.raw.execute('PRAGMA foreign_keys').fetchone() == (1,)
+        assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
+        assert db.raw.execute('PRAGMA integrity_check').fetchone() == ('ok',)
+        after = _rows(db.raw)
+    copied = tmp_path / 'local-schema-copy.db'
+    shutil.copyfile(old, copied)
+    with open_database(copied, writable=False) as db:
+        assert _rows(db.raw) == after
+        assert db.raw.execute('SELECT * FROM "a local ""sales" ORDER BY id').fetchall() == view_rows
+        assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
+        assert db.raw.execute('PRAGMA integrity_check').fetchone() == ('ok',)
+
+
 @pytest.mark.parametrize('backups', [False, True])
 @pytest.mark.parametrize('failure', ['mid_rebuild', 'late', 'foreign_key'])
 def test_failed_upgrade_restores_schema_data_and_fk_mode(old, tmp_path, backups, failure):

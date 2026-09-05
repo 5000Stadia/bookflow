@@ -393,6 +393,7 @@ to each posting leg. No source may attribute a different line or amount than its
 validated commercial facts. New immutable tables have update/delete guards.
 Schema docs describe the actual new profile tables and constraints. Migration
 rebuilds preserve all existing columns/values/indexes/immutability triggers,
+installation-local views and triggers on other tables, including their exact SQL,
 foreign-key-check before commit; failure restores original schema and data.
 
 Invoice: Dr AR per line gross, Cr line income for net, Cr each component's tax
