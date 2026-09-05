@@ -93,7 +93,11 @@ snapshot. Metadata includes company, period, accrual basis, report version, sche
 revision, generation time, home currency and audit watermark. Cash basis is rejected.
 
 Continuation binds company, identity, permissions, filters and the exact relevant
-watermark. A relevant posting, correction, void or displayed-label change returns
+watermark. The complete state, including initial report metadata and resolved
+account, is authenticated with HMAC-SHA256 before any decoded value is accepted.
+A private 32-byte company-local key is created during migration and travels with
+a copied company; it is excluded from command output, audit and annotation targets.
+Malformed, unsigned or tampered continuations return E_VALIDATION. A relevant posting, correction, void or displayed-label change returns
 `E_QUERY_STALE` before another page is emitted; clients discard accumulated pages
 and restart. Successful continuations preserve generation time and report metadata.
 This is restart-on-change pagination, without an as-recorded historical framework.

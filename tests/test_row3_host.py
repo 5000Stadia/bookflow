@@ -630,10 +630,20 @@ def _read_calls(hosted):
         calls[f"{noun} list"] = ({}, cid)
         calls[f"{noun} query"] = ({"limit": 2}, cid)
         calls[f"{noun} show"] = ({noun.replace("-", "_"): listed["items"][0]["id"]}, cid)
+    journal = hosted.ok("journal.query", company=cid)["items"][0]
+    calls.update({
+        "journal query": ({}, cid),
+        "journal show": ({"journal": journal["id"]}, cid),
+        "journal history": ({"journal": journal["id"]}, cid),
+        "report trial-balance": ({"date_to": "2026-12-31"}, cid),
+        "report general-ledger": ({"date_from": "2026-01-01", "date_to": "2026-12-31"}, cid),
+    })
     return calls
 
 
-def test_every_routed_read_returns_the_same_document_over_http_as_in_the_library(hosted, root):
+def test_every_routed_read_returns_the_same_document_over_http_as_in_the_library(hosted, root, monkeypatch):
+    # Both requests share one diagnostic report generation time for exact parity.
+    monkeypatch.setattr("bookflow.company.ledger_reports.now_iso", lambda: "2026-09-05T00:00:00.000Z")
     from bookflow.core import registry
     from tests.test_row1_flow import normalize
     registry.load_all()

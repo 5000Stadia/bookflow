@@ -585,11 +585,13 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
     key_db, ihash = key
     hub_tx = bool(cmd.writes & {"hub", "config"}) or cmd.kind == "advisory"
     co_tx = s.company is not None and "company" in cmd.writes
+    business_savepoint = co_tx and getattr(cmd, "ledger", False)
     if hub_tx:
         s.hub.raw.execute("BEGIN IMMEDIATE")
     if co_tx:
         s.company.raw.execute("BEGIN IMMEDIATE")
-        s.company.raw.execute("SAVEPOINT bookflow_business")
+        if business_savepoint:
+            s.company.raw.execute("SAVEPOINT bookflow_business")
     try:
         if co_tx:
             _upsert_principals(s, ctx)
@@ -612,7 +614,7 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
         changed = bool(applied.touched) or applied.audited or bool(s.hub_touched) or s.pending_config
         output = applied.output.model_dump(mode="json")
         if not changed:
-            if co_tx and s.company.write_transaction:
+            if business_savepoint and s.company is not None and s.company.write_transaction:
                 s.company.raw.execute("ROLLBACK TO bookflow_business")
                 s.company.raw.execute("RELEASE bookflow_business")
             # A no-op keeps its successful retry result without creating an audit event.
@@ -628,7 +630,7 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
                 if s.hub.write_transaction:
                     s.hub.raw.execute("COMMIT")
             return applied
-        if co_tx and s.company.write_transaction:
+        if business_savepoint and s.company is not None and s.company.write_transaction:
             s.company.raw.execute("RELEASE bookflow_business")
         if s.company is not None and cmd.truth == "company":
             if co_entries and not applied.audited and s.company.write_transaction:

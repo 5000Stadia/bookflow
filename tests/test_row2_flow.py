@@ -272,7 +272,9 @@ def test_budget(client, root):
     """5,000 creates and 5,000 updates, half versioned; audit tables at most 6x live tables (blueprint 18)."""
     import os
     n = int(os.environ.get("BOOKFLOW_BUDGET_N", "200"))  # the full fixture is 5,000; BOOKFLOW_BUDGET_N=5000 runs it
-    cid = client.company.list()["items"][0]["company_id"]
+    organization = client.company.show(company="Demo Plumbing Co")["organization_id"]
+    cid = client.company.new(organization=organization, legal_name="Audit storage witness",
+                             home_currency="USD", timezone="UTC", chart="general")["company_id"]
     from bookflow.core import registry
     from bookflow.core.context import Context, Interface
     from bookflow.core.dispatch import run_in_session, _open_hub, _load_actor
@@ -286,9 +288,9 @@ def test_budget(client, root):
         _open_hub(s, True, ctx); _load_actor(s)
         ctx = ctx.model_copy(update={"actor_id": s.actor.id, "actor_kind": s.actor.kind})
         add, upd, deact = registry.get("directive add"), registry.get("company update"), registry.get("directive deactivate")
-        # The complete demo deliberately carries a large production-shaped audit
-        # history. Reset only that temporary fixture history so this witness
-        # measures the operations below rather than unrelated seeded commands.
+        # This fresh temporary company has no ledger history referring to audit
+        # events. Clear its rollout history to measure only the operations below;
+        # the complete demo and its immutable posting provenance stay intact.
         run_in_session(
             upd,
             upd.input_model(phone="budget-baseline"),

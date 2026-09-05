@@ -11,6 +11,7 @@ import base64
 from contextlib import contextmanager
 from datetime import date
 import hashlib
+import hmac
 import json
 import re
 from typing import Literal
@@ -243,10 +244,27 @@ def _invalid_cursor():
     return BookflowError("E_VALIDATION", details={"fields": [{"field": "cursor", "problem": "invalid or mismatched continuation; restart without cursor"}]})
 
 
-def _decode_cursor(encoded_cursor):
+def _cursor_key(db):
+    row = db.raw.execute("SELECT key_material FROM report_cursor_keys WHERE key_id=1").fetchone()
+    if row is None or not isinstance(row[0], bytes) or len(row[0]) != 32:
+        raise BookflowError("E_INTERNAL", message="Report continuation key is unavailable")
+    return row[0]
+
+
+def _cursor_mac(db, payload):
+    return hmac.digest(_cursor_key(db), b"bookflow.report.cursor.v1\x00" + payload, "sha256")
+
+
+def _decode_cursor(encoded_cursor, db):
     try:
-        encoded = encoded_cursor.encode("ascii")
-        return ReportCursor.model_validate_json(base64.b64decode(encoded + b"=" * (-len(encoded) % 4), altchars=b"-_", validate=True))
+        if not 1 <= len(encoded_cursor) <= 4096:
+            raise ValueError
+        payload_text, signature_text = encoded_cursor.encode("ascii").split(b".")
+        decode = lambda value: base64.b64decode(value + b"=" * (-len(value) % 4), altchars=b"-_", validate=True)
+        payload, signature = decode(payload_text), decode(signature_text)
+        if not hmac.compare_digest(signature, _cursor_mac(db, payload)):
+            raise ValueError
+        return ReportCursor.model_validate_json(payload)
     except (ValueError, UnicodeError, ValidationError):
         raise _invalid_cursor() from None
 
@@ -279,7 +297,7 @@ def _state(s, inp, report, principal_id, account_id):
     query = _hash([report, inp.model_dump(exclude={"cursor"})])
     company = str(s.company_row["id"])
     if inp.cursor is not None:
-        previous = _decode_cursor(inp.cursor)
+        previous = _decode_cursor(inp.cursor, s.company)
         if (previous.company, previous.query, previous.permissions) != (company, query, permissions):
             raise _invalid_cursor()
         if previous.watermark != watermark or previous.metadata.report_version != REPORT_VERSION:
@@ -295,10 +313,12 @@ def _state(s, inp, report, principal_id, account_id):
     return ReportCursor(company=company, account_id=account_id, query=query, permissions=permissions, watermark=watermark, offset=1, metadata=metadata), 0
 
 
-def _continuation(state, offset, count, more):
+def _continuation(state, offset, count, more, db):
     if not more:
         return None
-    return base64.urlsafe_b64encode(state.model_copy(update={"offset": offset + count}).model_dump_json().encode()).decode().rstrip("=")
+    payload = state.model_copy(update={"offset": offset + count}).model_dump_json().encode()
+    encode = lambda value: base64.urlsafe_b64encode(value).decode().rstrip("=")
+    return encode(payload) + "." + encode(_cursor_mac(db, payload))
 
 
 # Never use SQL arithmetic on aggregate decimal text: SQLite would coerce it to
@@ -343,7 +363,7 @@ def trial_balance(inp: TrialBalanceInput, s, *, principal_id=None) -> TrialBalan
         rows = [TrialBalanceRow(account_id=r[0], current_account_label=r[1], active=bool(r[2]), signed_net=money(int(r[3]), currency),
             debit=money(max(int(r[3]), 0), currency), credit=money(max(-int(r[3]), 0), currency)) for r in page[:inp.limit]]
         return TrialBalanceOutput(metadata=state.metadata, totals=totals, rows=rows, count=len(rows),
-            next_cursor=_continuation(state, offset, len(rows), len(page)>inp.limit))
+            next_cursor=_continuation(state, offset, len(rows), len(page)>inp.limit, s.company))
 
 
 _GL = _EFFECTS + """, selected AS (
@@ -373,7 +393,7 @@ def general_ledger(inp: GeneralLedgerInput, s, *, principal_id=None) -> GeneralL
         if inp.cursor is not None:
             # Retain the initially resolved stable ID: renaming a selected full
             # name must stale its continuation, not produce record-not-found.
-            account_id = _decode_cursor(inp.cursor).account_id
+            account_id = _decode_cursor(inp.cursor, s.company).account_id
         elif inp.account is not None:
             from bookflow.company.accounts import resolve_account
             account_id = resolve_account(s.company, inp.account)["id"]
@@ -410,4 +430,4 @@ def general_ledger(inp: GeneralLedgerInput, s, *, principal_id=None) -> GeneralL
                 row["account_snapshot"] = json.loads(row["account_snapshot"])
             rows.append(GeneralLedgerRow(**row))
         return GeneralLedgerOutput(metadata=state.metadata, totals=totals, rows=rows, count=len(rows),
-            next_cursor=_continuation(state, offset, len(rows), len(page)>inp.limit))
+            next_cursor=_continuation(state, offset, len(rows), len(page)>inp.limit, s.company))

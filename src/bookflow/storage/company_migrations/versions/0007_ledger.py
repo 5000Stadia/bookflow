@@ -37,6 +37,8 @@ DDL = (
     "CREATE TRIGGER posting_line_sources_no_update BEFORE UPDATE ON posting_line_sources BEGIN SELECT RAISE(ABORT, 'immutable ledger history'); END",
     "CREATE TRIGGER posting_line_sources_no_delete BEFORE DELETE ON posting_line_sources BEGIN SELECT RAISE(ABORT, 'immutable ledger history'); END",
     "CREATE TRIGGER transactions_no_delete BEFORE DELETE ON transactions BEGIN SELECT RAISE(ABORT, 'business documents are retained'); END",
+    "CREATE TABLE report_cursor_keys (\n\tkey_id INTEGER NOT NULL, \n\tkey_material BLOB NOT NULL, \n\tPRIMARY KEY (key_id), \n\tCONSTRAINT ck_report_cursor_key_slot CHECK (key_id = 1), \n\tCONSTRAINT ck_report_cursor_key_material CHECK (typeof(key_material) = 'blob' AND length(key_material) = 32)\n)",
+    'INSERT INTO report_cursor_keys (key_id, key_material) VALUES (1, randomblob(32))',
     "ALTER TABLE sequences ADD COLUMN prefix VARCHAR(16) NOT NULL DEFAULT ''",
     "INSERT INTO sequences (name, next_number, prefix) VALUES ('journal_entry', 1, '')",
 

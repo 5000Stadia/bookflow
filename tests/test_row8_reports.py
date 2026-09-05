@@ -38,8 +38,9 @@ def insert(db, table, **values):
 def ledger(tmp_path):
     with open_database(tmp_path / "ledger.db", writable=True, create=True) as db:
         db.raw.execute("PRAGMA foreign_keys=OFF")
-        for name in ("accounts", "company_info", "audit_events", "transaction_revisions", "posting_batches", "posting_lines", "posting_line_sources"):
+        for name in ("report_cursor_keys", "accounts", "company_info", "audit_events", "transaction_revisions", "posting_batches", "posting_lines", "posting_line_sources"):
             db.conn.execute(sa.schema.CreateTable(getattr(schema, name)))
+        db.raw.execute("INSERT INTO report_cursor_keys VALUES (1, ?)", (b"r" * 32,))
         db.raw.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
         db.raw.execute("INSERT INTO alembic_version VALUES ('co0007')")
         insert(db, schema.company_info, id="company", legal_name="Books", display_name="Books", home_currency="USD", timezone="UTC")

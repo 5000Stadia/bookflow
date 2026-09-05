@@ -113,3 +113,16 @@ def test_account_balance_overflow_is_exact_and_sort_cursor_stales(client):
     client.journal.void(journal=first['id'], expected_version=1, reason='Reverse large test entry', company=COMPANY)
     # Intermediate sums exceed i64; exact cancellation must still recover one cent.
     assert client.account.show(account=bank, company=COMPANY)['balance']['minor_units'] == 1
+
+
+def test_historical_journal_page_uses_revision_number_after_renumber(hosted):
+    cid = hosted.company_id
+    journal = hosted.ok('journal.query', company=cid)['items'][0]
+    old_number = journal['number']
+    hosted.ok('journal.update', {'journal': journal['id'], 'expected_version': journal['version'], 'number': 'RENAMED-JOURNAL'}, company=cid)
+    browser = _browser(hosted)
+    page = browser.get(f"/c/{cid}/journal/{journal['id']}?revision_number=1")
+    assert page.status_code == 200
+    assert f'<h1>{old_number}</h1>' in page.text
+    assert f'<h2>Journal {old_number}</h2>' in page.text
+    assert 'Current journal number: RENAMED-JOURNAL' in page.text

@@ -189,4 +189,11 @@ def define_tables(metadata, column, table, common):
         sa.Index('ix_posting_sources_document_line', 'document_line_id'),
         description='Immutable exact source allocations and inverse links for every posting line.')
 
+    report_cursor_keys = T('report_cursor_keys',
+        C('key_id', sa.Integer, 'Singleton report cursor authentication key slot.', primary_key=True),
+        C('key_material', sa.LargeBinary(32), 'Private random authentication key; never returned by commands or included in audit snapshots.', nullable=False),
+        sa.CheckConstraint('key_id = 1', name='ck_report_cursor_key_slot'),
+        sa.CheckConstraint("typeof(key_material) = 'blob' AND length(key_material) = 32", name='ck_report_cursor_key_material'),
+        description='Company-local secret authenticating report continuation state; copied with the company and excluded from annotation targets.')
+
     return {name: value for name, value in locals().items() if isinstance(value, sa.Table)}

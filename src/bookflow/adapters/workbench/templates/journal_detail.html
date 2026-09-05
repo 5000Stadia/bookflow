@@ -1,6 +1,7 @@
 {% set revision = record.revision %}
 <section class="workspace-card" aria-label="Journal entry">
-<h2>Journal {{ record.number }}</h2>
+<h2>Journal {{ revision.number }}</h2>
+{% if revision.number != record.number %}<p class="muted">Current journal number: {{ record.number }}</p>{% endif %}
 <p><strong>{{ revision.date }}</strong> · {{ record.status|capitalize }} · Revision {{ revision.revision_number }} · {{ revision.currency }}</p>
 {% if revision.memo %}<p>{{ revision.memo }}</p>{% endif %}
 {% if record.void_reason %}<p class="warn">Voided: {{ record.void_reason }}. The original and reversing entries remain in the books.</p>{% endif %}

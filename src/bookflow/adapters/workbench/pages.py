@@ -822,6 +822,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             ),
             record_id,
         )
+        if command_noun == "journal":
+            record_title = out["revision"]["number"]
         contact_copy = None
         if company_id is not None and command_noun in ("customer", "vendor"):
             target_noun = "vendor" if command_noun == "customer" else "customer"
