@@ -187,6 +187,18 @@ def test_failed_migration_rolls_back_all_ddl_and_rows(old, tmp_path, monkeypatch
     assert current_revision_raw(old) == 'co0009'
 
 
+@pytest.mark.parametrize('backups', [False, True])
+def test_unrecognized_local_scope_constraint_fails_without_data_loss(old, tmp_path, backups):
+    with open_database(old, writable=True) as db:
+        db.raw.execute('ALTER TABLE custom_field_scopes RENAME COLUMN record_type TO local_record_type')
+        before, objects = _rows(db.raw), _normalized_schema(db.raw)
+        with pytest.raises(BookflowError) as caught:
+            migrate_to_head(db, 'company', tmp_path / 'backups' if backups else None)
+        assert caught.value.code == 'E_MIGRATION_FAILED'
+        assert _rows(db.raw) == before and _normalized_schema(db.raw) == objects
+        assert db.raw.execute('SELECT version_num FROM alembic_version').fetchone() == ('co0009',)
+
+
 def test_deferred_current_owner_and_self_roots(db):
     a, ar = document(db)
     b, br = document(db)
@@ -340,6 +352,9 @@ def test_hub_capabilities_additive_and_fresh(tmp_path):
 @pytest.mark.parametrize('backups', [False, True])
 def test_scope_rebuild_preserves_local_schema_and_rolls_back(old, tmp_path, failure, backups):
     with open_database(old, writable=True) as db:
+        db.raw.execute("ALTER TABLE custom_field_scopes ADD COLUMN local_note TEXT NOT NULL DEFAULT 'retained custom data' CHECK(length(local_note) > 0)")
+        db.raw.execute('ALTER TABLE custom_field_scopes ADD COLUMN "local ""count" INTEGER NOT NULL DEFAULT 9')
+        db.raw.execute('ALTER TABLE custom_field_scopes ADD COLUMN local_computed TEXT GENERATED ALWAYS AS (local_note || record_type) VIRTUAL')
         db.raw.execute('CREATE VIEW z_local_scopes AS SELECT id, record_type FROM custom_field_scopes')
         db.raw.execute('CREATE VIEW "a local ""scopes" AS SELECT * FROM z_local_scopes')
         db.raw.execute('CREATE INDEX "local scope index" ON custom_field_scopes(record_type) WHERE active=1')
@@ -352,7 +367,7 @@ def test_scope_rebuild_preserves_local_schema_and_rolls_back(old, tmp_path, fail
             BEGIN SELECT RAISE(ABORT, 'local view guard'); END''')
         if failure == 'foreign_key':
             db.raw.execute('PRAGMA foreign_keys=OFF')
-            db.raw.execute("INSERT INTO custom_field_scopes SELECT 'orphan', 'missing', position, active, record_type, 'Orphan', 'orphan', definition_active FROM custom_field_scopes LIMIT 1")
+            db.raw.execute("INSERT INTO custom_field_scopes (id,definition_id,position,active,record_type,definition_name,definition_name_key,definition_active) SELECT 'orphan', 'missing', position, active, record_type, 'Orphan', 'orphan', definition_active FROM custom_field_scopes LIMIT 1")
             db.raw.execute('PRAGMA foreign_keys=ON')
         before, objects = _rows(db.raw), _normalized_schema(db.raw)
         view_rows = db.raw.execute('SELECT * FROM "a local ""scopes" ORDER BY id').fetchall()
@@ -387,6 +402,8 @@ def test_scope_rebuild_preserves_local_schema_and_rolls_back(old, tmp_path, fail
         assert db.raw.execute('SELECT * FROM "a local ""scopes" ORDER BY id').fetchall() == view_rows
         with pytest.raises(sqlite3.IntegrityError,match='local scope guard'):
             db.raw.execute('UPDATE custom_field_scopes SET position=9876')
+        with pytest.raises(sqlite3.IntegrityError):
+            db.raw.execute("UPDATE custom_field_scopes SET local_note='' ")
         with pytest.raises(sqlite3.IntegrityError,match='local external guard'):
             db.raw.execute("UPDATE accounts SET name='local-blocked' WHERE id='bank'")
         with pytest.raises(sqlite3.IntegrityError,match='local view guard'):

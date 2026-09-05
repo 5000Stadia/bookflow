@@ -4,6 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 import hashlib
 import json
+from pydantic import ValidationError
 import sqlalchemy as sa
 from sqlalchemy.dialects.sqlite import insert
 
@@ -328,8 +329,6 @@ def _lifecycle(kind, old, value, inp, ctx):
                 raise _invalid('status', f'cannot change {prior} directly to {status}')
             if prior in ('complete', 'cancelled') or status == 'cancelled':
                 _reason(ctx)
-            if prior == 'complete':
-                value['facts']['actual_end'] = None
         if prior == 'complete' and status == 'complete':
             before_scope = {key: old['facts'][key] for key in ('scope', 'inclusions', 'exclusions', 'timing', 'commercial_terms')}
             after_scope = {key: value['facts'][key] for key in before_scope}
@@ -403,7 +402,16 @@ def _assignees(s, requested, previous=()):
     return result
 
 
-def _resolve_facts(s, inp, kind, old=None, old_date=None):
+def _validated_input_facts(values):
+    try:
+        return WorkFacts.model_validate(values)
+    except ValidationError as error:
+        raise BookflowError('E_VALIDATION', details={'fields': [
+            {'field': '.'.join(str(part) for part in item['loc']) or 'facts', 'problem': item['msg']}
+            for item in error.errors(include_url=False, include_context=False)]}) from error
+
+
+def _resolve_facts(s, inp, kind, old=None, old_date=None, old_status=None):
     profile, warnings = work_defaults.resolve_header(s, inp, kind, previous=old.profile if old else None, old_date=old_date)
     info = dict(s.company.conn.execute(sa.select(c.company_info)).mappings().one())
     issuer = {key: value for key, value in info.items() if key in ('id', 'legal_name', 'display_name', 'home_currency')
@@ -421,7 +429,9 @@ def _resolve_facts(s, inp, kind, old=None, old_date=None):
         values['site_address'] = profile.shipping_address
     if 'assignees' in inp.model_fields_set:
         values['assignees'] = _assignees(s, inp.assignees, old.assignees if old else ())
-    return WorkFacts.model_validate(values), warnings
+    if kind == 'work_order' and old_status == 'complete' and getattr(inp, 'status', None) == 'in_progress':
+        values['actual_end'] = None
+    return _validated_input_facts(values), warnings
 
 
 def _resolve_lines(s, inp, kind, profile, old_rev=None, old_profile=None):
@@ -608,7 +618,7 @@ def prepare(s, ctx, inp, kind, operation):
         custom_snapshot = json.loads(old_rev['custom_fields_snapshot'])
     else:
         old_facts = facts(old_rev) if old else None
-        resolved, warnings = _resolve_facts(s, inp, kind, old_facts, old_rev['date'] if old else None)
+        resolved, warnings = _resolve_facts(s, inp, kind, old_facts, old_rev['date'] if old else None, old['status'] if old else None)
         line_values, line_warnings = _resolve_lines(s, inp, kind, resolved.profile, old_rev, old_facts.profile if old else None)
         warnings += line_warnings
         custom_plan, custom_warnings = _custom_plan(s, inp, kind, header['id'], old_rev)
@@ -692,7 +702,7 @@ def _prepare_destination(s, ctx, inp, kind, operation):
                 f[field] = getattr(inp, field)
         if 'assignees' in inp.model_fields_set:
             f['assignees'] = [value.model_dump() for value in _assignees(s, inp.assignees)]
-    WorkFacts.model_validate(f)
+    _validated_input_facts(f)
     warnings = _carry_warnings(s, source_rev, source_lines)
     custom_plan, custom_warnings = _custom_plan(s, inp, destination_kind, header['id'], carry=source_rev)
     warnings += custom_warnings

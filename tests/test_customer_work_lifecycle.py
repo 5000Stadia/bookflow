@@ -120,6 +120,40 @@ def test_completed_work_must_reopen_before_scope_or_quantity_changes(client, sal
     assert revised['revision']['lines'][0]['completed_quantity'] == '1'
 
 
+def test_reopening_normalizes_old_end_before_new_start_validation(client, sale, cli):
+    order = make(client, sale, 'work-order')
+    run(client, 'work-order', 'complete', work_order=order['id'], expected_version=1,
+        actual_start='2026-01-12T10:00:00Z', actual_end='2026-01-12T12:00:00Z')
+    invalid = dict(work_order=order['id'], expected_version=2, actual_start=None)
+    for dry_run in (True, False):
+        with pytest.raises(BookflowError) as caught:
+            client.run('work-order update', invalid, company=COMPANY, dry_run=dry_run, reason='Invalid timestamps')
+        assert caught.value.code == 'E_VALIDATION'
+    reopened = cli.run('work-order', 'update', order['id'], '--expected-version', '2', '--status', 'in_progress',
+        '--actual-start', '2026-01-13T09:00:00Z', '--reason', 'Reopen work', '--company', COMPANY, '--json')
+    assert reopened.returncode == 0, reopened.stdout + reopened.stderr
+    current = run(client, 'work-order', 'show', work_order=order['id'])
+    assert current['version'] == 3 and current['status'] == 'in_progress'
+    assert current['revision']['facts']['actual_start'] == '2026-01-13T09:00:00Z'
+    assert current['revision']['facts']['actual_end'] is None
+    prior = run(client, 'work-order', 'show', work_order=order['id'], revision_number=2)
+    assert prior['revision']['facts']['actual_end'] == '2026-01-12T12:00:00Z'
+
+
+def test_conversion_schedule_errors_use_shared_validation_code(client, sale):
+    estimate = make(client, sale)
+    run(client, 'estimate', 'update', estimate=estimate['id'], expected_version=1,
+        status='accepted', decision_note='Accepted today')
+    for dry_run in (True, False):
+        with pytest.raises(BookflowError) as caught:
+            client.run('estimate work-order', dict(estimate=estimate['id'], expected_version=2,
+                conversion_key='invalid-schedule', date='2026-01-12', scheduled_end='2026-01-13T09:00:00Z'),
+                company=COMPANY, dry_run=dry_run, reason='Schedule work')
+        assert caught.value.code == 'E_VALIDATION'
+    assert run(client, 'estimate', 'show', estimate=estimate['id'])['version'] == 2
+    assert run(client, 'work-order', 'query', customer=sale['customer'])['count'] == 0
+
+
 def test_retired_and_foreign_line_identities_cannot_return(client, sale):
     order = make(client, sale, 'work-order')
     identity = order['revision']['lines'][0]['line_id']
