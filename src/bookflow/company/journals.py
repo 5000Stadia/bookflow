@@ -39,7 +39,7 @@ def rows(s, table, *where, order=None):
 def resolve(s, selector):
     t = c.transactions
     key = selector.upper() if is_ulid(selector) else selector
-    found = rows(s, t, t.c.id == key)
+    found = rows(s, t, t.c.id == key, t.c.type == 'journal_entry')
     if not found:
         found = rows(s, t, t.c.number == selector, t.c.type == 'journal_entry')
     if not found:
@@ -191,23 +191,8 @@ def existing_input(l):
 
 
 def allocate(s, explicit, own=None):
-    t = c.transactions
-    def occupied(n):
-        q = sa.select(t.c.id).where(t.c.type == 'journal_entry', t.c.number == n)
-        if own:
-            q = q.where(t.c.id != own)
-        return s.company.conn.execute(q).first() is not None
-    if explicit is not None:
-        if occupied(explicit):
-            raise BookflowError('E_DUPLICATE_NUMBER', details={'number': explicit, 'type': 'journal_entry'})
-        return explicit, None
-    sequence = rows(s, c.sequences, c.sequences.c.name == 'journal_entry')
-    n, prefix = (sequence[0]['next_number'], sequence[0]['prefix']) if sequence else (1, '')
-    while occupied(f'{prefix}{n}'):
-        n += 1
-    if n >= 9223372036854775807:
-        raise BookflowError('E_VALUE_RANGE', details={'field': 'next_number'})
-    return f'{prefix}{n}', dict(name='journal_entry', next_number=n + 1, prefix=prefix)
+    from bookflow.company.document_effects import allocate as allocate_document
+    return allocate_document(s, 'journal_entry', explicit, own)
 
 
 def prepare(s, ctx, inp, operation):
@@ -284,15 +269,8 @@ def prepare(s, ctx, inp, operation):
         r = old_r
     if old_h:
         h.update(version=old_h['version'] + 1, updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
-        inverse = dict(**created(), transaction_id=h['id'], revision_id=old_r['id'], kind='reversal',
-            effective_date=current_batch['effective_date'], reverses_batch_id=current_batch['id'], replaces_batch_id=None, audit_event_id=event)
-        pending['posting_batches'].append(inverse)
-        old_legs = rows(s, c.posting_lines, c.posting_lines.c.batch_id == current_batch['id'], order=c.posting_lines.c.line_no)
-        for leg in old_legs:
-            new = dict(leg, **created(), batch_id=inverse['id'], debit_minor_units=leg['credit_minor_units'], credit_minor_units=leg['debit_minor_units'], reversed_line_id=leg['id'])
-            pending['posting_lines'].append(new)
-            for source in rows(s, c.posting_line_sources, c.posting_line_sources.c.posting_line_id == leg['id']):
-                pending['posting_line_sources'].append(dict(source, **created(), posting_line_id=new['id'], reversed_source_id=source['id']))
+        from bookflow.company.document_effects import reverse
+        inverse = reverse(s, h, old_r, current_batch, event, created, pending)
         if operation == 'void':
             h.update(status='voided', voided_at=at, voided_by=s.actor.id, void_reason=ctx.reason.strip(), void_posting_batch_id=inverse['id'])
     if operation != 'void':
@@ -305,7 +283,8 @@ def prepare(s, ctx, inp, operation):
                 credit_minor_units=line['amount_minor_units'] if line['side'] == 'credit' else 0, reversed_line_id=None)
             pending['posting_lines'].append(leg)
             pending['posting_line_sources'].append(dict(**created(), transaction_id=h['id'], posting_line_id=leg['id'],
-                revision_id=r['id'], document_line_id=line['id'], amount_minor_units=line['amount_minor_units'], currency=line['currency'], reversed_source_id=None))
+                revision_id=r['id'], document_line_id=line['id'], amount_minor_units=line['amount_minor_units'], currency=line['currency'], reversed_source_id=None,
+                tax_component_id=None))
     validate_pending_aggregate(s, h, pending, custom_plan, custom_input=inp, creating=old_h is None)
     view_pending = pending if operation != 'void' else {k: v for k, v in pending.items() if k != 'document_lines'}
     output = JournalWriteOutput(**summary(h, r), revision=revision_output(s, r, view_pending), warnings=warnings,
@@ -329,6 +308,11 @@ def validate_pending_aggregate(s, header, pending, custom_plan=None, *, custom_i
     def require(condition, problem):
         if not condition:
             raise BookflowError('E_INTERNAL', message='Invalid journal aggregate: ' + problem)
+
+    require(header['type'] == 'journal_entry', 'wrong business document type')
+    require(all(line['kind'] == 'journal' for line in pending['document_lines']), 'wrong entered line kind')
+    require(all(source.get('tax_component_id') is None for source in pending['posting_line_sources']),
+            'a journal source cannot attribute a sales tax component')
 
     def index(values):
         result = {value['id']: value for value in values}
@@ -526,7 +510,7 @@ def page(s, ctx, inp, history=False):
         q = sa.select(*(column for column in t.c if not column.name.endswith('_snapshot'))).where(t.c.transaction_id == h['id']).order_by(t.c.revision_number)
     else:
         t, r = c.transactions, c.transaction_revisions
-        q = sa.select(t).join(r, r.c.id == t.c.current_revision_id)
+        q = sa.select(t).join(r, r.c.id == t.c.current_revision_id).where(t.c.type == 'journal_entry')
         if inp.status:
             q = q.where(t.c.status == inp.status)
         if inp.date_from:

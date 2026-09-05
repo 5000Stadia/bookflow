@@ -65,8 +65,16 @@ All source dates are in **2026**. These are explicit domestic journals:
 The May receipt is corrected to 525000 on May 15: original 500000, exact reversal
 500000, replacement 525000. The November duplicate and exact reversal are both
 90000 on November 16. All original, reversal and replacement postings remain in
-history. No depreciation calculation, invoice, bill, payment application, tax or
-inventory processing is implied.
+history. Depreciation is entered explicitly; bill, payment application and
+inventory processing are not performed by those journals.
+
+September 5 adds an invoice and paid sales receipt: each has a10000 service and
+800 tax, then a correcting2000 exempt service, for12800 total. The receipt
+debits Checking and the invoice debits Accounts Receivable. September 6 repeats
+both documents as corrected-then-voided duplicates. All14 commercial posting
+batches remain. Net additions are Checking12800, AR12800, Service Income credit
+24000 and Sales Tax Payable credit1600. The new documents also exercise captured
+boolean custom fields and historical definition labels.
 
 For month number `m` from 1 through 12, cumulative receipts are
 `250000*m + 50000*m*(m+1)/2 + (25000 if m >= 5 else 0)`.
@@ -84,25 +92,30 @@ gross movements follow the source table directly. Second-half gross movements
 are December cumulative movements minus June cumulative movements. These
 arithmetic formulas do not use the production report implementation.
 
+From September, add the commercial effects above. Gross Checking and AR each
+add47200 debits and34400 credits; Service Income adds64000 debits and88000
+credits; Sales Tax Payable adds4800 debits and6400 credits. These include the
+originals, both correction reversals/replacements and the final duplicate voids.
+
 | Checkpoint | Checking | Trial balance, each side | Income | Net assets |
 |---|---:|---:|---:|---:|
 | June 30 | 3065000 | 3575000 | 2305000 | 3305000 |
-| December 31 | 7255000 | 8005000 | 6415000 | 7415000 |
+| December 31 | 7267800 | 8030600 | 6439000 | 7439000 |
 
-At December 31, debit balances are Checking 7255000, Equipment 240000,
+At December 31, debit balances are Checking7267800, Accounts Receivable12800, Equipment240000,
 Professional Fees 330000, Insurance Expense 120000 and Depreciation Expense
 60000. Credit balances are Accumulated Depreciation 60000, Service Income
-6925000, Opening Balance Equity 1000000 and Business Credit Card 20000.
-Income is `6925000 - 330000 - 120000 - 60000 = 6415000`.
-Net assets are `7255000 + 240000 - 60000 - 20000 = 7415000`, equal to
-capital plus income. AR and AP are zero. Income and net-assets values are independent arithmetic regression oracles for
+6949000, Opening Balance Equity1000000, Business Credit Card20000 and Sales Tax Payable1600.
+Income is `6949000 - 330000 - 120000 - 60000 = 6439000`.
+Net assets are `7267800 + 12800 + 240000 - 60000 - 20000 - 1600 = 7439000`, equal to
+capital plus income. AP is zero. Income and net-assets values are independent arithmetic regression oracles for
 the profit-and-loss and balance-sheet commands. Aging remains unavailable.
 
-The ordinary demo contains ten journals, trial balance 664595 on each side and
-Checking 612095. Account show/list express balances on each account's normal
+The ordinary demo contains ten journals, two invoices and two receipts, trial balance690195 on each side and
+Checking624895. Account show/list express balances on each account's normal
 side; reports use debit-minus-credit values. Both companies remain ordinary
 independent companies selectable through company show/list and the browser
-picker. The reference Checking register shows `72550.00 USD`.
+picker. The reference Checking register shows `72678.00 USD`.
 
 ## Documentation generation
 
@@ -130,11 +143,11 @@ The statement table shows home-currency totals, bounded account detail and
 links to the current general ledger with the same dates. A drill-down warns
 when the books have changed since the source statement.
 
-Annual P&L income is6925000, expense510000 and net income6415000 minor units.
-Balance-sheet assets are7435000, liabilities20000, posted equity1000000,
-prior earnings0 and current-year income6415000. Total equity7415000 plus
-liabilities20000 equals assets7435000; difference0. In2027 with no new entries,
-those6415000 become prior earnings and current-year income is0.
+Annual P&L income is6949000, expense510000 and net income6439000 minor units.
+Balance-sheet assets are7460600, liabilities21600, posted equity1000000,
+prior earnings0 and current-year income6439000. Total equity7439000 plus
+liabilities21600 equals assets7460600; difference0. In2027 with no new entries,
+those6439000 become prior earnings and current-year income is0.
 
 Both reports support **accrual only**; cash returns E_VALIDATION. P&L dates are
 inclusive; balance sheet includes all effects through its as-of date. Each account

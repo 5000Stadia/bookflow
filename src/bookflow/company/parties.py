@@ -2334,6 +2334,8 @@ def project_party_record(
         )
     }
     if noun == "customer":
+        from bookflow.company.customer_balances import own_balance, family_balance
+        net = Money(own_balance(db, str(values["id"])), _home_currency(db)).to_dict()
         vendor_links = _customer_vendor_links(db, "customer", str(values["id"]))
         ancestors = list_service.hierarchy_ancestors(db, schema.customers, row)
         stored_collections = collections or read_party_collections(db, "customer", str(values["id"]))
@@ -2395,9 +2397,10 @@ def project_party_record(
             "contacts_source_id": effective_contact_source,
             **_contact_shortcuts(public_contacts),
             "custom_fields": list(custom),
-            "balances_available": False,
-            "current_balance": Money(0, _home_currency(db)).to_dict(),
-            "open_balance": Money(0, _home_currency(db)).to_dict(),
+            "balances_available": True,
+            "current_balance": net,
+            "open_balance": net,
+            "family_balance": Money(family_balance(db, str(values["id"])), _home_currency(db)).to_dict(),
             "customer_or_job": "job" if values["parent_id"] is not None else "customer",
         }
         address, address_source = _effective_customer_address(values, ancestors)

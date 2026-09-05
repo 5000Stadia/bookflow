@@ -15,6 +15,8 @@ from bookflow.core.errors import BookflowError
 
 def edit_projection(journal: dict[str, Any], account: dict[str, Any], label) -> dict[str, Any] | None:
     """Losslessly expose an expressible current revision; never flatten journals."""
+    if journal.get("type") != "journal_entry":
+        return None
     revision = journal["revision"]
     lines = revision["lines"]
     # A malformed/unprojected snapshot is still incompatible; valid header facts

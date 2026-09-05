@@ -8,7 +8,11 @@
 {% if error %}<div class="error"><b>{{ error.code }}</b> {{ error.message }}{% if error.details.fields %}<ul>{% for f in error.details.fields %}<li>{{ f.field }}: {{ f.problem }}</li>{% endfor %}</ul>{% endif %}{% if error.details.suggestions %}<p>Did you mean: {{ error.details.suggestions | join(", ") }}</p>{% endif %}</div>{% endif %}
 {% if error and error.code == 'E_VERSION_CONFLICT' %}<div class="workflow-note" role="alert">Someone changed this record while you were editing. Your entered values and attempted version are preserved below. Changed fields: {{ error.details.changed_fields | join(', ') }}. <a href="{{ base }}/{{ record_id }}" target="_blank" rel="noopener">Review the saved record in another tab</a> before starting a new edit; submitting this stale version again does not overwrite their changes.</div>{% endif %}
 {% if noun == 'report' and source_report_watermark is not none %}<p class="workflow-note" id="report-source-state">This drill-down opens the current books. Source statement audit watermark: {{ source_report_watermark }}.{% if result and result.metadata and result.metadata.audit_watermark|string != source_report_watermark %} <strong>The books changed since the source statement. Rerun that statement before comparing amounts.</strong>{% endif %}</p>{% endif %}
-{% if statement %}{% include "statement.html" %}{% elif result %}<div class="{{ 'warn' if preview else 'field' }}"><b>{{ "Preview (nothing written)" if preview else "Result" }}</b><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></div>{% endif %}
+{% if sale %}{% include "sales_detail.html" %}{% elif sales_history %}
+<section class="workspace-card sales-document" aria-label="Sales history"><h2>Revision history for {{ sales_history.number }}</h2><p>{{ sales_history.status|capitalize }} · current version {{ sales_history.version }}</p>
+<div class="table-wrap"><table><thead><tr><th>Revision</th><th>Date</th><th>Memo</th><th>Subtotal</th><th>Tax</th><th>Total</th><th>Accounting effects</th></tr></thead><tbody>{% for revision in sales_history['items'] %}<tr><td><a href="{{ base }}/{{ sales_history.id }}?revision_number={{ revision.revision_number }}">{{ revision.revision_number }}</a></td><td>{{ revision.date }}</td><td>{{ revision.memo or '' }}</td><td>{{ revision.subtotal.amount }}</td><td>{{ revision.tax.amount }}</td><td>{{ revision.total.amount }} {{ revision.currency }}</td><td>{% for batch in revision.batches %}<div>{{ batch.kind }} · {{ batch.effective_date }} · {{ batch.debit_total.amount }} / {{ batch.credit_total.amount }}</div>{% endfor %}</td></tr>{% endfor %}</tbody></table></div>
+{% if sales_history.next_cursor %}<a href="{{ base }}/{{ sales_history.id }}/history?limit={{ (attempted.get('f:limit') or request.query_params.get('limit', '50'))|urlencode }}&amp;cursor={{ sales_history.next_cursor|urlencode }}" rel="next">Next revisions</a>{% endif %}</section>
+{% elif statement %}{% include "statement.html" %}{% elif result %}<div class="{{ 'warn' if preview else 'field' }}"><b>{{ "Preview (nothing written)" if preview else "Result" }}</b><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></div>{% endif %}
 {% if workflow_note %}<div class="workflow-note">{{ workflow_note }}</div>{% endif %}
 
 {% macro reference_control(reference, name, cur, id, current, clearable) %}
@@ -33,6 +37,7 @@
 {% elif control.kind == "choice" %}<select id="{{ id }}" name="{{ name }}"><option value="">(choose)</option>{% for choice in control.choices %}<option value="{{ choice }}"{% if cur == choice %} selected{% endif %}>{{ choice }}</option>{% endfor %}</select>
 {% elif control.kind == "bool" %}<select id="{{ id }}" name="{{ name }}"><option value="unset">(unset)</option><option value="true"{% if cur == true or cur == "true" %} selected{% endif %}>true</option><option value="false"{% if cur == false or cur == "false" %} selected{% endif %}>false</option></select>
 {% else %}<input id="{{ id }}" name="{{ name }}" value="{{ cur if cur is not none else '' }}"{% if control.kind == "number" %} inputmode="numeric"{% endif %}>{% endif %}
+{% if sales_form and control.name in ('description', 'unit', 'class_id', 'tax_code', 'price_level') %}<label class="clear-control"><input type="checkbox" name="clear:{{ name }}" value="1"{% if attempted.get('clear:' ~ name) == '1' %} checked{% endif %}> Clear {{ control.name.replace('_', ' ') }}</label>{% endif %}
 {% endmacro %}
 
 {% macro collection_item(item, path, value, depth) %}
@@ -109,7 +114,8 @@
 </div>
 {% endmacro %}
 
-<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" data-generated-form>
+<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" data-generated-form{% if sales_form %} data-sales-form data-sales-scope="{{ sales_scope }}"{% endif %}>
+{% if sales_form %}<input type="hidden" name="f:expected_facts_fingerprint" value="{{ sales_fingerprint }}"><p data-sales-preview-status aria-live="polite">{{ 'Preview checked. Save to post these values.' if sales_fingerprint else 'Preview your values before saving.' }}</p>{% endif %}
 <input type="hidden" name="originals" value='{{ json.dumps(originals, default=str) | e }}'>
 {% if noun == 'report' and source_report_watermark is not none %}<input type="hidden" name="_source_report_watermark" value="{{ source_report_watermark }}">{% endif %}
 {% if return_context %}<input type="hidden" name="_return_token" value="{{ return_context.token }}"><input type="hidden" name="_return_target" value="{{ return_context.target }}">{% endif %}

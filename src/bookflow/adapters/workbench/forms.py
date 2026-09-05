@@ -555,6 +555,14 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
             v = _read_collection(
                 leaf["annotation"], (path,), form, coerce=True
             )
+            if getattr(cmd, 'name', '').split(' ', 1)[0] in ('invoice', 'sales-receipt') and path == 'lines':
+                indexes = list(dict.fromkeys(key.split(':')[2] for key in form
+                    if key.startswith('c:lines:') and len(key.split(':')) >= 4))
+                for index, row in zip(indexes, v):
+                    for field in ('description', 'unit', 'class_id', 'tax_code', 'price_level'):
+                        key = f'c:lines:{index}:{field}'
+                        if form.get('clear:' + key) == '1' or form.get('ref-state:' + key) == 'clear':
+                            row[field] = None
             # An empty optional control without an original remains absent,
             # including generated post forms and missing update collections.
             if original is None and not leaf["required"] and not v:

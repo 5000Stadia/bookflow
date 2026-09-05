@@ -1362,6 +1362,14 @@ def _validate_domain_target(
 
             staged = "units" in roots
             if staged:
+                units.validate_factor_changes(
+                    connection,
+                    units._children(db, str(current["id"])),
+                    [{"id": row["id"], "base_factor_nanounits":
+                      parse_unit_factor_nano_units(row["base_factor"])}
+                     for row in desired.get("units", [])],
+                )
+            if staged:
                 connection.exec_driver_sql("SAVEPOINT undo_validate_unit")
             try:
                 if staged:
@@ -1429,6 +1437,8 @@ def _validate_domain_target(
                         "RELEASE SAVEPOINT undo_validate_custom_field"
                     )
     except BookflowError as exc:
+        if exc.code == "E_ACTIVE_DEPENDENTS":
+            raise
         raise _rule_conflict(handler, current, exc) from exc
 
 
@@ -1489,12 +1499,15 @@ def _active_dependents(
                     )
                 ).scalar_one()
             )
-        # Journal slots remain dependencies when their document is voided.
+        # Transaction slots remain dependencies when their document is voided.
         count += int(connection.execute(
             sa.select(sa.func.count()).select_from(schema.custom_field_values).where(
                 schema.custom_field_values.c.def_id == record_id,
-                schema.custom_field_values.c.record_type == "journal_entry",
-                schema.custom_field_values.c.active.is_(True),
+                sa.or_(
+                    schema.custom_field_values.c.record_type.in_({"invoice", "sales_receipt"}),
+                    sa.and_(schema.custom_field_values.c.record_type == "journal_entry",
+                            schema.custom_field_values.c.active.is_(True)),
+                ),
             )
         ).scalar_one())
         if count:

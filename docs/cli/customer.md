@@ -252,15 +252,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `custom_fields[].kind` | literal["text", "number", "date", "bool", "choice"] | yes | no | — | — |
 | `custom_fields[].definition_active` | boolean | yes | no | — | — |
 | `custom_fields[].value` | any | yes | no | — | — |
-| `balances_available` | boolean | no | no | false | — |
-| `current_balance` | object | yes | no | — | — |
+| `balances_available` | boolean | no | no | true | — |
+| `current_balance` | object | yes | no | — | Exact customer/job net AR ledger balance. |
 | `current_balance.amount` | string | yes | no | — | — |
 | `current_balance.currency` | string | yes | no | — | — |
 | `current_balance.minor_units` | integer | yes | no | — | — |
-| `open_balance` | object | yes | no | — | — |
+| `open_balance` | object | yes | no | — | Net AR ledger balance, including credits; not invoice aging. |
 | `open_balance.amount` | string | yes | no | — | — |
 | `open_balance.currency` | string | yes | no | — | — |
 | `open_balance.minor_units` | integer | yes | no | — | — |
+| `family_balance` | object | yes | no | — | Net AR for this customer and all descendants exactly once. |
+| `family_balance.amount` | string | yes | no | — | — |
+| `family_balance.currency` | string | yes | no | — | — |
+| `family_balance.minor_units` | integer | yes | no | — | — |
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `changed` | boolean | yes | no | — | — |
@@ -276,7 +280,7 @@ Example JSON output:
   "affected_ids": [],
   "alt_contact": null,
   "alt_phone": null,
-  "balances_available": false,
+  "balances_available": true,
   "billing_address": null,
   "billing_address_source_id": null,
   "cc_email": null,
@@ -316,6 +320,11 @@ Example JSON output:
   "effective_sales_tax_item_id": null,
   "effective_terms_id": null,
   "email": null,
+  "family_balance": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
   "fax": null,
   "first_name": null,
   "full_name": "value",
@@ -414,6 +423,7 @@ Example JSON output:
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 | `E_VERSION_CONFLICT` | The record changed since the version you read. |
 
 ## `customer create`
@@ -743,15 +753,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `custom_fields[].kind` | literal["text", "number", "date", "bool", "choice"] | yes | no | — | — |
 | `custom_fields[].definition_active` | boolean | yes | no | — | — |
 | `custom_fields[].value` | any | yes | no | — | — |
-| `balances_available` | boolean | no | no | false | — |
-| `current_balance` | object | yes | no | — | — |
+| `balances_available` | boolean | no | no | true | — |
+| `current_balance` | object | yes | no | — | Exact customer/job net AR ledger balance. |
 | `current_balance.amount` | string | yes | no | — | — |
 | `current_balance.currency` | string | yes | no | — | — |
 | `current_balance.minor_units` | integer | yes | no | — | — |
-| `open_balance` | object | yes | no | — | — |
+| `open_balance` | object | yes | no | — | Net AR ledger balance, including credits; not invoice aging. |
 | `open_balance.amount` | string | yes | no | — | — |
 | `open_balance.currency` | string | yes | no | — | — |
 | `open_balance.minor_units` | integer | yes | no | — | — |
+| `family_balance` | object | yes | no | — | Net AR for this customer and all descendants exactly once. |
+| `family_balance.amount` | string | yes | no | — | — |
+| `family_balance.currency` | string | yes | no | — | — |
+| `family_balance.minor_units` | integer | yes | no | — | — |
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
 
@@ -764,7 +778,7 @@ Example JSON output:
   "address_mode": "inherit",
   "alt_contact": null,
   "alt_phone": null,
-  "balances_available": false,
+  "balances_available": true,
   "billing_address": null,
   "billing_address_source_id": null,
   "cc_email": null,
@@ -803,6 +817,11 @@ Example JSON output:
   "effective_sales_tax_item_id": null,
   "effective_terms_id": null,
   "email": null,
+  "family_balance": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
   "fax": null,
   "first_name": null,
   "full_name": "value",
@@ -1157,15 +1176,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `custom_fields[].kind` | literal["text", "number", "date", "bool", "choice"] | yes | no | — | — |
 | `custom_fields[].definition_active` | boolean | yes | no | — | — |
 | `custom_fields[].value` | any | yes | no | — | — |
-| `balances_available` | boolean | no | no | false | — |
-| `current_balance` | object | yes | no | — | — |
+| `balances_available` | boolean | no | no | true | — |
+| `current_balance` | object | yes | no | — | Exact customer/job net AR ledger balance. |
 | `current_balance.amount` | string | yes | no | — | — |
 | `current_balance.currency` | string | yes | no | — | — |
 | `current_balance.minor_units` | integer | yes | no | — | — |
-| `open_balance` | object | yes | no | — | — |
+| `open_balance` | object | yes | no | — | Net AR ledger balance, including credits; not invoice aging. |
 | `open_balance.amount` | string | yes | no | — | — |
 | `open_balance.currency` | string | yes | no | — | — |
 | `open_balance.minor_units` | integer | yes | no | — | — |
+| `family_balance` | object | yes | no | — | Net AR for this customer and all descendants exactly once. |
+| `family_balance.amount` | string | yes | no | — | — |
+| `family_balance.currency` | string | yes | no | — | — |
+| `family_balance.minor_units` | integer | yes | no | — | — |
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `changed` | boolean | yes | no | — | — |
@@ -1181,7 +1204,7 @@ Example JSON output:
   "affected_ids": [],
   "alt_contact": null,
   "alt_phone": null,
-  "balances_available": false,
+  "balances_available": true,
   "billing_address": null,
   "billing_address_source_id": null,
   "cc_email": null,
@@ -1221,6 +1244,11 @@ Example JSON output:
   "effective_sales_tax_item_id": null,
   "effective_terms_id": null,
   "email": null,
+  "family_balance": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
   "fax": null,
   "first_name": null,
   "full_name": "value",
@@ -1320,6 +1348,7 @@ Example JSON output:
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 | `E_VERSION_CONFLICT` | The record changed since the version you read. |
 
 ## `customer link-vendor`
@@ -1692,15 +1721,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].custom_fields[].kind` | literal["text", "number", "date", "bool", "choice"] | yes | no | — | — |
 | `items[].custom_fields[].definition_active` | boolean | yes | no | — | — |
 | `items[].custom_fields[].value` | any | yes | no | — | — |
-| `items[].balances_available` | boolean | no | no | false | — |
-| `items[].current_balance` | object | yes | no | — | — |
+| `items[].balances_available` | boolean | no | no | true | — |
+| `items[].current_balance` | object | yes | no | — | Exact customer/job net AR ledger balance. |
 | `items[].current_balance.amount` | string | yes | no | — | — |
 | `items[].current_balance.currency` | string | yes | no | — | — |
 | `items[].current_balance.minor_units` | integer | yes | no | — | — |
-| `items[].open_balance` | object | yes | no | — | — |
+| `items[].open_balance` | object | yes | no | — | Net AR ledger balance, including credits; not invoice aging. |
 | `items[].open_balance.amount` | string | yes | no | — | — |
 | `items[].open_balance.currency` | string | yes | no | — | — |
 | `items[].open_balance.minor_units` | integer | yes | no | — | — |
+| `items[].family_balance` | object | yes | no | — | Net AR for this customer and all descendants exactly once. |
+| `items[].family_balance.amount` | string | yes | no | — | — |
+| `items[].family_balance.currency` | string | yes | no | — | — |
+| `items[].family_balance.minor_units` | integer | yes | no | — | — |
 | `count` | integer | yes | no | — | — |
 
 Example JSON output:
@@ -1739,6 +1772,7 @@ Example JSON output:
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
 ## `customer query`
 
@@ -1809,10 +1843,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].company_name` | string \| null | no | yes | — | Present in CustomerSummary. |
 | `items[].primary_contact` | string \| null | no | yes | — | Present in CustomerSummary. |
 | `items[].phone` | string \| null | no | yes | — | Present in CustomerSummary. |
-| `items[].current_balance` | object | no | no | — | Present in CustomerSummary. |
+| `items[].current_balance` | object | no | no | — | Exact customer/job net AR ledger balance. Present in CustomerSummary. |
 | `items[].current_balance.amount` | string | no | no | — | Present in CustomerSummary. |
 | `items[].current_balance.currency` | string | no | no | — | Present in CustomerSummary. |
 | `items[].current_balance.minor_units` | integer | no | no | — | Present in CustomerSummary. |
+| `items[].open_balance` | object | no | no | — | Net AR ledger balance, including credits; not invoice aging. Present in CustomerSummary. |
+| `items[].open_balance.amount` | string | no | no | — | Present in CustomerSummary. |
+| `items[].open_balance.currency` | string | no | no | — | Present in CustomerSummary. |
+| `items[].open_balance.minor_units` | integer | no | no | — | Present in CustomerSummary. |
 | `items[].customer_type` | string \| null | no | yes | — | Present in CustomerSummary. |
 | `items[].sales_rep` | string \| null | no | yes | — | Present in CustomerSummary. |
 
@@ -1855,6 +1893,7 @@ Example JSON output:
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
 ## `customer show`
 
@@ -2097,15 +2136,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `custom_fields[].kind` | literal["text", "number", "date", "bool", "choice"] | yes | no | — | — |
 | `custom_fields[].definition_active` | boolean | yes | no | — | — |
 | `custom_fields[].value` | any | yes | no | — | — |
-| `balances_available` | boolean | no | no | false | — |
-| `current_balance` | object | yes | no | — | — |
+| `balances_available` | boolean | no | no | true | — |
+| `current_balance` | object | yes | no | — | Exact customer/job net AR ledger balance. |
 | `current_balance.amount` | string | yes | no | — | — |
 | `current_balance.currency` | string | yes | no | — | — |
 | `current_balance.minor_units` | integer | yes | no | — | — |
-| `open_balance` | object | yes | no | — | — |
+| `open_balance` | object | yes | no | — | Net AR ledger balance, including credits; not invoice aging. |
 | `open_balance.amount` | string | yes | no | — | — |
 | `open_balance.currency` | string | yes | no | — | — |
 | `open_balance.minor_units` | integer | yes | no | — | — |
+| `family_balance` | object | yes | no | — | Net AR for this customer and all descendants exactly once. |
+| `family_balance.amount` | string | yes | no | — | — |
+| `family_balance.currency` | string | yes | no | — | — |
+| `family_balance.minor_units` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -2116,7 +2159,7 @@ Example JSON output:
   "address_mode": "inherit",
   "alt_contact": null,
   "alt_phone": null,
-  "balances_available": false,
+  "balances_available": true,
   "billing_address": null,
   "billing_address_source_id": null,
   "cc_email": null,
@@ -2154,6 +2197,11 @@ Example JSON output:
   "effective_sales_tax_item_id": null,
   "effective_terms_id": null,
   "email": null,
+  "family_balance": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
   "fax": null,
   "first_name": null,
   "full_name": "value",
@@ -2247,6 +2295,7 @@ Example JSON output:
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
 ## `customer unlink-vendor`
 
@@ -2697,15 +2746,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `custom_fields[].kind` | literal["text", "number", "date", "bool", "choice"] | yes | no | — | — |
 | `custom_fields[].definition_active` | boolean | yes | no | — | — |
 | `custom_fields[].value` | any | yes | no | — | — |
-| `balances_available` | boolean | no | no | false | — |
-| `current_balance` | object | yes | no | — | — |
+| `balances_available` | boolean | no | no | true | — |
+| `current_balance` | object | yes | no | — | Exact customer/job net AR ledger balance. |
 | `current_balance.amount` | string | yes | no | — | — |
 | `current_balance.currency` | string | yes | no | — | — |
 | `current_balance.minor_units` | integer | yes | no | — | — |
-| `open_balance` | object | yes | no | — | — |
+| `open_balance` | object | yes | no | — | Net AR ledger balance, including credits; not invoice aging. |
 | `open_balance.amount` | string | yes | no | — | — |
 | `open_balance.currency` | string | yes | no | — | — |
 | `open_balance.minor_units` | integer | yes | no | — | — |
+| `family_balance` | object | yes | no | — | Net AR for this customer and all descendants exactly once. |
+| `family_balance.amount` | string | yes | no | — | — |
+| `family_balance.currency` | string | yes | no | — | — |
+| `family_balance.minor_units` | integer | yes | no | — | — |
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
 | `changed_fields` | array[string] | no | no | [] | — |
@@ -2722,7 +2775,7 @@ Example JSON output:
   "affected_descendant_ids": [],
   "alt_contact": null,
   "alt_phone": null,
-  "balances_available": false,
+  "balances_available": true,
   "billing_address": null,
   "billing_address_source_id": null,
   "cc_email": null,
@@ -2762,6 +2815,11 @@ Example JSON output:
   "effective_sales_tax_item_id": null,
   "effective_terms_id": null,
   "email": null,
+  "family_balance": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
   "fax": null,
   "first_name": null,
   "full_name": "value",

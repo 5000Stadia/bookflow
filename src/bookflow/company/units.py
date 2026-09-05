@@ -354,6 +354,29 @@ def plan_unit_create(
     return UnitMutation("create", None, owner, (), children, ("name", "units"))
 
 
+def validate_factor_changes(
+    connection: sa.Connection,
+    before: Sequence[Mapping[str, Any]],
+    after: Sequence[Mapping[str, Any]],
+) -> None:
+    """Protect factors referenced by any immutable sale revision, including history."""
+    old = {row["id"]: row["base_factor_nanounits"] for row in before}
+    changed = [row["id"] for row in after
+               if row["id"] in old and row["base_factor_nanounits"] != old[row["id"]]]
+    if not changed or not sa.inspect(connection).has_table("sales_line_profiles"):
+        return
+    # Query the persisted dependency directly; legacy company schemas may lack it.
+    profiles = sa.table("sales_line_profiles", sa.column("unit_id"))
+    count = connection.execute(sa.select(sa.func.count()).select_from(profiles).where(
+        profiles.c.unit_id.in_(changed)
+    )).scalar_one()
+    if count:
+        raise BookflowError("E_ACTIVE_DEPENDENTS", details={
+            "fields": [{"field": "units.base_factor", "problem": "a posted sale revision uses this unit factor"}],
+            "dependents": [{"record_type": "sales_line_profiles", "count": count}],
+        })
+
+
 def plan_unit_update(
     db: Database,
     record_id: str,
@@ -379,6 +402,7 @@ def plan_unit_update(
         if "units" in changes
         else existing
     )
+    validate_factor_changes(db.conn, existing, children)
     owner_values = {
         "name": name,
         "name_key": name_key,

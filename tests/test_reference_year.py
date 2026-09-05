@@ -67,6 +67,18 @@ def source_effects():
     entry('2026-11-16', 'REF-DUPLICATE', 'Service Income', 'Checking', 90000, 'reversal')
     entry('2026-12-21', 'REF-CARD-FEE', 'Professional Fees', 'Business Credit Card', 30000)
     entry('2026-12-27', 'REF-CARD-PAYMENT', 'Business Credit Card', 'Checking', 10000)
+    # A $100 service taxed at8%, corrected with a $20 exempt line. One active
+    # and one corrected/voided document per noun; gross effects stay separate.
+    for tag, control in (('INV', 'Accounts Receivable'), ('SR', 'Checking')):
+        for suffix, day in (('ACTIVE', '2026-09-05'), ('VOID', '2026-09-06')):
+            number = f'REF-SALE-{tag}-{suffix}'
+            base = [(control, 10800, 0), ('Service Income', 0, 10000), ('Sales Tax Payable', 0, 800)]
+            replacement = base + [(control, 2000, 0), ('Service Income', 0, 2000)]
+            batches = [('original', base), ('reversal', [(account, credit, debit) for account, debit, credit in base]), ('replacement', replacement)]
+            if suffix == 'VOID':
+                batches.append(('reversal', [(account, credit, debit) for account, debit, credit in replacement]))
+            for kind, legs in batches:
+                rows.extend((account, day, number, kind, debit, credit) for account, debit, credit in legs)
     return rows
 
 
@@ -84,11 +96,12 @@ def test_stored_oracles_match_independent_source_arithmetic():
         assert sum(b.values()) == 0
         assert checkpoint['trial_balance'] == sum(max(0,n) for n in b.values())
         assert checkpoint['income'] == -b['Service Income']-b['Professional Fees']-b['Insurance Expense']-b['Depreciation Expense']
-        assert checkpoint['net_assets'] == b['Checking']+b['Equipment']+b['Accumulated Depreciation']+b['Business Credit Card']
+        assert checkpoint['net_assets'] == b['Checking']+b['Equipment']+b['Accumulated Depreciation']+b['Business Credit Card']+b['Accounts Receivable']+b['Sales Tax Payable']
         assert checkpoint['net_assets'] == 1000000 + checkpoint['income']
-        assert checkpoint['accounts_receivable'] == checkpoint['accounts_payable'] == 0
+        assert checkpoint['accounts_receivable'] == (12800 if month >= 9 else 0)
+        assert checkpoint['accounts_payable'] == 0
     assert EXPECTED['annual'] == EXPECTED['monthly'][-1]
-    assert (EXPECTED['annual']['trial_balance'], EXPECTED['annual']['income'], EXPECTED['annual']['net_assets']) == (8005000,6415000,7415000)
+    assert (EXPECTED['annual']['trial_balance'], EXPECTED['annual']['income'], EXPECTED['annual']['net_assets']) == (8030600,6439000,7439000)
     assert EXPECTED['monthly'][5]['trial_balance'] == 3575000
     assert EXPECTED['second_half']['opening'] == EXPECTED['monthly'][5]['balances']
     for account, gross in EXPECTED['second_half']['gross_debits_credits'].items():
@@ -145,6 +158,7 @@ def test_gross_paged_ledger_every_source_and_running_balance(reference_client, a
             source = next(r for r in postings if r['batch_id'] == row['reverses_batch_id' if row['batch_kind'] == 'reversal' else 'replaces_batch_id'])
             assert row['transaction_id'] == source['transaction_id']
             if row['batch_kind'] == 'reversal':
+                source = next(r for r in postings if r['batch_id'] == row['reverses_batch_id'] and r['line_no'] == row['line_no'])
                 assert row['debit'] == source['credit'] and row['credit'] == source['debit']
 
 
@@ -164,9 +178,9 @@ def assert_balances(c):
         assert shown['balance']['minor_units'] == listed['balance']['minor_units'] == normal
         assert shown['balance']['currency'] == 'USD'
         assert shown['id'] != c.account.show(company=DEMO,account='Checking')['id']
-    assert c.report.trial_balance(company=REFERENCE,date_to='2026-12-31')['totals']['debit']['minor_units'] == 8005000
-    assert c.report.trial_balance(company=DEMO,date_to='2026-12-31')['totals']['debit']['minor_units'] == 664595
-    assert c.account.show(company=DEMO,account='Checking')['balance']['minor_units'] == 612095
+    assert c.report.trial_balance(company=REFERENCE,date_to='2026-12-31')['totals']['debit']['minor_units'] == 8030600
+    assert c.report.trial_balance(company=DEMO,date_to='2026-12-31')['totals']['debit']['minor_units'] == 690195
+    assert c.account.show(company=DEMO,account='Checking')['balance']['minor_units'] == 624895
     assert c.journal.query(company=DEMO)['count'] == 10
 
 
@@ -244,7 +258,7 @@ def test_readonly_and_sibling_permissions(reference_client):
     make_actor(root,'reference-reader',company_role=(cid,'readonly'))
     reader = as_user(root,'reference-reader')
     assert [r['company_id'] for r in reader.company.list()['items']] == [cid]
-    assert reader.report.trial_balance(company=cid,date_to='2026-12-31')['totals']['debit']['minor_units'] == 8005000
+    assert reader.report.trial_balance(company=cid,date_to='2026-12-31')['totals']['debit']['minor_units'] == 8030600
     for name, args, context in [('demo reset',{'include_reference':True},{}),('journal post',{'date':'2026-12-31','lines':[{'account':'Checking','side':'debit','amount':'1.00'},{'account':'Service Income','side':'credit','amount':'1.00'}]},{'company':cid})]:
         with pytest.raises(BookflowError) as caught:
             reader.run(name,args,**context)
@@ -272,7 +286,7 @@ def test_partial_seed_failure_reports_committed_effects_and_rerun_recovers(refer
     assert error.details['incomplete_company_id'] == c.company.show(company=REFERENCE)['company_id']
     assert len(error.details['company_ids']) == 2 and error.details['request_id']
     assert c.account.show(company=REFERENCE,account='Checking')['balance']['minor_units'] == 1000000
-    assert c.account.show(company=DEMO,account='Checking')['balance']['minor_units'] == 612095
+    assert c.account.show(company=DEMO,account='Checking')['balance']['minor_units'] == 624895
     monkeypatch.setattr(hub_cmds,'_load_seed',load)
     assert c.demo.reset(include_reference=True)['trashed_path']
     assert_balances(c)

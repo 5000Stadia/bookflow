@@ -731,3 +731,166 @@ input = { date_from = "2026-01-01", date_to = "2026-12-31" }
 [[commands]]
 command = "report balance-sheet"
 input = { date_to = "2026-12-31" }
+
+# September 2026 commercial examples: $100 service + $8 tax, corrected
+# with a $20 exempt service line. Each noun retains one $128 sale and
+# one corrected-then-voided duplicate; every original/reversal remains.
+# Seed entries cannot carry dry_run; preview is witnessed in focused tests.
+[[commands]]
+command = "company update"
+reason = "Use invoice-date tax accounting for disposable commercial examples"
+input = { "sales_tax_enabled" = true, "sales_tax_liability_basis" = "invoice_date" }
+
+[[commands]]
+command = "account show"
+capture = "sale_income"
+input = { "account" = "Service Income" }
+
+[[commands]]
+command = "account show"
+capture = "sale_liability"
+input = { "account" = "Sales Tax Payable" }
+
+[[commands]]
+command = "sales-tax-code show"
+capture = "sale_taxable"
+input = { "sales_tax_code" = "Tax" }
+
+[[commands]]
+command = "sales-tax-code create"
+capture = "sale_exempt"
+reason = "Identify exempt follow-up service in commercial examples"
+input = { "code" = "SVC", "description" = "Exempt follow-up service", "taxable" = false }
+
+[[commands]]
+command = "vendor create"
+capture = "sale_agency"
+reason = "Create the commercial example tax agency"
+input = { "name" = "Commercial Example Tax Agency", "is_tax_agency" = true }
+
+[[commands]]
+command = "item create"
+capture = "sale_tax"
+reason = "Create the exact eight-percent commercial example tax"
+input = { "name" = "Commercial Example Tax 8%", "type" = "sales_tax_item", "tax_percent" = "8", "tax_agency_vendor_id" = "${sale_agency.id}", "liability_account_id" = "${sale_liability.id}" }
+
+[[commands]]
+command = "customer create"
+capture = "sale_customer"
+reason = "Create the customer for dated commercial examples"
+input = { "name" = "Commercial Example Customer" }
+
+[[commands]]
+command = "item create"
+capture = "sale_service"
+reason = "Create the billable service for commercial examples"
+input = { "name" = "Commercial Example Service", "type" = "service", "sales_enabled" = true, "description" = "Completed service visit", "price" = "100.00", "income_account_id" = "${sale_income.id}", "sales_tax_code_id" = "${sale_taxable.id}" }
+
+[[commands]]
+command = "custom-field create"
+capture = "sale_verified"
+reason = "Capture a typed site-verification fact on sales"
+input = { "name" = "Site verified", "kind" = "bool", "scopes" = ["invoice", "sales_receipt"], "default" = true }
+
+[[commands]]
+command = "invoice post"
+capture = "sale_invoice_active"
+reason = "Record an unpaid service invoice"
+input = { "date" = "2026-09-05", "number" = "DEMO-SALE-INV-ACTIVE", "customer" = "${sale_customer.id}", "sales_tax_item" = "${sale_tax.id}", "customer_tax_code" = "${sale_taxable.id}", "lines" = [{ "item" = "${sale_service.id}", "quantity" = "1" }], "custom_fields" = { "${sale_verified.id}" = false }, "custom_field_kinds" = { "${sale_verified.id}" = "bool" }, "terms" = "Net 30" }
+
+[[commands]]
+command = "invoice update"
+capture = "sale_invoice_active_corrected"
+reason = "Add the omitted twenty-dollar exempt follow-up service"
+input = { "invoice" = "${sale_invoice_active.id}", "expected_version" = "${sale_invoice_active.version}", "lines" = [{ "item" = "${sale_service.id}", "line_id" = "${sale_invoice_active.revision.lines.0.line_id}" }, { "item" = "${sale_service.id}", "quantity" = "1", "unit_price" = "20.00", "description" = "Exempt follow-up service", "tax_code" = "${sale_exempt.id}" }] }
+
+[[commands]]
+command = "invoice show"
+input = { "invoice" = "${sale_invoice_active.id}", "revision_number" = 1 }
+
+[[commands]]
+command = "invoice history"
+input = { "invoice" = "${sale_invoice_active.id}" }
+
+[[commands]]
+command = "invoice post"
+capture = "sale_invoice_void"
+reason = "Record an unpaid service invoice as a disposable duplicate"
+input = { "date" = "2026-09-06", "number" = "DEMO-SALE-INV-VOID", "customer" = "${sale_customer.id}", "sales_tax_item" = "${sale_tax.id}", "customer_tax_code" = "${sale_taxable.id}", "lines" = [{ "item" = "${sale_service.id}", "quantity" = "1" }], "custom_fields" = { "${sale_verified.id}" = false }, "custom_field_kinds" = { "${sale_verified.id}" = "bool" }, "terms" = "Net 30" }
+
+[[commands]]
+command = "invoice update"
+capture = "sale_invoice_void_corrected"
+reason = "Add the omitted twenty-dollar exempt follow-up service"
+input = { "invoice" = "${sale_invoice_void.id}", "expected_version" = "${sale_invoice_void.version}", "lines" = [{ "item" = "${sale_service.id}", "line_id" = "${sale_invoice_void.revision.lines.0.line_id}" }, { "item" = "${sale_service.id}", "quantity" = "1", "unit_price" = "20.00", "description" = "Exempt follow-up service", "tax_code" = "${sale_exempt.id}" }] }
+
+[[commands]]
+command = "invoice void"
+reason = "Void the corrected duplicate; retain both revisions and all posting effects"
+input = { "invoice" = "${sale_invoice_void.id}", "expected_version" = "${sale_invoice_void_corrected.version}" }
+
+[[commands]]
+command = "invoice show"
+input = { "invoice" = "${sale_invoice_void.id}", "revision_number" = 1 }
+
+[[commands]]
+command = "invoice history"
+input = { "invoice" = "${sale_invoice_void.id}" }
+
+[[commands]]
+command = "invoice query"
+input = { "customer" = "${sale_customer.id}", "date_from" = "2026-01-01", "date_to" = "2026-12-31" }
+
+[[commands]]
+command = "sales-receipt post"
+capture = "sale_sales_receipt_active"
+reason = "Record a separate service sale paid by check"
+input = { "date" = "2026-09-05", "number" = "DEMO-SALE-SR-ACTIVE", "customer" = "${sale_customer.id}", "sales_tax_item" = "${sale_tax.id}", "customer_tax_code" = "${sale_taxable.id}", "lines" = [{ "item" = "${sale_service.id}", "quantity" = "1" }], "custom_fields" = { "${sale_verified.id}" = false }, "custom_field_kinds" = { "${sale_verified.id}" = "bool" }, "deposit_to" = "Checking", "payment_method" = "Check", "payment_reference" = "DEMO-CHECK-ACTIVE" }
+
+[[commands]]
+command = "sales-receipt update"
+capture = "sale_sales_receipt_active_corrected"
+reason = "Add the omitted twenty-dollar exempt follow-up service"
+input = { "sales_receipt" = "${sale_sales_receipt_active.id}", "expected_version" = "${sale_sales_receipt_active.version}", "lines" = [{ "item" = "${sale_service.id}", "line_id" = "${sale_sales_receipt_active.revision.lines.0.line_id}" }, { "item" = "${sale_service.id}", "quantity" = "1", "unit_price" = "20.00", "description" = "Exempt follow-up service", "tax_code" = "${sale_exempt.id}" }] }
+
+[[commands]]
+command = "sales-receipt show"
+input = { "sales_receipt" = "${sale_sales_receipt_active.id}", "revision_number" = 1 }
+
+[[commands]]
+command = "sales-receipt history"
+input = { "sales_receipt" = "${sale_sales_receipt_active.id}" }
+
+[[commands]]
+command = "sales-receipt post"
+capture = "sale_sales_receipt_void"
+reason = "Record a separate service sale paid by check as a disposable duplicate"
+input = { "date" = "2026-09-06", "number" = "DEMO-SALE-SR-VOID", "customer" = "${sale_customer.id}", "sales_tax_item" = "${sale_tax.id}", "customer_tax_code" = "${sale_taxable.id}", "lines" = [{ "item" = "${sale_service.id}", "quantity" = "1" }], "custom_fields" = { "${sale_verified.id}" = false }, "custom_field_kinds" = { "${sale_verified.id}" = "bool" }, "deposit_to" = "Checking", "payment_method" = "Check", "payment_reference" = "DEMO-CHECK-VOID" }
+
+[[commands]]
+command = "sales-receipt update"
+capture = "sale_sales_receipt_void_corrected"
+reason = "Add the omitted twenty-dollar exempt follow-up service"
+input = { "sales_receipt" = "${sale_sales_receipt_void.id}", "expected_version" = "${sale_sales_receipt_void.version}", "lines" = [{ "item" = "${sale_service.id}", "line_id" = "${sale_sales_receipt_void.revision.lines.0.line_id}" }, { "item" = "${sale_service.id}", "quantity" = "1", "unit_price" = "20.00", "description" = "Exempt follow-up service", "tax_code" = "${sale_exempt.id}" }] }
+
+[[commands]]
+command = "sales-receipt void"
+reason = "Void the corrected duplicate; retain both revisions and all posting effects"
+input = { "sales_receipt" = "${sale_sales_receipt_void.id}", "expected_version" = "${sale_sales_receipt_void_corrected.version}" }
+
+[[commands]]
+command = "sales-receipt show"
+input = { "sales_receipt" = "${sale_sales_receipt_void.id}", "revision_number" = 1 }
+
+[[commands]]
+command = "sales-receipt history"
+input = { "sales_receipt" = "${sale_sales_receipt_void.id}" }
+
+[[commands]]
+command = "sales-receipt query"
+input = { "customer" = "${sale_customer.id}", "date_from" = "2026-01-01", "date_to" = "2026-12-31" }
+
+[[commands]]
+command = "custom-field update"
+reason = "Rename the definition while preserving printed sales field facts"
+input = { "custom_field" = "${sale_verified.id}", "expected_version" = "${sale_verified.version}", "name" = "Site verification complete" }

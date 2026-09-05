@@ -1,0 +1,139 @@
+"""Commercial sales results shared by all command adapters."""
+from typing import Literal
+from pydantic import Field
+
+from bookflow.commands.common import CommonOut
+from bookflow.company.journal_custom_fields import SnapshotField
+from bookflow.company.journal_outputs import CreatedOutput, JournalBatchOutput, JournalMoneyOutput
+from bookflow.company.sales_facts import SalesProfile, SalesLineProfile, SalesTaxComponent
+from bookflow.company.sales_models import StrictModel
+from bookflow.core.models import WriteOutput
+
+MoneyOutput = JournalMoneyOutput
+
+
+class TaxComponentOutput(CreatedOutput):
+    transaction_id: str
+    revision_id: str
+    document_line_id: str
+    tax_item_id: str
+    agency_id: str
+    liability_account_id: str
+    rate_percent_millionths: int
+    taxable_minor_units: int
+    tax_minor_units: int
+    taxable: MoneyOutput
+    tax: MoneyOutput
+    component_snapshot: SalesTaxComponent
+
+
+class SalesLineOutput(CreatedOutput):
+    transaction_id: str
+    revision_id: str
+    line_id: str
+    position: int
+    kind: Literal["sale"]
+    item_id: str
+    description: str | None
+    quantity: str
+    base_quantity: str
+    quantity_microunits: int
+    base_quantity_microunits: int
+    unit_id: str | None
+    unit_factor_nanounits: int
+    unit_price: MoneyOutput
+    net: MoneyOutput
+    tax: MoneyOutput
+    gross: MoneyOutput
+    unit_price_minor_units: int
+    net_minor_units: int
+    tax_minor_units: int
+    gross_minor_units: int
+    currency: str
+    item_snapshot: SalesLineProfile
+    tax_components: list[TaxComponentOutput]
+
+
+class SalesRevisionSummaryOutput(CreatedOutput):
+    transaction_id: str
+    revision_number: int
+    supersedes_revision_id: str | None
+    date: str
+    number: str
+    name_type: Literal["customer"]
+    name_id: str
+    memo: str | None
+    subtotal: MoneyOutput
+    tax: MoneyOutput
+    total: MoneyOutput
+    subtotal_minor_units: int
+    tax_minor_units: int
+    total_minor_units: int
+    currency: str
+    audit_event_id: str
+    line_count: int
+    batches: list[JournalBatchOutput]
+
+
+class SalesRevisionOutput(SalesRevisionSummaryOutput):
+    issuer_snapshot: dict[str, str | None]
+    custom_fields_snapshot: dict[str, SnapshotField]
+    custom_fields: list[SnapshotField]
+    profile: SalesProfile
+    lines: list[SalesLineOutput]
+
+
+class SalesSummaryOutput(CommonOut):
+    type: Literal["invoice", "sales_receipt"]
+    number: str
+    current_revision_id: str
+    status: Literal["posted", "voided"]
+    voided_at: str | None
+    voided_by: str | None
+    void_reason: str | None
+    void_posting_batch_id: str | None
+    date: str
+    customer_id: str
+    customer_name: str
+    memo: str | None
+    due_date: str | None
+    subtotal: MoneyOutput
+    tax: MoneyOutput
+    total: MoneyOutput
+    subtotal_minor_units: int
+    tax_minor_units: int
+    total_minor_units: int
+    currency: str
+
+
+class SalesOutput(SalesSummaryOutput):
+    revision: SalesRevisionOutput
+
+
+class SalesWriteOutput(SalesOutput, WriteOutput):
+    facts_fingerprint: str | None = None
+    changed: bool = True
+    changed_fields: list[str] = Field(default_factory=list)
+    merged_over_versions: list[int] = Field(default_factory=list)
+    idempotent_replay: bool = False
+
+
+class SalesPageOutput(StrictModel):
+    items: list[SalesSummaryOutput]
+    count: int
+    has_more: bool
+    next_cursor: str | None
+    audit_watermark: int
+
+
+class SalesHistoryOutput(StrictModel):
+    id: str
+    version: int
+    current_revision_id: str
+    number: str
+    status: Literal["posted", "voided"]
+    items: list[SalesRevisionSummaryOutput]
+    count: int
+    has_more: bool
+    next_cursor: str | None
+    audit_watermark: int

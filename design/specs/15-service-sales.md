@@ -202,6 +202,13 @@ value. New lines always resolve from the document's currently selected header
 facts and their own inputs. Custom-field refresh keeps the existing journal
 semantics: refresh displayed definition/choice facts, not stored values.
 
+An unchanged selected price level retains its version for newly added lines too.
+When the current master version differs, its complete historical rules are read
+from that version's immutable audit aggregate; the line captures the applicable
+rule. Missing historical rules cause a field error requiring explicit refresh or
+selection, never substitution of current prices. This avoids copying every
+per-item rule into every sale header.
+
 A selected shipping_address_id is a captured owned-child reference, distinct
 from a standalone manual address. Changing customer must revalidate that selected
 id against the new effective collection. If it is not present, reject with a

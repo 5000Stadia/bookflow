@@ -119,7 +119,8 @@ def _revision_summaries(db, revision_ids, selected_id, info):
     lines = schema.document_lines
     for row in db.conn.execute(sa.select(lines.c.revision_id, lines.c.account_id,
         lines.c.account_snapshot, lines.c.class_id, lines.c.class_name)
-        .where(lines.c.revision_id.in_(revision_ids)).order_by(lines.c.revision_id, lines.c.position)):
+        .where(lines.c.revision_id.in_(revision_ids), lines.c.kind == 'journal')
+        .order_by(lines.c.revision_id, lines.c.position)):
         summary = summaries[row.revision_id]
         if row.account_id == selected_id:
             summary['selected'] += 1
@@ -170,7 +171,10 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
             category = class_label = memo = None
             if summary:
                 memo = summary['memo']
-                if summary['selected'] != 1:
+                if row.transaction_type != 'journal_entry':
+                    category = {'invoice': 'Invoice', 'sales_receipt': 'Sales receipt'}.get(row.transaction_type)
+                    class_label = row.class_name
+                elif summary['selected'] != 1:
                     category, class_label = 'General journal', row.class_name
                 else:
                     category = summary['category'] if summary['offsets'] == 1 else 'Splits'

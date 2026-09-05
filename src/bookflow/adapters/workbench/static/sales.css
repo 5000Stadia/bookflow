@@ -1,0 +1,6 @@
+.sales-document { min-width: 0; overflow-wrap: anywhere; }
+.sales-parties { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 1rem; }
+.sales-facts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: .4rem 1rem; }
+.sales-facts dd { margin: 0; }
+.sales-document td:not(:first-child) { white-space: nowrap; }
+.sales-document .table-wrap { max-width: 100%; overflow-x: auto; }

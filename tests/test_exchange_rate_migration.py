@@ -10,7 +10,7 @@ from alembic import command
 
 from bookflow.company import rates, schema
 from bookflow.storage.engine import open_database
-from bookflow.storage.migrate import _config, current_revision_raw, migrate_to_head
+from bookflow.storage.migrate import HEADS, _config, current_revision_raw, migrate_to_head
 from tests.test_attachment_migration import _old_data
 from tests.test_migration_chain import _make_revision, _normalized_schema
 from tests.test_row6_note_migration import _schema_semantics
@@ -22,7 +22,8 @@ def table_rows(db):
         for (name,) in db.raw.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name <> 'alembic_version'")}
 
 
-def test_upgrade_preserves_all_old_rows_and_matches_fresh(tmp_path):
+def test_upgrade_preserves_all_old_rows_and_matches_fresh(tmp_path, monkeypatch):
+    monkeypatch.setitem(HEADS, 'company', 'co0008')
     old, fresh = tmp_path / 'old.db', tmp_path / 'fresh.db'
     _make_revision(old, 'company', 'co0007', _old_data)
     _make_revision(fresh, 'company', 'co0008', _old_data)
@@ -72,7 +73,7 @@ def test_copy_reopen_retains_rates_audit_and_principals(client, tmp_path):
     with open_database(copied, writable=False) as db:
         assert rates.lookup(SimpleNamespace(company=db), '2026-01-12', 'JPY', 'USD')['id'] == first['id']
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
-    assert current_revision_raw(copied) == 'co0008'
+    assert current_revision_raw(copied) == HEADS['company']
 
 
 def test_failed_migration_restores_rows_and_schema(tmp_path):

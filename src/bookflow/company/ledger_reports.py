@@ -128,6 +128,7 @@ class GeneralLedgerRow(StrictModel):
     batch_id: str | None = None
     batch_kind: Literal["original", "reversal", "replacement"] | None = None
     transaction_id: str | None = None
+    transaction_type: Literal["journal_entry", "invoice", "sales_receipt"] | None = None
     transaction_number: str | None = None
     revision_id: str | None = None
     reverses_batch_id: str | None = None
@@ -417,11 +418,13 @@ def general_ledger(inp: GeneralLedgerInput, s, *, principal_id=None) -> GeneralL
           SELECT * FROM flat ORDER BY account_id, phase, effective_date, batch_id, line_no, posting_line_id
           LIMIT :limit OFFSET :offset)
           SELECT p.*, a.full_name AS current_account_label, e.batch_kind, e.transaction_id,
+            t.type AS transaction_type,
             e.revision_id, r.number AS transaction_number, e.reverses_batch_id, e.replaces_batch_id,
             e.recorded_at, e.account_snapshot, e.party_name, e.class_name, e.description
           FROM page p JOIN accounts a ON a.id=p.account_id
           LEFT JOIN effects e ON e.id=p.posting_line_id
           LEFT JOIN transaction_revisions r ON r.id=e.revision_id
+          LEFT JOIN transactions t ON t.id=e.transaction_id
           ORDER BY p.account_id, p.phase, p.effective_date, p.batch_id, p.line_no, p.posting_line_id
         """, {**params, "limit": inp.limit+1, "offset": offset})
         columns = [d[0] for d in result.description]

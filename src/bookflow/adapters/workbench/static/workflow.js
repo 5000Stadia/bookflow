@@ -37,7 +37,7 @@
     }
   }
   function invalidateUnit(picker) {
-    if (!wire(picker).name.endsWith(':component_item_id')) return;
+    if (!wire(picker).name.endsWith(':component_item_id') && !wire(picker).name.endsWith(':item')) return;
     const unit = picker.closest('[data-collection-item]')?.querySelector('[data-ref-component]');
     if (unit) clear(unit, 'Component changed. Choose a unit for the selected component, if needed.');
   }
@@ -76,7 +76,7 @@
       url.searchParams.set('target', kind);
     }
     if (picker.dataset.refComponent) {
-      const component = picker.closest('[data-collection-item]')?.querySelector('input[name$=":component_item_id"]');
+      const component = picker.closest('[data-collection-item]')?.querySelector('input[name$=":component_item_id"], input[name$=":item"]');
       if (!component?.value) { status(picker, 'Choose a component first.'); return; }
       url.searchParams.set(component.name, component.value);
     }

@@ -1,6 +1,13 @@
 {% extends "base.html" %}{% block title %}{{ noun }}{% endblock %}{% block body %}
 {% set base = ("/c/" ~ company_id ~ "/" ~ noun) if company_id else ("/hub/" ~ noun.replace(" ", "-")) %}
 <h1>{{ meta.plural_label or noun }}</h1>
+{% if sales_filters is not none and noun in ('invoice', 'sales-receipt') %}<form method="get" class="list-tools" aria-label="Sales filters">
+<label>Customer or job<input name="customer" value="{{ sales_filters.get('customer', '') }}" placeholder="Exact name or ID"></label>
+<label>Number contains<input name="number" value="{{ sales_filters.get('number', '') }}"></label>
+<label>From date<input type="date" name="date_from" value="{{ sales_filters.get('date_from', '') }}"></label>
+<label>Through date<input type="date" name="date_to" value="{{ sales_filters.get('date_to', '') }}"></label>
+<label>Status<select name="status"><option value="">All</option>{% for value in ('posted', 'voided') %}<option value="{{ value }}"{% if sales_filters.get('status') == value %} selected{% endif %}>{{ value|capitalize }}</option>{% endfor %}</select></label>
+<button>Apply</button><a href="{{ base }}">Reset</a></form>{% endif %}
 {% if noun == 'rate' %}<p><a href="{{ base }}/query">Query rates</a></p><form method="get" class="list-tools" aria-label="Rate filters">
 <label>From date<input type="date" name="date_from" value="{{ rate_filters.get('date_from', '') }}"></label>
 <label>Through date<input type="date" name="date_to" value="{{ rate_filters.get('date_to', '') }}"></label>

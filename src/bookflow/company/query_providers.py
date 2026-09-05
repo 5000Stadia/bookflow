@@ -217,8 +217,21 @@ def _party(noun, inp, session):
         else:
             p.columns.update(terms=_label(schema.terms, table.c.terms_id), vendor_type=_label(schema.vendor_types, table.c.vendor_type_id))
         balance = "current_balance" if customer else "open_balance"
-        p.columns[balance] = sa.literal(0)
-        p.transform = lambda row: {**row, balance: Money(0, session.company_info_row["home_currency"]).to_dict()}
+        if customer:
+            from bookflow.company.customer_balances import register_functions
+            from bookflow.core.exact import _require_i64
+            register_functions(session.company)
+            p.columns.update(current_balance=p.sorts["current_balance"], open_balance=p.sorts["current_balance"])
+            def transform(row):
+                for name in ("current_balance", "open_balance"):
+                    if name in row:
+                        row[name] = Money(_require_i64(int(row[name]), field=name),
+                            session.company_info_row["home_currency"]).to_dict()
+                return row
+            p.transform = transform
+        else:
+            p.columns[balance] = sa.literal(0)
+            p.transform = lambda row: {**row, balance: Money(0, session.company_info_row["home_currency"]).to_dict()}
     elif noun == "employee":
         complete = employee_completeness(session)
         p.columns["profile_complete"] = p.filters["profile_complete"] = p.sorts["profile_complete"] = complete

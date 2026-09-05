@@ -52,6 +52,7 @@ COMMAND_CODES: dict[str, str] = {
     "E_EVENT_NOT_FOUND": "No such audit event.",
     "E_INIT_CONFLICT": "The data root is already initialized for a different user.",
     "E_VERSION_CONFLICT": "The record changed since the version you read.",
+    "E_PREVIEW_STALE": "The resolved sale facts changed since preview; preview again before saving.",
     "E_DIRECTIVE_NOT_FOUND": "No such directive.",
     "E_DIRECTIVE_INACTIVE": "That directive has been deactivated.",
     "E_IDEMPOTENCY_MISMATCH": "That idempotency key was used for a different command or input.",

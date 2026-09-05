@@ -20,6 +20,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from bookflow.adapters.workbench import forms as F
 from bookflow.adapters.workbench import workflows as W
 from bookflow.adapters.workbench import statements as S
+from bookflow.adapters.workbench import sales as Sales
 from bookflow.core import registry
 from bookflow.core.errors import BookflowError
 from bookflow.core.models import list_columns
@@ -167,6 +168,8 @@ def _output_version(noun: str, output: dict[str, Any]) -> int | None:
 
 def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
     """Project the authoritative editable object from a show result."""
+    if noun in ('invoice', 'sales-receipt'):
+        return Sales.editable_values(shown)
     if noun == "journal":
         revision = shown.get("revision", {})
         return {
@@ -246,6 +249,7 @@ def _reference_target(
 
 def _form_reference(definition: Any, noun: str, path: str) -> Any | None:
     """Project the domain's sole authoritative reference declarations."""
+    definition = definition or registry.noun_meta(noun).get('form_definition')
     return F.reference_for_path(definition, path)
 
 
@@ -370,7 +374,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("style.css", "htmx.min.js", "workflow.js", "annotations.js", "register.js", "register.css")
+        for name in ("style.css", "htmx.min.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -410,6 +414,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             ctx = ctx.model_copy(update={"reason": headers.get("X-Bookflow-Reason", ctx.reason), "source_ref": headers.get("X-Bookflow-Source-Ref", ctx.source_ref),
                                          "directive_id": headers.get("X-Bookflow-Directive", ctx.directive_id), "idempotency_key": headers.get("Idempotency-Key", ctx.idempotency_key)})
         ctx = ctx.model_copy(update={"client_name": "bookflow-workbench"})
+        if not cmd.is_write:
+            # Form rendering performs internal reads after a submitted write.
+            # Its retry key belongs to that write, never to company/show lookups.
+            ctx = ctx.model_copy(update={'idempotency_key': None})
         result = run_command(cmd, raw, ctx, cred, company, "option" if company else "none", dry_run)
         if name == "company show":
             request.state.workbench_company = result
@@ -560,12 +568,27 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 "E_VALIDATION",
                 details={"fields": [{"field": "query", "problem": "must be at most 200 characters"}]},
             ))
+        if getattr(reference, 'owned_collection', None) == 'shipping_addresses':
+            customer = request.query_params.get('f:customer')
+            if not customer:
+                return HTMLResponse('', headers={'Cache-Control': 'no-store'})
+            try:
+                party = run(request, 'customer show', {'customer': customer}, company_id)
+            except BookflowError as err:
+                return page_error(request, err)
+            options = []
+            for address in party.get('shipping_addresses', []):
+                label = ' · '.join(str(address[key]) for key in ('label', 'line1', 'city') if address.get(key))
+                if address.get('active', True) and query.casefold() in label.casefold():
+                    options.append(f'<option value="{escape(address["id"], quote=True)}" label="{escape(label, quote=True)}"></option>')
+            return HTMLResponse(''.join(options[:25]), headers={'Cache-Control': 'no-store'})
         if getattr(reference, "child_units", False):
             component_selector = next(
                 (
                     value
                     for key, value in request.query_params.multi_items()
-                    if key.startswith("c:") and key.endswith(":component_item_id")
+                    if key.startswith("c:") and (key.endswith(":component_item_id") or
+                        (owner_noun in ('invoice', 'sales-receipt') and key.endswith(":item")))
                 ),
                 None,
             )
@@ -698,7 +721,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 raw["projection"] = "summary"
             if request.query_params.get("cursor"):
                 raw["cursor"] = request.query_params["cursor"]
-        for field in ("query", "sort", "direction", "date_from", "date_to", "status", "from_currency"):
+        for field in ("query", "sort", "direction", "date_from", "date_to", "status", "from_currency", "customer", "number"):
             value = request.query_params.get(field)
             if value and field in cmd.input_model.model_fields:
                 raw[field] = value
@@ -718,6 +741,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         items = out.get("items", [])
         definition = meta.get("definition")
         columns = (["number", "date", "memo", "total", "status"] if noun == "journal" else
+                   ["number", "date", "customer_name", "due_date", "total", "status"] if noun in ('invoice', 'sales-receipt') else
                    ["date", "from_currency", "to_currency", "rate", "source", "version"] if noun == "rate" else
                    list(definition.summary_columns) if definition is not None else list_columns(items))
         column_text = request.query_params.get("columns", "")
@@ -750,6 +774,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             verbs=page_verbs,
             query=raw.get("query", ""),
             rate_filters=raw if noun == "rate" else None,
+            sales_filters=raw if noun in ('invoice', 'sales-receipt') else None,
             filters=filters,
             selected_sort=raw.get("sort", ""),
             selected_direction=raw.get("direction", "asc"),
@@ -775,7 +800,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         show_selector = _record_selector(show, command_noun)
         raw = {show_selector: record_id} if show_selector else {}
         try:
-            if command_noun == "journal" and request.query_params.get("revision_number"):
+            if command_noun in ("journal", "invoice", "sales-receipt") and request.query_params.get("revision_number"):
                 try:
                     raw["revision_number"] = int(request.query_params["revision_number"])
                 except ValueError:
@@ -834,7 +859,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             ),
             record_id,
         )
-        if command_noun == "journal":
+        if command_noun in ("journal", "invoice", "sales-receipt"):
             record_title = out["revision"]["number"]
         contact_copy = None
         if company_id is not None and command_noun in ("customer", "vendor"):
@@ -867,6 +892,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 "inheritance": [{"field": W.label(key.removesuffix("_source_id")), "id": value, "name": source_names[value]} for key, value in out.items() if key.endswith("_source_id") and value in source_names],
             }
         return render("record.html", request, company_id=company_id, noun=noun, record_id=record_id, record=visible_record, record_title=record_title, audit=audit, meta=meta, verbs=verbs,
+                      sale=Sales.detail_context(out, company_id) if command_noun in ('invoice', 'sales-receipt') else None,
                       audit_undo=audit_undo, contact_copy=contact_copy, workspace=workspace,
                       annotations=annotations(company_id, noun, record_id, out, role_view, cred),
                       presence=(meta["record_type"] in _presence_types()) and company_id is not None
@@ -947,6 +973,19 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         elif cmd.version_source and record_id is None:
             return page_error(request, BookflowError("E_USAGE", message="open this update from a record page"))
         originals = originals or {}
+        if noun in ('invoice', 'sales-receipt') and verb == 'history' and record_id is not None:
+            originals[noun.replace('-', '_')] = record_id
+            if not attempted and result is None:
+                try:
+                    raw_history = {noun.replace('-', '_'): record_id,
+                        'limit': int(request.query_params.get('limit', '50'))}
+                    if request.query_params.get('cursor'):
+                        raw_history['cursor'] = request.query_params['cursor']
+                    result = run(request, cmd.name, raw_history, company_id)
+                except ValueError:
+                    return page_error(request, BookflowError('E_VALIDATION', details={'fields': [{'field': 'limit', 'problem': 'must be an integer'}]}))
+                except BookflowError as err:
+                    return page_error(request, err, restart_url=request.url.path)
         if cmd.name == "rate set" and record_id is not None:
             try:
                 shown = run(request, "rate show", {"rate_id": record_id}, company_id)
@@ -1018,6 +1057,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         if definition is not None and definition.custom_fields:
             originals["custom_fields"] = _custom_value_map(originals.get("custom_fields"))
         described = F.describe_fields(noun, verb, cmd.input_model, originals, attempted)
+        sales_form = noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')
+        if sales_form:
+            described = [leaf for leaf in described if leaf['path'] != 'expected_facts_fingerprint']
         if cmd.name in S.COMMANDS:
             # The visible filter form always starts fresh; continuation has its
             # own immutable filter fields and signed cursor in a separate form.
@@ -1030,7 +1072,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         for leaf in described:
             if leaf["path"] == selector:
                 leaf["pinned"] = True
-        if company_id is not None and definition is not None:
+        reference_definition = definition or meta.get('form_definition')
+        if company_id is not None and reference_definition is not None:
             def creation_targets(targets: tuple[str, ...]) -> list[dict[str, Any]]:
                 choices = []
                 for candidate in targets:
@@ -1046,21 +1089,34 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 if leaf["kind"] == "collection":
                     _decorate_collection_references(
                         leaf["collection"],
-                        definition=definition,
+                        definition=reference_definition,
                         noun=noun,
                         company_id=company_id,
                         path=leaf["path"],
                         create_targets=creation_targets,
                     )
             for leaf in described:
-                reference = _form_reference(definition, noun, leaf["path"])
+                reference = _form_reference(reference_definition, noun, leaf["path"])
                 if reference is None:
                     continue
                 targets = reference.target_nouns
                 target, discriminator = _reference_target(targets, noun, originals, attempted)
                 value = F.selected_value(leaf["path"], originals, attempted)
                 current = None
-                if target is not None and value:
+                owned_addresses = getattr(reference, 'owned_collection', None) == 'shipping_addresses'
+                if owned_addresses and value:
+                    customer = F.selected_value('customer', originals, attempted)
+                    if customer:
+                        try:
+                            party = run(request, 'customer show', {'customer': customer}, company_id)
+                        except BookflowError as err:
+                            if err.code != 'E_RECORD_NOT_FOUND':
+                                return page_error(request, err)
+                        else:
+                            address = next((row for row in party.get('shipping_addresses', []) if row['id'] == value), None)
+                            if address:
+                                current = dict(id=value, label=' · '.join(str(address[key]) for key in ('label', 'line1', 'city') if address.get(key)), active=address.get('active', True))
+                elif target is not None and value:
                     target_meta = registry.noun_meta(target)
                     show_command = registry.get(f"{target} show")
                     identifier = target_meta.get("identifier")
@@ -1078,7 +1134,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                                 "version": row.get("version"),
                                 "link_version": originals.get("expected_link_version"),
                             }
-                add_targets = creation_targets(targets)
+                add_targets = [] if owned_addresses else creation_targets(targets)
                 version_field = None
                 link_version_field = None
                 include_fields = []
@@ -1152,7 +1208,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     collect_references(leaf["collection"], leaf["collection"]["values"], leaf["path"])
         except BookflowError as err:
             return page_error(request, err)
-        runtime_scope = ("journal_entry" if noun in ("journal", "register") and verb in ("post", "update") else
+        runtime_scope = (noun.replace('-', '_') if noun in ('invoice', 'sales-receipt') and verb in ('post', 'update') else
+                         "journal_entry" if noun in ("journal", "register") and verb in ("post", "update") else
                          definition.record_type if definition is not None and definition.runtime_field_provider == "custom-fields" else None)
         if company_id is not None and runtime_scope:
             try:
@@ -1182,6 +1239,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       captured_foreign_lines=[line for line in (shown or {}).get("revision", {}).get("lines", []) if line.get("original_amount")],
                       annotations=annotations(company_id, noun, record_id, shown, authorized_company, cred),
                       ctx_fields=F.context_fields(cmd), result=result, error=error,
+                      sales_form=sales_form, sales_scope=cred.token_id,
+                      sales_fingerprint=(result.get('facts_fingerprint', '') if preview and result else
+                          '' if error and error.get('code') == 'E_PREVIEW_STALE' else attempted.get('f:expected_facts_fingerprint', '')),
+                      sale=Sales.detail_context(result, company_id, preview=preview) if result and noun in ('invoice', 'sales-receipt') and 'revision' in result else None,
+                      sales_history=result if noun in ('invoice', 'sales-receipt') and verb == 'history' else None,
                       statement=S.view(result, report_input, company_id) if result and report_input is not None and cmd.name in S.COMMANDS else None,
                       source_report_watermark=source_report_watermark,
                       preview=preview, get=F.get_path, form_value=F.form_value,
@@ -1282,6 +1344,14 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             if unresolved:
                 raise BookflowError("E_VALIDATION", details={"fields": [{"field": key, "problem": "Choose a matching record by name, or use Clear."} for key in unresolved]})
             raw, headers, preview = F.translate(cmd, form, originals if originals else None)
+            if noun in ('invoice', 'sales-receipt') and verb in ('post', 'update'):
+                if verb == 'update':
+                    raw = Sales.preserve_line_origins(raw, originals)
+                if preview:
+                    raw.pop('expected_facts_fingerprint', None)
+                    headers.pop('Idempotency-Key', None)
+                elif not raw.get('expected_facts_fingerprint'):
+                    raise BookflowError('E_VALIDATION', details={'fields': [{'field': 'preview', 'problem': 'Preview these values before saving.'}]})
             if (cmd.version_source or cmd.name == "rate set") and record_id is not None and "expected_version" not in raw and form.get("f:expected_version"):
                 raw["expected_version"] = int(form["f:expected_version"])
             selector = _record_selector(cmd, noun) if record_id is not None else None
@@ -1296,6 +1366,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return form_page(request, company_id, noun, verb, record_id, error=e.to_dict(), attempted=form)
         if preview:
             return form_page(request, company_id, noun, verb, record_id, result=out, preview=True, attempted=form)
+        if noun in ('invoice', 'sales-receipt') and verb in ('history', 'query'):
+            return form_page(request, company_id, noun, verb, record_id, result=out, attempted=form)
         if noun == "report" and not cmd.is_write:
             return form_page(request, company_id, noun, verb, record_id, result=out, attempted=form,
                              report_input=cmd.input_model.model_validate(raw).model_dump())

@@ -1,4 +1,4 @@
-"""Journal-owned value slots and immutable revision custom-field facts."""
+"""Transaction-owned value slots and immutable revision custom-field facts."""
 
 from __future__ import annotations
 
@@ -74,10 +74,10 @@ class JournalCustomFieldPlan:
         return self.owner_plan.changed or self.snapshot != json.loads(self.previous_json)
 
 
-def _slots(connection: sa.Connection, record_id: str) -> dict[str, dict[str, Any]]:
+def _slots(connection: sa.Connection, record_id: str, *, record_type: str) -> dict[str, dict[str, Any]]:
     return {row["def_id"]: dict(row) for row in connection.execute(
         sa.select(c.custom_field_values).where(
-            c.custom_field_values.c.record_type == "journal_entry",
+            c.custom_field_values.c.record_type == record_type,
             c.custom_field_values.c.record_id == record_id,
         )
     ).mappings()}
@@ -112,11 +112,11 @@ def _after(mutation: cf.CustomFieldValueMutation) -> dict:
 
 
 
-def validate_kinds(db, patch, expected) -> None:
+def validate_kinds(db, patch, expected, *, record_type: str = "journal_entry") -> None:
     """Check captured caller kinds against current company definitions."""
     if not expected.root:
         return
-    definitions = {d["id"]: d for d in cf._applicable_definitions(cf._conn(db), "journal_entry")}
+    definitions = {d["id"]: d for d in cf._applicable_definitions(cf._conn(db), record_type)}
     for key, kind in expected.root.items():
         if key not in patch.root or patch.root[key] is None:
             raise cf._validation(f"custom_field_kinds.{key}", "must accompany a supplied non-null custom value")
@@ -127,15 +127,16 @@ def validate_kinds(db, patch, expected) -> None:
 
 
 def prepare(db: Database | sa.Connection, record_id: str, patch: CustomFieldValuePatch,
-            previous_snapshot: dict, *, creating: bool, refresh: bool = False) -> JournalCustomFieldPlan:
+            previous_snapshot: dict, *, creating: bool, refresh: bool = False,
+            record_type: str = "journal_entry") -> JournalCustomFieldPlan:
     """Plan stable slots and a complete revision snapshot without writing."""
 
     connection = cf._conn(db)
-    owner = cf.plan_owner_value_patch(connection, record_type="journal_entry", record_id=record_id,
+    owner = cf.plan_owner_value_patch(connection, record_type=record_type, record_id=record_id,
                                      patch=patch, creating=creating)
     try:
         previous_json = json.dumps(previous_snapshot, sort_keys=True, allow_nan=False)
-        slots = _slots(connection, owner.record_id)
+        slots = _slots(connection, owner.record_id, record_type=record_type)
         changed = {mutation.definition_id for mutation in owner.mutations}
         for mutation in owner.mutations:
             slots[mutation.definition_id] = _after(mutation)
@@ -150,18 +151,18 @@ def prepare(db: Database | sa.Connection, record_id: str, patch: CustomFieldValu
                 snapshot[definition_id] = _capture(connection, slot)
         plan = JournalCustomFieldPlan(owner, snapshot, previous_json,
                                       json.dumps(patch.root, sort_keys=True, allow_nan=False), refresh)
-        validate(connection, plan, owner.record_id, snapshot)
+        validate(connection, plan, owner.record_id, snapshot, record_type=record_type)
         return plan
     except (ValueError, TypeError, KeyError) as exc:
         raise BookflowError("E_INTERNAL", details={"problem": "invalid journal custom-field source facts"}) from exc
 
 
 def validate(db: Database | sa.Connection, plan: JournalCustomFieldPlan,
-             record_id: str, snapshot: dict) -> None:
+             record_id: str, snapshot: dict, *, record_type: str = "journal_entry") -> None:
     """Check pending revision facts against stored slots and proposed changes."""
 
     try:
-        _validate(cf._conn(db), plan, record_id, snapshot)
+        _validate(cf._conn(db), plan, record_id, snapshot, record_type=record_type)
     except (ValueError, TypeError, KeyError, StopIteration, AttributeError, BookflowError) as exc:
         raise BookflowError("E_INTERNAL", details={"problem": "invalid journal custom-field plan or snapshot"}) from exc
 
@@ -171,14 +172,15 @@ def _require(condition: bool) -> None:
         raise ValueError("journal custom-field facts do not agree")
 
 
-def _validate(connection: sa.Connection, plan: JournalCustomFieldPlan, record_id: str, snapshot: dict) -> None:
+def _validate(connection: sa.Connection, plan: JournalCustomFieldPlan, record_id: str, snapshot: dict, *, record_type: str) -> None:
     owner = plan.owner_plan
     _require(type(owner.creating) is bool and type(plan.refresh) is bool)
-    _require(owner.record_type == "journal_entry" and owner.record_id == record_id)
+    _require(record_type in {"journal_entry", "invoice", "sales_receipt"})
+    _require(owner.record_type == record_type and owner.record_id == record_id)
     _require(is_ulid(record_id) and normalize_ulid(record_id) == record_id)
     previous = json.loads(plan.previous_json)
     _require(isinstance(previous, dict) and isinstance(snapshot, dict) and snapshot == plan.snapshot)
-    slots = _slots(connection, record_id)
+    slots = _slots(connection, record_id, record_type=record_type)
     active_before = {key for key, slot in slots.items() if slot["active"]}
     _require(set(previous) == active_before)
     if owner.creating:
@@ -186,6 +188,10 @@ def _validate(connection: sa.Connection, plan: JournalCustomFieldPlan, record_id
     # When an aggregate exists, its selected immutable revision is the authority
     # for preserved labels, rather than the supplied preparation dictionary.
     if sa.inspect(connection).has_table("transactions"):
+        header_type = connection.execute(sa.select(c.transactions.c.type).where(
+            c.transactions.c.id == record_id)).scalar_one_or_none()
+        if header_type is not None:
+            _require(header_type == record_type)
         source = connection.execute(sa.select(c.transaction_revisions.c.custom_fields_snapshot).select_from(
             c.transactions.join(c.transaction_revisions,
                                 c.transactions.c.current_revision_id == c.transaction_revisions.c.id)
@@ -193,7 +199,7 @@ def _validate(connection: sa.Connection, plan: JournalCustomFieldPlan, record_id
         if source is not None:
             _require(not owner.creating and json.loads(source) == previous)
 
-    definitions = {row["id"]: row for row in cf._applicable_definitions(connection, "journal_entry")}
+    definitions = {row["id"]: row for row in cf._applicable_definitions(connection, record_type)}
     for key, raw in previous.items():
         field = SnapshotField.model_validate(raw)
         slot = slots[key]
@@ -207,7 +213,7 @@ def _validate(connection: sa.Connection, plan: JournalCustomFieldPlan, record_id
     # inactive equality and stable reuse. Only new slot ids are supplied here.
     insert_by_definition = {m.definition_id: m.row_id for m in owner.mutations if m.operation == "insert"}
     insert_ids = iter(insert_by_definition[key] for key in definitions if key in insert_by_definition)
-    expected = cf.plan_owner_value_patch(connection, record_type="journal_entry", record_id=record_id,
+    expected = cf.plan_owner_value_patch(connection, record_type=record_type, record_id=record_id,
         patch=CustomFieldValuePatch.model_validate(json.loads(plan.patch_json)), creating=owner.creating,
         id_factory=lambda: next(insert_ids))
     _require(owner == expected)

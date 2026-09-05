@@ -219,6 +219,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.note_cmds": ["note"],
     "bookflow.commands.attachment_cmds": ["attachment"],
     "bookflow.commands.journal_cmds": ["journal"],
+    "bookflow.commands.sales_cmds": ["invoice", "sales-receipt"],
     "bookflow.commands.register_cmds": ["register"],
     "bookflow.commands.report_cmds": ["report"],
     "bookflow.commands.rate_cmds": ["rate"],
@@ -300,6 +301,8 @@ def all_nouns() -> list[str]:
 # Overrides where a noun's record type or identifier differs from the derivation (record type = noun; identifier = the
 # show command's first positional). `company show` takes no positional: the record is the selected company.
 NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
+    "invoice": {"record_type": "transaction", "identifier": "invoice", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "number", "singular_label": "Invoice", "plural_label": "Invoices"},
+    "sales-receipt": {"record_type": "transaction", "identifier": "sales_receipt", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "number", "singular_label": "Sales receipt", "plural_label": "Sales receipts"},
     "company": {"record_type": "company_info", "identifier": None},
     "journal": {"record_type": "transaction", "identifier": "journal", "output_identifier": "id", "ui_group": "Accounting", "display_field": "number", "singular_label": "Journal", "plural_label": "Journals"},
     "register": {"record_type": None, "identifier": None, "ui_group": "Accounting"},
@@ -313,7 +316,11 @@ NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
 def noun_meta(noun: str) -> dict[str, Any]:
     """Project routing metadata, including an authoritative Row 5 list definition when available."""
     if noun in NOUN_META_OVERRIDES:
-        return dict(NOUN_META_OVERRIDES[noun])
+        meta = dict(NOUN_META_OVERRIDES[noun])
+        if noun in ('invoice', 'sales-receipt'):
+            from bookflow.company.sales_contract import FORM_DEFINITIONS
+            meta['form_definition'] = FORM_DEFINITIONS[noun]
+        return meta
     show = REGISTRY.get(f"{noun} show")
     identifier = show.positional[0] if show and show.positional else None
     from bookflow.company.lists import get_list_definition

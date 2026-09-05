@@ -200,7 +200,7 @@ _BOOLEAN_FILTERS = frozenset({
     "profile_complete", "purchase_enabled", "released", "required", "sales_enabled",
     "taxable", "track_reimbursable_expenses", "unconverted", "unreleased",
 })
-_INTEGER_FILTERS = frozenset({"display_order"})
+_INTEGER_FILTERS = frozenset({"display_order", "current_balance", "open_balance"})
 
 
 def _filter(field: str) -> FilterDefinition:
@@ -312,10 +312,10 @@ _add(_define(
 _add(_define(
     "customer", "customers", ("Customer or job", "Customers and jobs"), "full_name", selector=("id", "full_name"), hierarchical=True,
     search=("name", "full_name", "company_name", "effective-contact-names", "effective-contact-points", "effective-billing-address", "effective-shipping-addresses", "account_number", "customer_type", "job_type", "sales_rep", "notes", "$custom-searchable"),
-    filters=("active", "parent_id", "customer_or_job", "customer_type_id", "job_type_id", "job_status", "sales_rep_id", "price_level_id", "sales_tax_code_id", "preferred_payment_method_id", "linked_vendor_id"),
-    sorts=("full_name", "company_name", "primary_contact", "phone", "current_balance", "customer_type", "sales_rep", "job_status", "updated_at"),
+    filters=("active", "parent_id", "customer_or_job", "customer_type_id", "job_type_id", "job_status", "sales_rep_id", "price_level_id", "sales_tax_code_id", "preferred_payment_method_id", "linked_vendor_id", "current_balance", "open_balance"),
+    sorts=("full_name", "company_name", "primary_contact", "phone", "current_balance", "open_balance", "customer_type", "sales_rep", "job_status", "updated_at"),
     default_sort=("full_name", "id"),
-    default_columns=("full_name", "company_name", "primary_contact", "phone", "current_balance", "customer_type", "sales_rep", "active"),
+    default_columns=("full_name", "company_name", "primary_contact", "phone", "current_balance", "open_balance", "customer_type", "sales_rep", "active"),
     additional_columns=("account_number", "postal_code", "email", "payment_method", "terms", "credit_limit", "price_level", "tax_code", "tax_item", "job_status", "job_dates", "delivery_method", "ship_method", "linked_vendor", "$custom", "$common"),
     references=_refs(("parent_id", "customer", "hard"), ("customer_type_id", "customer-type", "soft"), ("job_type_id", "job-type", "soft"), ("sales_rep_id", "sales-rep", "soft"), ("job_sales_rep_id", "sales-rep", "soft"), ("price_level_id", "price-level", "soft"), ("sales_tax_code_id", "sales-tax-code", "soft"), ("sales_tax_item_id", "item", "soft"), ("preferred_payment_method_id", "payment-method", "soft"), ("terms_id", "term", "soft"), ("preferred_ship_method_id", "ship-method", "soft"), ("default_class_id", "class", "soft"), ("linked_vendor_id", "vendor", "explicit"), ("customer", "customer", "explicit"), ("vendor", "vendor", "explicit")),
     dependents=("customer",), aggregates=("addresses", "contacts", "custom_fields", "vendor_link"), custom_fields=True,

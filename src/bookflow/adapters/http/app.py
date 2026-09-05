@@ -29,7 +29,7 @@ log = logging.getLogger("bookflow.http")
 
 STATUS = {"E_UNAUTHENTICATED": 401, "E_LOGIN_FAILED": 401, "E_PERMISSION": 403, "E_WORKBENCH_HEADER": 403,
           "E_COMPANY_NOT_FOUND": 404, "E_ORGANIZATION_NOT_FOUND": 404, "E_EVENT_NOT_FOUND": 404, "E_DIRECTIVE_NOT_FOUND": 404, "E_RECORD_NOT_FOUND": 404, "E_USER_NOT_FOUND": 404, "E_TOKEN_NOT_FOUND": 404,
-          "E_VERSION_CONFLICT": 409, "E_QUERY_STALE": 409, "E_IDEMPOTENCY_MISMATCH": 409, "E_NAME_TAKEN": 409, "E_DB_BUSY": 409,
+          "E_VERSION_CONFLICT": 409, "E_PREVIEW_STALE": 409, "E_QUERY_STALE": 409, "E_IDEMPOTENCY_MISMATCH": 409, "E_NAME_TAKEN": 409, "E_DB_BUSY": 409,
           "E_VALIDATION": 422, "E_VALUE_RANGE": 422, "E_LIST_FILTER": 422, "E_INTERNAL": 500}
 CONTEXT_HEADERS = {"reason": "X-Bookflow-Reason", "directive_id": "X-Bookflow-Directive", "source_ref": "X-Bookflow-Source-Ref",
                    "idempotency_key": "Idempotency-Key", "client_name": "X-Bookflow-Client-Name", "client_version": "X-Bookflow-Client-Version"}

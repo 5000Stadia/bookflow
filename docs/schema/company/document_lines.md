@@ -2,7 +2,7 @@
 
 # `company.document_lines`
 
-Immutable ordered entered journal lines, displayed snapshots and original currency facts.
+Immutable ordered journal or sale envelopes, dimensions and original journal currency facts.
 
 Database: `company`.
 
@@ -16,12 +16,12 @@ Database: `company`.
 | `revision_id` | VARCHAR(26) | no | — | unique with revision_id + line_id, unique with revision_id + position, unique with transaction_id + revision_id + id | — | transaction_revisions.id | Immutable document revision containing this line. |
 | `line_id` | VARCHAR(26) | no | — | unique with revision_id + line_id | — | document_line_identities.id | Stable line identity carried across revisions. |
 | `position` | BIGINT | no | — | unique with revision_id + position | — | — | One-based entered line position within the revision. |
-| `kind` | VARCHAR(16) | no | — | — | — | — | Entered line kind: journal. |
-| `account_id` | VARCHAR(26) | no | — | — | — | accounts.id | Posting account selected for this entered line. |
-| `side` | VARCHAR(6) | no | — | — | — | — | Entered accounting side: debit or credit. |
-| `amount_minor_units` | BIGINT | no | — | — | — | — | Positive home-currency amount entered on this side. |
+| `kind` | VARCHAR(16) | no | — | — | — | — | Entered line kind: journal or sale. |
+| `account_id` | VARCHAR(26) | yes | — | — | — | accounts.id | Posting account selected for a journal; null for a sale. |
+| `side` | VARCHAR(6) | yes | — | — | — | — | Journal side: debit or credit; null for a sale. |
+| `amount_minor_units` | BIGINT | yes | — | — | — | — | Positive journal amount; null for a sale. |
 | `currency` | VARCHAR(3) | no | — | — | — | — | Home currency of the entered amount. |
-| `account_snapshot` | TEXT | no | — | — | — | — | JSON object of account name, number, type and normal side at this revision. |
+| `account_snapshot` | TEXT | yes | — | — | — | — | Journal account facts as a JSON object; null for a sale. |
 | `name_type` | VARCHAR(16) | yes | — | — | — | — | Party type: customer, vendor, employee or other_name; null with name_id. |
 | `name_id` | VARCHAR(26) | yes | — | — | — | — | Company-local party id; null with name_type. |
 | `party_name` | VARCHAR(200) | yes | — | — | — | — | Party label captured for this revision or posting. |

@@ -225,7 +225,39 @@ them in the journal editor; its row composer remains home-currency entry.
 
 The demo's DEMO-JPY captures JPY2345 at0.0068 as USD15.95. Its current table quote
 is then changed to0.007 without changing that saved journal. Demo Checking is
-612095minor units; trial balance totals are664595 each. Reference Plumbing Co's
-fixed2026 figures are unchanged. Rate fetching, automatic fetching and foreign
+624895minor units; trial balance totals are690195 each, including the separate
+domestic invoice and sales-receipt examples. Rate fetching, automatic fetching and foreign
 settlement accounting are not implemented; these manual commands send no data
 outside the machine.
+
+## Service invoices and sales receipts
+
+`invoice post` records a customer or job receivable from commercial item lines.
+`sales-receipt post` records a completed payment to a selected bank or Undeposited
+Funds account, with a payment method. Both support service, non-inventory part
+and fixed other-charge items in home currency. Quantities have six decimal
+places; prices and totals are exact money. Tax groups retain separate component
+rates and round each component on each line to nearest, ties to even.
+
+Use `--dry-run` to inspect captured customer, address, item, price, unit, term and
+tax facts. Copy its `facts_fingerprint` into `expected_facts_fingerprint` when
+posting the same input to require the previewed facts. `E_PREVIEW_STALE` means
+preview again. The browser performs this check on Save and invalidates its
+preview when values change. A committed idempotent replay returns its original
+receipt even after defaults or document versions change.
+
+Corrections retain omitted facts and explicit overrides. `use_defaults` clears
+selected overrides; `refresh_defaults` reloads applicable master facts and shows
+the changes in preview. Stable line identities preserve captured prices and
+tax rules on ordinary quantity edits. Added lines inherit the selected header's
+price-level version; its historical audit aggregate supplies per-item rules.
+Updates append an exact old-date reversal and a complete replacement. Voids
+require a reason and append only the exact reversal. Closed accounting dates
+block either operation, and concurrent stale versions conflict as one document.
+
+`show`, `query` and `history` expose commercial totals separately from accounting
+batch totals. Customer current/open balance is that customer's exact net posted
+receivables, including credits and reversals; family balance also includes jobs.
+Credit limits produce advisory family-exposure warnings. Invoice settlement,
+deposits/retainers, inventory sales, progress billing and sending are separate
+workflows and are not performed by these commands.

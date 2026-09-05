@@ -135,7 +135,7 @@ def test_fresh_init_has_current_compatibility_schema(tmp_path):
     bookflow.connect(data_root=str(root)).init()
 
     assert current_revision_raw(root / "hub.db") == "hub0010"
-    assert HEADS == {"hub": "hub0010", "company": "co0008"}
+    assert HEADS == {"hub": "hub0010", "company": "co0009"}
     assert str(hub_schema.memberships.c.grants.type) == "TEXT" and hub_schema.memberships.c.grants.nullable
     assert str(hub_schema.memberships.c.denies.type) == "TEXT" and hub_schema.memberships.c.denies.nullable
     assert [column.name for column in hub_schema.role_capabilities.primary_key.columns] == [
@@ -197,7 +197,7 @@ def test_populated_co0003_upgrade_allows_job_delivery_inheritance(tmp_path):
     _make_revision(company, "company", "co0003", populate)
     backups = tmp_path / "backups"
     with open_database(company, writable=True) as db:
-        assert migrate_to_head(db, "company", backups) == ("co0003", "co0008")
+        assert migrate_to_head(db, "company", backups) == ("co0003", "co0009")
         column = next(
             row for row in db.raw.execute("PRAGMA table_info(customers)")
             if row[1] == "preferred_delivery_method"

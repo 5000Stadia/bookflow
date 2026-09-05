@@ -245,9 +245,10 @@ _CUSTOMER_FIELDS: dict[str, tuple[object, object]] = {
     "website": (str | None, None),
     "notes": (str | None, None),
     "custom_fields": (list[CustomValueOutput], Field(default_factory=list)),
-    "balances_available": (bool, False),
-    "current_balance": (MoneyOutput, ...),
-    "open_balance": (MoneyOutput, ...),
+    "balances_available": (bool, True),
+    "current_balance": (MoneyOutput, Field(description="Exact customer/job net AR ledger balance.")),
+    "open_balance": (MoneyOutput, Field(description="Net AR ledger balance, including credits; not invoice aging.")),
+    "family_balance": (MoneyOutput, Field(description="Net AR for this customer and all descendants exactly once.")),
 }
 
 _VENDOR_FIELDS: dict[str, tuple[object, object]] = {
@@ -636,6 +637,8 @@ def _contact_sort(
 
 @lru_cache(maxsize=1)
 def _customer_expressions() -> tuple[dict[str, sa.ColumnElement], dict[str, sa.ColumnElement], dict[str, sa.ColumnElement]]:
+    from bookflow.company.customer_balances import balance_expression
+    balance = balance_expression()
     table = schema.customers
     linked = (
         sa.select(schema.customer_vendor_links.c.vendor_id)
@@ -701,6 +704,8 @@ def _customer_expressions() -> tuple[dict[str, sa.ColumnElement], dict[str, sa.C
         "price_level_id": _customer_effective("price_level_id"),
         "sales_tax_code_id": _customer_effective("sales_tax_code_id"),
         "preferred_payment_method_id": _customer_effective("preferred_payment_method_id"),
+        "current_balance": balance,
+        "open_balance": balance,
     }
     sorts = {
         "primary_contact": _contact_sort(
@@ -714,7 +719,8 @@ def _customer_expressions() -> tuple[dict[str, sa.ColumnElement], dict[str, sa.C
             "work_phone",
             primary_only=True,
         ),
-        "current_balance": sa.literal(0),
+        "current_balance": balance,
+        "open_balance": balance,
         "customer_type": _reference_name(schema.customer_types, effective_customer_type),
         "sales_rep": _reference_name(schema.sales_reps, effective_sales_rep),
     }
@@ -978,6 +984,9 @@ def _register_party(noun: str) -> None:
         manual_profile = next((item.value for item in parsed if item.field == "profile_complete"), None)
         sql_filters = [entry for entry in inp.filter if not entry.startswith("profile_complete=")]
         search, filters, sorts = _expressions(noun)
+        if noun == "customer":
+            from bookflow.company.customer_balances import register_functions
+            register_functions(s.company)
         manual_sort = inp.sort == "profile_complete"
         rows = list_service.list_rows(
             s.company,
@@ -1076,6 +1085,9 @@ def _register_party(noun: str) -> None:
             create=("E_AMOUNT_PRECISION", "E_VALUE_RANGE"),
             update=("E_AMOUNT_PRECISION", "E_VALUE_RANGE"),
         )
+    if noun == "customer":
+        errors.update(show=("E_VALUE_RANGE",), list=("E_VALUE_RANGE",),
+                      activate=("E_VALUE_RANGE",), deactivate=("E_VALUE_RANGE",))
     if noun == "other-name":
         errors["activate"] = ("E_RECORD_IN_USE",)
     register_lifecycle(

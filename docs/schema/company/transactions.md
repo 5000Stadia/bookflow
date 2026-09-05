@@ -8,7 +8,7 @@ Database: `company`.
 
 | Column | SQL type | Nullable | Default | Key | Indexes | References | Meaning |
 |---|---|---|---|---|---|---|---|
-| `id` | VARCHAR(26) | no | — | primary key 1 | ix_transactions_status_number | posting_batches.transaction_id, transaction_revisions.transaction_id | Stable ULID of this record. |
+| `id` | VARCHAR(26) | no | — | primary key 1, unique with id + type | ix_transactions_status_number | posting_batches.transaction_id, transaction_revisions.transaction_id | Stable ULID of this record. |
 | `version` | INTEGER | no | 1 | — | — | — | Optimistic-concurrency version of this record. |
 | `created_at` | VARCHAR(32) | no | — | — | — | — | UTC timestamp when this record was created. |
 | `created_by` | VARCHAR(26) | no | — | — | — | — | User id recorded as creating this record. |
@@ -16,7 +16,7 @@ Database: `company`.
 | `updated_at` | VARCHAR(32) | no | — | — | — | — | UTC timestamp of the latest update to this record. |
 | `updated_by` | VARCHAR(26) | no | — | — | — | — | User id recorded for the latest update to this record. |
 | `updated_via` | VARCHAR(16) | no | — | — | — | — | Interface recorded for the latest update to this record. |
-| `type` | VARCHAR(32) | no | — | unique with type + number | — | — | Business document type; journal_entry for entered journals. |
+| `type` | VARCHAR(32) | no | — | unique with id + type, unique with type + number | — | — | Business document type: journal_entry, invoice or sales_receipt. |
 | `number` | VARCHAR(64) | no | — | unique with type + number | ix_transactions_status_number | — | Unique editable number within the document type. |
 | `current_revision_id` | VARCHAR(26) | no | — | — | — | transaction_revisions.id | Immutable revision currently displayed. |
 | `status` | VARCHAR(16) | no | — | — | ix_transactions_status_number | — | Current workflow state: posted or voided. |

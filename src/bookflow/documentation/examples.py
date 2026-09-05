@@ -189,3 +189,22 @@ EXAMPLES.update({
     "rate show": Example('bookflow rate show --date 2026-07-15 --from-currency JPY --company "Demo Plumbing Co" --json', {"date":"2026-07-15","from_currency":"JPY"}),
     "rate query": Example('bookflow rate query --from-currency JPY --limit 25 --company "Demo Plumbing Co" --json', {"from_currency":"JPY","limit":25}),
 })
+
+
+for _noun in ('invoice', 'sales-receipt'):
+    _selector = _noun.replace('-', '_')
+    _receipt = _noun == 'sales-receipt'
+    _payload = {'date': '2026-09-01', 'customer': 'Riverside Apartments',
+                'lines': [{'item': 'Mainline Clearing', 'quantity': '1', 'unit_price': '125.00'}]}
+    if _receipt:
+        _payload.update(deposit_to='Checking', payment_method='Check')
+    import json as _json
+    import shlex as _shlex
+    _options = ' '.join('--' + key.replace('_', '-') + ' ' + _shlex.quote(_json.dumps(value) if isinstance(value, list) else value)
+                        for key, value in _payload.items())
+    EXAMPLES[_noun + ' post'] = Example('bookflow ' + _noun + ' post ' + _options + ' --company "Demo Plumbing Co" --reason "Record completed service" --json', _payload)
+    EXAMPLES[_noun + ' show'] = Example(f'bookflow {_noun} show {ID} --company "Demo Plumbing Co" --json', {_selector: ID})
+    EXAMPLES[_noun + ' update'] = Example(f'bookflow {_noun} update {ID} --memo "Completed service" --expected-version 1 --company "Demo Plumbing Co" --json', {_selector: ID, 'memo': 'Completed service', 'expected_version': 1})
+    EXAMPLES[_noun + ' void'] = Example(f'bookflow {_noun} void {ID} --expected-version 1 --reason "Duplicate sale" --company "Demo Plumbing Co" --json', {_selector: ID, 'expected_version': 1})
+    EXAMPLES[_noun + ' query'] = Example(f'bookflow {_noun} query --date-from 2026-01-01 --date-to 2026-12-31 --limit 25 --company "Demo Plumbing Co" --json', {'date_from': '2026-01-01', 'date_to': '2026-12-31', 'limit': 25})
+    EXAMPLES[_noun + ' history'] = Example(f'bookflow {_noun} history {ID} --limit 25 --company "Demo Plumbing Co" --json', {_selector: ID, 'limit': 25})
