@@ -25,6 +25,25 @@ POS uses the shared [print-template system](print-templates.md), including recei
 widths, content-dependent length, repeating item elements and ordered groups.
 Invoice and estimate output may use those media too.
 
+## Item commission attribution — future sales entry
+
+Items have a **Commission enabled** option. When an item with that saved option
+enabled is entered on an invoice or sales receipt, a popup immediately asks the
+operator to select the employee or affiliate receiving that line's commission.
+The prompt belongs to item entry; it is not delayed until saving the complete
+invoice/receipt or taking payment. This applies to ordinary invoice/sales-receipt
+entry as well as the future POS workspace.
+
+The selected recipient is associated with that sales line, allowing different
+items on one sale to credit different people. An item without commission enabled
+does not trigger this commission picker. Attribution is distinct from the sale's
+header-level sales representative and from the operator entering the transaction.
+
+Commission rates, calculation basis, earning/payment timing, split commissions,
+affiliate records, cancellation of the picker, later line edits and returns remain
+for the owning commission plan. This note selects no payroll or payable posting
+rules and introduces no implementation now.
+
 ## Design input to carry into the later plan
 
 The following are Navigator recommendations for the future plan, distinguished
@@ -57,6 +76,9 @@ from the visual POS references.
   assembled sale while changing pages.
 - Print short and long sales using one receipt template, preserving all item
   details and totals while the receipt length follows the content.
+- Enter a commission-enabled item on an invoice or sales receipt and immediately
+  select its employee/affiliate in the popup; retain that selection with the line.
+  An item with commission disabled does not open the picker.
 
 Begin with the established core workflows. Introduce POS and its UI after the
 required sales/item/payment capabilities exist; no speculative foundation work is

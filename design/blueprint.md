@@ -1250,6 +1250,11 @@ location and a POS-only access configuration so a dedicated operator logs direct
 into the permitted POS workspace. A possible invoice/receipt hybrid remains open
 for later design. This adds no active implementation row or immediate role changes.
 
+The same future sales-entry roadmap includes an item-level **Commission enabled**
+option. Entering an enabled item on an invoice or sales receipt immediately opens
+an employee/affiliate picker for that line, including outside POS. Commission
+calculation and payout rules remain a separate later design.
+
 ## 14. Reports
 
 Standard financial statement controls and their explicit staged coverage are
