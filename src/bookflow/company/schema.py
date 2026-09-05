@@ -1,4 +1,4 @@
-"""Company database tables (blueprint sections 4, 6, 7, 9, and 11)."""
+"""Company database tables (blueprint sections 4, 6, 7, 9, 11, and 12)."""
 
 from __future__ import annotations
 
@@ -984,3 +984,20 @@ for _table_with_foreign_keys in (*ROW5_TABLES, company_info):
         _index_name = f"ix_{_table_with_foreign_keys.name}_{_foreign_column}"
         if _index_name not in {_index.name for _index in _table_with_foreign_keys.indexes}:
             sa.Index(_index_name, _foreign_key.parent)
+
+
+notes = _table(
+    "notes",
+    *_common(),
+    _column("record_type", sa.String(64), "Canonical company-local type of the annotated record.", nullable=False),
+    _column("record_id", sa.String(26), "Stable id of the annotated record.", nullable=False),
+    _column("body", sa.Text, "Preserved nonblank note text, limited to 65,536 UTF-8 bytes by commands.", nullable=False),
+    _column("author_id", sa.String(26), "Original author's company-local principal id.", nullable=False),
+    _column("interface", sa.String(16), "Interface through which the note was originally added.", nullable=False),
+    _column("at", sa.String(32), "UTC timestamp when the note was originally added.", nullable=False),
+    _column("edited_at", sa.String(32), "UTC timestamp of the latest body edit; null before any edit.", nullable=True),
+    _column("kind", sa.String(16), "Note kind: comment or reserved system note.", nullable=False),
+    sa.CheckConstraint("kind IN ('comment', 'system')", name="ck_notes_kind"),
+    sa.Index("ix_notes_target_id", "record_type", "record_id", "id"),
+    description="Versioned company-local notes attached to persistent records.",
+)

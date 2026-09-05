@@ -676,7 +676,7 @@ def test_pending_config_migration_is_additive_and_revision_local(tmp_path):
         command.upgrade(_config("hub", db.conn), "hub0005")
         original = dict(db.raw.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table'").fetchall())
         assert "pending_config" not in original
-        assert migrate_to_head(db, "hub", tmp_path / "backups") == ("hub0005", "hub0006")
+        assert migrate_to_head(db, "hub", tmp_path / "backups") == ("hub0005", "hub0007")
         current = dict(db.raw.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table'").fetchall())
         assert {key: value for key, value in current.items() if key != "pending_config"} == original
         assert db.raw.execute("SELECT count(*) FROM pending_config").fetchone()[0] == 0

@@ -1,6 +1,6 @@
 # Bookflow — architecture
 
-What is built, module by module: package skeleton, registry, data root, hub, organizations, companies, demo, CLI, company audit, versioned writes, presence, idempotency, directives, the event feed, the host process, HTTP routes, tokens, the POSIX local hand-off, the workbench, and generated command and schema documentation.
+What is built, module by module: package skeleton, registry, data root, hub, organizations, companies, demo, CLI, company audit, versioned writes, presence, idempotency, directives, record notes, the event feed, the host process, HTTP routes, tokens, the POSIX local hand-off, the workbench, and generated command and schema documentation.
 
 ## Layout
 
@@ -37,8 +37,8 @@ src/bookflow/
     engine.py            Database (sqlite3 + SQLAlchemy Core); explicit read-only snapshots, verified WAL/FULL/foreign-key writers, writable-transaction detection and exception-safe cleanup; percent-encoded URIs; create=True only for init/rollout
     traced_sqlite.py      capture-enabled per-connection native subclasses; bounded statement classification, execute/fetch/transaction timing, caller factories preserved
     migrate.py           HEADS constants; classify(); backup via sqlite backup API; migrate_to_head(); Alembic loaded only when migrating
-    hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection)
-    company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit/presence/directives), co0003 (20 supporting lists), co0004 (job delivery inheritance)
+    hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection), hub0007 (note capabilities)
+    company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit/presence/directives), co0003 (20 supporting lists), co0004 (job delivery inheritance), co0005 (notes)
     migrate.py           + migrate_company(): the one owner of company migrations: migrate entry by the system user, baseline entry, marker, hub projection entry
   hub/
     schema.py            users, api_tokens, organizations, companies, memberships, role_capabilities, features, audit_events, audit_entries; co-located table and column descriptions
@@ -54,6 +54,7 @@ src/bookflow/
     rollout.py           create_company_folder(): stages 2-4 with cleanup; writes the company_info create entry
     presence.py          set/clear/live_for/prune; 90 s TTL; never audited
     directives.py        add/resolve/deactivate/list_all; SI-<n> codes from sequences, never reused
+    records.py           explicit persistent annotation targets, including inactive list and owned-child identities; selected-company primary-key lookups
     query.py             strict bounded query inputs, reference rows, scoped/permission-bound continuation contract
     query_providers.py   SQL-first noun selection and summary/reference projection; audit-watermark continuation validation
   commands/
@@ -61,6 +62,7 @@ src/bookflow/
     hub_cmds.py          init (bootstrap path run_init), upgrade, organization new/list/show/rename, company new/list/use/attach/detach, demo reset, hub audit list/show
     company_cmds.py      company show (+ info_version, editing_by), company rename, company update, directive add/list/show/deactivate, presence set/clear
     audit_cmds.py        audit list/show/tail (company) and hub audit list/show/tail, one implementation over either database; seq cursors; per-entry visibility
+    note_cmds.py         note add/show/edit/list; existing audit/retry pipeline, required edit versions, bounded body and keyset pages
     host_cmds.py         serve (bootstrap path run_serve, bind parsing, the --allow-network gate), start_serving()/ServeHandle, migrate_everything(), make_local_handler(), user_for_login(); user set-password; token issue/list/revoke
     docs_cmds.py         standalone docs generate/check command; imports the renderer only when invoked
     query_cmds.py        lazy registry generation of typed query models and commands for all 20 company list nouns
@@ -101,7 +103,7 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - The event stream validates its cursor before sending a streaming response. Each worker call drains at most 100 events, closes its snapshot before yielding frames, and immediately redrains a full page. It reauthenticates between batches. Idle streams wait on `asyncio.Event` without a reader or worker. Canonical database ids and subscribe/redrain sequence comparison close the drain/wait race. Disconnect and shutdown unregister subscriptions.
 - Company API paths require a ULID. An accompanying `X-Bookflow-Company` must be the same ULID after normalization; mismatch is `E_VALIDATION` before visibility lookup. Header-only company selection through `/commands/<noun.verb>` retains the ordinary selector rules.
 - Session and bearer liveness refreshes are throttled to five minutes. A browser session's database expiry and cookie `Max-Age` renew together; SSE does not renew the cookie. Password changes revoke every other session for the target and preserve bearer tokens.
-- Hub head `hub0006` adds recoverable pending configuration contents. Company head is `co0004`. Membership grants/denies and capability/feature projections remain compatibility state; enforcement remains role-based until row 7. The planned agent-authority epochs and immutable ledger document/posting contracts are not implemented tables.
+- Hub head `hub0007` adds note capability rows after `hub0006`'s recoverable pending configuration contents. Company head `co0005` adds versioned notes. Membership grants/denies and capability/feature projections remain compatibility state; enforcement remains role-based until row 7. The planned agent-authority epochs and immutable ledger document/posting contracts are not implemented tables.
 - A single-word command (`upgrade`) has no verb: its noun page is its form, and it submits to `/hub/<noun>`.
 - `docs generate` is a rootless standalone command: no data root, lock, actor, capability, forwarding, or HTTP route. It renders all registered commands including standalone tooling, validates examples and schema descriptions, and copies packaged prose resources. Generation accepts only an absent, empty, or exactly marked real directory; it refuses symlinks and unrelated trees, validates a sibling stage, swaps it atomically, and restores the previous complete tree if publication fails. `--check` performs a read-only byte/path comparison and reports sorted missing, extra, and changed paths as `E_DOCS_STALE`.
 - The cold-start test budgets `bookflow --help` below 300 ms; neither root help nor command discovery imports FastAPI, uvicorn, or the workbench.
@@ -110,7 +112,9 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 
 ## Verified on this machine (Linux, ext4, Python 3.12)
 
-The complete correctness suite passes 736 tests in 476.54 seconds, with nine dependency/schema-order warnings. Generated documentation freshness checks 93 files. The same run records cold root help at 229.88 ms, company list at 555.11 ms, customer list at 771.97 ms and term list at 597.56 ms; cold reads are diagnostics, while root help and the 10,000-record warm-query gate pass their strict limits. Customer/job and nested reference workflows have real-Chrome desktop/narrow-screen witnesses. Human browser acceptance of the wider list workbench remains pending.
+Record notes use one new company table and its target/id index, with no added runtime dependency or background service. Note bodies are at most 65,536 UTF-8 bytes; list pages contain at most 200 notes and 262,144 body bytes. Existing audit snapshots preserve edits and existing request idempotency handles add retries. Notes do not change target versions or block soft retirement. CLI, Python and HTTP expose add/show/edit/list; the generic workbench has safe note display/edit and a target-input form for record-scoped lists. A record-local Notes and files panel, attachment transfer/storage and merged activity remain unimplemented portions of row 6.
+
+The pre-notes checkpoint passed the complete correctness suite: 736 tests in 476.54 seconds, with nine dependency/schema-order warnings and 93 generated documentation files. The same run recorded cold root help at 229.88 ms, company list at 555.11 ms, customer list at 771.97 ms and term list at 597.56 ms; cold reads are diagnostics, while root help and the 10,000-record warm-query gate passed their strict limits. These measurements predate the notes increment. Customer/job and nested reference workflows have real-Chrome desktop/narrow-screen witnesses. Human browser acceptance of the wider list workbench remains pending.
 
 Local tracing has 40 recorder, SQLite and integration witnesses, including original-error/durable-result parity, CLI parser rejection, private export, exhausted captures, HTTP cleanup and late queued writes. A synthetic exported capture opens in Perfetto UI v58.3 with all nine slices on three separate caller/writer/virtual-wait tracks and zero parser errors.
 

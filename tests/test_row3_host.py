@@ -556,6 +556,7 @@ def _read_calls(hosted):
     event = hosted.ok("audit.list", {"limit": 1}, company=cid)["items"][0]["id"]
     hub_event = hosted.ok("hub.audit.list", {"limit": 1})["items"][0]["id"]
     directive = hosted.ok("directive.list", {}, company=cid)["items"][0]
+    note = hosted.ok("note.list", {"record_type": "company_info", "record_id": cid}, company=cid)["items"][0]
     org = hosted.ok("organization.list")["items"][0]
     calls = {
         "audit list": ({"limit": 5}, cid),
@@ -565,6 +566,8 @@ def _read_calls(hosted):
         "company show": ({}, cid),
         "directive list": ({}, cid),
         "directive show": ({"directive": directive["code"]}, cid),
+        "note list": ({"record_type": "company_info", "record_id": cid}, cid),
+        "note show": ({"note": note["id"]}, cid),
         "hub audit list": ({"limit": 5}, None),
         "hub audit show": ({"event": hub_event}, None),
         "hub audit tail": ({"limit": 5}, None),

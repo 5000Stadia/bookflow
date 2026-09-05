@@ -559,3 +559,20 @@ input = { price_level = "${item_price_initial.id}", expected_version = "${item_p
 [[commands]]
 command = "company update"
 input = { use_classes = false, enable_price_levels = false, units_of_measure_mode = "disabled", sales_tax_enabled = false, default_sales_tax_item_id = "${null}", sales_tax_liability_basis = "invoice_date", sales_tax_remittance_frequency = "quarterly", default_ship_method_id = "${null}", free_on_board = "${null}" }
+
+[[commands]]
+command = "company show"
+capture = "annotation_company"
+input = {}
+
+[[commands]]
+command = "note add"
+input = { record_type = "company_info", record_id = "${annotation_company.company_id}", body = "Demo comments are separate from company settings and retain their edit history." }
+
+[[commands]]
+command = "note add"
+input = { record_type = "customer", record_id = "${customer.id}", body = "Call before arriving at the job site." }
+
+[[commands]]
+command = "note add"
+input = { record_type = "account", record_id = "${income_account.id}", body = "Service income for completed plumbing work." }

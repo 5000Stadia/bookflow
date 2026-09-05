@@ -41,7 +41,8 @@ the existing conflict response; no-op edits do not create versions/audit rows.
 Adds support existing request idempotency. Show/list include common fields and
 actor names from company-local principals.
 
-List returns a page, default 50 and maximum 200, with count for that page, has_more
+List returns a page, default 50 and maximum 200, additionally capped at 262,144
+UTF-8 body bytes, with count for that page, has_more
 and next_cursor. Order is newest first by immutable ULID id, not wall clock; the
 opaque cursor binds to company, target and current actor. Invalid/mismatched cursors
 are rejected. This is a live list of current note versions, not an issued snapshot;

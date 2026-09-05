@@ -629,6 +629,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         meta = registry.noun_meta(noun)
         definition = meta.get("definition")
         cmd = registry.get(definition.query_command if definition is not None and company_id else f"{noun} list")
+        if cmd is not None and any(field.is_required() for field in cmd.input_model.model_fields.values()):
+            # Record-scoped lists need a target, not an invalid empty invocation.
+            return form_page(request, company_id, noun, cmd.verb, None)
         if cmd is None:
             single = registry.get(noun)  # a single-word command such as `upgrade`: the noun's page is its form
             if single is not None and not single.local_only:
