@@ -24,6 +24,12 @@ deposit destination. Completion alone does not claim payment or create ledger
 entries. Estimates and work orders remain non-posting operational documents.
 Only the chosen accounting transaction posts the financial effects.
 
+If work has already been invoiced, receiving its payment settles that invoice
+through a customer payment. It does not create a second sale or replace the
+invoice with a sales receipt. For partially billed work, completion bills only
+the unbilled remainder; receipts and payments remain linked to their actual
+obligations. The workflow shows existing billing before offering its next action.
+
 Conversion creates a linked destination document and retains the source and its
 history. Source and destination show their relationship and status. Retrying a
 conversion cannot duplicate billing. Partial/progress billing retains the billed
@@ -43,6 +49,7 @@ not a list of currently registered commands:
 | Turn this estimate into a work order | Create a work order linked to the selected estimate revision. |
 | This work is finished; make an invoice | Complete the work and create the linked invoice, showing the billed lines and amount owed. |
 | They paid; make a sales receipt | Create the linked paid-sale document using the supplied payment facts and deposit account. |
+| They paid invoice 1043 | Record a customer payment against that invoice and show its remaining balance. |
 | Make and send an invoice | Create/post the invoice and request its delivery to the resolved recipient; return both accounting and delivery outcomes. |
 | Send invoice 1043 | Deliver the existing invoice without creating another invoice or ledger posting. |
 | Write the initial statement of work | Create a proposal/scope document for the customer and job, available for review and later conversion. |
