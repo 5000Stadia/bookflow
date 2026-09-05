@@ -149,3 +149,18 @@ EXAMPLES.update({
         {"event_id": ID},
     ),
 })
+
+
+EXAMPLES.update({
+    "journal post": Example(
+        'bookflow journal post --date 2026-01-15 --lines \'[{"account":"Checking","side":"debit","amount":"125.00"},{"account":"Service Income","side":"credit","amount":"125.00"}]\' --company "Demo Plumbing Co" --reason "Record service receipt" --json',
+        {"date": "2026-01-15", "lines": [{"account": "Checking", "side": "debit", "amount": "125.00"}, {"account": "Service Income", "side": "credit", "amount": "125.00"}]},
+    ),
+    "journal show": Example(f'bookflow journal show {ID} --company "Demo Plumbing Co" --json', {"journal": ID}),
+    "journal update": Example(f'bookflow journal update {ID} --memo "Service receipt" --expected-version 1 --company "Demo Plumbing Co" --reason "Clarify receipt" --json', {"journal": ID, "memo": "Service receipt", "expected_version": 1}),
+    "journal void": Example(f'bookflow journal void {ID} --expected-version 1 --company "Demo Plumbing Co" --reason "Duplicate receipt" --json', {"journal": ID, "expected_version": 1}),
+    "journal query": Example('bookflow journal query --date-from 2026-01-01 --date-to 2026-12-31 --limit 25 --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31", "limit": 25}),
+    "journal history": Example(f'bookflow journal history {ID} --limit 25 --company "Demo Plumbing Co" --json', {"journal": ID, "limit": 25}),
+    "report trial-balance": Example('bookflow report trial-balance --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_to": "2026-12-31"}),
+    "report general-ledger": Example('bookflow report general-ledger --date-from 2026-01-01 --date-to 2026-12-31 --account Checking --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31", "account": "Checking"}),
+})

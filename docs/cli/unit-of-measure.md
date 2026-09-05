@@ -218,11 +218,11 @@ Create a unit of measure set.
 | `default_purchase_unit_id` | `--default-purchase-unit-id` | string \| null | no | yes | null | — |
 | `default_sales_unit_id` | `--default-sales-unit-id` | string \| null | no | yes | null | — |
 | `default_shipping_unit_id` | `--default-shipping-unit-id` | string \| null | no | yes | null | — |
-| `units[].id` | `--units[]-id` | string \| null | no | yes | null | — |
-| `units[].name` | `--units[]-name` | string | yes | no | — | minimum length 1; maximum length 200 |
-| `units[].abbreviation` | `--units[]-abbreviation` | string | yes | no | — | minimum length 1; maximum length 32 |
-| `units[].is_base` | `--units[]-is-base` | boolean | no | no | false | — |
-| `units[].base_factor` | `--units[]-base-factor` | string | yes | no | — | — |
+| `units[].id` | inside `--units` JSON array | string \| null | no | yes | null | — |
+| `units[].name` | inside `--units` JSON array | string | yes | no | — | minimum length 1; maximum length 200 |
+| `units[].abbreviation` | inside `--units` JSON array | string | yes | no | — | minimum length 1; maximum length 32 |
+| `units[].is_base` | inside `--units` JSON array | boolean | no | no | false | — |
+| `units[].base_factor` | inside `--units` JSON array | string | yes | no | — | — |
 
 ### Command and context options
 
@@ -695,7 +695,7 @@ Example JSON output:
 
 ```json
 {
-  "count": 1,
+  "count": 0,
   "items": []
 }
 ```
@@ -1063,11 +1063,11 @@ Update a unit of measure set.
 | `default_purchase_unit_id` | `--default-purchase-unit-id` | string \| null | no | yes | null | — |
 | `default_sales_unit_id` | `--default-sales-unit-id` | string \| null | no | yes | null | — |
 | `default_shipping_unit_id` | `--default-shipping-unit-id` | string \| null | no | yes | null | — |
-| `units[].id` | `--units[]-id` | string \| null | no | yes | null | — |
-| `units[].name` | `--units[]-name` | string | yes | no | — | minimum length 1; maximum length 200 |
-| `units[].abbreviation` | `--units[]-abbreviation` | string | yes | no | — | minimum length 1; maximum length 32 |
-| `units[].is_base` | `--units[]-is-base` | boolean | no | no | false | — |
-| `units[].base_factor` | `--units[]-base-factor` | string | yes | no | — | — |
+| `units[].id` | inside `--units` JSON array | string \| null | no | yes | null | — |
+| `units[].name` | inside `--units` JSON array | string | yes | no | — | minimum length 1; maximum length 200 |
+| `units[].abbreviation` | inside `--units` JSON array | string | yes | no | — | minimum length 1; maximum length 32 |
+| `units[].is_base` | inside `--units` JSON array | boolean | no | no | false | — |
+| `units[].base_factor` | inside `--units` JSON array | string | yes | no | — | — |
 
 ### Command and context options
 

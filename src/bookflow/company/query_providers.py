@@ -249,11 +249,15 @@ def _profiles(noun, inp, session):
 
 
 def _account(inp, session):
+    from bookflow.company.accounts import balance_expression
+    from bookflow.core.exact import _require_i64
     table = schema.accounts
+    balance = balance_expression(session.company)
     return Provider(table, filters={"is_system": table.c.system_role.is_not(None)},
-        sorts={"balance": sa.literal(0), "hierarchy_order": table.c.path},
-        columns={"balance": sa.literal(0)},
-        transform=lambda row: {**row, "balance": Money(0, session.company_info_row["home_currency"]).to_dict()})
+        sorts={"balance": balance, "hierarchy_order": table.c.path},
+        columns={"balance": balance},
+        transform=lambda row: {**row, "balance": Money(_require_i64(int(row["balance"]), field="balance"),
+            session.company_info_row["home_currency"]).to_dict()})
 
 
 def _from_options(table, options):

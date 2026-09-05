@@ -60,10 +60,10 @@ def next_seq(db, events_table) -> int:
 
 @measured("command.audit")
 def write_event_to(db, ctx: Context, command: str, summary: str, touched: list[Touched], *, actor_id: str | None,
-                   actor_kind: str | None, directive_code: str | None = None) -> str:
+                   actor_kind: str | None, directive_code: str | None = None, event_id: str | None = None) -> str:
     """Insert one event and its entries into ``db`` inside the caller's open transaction."""
     events, entries = _tables(db)
-    event_id = new_id()
+    event_id = event_id or new_id()
     db.conn.execute(events.insert().values(
         id=event_id, seq=next_seq(db, events), at=now_iso(), command=command,
         actor_id=actor_id, actor_kind=actor_kind,

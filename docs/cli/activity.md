@@ -89,7 +89,7 @@ Example JSON output:
 
 ```json
 {
-  "count": 1,
+  "count": 0,
   "has_more": false,
   "high_water": 1,
   "items": [],

@@ -44,7 +44,7 @@
 {{ collection_control(child.collection, path ~ ":" ~ child.name, child_value or [], depth + 1, child.name) }}
 {% else %}
 {% set child_name = "c:" ~ path ~ ":" ~ child.name %}{% set child_id = child_name.replace(':', '-').replace('.', '-') %}
-<div class="collection-field"{% if child.name == 'id' %} hidden{% endif %}><label for="{{ child_id }}">{{ child.name.replace('_id', '').replace('_', ' ') }}{% if child.required %} *{% endif %}<small>{{ child.description }}</small></label>{% if child.name == "id" %}<input type="hidden" id="{{ child_id }}" name="{{ child_name }}" value="{{ child_value or '' }}"><code class="stable-child-id">{{ child_value or "assigned when saved" }}</code>{% else %}{{ collection_scalar(child, child_name, child_value, child_id) }}{% endif %}</div>
+<div class="collection-field"{% if child.name in ('id', 'line_id') %} hidden{% endif %}><label for="{{ child_id }}">{{ child.name.replace('_id', '').replace('_', ' ') }}{% if child.required %} *{% endif %}<small>{{ child.description }}</small></label>{% if child.name in ("id", "line_id") %}<input type="hidden" id="{{ child_id }}" name="{{ child_name }}" value="{{ child_value or '' }}"><code class="stable-child-id">{{ child_value or "assigned when saved" }}</code>{% else %}{{ collection_scalar(child, child_name, child_value, child_id) }}{% endif %}</div>
 {% endif %}
 {% endfor %}
 {% else %}

@@ -432,13 +432,29 @@ def _validate_references(
 
 
 def _transaction_count(db: Database, account_id: str) -> int:
-    if not sa.inspect(db.conn).has_table("transaction_lines"):
+    if not sa.inspect(db.conn).has_table("posting_lines"):
         return 0
     value = db.conn.execute(
-        sa.text("SELECT count(*) FROM transaction_lines WHERE account_id = :account_id"),
+        sa.text("SELECT count(*) FROM posting_lines WHERE account_id = :account_id"),
         {"account_id": account_id},
     ).scalar_one()
     return int(value)
+
+
+def balance_expression(db: Database):
+    """Exact normal-side text with numeric collation for SQL projection and sorting."""
+    from bookflow.company.ledger_reports import register_ledger_functions
+    register_ledger_functions(db)
+    db.raw.create_function("bookflow_account_normal", 2,
+        lambda value, side: str(-int(value) if side == "credit" else int(value)), deterministic=True)
+    db.raw.create_collation("bookflow_integer", lambda left, right: (int(left) > int(right)) - (int(left) < int(right)))
+    if not sa.inspect(db.conn).has_table("posting_lines"):
+        return sa.literal("0").collate("bookflow_integer")
+    lines = schema.posting_lines
+    net = sa.select(sa.func.coalesce(sa.func.bookflow_sum_int(lines.c.debit_minor_units - lines.c.credit_minor_units), "0")).where(
+        lines.c.account_id == schema.accounts.c.id).correlate(schema.accounts).scalar_subquery()
+    side = sa.case((schema.accounts.c.type.in_([kind for kind, normal in NORMAL_BALANCE.items() if normal == "credit"]), "credit"), else_="debit")
+    return sa.func.bookflow_account_normal(net, side).collate("bookflow_integer")
 
 
 def _active_master_uses(db: Database, account_id: str) -> dict[str, int]:
@@ -653,7 +669,7 @@ def plan_account_update(
     ):
         raise BookflowError(
             "E_RECORD_IN_USE",
-            details={"record_id": record_id, "field": "currency", "dependents": [{"record_type": "transaction_line", "count": _transaction_count(db, record_id)}]},
+            details={"record_id": record_id, "field": "currency", "dependents": [{"record_type": "posting_line", "count": _transaction_count(db, record_id)}]},
         )
     _number_available(db, proposed["number"], exclude_id=record_id)
     _validate_type_profile({**current, **proposed})
@@ -740,7 +756,7 @@ def _deactivation_uses(db: Database, account_id: str) -> tuple[dict[str, Any], .
     counts = _active_master_uses(db, account_id)
     transaction_count = _transaction_count(db, account_id)
     if transaction_count:
-        counts["transaction_line"] = transaction_count
+        counts["posting_line"] = transaction_count
     # Vendor expense-account rows are explicit soft form defaults.
     counts.pop("vendor_expense_account", None)
     return tuple(
@@ -910,11 +926,14 @@ def _project_account_values(
     home_currency: str,
     child_count: int,
     transaction_count: int,
+    net_balance: int = 0,
 ) -> dict[str, Any]:
     result = logical_account_snapshot(row)
     result["provider_profile_ref"] = None
     result["is_system"] = row.get("system_role") is not None
-    result["balance"] = Money(0, home_currency).to_dict()
+    from bookflow.core.exact import _require_i64
+    normal = -net_balance if NORMAL_BALANCE[str(row["type"])] == "credit" else net_balance
+    result["balance"] = Money(_require_i64(normal, field="balance"), home_currency).to_dict()
     result["available_balance"] = None
     result["normal_balance"] = NORMAL_BALANCE[str(row["type"])]
     result["statement_family"] = STATEMENT_FAMILY[str(row["type"])]
@@ -925,7 +944,7 @@ def _project_account_values(
 
 
 def project_account(db: Database, row: Mapping[str, Any]) -> dict[str, Any]:
-    """Project every public stored field plus Row 5's derived placeholders."""
+    """Project stored account fields, own ledger balance and dependency facts."""
     child_count = int(
         db.conn.execute(
             sa.select(sa.func.count())
@@ -933,11 +952,15 @@ def project_account(db: Database, row: Mapping[str, Any]) -> dict[str, Any]:
             .where(schema.accounts.c.parent_id == row["id"])
         ).scalar_one()
     )
+    normal_amount = int(db.conn.execute(sa.select(balance_expression(db)).where(
+        schema.accounts.c.id == row["id"])).scalar_one_or_none() or 0)
+    net_amount = -normal_amount if NORMAL_BALANCE[str(row["type"])] == "credit" else normal_amount
     return _project_account_values(
         row,
         home_currency=str(_company_info(db)["home_currency"]),
         child_count=child_count,
         transaction_count=_transaction_count(db, str(row["id"])),
+        net_balance=net_amount,
     )
 
 
@@ -964,7 +987,7 @@ def list_accounts(
         include_inactive=include_inactive,
         filter_expressions={"is_system": is_system},
         sort_expressions={
-            "balance": sa.literal(0),
+            "balance": balance_expression(db),
             "hierarchy_order": schema.accounts.c.path,
         },
     )
@@ -979,23 +1002,26 @@ def list_accounts(
         ).all()
     }
     transaction_counts: dict[str, int] = {}
-    if sa.inspect(db.conn).has_table("transaction_lines"):
+    if sa.inspect(db.conn).has_table("posting_lines"):
         transaction_counts = {
             str(account_id): int(count)
             for account_id, count in db.conn.execute(
                 sa.text(
-                    "SELECT account_id, count(*) FROM transaction_lines "
+                    "SELECT account_id, count(*) FROM posting_lines "
                     "GROUP BY account_id"
                 )
             ).all()
         }
     home_currency = str(_company_info(db)["home_currency"])
+    from bookflow.company.ledger_reports import net_balances
+    balances = net_balances(db) if sa.inspect(db.conn).has_table("posting_lines") else {}
     return [
         _project_account_values(
             row,
             home_currency=home_currency,
             child_count=child_counts.get(str(row["id"]), 0),
             transaction_count=transaction_counts.get(str(row["id"]), 0),
+            net_balance=balances.get(str(row["id"]), 0),
         )
         for row in rows
     ]

@@ -177,9 +177,9 @@ Create a custom field.
 | `name` | `--name` | string | yes | no | — | — |
 | `kind` | `--kind` | literal["text", "number", "date", "bool", "choice"] | yes | no | — | — |
 | `scopes` | `--scopes` | array[literal["customer", "vendor", "employee", "other_name", "item", "journal_entry", "invoice", "sales_receipt", "credit_memo", "payment", "deposit", "bill", "bill_payment", "check", "credit_card_charge", "transfer", "inventory_adjustment", "vendor_credit", "estimate", "sales_order", "purchase_order", "item_receipt", "statement"]] | yes | no | — | — |
-| `choices[].id` | `--choices[]-id` | string | no | no | generated | — |
-| `choices[].value` | `--choices[]-value` | string | yes | no | — | — |
-| `choices[].active` | `--choices[]-active` | boolean | no | no | true | — |
+| `choices[].id` | inside `--choices` JSON array | string | no | no | generated | — |
+| `choices[].value` | inside `--choices` JSON array | string | yes | no | — | — |
+| `choices[].active` | inside `--choices` JSON array | boolean | no | no | true | — |
 | `position` | `--position` | integer | no | no | 0 | minimum 0 |
 | `required` | `--required` | boolean | no | no | false | — |
 | `default` | `--default` | any \| null | no | yes | null | — |
@@ -543,7 +543,7 @@ Example JSON output:
 
 ```json
 {
-  "count": 1,
+  "count": 0,
   "items": []
 }
 ```
@@ -835,16 +835,16 @@ Update a custom field.
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `name` | `--name` | Annotated \| null | no | yes | null | — |
+| `name` | `--name` | string \| null | no | yes | null | — |
 | `kind` | `--kind` | literal["text", "number", "date", "bool", "choice"] \| null | no | yes | null | — |
 | `scopes` | `--scopes` | array[literal["customer", "vendor", "employee", "other_name", "item", "journal_entry", "invoice", "sales_receipt", "credit_memo", "payment", "deposit", "bill", "bill_payment", "check", "credit_card_charge", "transfer", "inventory_adjustment", "vendor_credit", "estimate", "sales_order", "purchase_order", "item_receipt", "statement"]] \| null | no | yes | null | — |
-| `choices[].id` | `--choices[]-id` | string | no | no | generated | — |
-| `choices[].value` | `--choices[]-value` | string | yes | no | — | — |
-| `choices[].active` | `--choices[]-active` | boolean | no | no | true | — |
-| `position` | `--position` | Annotated \| null | no | yes | null | — |
-| `required` | `--required` | Annotated \| null | no | yes | null | — |
+| `choices[].id` | inside `--choices` JSON array | string | no | no | generated | — |
+| `choices[].value` | inside `--choices` JSON array | string | yes | no | — | — |
+| `choices[].active` | inside `--choices` JSON array | boolean | no | no | true | — |
+| `position` | `--position` | integer \| null | no | yes | null | — |
+| `required` | `--required` | boolean \| null | no | yes | null | — |
 | `default` | `--default` | any \| null | no | yes | null | — |
-| `active` | `--active` | Annotated \| null | no | yes | null | — |
+| `active` | `--active` | boolean \| null | no | yes | null | — |
 | `custom_field` | `CUSTOM_FIELD` | string | yes | no | — | Custom-field definition id or name |
 | `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
 

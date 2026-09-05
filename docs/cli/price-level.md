@@ -207,11 +207,11 @@ Create a price level.
 | `rounding_increment` | `--rounding-increment` | string \| null | no | yes | null | — |
 | `rounding_offset` | `--rounding-offset` | string \| null | no | yes | null | — |
 | `percent` | `--percent` | string \| null | no | yes | null | — |
-| `items[].id` | `--items[]-id` | string \| null | no | yes | null | — |
-| `items[].item_id` | `--items[]-item-id` | string | yes | no | — | minimum length 26; maximum length 26 |
-| `items[].price` | `--items[]-price` | string \| null | no | yes | null | — |
-| `items[].percent` | `--items[]-percent` | string \| null | no | yes | null | — |
-| `items[].adjustment_basis` | `--items[]-adjustment-basis` | literal["standard_price", "cost", "current_custom_price"] | yes | no | — | — |
+| `items[].id` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].item_id` | inside `--items` JSON array | string | yes | no | — | minimum length 26; maximum length 26 |
+| `items[].price` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].percent` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].adjustment_basis` | inside `--items` JSON array | literal["standard_price", "cost", "current_custom_price"] | yes | no | — | — |
 
 ### Command and context options
 
@@ -641,7 +641,7 @@ Example JSON output:
 
 ```json
 {
-  "count": 1,
+  "count": 0,
   "items": []
 }
 ```
@@ -969,11 +969,11 @@ Update a price level.
 | `rounding_increment` | `--rounding-increment` | string \| null | no | yes | null | — |
 | `rounding_offset` | `--rounding-offset` | string \| null | no | yes | null | — |
 | `percent` | `--percent` | string \| null | no | yes | null | — |
-| `items[].id` | `--items[]-id` | string \| null | no | yes | null | — |
-| `items[].item_id` | `--items[]-item-id` | string | yes | no | — | minimum length 26; maximum length 26 |
-| `items[].price` | `--items[]-price` | string \| null | no | yes | null | — |
-| `items[].percent` | `--items[]-percent` | string \| null | no | yes | null | — |
-| `items[].adjustment_basis` | `--items[]-adjustment-basis` | literal["standard_price", "cost", "current_custom_price"] | yes | no | — | — |
+| `items[].id` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].item_id` | inside `--items` JSON array | string | yes | no | — | minimum length 26; maximum length 26 |
+| `items[].price` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].percent` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].adjustment_basis` | inside `--items` JSON array | literal["standard_price", "cost", "current_custom_price"] | yes | no | — | — |
 
 ### Command and context options
 

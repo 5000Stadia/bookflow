@@ -100,7 +100,7 @@ Example JSON output:
 
 ```json
 {
-  "count": 1,
+  "count": 0,
   "items": [],
   "next_before": null
 }
@@ -376,7 +376,7 @@ Example JSON output:
 
 ```json
 {
-  "count": 1,
+  "count": 0,
   "high_water": null,
   "items": [],
   "next_after": null,

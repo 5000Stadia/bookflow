@@ -5,11 +5,16 @@ import sqlite3
 import pytest
 from bookflow.hub import credentials
 from bookflow.storage.engine import open_database
-from bookflow.storage.migrate import migrate_to_head, current_revision_raw
+from bookflow.storage.migrate import HEADS, migrate_to_head, current_revision_raw
 from bookflow.core.errors import BookflowError
 from tests.test_row7_identity_migration import _make, _dump
 from tests.test_row7_credentials import authority, writer
 from tests.conftest import make_actor
+
+
+@pytest.fixture(autouse=True)
+def _revision_under_test(monkeypatch):
+    monkeypatch.setitem(HEADS, "hub", "hub0009")
 
 
 def test_old_human_secrets_authenticate_after_conversion(tmp_path):
@@ -37,7 +42,8 @@ import os, sys
 from pathlib import Path
 import sqlalchemy as sa
 from bookflow.storage.engine import open_database
-from bookflow.storage.migrate import migrate_to_head
+from bookflow.storage.migrate import HEADS, migrate_to_head
+HEADS['hub'] = 'hub0009'
 def interrupt(conn, cursor, statement, parameters, context, executemany):
     if 'INSERT INTO audit_entries' in statement and 'api_token' in parameters:
         os._exit(73)

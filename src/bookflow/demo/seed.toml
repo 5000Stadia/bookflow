@@ -579,6 +579,7 @@ input = { record_type = "account", record_id = "${income_account.id}", body = "S
 
 [[commands]]
 command = "attachment add"
+capture = "service_document"
 body_fixture = "example.pdf"
 input = { record_type = "company_info", record_id = "${annotation_company.company_id}", original_filename = "Example service document.pdf", media_type = "application/pdf", caption = "Sample PDF for the demo" }
 
@@ -591,3 +592,42 @@ input = { record_type = "customer", record_id = "${customer.id}", original_filen
 command = "attachment add"
 body_fixture = "example.pdf"
 input = { record_type = "account", record_id = "${income_account.id}", original_filename = "Example service document.pdf", media_type = "application/pdf", caption = "Sample PDF for the demo" }
+
+
+[[commands]]
+command = "journal post"
+capture = "opening_journal"
+input = { date = "2026-01-01", number = "DEMO-OPEN", memo = "Opening capital journal", lines = [{ account = "Checking", side = "debit", amount = "5000.00" }, { account = "Opening Balance Equity", side = "credit", amount = "5000.00" }] }
+
+[[commands]]
+command = "journal post"
+capture = "service_journal"
+input = { date = "2026-01-15", number = "DEMO-SERVICE", memo = "Domestic journal for completed service work received in cash", lines = [{ account = "Checking", side = "debit", amount = "1200.00" }, { account = "Service Income", side = "credit", amount = "1200.00" }] }
+
+[[commands]]
+command = "journal update"
+capture = "corrected_service"
+reason = "Correct the service amount from the source document"
+input = { journal = "${service_journal.id}", expected_version = "${service_journal.version}", lines = [{ account = "Checking", side = "debit", amount = "1400.00" }, { account = "Service Income", side = "credit", amount = "1400.00" }] }
+
+[[commands]]
+command = "journal post"
+input = { date = "2026-02-01", number = "DEMO-FEE", memo = "Professional fees paid from checking", lines = [{ account = "Professional Fees", side = "debit", amount = "250.00" }, { account = "Checking", side = "credit", amount = "250.00" }] }
+
+[[commands]]
+command = "journal post"
+capture = "duplicate_journal"
+input = { date = "2026-03-01", number = "DEMO-VOID", memo = "Duplicate example retained in history", lines = [{ account = "Checking", side = "debit", amount = "75.00" }, { account = "Service Income", side = "credit", amount = "75.00" }] }
+
+[[commands]]
+command = "journal void"
+reason = "Remove the duplicate example journal"
+input = { journal = "${duplicate_journal.id}", expected_version = "${duplicate_journal.version}" }
+
+[[commands]]
+command = "note add"
+input = { record_type = "transaction", record_id = "${service_journal.id}", body = "The source PDF belongs to this stable journal identity, including its corrected revision." }
+
+[[commands]]
+command = "attachment link"
+input = { attachment = "${service_document.attachment.id}", record_type = "transaction", record_id = "${service_journal.id}", caption = "Source document for the service journal" }

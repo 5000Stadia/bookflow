@@ -589,8 +589,10 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
         s.hub.raw.execute("BEGIN IMMEDIATE")
     if co_tx:
         s.company.raw.execute("BEGIN IMMEDIATE")
-        _upsert_principals(s, ctx)  # inside the transaction: a no-op command rolls it back with everything else
+        s.company.raw.execute("SAVEPOINT bookflow_business")
     try:
+        if co_tx:
+            _upsert_principals(s, ctx)
         with performance.span("command.apply", command=cmd.name):
             applied = cmd.apply(plan, ctx, s)
         if applied.finalized:
@@ -610,6 +612,9 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
         changed = bool(applied.touched) or applied.audited or bool(s.hub_touched) or s.pending_config
         output = applied.output.model_dump(mode="json")
         if not changed:
+            if co_tx and s.company.write_transaction:
+                s.company.raw.execute("ROLLBACK TO bookflow_business")
+                s.company.raw.execute("RELEASE bookflow_business")
             # A no-op keeps its successful retry result without creating an audit event.
             if key_db is not None and ihash:
                 idempotency.store(key_db, s.actor.id, ctx.idempotency_key, cmd.name, ihash, ctx.request_id, output)
@@ -623,6 +628,8 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
                 if s.hub.write_transaction:
                     s.hub.raw.execute("COMMIT")
             return applied
+        if co_tx and s.company.write_transaction:
+            s.company.raw.execute("RELEASE bookflow_business")
         if s.company is not None and cmd.truth == "company":
             if co_entries and not applied.audited and s.company.write_transaction:
                 write_event_to(s.company, ctx, cmd.name, applied.summary, co_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)

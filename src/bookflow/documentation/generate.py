@@ -64,6 +64,9 @@ def _command_options(cmd: Any) -> list[tuple[str, str]]:
 def _field_flag(cmd: Any, path: str, secret: bool) -> str:
     if path in cmd.positional:
         return f"`{path.upper()}`"
+    if "[]" in path:
+        container = path.split("[]", 1)[0].replace(".", "-").replace("_", "-")
+        return f"inside `--{container}` JSON array"
     flag = path.replace(".", "-").replace("_", "-")
     suffix = " (secret)" if secret else ""
     return f"`--{flag}`{suffix}"

@@ -66,10 +66,13 @@ def test_co6_ddl_does_not_follow_live_metadata(tmp_path, monkeypatch):
     assert _schema_semantics(changed) == _schema_semantics(baseline)
 
 
-def test_upgrade_existing_company_default_and_limit_constraints(client):
-    path = Path(client.company.show(company=COMPANY)["path"]) / "company.db"
+def test_upgrade_existing_company_default_and_limit_constraints(tmp_path):
+    path = tmp_path / "company.db"
+    def populate(conn):
+        _old_data(conn)
+        conn.execute("INSERT INTO company_info (id, version, created_at, created_by, created_via, updated_at, updated_by, updated_via, legal_name, display_name, tax_id_kind, entity_type, income_tax_form, fiscal_year_start_month, tax_year_start_month, report_basis, home_currency, timezone, recent_activity_window_seconds) VALUES ('C1',1,'t','U1','cli','t','U1','cli','Preserved Company','Preserved Company','ein','other','other',1,1,'accrual','USD','UTC',60)")
+    _make_revision(path, "company", "co0005", populate)
     with open_database(path, writable=True) as db:
-        command.downgrade(_config("company", db.conn), "co0005")
         original = db.raw.execute("SELECT id, legal_name FROM company_info").fetchall()
         command.upgrade(_config("company", db.conn), "co0006")
         assert db.raw.execute("SELECT id, legal_name FROM company_info").fetchall() == original

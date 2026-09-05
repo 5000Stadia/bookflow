@@ -905,7 +905,7 @@ def _apply_seed_history(s: Session, ctx: Context, seed: dict[str, Any], row: dic
             run_in_session(_registry.get("company update"), _registry.get("company update").input_model(**fields), ctx.model_copy(update={"company_id": row["id"]}), s)
         captures: dict[str, dict[str, Any]] = {}
         for index, entry in enumerate(seed.get("commands", []), start=1):
-            unexpected = set(entry) - {"command", "capture", "input", "body_fixture"}
+            unexpected = set(entry) - {"command", "capture", "input", "body_fixture", "reason"}
             if unexpected:
                 raise ValueError(
                     f"demo seed command {index} has unknown keys: {sorted(unexpected)}"
@@ -922,7 +922,13 @@ def _apply_seed_history(s: Session, ctx: Context, seed: dict[str, Any], row: dic
             if not isinstance(raw, dict):
                 raise ValueError(f"demo seed command {index} input is not a table")
             raw_input = _resolve_seed_references(raw, captures)
-            seed_ctx = ctx.model_copy(update={"company_id": row["id"]})
+            context_values = {"company_id": row["id"]}
+            if "reason" in entry:
+                reason = entry["reason"]
+                if not cmd.is_write or not isinstance(reason, str) or not reason.strip() or len(reason) > 140:
+                    raise ValueError("demo command reason requires a write and 1 through 140 characters")
+                context_values["reason"] = reason
+            seed_ctx = ctx.model_copy(update=context_values)
             if cmd.transfer is not None:
                 if cmd.transfer.direction != "input" or entry.get("body_fixture") != "example.pdf":
                     raise ValueError("demo transfers require the packaged example.pdf fixture")

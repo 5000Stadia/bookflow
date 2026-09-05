@@ -23,6 +23,12 @@ MIGRATION = importlib.import_module("bookflow.storage.hub_migrations.versions.00
 REASON = "migration_requires_authorization"
 
 
+@pytest.fixture(autouse=True)
+def _revision_under_test(monkeypatch):
+    monkeypatch.setitem(HEADS, "hub", "hub0009")
+    monkeypatch.setitem(HEADS, "company", "co0006")
+
+
 def _insert(conn, table, values):
     columns = ', '.join(f'"{name}"' for name in values)
     conn.execute(f'INSERT INTO "{table}" ({columns}) VALUES ({", ".join("?" for _ in values)})', tuple(values.values()))

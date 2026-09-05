@@ -6,7 +6,7 @@ import inspect
 import json
 import types
 from enum import Enum
-from typing import Any, Literal, Mapping, Union, get_args, get_origin
+from typing import Annotated, Any, Literal, Mapping, Union, get_args, get_origin
 
 from pydantic import BaseModel
 
@@ -16,9 +16,12 @@ from bookflow.core.errors import BookflowError
 
 def _base(ann):
     origin = get_origin(ann)
+    if origin is Annotated:
+        return _base(get_args(ann)[0])
     if origin is Union or origin is types.UnionType:
         args = [a for a in get_args(ann) if a is not type(None)]
-        return args[0] if args else str, True
+        base, nullable = _base(args[0]) if args else (str, True)
+        return base, nullable or type(None) in get_args(ann)
     return ann, False
 
 

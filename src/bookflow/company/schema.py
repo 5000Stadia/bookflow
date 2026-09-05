@@ -297,6 +297,7 @@ sequences = _table(
     "sequences",
     _column("name", sa.String(32), "Name of the company-local numbered series.", primary_key=True),
     _column("next_number", sa.Integer, "Next integer to allocate from this series.", nullable=False),
+    _column("prefix", sa.String(16), "Text prefix used for automatic document numbers.", nullable=False, server_default=""),
     description="Company-local counters used to allocate stable human-readable codes.",
 )
 
@@ -1041,3 +1042,8 @@ attachment_collection = _table(
     sa.CheckConstraint("length(CAST(payload AS BLOB)) <= 262144 AND json_valid(payload)", name="ck_attachment_collection_payload"),
     description="Internal durable attachment collection intents, bounded to 262144 UTF-8 bytes.",
 )
+
+# Shared company metadata includes the journal history tables.
+from bookflow.company.ledger_schema import define_tables as _define_ledger_tables
+
+globals().update(_define_ledger_tables(metadata, _column, _table, _common))

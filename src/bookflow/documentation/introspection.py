@@ -7,7 +7,7 @@ import json
 import types
 from dataclasses import dataclass, replace
 from enum import Enum
-from typing import Any, Literal, Union, get_args, get_origin
+from typing import Annotated, Any, Literal, Union, get_args, get_origin
 
 from pydantic import BaseModel, TypeAdapter
 from pydantic_core import PydanticUndefined
@@ -28,12 +28,15 @@ class FieldDoc:
 
 def _optional(annotation: Any) -> tuple[Any, bool]:
     origin = get_origin(annotation)
+    if origin is Annotated:
+        return _optional(get_args(annotation)[0])
     if origin in (Union, types.UnionType):
         args = get_args(annotation)
         nullable = type(None) in args
         remaining = tuple(arg for arg in args if arg is not type(None))
         if len(remaining) == 1:
-            return remaining[0], nullable
+            base, inner_nullable = _optional(remaining[0])
+            return base, nullable or inner_nullable
         return remaining, nullable
     return annotation, False
 
@@ -207,7 +210,7 @@ def sample_value(annotation: Any, name: str) -> Any:
     if base is str:
         return _sample_string(name)
     if base is int:
-        return 1
+        return 0 if name == "count" else 1
     if base is float:
         return 1.0
     if base is bool:

@@ -423,19 +423,19 @@ Create a item.
 | `useful_life_months` | `--useful-life-months` | integer \| null | no | yes | null | — |
 | `book_basis` | `--book-basis` | any \| null | no | yes | null | — |
 | `tax_basis` | `--tax-basis` | any \| null | no | yes | null | — |
-| `members[].id` | `--members[]-id` | string \| null | no | yes | null | — |
-| `members[].component_item_id` | `--members[]-component-item-id` | string | yes | no | — | minimum length 26; maximum length 26 |
-| `members[].quantity` | `--members[]-quantity` | string | yes | no | — | — |
-| `members[].unit_id` | `--members[]-unit-id` | string \| null | no | yes | null | — |
-| `vendor_profiles[].id` | `--vendor-profiles[]-id` | string \| null | no | yes | null | — |
-| `vendor_profiles[].vendor_id` | `--vendor-profiles[]-vendor-id` | string | yes | no | — | minimum length 26; maximum length 26 |
-| `vendor_profiles[].preferred_rank` | `--vendor-profiles[]-preferred-rank` | integer | yes | no | — | minimum 1 |
-| `vendor_profiles[].vendor_item_name` | `--vendor-profiles[]-vendor-item-name` | string \| null | no | yes | null | — |
-| `vendor_profiles[].purchase_cost` | `--vendor-profiles[]-purchase-cost` | any \| null | no | yes | null | — |
-| `vendor_profiles[].minimum_quantity` | `--vendor-profiles[]-minimum-quantity` | string \| null | no | yes | null | — |
-| `vendor_profiles[].lead_time_days` | `--vendor-profiles[]-lead-time-days` | integer \| null | no | yes | null | — |
-| `vendor_profiles[].manufacturer_part_number` | `--vendor-profiles[]-manufacturer-part-number` | string \| null | no | yes | null | — |
-| `vendor_profiles[].availability_notes` | `--vendor-profiles[]-availability-notes` | string \| null | no | yes | null | — |
+| `members[].id` | inside `--members` JSON array | string \| null | no | yes | null | — |
+| `members[].component_item_id` | inside `--members` JSON array | string | yes | no | — | minimum length 26; maximum length 26 |
+| `members[].quantity` | inside `--members` JSON array | string | yes | no | — | — |
+| `members[].unit_id` | inside `--members` JSON array | string \| null | no | yes | null | — |
+| `vendor_profiles[].id` | inside `--vendor-profiles` JSON array | string \| null | no | yes | null | — |
+| `vendor_profiles[].vendor_id` | inside `--vendor-profiles` JSON array | string | yes | no | — | minimum length 26; maximum length 26 |
+| `vendor_profiles[].preferred_rank` | inside `--vendor-profiles` JSON array | integer | yes | no | — | minimum 1 |
+| `vendor_profiles[].vendor_item_name` | inside `--vendor-profiles` JSON array | string \| null | no | yes | null | — |
+| `vendor_profiles[].purchase_cost` | inside `--vendor-profiles` JSON array | any \| null | no | yes | null | — |
+| `vendor_profiles[].minimum_quantity` | inside `--vendor-profiles` JSON array | string \| null | no | yes | null | — |
+| `vendor_profiles[].lead_time_days` | inside `--vendor-profiles` JSON array | integer \| null | no | yes | null | — |
+| `vendor_profiles[].manufacturer_part_number` | inside `--vendor-profiles` JSON array | string \| null | no | yes | null | — |
+| `vendor_profiles[].availability_notes` | inside `--vendor-profiles` JSON array | string \| null | no | yes | null | — |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] \| null | no | yes | null | — |
 
 ### Command and context options
@@ -1316,7 +1316,7 @@ Example JSON output:
 
 ```json
 {
-  "count": 1,
+  "count": 0,
   "items": []
 }
 ```
@@ -1868,19 +1868,19 @@ Update a item.
 | `useful_life_months` | `--useful-life-months` | integer \| null | no | yes | null | — |
 | `book_basis` | `--book-basis` | any \| null | no | yes | null | — |
 | `tax_basis` | `--tax-basis` | any \| null | no | yes | null | — |
-| `members[].id` | `--members[]-id` | string \| null | no | yes | null | — |
-| `members[].component_item_id` | `--members[]-component-item-id` | string | yes | no | — | minimum length 26; maximum length 26 |
-| `members[].quantity` | `--members[]-quantity` | string | yes | no | — | — |
-| `members[].unit_id` | `--members[]-unit-id` | string \| null | no | yes | null | — |
-| `vendor_profiles[].id` | `--vendor-profiles[]-id` | string \| null | no | yes | null | — |
-| `vendor_profiles[].vendor_id` | `--vendor-profiles[]-vendor-id` | string | yes | no | — | minimum length 26; maximum length 26 |
-| `vendor_profiles[].preferred_rank` | `--vendor-profiles[]-preferred-rank` | integer | yes | no | — | minimum 1 |
-| `vendor_profiles[].vendor_item_name` | `--vendor-profiles[]-vendor-item-name` | string \| null | no | yes | null | — |
-| `vendor_profiles[].purchase_cost` | `--vendor-profiles[]-purchase-cost` | any \| null | no | yes | null | — |
-| `vendor_profiles[].minimum_quantity` | `--vendor-profiles[]-minimum-quantity` | string \| null | no | yes | null | — |
-| `vendor_profiles[].lead_time_days` | `--vendor-profiles[]-lead-time-days` | integer \| null | no | yes | null | — |
-| `vendor_profiles[].manufacturer_part_number` | `--vendor-profiles[]-manufacturer-part-number` | string \| null | no | yes | null | — |
-| `vendor_profiles[].availability_notes` | `--vendor-profiles[]-availability-notes` | string \| null | no | yes | null | — |
+| `members[].id` | inside `--members` JSON array | string \| null | no | yes | null | — |
+| `members[].component_item_id` | inside `--members` JSON array | string | yes | no | — | minimum length 26; maximum length 26 |
+| `members[].quantity` | inside `--members` JSON array | string | yes | no | — | — |
+| `members[].unit_id` | inside `--members` JSON array | string \| null | no | yes | null | — |
+| `vendor_profiles[].id` | inside `--vendor-profiles` JSON array | string \| null | no | yes | null | — |
+| `vendor_profiles[].vendor_id` | inside `--vendor-profiles` JSON array | string | yes | no | — | minimum length 26; maximum length 26 |
+| `vendor_profiles[].preferred_rank` | inside `--vendor-profiles` JSON array | integer | yes | no | — | minimum 1 |
+| `vendor_profiles[].vendor_item_name` | inside `--vendor-profiles` JSON array | string \| null | no | yes | null | — |
+| `vendor_profiles[].purchase_cost` | inside `--vendor-profiles` JSON array | any \| null | no | yes | null | — |
+| `vendor_profiles[].minimum_quantity` | inside `--vendor-profiles` JSON array | string \| null | no | yes | null | — |
+| `vendor_profiles[].lead_time_days` | inside `--vendor-profiles` JSON array | integer \| null | no | yes | null | — |
+| `vendor_profiles[].manufacturer_part_number` | inside `--vendor-profiles` JSON array | string \| null | no | yes | null | — |
+| `vendor_profiles[].availability_notes` | inside `--vendor-profiles` JSON array | string \| null | no | yes | null | — |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] \| null | no | yes | null | — |
 
 ### Command and context options

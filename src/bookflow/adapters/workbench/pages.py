@@ -166,6 +166,17 @@ def _output_version(noun: str, output: dict[str, Any]) -> int | None:
 
 def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
     """Project the authoritative editable object from a show result."""
+    if noun == "journal":
+        revision = shown.get("revision", {})
+        return {
+            "number": revision.get("number"), "date": revision.get("date"),
+            "memo": revision.get("memo"),
+            "lines": [{
+                "line_id": line["line_id"], "account": line["account_id"],
+                "side": line["side"], "amount": line["amount"]["amount"],
+                **{key: line[key] for key in ("name_type", "name_id", "class_id", "description") if line.get(key) is not None},
+            } for line in revision.get("lines", [])],
+        }
     definition = registry.noun_meta(noun).get("definition")
     path = definition.editable_output_path if definition is not None else ()
     current: Any = shown
@@ -650,6 +661,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         meta = registry.noun_meta(noun)
         definition = meta.get("definition")
         cmd = registry.get(definition.query_command if definition is not None and company_id else f"{noun} list")
+        if cmd is None:
+            cmd = registry.get(f"{noun} query")
         if cmd is not None and any(field.is_required() for field in cmd.input_model.model_fields.values()):
             # Record-scoped lists need a target, not an invalid empty invocation.
             return form_page(request, company_id, noun, cmd.verb, None)
@@ -665,15 +678,17 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                           has_inactive=False, include=False, verbs=page_verbs, extra={"note": "this noun has no list; use its actions"})
         include = request.query_params.get("include_inactive") == "1"
         raw: dict[str, Any] = {}
-        if definition is not None and company_id:
+        if company_id and "limit" in cmd.input_model.model_fields:
             try:
                 limit = int(request.query_params.get("limit", "50"))
             except ValueError:
                 return page_error(request, BookflowError("E_VALIDATION", details={"fields": [{"field": "limit", "problem": "must be an integer"}]}))
-            raw.update({"projection": "summary", "limit": limit})
+            raw["limit"] = limit
+            if "projection" in cmd.input_model.model_fields:
+                raw["projection"] = "summary"
             if request.query_params.get("cursor"):
                 raw["cursor"] = request.query_params["cursor"]
-        for field in ("query", "sort", "direction"):
+        for field in ("query", "sort", "direction", "date_from", "date_to", "status"):
             value = request.query_params.get(field)
             if value and field in cmd.input_model.model_fields:
                 raw[field] = value
@@ -692,7 +707,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         meta = registry.noun_meta(noun)
         items = out.get("items", [])
         definition = meta.get("definition")
-        columns = list(definition.summary_columns) if definition is not None else list_columns(items)
+        columns = (["number", "date", "memo", "total", "status"] if noun == "journal" else
+                   list(definition.summary_columns) if definition is not None else list_columns(items))
         column_text = request.query_params.get("columns", "")
         if column_text and definition is not None:
             requested_columns = [field.strip() for field in column_text.split(",") if field.strip()]
@@ -747,6 +763,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         show_selector = _record_selector(show, command_noun)
         raw = {show_selector: record_id} if show_selector else {}
         try:
+            if command_noun == "journal" and request.query_params.get("revision_number"):
+                try:
+                    raw["revision_number"] = int(request.query_params["revision_number"])
+                except ValueError:
+                    raise BookflowError("E_VALIDATION", details={"fields": [{"field": "revision_number", "problem": "must be an integer"}]}) from None
             out = run(request, show.name, raw, company_id if show.scope == "company" else None)
             cred = credential(request)
             role_view = out
@@ -792,7 +813,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                         audit_undo = {"eligible": True, "event_id": out["id"]}
         visible_record = {key: value for key, value in out.items() if key != "editing_by"}
         definition = meta.get("definition")
-        display_field = definition.display_field if definition is not None else None
+        display_field = definition.display_field if definition is not None else meta.get("display_field")
         record_title = next(
             (
                 str(out[field])

@@ -6,6 +6,7 @@
 <script>addEventListener('pagehide',()=>navigator.sendBeacon&&fetch('/c/{{ company_id }}/presence/clear/{{ meta.record_type }}/{{ record.id if noun != 'company' else record.company_id }}',{method:'POST',headers:{'X-Bookflow-Workbench':'1'},keepalive:true}))</script>{% endif %}
 <h1>{{ record_title }}</h1>
 <p class="actions">{% if workspace %}{% for v in verbs if v.verb == 'update' %}<a class="primary-action" href="{{ base }}/{{ record_id }}/update">Edit {{ 'job' if record.parent_id else 'customer' }}</a>{% endfor %}{% endif %}{% for v in verbs %}{% if v.is_write and not (workspace and v.verb == 'update') %}<a href="{{ base }}/{{ record_id }}/{{ v.verb }}">{{ v.verb.replace('-', ' ').capitalize() if workspace else v.verb }}</a>{% endif %}{% endfor %}{% if contact_copy %}<a href="{{ contact_copy.url }}">{{ contact_copy.label }}</a>{% endif %}</p>
+{% if noun == "journal" %}{% include "journal_detail.html" %}{% endif %}
 {% if workspace %}
 {% macro readable(value) %}{% if value is mapping %}{% if value.currency and value.amount is defined %}{{ value.amount }} {{ value.currency }}{% else %}{% for key, part in value.items() if key not in ('id', 'owner_id', 'active', 'position') and not key.endswith('_id') %}{% if part not in (none, '', []) %}<div><span class="muted">{{ key.replace('_', ' ') }}:</span> {{ readable(part) }}</div>{% endif %}{% endfor %}{% endif %}{% elif value is sequence and value is not string %}{% for part in value %}<div class="contact-entry">{{ readable(part) }}</div>{% endfor %}{% elif value == true %}Yes{% elif value == false %}No{% else %}{{ value }}{% endif %}{% endmacro %}
 <div class="customer-workspace">
@@ -22,7 +23,7 @@
 {% elif audit_undo.unavailable %}<p class="muted">Undo unavailable: {{ audit_undo.unavailable }}</p>{% endif %}
 </section>{% endif %}
 {% macro fields(obj, prefix) %}{% for k, v in obj.items() %}{% if v is mapping %}<div class="field"><b>{{ prefix }}{{ k }}</b><span></span></div>{{ fields(v, prefix ~ k ~ ".") }}{% elif v is sequence and v is not string and v and v[0] is mapping %}<div class="field"><b>{{ prefix }}{{ k }}</b><pre>{{ json.dumps(v, indent=1, default=str) }}</pre></div>{% else %}<div class="field"><b>{{ prefix }}{{ k }}</b><span>{{ v if v is not none else "" }}</span></div>{% endif %}{% endfor %}{% endmacro %}
-{% if workspace %}<details class="technical-details"><summary>All fields and technical details</summary>{{ fields(record, "") }}</details>{% else %}{{ fields(record, "") }}{% endif %}
+{% if workspace or noun == "journal" %}<details class="technical-details"><summary>All fields and technical details</summary>{{ fields(record, "") }}</details>{% else %}{{ fields(record, "") }}{% endif %}
 {% if audit is not none %}<h3>Audit</h3><div class="table-wrap"><table><tr><th>at</th><th>command</th><th>actor</th><th>interface</th><th>reason</th><th>summary</th></tr>
 {% for e in audit %}<tr><td>{{ e.at }}</td><td>{{ e.command }}</td><td>{{ e.actor_name or e.actor_id }}</td><td>{{ e.interface }}</td><td>{{ e.reason or "" }}{% if e.directive_code %} ({{ e.directive_code }}){% endif %}</td><td>{{ e.summary }}</td></tr>{% endfor %}</table></div>{% endif %}
 {% include "annotations.html" %}

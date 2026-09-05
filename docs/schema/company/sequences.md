@@ -10,3 +10,4 @@ Database: `company`.
 |---|---|---|---|---|---|---|---|
 | `name` | VARCHAR(32) | no | — | primary key 1 | — | — | Name of the company-local numbered series. |
 | `next_number` | INTEGER | no | — | — | — | — | Next integer to allocate from this series. |
+| `prefix` | VARCHAR(16) | no | — | — | — | — | Text prefix used for automatic document numbers. |

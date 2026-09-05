@@ -656,7 +656,7 @@ Example JSON output:
 
 ```json
 {
-  "count": 1,
+  "count": 0,
   "has_more": false,
   "items": [],
   "next_cursor": null

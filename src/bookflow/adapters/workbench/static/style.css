@@ -54,3 +54,8 @@ nav.crumbs{margin:.5rem 0;color:#666}
 .annotations ol { padding-left: 1.4rem; }
 .annotations :focus-visible { outline: 3px solid #2166a5; outline-offset: 2px; }
 @media (max-width: 700px) { .annotation-columns { grid-template-columns: minmax(0, 1fr); } }
+
+/* Financial tables scroll within their cards and keep each amount intact. */
+.ledger-table { min-width: 640px; }
+.ledger-table th, .ledger-table td { overflow-wrap: normal; word-break: normal; }
+.ledger-table td:nth-last-child(-n+2), .ledger-table tfoot th:nth-last-child(-n+2) { white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }

@@ -17,7 +17,8 @@ HUB0004 = importlib.import_module("bookflow.storage.hub_migrations.versions.0004
 HUB0005 = importlib.import_module("bookflow.storage.hub_migrations.versions.0005_row5_complete_capabilities")
 HUB0007 = importlib.import_module("bookflow.storage.hub_migrations.versions.0007_note_capabilities")
 HUB0008 = importlib.import_module("bookflow.storage.hub_migrations.versions.0008_attachment_capabilities")
-CURRENT_ROLE_CAPABILITY_SEED = tuple(sorted(HUB0005.ROLE_CAPABILITY_SEED + HUB0007.ROLE_CAPABILITY_SEED + HUB0008.ROLE_CAPABILITY_SEED))
+HUB0010 = importlib.import_module("bookflow.storage.hub_migrations.versions.0010_ledger_capabilities")
+CURRENT_ROLE_CAPABILITY_SEED = tuple(sorted(HUB0005.ROLE_CAPABILITY_SEED + HUB0007.ROLE_CAPABILITY_SEED + HUB0008.ROLE_CAPABILITY_SEED + HUB0010.ROLE_CAPABILITY_SEED))
 CO0002 = importlib.import_module("bookflow.storage.company_migrations.versions.0002_contract")
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -133,8 +134,8 @@ def test_fresh_init_has_current_compatibility_schema(tmp_path):
     root = tmp_path / "fresh"
     bookflow.connect(data_root=str(root)).init()
 
-    assert current_revision_raw(root / "hub.db") == "hub0009"
-    assert HEADS == {"hub": "hub0009", "company": "co0006"}
+    assert current_revision_raw(root / "hub.db") == "hub0010"
+    assert HEADS == {"hub": "hub0010", "company": "co0007"}
     assert str(hub_schema.memberships.c.grants.type) == "TEXT" and hub_schema.memberships.c.grants.nullable
     assert str(hub_schema.memberships.c.denies.type) == "TEXT" and hub_schema.memberships.c.denies.nullable
     assert [column.name for column in hub_schema.role_capabilities.primary_key.columns] == [
@@ -169,7 +170,7 @@ def test_populated_hub0004_upgrade_refreshes_complete_capabilities(tmp_path):
 
     backups = tmp_path / "backups"
     with open_database(hub, writable=True) as db:
-        assert migrate_to_head(db, "hub", backups) == ("hub0004", "hub0009")
+        assert migrate_to_head(db, "hub", backups) == ("hub0004", "hub0010")
         seeded = tuple(db.raw.execute(
             "SELECT role, capability, required_role FROM role_capabilities "
             "ORDER BY role, capability, required_role"
@@ -196,7 +197,7 @@ def test_populated_co0003_upgrade_allows_job_delivery_inheritance(tmp_path):
     _make_revision(company, "company", "co0003", populate)
     backups = tmp_path / "backups"
     with open_database(company, writable=True) as db:
-        assert migrate_to_head(db, "company", backups) == ("co0003", "co0006")
+        assert migrate_to_head(db, "company", backups) == ("co0003", "co0007")
         column = next(
             row for row in db.raw.execute("PRAGMA table_info(customers)")
             if row[1] == "preferred_delivery_method"
@@ -233,7 +234,7 @@ def test_populated_hub0002_upgrade_adds_compatibility_schema_and_verified_backup
 
     backups = tmp_path / "backups"
     with open_database(hub, writable=True) as db:
-        assert migrate_to_head(db, "hub", backups) == ("hub0002", "hub0009")
+        assert migrate_to_head(db, "hub", backups) == ("hub0002", "hub0010")
         membership = db.raw.execute(
             "SELECT id, user_id, scope_type, scope_id, role, grants, denies FROM memberships WHERE id='M1'"
         ).fetchone()

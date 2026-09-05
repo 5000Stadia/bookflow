@@ -474,37 +474,37 @@ Create a customer or job.
 | `job_sales_rep_id` | `--job-sales-rep-id` | string \| null | no | yes | null | — |
 | `address_mode` | `--address-mode` | literal["inherit", "own"] \| null | no | yes | null | — |
 | `contact_mode` | `--contact-mode` | literal["inherit", "own"] \| null | no | yes | null | — |
-| `shipping_addresses[].line1` | `--shipping-addresses[]-line1` | string \| null | no | yes | null | — |
-| `shipping_addresses[].line2` | `--shipping-addresses[]-line2` | string \| null | no | yes | null | — |
-| `shipping_addresses[].city` | `--shipping-addresses[]-city` | string \| null | no | yes | null | — |
-| `shipping_addresses[].state` | `--shipping-addresses[]-state` | string \| null | no | yes | null | — |
-| `shipping_addresses[].postal_code` | `--shipping-addresses[]-postal-code` | string \| null | no | yes | null | — |
-| `shipping_addresses[].country` | `--shipping-addresses[]-country` | string \| null | no | yes | null | — |
-| `shipping_addresses[].id` | `--shipping-addresses[]-id` | string \| null | no | yes | null | — |
-| `shipping_addresses[].label` | `--shipping-addresses[]-label` | string | yes | no | — | minimum length 1; maximum length 128 |
-| `shipping_addresses[].is_default` | `--shipping-addresses[]-is-default` | boolean | no | no | false | — |
-| `contacts[].id` | `--contacts[]-id` | string \| null | no | yes | null | — |
-| `contacts[].role` | `--contacts[]-role` | literal["primary", "alternate", "additional"] | yes | no | — | — |
-| `contacts[].display_name` | `--contacts[]-display-name` | string \| null | no | yes | null | — |
-| `contacts[].salutation` | `--contacts[]-salutation` | string \| null | no | yes | null | — |
-| `contacts[].first_name` | `--contacts[]-first-name` | string \| null | no | yes | null | — |
-| `contacts[].middle_name` | `--contacts[]-middle-name` | string \| null | no | yes | null | — |
-| `contacts[].last_name` | `--contacts[]-last-name` | string \| null | no | yes | null | — |
-| `contacts[].job_title` | `--contacts[]-job-title` | string \| null | no | yes | null | — |
-| `contacts[].work_phone` | `--contacts[]-work-phone` | string \| null | no | yes | null | — |
-| `contacts[].home_phone` | `--contacts[]-home-phone` | string \| null | no | yes | null | — |
-| `contacts[].mobile_phone` | `--contacts[]-mobile-phone` | string \| null | no | yes | null | — |
-| `contacts[].other_phone` | `--contacts[]-other-phone` | string \| null | no | yes | null | — |
-| `contacts[].work_fax` | `--contacts[]-work-fax` | string \| null | no | yes | null | — |
-| `contacts[].home_fax` | `--contacts[]-home-fax` | string \| null | no | yes | null | — |
-| `contacts[].primary_email` | `--contacts[]-primary-email` | string \| null | no | yes | null | — |
-| `contacts[].secondary_email` | `--contacts[]-secondary-email` | string \| null | no | yes | null | — |
-| `contacts[].website` | `--contacts[]-website` | string \| null | no | yes | null | — |
-| `contacts[].external_handle` | `--contacts[]-external-handle` | string \| null | no | yes | null | — |
-| `contacts[].points[].id` | `--contacts[]-points[]-id` | string \| null | no | yes | null | — |
-| `contacts[].points[].kind` | `--contacts[]-points[]-kind` | literal["main_phone", "work_phone", "home_phone", "mobile_phone", "other_phone", "fax", "work_fax", "home_fax", "pager", "main_email", "additional_email", "cc_email", "website", "url_1", "url_2", "linked_in", "facebook", "twitter", "skype_id", "instant_messaging", "other_1", "other_2", "other_3", "other_4"] | yes | no | — | — |
-| `contacts[].points[].custom_label` | `--contacts[]-points[]-custom-label` | string \| null | no | yes | null | — |
-| `contacts[].points[].value` | `--contacts[]-points[]-value` | string | yes | no | — | minimum length 1; maximum length 512 |
+| `shipping_addresses[].line1` | inside `--shipping-addresses` JSON array | string \| null | no | yes | null | — |
+| `shipping_addresses[].line2` | inside `--shipping-addresses` JSON array | string \| null | no | yes | null | — |
+| `shipping_addresses[].city` | inside `--shipping-addresses` JSON array | string \| null | no | yes | null | — |
+| `shipping_addresses[].state` | inside `--shipping-addresses` JSON array | string \| null | no | yes | null | — |
+| `shipping_addresses[].postal_code` | inside `--shipping-addresses` JSON array | string \| null | no | yes | null | — |
+| `shipping_addresses[].country` | inside `--shipping-addresses` JSON array | string \| null | no | yes | null | — |
+| `shipping_addresses[].id` | inside `--shipping-addresses` JSON array | string \| null | no | yes | null | — |
+| `shipping_addresses[].label` | inside `--shipping-addresses` JSON array | string | yes | no | — | minimum length 1; maximum length 128 |
+| `shipping_addresses[].is_default` | inside `--shipping-addresses` JSON array | boolean | no | no | false | — |
+| `contacts[].id` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].role` | inside `--contacts` JSON array | literal["primary", "alternate", "additional"] | yes | no | — | — |
+| `contacts[].display_name` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].salutation` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].first_name` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].middle_name` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].last_name` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].job_title` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].work_phone` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].home_phone` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].mobile_phone` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].other_phone` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].work_fax` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].home_fax` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].primary_email` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].secondary_email` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].website` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].external_handle` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].points[].id` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].points[].kind` | inside `--contacts` JSON array | literal["main_phone", "work_phone", "home_phone", "mobile_phone", "other_phone", "fax", "work_fax", "home_fax", "pager", "main_email", "additional_email", "cc_email", "website", "url_1", "url_2", "linked_in", "facebook", "twitter", "skype_id", "instant_messaging", "other_1", "other_2", "other_3", "other_4"] | yes | no | — | — |
+| `contacts[].points[].custom_label` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].points[].value` | inside `--contacts` JSON array | string | yes | no | — | minimum length 1; maximum length 512 |
 | `contact` | `--contact` | string \| null | no | yes | null | — |
 | `alt_contact` | `--alt-contact` | string \| null | no | yes | null | — |
 | `phone` | `--phone` | string \| null | no | yes | null | — |
@@ -1702,7 +1702,7 @@ Example JSON output:
 
 ```json
 {
-  "count": 1,
+  "count": 0,
   "items": []
 }
 ```
@@ -2422,37 +2422,37 @@ Update a customer or job.
 | `job_sales_rep_id` | `--job-sales-rep-id` | string \| null | no | yes | null | — |
 | `address_mode` | `--address-mode` | literal["inherit", "own"] \| null | no | yes | null | — |
 | `contact_mode` | `--contact-mode` | literal["inherit", "own"] \| null | no | yes | null | — |
-| `shipping_addresses[].line1` | `--shipping-addresses[]-line1` | string \| null | no | yes | null | — |
-| `shipping_addresses[].line2` | `--shipping-addresses[]-line2` | string \| null | no | yes | null | — |
-| `shipping_addresses[].city` | `--shipping-addresses[]-city` | string \| null | no | yes | null | — |
-| `shipping_addresses[].state` | `--shipping-addresses[]-state` | string \| null | no | yes | null | — |
-| `shipping_addresses[].postal_code` | `--shipping-addresses[]-postal-code` | string \| null | no | yes | null | — |
-| `shipping_addresses[].country` | `--shipping-addresses[]-country` | string \| null | no | yes | null | — |
-| `shipping_addresses[].id` | `--shipping-addresses[]-id` | string \| null | no | yes | null | — |
-| `shipping_addresses[].label` | `--shipping-addresses[]-label` | string | yes | no | — | minimum length 1; maximum length 128 |
-| `shipping_addresses[].is_default` | `--shipping-addresses[]-is-default` | boolean | no | no | false | — |
-| `contacts[].id` | `--contacts[]-id` | string \| null | no | yes | null | — |
-| `contacts[].role` | `--contacts[]-role` | literal["primary", "alternate", "additional"] | yes | no | — | — |
-| `contacts[].display_name` | `--contacts[]-display-name` | string \| null | no | yes | null | — |
-| `contacts[].salutation` | `--contacts[]-salutation` | string \| null | no | yes | null | — |
-| `contacts[].first_name` | `--contacts[]-first-name` | string \| null | no | yes | null | — |
-| `contacts[].middle_name` | `--contacts[]-middle-name` | string \| null | no | yes | null | — |
-| `contacts[].last_name` | `--contacts[]-last-name` | string \| null | no | yes | null | — |
-| `contacts[].job_title` | `--contacts[]-job-title` | string \| null | no | yes | null | — |
-| `contacts[].work_phone` | `--contacts[]-work-phone` | string \| null | no | yes | null | — |
-| `contacts[].home_phone` | `--contacts[]-home-phone` | string \| null | no | yes | null | — |
-| `contacts[].mobile_phone` | `--contacts[]-mobile-phone` | string \| null | no | yes | null | — |
-| `contacts[].other_phone` | `--contacts[]-other-phone` | string \| null | no | yes | null | — |
-| `contacts[].work_fax` | `--contacts[]-work-fax` | string \| null | no | yes | null | — |
-| `contacts[].home_fax` | `--contacts[]-home-fax` | string \| null | no | yes | null | — |
-| `contacts[].primary_email` | `--contacts[]-primary-email` | string \| null | no | yes | null | — |
-| `contacts[].secondary_email` | `--contacts[]-secondary-email` | string \| null | no | yes | null | — |
-| `contacts[].website` | `--contacts[]-website` | string \| null | no | yes | null | — |
-| `contacts[].external_handle` | `--contacts[]-external-handle` | string \| null | no | yes | null | — |
-| `contacts[].points[].id` | `--contacts[]-points[]-id` | string \| null | no | yes | null | — |
-| `contacts[].points[].kind` | `--contacts[]-points[]-kind` | literal["main_phone", "work_phone", "home_phone", "mobile_phone", "other_phone", "fax", "work_fax", "home_fax", "pager", "main_email", "additional_email", "cc_email", "website", "url_1", "url_2", "linked_in", "facebook", "twitter", "skype_id", "instant_messaging", "other_1", "other_2", "other_3", "other_4"] | yes | no | — | — |
-| `contacts[].points[].custom_label` | `--contacts[]-points[]-custom-label` | string \| null | no | yes | null | — |
-| `contacts[].points[].value` | `--contacts[]-points[]-value` | string | yes | no | — | minimum length 1; maximum length 512 |
+| `shipping_addresses[].line1` | inside `--shipping-addresses` JSON array | string \| null | no | yes | null | — |
+| `shipping_addresses[].line2` | inside `--shipping-addresses` JSON array | string \| null | no | yes | null | — |
+| `shipping_addresses[].city` | inside `--shipping-addresses` JSON array | string \| null | no | yes | null | — |
+| `shipping_addresses[].state` | inside `--shipping-addresses` JSON array | string \| null | no | yes | null | — |
+| `shipping_addresses[].postal_code` | inside `--shipping-addresses` JSON array | string \| null | no | yes | null | — |
+| `shipping_addresses[].country` | inside `--shipping-addresses` JSON array | string \| null | no | yes | null | — |
+| `shipping_addresses[].id` | inside `--shipping-addresses` JSON array | string \| null | no | yes | null | — |
+| `shipping_addresses[].label` | inside `--shipping-addresses` JSON array | string | yes | no | — | minimum length 1; maximum length 128 |
+| `shipping_addresses[].is_default` | inside `--shipping-addresses` JSON array | boolean | no | no | false | — |
+| `contacts[].id` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].role` | inside `--contacts` JSON array | literal["primary", "alternate", "additional"] | yes | no | — | — |
+| `contacts[].display_name` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].salutation` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].first_name` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].middle_name` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].last_name` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].job_title` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].work_phone` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].home_phone` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].mobile_phone` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].other_phone` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].work_fax` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].home_fax` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].primary_email` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].secondary_email` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].website` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].external_handle` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].points[].id` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].points[].kind` | inside `--contacts` JSON array | literal["main_phone", "work_phone", "home_phone", "mobile_phone", "other_phone", "fax", "work_fax", "home_fax", "pager", "main_email", "additional_email", "cc_email", "website", "url_1", "url_2", "linked_in", "facebook", "twitter", "skype_id", "instant_messaging", "other_1", "other_2", "other_3", "other_4"] | yes | no | — | — |
+| `contacts[].points[].custom_label` | inside `--contacts` JSON array | string \| null | no | yes | null | — |
+| `contacts[].points[].value` | inside `--contacts` JSON array | string | yes | no | — | minimum length 1; maximum length 512 |
 | `contact` | `--contact` | string \| null | no | yes | null | — |
 | `alt_contact` | `--alt-contact` | string \| null | no | yes | null | — |
 | `phone` | `--phone` | string \| null | no | yes | null | — |

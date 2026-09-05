@@ -123,6 +123,7 @@ on restart; it must not silently change a later running balance.
 
 ## Following increments
 
+Journal custom-field entry and immutable definition/value snapshots follow the domestic core.
 Manual dated exchange rates and foreign-tagged posting follow a separately fixed
 rounding and rate-scope contract. Functional register entry uses the same journal
 service, supports keyboard entry and displays the authoritative posted result in

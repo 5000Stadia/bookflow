@@ -147,3 +147,27 @@ STANDALONE_MATRIX = {
 INFRASTRUCTURE = ["E_USAGE", "E_VALIDATION", "E_CONTEXT_IN_INPUT", "E_NOT_INITIALIZED", "E_NO_ACTOR", "E_PERMISSION", "E_COMPANY_NOT_FOUND",
                   "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND", "E_DB_BUSY", "E_NETWORK_SHARE", "E_FS_UNKNOWN", "E_SCHEMA_UNKNOWN",
                   "E_SCHEMA_BEHIND", "E_MIGRATION_FAILED", "E_CONFIG_INVALID", "E_IO", "E_PARTIAL_WRITE", "E_REASON_REQUIRED", "E_FEATURE_DISABLED", "E_UNAUTHENTICATED", "E_INTERNAL"]
+
+_LEDGER_WRITE_ERRORS = {
+    'E_RECORD_NOT_FOUND': 'journal, account, party or class absent from selected company',
+    'E_VERSION_CONFLICT': 'stale whole-journal expected version, including no-op and repeated void',
+    'E_UNBALANCED_ENTRY': 'entered or generated batch debit and credit totals differ',
+    'E_PERIOD_CLOSED': 'original or replacement accounting date is closed',
+    'E_DUPLICATE_NUMBER': 'supplied number belongs to another journal, including a voided one',
+    'E_INACTIVE_REFERENCE': 'new posting references an inactive account, party or class',
+    'E_VALUE_RANGE': 'amount or journal side exceeds signed 64-bit range',
+    'E_AMOUNT_PRECISION': 'decimal input has more places than home currency supports',
+    'E_REASON_REQUIRED': 'void has no reason, or agent/system write lacks reason or directive',
+    'E_IDEMPOTENCY_MISMATCH': 'retry key is reused with different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown context directive',
+    'E_DIRECTIVE_INACTIVE': 'inactive context directive',
+}
+for _verb in ('post', 'update', 'void'):
+    MATRIX['journal ' + _verb] = dict(_LEDGER_WRITE_ERRORS)
+MATRIX.update({
+    'journal show': {'E_RECORD_NOT_FOUND': 'journal or requested revision absent'},
+    'journal query': {'E_QUERY_STALE': 'company audit changed between journal pages'},
+    'journal history': {'E_RECORD_NOT_FOUND': 'journal absent', 'E_QUERY_STALE': 'company audit changed between history pages'},
+    'report trial-balance': {'E_QUERY_STALE': 'relevant posting or account display facts changed between pages', 'E_VALUE_RANGE': 'public account balance or report total exceeds signed 64-bit range'},
+    'report general-ledger': {'E_QUERY_STALE': 'relevant posting or account display facts changed between pages', 'E_VALUE_RANGE': 'public running balance or report total exceeds signed 64-bit range', 'E_RECORD_NOT_FOUND': 'account filter does not resolve'},
+})

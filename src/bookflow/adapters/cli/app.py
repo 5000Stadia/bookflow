@@ -104,9 +104,13 @@ def _set_path(d: dict[str, Any], path: str, value: Any) -> None:
 def _input_value(annotation: Any, value: Any, path: str) -> Any:
     """Translate structured and integer flag text without weakening the model."""
     base = annotation
-    if get_origin(base) in (Union, types.UnionType):
-        branches = [arg for arg in get_args(base) if arg is not type(None)]
-        if len(branches) == 1:
+    while get_origin(base) in (Annotated, Union, types.UnionType):
+        if get_origin(base) is Annotated:
+            base = get_args(base)[0]
+        else:
+            branches = [arg for arg in get_args(base) if arg is not type(None)]
+            if len(branches) != 1:
+                break
             base = branches[0]
     if isinstance(value, str) and get_origin(base) in (list, dict):
         import json

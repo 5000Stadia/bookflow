@@ -34,6 +34,9 @@ INFRASTRUCTURE_CODES: dict[str, str] = {
 }
 
 COMMAND_CODES: dict[str, str] = {
+    "E_UNBALANCED_ENTRY": "Journal debits and credits must be equal.",
+    "E_PERIOD_CLOSED": "An affected accounting date is in a closed period.",
+    "E_DUPLICATE_NUMBER": "That document number is already used by this type.",
     "E_NAME_TAKEN": "That display name is already used.",
     "E_ORGANIZATION_REQUIRED": "More than one organization is visible; name one with --organization.",
     "E_ROLLOUT_INCOMPLETE": "Company creation did not finish; a folder remains.",
