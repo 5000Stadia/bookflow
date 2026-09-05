@@ -105,6 +105,8 @@ class WorkOutput(WorkSummaryOutput):
     revision: WorkRevisionOutput
     links: list[WorkLinkOutput]
     links_has_more: bool = False
+    next_links_cursor: str | None = None
+    links_audit_watermark: int | None = None
 
 
 class WorkWriteOutput(WorkOutput, WriteOutput):

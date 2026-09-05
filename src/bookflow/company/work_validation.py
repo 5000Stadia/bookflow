@@ -149,6 +149,27 @@ def validate(plan, s, ctx):
         require(owner.record_id in headers, 'custom fields belong to another document')
         rev = revisions[headers[owner.record_id]['current_revision_id']]
         custom.validate(s.company, custom_plan, owner.record_id, json.loads(rev['custom_fields_snapshot']), record_type=headers[owner.record_id]['kind'])
+    destination = headers[plan.preview.id]
+    destination_rev = revisions[destination['current_revision_id']]
+    destination_lines = sorted((line for line in pending['work_lines'] if line['revision_id'] == destination_rev['id']), key=lambda row: row['position'])
+    actual_semantic = work._semantic(destination_rev, destination_lines)
+    new_ids = indexed['work_line_identities']
+    for line in actual_semantic['lines']:
+        if line['line_id'] in new_ids:
+            line['line_id'] = None
+    require(actual_semantic == data['semantic'], 'stored aggregate differs from resolved intent')
+    # A conversion source receives only an immutable link revision, never a
+    # hidden scope, acceptance, custom-value or quantity edit.
+    for header in headers.values():
+        if header['id'] == destination['id']:
+            continue
+        old = data['before'].get(header['id'])
+        require(old is not None, 'unexpected additional new document')
+        old_rev = work.revision(s, old)
+        new_rev = revisions[header['current_revision_id']]
+        new_lines = sorted((line for line in pending['work_lines'] if line['revision_id'] == new_rev['id']), key=lambda row: row['position'])
+        require(work._semantic(old_rev, work.saved_lines(s, old_rev)) == work._semantic(new_rev, new_lines), 'conversion rewrote source facts')
+        require(all(old_rev[key] == new_rev[key] for key in ('accepted_revision_id', 'accepted_at', 'accepted_by')), 'conversion changed source acceptance')
     require(plan.preview.id in headers and plan.preview.revision.id == headers[plan.preview.id]['current_revision_id'], 'preview shows another document')
     require(plan.preview.gross_minor_units == revisions[plan.preview.revision.id]['gross_minor_units'], 'preview total differs')
     # Re-resolve the original typed intent; generated identities/provenance are not

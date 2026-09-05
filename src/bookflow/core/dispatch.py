@@ -525,7 +525,7 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
         ihash = idempotency.input_hash(retry_input, s.company_row["id"] if s.company_row else None)
         hit = idempotency.lookup(key_db, s.actor.id, ctx.idempotency_key, cmd.name, ihash)
         if hit is not None:
-            replay = _replay(cmd, hit, s)
+            replay = cmd.replay(inp, ctx, s, hit) if cmd.replay is not None else _replay(cmd, hit, s)
             if replay is not None:
                 replay["idempotent_replay"] = True
                 if dry_run:

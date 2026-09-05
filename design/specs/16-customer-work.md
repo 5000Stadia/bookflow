@@ -46,7 +46,10 @@ Show selects current or a positive revision_number. Query filters exact customer
 number/title text, date interval, status, active (default true; null means both),
 and inclusive minimum/maximum net amount. It orders by date then stable id,
 limits50/default,200/max, and uses the existing scope/permission-hash-checked audit-watermark continuation.
-History is revision-number ordered and bounded. Query summaries do not materialize
+History is revision-number ordered and bounded. Show includes at most200 source
+links and an explicit next_links_cursor; passing links_cursor to show traverses
+them under the same company/permission/audit-watermark checks. Links expose both
+source birth revision and current destination state; the cursor grants no authority. Query summaries do not materialize
 all lines. Referenced records resolve only in the selected company.
 
 Every write supports dry-run with a resolved-facts fingerprint; execution checks
@@ -245,7 +248,11 @@ request-cache expiry. Store hash(key), canonical request hash, source id/revisio
 version, destination id/initial revision and relation. Same key+intent returns the
 original destination with its current state even after either document changes or
 the generic cache expires. Different intent with that key rejects. Authorization
-is checked before replay. Key hashing compares canonical typed request with the
+is checked before replay. Both conversion descriptors provide a read-only replay
+refresh after normal authorization and matching generic request-cache validation;
+a cached receipt is resolved through its permanent link to the current destination.
+A missing/mismatched durable link fails without creating anything. Other commands
+retain their ordinary cached-receipt behavior. Key hashing compares canonical typed request with the
 explicit source id/version and caller fields; exclude preview fingerprint, context
 clock and generated ids. Dry-run never reserves a key, number or identity.
 

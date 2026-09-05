@@ -245,6 +245,7 @@ class WorkOrderUpdateInput(WorkUpdateInput, OperationalFields):
 
 
 class WorkShowInput(StrictModel):
+    links_cursor: str | None = Field(default=None, max_length=2048)
     revision_number: _Version | None = None
 
 

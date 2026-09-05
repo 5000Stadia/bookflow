@@ -30,7 +30,7 @@ def _register(kind, prefix):
             if write:
                 return work.prepare(s, ctx, inp, kind, verb)
             if verb == 'show':
-                return Plan(work.show(s, inp, kind))
+                return Plan(work.show(s, inp, kind, ctx))
             return Plan(work.page(s, ctx, inp, kind, history=verb == 'history'))
         cmd = command(noun + ' ' + verb, scope='company',
             description=(WRITE_DESCRIPTIONS if write else READ_DESCRIPTIONS)[verb],
@@ -41,10 +41,14 @@ def _register(kind, prefix):
             version_source=(noun + ' show', kind, 'version') if write and verb != 'create' else None,
             error_codes=['E_RECORD_NOT_FOUND'] + (['E_VERSION_CONFLICT', 'E_DUPLICATE_NUMBER', 'E_INACTIVE_REFERENCE',
                 'E_VALUE_RANGE', 'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED', 'E_PREVIEW_STALE', 'E_WORK_DEPENDENCY',
-                'E_CONVERSION_KEY_REUSED'] if write else ['E_QUERY_STALE'] if verb != 'show' else []),
+                'E_CONVERSION_KEY_REUSED'] if write else ['E_QUERY_STALE']),
         )(planner)
         if write:
             cmd.applier(work.apply)
+        if verb in ('estimate', 'work-order'):
+            def replay(inp, ctx, s, hit, kind=kind, verb=verb):
+                return work.replay_conversion(s, ctx, inp, kind, verb, hit)
+            cmd.replay = replay
         commands.append(cmd)
     return commands
 

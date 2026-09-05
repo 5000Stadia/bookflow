@@ -82,6 +82,7 @@ class Command:
     standalone_runner: Callable[..., dict[str, Any]] | None = None  # explicit rootless runner: no data root, lock, actor, or forwarding
     transfer: TransferDescriptor | None = None
     authorization: str | None = None  # exact human-readable rule when required_role alone cannot express it
+    replay: Callable[..., dict[str, Any]] | None = None  # read-only refresh after normal authorization and matching request-cache lookup
 
     @property
     def is_write(self) -> bool:

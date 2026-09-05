@@ -26,6 +26,7 @@ from bookflow.core.exact import format_quantity_micro_units
 from bookflow.core.registry import Plan, Applied, Touched
 from bookflow.hub.users import common
 
+LINK_PAGE_SIZE = 200
 KINDS = ('proposal', 'estimate', 'work_order')
 QUOTE_STATES = ('draft', 'open', 'accepted', 'declined', 'superseded', 'cancelled')
 WORK_STATES = ('draft', 'scheduled', 'in_progress', 'on_hold', 'complete', 'cancelled')
@@ -134,36 +135,45 @@ def revision_output(s, rev, pending=None, *, summary_only=False):
         estimated_profit=Money(rev['net_minor_units'] - known, rev['currency']).to_dict() if complete else None)
 
 
-def links(s, document_id, pending=None, headers=None):
+def links(s, document_id, pending=None, headers=None, *, cursor=None, ctx=None):
+    from bookflow.company.query import page_state, continuation
+    class Contract:
+        query = None
+        def model_dump(self, **kw):
+            return dict(document_id=document_id, limit=LINK_PAGE_SIZE)
+    contract = Contract()
+    contract.cursor = cursor
+    state = page_state(s, 'work source links', contract, ctx.on_behalf_of if ctx else None)
     t = c.work_links
     existing = list(s.company.conn.execute(sa.select(t).where(sa.or_(
         t.c.source_document_id == document_id, t.c.destination_document_id == document_id))
-        .order_by(t.c.created_at, t.c.id).limit(201)).mappings())
+        .order_by(t.c.created_at, t.c.id).offset(state.offset).limit(LINK_PAGE_SIZE + 1)).mappings())
     all_links = [dict(row) for row in existing] + [row for row in (pending or {}).get('work_links', [])
         if document_id in (row['source_document_id'], row['destination_document_id'])]
     known = {row['id']: row for row in headers or []}
-    needed = {row[k] for row in all_links[:200] for k in ('source_document_id', 'destination_document_id')} - known.keys()
+    needed = {row[k] for row in all_links[:LINK_PAGE_SIZE] for k in ('source_document_id', 'destination_document_id')} - known.keys()
     if needed:
         known.update({row['id']: row for row in rows(s, c.work_documents, c.work_documents.c.id.in_(needed))})
     out = []
-    for row in all_links[:200]:
+    for row in all_links[:LINK_PAGE_SIZE]:
         value = {key: item for key, item in row.items() if key not in ('conversion_key_hash', 'request_hash')}
         for side in ('source', 'destination'):
             head = known[row[side + '_document_id']]
             value.update({side + '_' + key: head[key] for key in ('kind', 'number', 'status', 'current_revision_id')})
         out.append(WorkLinkOutput(**value))
-    return out, len(all_links) > 200
+    more = len(all_links) > LINK_PAGE_SIZE
+    return out, more, continuation(state, len(out), more) if pending is None else None, state.sequence
 
 
-def output(s, header, rev, pending=None, headers=None):
-    linked, more = links(s, header['id'], pending, headers)
+def output(s, header, rev, pending=None, headers=None, *, cursor=None, ctx=None):
+    linked, more, following, watermark = links(s, header['id'], pending, headers, cursor=cursor, ctx=ctx)
     return WorkOutput(**summary(header, rev).model_dump(), revision=revision_output(s, rev, pending),
-                      links=linked, links_has_more=more)
+                      links=linked, links_has_more=more, next_links_cursor=following, links_audit_watermark=watermark)
 
 
-def show(s, inp, kind):
+def show(s, inp, kind, ctx=None):
     h = resolve(s, getattr(inp, kind), kind)
-    return output(s, h, revision(s, h, inp.revision_number))
+    return output(s, h, revision(s, h, inp.revision_number), cursor=inp.links_cursor, ctx=ctx)
 
 
 def page(s, ctx, inp, kind, *, history=False):
@@ -304,7 +314,8 @@ def _lifecycle(kind, old, value, inp, ctx):
             raise _invalid('status', f'cannot change {prior} directly to {status}')
         if status != prior and (status in ('cancelled', 'superseded') or prior in ('accepted', 'declined', 'superseded', 'cancelled')):
             _reason(ctx)
-        if status != prior and status in ('accepted', 'declined', 'superseded') and not value['decision_note']:
+        if status != prior and status in ('accepted', 'declined', 'superseded') and (
+                'decision_note' not in inp.model_fields_set or not value['decision_note']):
             raise _invalid('decision_note', 'record the decision when accepting, declining or superseding')
         expiry = value['facts']['expires_on']
         if status == 'accepted' and prior != status and expiry and expiry < clock.now().date().isoformat() and not getattr(inp, 'acknowledge_expired', False):
@@ -475,12 +486,24 @@ def _custom_plan(s, inp, kind, document_id, old_rev=None, *, carry=None):
 def _carry_warnings(s, source, lines):
     f = facts(source)
     references = {(c.customers.name, f.profile.customer.id): c.customers}
+    from bookflow.company.sales_defaults import _TABLES
+    for field in ('terms', 'ship_method', 'sales_rep', 'class_id', 'customer_tax_code',
+                  'sales_tax_item', 'price_level', 'customer_message_item'):
+        captured = getattr(f.profile, field)
+        if captured:
+            table = _TABLES[field][1]
+            references[(table.name, captured.id)] = table
     for line in lines:
         lf = line_facts(line)
         references[(c.items.name, lf.item_id)] = c.items
         if lf.unit_id:
             references[(c.unit_conversions.name, lf.unit_id)] = c.unit_conversions
         references[(c.accounts.name, lf.profile.income_account.id)] = c.accounts
+        for field in ('class_id', 'tax_code', 'price_rule'):
+            captured = getattr(lf.profile, field)
+            if captured:
+                table = c.price_levels if field == 'price_rule' else _TABLES[field][1]
+                references[(table.name, captured.id)] = table
         for component in lf.taxes:
             rule = component.rule
             references[(c.items.name, rule.id)] = c.items
@@ -605,7 +628,7 @@ def prepare(s, ctx, inp, kind, operation):
     fingerprint = _fingerprint(s, inp, kind, operation, value, old_rev, warnings)
     changes = _changes(before, value) if before else list(value)
     if old and not changes and (custom_plan is None or not custom_plan.changed):
-        return Plan(WorkWriteOutput(**output(s, old, old_rev).model_dump(), changed=False,
+        return Plan(WorkWriteOutput(**output(s, old, old_rev, ctx=ctx).model_dump(), changed=False,
             facts_fingerprint=fingerprint, warnings=warnings),
             dict(input=inp, kind=kind, operation=operation, changed=False))
     if old:
@@ -613,7 +636,7 @@ def prepare(s, ctx, inp, kind, operation):
     pending = {table: [] for table, _ in TABLE_KINDS}
     accepted = {key: old_rev[key] for key in ('accepted_revision_id', 'accepted_at', 'accepted_by')} if old_rev else None
     rev = _new_revision(s, ctx, header, value, custom_snapshot, old_rev, pending, event, at, acceptance=accepted)
-    view = output(s, header, rev, pending, [header])
+    view = output(s, header, rev, pending, [header], ctx=ctx)
     return Plan(WorkWriteOutput(**view.model_dump(), facts_fingerprint=fingerprint,
         changed_fields=changes, warnings=warnings), dict(input=inp, kind=kind, operation=operation,
         changed=True, headers=[header], before={old['id']: old} if old else {}, pending=pending,
@@ -636,7 +659,7 @@ def _prepare_destination(s, ctx, inp, kind, operation):
             if match['request_hash'] != request_hash:
                 raise BookflowError('E_CONVERSION_KEY_REUSED', details={'destination_id': match['destination_document_id']})
             destination = resolve(s, match['destination_document_id'], destination_kind)
-            return Plan(WorkWriteOutput(**output(s, destination, revision(s, destination)).model_dump(),
+            return Plan(WorkWriteOutput(**output(s, destination, revision(s, destination), ctx=ctx).model_dump(),
                 changed=False, idempotent_replay=True), dict(input=inp, kind=kind, operation=operation, changed=False))
     _version(s, source, inp.expected_version)
     if relation != 'copy' and not source['active']:
@@ -697,7 +720,7 @@ def _prepare_destination(s, ctx, inp, kind, operation):
         destination_document_id=header['id'], destination_revision_id=rev['id'], relation=relation,
         conversion_key_hash=key_hash, request_hash=request_hash,
         created_at=at, created_by=s.actor.id, created_via=ctx.interface.value))
-    view = output(s, header, rev, pending, [header, source_current])
+    view = output(s, header, rev, pending, [header, source_current], ctx=ctx)
     return Plan(WorkWriteOutput(**view.model_dump(), facts_fingerprint=fingerprint,
         warnings=warnings, changed_fields=['created', 'source_link']),
         dict(input=inp, kind=kind, operation=operation, changed=True, headers=headers, before=before,
@@ -742,3 +765,16 @@ def apply(plan, ctx, s):
         statement = insert(c.sequences).values(**data['sequence'])
         s.company.conn.execute(statement.on_conflict_do_update(index_elements=['name'], set_=data['sequence']))
     return Applied(fresh.preview, touched, summary_text, audited=True)
+
+
+def replay_conversion(s, ctx, inp, kind, operation, hit):
+    """Refresh a matched generic receipt through its authoritative permanent link.
+
+    Dispatch has already authorized the actor and checked the ordinary request
+    hash. A missing durable link is corruption, never permission to create again.
+    """
+    plan = _prepare_destination(s, ctx, inp, kind, operation)
+    original = json.loads(hit['output']) if hit.get('output') else {}
+    if plan.data['changed'] or not plan.preview.idempotent_replay or original.get('id') != plan.preview.id:
+        raise BookflowError('E_INTERNAL', message='Conversion receipt does not match its permanent source link.')
+    return plan.preview.model_dump(mode='json')

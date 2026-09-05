@@ -222,3 +222,29 @@ MATRIX.update({
     'rate show': {'E_RECORD_NOT_FOUND': 'id or exact date pair absent in selected company'},
     'rate query': {'E_QUERY_STALE': 'company audit changed between rate pages'},
 })
+
+_WORK_WRITE_ERRORS = {
+    'E_RECORD_NOT_FOUND': 'work, historical revision or company-local referenced record does not exist',
+    'E_VERSION_CONFLICT': 'expected whole-work version differs, including stale no-op or competing conversion',
+    'E_DUPLICATE_NUMBER': 'number belongs to another work document of this kind',
+    'E_INACTIVE_REFERENCE': 'new selection or conversion source is inactive; carried historical facts stay captured',
+    'E_VALUE_RANGE': 'exact quote quantity, price, cost, tax or total exceeds supported bounds',
+    'E_AMOUNT_PRECISION': 'home-currency quote amount has excess fractional precision',
+    'E_REASON_REQUIRED': 'decision revocation, cancellation, supersession or reopening lacks required reason',
+    'E_PREVIEW_STALE': 'resolved source/default/custom facts differ from preview',
+    'E_WORK_DEPENDENCY': 'another alternative is accepted, agreed scope is frozen or the work-order destination already exists',
+    'E_CONVERSION_KEY_REUSED': 'permanent company conversion key identifies a different canonical intent',
+    'E_IDEMPOTENCY_MISMATCH': 'ordinary request key reused with different command or input',
+    'E_DIRECTIVE_NOT_FOUND': 'context directive does not exist',
+    'E_DIRECTIVE_INACTIVE': 'context directive is inactive',
+}
+for _noun, _conversion in (('proposal', 'estimate'), ('estimate', 'work-order'), ('work-order', 'complete')):
+    for _verb in ('create', 'update', 'copy', _conversion):
+        MATRIX[f'{_noun} {_verb}'] = dict(_WORK_WRITE_ERRORS)
+    MATRIX[f'{_noun} show'] = {'E_RECORD_NOT_FOUND': 'document kind or selected revision does not exist',
+        'E_QUERY_STALE': 'company audit changed between source-link pages'}
+    for _verb in ('query', 'history'):
+        MATRIX[f'{_noun} {_verb}'] = {
+            'E_RECORD_NOT_FOUND': 'document or customer filter absent from selected company',
+            'E_QUERY_STALE': 'company audit changed between bounded pages',
+        }
