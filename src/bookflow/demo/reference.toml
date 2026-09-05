@@ -395,3 +395,172 @@ input = { "customer" = "${sale_customer.id}", "date_from" = "2026-01-01", "date_
 command = "custom-field update"
 reason = "Rename the definition while preserving printed sales field facts"
 input = { "custom_field" = "${sale_verified.id}", "expected_version" = "${sale_verified.version}", "name" = "Site verification complete" }
+
+[[commands]]
+command = "employee create"
+capture = "work_crew"
+reason = "Create the reference crew lead assigned to work orders"
+input = { "name" = "Reference Crew Lead", "first_name" = "Sam", "last_name" = "Lead" }
+
+# Row 16 customer work: linked non-posting proposal, alternative estimates,
+# accepted alternative, work order and completion. Nothing here posts, so the
+# ledger, customer balances and account balances above are unchanged.
+
+[[commands]]
+command = "custom-field create"
+capture = "work_permit"
+reason = "Capture a typed permit fact on customer work documents"
+input = { "name" = "Permit pulled", "kind" = "bool", "scopes" = ["proposal", "estimate", "work_order"], "default" = true }
+
+[[commands]]
+command = "proposal create"
+capture = "work_proposal"
+reason = "Propose a bathroom refit with markup, amount, unknown-cost, zero-cost and nonbillable lines"
+input = { "date" = "2026-09-08", "number" = "REF-WORK-PROP-1", "customer" = "${sale_customer.id}", "title" = "Bathroom refit", "sales_tax_item" = "${sale_tax.id}", "customer_tax_code" = "${sale_taxable.id}", "scope" = "Replace the vanity, tap and supply lines in the main bathroom.", "exclusions" = "Tile and paint are not included.", "memo" = "Internal: customer prefers morning visits.", "lines" = [{ "item" = "${sale_service.id}", "quantity" = "2", "description" = "Vanity installation, cost plus markup", "estimated_unit_cost" = "4.00", "markup_percent" = "25" }, { "item" = "${sale_service.id}", "quantity" = "2", "description" = "Tap replacement, quoted as an amount", "net_amount" = "10.01" }, { "item" = "${sale_service.id}", "quantity" = "1", "description" = "Supply line check at catalog price, cost unknown" }, { "item" = "${sale_service.id}", "quantity" = "3", "description" = "Warranty visits at zero cost with markup", "estimated_unit_cost" = "0", "markup_percent" = "50" }, { "item" = "${sale_service.id}", "quantity" = "1", "description" = "Courtesy inspection, not billable", "unit_price" = "20.00", "billable" = false, "tax_code" = "${sale_exempt.id}" }], "custom_fields" = { "${work_permit.id}" = false }, "custom_field_kinds" = { "${work_permit.id}" = "bool" } }
+
+[[commands]]
+command = "proposal update"
+capture = "work_proposal_cleared"
+reason = "Clear the permit fact; the earlier false value stays in revision history"
+input = { "proposal" = "${work_proposal.id}", "expected_version" = "${work_proposal.version}", "custom_fields" = { "${work_permit.id}" = "${null}" } }
+
+[[commands]]
+command = "proposal update"
+capture = "work_proposal_open"
+reason = "Send the proposal to the customer"
+input = { "proposal" = "${work_proposal.id}", "expected_version" = "${work_proposal_cleared.version}", "status" = "open" }
+
+[[commands]]
+command = "note add"
+input = { record_type = "work_document", record_id = "${work_proposal.id}", body = "Site survey photos and the customer's sketch are attached to this proposal." }
+
+[[commands]]
+command = "attachment add"
+capture = "work_document_file"
+body_fixture = "example.pdf"
+input = { record_type = "work_document", record_id = "${work_proposal.id}", original_filename = "Example service document.pdf", media_type = "application/pdf", caption = "Customer sketch for the bathroom refit" }
+
+[[commands]]
+command = "proposal estimate"
+capture = "work_estimate_a"
+reason = "Quote the proposal as alternative A with a permanent conversion key"
+input = { "proposal" = "${work_proposal.id}", "expected_version" = "${work_proposal_open.version}", "conversion_key" = "REF-WORK-PROP-1 alternative A", "date" = "2026-09-09", "number" = "REF-WORK-EST-1A", "expires_on" = "2026-10-09" }
+
+[[commands]]
+command = "proposal estimate"
+capture = "work_estimate_a_replay"
+reason = "Retry the same conversion; the durable key returns the original estimate"
+input = { "proposal" = "${work_proposal.id}", "expected_version" = "${work_proposal_open.version}", "conversion_key" = "REF-WORK-PROP-1 alternative A", "date" = "2026-09-09", "number" = "REF-WORK-EST-1A", "expires_on" = "2026-10-09" }
+
+[[commands]]
+command = "estimate copy"
+capture = "work_estimate_b"
+reason = "Offer alternative B in the same estimate group"
+input = { "estimate" = "${work_estimate_a.id}", "expected_version" = "${work_estimate_a.version}", "date" = "2026-09-09", "number" = "REF-WORK-EST-1B", "title" = "Bathroom refit, premium fixtures", "expires_on" = "2026-10-09" }
+
+[[commands]]
+command = "estimate copy"
+capture = "work_estimate_independent"
+reason = "Reuse the quote as an independent scope for a second bathroom"
+input = { "estimate" = "${work_estimate_a.id}", "expected_version" = "${work_estimate_a.version}", "date" = "2026-09-10", "number" = "REF-WORK-EST-2", "title" = "Guest bathroom refit", "copy_mode" = "independent" }
+
+[[commands]]
+command = "estimate update"
+capture = "work_estimate_accepted"
+reason = "Record the customer's acceptance of alternative B"
+input = { "estimate" = "${work_estimate_b.id}", "expected_version" = "${work_estimate_b.version}", "status" = "accepted", "decision_note" = "Accepted by telephone on 2026-09-10; alternative A declined" }
+
+[[commands]]
+command = "estimate work-order"
+capture = "work_order"
+reason = "Schedule the accepted alternative as one work order"
+input = { "estimate" = "${work_estimate_b.id}", "expected_version" = "${work_estimate_accepted.version}", "conversion_key" = "REF-WORK-EST-1B work order", "date" = "2026-09-11", "number" = "REF-WORK-WO-1", "scheduled_start" = "2026-09-14T13:00:00Z", "scheduled_end" = "2026-09-14T17:00:00Z", "assignees" = ["${work_crew.id}"] }
+
+[[commands]]
+command = "work-order update"
+capture = "work_order_scheduled"
+reason = "Confirm the crew and schedule"
+input = { "work_order" = "${work_order.id}", "expected_version" = "${work_order.version}", "status" = "scheduled", "priority" = "high", "scheduled_start" = "2026-09-14T13:00:00Z", "scheduled_end" = "2026-09-14T17:00:00Z", "assignees" = ["${work_crew.id}"] }
+
+[[commands]]
+command = "work-order update"
+capture = "work_order_started"
+reason = "Start work and record the first completed vanity"
+input = { "work_order" = "${work_order.id}", "expected_version" = "${work_order_scheduled.version}", "status" = "in_progress", "priority" = "high", "scheduled_start" = "2026-09-14T13:00:00Z", "scheduled_end" = "2026-09-14T17:00:00Z", "actual_start" = "2026-09-14T13:10:00Z", "assignees" = ["${work_crew.id}"], "lines" = [{ "item" = "${sale_service.id}", "line_id" = "${work_order.revision.lines.0.line_id}", "completed_quantity" = "1" }, { "item" = "${sale_service.id}", "line_id" = "${work_order.revision.lines.1.line_id}" }, { "item" = "${sale_service.id}", "line_id" = "${work_order.revision.lines.2.line_id}" }, { "item" = "${sale_service.id}", "line_id" = "${work_order.revision.lines.3.line_id}" }, { "item" = "${sale_service.id}", "line_id" = "${work_order.revision.lines.4.line_id}" }] }
+
+[[commands]]
+command = "work-order complete"
+capture = "work_order_complete"
+reason = "Finish the job; remaining quantities complete without invoicing"
+input = { "work_order" = "${work_order.id}", "expected_version" = "${work_order_started.version}", "actual_end" = "2026-09-14T16:30:00Z" }
+
+[[commands]]
+command = "work-order complete"
+capture = "work_order_complete_again"
+reason = "Repeat completion with unchanged facts; no revision is created"
+input = { "work_order" = "${work_order.id}", "expected_version" = "${work_order_complete.version}", "actual_end" = "2026-09-14T16:30:00Z" }
+
+[[commands]]
+command = "work-order copy"
+capture = "work_order_copy"
+reason = "Copy the finished job as a fresh draft for a repeat visit"
+input = { "work_order" = "${work_order.id}", "expected_version" = "${work_order_complete.version}", "date" = "2026-09-15", "number" = "REF-WORK-WO-2", "title" = "Bathroom refit, repeat visit" }
+
+[[commands]]
+command = "proposal show"
+capture = "work_proposal_current"
+input = { "proposal" = "${work_proposal.id}" }
+
+[[commands]]
+command = "proposal copy"
+capture = "work_proposal_copy"
+reason = "Reuse the proposal wording for a second property"
+input = { "proposal" = "${work_proposal.id}", "expected_version" = "${work_proposal_current.version}", "date" = "2026-09-15", "number" = "REF-WORK-PROP-2", "title" = "Bathroom refit, second property" }
+
+[[commands]]
+command = "estimate create"
+capture = "work_estimate_direct"
+reason = "Quote a small repair directly without a proposal"
+input = { "date" = "2026-09-08", "number" = "REF-WORK-EST-3", "customer" = "${sale_customer.id}", "title" = "Leaking tap repair", "sales_tax_item" = "${sale_tax.id}", "customer_tax_code" = "${sale_taxable.id}", "expires_on" = "2026-09-30", "lines" = [{ "item" = "${sale_service.id}", "quantity" = "2", "estimated_unit_cost" = "4.00", "markup_percent" = "25" }], "custom_fields" = { "${work_permit.id}" = false }, "custom_field_kinds" = { "${work_permit.id}" = "bool" } }
+
+[[commands]]
+command = "work-order create"
+capture = "work_order_direct"
+reason = "Record an emergency call-out as a direct work order"
+input = { "date" = "2026-09-08", "number" = "REF-WORK-WO-3", "customer" = "${sale_customer.id}", "title" = "Emergency burst pipe", "sales_tax_item" = "${sale_tax.id}", "customer_tax_code" = "${sale_taxable.id}", "priority" = "urgent", "site_address" = { "line1" = "12 Riverside Ct", "city" = "Springfield", "state" = "IL", "postal_code" = "62704" }, "lines" = [{ "item" = "${sale_service.id}", "quantity" = "2", "unit_price" = "20.00", "completed_quantity" = "1" }] }
+
+[[commands]]
+command = "proposal show"
+input = { "proposal" = "${work_proposal.id}", "revision_number" = 1 }
+
+[[commands]]
+command = "proposal history"
+input = { "proposal" = "${work_proposal.id}" }
+
+[[commands]]
+command = "proposal query"
+input = { "customer" = "${sale_customer.id}", "date_from" = "2026-01-01", "date_to" = "2026-12-31" }
+
+[[commands]]
+command = "estimate show"
+input = { "estimate" = "${work_estimate_b.id}", "revision_number" = 1 }
+
+[[commands]]
+command = "estimate history"
+input = { "estimate" = "${work_estimate_b.id}" }
+
+[[commands]]
+command = "estimate query"
+input = { "customer" = "${sale_customer.id}", "status" = "accepted" }
+
+[[commands]]
+command = "work-order show"
+input = { "work_order" = "${work_order.id}", "revision_number" = 1 }
+
+[[commands]]
+command = "work-order history"
+input = { "work_order" = "${work_order.id}" }
+
+[[commands]]
+command = "work-order query"
+input = { "customer" = "${sale_customer.id}", "date_from" = "2026-01-01", "date_to" = "2026-12-31" }
