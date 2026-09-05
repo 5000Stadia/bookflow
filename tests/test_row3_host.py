@@ -1634,6 +1634,8 @@ def test_an_agent_token_with_a_principal_acts_on_behalf_of_that_person(hosted, r
         hub = hosted.handle.host._hub
         hub.raw.execute("BEGIN IMMEDIATE")
         hub.conn.execute(h.users.insert().values(id=aid, kind="agent", username="ledger-bot", display_name="Ledger Bot", owner_user_id=admin["id"], password_hash=None, hub_admin=True, timezone=None, active=True, **common(admin["id"], "system")))
+        hub.conn.execute(h.agent_authority.insert().values(agent_user_id=aid, epoch=1, suspended_at=None, suspension_reason=None))
+        hub.conn.execute(h.agent_principals.insert().values(agent_user_id=aid, principal_user_id=admin["id"], assigned_by=admin["id"], assigned_at=clock.now_iso(), revoked_at=None))
         hub.conn.execute(h.memberships.insert().values(id=new_id(), user_id=aid, scope_type="organization", scope_id=org_id, role="admin", granted_by=admin["id"], granted_at=clock.now_iso(), revoked_at=None))
         hub.raw.execute("COMMIT")
     hosted.handle.host.submit(insert)

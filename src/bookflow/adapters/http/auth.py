@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
-import hashlib
-import secrets
 import threading
-import time
 from datetime import timedelta
 from typing import Any
 
-import sqlalchemy as sa
-
 from bookflow.core import clock
 from bookflow.core.errors import BookflowError
-from bookflow.core.ids import new_id
 from bookflow.hub import schema as h
-from bookflow.hub.users import common
+from bookflow.hub.credentials import (
+    SESSION_HOURS,
+    issue_token as issue_token,
+    new_secret as new_secret,
+    resolve_token as resolve_token,
+    token_hash as token_hash,
+)
 
-SESSION_HOURS = 12
 REFRESH_SECONDS = 300
 _DUMMY_HASH = None
 _attempts: dict[str, int] = {}
@@ -44,38 +43,6 @@ def verify_password(stored: str | None, password: str) -> bool:
         return ph.verify(stored or _DUMMY_HASH, password) and stored is not None
     except (VerifyMismatchError, VerificationError):
         return False
-
-
-def token_hash(secret: str) -> str:
-    return hashlib.sha256(secret.encode("utf-8")).hexdigest()
-
-
-def new_secret() -> str:
-    return secrets.token_urlsafe(32)
-
-
-def issue_token(db, *, user_id: str, kind: str, label: str | None, days: int | None, via: str, actor_id: str) -> tuple[dict[str, Any], str]:
-    secret = new_secret()
-    expires = (clock.now() + timedelta(days=days)).isoformat(timespec="milliseconds").replace("+00:00", "Z") if days else None
-    if kind == "session":
-        expires = (clock.now() + timedelta(hours=SESSION_HOURS)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-    row = {"id": new_id(), "user_id": user_id, "on_behalf_of": None, "kind": kind, "token_hash": token_hash(secret), "label": label,
-           "expires_at": expires, "last_used_at": clock.now_iso(), "revoked_at": None, **common(actor_id, via)}
-    db.conn.execute(h.api_tokens.insert().values(**row))
-    return row, secret
-
-
-def resolve_token(db, secret: str) -> dict[str, Any]:
-    """The token row for a secret, or E_UNAUTHENTICATED with a reason."""
-    row = db.conn.execute(sa.select(h.api_tokens).where(h.api_tokens.c.token_hash == token_hash(secret))).mappings().first()
-    if row is None:
-        raise BookflowError("E_UNAUTHENTICATED", details={"reason": "unknown token"})
-    row = dict(row)
-    if row["revoked_at"]:
-        raise BookflowError("E_UNAUTHENTICATED", details={"reason": "revoked"})
-    if row["expires_at"] and clock.parse_iso(row["expires_at"]) < clock.now():
-        raise BookflowError("E_UNAUTHENTICATED", details={"reason": "expired"})
-    return row
 
 
 def needs_refresh(row: dict[str, Any]) -> bool:

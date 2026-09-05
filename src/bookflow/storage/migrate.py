@@ -16,7 +16,7 @@ from bookflow.core.durability import sync_directory, sync_file
 from bookflow.storage.engine import Database, io_error, sqlite_uri
 
 # Head revisions as constants: checked before Alembic is imported on the read path.
-HEADS = {"hub": "hub0008", "company": "co0006"}
+HEADS = {"hub": "hub0009", "company": "co0006"}
 _PKG = Path(__file__).parent
 
 

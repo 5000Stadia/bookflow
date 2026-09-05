@@ -20,6 +20,22 @@ Command input contains business fields. Execution context contains actor, interf
 
 The host derives the actor and any principal from the bearer or browser session. A caller cannot select `actor_id` or `actor_kind`. HTTP callers provide optional context with `X-Bookflow-Reason`, `X-Bookflow-Directive`, `X-Bookflow-Source-Ref`, `Idempotency-Key`, `X-Bookflow-Client-Name`, and `X-Bookflow-Client-Version`. A write by an agent or system identity requires a reason or an active directive.
 
+## Credentials and agent authority
+
+Human bearer and browser credentials authenticate an active human user. Agent
+credentials bind one active human principal from the agent's assigned set and the
+current unsuspended authority epoch. Authentication rejects revoked or expired
+tokens, inactive identities, revoked assignments, suspension and stale epochs.
+`token issue` validates the same authority and stores the principal and epoch
+alongside the token hash. The secret is returned once.
+
+Upgrade suspends existing agents, revokes their credentials and records that
+conversion atomically in hub audit history. Human credentials remain valid.
+Agent creation, assignment and reauthorization commands are not yet exposed;
+legacy agent access remains suspended until that workflow is available. Full
+capability resolution and execution/publication revocation fences are subsequent
+identity integration work.
+
 ## Dry runs and retry safety
 
 Durable write commands accept dry-run execution. A dry run performs selection, authorization, validation, directive resolution, conflict checks, and planning, then returns the planned output with `dry_run: true` without committing the business change or its audit event. Presence is advisory state rather than a durable audited business write.

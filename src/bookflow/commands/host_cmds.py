@@ -569,6 +569,8 @@ class TokenIssueInput(BaseModel):
 
 
 class TokenIssueOutput(WriteOutput):
+    on_behalf_of: str | None
+    authority_epoch: int | None
     token_id: str
     user_id: str
     username: str
@@ -583,6 +585,7 @@ class TokenOut(CommonOut):
     user_id: str
     username: str | None
     on_behalf_of: str | None
+    authority_epoch: int | None
     kind: str
     label: str | None
     expires_at: str | None
@@ -628,7 +631,7 @@ def _target_user(s: Session, selector: str | None) -> dict[str, Any]:
 
 
 token_issue = command("token issue", scope="hub",
-                      description="Issue a bearer token a program can send to the host; the secret is shown once.",
+                      description="Issue a bearer token; the secret is shown once. Agents require an active assigned human principal and unsuspended authority. One agent identity per principal is recommended.",
                       input_model=TokenIssueInput, output_model=TokenIssueOutput, writes={"hub"},
                       error_codes=["E_USER_NOT_FOUND", "E_VALIDATION", "E_PERMISSION"],
                       authorization="human self-service; a human hub administrator may issue for another user")
@@ -636,6 +639,7 @@ token_issue = command("token issue", scope="hub",
 
 @token_issue
 def plan_token_issue(inp: TokenIssueInput, ctx: Context, s: Session) -> Plan:
+    from bookflow.hub import credentials
     if s.actor.kind != "human":
         raise BookflowError("E_PERMISSION", details={"capability": "token", "required_role": "human"})
     target = _target_user(s, inp.user)
@@ -651,21 +655,21 @@ def plan_token_issue(inp: TokenIssueInput, ctx: Context, s: Session) -> Plan:
         if principal["kind"] != "human":
             raise BookflowError("E_VALIDATION", details={"fields": [{"field": "principal", "problem": "the principal must be a human user"}]})
         obo = principal["id"]
-    preview = TokenIssueOutput(token_id="", user_id=target["id"], username=target["username"], label=inp.label,
+    epoch = credentials.issuance_epoch(s.hub, user_id=target["id"], on_behalf_of=obo)
+    preview = TokenIssueOutput(on_behalf_of=obo, authority_epoch=epoch, token_id="", user_id=target["id"], username=target["username"], label=inp.label,
                                expires_at=None, secret="", message="A dry run issues nothing.")
     return Plan(preview=preview, data={"target": target, "label": inp.label, "days": inp.days, "on_behalf_of": obo})
 
 
 @token_issue.applier
 def apply_token_issue(plan: Plan, ctx: Context, s: Session) -> Applied:
+    from bookflow.hub import credentials
     target = plan.data["target"]
-    row, secret = auth.issue_token(s.hub, user_id=target["id"], kind="bearer", label=plan.data["label"],
-                                   days=plan.data["days"], via=VIA(ctx), actor_id=s.actor.id)
-    if plan.data["on_behalf_of"]:
-        row = {**row, "on_behalf_of": plan.data["on_behalf_of"]}
-        s.hub.conn.execute(h.api_tokens.update().where(h.api_tokens.c.id == row["id"]).values(on_behalf_of=row["on_behalf_of"]))
+    row, secret = credentials.issue_token(s.hub, user_id=target["id"], kind="bearer", label=plan.data["label"],
+                                   days=plan.data["days"], via=VIA(ctx), actor_id=s.actor.id,
+                                   on_behalf_of=plan.data["on_behalf_of"])
     after = {k: v for k, v in row.items() if k != "token_hash"}
-    out = TokenIssueOutput(token_id=row["id"], user_id=target["id"], username=target["username"], label=row["label"],
+    out = TokenIssueOutput(on_behalf_of=row["on_behalf_of"], authority_epoch=row["authority_epoch"], token_id=row["id"], user_id=target["id"], username=target["username"], label=row["label"],
                            expires_at=localize(s, row["expires_at"]), secret=secret, message=SHOWN_ONCE)
     return Applied(out, [Touched("api_token", row["id"], "create", None, 1, after)],
                    f"issued a bearer token for {target['username']} labelled {row['label']}")
@@ -694,7 +698,7 @@ def plan_token_list(inp: TokenListInput, ctx: Context, s: Session) -> Plan:
 
 def _token_out(s: Session, row: dict[str, Any], names: dict[str, str]) -> TokenOut:
     return TokenOut(**common_out(s, row), token_id=row["id"], user_id=row["user_id"], username=names.get(row["user_id"]),
-                    on_behalf_of=row["on_behalf_of"], kind=row["kind"], label=row["label"],
+                    on_behalf_of=row["on_behalf_of"], authority_epoch=row["authority_epoch"], kind=row["kind"], label=row["label"],
                     expires_at=localize(s, row["expires_at"]), last_used_at=localize(s, row["last_used_at"]),
                     revoked_at=localize(s, row["revoked_at"]))
 

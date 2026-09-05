@@ -24,3 +24,4 @@ Database: `hub`.
 | `expires_at` | VARCHAR(32) | yes | — | — | — | — | UTC timestamp after which the token is invalid; null means no fixed expiry. |
 | `last_used_at` | VARCHAR(32) | yes | — | — | — | — | UTC timestamp of the latest throttled liveness refresh. |
 | `revoked_at` | VARCHAR(32) | yes | — | — | — | — | UTC timestamp when the token was revoked; null while active. |
+| `authority_epoch` | INTEGER | yes | — | — | — | — | Agent authority epoch at issuance; null for human credentials. |

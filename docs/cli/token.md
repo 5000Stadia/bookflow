@@ -4,7 +4,7 @@
 
 ## `token issue`
 
-Issue a bearer token a program can send to the host; the secret is shown once.
+Issue a bearer token; the secret is shown once. Agents require an active assigned human principal and unsuspended authority. One agent identity per principal is recommended.
 
 | Contract | Value |
 |---|---|
@@ -60,6 +60,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
+| `on_behalf_of` | string \| null | yes | yes | — | — |
+| `authority_epoch` | integer \| null | yes | yes | — | — |
 | `token_id` | string | yes | no | — | — |
 | `user_id` | string | yes | no | — | — |
 | `username` | string | yes | no | — | — |
@@ -72,10 +74,12 @@ Example JSON output:
 
 ```json
 {
+  "authority_epoch": null,
   "dry_run": false,
   "expires_at": null,
   "label": null,
   "message": "value",
+  "on_behalf_of": null,
   "secret": "value",
   "token_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "user_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -173,6 +177,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].user_id` | string | yes | no | — | — |
 | `items[].username` | string \| null | yes | yes | — | — |
 | `items[].on_behalf_of` | string \| null | yes | yes | — | — |
+| `items[].authority_epoch` | integer \| null | yes | yes | — | — |
 | `items[].kind` | string | yes | no | — | — |
 | `items[].label` | string \| null | yes | yes | — | — |
 | `items[].expires_at` | string \| null | yes | yes | — | — |

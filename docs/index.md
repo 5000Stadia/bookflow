@@ -98,6 +98,8 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`company/vendor_expense_accounts`](schema/company/vendor_expense_accounts.md)
 - [`company/vendor_types`](schema/company/vendor_types.md)
 - [`company/vendors`](schema/company/vendors.md)
+- [`hub/agent_authority`](schema/hub/agent_authority.md)
+- [`hub/agent_principals`](schema/hub/agent_principals.md)
 - [`hub/api_tokens`](schema/hub/api_tokens.md)
 - [`hub/audit_entries`](schema/hub/audit_entries.md)
 - [`hub/audit_events`](schema/hub/audit_events.md)

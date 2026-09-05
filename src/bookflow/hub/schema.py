@@ -55,8 +55,30 @@ api_tokens = _table(
         _column("expires_at", sa.String(32), "UTC timestamp after which the token is invalid; null means no fixed expiry.", nullable=True),
         _column("last_used_at", sa.String(32), "UTC timestamp of the latest throttled liveness refresh.", nullable=True),
         _column("revoked_at", sa.String(32), "UTC timestamp when the token was revoked; null while active.", nullable=True),
+        _column("authority_epoch", sa.Integer, "Agent authority epoch at issuance; null for human credentials.", nullable=True),
     ),
     description="Hashed bearer credentials and browser sessions.",
+)
+
+agent_principals = _table(
+    "agent_principals",
+    _column("agent_user_id", sa.String(26), "Agent assigned to act for this principal.", sa.ForeignKey("users.id"), primary_key=True),
+    _column("principal_user_id", sa.String(26), "Human principal assigned to this agent.", sa.ForeignKey("users.id"), primary_key=True),
+    _column("assigned_by", sa.String(26), "User that assigned this principal.", sa.ForeignKey("users.id"), nullable=False),
+    _column("assigned_at", sa.String(32), "UTC timestamp when the principal was assigned.", nullable=False),
+    _column("revoked_at", sa.String(32), "UTC timestamp when the assignment was revoked; null while active.", nullable=True),
+    sa.Index("ix_agent_principals_principal", "principal_user_id", "agent_user_id"),
+    description="Assigned human principals an agent may act on behalf of.",
+)
+
+agent_authority = _table(
+    "agent_authority",
+    _column("agent_user_id", sa.String(26), "Agent whose authority this row governs.", sa.ForeignKey("users.id"), primary_key=True),
+    _column("epoch", sa.Integer, "Monotonically increasing authority epoch, starting at one.", nullable=False),
+    _column("suspended_at", sa.String(32), "UTC timestamp of authority suspension; null while authorized.", nullable=True),
+    _column("suspension_reason", sa.String(140), "Reason for the authority suspension; null while authorized.", nullable=True),
+    sa.CheckConstraint("epoch >= 1", name="ck_agent_authority_epoch"),
+    description="Current agent authority epoch and suspension state.",
 )
 
 organizations = _table(

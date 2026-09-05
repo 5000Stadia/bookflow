@@ -133,8 +133,8 @@ def test_fresh_init_has_current_compatibility_schema(tmp_path):
     root = tmp_path / "fresh"
     bookflow.connect(data_root=str(root)).init()
 
-    assert current_revision_raw(root / "hub.db") == "hub0008"
-    assert HEADS == {"hub": "hub0008", "company": "co0006"}
+    assert current_revision_raw(root / "hub.db") == "hub0009"
+    assert HEADS == {"hub": "hub0009", "company": "co0006"}
     assert str(hub_schema.memberships.c.grants.type) == "TEXT" and hub_schema.memberships.c.grants.nullable
     assert str(hub_schema.memberships.c.denies.type) == "TEXT" and hub_schema.memberships.c.denies.nullable
     assert [column.name for column in hub_schema.role_capabilities.primary_key.columns] == [
@@ -169,7 +169,7 @@ def test_populated_hub0004_upgrade_refreshes_complete_capabilities(tmp_path):
 
     backups = tmp_path / "backups"
     with open_database(hub, writable=True) as db:
-        assert migrate_to_head(db, "hub", backups) == ("hub0004", "hub0008")
+        assert migrate_to_head(db, "hub", backups) == ("hub0004", "hub0009")
         seeded = tuple(db.raw.execute(
             "SELECT role, capability, required_role FROM role_capabilities "
             "ORDER BY role, capability, required_role"
@@ -233,7 +233,7 @@ def test_populated_hub0002_upgrade_adds_compatibility_schema_and_verified_backup
 
     backups = tmp_path / "backups"
     with open_database(hub, writable=True) as db:
-        assert migrate_to_head(db, "hub", backups) == ("hub0002", "hub0008")
+        assert migrate_to_head(db, "hub", backups) == ("hub0002", "hub0009")
         membership = db.raw.execute(
             "SELECT id, user_id, scope_type, scope_id, role, grants, denies FROM memberships WHERE id='M1'"
         ).fetchone()
