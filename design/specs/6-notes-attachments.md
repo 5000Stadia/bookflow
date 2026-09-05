@@ -99,9 +99,65 @@ and report collected bytes honestly. Downloads hold a bounded file lease rather
 than a SQLite snapshot through slow output. Company copying includes its attachment
 directory; verification is read-only and reports missing/corrupt bodies.
 
-Before this increment's code, complete the exact transfer framing and lease/compact
-state contract in section 12.2. This plan does not permit filling those interfaces
+Before command or adapter integration, complete the exact transfer framing and lease/compact
+state contract in section 12.2. The independent byte-store primitive below does not
+expose a command, acquire authority or implement garbage collection. This plan does not permit filling those interfaces
 with adapter-specific server paths or silently removing hosted CLI support.
+
+### Increment 2a: bounded byte-store primitive
+
+`company/attachment_store.py` is a standard-library-only implementation of the
+byte lifecycle. Its caller supplies an already authorized stream, the resolved
+company attachment directory and an effective size limit. It neither resolves
+companies nor opens databases. No production adapter calls it until the full
+transfer/lease contract above is complete. No dependency, schema or demo change
+is needed for this internal-only primitive.
+
+Scan input in requests of at most 65,536 bytes, counting actual bytes and computing
+SHA-256. The effective limit is positive and at most 100,000,000 bytes; the later
+company setting defaults to 25,000,000. A stream that returns more bytes than
+requested, non-byte data or no progress (`None`) is rejected. Empty bytes means
+EOF; a zero-length attachment is allowed. Read at most one byte beyond the limit
+to identify oversize input. Adapters, not this synchronous primitive, own transport
+timeouts and cancellation; exceptions must unwind the temporary owner.
+
+An invocation context stages in a unique owner-only temporary inside the existing
+attachment directory. Its path is an internal resource, never command input or
+output. Dry-run scanning creates no file or directory. On exit, remove only that
+invocation's temporary, including cancellation and oversize failures. Never remove
+a published digest path on rollback or cleanup.
+
+Publication consumes a live staged resource from the same store. Reopen neither
+arbitrary caller paths nor a closed resource. Flush, re-read and verify the staged
+bytes against their computed digest/size, then fsync the held descriptor. A
+private two-hex shard directory is created if needed; refuse symlinked store,
+shard and body entries and non-regular bodies. Publish with an atomic no-replace
+hard link, then synchronize shard and store directories. Filesystems without hard
+link support fail closed with `E_IO`; there is no overwrite-prone fallback.
+Seal and close the staging writer before linking; publication consumes the resource
+even if a later directory sync fails. No writable staged alias remains usable.
+Retries use a new invocation. Verification checks descriptor size before hashing
+and reads at most the expected size plus one byte, including sparse/corrupt files.
+
+An existing digest path is opened without following symlinks, checked as a regular
+file and verified for exact digest/size before deduplication is reported. Retry
+synchronizes the existing file and parent directories too, so a preceding failed
+directory sync is not mistaken for completed publication. Corruption returns
+`E_IO` with a stable check label and does not replace or remove the existing body.
+Publication returns digest, size and whether a body was newly published, no path.
+
+The caller must hold the data-root ownership and company filesystem lease across
+staging/publication. The primitive rejects pre-existing symlinks but does not
+claim isolation from a malicious process with the same OS account changing
+ancestor directories concurrently. It never deletes bodies; the later compact
+command owns that separate durable transition. Hardware durability and Windows
+filesystem behavior remain unverified until exercised there.
+
+Witnesses: exact/over limit including multibyte input, bounded read requests,
+malformed streams, no-file dry scan, private modes, cleanup on errors/cancellation,
+same-content deduplication, corrupt existing and tampered staged bytes, unsafe
+paths, unsupported hard links, file/directory sync failures, no-replace races,
+and retry after publication but before its directory sync completes.
 
 ## Increment 3: activity and browser
 
