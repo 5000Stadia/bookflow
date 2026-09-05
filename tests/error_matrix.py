@@ -171,3 +171,10 @@ MATRIX.update({
     'report trial-balance': {'E_QUERY_STALE': 'relevant posting or account display facts changed between pages', 'E_VALUE_RANGE': 'public account balance or report total exceeds signed 64-bit range'},
     'report general-ledger': {'E_QUERY_STALE': 'relevant posting or account display facts changed between pages', 'E_VALUE_RANGE': 'public running balance or report total exceeds signed 64-bit range', 'E_RECORD_NOT_FOUND': 'account filter does not resolve'},
 })
+
+for _verb in ('post', 'update'):
+    MATRIX['register ' + _verb] = dict(_LEDGER_WRITE_ERRORS)
+MATRIX['register calculate'] = {code: _LEDGER_WRITE_ERRORS[code] for code in (
+    'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_VALUE_RANGE', 'E_AMOUNT_PRECISION')}
+MATRIX['register query'] = dict(MATRIX['report general-ledger'])
+MATRIX['register query'].update({code: _LEDGER_WRITE_ERRORS[code] for code in ('E_INACTIVE_REFERENCE', 'E_AMOUNT_PRECISION')})

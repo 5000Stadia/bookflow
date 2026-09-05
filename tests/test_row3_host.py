@@ -635,6 +635,8 @@ def _read_calls(hosted):
         "journal query": ({}, cid),
         "journal show": ({"journal": journal["id"]}, cid),
         "journal history": ({"journal": journal["id"]}, cid),
+        "register query": ({"account": "Checking", "date_from": "2026-01-01", "date_to": "2026-12-31"}, cid),
+        "register calculate": ({"account": "Checking", "direction": "decrease", "allocations": [{"account": "Professional Fees", "amount": "125.00"}]}, cid),
         "report trial-balance": ({"date_to": "2026-12-31"}, cid),
         "report general-ledger": ({"date_from": "2026-01-01", "date_to": "2026-12-31"}, cid),
     })

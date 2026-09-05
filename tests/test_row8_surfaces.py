@@ -10,14 +10,24 @@ COMPANY = 'Demo Plumbing Co'
 
 def test_demo_account_balances_and_reports_reconcile(client):
     journals = client.journal.query(company=COMPANY)['items']
-    assert len(journals) == 4
+    assert len(journals) == 9
     assert sum(j['status'] == 'voided' for j in journals) == 1
     service = next(j for j in journals if j['number'] == 'DEMO-SERVICE')
     assert service['version'] == 2
     assert len(client.journal.history(journal=service['id'], company=COMPANY)['items']) == 2
     tb = client.run('report trial-balance', {'date_to': '2026-12-31'}, company=COMPANY)
-    assert tb['totals']['debit']['minor_units'] == tb['totals']['credit']['minor_units'] == 640000
+    assert tb['totals']['debit']['minor_units'] == tb['totals']['credit']['minor_units'] == 663000
     nets = {r['account_id']: r['signed_net']['minor_units'] for r in tb['rows']}
+    expected_balances = {'Checking': 610500, 'Professional Fees': 52500,
+                         'Service Income': 160000, 'Opening Balance Equity': 500000,
+                         'Business Credit Card': 3000}
+    for name, amount in expected_balances.items():
+        assert client.account.show(account=name, company=COMPANY)['balance']['minor_units'] == amount
+    bank_register = client.register.query(account='Checking', date_from='2026-01-01',
+                                         date_to='2026-12-31', company=COMPANY)
+    assert bank_register['totals']['closing']['minor_units'] == 610500
+    split = next(row for row in bank_register['rows'] if row['transaction_number'] == 'REG-SPLIT' and row['batch_kind'] == 'replacement')
+    assert split['decrease']['minor_units'] == 10000 and split['category_label'] == 'Splits'
     listed = client.account.list(company=COMPANY)['items']
     queried = client.account.query(company=COMPANY, sort='balance', direction='desc', limit=100)['items']
     assert [a['balance']['minor_units'] for a in queried] == sorted((a['balance']['minor_units'] for a in queried), reverse=True)

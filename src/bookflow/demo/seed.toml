@@ -631,3 +631,44 @@ input = { record_type = "transaction", record_id = "${service_journal.id}", body
 [[commands]]
 command = "attachment link"
 input = { attachment = "${service_document.attachment.id}", record_type = "transaction", record_id = "${service_journal.id}", caption = "Source document for the service journal" }
+
+
+[[commands]]
+command = "account create"
+capture = "register_card"
+input = { name = "Business Credit Card", type = "credit_card" }
+
+[[commands]]
+command = "register post"
+input = { account = "Checking", date = "2026-04-01", number = "REG-PAY", memo = "Professional fees paid from the bank register", direction = "decrease", amount = "125.00", category = "Professional Fees" }
+
+[[commands]]
+command = "register post"
+input = { account = "Checking", date = "2026-04-15", number = "REG-DEP", memo = "Service receipt entered in the bank register", direction = "increase", amount = "200.00", category = "Service Income" }
+
+[[commands]]
+command = "register post"
+input = { account = "${register_card.id}", date = "2026-05-01", number = "REG-CARD", memo = "Professional fees charged to the business card", direction = "increase", amount = "50.00", category = "Professional Fees" }
+
+[[commands]]
+command = "register post"
+input = { account = "${register_card.id}", date = "2026-05-15", number = "REG-CARDPAY", memo = "Card payment from checking", direction = "decrease", amount = "20.00", category = "Checking" }
+
+[[commands]]
+command = "register post"
+capture = "split_register"
+input = { account = "Checking", date = "2026-06-01", number = "REG-SPLIT", memo = "Professional fees with a refund applied to the payment", direction = "decrease", amount = "100.00", allocations = [{ account = "Professional Fees", amount = "120.00", memo = "Current professional fees" }, { account = "Professional Fees", amount = "20.00", direction = "increase", memo = "Refund credited against the payment" }] }
+
+[[commands]]
+command = "register calculate"
+input = { account = "Checking", direction = "decrease", allocations = [{ account = "Professional Fees", amount = "120.00" }, { account = "Professional Fees", amount = "20.00", direction = "increase" }] }
+
+[[commands]]
+command = "register query"
+input = { account = "Checking", date_from = "2026-01-01", date_to = "2026-12-31", limit = 25 }
+
+
+[[commands]]
+command = "register update"
+reason = "Clarify the split payment description"
+input = { journal = "${split_register.id}", expected_version = "${split_register.version}", selected_line_id = "${split_register.revision.lines.0.line_id}", account = "Checking", date = "2026-06-01", number = "REG-SPLIT", memo = "Professional fees net of the credited refund", direction = "decrease", amount = "100.00", allocations = [{ line_id = "${split_register.revision.lines.1.line_id}", account = "Professional Fees", amount = "120.00", memo = "Current professional fees" }, { line_id = "${split_register.revision.lines.2.line_id}", account = "Professional Fees", amount = "20.00", direction = "increase", memo = "Refund credited against the payment" }] }

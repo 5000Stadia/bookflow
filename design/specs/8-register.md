@@ -49,7 +49,8 @@ journal debit total is120; register movement is100. Each side fits signed i64.
 Calculate takes account, main direction and allocations and returns exact
 positive net Money, currency and direction without posting/reserving a number.
 It validates supported active home-currency selected/offset accounts, offset
-party references and their AR/AP requirements, and allocation amount/sign rules.
+party references and their AR/AP requirements, explicit allocation classes, and
+allocation amount/sign rules.
 It does not validate a selected AR/AP payee or inherited row class: those are not
 calculator inputs and remain post/preview validation. Calculate is a split-total
 calculator, not an assertion that the entire proposed journal can post. Recalculate explicitly sets
@@ -160,6 +161,13 @@ After the 30-day retry retention window, disable automatic resubmission and link
 to authoritative journal/audit review using the original idempotency key/request
 ID where available. Explicit reconciliation is required before discarding that
 intent or beginning a replacement. This does not claim exact-once after expiry.
+
+A precommit rejection permits revision only when no earlier attempt of that
+intent may have committed. Persist attempt state before sending. Once any
+response is uncertain, a later permission/validation rejection does not resolve
+the earlier attempt; retain its exact key and payload until an authoritative
+saved result or the documented reconciliation flow resolves it. Recovery state
+without reliable attempt metadata is treated as uncertain.
 
 A receipt survives failed balance refresh and a backdated entry outside the
 selected period. A separate Refresh action retries the read. Next-page staleness

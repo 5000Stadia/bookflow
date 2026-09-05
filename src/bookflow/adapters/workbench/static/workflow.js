@@ -201,3 +201,24 @@
   });
   initialize();
 })();
+
+
+// A pending register intent is private to the signed-in person in this tab.
+(() => {
+  let cleared = false;
+  function clearRegisterIntent() {
+    if (cleared) return;
+    cleared = true;
+    try { sessionStorage.removeItem('bookflow-register-pending-v1'); } catch (_) {}
+    if (typeof BroadcastChannel === 'function') {
+      const channel = new BroadcastChannel('bookflow-register-identity');
+      channel.postMessage('logout'); channel.close();
+    }
+  }
+  document.addEventListener('submit', event => {
+    if (event.target.matches('form[action="/logout"]')) clearRegisterIntent();
+  }, true);
+  document.addEventListener('htmx:beforeRequest', event => {
+    if (event.detail.elt?.closest('form[action="/logout"]')) clearRegisterIntent();
+  });
+})();

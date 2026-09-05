@@ -451,6 +451,11 @@ def validate_pending_aggregate(s, header, pending):
 def apply(plan, ctx, s):
     # Rebuild under BEGIN IMMEDIATE: references, dates, versions and allocation are decisive here.
     fresh = prepare(s, ctx, plan.data['input'], plan.data['operation'])
+    return persist_prepared(fresh, ctx, s, command_name='journal ' + plan.data['operation'])
+
+
+def persist_prepared(fresh, ctx, s, *, command_name):
+    """Persist a writer-validated aggregate under its outer command's single audit event."""
     if not fresh.data['changed']:
         return Applied(fresh.preview, [], 'no change')
     d = fresh.data
@@ -461,7 +466,7 @@ def apply(plan, ctx, s):
     for table, kind in zip(TABLES, TYPES):
         touched.extend(Touched(kind, row['id'], 'create', None, 1, decoded(row), db='company') for row in pending[table])
     summary_text = f"{d['operation']} journal {h['number']}"
-    audit.write_event_to(s.company, ctx, 'journal ' + d['operation'], summary_text, touched,
+    audit.write_event_to(s.company, ctx, command_name, summary_text, touched,
         actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=getattr(s, 'directive_code', None), event_id=d['event'])
     if old:
         s.company.conn.execute(c.transactions.update().where(c.transactions.c.id == h['id']).values(**h))

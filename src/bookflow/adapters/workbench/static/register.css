@@ -1,0 +1,25 @@
+#register-workspace { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+#register-workspace section { margin-block: 1.2rem; }
+#register-workspace fieldset { min-width: 0; padding: .8rem; }
+.register-entry-grid, .register-split-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: .75rem; align-items: end; }
+#register-workspace label { display: block; min-width: 0; }
+#register-workspace input, #register-workspace select { box-sizing: border-box; width: 100%; min-width: 0; }
+#register-workspace button { white-space: normal; }
+#register-workspace .actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.register-picker { position: relative; min-width: 0; }
+.register-options { max-height: 14rem; overflow: auto; border: 1px solid #999; background: var(--panel, white); }
+.register-options button { display: block; width: 100%; text-align: left; }
+.register-options button[aria-selected="true"] { outline: 2px solid #24659b; outline-offset: -2px; }
+.register-picker small { display: block; }
+.register-period { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
+#register-history { min-width: 70rem; }
+#register-history th, #register-history td { overflow-wrap: normal; word-break: normal; }
+#register-workspace .table-wrap { max-width: 100%; overflow-x: auto; }
+.register-money { white-space: nowrap; font-variant-numeric: tabular-nums; }
+#register-receipt, #register-pending { padding: 1rem; border: 1px solid #999; overflow-wrap: anywhere; }
+#register-workspace :focus-visible { outline: 3px solid #24659b; outline-offset: 2px; scroll-margin-block: 5rem; }
+#register-workspace [hidden] { display: none !important; }
+#register-error:empty { display: none; }
+@media (max-width: 600px) { .register-entry-grid, .register-split-fields { grid-template-columns: minmax(0, 1fr); } #register-workspace fieldset { padding: .5rem; } }
+
+#register-workspace input[type="checkbox"] { width: auto; }

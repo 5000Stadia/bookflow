@@ -164,3 +164,19 @@ EXAMPLES.update({
     "report trial-balance": Example('bookflow report trial-balance --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_to": "2026-12-31"}),
     "report general-ledger": Example('bookflow report general-ledger --date-from 2026-01-01 --date-to 2026-12-31 --account Checking --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31", "account": "Checking"}),
 })
+
+
+EXAMPLES.update({
+    "register post": Example(
+        'bookflow register post --account Checking --date 2026-04-01 --direction decrease --amount 125.00 --category "Professional Fees" --company "Demo Plumbing Co" --reason "Record professional fees" --json',
+        {"account": "Checking", "date": "2026-04-01", "direction": "decrease", "amount": "125.00", "category": "Professional Fees"}),
+    "register update": Example(
+        f'bookflow register update {ID} --expected-version 1 --selected-line-id {ID} --category-line-id {ID} --account Checking --date 2026-04-01 --direction decrease --amount 125.00 --category "Professional Fees" --memo "Professional fee receipt" --company "Demo Plumbing Co" --reason "Clarify payment memo" --json',
+        {"journal": ID, "expected_version": 1, "selected_line_id": ID, "category_line_id": ID, "account": "Checking", "date": "2026-04-01", "direction": "decrease", "amount": "125.00", "category": "Professional Fees", "memo": "Professional fee receipt"}),
+    "register calculate": Example(
+        'bookflow register calculate --account Checking --direction decrease --allocations \'[{"account":"Professional Fees","amount":"120.00"},{"account":"Professional Fees","amount":"20.00","direction":"increase"}]\' --company "Demo Plumbing Co" --json',
+        {"account": "Checking", "direction": "decrease", "allocations": [{"account": "Professional Fees", "amount": "120.00"}, {"account": "Professional Fees", "amount": "20.00", "direction": "increase"}]}),
+    "register query": Example(
+        'bookflow register query --account Checking --date-from 2026-01-01 --date-to 2026-12-31 --limit 25 --company "Demo Plumbing Co" --json',
+        {"account": "Checking", "date_from": "2026-01-01", "date_to": "2026-12-31", "limit": 25}),
+})

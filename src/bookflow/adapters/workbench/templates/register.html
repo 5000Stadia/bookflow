@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ account_label }} register · Bookflow{% endblock %}
+{% block body %}
+<link rel="stylesheet" href="{{ static_urls['register.css'] }}">
+<script src="{{ static_urls['register.js'] }}" defer></script>
+<script type="application/json" id="register-config">{{ config | tojson }}</script>
+<div id="register-workspace">
+<nav aria-label="Context"><a href="/c/{{ company_id }}/account">Chart of accounts</a> / <a href="/c/{{ company_id }}/account/{{ account.id }}">{{ account_label }}</a></nav>
+<h1>{{ account_label }} register</h1>
+<p>{{ account.type.replace('_', ' ') | title }} · {{ account.currency }} · Own account balance, excluding descendants</p>
+<p><a href="{{ gl_url }}">Account general ledger</a></p>
+<div id="register-account-chooser"></div>
+{% if not config.supported %}<p>{% if account.type == 'non_posting' %}This is a non-posting account and accepts no entry.{% else %}Use the account general ledger for income and expense activity.{% endif %}</p>{% endif %}
+<section id="register-pending" aria-label="Save recovery" hidden><p id="register-pending-message" role="status"></p><button type="button" id="register-retry">Retry same save</button> <a id="register-review">Review original request</a> <a id="register-pending-location" hidden>Return to pending register</a><div id="register-reconciliation" hidden><label><input id="register-reconciled" type="checkbox"> I reviewed this request key in the authoritative journal and audit trail and resolved whether it committed.</label><button id="register-finish-reconciliation" type="button" disabled>Finish reconciliation and start a new draft</button></div></section>
+<section id="register-receipt" aria-label="Saved entry" role="status" hidden></section>
+{% if config.writable %}
+<section aria-label="Register entry">
+<h2 id="register-entry-title">{{ 'Edit journal' if config.edit else 'New journal entry' }}</h2>
+<p class="muted">Journal numbering applies. T = company today; + / − = adjacent day. Only Record posts an entry.</p>
+<form id="register-form" novalidate>
+<fieldset id="register-fields">
+<div class="register-entry-grid">
+<label>Date <input id="register-date" name="date" type="text" inputmode="numeric" placeholder="YYYY-MM-DD" required aria-describedby="register-date-help"></label>
+<button id="register-calendar-open" type="button">Calendar</button>
+<label id="register-calendar-label" hidden>Choose date<input id="register-calendar" type="date"></label>
+<label>Journal number <input name="number" maxlength="64" placeholder="Automatic"></label>
+<div id="register-payee"></div>
+<label>Movement <select name="direction">{% for value, label in config.directions %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+<label>Amount ({{ config.currency }}) <input name="amount" inputmode="decimal" required autocomplete="off"></label>
+<div id="register-category"></div>
+<label>Memo <input name="memo" maxlength="2000"></label>
+<div id="register-class"></div>
+</div>
+<small id="register-date-help">YYYY-MM-DD · {{ config.timezone }}</small>
+<div class="actions"><button id="register-splits-open" type="button">Splits</button></div>
+<section id="register-splits" aria-label="Split allocations" hidden>
+<h3>Splits</h3><p>Amounts are positive. Choose the account movement for each allocation. Recalculate explicitly sets the main amount.</p>
+<div id="register-allocations"></div>
+<div class="actions"><button id="register-split-add" type="button">Add split</button><button id="register-split-clear" type="button">Clear splits</button><button id="register-recalculate" type="button">Recalculate</button><button id="register-split-close" type="button">Close splits</button></div>
+</section>
+<label>Reason <input name="reason" maxlength="2000"></label>
+<label>Source reference <input name="source_ref" maxlength="2000"></label>
+<label>Directive <input name="directive_id" maxlength="2000"></label>
+<div class="actions"><button id="register-record" type="button">Record</button><button id="register-restore" type="button">Restore</button><button id="register-new" type="button" {% if not config.edit %}hidden{% endif %}>New entry</button></div>
+</fieldset>
+<div id="register-error" class="error" role="alert" tabindex="-1"></div>
+</form></section>
+{% endif %}
+{% if config.supported %}
+<section aria-label="Account movements">
+<h2>Account movements</h2>
+<form id="register-period" class="register-period"><label>From <input type="date" name="date_from" value="{{ config.date_from }}"></label><label>Through <input type="date" name="date_to" value="{{ config.date_to }}"></label><button type="submit">Refresh</button></form>
+<p id="register-current">All entries: loading…</p><p id="register-current-metadata" class="muted"></p>
+<p id="register-period-totals"></p><p id="register-metadata" class="muted"></p><p id="register-query-error" role="status"></p>
+<div class="table-wrap" role="region" aria-label="Scrollable account history" tabindex="0"><table id="register-history"><thead><tr><th>Date / recorded</th><th>Number / type / effect</th><th>Payee</th><th>Category</th><th>Memo / line description</th><th>Class</th><th>Increase</th><th>Decrease</th><th>Running balance</th><th>Journal</th></tr></thead><tbody></tbody></table></div>
+<button id="register-next" type="button" hidden>Next page</button>
+</section>
+{% endif %}
+</div>
+{% endblock %}

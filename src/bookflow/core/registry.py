@@ -219,6 +219,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.note_cmds": ["note"],
     "bookflow.commands.attachment_cmds": ["attachment"],
     "bookflow.commands.journal_cmds": ["journal"],
+    "bookflow.commands.register_cmds": ["register"],
     "bookflow.commands.report_cmds": ["report"],
     "bookflow.commands.activity_cmds": ["activity"],
     "bookflow.commands.compact_cmds": ["company"],
@@ -300,6 +301,7 @@ def all_nouns() -> list[str]:
 NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
     "company": {"record_type": "company_info", "identifier": None},
     "journal": {"record_type": "transaction", "identifier": "journal", "output_identifier": "id", "ui_group": "Accounting", "display_field": "number", "singular_label": "Journal", "plural_label": "Journals"},
+    "register": {"record_type": None, "identifier": None, "ui_group": "Accounting"},
     "report": {"record_type": None, "identifier": None, "ui_group": "Accounting"},
     "audit": {"record_type": "audit_event", "identifier": "event"},
     "hub audit": {"record_type": "audit_event", "identifier": "event"},

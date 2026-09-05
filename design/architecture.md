@@ -113,7 +113,7 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - Journal numbering, header pointers, principal snapshots, revisions, posting effects, audit and idempotency share the company transaction. Ledger services preallocate their audit ID and return `Applied(audited=True)` without committing. Dispatch rolls a ledger no-op back to its business savepoint before retaining its retry result, so a ledger no-op does not refresh company principals. Ordinary list no-ops retain their principal-mirroring and projection-repair behavior.
 - `company/ledger_reports.py` reads all effective posting batches, including reversals and replacements. Trial balance nets each account; general ledger pages opening/posting/closing rows with running balances computed before slicing. Lossless integer aggregation and numeric text collation avoid intermediate SQLite integer overflow and floating-point conversion. Public values outside signed 64-bit range fail with `E_VALUE_RANGE`. Report continuations authenticate complete state and first-page metadata with HMAC-SHA256 using a private company-local 32-byte key. Signature verification precedes decoded-account use. They bind filters, identity and relevant change watermarks, preserve first-page metadata, and restart with `E_QUERY_STALE` on relevant changes. The key is generated in migration, copied with the company, and excluded from commands, audit snapshots and annotation targets.
 - Account show/list/query derive the account's own normal-side balance from posting lines and real history dependencies. Descendants are not rolled up. A posted account cannot be deactivated. Journal browser pages display historical line snapshots, balanced totals, revision links and stable-header notes/files; generated update forms preserve line identities and shown versions.
-- The demo includes opening capital, a corrected service journal, an expense and a voided duplicate. Its accrual trial balance as of 2026-12-31 is 640000 USD minor units on each side. Foreign-tagged posting, exchange-rate commands, transaction custom-field values and the functional register remain following increments. Fine-grained identity and publication controls remain unfinished identity work.
+- The demo includes opening capital, a corrected service journal, an expense, a voided duplicate, bank payments and receipts, a credit-card charge and payment, and a corrected mixed split with a net payment of 10000 USD minor units. Its accrual trial balance as of 2026-12-31 is 663000 USD minor units on each side. Foreign-tagged posting, exchange-rate commands and transaction custom-field values remain following increments. Fine-grained identity and publication controls remain unfinished identity work.
 - A single-word command (`upgrade`) has no verb: its noun page is its form, and it submits to `/hub/<noun>`.
 - `docs generate` is a rootless standalone command: no data root, lock, actor, capability, forwarding, or HTTP route. It renders all registered commands including standalone tooling, validates examples and schema descriptions, and copies packaged prose resources. Generation accepts only an absent, empty, or exactly marked real directory; it refuses symlinks and unrelated trees, validates a sibling stage, swaps it atomically, and restores the previous complete tree if publication fails. `--check` performs a read-only byte/path comparison and reports sorted missing, extra, and changed paths as `E_DOCS_STALE`.
 - The cold-start test budgets `bookflow --help` below 300 ms; neither root help nor command discovery imports FastAPI, uvicorn, or the workbench.
@@ -281,3 +281,24 @@ Generated-documentation verification in `tests/test_docs_generation.py`, `tests/
 - `serve --bind <address>:0` is `E_VALIDATION` before the network gate is reached, because the port range is checked first.
 - `E_IDEMPOTENCY_MISMATCH` (409) and `E_INTERNAL` (500) are in the status map but are not exercised over HTTP.
 - The generated `/openapi.json` is asserted for shape and coverage, not validated against an OpenAPI schema validator.
+
+
+### Account registers
+
+`company/register_models.py` defines complete entry, allocation, calculator and
+receipt contracts. `registers.py` resolves them to domestic journal lines again
+inside the writer transaction and calls `journals.persist_prepared` with the
+outer command name. One audit event covers each changing register write.
+`register_query.py` combines an authenticated general-ledger page with immutable
+revision summaries, normal-side movements and a separate all-date balance.
+Period metadata stays frozen across pages; the all-date balance has its own
+fresh generation time and audit watermark. Register cursors bind the query,
+permissions, company and current account display facts with a private company key.
+
+`adapters/workbench/register.py` installs balance-sheet account register routes.
+The register browser composer posts through the same command API and shows the
+receipt in place. Split allocations retain their entered identities and explicit
+class inheritance modes. General journals outside the editable register shape
+remain readable and link to the journal editor. The browser retains one bounded
+pending write per tab, including its payload and retry key, before submission;
+uncertain results require resolving that same intent before another write.

@@ -38,6 +38,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`presence`](cli/presence.md)
 - [`price-level`](cli/price-level.md)
 - [`profile`](cli/profile.md)
+- [`register`](cli/register.md)
 - [`report`](cli/report.md)
 - [`sales-rep`](cli/sales-rep.md)
 - [`sales-tax-code`](cli/sales-tax-code.md)

@@ -360,7 +360,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("style.css", "htmx.min.js", "workflow.js", "annotations.js")
+        for name in ("style.css", "htmx.min.js", "workflow.js", "annotations.js", "register.js", "register.css")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -908,6 +908,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 "capability": cmd.capability, "required_role": cmd.required_role,
             }))
         attempted = attempted or {}
+        if noun == "report" and not cmd.is_write and not attempted:
+            for field in cmd.input_model.model_fields:
+                value = request.query_params.get("f:" + field, request.query_params.get(field))
+                if value is not None:
+                    attempted["f:" + field] = value
         originals = None
         shown = None
         generic_selector_form = record_id == "self" and cmd.version_source and cmd.version_source[0] != "company show"
@@ -1209,6 +1214,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 f"This submits the ordinary versioned {target_noun} update command."
             ),
         )
+
+    from bookflow.adapters.workbench.register import install as install_register
+    install_register(app, render=render, run=run, credential=credential, page_error=page_error)
 
     @app.get("/hub/{noun}/{record_id}/{verb}", response_class=HTMLResponse)
     def hub_record_form(noun: str, record_id: str, verb: str, request: Request):
