@@ -979,6 +979,17 @@ Registered command schemas expose `custom_fields` as a typed static mapping keye
 
 Custom-field search covers definition name, target type, and choice labels. Filters are active state, target type, kind, and required. Sorts are position, name, kind, target type, and updated time. Default columns are position, name, target types, kind, required, and active. Active searchable list values participate in their owner's query; active definitions are available as typed owner-list filters and selectable columns.
 
+#### Journal header custom-field controls
+
+Journal post/update and register entry expose journal_entry custom fields in
+stable definition order using text, exact decimal, date, boolean and choice
+controls. Required/default state, explicit clear, empty text, false, zero and
+untouched values remain distinct. Current active definitions supply available
+controls; selected revision snapshots supply editing originals and historical
+labels. More than 45 applicable fields remain reachable. Unrelated updates do
+not populate new defaults; inactive captured values remain readable. Details and
+writer behavior are specified in [8-custom-fields.md](specs/8-custom-fields.md).
+
 ### 11.16 Undo
 
 `undo <event_id>` applies only to a company audit event whose entries are all Row 5 list records. Update, activate, deactivate, cascade, link, unlink, conversion, reparent, and nested-child events receive one atomic compensating write. Undoing a create deactivates the created record and never deletes it. For an update, every field changed by the original event is restored to its before-value when its current value still equals the original after-value; fields changed later but disjoint from the original diff are preserved. A later overlapping field change returns `E_UNDO_CONFLICT` with record, field, current version, and conflicting event details. Current dependency, hierarchy, reference, type, and system-record rules are rechecked and may also return a conflict.
