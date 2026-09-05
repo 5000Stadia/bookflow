@@ -16,8 +16,11 @@ Outputs use existing report metadata and signed Money output (integer minor unit
 formatted amount, company home currency). A bounded page contains account rows,
 count and next_cursor; `totals` always covers the whole statement, never this page.
 Account rows carry ID, explicitly current full label, type, parent ID, active flag,
-section and own-account normal-side amount. Parents never silently include child
-balances. Full path labels identify subaccounts; each posting enters totals once.
+section, current account name/number, preference-controlled display label, and
+own-account normal-side amount. Parents never silently include child
+balances. Full paths remain available as identity context while browser labels honor
+use_account_numbers and show_lowest_subaccount_only; preference or number changes
+stale continuations. Each posting enters totals once.
 Inactive accounts with nonzero amounts remain. Zero omission uses period net for
 profit-and-loss and ending net for balance sheet. include_zero includes never-posted
 accounts in the relevant statement family, but never non-posting accounts.
@@ -50,24 +53,36 @@ liabilities/equity credit-normal. Report rows show direct posted account balance
 Compute fiscal_year_start from the company's fiscal_year_start_month and as-of
 date; at the supported year1 boundary clamp the unavailable preceding year to
 0001-01-01. Expose fiscal_year_start in output. Derived prior_earnings is the
-negative cumulative P&L net strictly before that start; current_year_income is
-the negative P&L net from that start through date_to. Both include every effect,
-including any explicit manual closing transfers; never add a second transfer or
+negative sum of raw (debit_minor_units-credit_minor_units) across the five P&L
+account types strictly before that start; current_year_income is the same raw
+signed sum negated from that start through date_to. Thus current_year_income equals
+profit-and-loss net_income for that fiscal interval, not its negative. Both include
+every effect; never add a second transfer or
 pretend a synthetic amount was posted to an account. Display these separately
 from posted_equity. Their sum with posted_equity is total_equity.
 Totals: assets, liabilities, posted_equity, prior_earnings, current_year_income,
 total_equity, liabilities_and_equity, difference = assets-liabilities_and_equity.
 For valid balanced books difference is zero, including a net loss, non-January
-fiscal years and manual transfers to retained earnings.
+fiscal years. Ordinary user journals that transfer income to equity are included
+exactly as entered: a same-period transfer can reduce the P&L to zero, and the
+report must not guess that a memo means an excluded closing entry. The browser
+and docs explain this ledger-based result. Automatic/formal closing transfers and
+pre-closing business-performance views require an explicit future closing profile.
+The prior-period manual-transfer fixture checks residual earnings plus posted
+equity without double counting; it does not promise to reconstruct pre-closing
+profit from ordinary journal descriptions.
 
 ## Snapshot and continuation
 
 Reuse report cursor signing/company/principal/query binding and consistent read
-snapshot. Hash all relevant effects plus account labels, types, parents, active
-flags and company fiscal setting. Relevant backdated effects, rename/deactivation,
+snapshot. Hash all relevant effects plus account labels/numbers, types, parents, active
+flags, company fiscal/presentation settings and the company audit high-water mark. Relevant backdated effects, rename/deactivation,
 hierarchy or fiscal setting changes stale continuation; foreign-company/principal,
 report-kind, options, period or limit changes reject it. Metadata and totals remain
-constant across an unchanged continuation. Permission is rechecked on every page.
+constant across an unchanged continuation. Every intervening audited company
+write (even an unrelated note) stales these statements: each page thus identifies
+the same company information boundary, not a selectively frozen older watermark.
+Permission is rechecked on every page.
 Report version and schema are preserved. Copy/attach keeps existing cursor rules.
 
 ## Browser and documentation
@@ -82,6 +97,11 @@ under details. No auto-fetching an unbounded full report.
 Each account amount links to the existing general-ledger form with stable account
 ID and the report dates prefilled (balance sheet starts 0001-01-01). The GL sign
 convention is documented: income/liability/equity report amounts negate GL nets.
+Drill-down carries the source report audit watermark as browser context (not a
+new GL command input). The form explains that it opens current books; on submission
+it compares returned metadata watermark with the source watermark and explicitly
+flags changed books and the need to rerun the source statement. The context survives
+form submission, is escaped, and never changes accounting or authorization.
 Desktop1280 and phone390 fit without page overflow. Values/labels are escaped.
 Generated command docs and a short statement usage page explain earnings,
 own-account rows, totals across pages and accrual-only scope.
@@ -96,14 +116,20 @@ No new records are necessary for these read-only commands.
 
 Reference monthly/YTD/annual and second-half source arithmetic; unchanged TB/GL
 reconciliation; negatives, contra assets, parent and child own balances, inactive
-and zero-net accounts; fiscal rollover/nonJanuary start and manual equity closing;
+and zero-net accounts; fiscal rollover/nonJanuary start and ordinary prior-period transfers to equity;
 future/backdated corrections/voids; strict inputs, overflow beyond selected page,
 cursor tamper/query/company/principal binding/staleness; no writes. CLI/HTTP parity
-and actual Chrome desktop/phone navigation, input, next-page and account drill-down.
+and Python outputs/errors; actual Chrome desktop/phone navigation, input,
+next-page and account drill-down, including changed-source warning. Across adapters
+exercise invalid periods, unsupported cash, overflow and stale continuation where
+the surface accepts those inputs. Copy/attach into a separate initialized root must
+reproduce both statement amounts, fiscal split and current label preferences
+independently of the original hub/process; a cursor is not an archived report.
 Fresh artifact critique uses isolated copies and meaningful mutations of signs,
 earnings, immutable-effects selection and browser continuation as appropriate.
 
-Advanced report comparison columns, classes/jobs, hierarchy rollup, cash basis,
+The complete standard-report control inventory and explicit staged boundary are
+in design/inventories/financial-statements.md. Advanced report comparison columns, classes/jobs, hierarchy rollup, cash basis,
 cash-flow statement, PDF/CSV export, saved reports and operational subledger
 reports remain inventoried future work; this increment makes no parity claim for
 those features.

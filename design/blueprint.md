@@ -1205,6 +1205,12 @@ Dependency updates for the whole project, including the optional email package, 
 
 ## 14. Reports
 
+Standard financial statement controls and their explicit staged coverage are
+listed in [the statement inventory](inventories/financial-statements.md). The
+first bounded P&L/balance-sheet implementation supplies standard accrual account
+amounts and statement totals; it does not claim full equivalent-screen parity for
+the customization and variants listed there.
+
 This is the future reporting contract. Every report declares its source records, grouping keys, date semantics, supported bases, and exact reconciliation checks before implementation. `--json` and `--csv` render the same structured result. Flow reports use inclusive `--from`/`--to` dates; balance and aging reports use `--to` as the as-of date and declare any comparative-period input separately. `--basis accrual|cash` is available only where defined; an unsupported basis returns `E_VALIDATION`, never an unlabeled approximation. The company report basis supplies the default only for a report supporting it. Trial balance and general ledger initially support accrual only.
 
 Financial ledger reports sum immutable posting lines whose batches fall in the requested accounting date range. They include **original, reversal, and replacement batches**; they never filter those effects by a document's current `posted`/`voided` status, by a current-revision pointer, or by the existence of a reversing link. Each exact reversal offsets its target once. General-ledger detail exposes the transaction number/id, document revision, batch kind, reversed/replaced links, effective date, and recorded time. Trial balance account totals reconcile to that detail. Opening balances plus dated movements equal closing balances.
