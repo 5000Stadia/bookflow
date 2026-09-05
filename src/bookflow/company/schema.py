@@ -1047,3 +1047,7 @@ attachment_collection = _table(
 from bookflow.company.ledger_schema import define_tables as _define_ledger_tables
 
 globals().update(_define_ledger_tables(metadata, _column, _table, _common))
+
+from bookflow.company.rate_schema import define_tables as _define_rate_tables
+
+globals().update(_define_rate_tables(metadata, _column, _table))
