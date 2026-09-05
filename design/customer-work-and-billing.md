@@ -1,7 +1,9 @@
 # Customer work and billing
 
-This planned workflow extends blueprint sections 10.3, 13.1 and 13.4. Its document
-forms and delivery commands are not implemented by the current journal increment.
+This workflow extends blueprint sections 10.3, 13.1 and 13.4. Proposals, estimates
+and work orders have shared commands and browser forms. [Linked work billing](specs/17-work-billing.md)
+connects whole source lines to invoices and receipts next; partial/progress billing,
+settlement and delivery remain subsequent increments.
 
 ## Customer workspace
 
