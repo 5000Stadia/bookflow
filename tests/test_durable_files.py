@@ -667,16 +667,18 @@ def test_config_pending_read_refuses_network_database_before_connect(tmp_path, m
     assert error.value.code == "E_NETWORK_SHARE" and calls == [tmp_path / "hub.db"]
 
 
-def test_pending_config_migration_is_additive_and_revision_local(tmp_path):
+def test_pending_config_migration_is_additive_and_revision_local(tmp_path, monkeypatch):
     from alembic import command
-    from bookflow.storage.migrate import _config, migrate_to_head
+    from bookflow.storage.migrate import HEADS, _config, migrate_to_head
+
+    monkeypatch.setitem(HEADS, "hub", "hub0006")
 
     path = tmp_path / "hub.db"
     with open_database(path, writable=True, create=True) as db:
         command.upgrade(_config("hub", db.conn), "hub0005")
         original = dict(db.raw.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table'").fetchall())
         assert "pending_config" not in original
-        assert migrate_to_head(db, "hub", tmp_path / "backups") == ("hub0005", "hub0009")
+        assert migrate_to_head(db, "hub", tmp_path / "backups") == ("hub0005", "hub0006")
         current = dict(db.raw.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table'").fetchall())
         assert {key: value for key, value in current.items() if key != "pending_config"} == original
         assert db.raw.execute("SELECT count(*) FROM pending_config").fetchone()[0] == 0
