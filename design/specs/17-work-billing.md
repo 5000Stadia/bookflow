@@ -27,6 +27,18 @@ and ledger.read. All source and destination access uses the same selected compan
 and existing authority boundary. Conversion is a ledger operation, including
 ordinary open-period and current posting-account checks. Completion stays nonposting.
 
+Composite access additionally requires the source work operation's authority:
+customer-work write access for conversions and linked corrections/voids that change
+consumption; customer-work read access for billing views, source snapshots and
+linked history. Record both resource requirements in the shared command contract
+and evaluate both through the common access checker before preview, execution or
+any replay. The current blueprint4.4 implementation enforces membership/roles;
+resolved capability grants/denies remain Row7 work. This increment does not claim
+that granular denies already work. When that evaluator resolves capabilities, the
+same composite requirements must deny access if either resource is denied; no
+adapter or replay callback may bypass the common checker. Source details must not
+be materialized in a sale response before their additional read check succeeds.
+
 Conversion requires canonical source id, positive expected_version, permanent
 conversion_key (1–128), financial date and optional destination number. Optional
 line_ids selects 1–200 distinct current source line identities. Omission selects
@@ -34,6 +46,17 @@ all currently unbilled, billable lines. Explicitly selected nonbillable, consume
 retired or foreign lines reject rather than silently disappearing. The destination
 must contain at least one line and have a positive gross total. Zero-value source
 lines can accompany positive lines and are then consumed, with no zero posting legs.
+
+An unallocated line with zero gross has the derived state `no_charge`, not unpaid
+or billed. Its ordered/completed quantities remain visible, billed quantity stays
+zero, and remaining chargeable quantity/amount are zero. It need not be attached
+to a financial sale to finish chargeable billing. A remaining document containing
+only such lines reports "No charge remains; zero-price lines were not invoiced"
+and offers no financial conversion. This state changes if an otherwise permitted
+source revision gives the line a price. When a zero-price line is explicitly
+included alongside a positive line, its actual allocation and billed quantity are
+recorded normally. Thus a previously closed positive invoice need not be changed
+merely to account for a zero-price line that was not selected.
 
 Invoice adds optional AR account, terms and due-date overrides. Receipt requires
 deposit_to and exact amount_received equal to the preview's gross total; its date
@@ -86,6 +109,15 @@ recognition; the existing payment-receipt-policy posting rejection remains.
 If current enabled/disabled tax policy conflicts with captured taxable facts,
 reject and identify the conflict, without silently changing the agreed quote.
 
+The captured line's income account and each captured component's liability account
+govern the postings. A changed current item/tax mapping does not substitute a new
+account: retain the captured account and show a mapping-change warning. Validate
+each captured posting account's current existence, active state, compatible account
+type and currency. Validate current selling-item type/eligibility against the
+captured supported type and the captured tax agency/item identity against current
+eligibility. An incompatible captured mapping rejects rather than choosing a new
+classification. AR/deposit control accounts are separately selected below.
+
 Select the invoice AR account or receipt deposit account through the ordinary
 financial resolver. Invoice terms default to the captured source terms; calculate
 due/discount dates from that captured term and the new financial date, unless
@@ -107,6 +139,8 @@ Quantity-only edits preserve an amount-priced line's exact net. A supplied unit_
 or explicit price_level selects rate pricing and clears the saved amount basis;
 use_defaults unit_price returns to catalog pricing. A supplied net_amount clears
 rate mode. Explicit net_amount with price_level or price_basis_amount rejects.
+Explicit net_amount with use_defaults containing unit_price also rejects; there is
+no precedence rule that silently discards either requested mode.
 Item/unit changes retain explicitly entered amount with a warning, matching saved
 explicit-rate behavior. Refresh preserves explicit overrides. Preview and both
 independent arithmetic validation paths enforce the same precedence.
@@ -226,3 +260,9 @@ without touching other sales; injected audit/source/allocation/posting failures;
 fresh/populated/local-extension migration and rollback; preserved demo histories,
 balances and original attachment bytes. An independent accounting/schema review
 precedes the preserving live-demo refresh. Progress billing remains next on deck.
+
+The MCP adapter remains the explicit unimplemented Row9 target. This increment
+verifies registry/documentation discovery and core attribution with interface=mcp,
+including rejection and durable replay, without calling that an MCP transport test.
+Row9's acceptance must exercise actual MCP discovery, execution, errors and replay
+for this registered billing contract before claiming cross-adapter completion.
