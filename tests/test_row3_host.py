@@ -1287,6 +1287,8 @@ def _page_url(cmd, company_id):
 
 
 def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted):
+    import re
+
     from bookflow.adapters.workbench import forms as F
     from bookflow.core import registry
     registry.load_all()
@@ -1298,11 +1300,18 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
         assert page.status_code == 200, (cmd.name, url, page.status_code, page.text[:300])
         definition = registry.noun_meta(cmd.noun).get("definition")
         for leaf in F.leaves(cmd.input_model):
-            if leaf["path"] == "custom_fields" and getattr(
-                definition, "runtime_field_provider", None
-            ) == "custom-fields":
+            if leaf["path"] == "custom_fields" and (
+                getattr(definition, "runtime_field_provider", None) == "custom-fields"
+                or (cmd.noun in ("journal", "register") and cmd.verb in ("post", "update"))
+            ):
                 assert 'name="f:custom_fields"' not in page.text, cmd.name
                 assert 'name="cf:' in page.text, cmd.name
+            elif leaf["path"] == "custom_field_kinds" and cmd.noun in ("journal", "register"):
+                assert 'name="f:custom_field_kinds"' not in page.text, cmd.name
+                kinds = re.findall(r'name="cf-kind:([^"]+)"', page.text)
+                values = re.findall(r'name="cf:([^"]+)"', page.text)
+                assert kinds and sorted(kinds) == sorted(values), cmd.name
+                assert len(kinds) == len(set(kinds)), cmd.name
             elif leaf["kind"] == "collection":
                 assert page.text.count(
                     f'name="collection:{leaf["path"]}"'
