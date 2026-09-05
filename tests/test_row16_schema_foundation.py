@@ -342,7 +342,8 @@ def test_hub_capabilities_additive_and_fresh(tmp_path):
             if name != 'role_capabilities':
                 assert after[name] == before[name]
         new=set(after['role_capabilities'][1])-set(before['role_capabilities'][1])
-        assert new == {(role,'customer-work','member') for role in ('owner','admin','hub_admin','standard','readonly')}
+        assert new == ({(role,'customer-work','member') for role in ('owner','admin','hub_admin','standard','readonly')}
+                       | {(role,'customer-work','standard') for role in ('owner','admin','hub_admin','standard')})
     with open_database(tmp_path/'fresh-hub.db',writable=True,create=True) as db:
         migrate_to_head(db,'hub',None)
         assert _rows(db.raw) == after

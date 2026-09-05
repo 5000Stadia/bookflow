@@ -32,7 +32,7 @@ customer-work write access for conversions and linked corrections/voids that cha
 consumption; customer-work read access for billing views, source snapshots and
 linked history. Record both resource requirements in the shared command contract
 and evaluate both through the common access checker before preview, execution or
-any replay. The current blueprint4.4 implementation enforces membership/roles;
+any replay. The current blueprint4.3b implementation enforces membership/roles;
 resolved capability grants/denies remain Row7 work. This increment does not claim
 that granular denies already work. When that evaluator resolves capabilities, the
 same composite requirements must deny access if either resource is denied; no

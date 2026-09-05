@@ -13,6 +13,10 @@ ROLE_CAPABILITY_SEED = (
     ('owner', 'customer-work', 'member'),
     ('readonly', 'customer-work', 'member'),
     ('standard', 'customer-work', 'member'),
+    ('admin', 'customer-work', 'standard'),
+    ('hub_admin', 'customer-work', 'standard'),
+    ('owner', 'customer-work', 'standard'),
+    ('standard', 'customer-work', 'standard'),
 )
 
 
