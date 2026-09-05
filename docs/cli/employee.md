@@ -51,6 +51,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `Authorization` | required for bearer clients | `Bearer <secret>` |
 | `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
 | `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
 | `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
 | `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
 | `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
@@ -264,6 +265,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `Authorization` | required for bearer clients | `Bearer <secret>` |
 | `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
 | `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
 | `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
 | `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
 | `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
@@ -451,6 +453,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `Authorization` | required for bearer clients | `Bearer <secret>` |
 | `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
 | `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
 | `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
 | `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
 | `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
@@ -639,6 +642,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `Authorization` | required for bearer clients | `Bearer <secret>` |
 | `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
 | `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
 | `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
 
 ### Output
@@ -782,6 +786,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `Authorization` | required for bearer clients | `Bearer <secret>` |
 | `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
 | `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
 | `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
 
 ### Output
@@ -886,6 +891,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `Authorization` | required for bearer clients | `Bearer <secret>` |
 | `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
 | `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
 | `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
 
 ### Output
@@ -1085,6 +1091,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `Authorization` | required for bearer clients | `Bearer <secret>` |
 | `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
 | `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
 | `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
 | `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
 | `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |

@@ -89,6 +89,7 @@ def _http_headers(cmd: Any) -> list[tuple[str, str, str]]:
         ("`Authorization`", "required for bearer clients", "`Bearer <secret>`"),
         ("`X-Bookflow-Client-Name`", "optional", "Stable caller name recorded in audit"),
         ("`X-Bookflow-Client-Version`", "optional", "Caller version recorded in audit"),
+        ("`X-Bookflow-Context-Encoding`", "optional", "percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding"),
     ]
     if cmd.scope == "company":
         headers.append(("`X-Bookflow-Company`", "optional", "If sent, must equal the company ULID in the route"))

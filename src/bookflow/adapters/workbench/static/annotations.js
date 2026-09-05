@@ -30,6 +30,11 @@
         const value = document.querySelector(`[name="ctx:${field}"]`)?.value;
         if (value) result[header] = value;
       }
+      for (const header of ['X-Bookflow-Reason', 'X-Bookflow-Source-Ref', 'X-Bookflow-Directive',
+                            'Idempotency-Key', 'X-Bookflow-Client-Name', 'X-Bookflow-Client-Version']) {
+        if (result[header] != null) result[header] = encodeURIComponent(result[header]);
+      }
+      result['X-Bookflow-Context-Encoding'] = 'percent-utf8';
       return result;
     }
     async function responseError(response) {

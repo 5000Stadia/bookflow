@@ -219,3 +219,11 @@ posts outside both period ends, closed/empty picker Enter, Shift+Tab/Escape,
 company-local T and +/− date shortcuts. A reduced visual viewport with focused
 lower controls must preserve visibility; phone viewport sizing alone is not a
 claim about an actual device's soft keyboard.
+
+
+Attribution text uses the HTTP percent-utf8 context-header transport and arrives
+unchanged in audit, including non-Latin reason/source reference. The browser
+validates local request construction before transmission; local construction
+failures are known rejections, while a failure after a possibly sent attempt
+retains conservative retry state. Opening/closing split presentation preserves
+null versus empty descriptions, identities and untouched version/history.

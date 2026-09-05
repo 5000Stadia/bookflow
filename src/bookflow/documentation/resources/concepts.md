@@ -95,3 +95,15 @@ Hub and company schema revisions are explicit. Opening a database from an unknow
 ## Errors and process exits
 
 Every public failure has the JSON shape `{"code": "E_...", "message": "...", "details": {}}`. Programs branch on the stable `code` and use `details` for structured recovery; message text is for people. HTTP maps authentication, permission, missing-record, conflict, validation, and internal failures to the corresponding 4xx or 5xx status while preserving that document. The CLI exits `0` on success, `2` for `E_USAGE`, `3` for `E_INTERNAL`, and `1` for other named errors.
+
+
+HTTP context headers support Unicode through `X-Bookflow-Context-Encoding:
+percent-utf8`. When present, encode every supplied reason, source reference,
+directive, idempotency key, client name and client version header value with UTF-8
+percent encoding. The host decodes each exactly once before building command
+context. Authentication and company-selection headers are unchanged. Without
+this opt-in header, context values retain their ordinary header interpretation.
+Malformed escapes, invalid UTF-8 and unknown encodings return E_VALIDATION before
+command execution. A literal percent sign becomes `%25`; plus is not decoded as
+space. Browser register entry applies this transport automatically and retains
+the original context text with its pending request.

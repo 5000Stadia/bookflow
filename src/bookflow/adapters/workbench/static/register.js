@@ -32,6 +32,14 @@
   async function command(name, payload, context = {}, key = null, company = c.company, wire = null) {
     const headers = {'Content-Type': 'application/json', 'X-Bookflow-Workbench': '1', 'X-Bookflow-Client-Name': 'bookflow-workbench', ...context};
     if (key) headers['Idempotency-Key'] = key;
+    try {
+      for (const name of ['X-Bookflow-Reason', 'X-Bookflow-Source-Ref', 'X-Bookflow-Directive',
+                          'Idempotency-Key', 'X-Bookflow-Client-Name', 'X-Bookflow-Client-Version']) {
+        if (headers[name] != null) headers[name] = encodeURIComponent(headers[name]);
+      }
+      headers['X-Bookflow-Context-Encoding'] = 'percent-utf8';
+      new Headers(headers);  // Local construction failures cannot have posted.
+    } catch (_) { throw {code: 'E_VALIDATION', message: 'Not sent: attribution contains invalid text.'}; }
     let response;
     try { response = await fetch(`/companies/${encodeURIComponent(company)}/commands/${name}`, {
       method: 'POST', credentials: 'same-origin', headers, body: wire || JSON.stringify(payload),
@@ -356,7 +364,7 @@
     $('register-calendar-open').addEventListener('click', () => { $('register-calendar-label').hidden = false; $('register-calendar').value = field('date').value; $('register-calendar').focus(); $('register-calendar').showPicker?.(); });
     $('register-calendar').addEventListener('change', () => { field('date').value = $('register-calendar').value; $('register-calendar-label').hidden = true; dirty = true; dateFocus(); });
     $('register-splits-open').addEventListener('click', () => {
-      if (!splitMode) { splitMode = true; const value = {}; try { value.account = category.value(); } catch (_) {} value.amount = field('amount').value; value.memo = field('memo').value; try { value.party = payee.value(); } catch (_) {} if (edit?.category_line_id) value.line_id = edit.category_line_id;
+      if (!splitMode) { splitMode = true; const value = {}; try { value.account = category.value(); } catch (_) {} value.amount = field('amount').value; value.memo = field('memo').value === (edit?.memo ?? '') ? (edit?.memo ?? null) : (field('memo').value || null); try { value.party = payee.value(); } catch (_) {} if (edit?.category_line_id) value.line_id = edit.category_line_id;
         addSplit(value, {account: category.label(), party: payee.label()}); dirty = true; }
       $('register-category').hidden = true; $('register-splits').hidden = false; splits[0]?.a.input.focus();
     });

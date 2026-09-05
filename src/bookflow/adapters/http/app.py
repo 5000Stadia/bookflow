@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import socket as _socket
 import time
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 import sqlalchemy as sa
 from fastapi import FastAPI, Request, Response
@@ -34,6 +35,25 @@ CONTEXT_HEADERS = {"reason": "X-Bookflow-Reason", "directive_id": "X-Bookflow-Di
                    "idempotency_key": "Idempotency-Key", "client_name": "X-Bookflow-Client-Name", "client_version": "X-Bookflow-Client-Version"}
 COOKIE = "bookflow_session"
 WORKBENCH_HEADER = "x-bookflow-workbench"
+
+
+def decode_context_headers(headers) -> dict[str, str | None]:
+    """Decode explicitly encoded textual context once, before constructing Context."""
+    values = {field: headers.get(name) for field, name in CONTEXT_HEADERS.items()}
+    encoding = headers.get("X-Bookflow-Context-Encoding")
+    if encoding is None:
+        return values
+    try:
+        if encoding != "percent-utf8":
+            raise ValueError
+        for field, value in values.items():
+            if value is not None:
+                if not value.isascii() or re.search(r"%(?![0-9a-fA-F]{2})", value):
+                    raise ValueError
+                values[field] = unquote(value, encoding="utf-8", errors="strict")
+    except (ValueError, UnicodeError):
+        raise BookflowError("E_VALIDATION", message="Invalid percent-utf8 context headers.") from None
+    return values
 
 
 def safe_workbench_destination(value: Any) -> str:
@@ -133,11 +153,12 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
 
     def make_context(request: Request, cred: Credential, interface: Interface = Interface.http) -> Context:
         hdr = request.headers
-        client_name = hdr.get(CONTEXT_HEADERS["client_name"]) or (cred.label if cred.kind == "bearer" else "bookflow-workbench" if hdr.get(WORKBENCH_HEADER) == "1" else "http")
-        return Context(interface=interface, client_name=client_name or "http", client_version=hdr.get(CONTEXT_HEADERS["client_version"]) or host.version,
+        values = decode_context_headers(hdr)
+        client_name = values["client_name"] or (cred.label if cred.kind == "bearer" else "bookflow-workbench" if hdr.get(WORKBENCH_HEADER) == "1" else "http")
+        return Context(interface=interface, client_name=client_name or "http", client_version=values["client_version"] or host.version,
                        client_host=_socket.gethostname(), session_id=cred.token_id, request_id=new_id(), on_behalf_of=cred.on_behalf_of,
-                       reason=hdr.get(CONTEXT_HEADERS["reason"]), directive_id=hdr.get(CONTEXT_HEADERS["directive_id"]),
-                       source_ref=hdr.get(CONTEXT_HEADERS["source_ref"]), idempotency_key=hdr.get(CONTEXT_HEADERS["idempotency_key"]))
+                       reason=values["reason"], directive_id=values["directive_id"],
+                       source_ref=values["source_ref"], idempotency_key=values["idempotency_key"])
 
     # ------------------------------------------------------------ running commands
     def run_command(cmd, raw: dict[str, Any], ctx: Context, cred: Credential, selector: str | None, source: str, dry_run: bool) -> dict[str, Any]:
@@ -462,7 +483,7 @@ def build_openapi(version: str) -> dict[str, Any]:
     registry.load_all()
     paths: dict[str, Any] = {}
     error_schema = {"type": "object", "properties": {"code": {"type": "string", "enum": sorted(ALL_CODES)}, "message": {"type": "string"}, "details": {"type": "object"}}, "required": ["code", "message", "details"]}
-    params = [{"name": hdr, "in": "header", "required": False, "schema": {"type": "string"}} for hdr in CONTEXT_HEADERS.values()]
+    params = [{"name": "X-Bookflow-Context-Encoding", "in": "header", "required": False, "schema": {"type": "string", "enum": ["percent-utf8"]}}] + [{"name": hdr, "in": "header", "required": False, "schema": {"type": "string"}} for hdr in CONTEXT_HEADERS.values()]
     for cmd in registry.routed_commands():
         path = f"/commands/{route_name(cmd.name)}" if cmd.scope == "hub" else f"/companies/{{company_id}}/commands/{route_name(cmd.name)}"
         errors = list(dict.fromkeys([*cmd.error_codes, *INFRASTRUCTURE_CODES]))

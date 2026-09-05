@@ -282,10 +282,13 @@ def test_annotation_reads_and_download_ignore_pending_form_directive(browser_sit
         browser.evaluate("document.querySelector('[data-link-id] button').click()")
         browser.wait_for("document.querySelector('[data-link-id] [role=status]').textContent.includes('Download handed')")
         assert browser.evaluate("annotationRequests.filter(r=>/note.list|attachment.list|commands\\/activity|attachment.get/.test(r.url)).every(r=>!r.headers['X-Bookflow-Directive'])")
+        browser.evaluate("document.querySelector('[name=\"ctx:reason\"]').value='修理 receipt + 100%'; document.querySelector('[name=\"ctx:source_ref\"]').value='工事/é😀'")
         browser.evaluate("document.querySelector('#annotation-note').value='Directive belongs to this new note';document.querySelector('[data-note-add]').requestSubmit()")
         browser.wait_for("document.querySelector('[data-note-add] [role=status]').textContent==='Note added.' && [...document.querySelectorAll('[data-note-id]')].some(n=>n.textContent.includes('Directive belongs to this new note'))")
         note_id = browser.evaluate("[...document.querySelectorAll('[data-note-id]')].find(n=>n.textContent.includes('Directive belongs to this new note')).dataset.noteId")
         audit = _api(browser, site, 'audit.list', {'record_type': 'note', 'record_id': note_id})['items']
         assert audit[0]['directive_code'] == directive
+        assert audit[0]['reason'] == '修理 receipt + 100%'
+        assert audit[0]['source_ref'] == '工事/é😀'
     finally:
         browser.close()
