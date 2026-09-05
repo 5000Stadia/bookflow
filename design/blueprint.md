@@ -981,7 +981,13 @@ Before a list, form, or report is built, its blueprint section is completed to n
 
 ### 12.1 Notes
 
-Table `notes`. Fields: `record_type`, `record_id`, `body` (text, Markdown allowed), `author_id`, `interface`, `at`, `edited_at`, `kind` (`comment` or `system`). Any record in any table in company.db may carry notes, including `company_info`. `note add <record_type> <record_id> --body`, `note edit`, `note list`. Editing keeps the original in the audit log. Notes are never deleted.
+Table `notes` carries the common fields plus `record_type`, `record_id`, `body` (text, Markdown allowed), `author_id`, `interface`, `at`, `edited_at`, `kind` (`comment` or `system`). Body is nonblank, preserved as entered, and limited to 65,536 UTF-8 bytes. Public creation accepts only comments; system notes are reserved for internal producers. Body text never grants authority or executes markup.
+
+The company-local annotation target registry covers the twenty list types, stable-id owned children, `company_info`, `directive`, `principal`, `audit_event`, `audit_entry`, `customer_vendor_link`, and `note`. Future persistent record types register explicitly. Transient presence, retry bookkeeping, sequence counters and migration metadata are not annotation targets. Inputs use canonical record type and stable id, never SQL table names. Company identity is the selected company's id. Inactive records retain readable notes; rename, deactivation, owned-child retirement and undo-create preserve target identity and remain permitted. Physical target deletion cannot strand a note.
+
+Commands: `note add <record_type> <record_id> --body`, `note show <note>`, `note edit <note> --body --expected-version`, `note list <record_type> <record_id>`. Reads require membership; add/edit require standard role and the ordinary agent reason gate. Add uses existing request idempotency. Edit requires a positive expected version; a conflicting body edit is rejected, a current-version no-op writes nothing. Original author/interface/time remain unchanged; the common updated fields identify the editor. Editing keeps prior bodies in immutable audit snapshots. Notes are never deleted and do not change their target's business version.
+
+`note list` returns current note versions, newest id first, in pages of 50 by default and at most 200. Output has items, page count, has_more and next_cursor; cursors bind company, target and current permissions. This live list is not a historical report: edits are current and inserts above the cursor appear on first-page refresh. Chronological immutable history belongs to activity. The stored target/id index bounds the page query; principal labels are fetched as one set, not one query per note.
 
 ### 12.2 Attachments
 
