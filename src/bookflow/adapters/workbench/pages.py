@@ -333,6 +333,8 @@ def _inactive_toggle(path: str, request: Request, *, include: bool) -> str:
 def _success_target(cmd: registry.Command, company_id: str | None, noun: str, record_id: str | None,
                     output: dict[str, Any]) -> str:
     route_noun = noun.replace(" ", "-")
+    if company_id and cmd.name in ("register post", "register update") and output.get("id"):
+        return f"/c/{company_id}/journal/{output['id']}"
     if record_id is not None:
         base = f"/c/{company_id}/{noun}" if company_id else f"/hub/{route_noun}"
         return f"{base}/{record_id}"
