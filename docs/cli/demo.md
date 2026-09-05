@@ -4,7 +4,7 @@
 
 ## `demo reset`
 
-Create, or move to trash and recreate, the demo organization and its demo company from the package seed.
+Move the entire existing demo organization and all its companies to trash, then recreate Demo Plumbing Co; optionally also seed Reference Plumbing Co. Other organizations are untouched.
 
 | Contract | Value |
 |---|---|
@@ -24,7 +24,7 @@ Create, or move to trash and recreate, the demo organization and its demo compan
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| — | — | — | — | — | — | This command has no input fields. |
+| `include_reference` | `--include-reference` | boolean | no | no | false | Also seed Reference Plumbing Co with the fixed 2026 reference year. Reset moves the entire existing demo organization, including every company, to trash. |
 
 ### Command and context options
 
@@ -63,6 +63,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `display_name` | string | yes | no | — | — |
 | `path` | string \| null | yes | yes | — | — |
 | `trashed_path` | string \| null | yes | yes | — | — |
+| `reference_company_id` | string \| null | no | yes | null | Reference company ID when requested; null otherwise. Preview IDs are prospective. |
+| `reference_display_name` | string \| null | no | yes | null | Reference company display name when requested; null otherwise. |
 
 Example JSON output:
 
@@ -73,6 +75,8 @@ Example JSON output:
   "dry_run": false,
   "organization_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "path": null,
+  "reference_company_id": null,
+  "reference_display_name": null,
   "trashed_path": null,
   "warnings": []
 }

@@ -1,0 +1,226 @@
+# Fixed 2026 domestic reference journals; amounts are exact USD decimal strings.
+[company]
+legal_name = "Reference Plumbing Company LLC"
+display_name = "Reference Plumbing Co"
+home_currency = "USD"
+timezone = "America/Chicago"
+chart = "contractor"
+fiscal_year_start_month = 1
+report_basis = "accrual"
+
+[[commands]]
+command = "account create"
+reason = "Create reference account: Equipment"
+input = { name = "Equipment", type = "fixed_asset" }
+
+[[commands]]
+command = "account create"
+reason = "Create reference account: Insurance Expense"
+input = { name = "Insurance Expense", type = "expense" }
+
+[[commands]]
+command = "account create"
+reason = "Create reference account: Depreciation Expense"
+input = { name = "Depreciation Expense", type = "expense" }
+
+[[commands]]
+command = "account create"
+reason = "Create reference account: Accumulated Depreciation"
+input = { name = "Accumulated Depreciation", type = "fixed_asset" }
+
+[[commands]]
+command = "account create"
+reason = "Create reference account: Business Credit Card"
+input = { name = "Business Credit Card", type = "credit_card" }
+
+[[commands]]
+command = "journal post"
+reason = "Opening capital"
+input = { date = "2026-01-01", number = "REF-OPEN", memo = "Opening capital", lines = [{ account = "Checking", side = "debit", amount = "10000.00" }, { account = "Opening Balance Equity", side = "credit", amount = "10000.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Annual insurance paid"
+input = { date = "2026-01-02", number = "REF-INSURANCE", memo = "Annual insurance paid", lines = [{ account = "Insurance Expense", side = "debit", amount = "1200.00" }, { account = "Checking", side = "credit", amount = "1200.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 1 service receipts"
+input = { date = "2026-01-15", number = "REF-SERVICE-01", memo = "Month 1 service receipts", lines = [{ account = "Checking", side = "debit", amount = "3000.00" }, { account = "Service Income", side = "credit", amount = "3000.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 1 professional fees"
+input = { date = "2026-01-20", number = "REF-FEES-01", memo = "Month 1 professional fees", lines = [{ account = "Professional Fees", side = "debit", amount = "250.00" }, { account = "Checking", side = "credit", amount = "250.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 2 service receipts"
+input = { date = "2026-02-15", number = "REF-SERVICE-02", memo = "Month 2 service receipts", lines = [{ account = "Checking", side = "debit", amount = "3500.00" }, { account = "Service Income", side = "credit", amount = "3500.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 2 professional fees"
+input = { date = "2026-02-20", number = "REF-FEES-02", memo = "Month 2 professional fees", lines = [{ account = "Professional Fees", side = "debit", amount = "250.00" }, { account = "Checking", side = "credit", amount = "250.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 3 service receipts"
+input = { date = "2026-03-15", number = "REF-SERVICE-03", memo = "Month 3 service receipts", lines = [{ account = "Checking", side = "debit", amount = "4000.00" }, { account = "Service Income", side = "credit", amount = "4000.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 3 professional fees"
+input = { date = "2026-03-20", number = "REF-FEES-03", memo = "Month 3 professional fees", lines = [{ account = "Professional Fees", side = "debit", amount = "250.00" }, { account = "Checking", side = "credit", amount = "250.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 4 service receipts"
+input = { date = "2026-04-15", number = "REF-SERVICE-04", memo = "Month 4 service receipts", lines = [{ account = "Checking", side = "debit", amount = "4500.00" }, { account = "Service Income", side = "credit", amount = "4500.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 4 professional fees"
+input = { date = "2026-04-20", number = "REF-FEES-04", memo = "Month 4 professional fees", lines = [{ account = "Professional Fees", side = "debit", amount = "250.00" }, { account = "Checking", side = "credit", amount = "250.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 5 service receipts"
+capture = "may_receipt"
+input = { date = "2026-05-15", number = "REF-SERVICE-05", memo = "Month 5 service receipts", lines = [{ account = "Checking", side = "debit", amount = "5000.00" }, { account = "Service Income", side = "credit", amount = "5000.00" }] }
+
+[[commands]]
+command = "journal update"
+reason = "Correct May receipt to 5250.00 USD"
+input = { journal = "${may_receipt.id}", expected_version = "${may_receipt.version}", lines = [{ account = "Checking", side = "debit", amount = "5250.00" }, { account = "Service Income", side = "credit", amount = "5250.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 5 professional fees"
+input = { date = "2026-05-20", number = "REF-FEES-05", memo = "Month 5 professional fees", lines = [{ account = "Professional Fees", side = "debit", amount = "250.00" }, { account = "Checking", side = "credit", amount = "250.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 6 service receipts"
+input = { date = "2026-06-15", number = "REF-SERVICE-06", memo = "Month 6 service receipts", lines = [{ account = "Checking", side = "debit", amount = "5500.00" }, { account = "Service Income", side = "credit", amount = "5500.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Equipment purchased"
+input = { date = "2026-06-15", number = "REF-EQUIPMENT", memo = "Equipment purchased", lines = [{ account = "Equipment", side = "debit", amount = "2400.00" }, { account = "Checking", side = "credit", amount = "2400.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 6 professional fees"
+input = { date = "2026-06-20", number = "REF-FEES-06", memo = "Month 6 professional fees", lines = [{ account = "Professional Fees", side = "debit", amount = "250.00" }, { account = "Checking", side = "credit", amount = "250.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 7 service receipts"
+input = { date = "2026-07-15", number = "REF-SERVICE-07", memo = "Month 7 service receipts", lines = [{ account = "Checking", side = "debit", amount = "6000.00" }, { account = "Service Income", side = "credit", amount = "6000.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 7 professional fees"
+input = { date = "2026-07-20", number = "REF-FEES-07", memo = "Month 7 professional fees", lines = [{ account = "Professional Fees", side = "debit", amount = "250.00" }, { account = "Checking", side = "credit", amount = "250.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 7 explicit depreciation journal"
+input = { date = "2026-07-28", number = "REF-DEPRECIATION-07", memo = "Month 7 explicit depreciation journal", lines = [{ account = "Depreciation Expense", side = "debit", amount = "100.00" }, { account = "Accumulated Depreciation", side = "credit", amount = "100.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 8 service receipts"
+input = { date = "2026-08-15", number = "REF-SERVICE-08", memo = "Month 8 service receipts", lines = [{ account = "Checking", side = "debit", amount = "6500.00" }, { account = "Service Income", side = "credit", amount = "6500.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 8 professional fees"
+input = { date = "2026-08-20", number = "REF-FEES-08", memo = "Month 8 professional fees", lines = [{ account = "Professional Fees", side = "debit", amount = "250.00" }, { account = "Checking", side = "credit", amount = "250.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 8 explicit depreciation journal"
+input = { date = "2026-08-28", number = "REF-DEPRECIATION-08", memo = "Month 8 explicit depreciation journal", lines = [{ account = "Depreciation Expense", side = "debit", amount = "100.00" }, { account = "Accumulated Depreciation", side = "credit", amount = "100.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 9 service receipts"
+input = { date = "2026-09-15", number = "REF-SERVICE-09", memo = "Month 9 service receipts", lines = [{ account = "Checking", side = "debit", amount = "7000.00" }, { account = "Service Income", side = "credit", amount = "7000.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 9 professional fees"
+input = { date = "2026-09-20", number = "REF-FEES-09", memo = "Month 9 professional fees", lines = [{ account = "Professional Fees", side = "debit", amount = "250.00" }, { account = "Checking", side = "credit", amount = "250.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 9 explicit depreciation journal"
+input = { date = "2026-09-28", number = "REF-DEPRECIATION-09", memo = "Month 9 explicit depreciation journal", lines = [{ account = "Depreciation Expense", side = "debit", amount = "100.00" }, { account = "Accumulated Depreciation", side = "credit", amount = "100.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 10 service receipts"
+input = { date = "2026-10-15", number = "REF-SERVICE-10", memo = "Month 10 service receipts", lines = [{ account = "Checking", side = "debit", amount = "7500.00" }, { account = "Service Income", side = "credit", amount = "7500.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 10 professional fees"
+input = { date = "2026-10-20", number = "REF-FEES-10", memo = "Month 10 professional fees", lines = [{ account = "Professional Fees", side = "debit", amount = "250.00" }, { account = "Checking", side = "credit", amount = "250.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 10 explicit depreciation journal"
+input = { date = "2026-10-28", number = "REF-DEPRECIATION-10", memo = "Month 10 explicit depreciation journal", lines = [{ account = "Depreciation Expense", side = "debit", amount = "100.00" }, { account = "Accumulated Depreciation", side = "credit", amount = "100.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 11 service receipts"
+input = { date = "2026-11-15", number = "REF-SERVICE-11", memo = "Month 11 service receipts", lines = [{ account = "Checking", side = "debit", amount = "8000.00" }, { account = "Service Income", side = "credit", amount = "8000.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Duplicate November receipt"
+capture = "duplicate"
+input = { date = "2026-11-16", number = "REF-DUPLICATE", memo = "Duplicate November receipt", lines = [{ account = "Checking", side = "debit", amount = "900.00" }, { account = "Service Income", side = "credit", amount = "900.00" }] }
+
+[[commands]]
+command = "journal void"
+reason = "Void duplicate November receipt"
+input = { journal = "${duplicate.id}", expected_version = "${duplicate.version}" }
+
+[[commands]]
+command = "journal post"
+reason = "Month 11 professional fees"
+input = { date = "2026-11-20", number = "REF-FEES-11", memo = "Month 11 professional fees", lines = [{ account = "Professional Fees", side = "debit", amount = "250.00" }, { account = "Checking", side = "credit", amount = "250.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 11 explicit depreciation journal"
+input = { date = "2026-11-28", number = "REF-DEPRECIATION-11", memo = "Month 11 explicit depreciation journal", lines = [{ account = "Depreciation Expense", side = "debit", amount = "100.00" }, { account = "Accumulated Depreciation", side = "credit", amount = "100.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 12 service receipts"
+input = { date = "2026-12-15", number = "REF-SERVICE-12", memo = "Month 12 service receipts", lines = [{ account = "Checking", side = "debit", amount = "8500.00" }, { account = "Service Income", side = "credit", amount = "8500.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 12 professional fees"
+input = { date = "2026-12-20", number = "REF-FEES-12", memo = "Month 12 professional fees", lines = [{ account = "Professional Fees", side = "debit", amount = "250.00" }, { account = "Checking", side = "credit", amount = "250.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Professional fees charged to card"
+input = { date = "2026-12-21", number = "REF-CARD-FEE", memo = "Professional fees charged to card", lines = [{ account = "Professional Fees", side = "debit", amount = "300.00" }, { account = "Business Credit Card", side = "credit", amount = "300.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Partial card payment"
+input = { date = "2026-12-27", number = "REF-CARD-PAYMENT", memo = "Partial card payment", lines = [{ account = "Business Credit Card", side = "debit", amount = "100.00" }, { account = "Checking", side = "credit", amount = "100.00" }] }
+
+[[commands]]
+command = "journal post"
+reason = "Month 12 explicit depreciation journal"
+input = { date = "2026-12-28", number = "REF-DEPRECIATION-12", memo = "Month 12 explicit depreciation journal", lines = [{ account = "Depreciation Expense", side = "debit", amount = "100.00" }, { account = "Accumulated Depreciation", side = "credit", amount = "100.00" }] }

@@ -59,6 +59,8 @@ See [binary transfers](docs/transfers.md) for Python downloads, HTTP bodies, lim
 
 ## Documentation
 
+For a fixed full year of domestic journals, use `bookflow demo reset --include-reference`. This moves the entire previous demo organization and all its companies to trash. See the [reference-year guide](docs/reference-year.md) for isolated invocation, source amounts and independent monthly report expectations.
+
 The generated [documentation index](docs/index.md) includes the complete command and database-schema references, core concepts, and an executable guide for a fresh agent. Regenerate it after changing a command or schema and verify that the committed tree is current:
 
 ```

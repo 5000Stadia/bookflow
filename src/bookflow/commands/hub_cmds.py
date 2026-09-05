@@ -780,28 +780,36 @@ def apply_company_detach(plan: Plan, ctx: Context, s: Session) -> Applied:
 
 # ---------------------------------------------------------------- demo reset
 
+class DemoResetInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    include_reference: bool = Field(False, description="Also seed Reference Plumbing Co with the fixed 2026 reference year. Reset moves the entire existing demo organization, including every company, to trash.")
+
+
 class DemoResetOutput(WriteOutput):
     organization_id: str
     company_id: str
     display_name: str
     path: str | None
     trashed_path: str | None
+    reference_company_id: str | None = Field(None, description="Reference company ID when requested; null otherwise. Preview IDs are prospective.")
+    reference_display_name: str | None = Field(None, description="Reference company display name when requested; null otherwise.")
 
 
-demo_reset = command("demo reset", scope="hub", description="Create, or move to trash and recreate, the demo organization and its demo company from the package seed.",
-                     input_model=Empty, output_model=DemoResetOutput, writes={"hub", "company", "config"}, required_role="hub_admin",
+demo_reset = command("demo reset", scope="hub", description="Move the entire existing demo organization and all its companies to trash, then recreate Demo Plumbing Co; optionally also seed Reference Plumbing Co. Other organizations are untouched.",
+                     input_model=DemoResetInput, output_model=DemoResetOutput, writes={"hub", "company", "config"}, required_role="hub_admin",
                      error_codes=["E_DEMO_RESET_INCOMPLETE", "E_NAME_TAKEN"])
 
 
-def _load_seed() -> dict[str, Any]:
+def _load_seed(resource: str = "seed.toml") -> dict[str, Any]:
     import tomllib
     from importlib import resources
-    return tomllib.loads(resources.files("bookflow.demo").joinpath("seed.toml").read_text(encoding="utf-8"))
+    return tomllib.loads(resources.files("bookflow.demo").joinpath(resource).read_text(encoding="utf-8"))
 
 
 @demo_reset
-def plan_demo_reset(inp: Empty, ctx: Context, s: Session) -> Plan:
+def plan_demo_reset(inp: DemoResetInput, ctx: Context, s: Session) -> Plan:
     seed = _load_seed()
+    reference = _load_seed("reference.toml") if inp.include_reference else None
     existing = s.hub.conn.execute(sa.select(h.organizations).where(h.organizations.c.is_demo.is_(True))).mappings().first()
     existing = dict(existing) if existing else None
     if existing is None and org.name_taken(s, name_key(seed["organization"]["display_name"])):
@@ -819,7 +827,10 @@ def plan_demo_reset(inp: Empty, ctx: Context, s: Session) -> Plan:
     from bookflow.storage.paths import derive_folder_name
     company_folder = derive_folder_name(seed["company"]["display_name"]) if existing else choose_folder_name(s.organizations_dir / org_folder, seed["company"]["display_name"])
     preview = DemoResetOutput(organization_id=new_id(), company_id=new_id(), display_name=seed["company"]["display_name"], path=str(s.organizations_dir / org_folder / company_folder), trashed_path=str(s.abs_path(trash_rel)) if trash_rel else None)
-    return Plan(preview=preview, data={"seed": seed, "existing": existing, "trash_rel": trash_rel})
+    if reference:
+        preview.reference_company_id = new_id()
+        preview.reference_display_name = reference["company"]["display_name"]
+    return Plan(preview=preview, data={"seed": seed, "reference": reference, "existing": existing, "trash_rel": trash_rel})
 
 
 @demo_reset.applier
@@ -858,26 +869,54 @@ def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
         touched = co.delete_organization_rows(s, existing["id"])
         audit.write_event(s, ctx, "demo reset", "removed previous demo organization", touched)
     orow, t_org = org.create(s, normalize_display_name(seed["organization"]["display_name"]), VIA(ctx), is_demo=True)
-    inp = CompanyNewInput.model_validate({k: v for k, v in seed["company"].items()} | {"organization": orow["id"]})
-    display = normalize_display_name(inp.display_name or inp.legal_name)
-    if inp.timezone is None:
-        inp = inp.model_copy(update={"timezone": _machine_zone() or "UTC"})
-    cid = new_id()
-    folder = rollout.create_company_folder(
-        s,
-        s.abs_path(orow["path"]),
-        cid,
-        display,
-        _info_columns(inp),
-        VIA(ctx),
-        ctx,
-        chart=inp.chart,
+    rows = []
+    touched = [t_org]
+    seeds = [seed] + ([plan.data["reference"]] if plan.data["reference"] else [])
+    for company_seed in seeds:
+        inp = CompanyNewInput.model_validate({k: v for k, v in company_seed["company"].items()} | {"organization": orow["id"]})
+        display = normalize_display_name(inp.display_name or inp.legal_name)
+        if inp.timezone is None:
+            inp = inp.model_copy(update={"timezone": _machine_zone() or "UTC"})
+        cid = new_id()
+        folder = rollout.create_company_folder(
+            s,
+            s.abs_path(orow["path"]),
+            cid,
+            display,
+            _info_columns(inp),
+            VIA(ctx),
+            ctx,
+            chart=inp.chart,
+        )
+        row, t_co = co.register(s, company_id=cid, organization_id=orow["id"], display_name=display, rel_path=s.rel_path(folder), legal_name=inp.legal_name,
+                                home_currency=inp.home_currency, schema_revision=migrate.HEADS["company"], via=VIA(ctx), is_demo=True)
+        rows.append(row)
+        touched.extend(t_co)
+    primary = rows[0]
+    reference = rows[1] if len(rows) > 1 else None
+    out = DemoResetOutput(
+        organization_id=orow["id"], company_id=primary["id"],
+        display_name=primary["display_name"], path=str(s.abs_path(primary["path"])),
+        trashed_path=trashed,
+        reference_company_id=reference["id"] if reference else None,
+        reference_display_name=reference["display_name"] if reference else None,
     )
-    row, t_co = co.register(s, company_id=cid, organization_id=orow["id"], display_name=display, rel_path=s.rel_path(folder), legal_name=inp.legal_name,
-                            home_currency=inp.home_currency, schema_revision=migrate.HEADS["company"], via=VIA(ctx), is_demo=True)
-    out = DemoResetOutput(organization_id=orow["id"], company_id=cid, display_name=display, path=str(folder), trashed_path=trashed)
-    return Applied(out, [t_org, *t_co], f"reset demo: {orow['display_name']} / {display}", after_commit=lambda: _apply_seed_history(s, ctx, seed, row))
 
+    def seed_history() -> None:
+        for company_seed, row in zip(seeds, rows):
+            try:
+                _apply_seed_history(s, ctx, company_seed, row)
+            except Exception as error:
+                raise BookflowError(
+                    "E_PARTIAL_WRITE",
+                    message="The demo organization and companies were created, but seed history is incomplete. Earlier seed commands remain saved. Rerunning demo reset moves this entire disposable organization to trash.",
+                    details={"command": "demo reset", "durable": ["organization", "company"],
+                             "organization_id": orow["id"], "company_ids": [r["id"] for r in rows],
+                             "incomplete_company_id": row["id"], "request_id": ctx.request_id,
+                             "cause": getattr(error, "code", "E_INTERNAL")},
+                ) from error
+
+    return Applied(out, touched, f"reset demo: {orow['display_name']} / " + ", ".join(r["display_name"] for r in rows), after_commit=seed_history)
 
 
 
