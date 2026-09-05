@@ -208,6 +208,15 @@
       });
       box.append(label, input, actionLabel);
       if (!d || kind !== d.wire_kind) box.append(node('strong', 'Unavailable field attempt — change or clear explicitly.'));
+      if (d && kind !== d.wire_kind) {
+        const adopt = node('button', `Use ${d.wire_kind} type`); adopt.type = 'button'; adopt.dataset.customAdopt = id;
+        adopt.addEventListener('click', () => {
+          state.kind = d.wire_kind; state.state = 'set';
+          if (state.kind === 'bool' && ['true', 'false'].includes(String(state.value))) state.value = String(state.value) === 'true';
+          customLoad({payload: p, customState: structuredClone(customState), custom_fields: captured}); dirty = true;
+        });
+        box.append(adopt);
+      }
       if (!p.journal && d?.creation_default != null) box.append(node('small', ' Default: ' + text(d.creation_default)));
       container.append(box);
     }
@@ -228,6 +237,8 @@
     const value = {account: c.account, date: field('date').value.trim(), direction: field('direction').value,
       amount: field('amount').value.trim(), memo: field('memo').value === (edit?.memo ?? '') ? (edit?.memo ?? null) : (field('memo').value || null), payee: payee.value(), class_id: rowClass.value() || null};
     value.custom_fields = customPatch();
+    value.custom_field_kinds = Object.fromEntries(Object.entries(customState)
+      .filter(([, f]) => f.state === 'set').map(([id, f]) => [id, f.kind]));
     if (field('number').value.trim()) value.number = field('number').value.trim();
     if (splitMode) value.allocations = allocations(); else value.category = category.value();
     if (edit) { value.journal = edit.journal; value.expected_version = edit.expected_version; value.selected_line_id = edit.selected_line_id;
@@ -340,6 +351,7 @@
       if (e.code === 'E_UNAUTHENTICATED') { clearProtected(); storageBlocked = true; }
       else if (firstAttempt && commandStarted && precommit.has(e.code)) {
         try { forgetResolved(); } catch (_) { storageBlocked = true; }
+        if (!storageBlocked) customLoad({payload: edit || {}, customState: structuredClone(customState), custom_fields: initial?.custom_fields || []});
       }
       error(e);
     } finally { sending = false; pendingView(); if (!pending && !storageBlocked && !$('register-error')?.textContent) dateFocus(); }

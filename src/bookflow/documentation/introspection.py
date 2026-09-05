@@ -43,6 +43,8 @@ def _optional(annotation: Any) -> tuple[Any, bool]:
 
 def _base_model(annotation: Any) -> type[BaseModel] | None:
     base, _ = _optional(annotation)
+    if getattr(base, "__pydantic_root_model__", False):
+        return _base_model(base.model_fields["root"].annotation)
     if inspect.isclass(base) and issubclass(base, BaseModel):
         return base
     origin = get_origin(base)
@@ -70,6 +72,8 @@ def type_name(annotation: Any) -> str:
             text = f"object[{key}, {value}]"
         elif inspect.isclass(base) and issubclass(base, Enum):
             text = "enum[" + ", ".join(json.dumps(item.value) for item in base) + "]"
+        elif getattr(base, "__pydantic_root_model__", False):
+            text = type_name(base.model_fields["root"].annotation)
         elif inspect.isclass(base) and issubclass(base, BaseModel):
             text = "object"
         else:
@@ -92,6 +96,8 @@ def _default(field: Any) -> str:
             return "factory"
     else:
         return "—"
+    if isinstance(value, BaseModel):
+        value = value.model_dump(mode="json")
     return json.dumps(value, sort_keys=True, default=str)
 
 
@@ -205,6 +211,8 @@ def sample_value(annotation: Any, name: str) -> Any:
         return {}
     if inspect.isclass(base) and issubclass(base, Enum):
         return next(iter(base)).value
+    if getattr(base, "__pydantic_root_model__", False):
+        return sample_value(base.model_fields["root"].annotation, name)
     if inspect.isclass(base) and issubclass(base, BaseModel):
         return sample_model(base)
     if base is str:

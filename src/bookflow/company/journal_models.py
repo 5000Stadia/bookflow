@@ -9,7 +9,7 @@ from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
-from bookflow.company.custom_fields import CustomFieldValuePatch
+from bookflow.company.custom_fields import CustomFieldValuePatch, CustomFieldKindExpectations
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import INT64_MAX, _parse_scaled_decimal, _require_i64
 from bookflow.core.money import Money, is_currency, minor_units_of
@@ -150,6 +150,10 @@ _Lines = Annotated[list[JournalLineInput], Field(min_length=2, max_length=200)]
 
 
 class JournalPostInput(_Input):
+    custom_field_kinds: CustomFieldKindExpectations = Field(
+        default_factory=lambda: CustomFieldKindExpectations({}),
+        description="Optional captured kinds for supplied non-null custom values. A current kind mismatch rejects the write without reinterpreting a draft.",
+    )
     custom_fields: CustomFieldValuePatch = Field(
         default_factory=lambda: CustomFieldValuePatch({}),
         description="Header values keyed by journal_entry custom-field definition ID. Omitted keys preserve values on update; null clears an optional value. Numbers are exact decimal strings.",
@@ -167,6 +171,10 @@ class JournalPostInput(_Input):
 
 
 class JournalUpdateInput(_Input):
+    custom_field_kinds: CustomFieldKindExpectations = Field(
+        default_factory=lambda: CustomFieldKindExpectations({}),
+        description="Optional captured kinds for supplied non-null custom values. A current kind mismatch rejects the write without reinterpreting a draft.",
+    )
     custom_fields: CustomFieldValuePatch = Field(
         default_factory=lambda: CustomFieldValuePatch({}),
         description="Header values keyed by journal_entry custom-field definition ID. Omitted keys preserve values on update; null clears an optional value. Numbers are exact decimal strings.",

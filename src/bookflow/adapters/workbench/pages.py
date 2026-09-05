@@ -1139,7 +1139,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             except BookflowError as err:
                 return page_error(request, err)
             runtime_fields = F.custom_field_descriptors(definitions, originals.get("custom_fields"), attempted, update=verb == "update")
-            described = [leaf for leaf in described if leaf["path"] != "custom_fields"]
+            described = [leaf for leaf in described if leaf["path"] not in ("custom_fields", "custom_field_kinds")]
         return_token = attempted.get("_return_token") or request.query_params.get("return_token")
         return_target = attempted.get("_return_target") or request.query_params.get("return_target")
         return_context = None

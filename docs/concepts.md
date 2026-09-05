@@ -119,6 +119,17 @@ fields. Omit the object or a key to preserve a value on update. An explicit
 `null` clears an optional value; `false`, `"0"`, and `""` remain supplied values.
 The object itself cannot be `null`.
 
+Journal and register writers also accept `custom_field_kinds`, an optional object
+mapping definition IDs to their captured kinds. Each key must accompany a
+supplied non-null `custom_fields` value. If the current kind differs, the command
+returns E_VALIDATION before writing. Browser forms supply these kinds and keep
+the original attempt on rejection. Use the explicit current-type action to
+reinterpret a draft after a definition changes; generated forms preview that
+change before save. Without captured kinds, API values use current definitions.
+
+At the CLI, pass the value object with `--custom-fields` and the optional kind
+object with `--custom-field-kinds`; both take JSON objects.
+
 Creation applies active defaults and enforces required fields. Updates do not
 apply newly added defaults or retroactively require absent values; a populated
 required value cannot be cleared. An unchanged inactive definition or retired
@@ -156,3 +167,7 @@ client.run("journal update", {
     "custom_fields": {field["id"]: None},
 }, company=company, reason="Clear optional ticket reference")
 ```
+
+List-record undo restores the audited canonical choice spelling when a choice
+was renamed with the same normalized key. It still requires the corresponding
+active choice for a changing value; it does not recreate a retired choice.

@@ -346,3 +346,17 @@ normal revision and balanced reversal/replacement with zero net account change.
 The demo includes Work order and Source values, a metadata rename with preserved
 historical labels, and a split payment whose work order is corrected, cleared
 and restored through the same value slot.
+
+
+Journal/register custom-field kind expectations are part of the shared command
+input and are checked against the writer's current definitions. Browser drafts
+carry the original kinds through preview, errors and uncertain retries. A local
+explicit current-type action permits a deliberate reinterpretation. The final
+aggregate validator separately checks the custom plan's patch, creating state
+and refresh flag against the original prepared command.
+
+With custom-field planning enabled and no custom values supplied, 20 resident-host
+samples of a 20-line journal on the same 10,000-account fixture have median
+43.57 ms and maximum 45.84 ms. Garbage collection is enabled. These samples
+exclude host startup and include dispatch, authorization, company writer, audit
+and commit. They do not measure a journal populated with dozens of custom values.

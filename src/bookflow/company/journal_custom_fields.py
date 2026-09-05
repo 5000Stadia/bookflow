@@ -111,6 +111,21 @@ def _after(mutation: cf.CustomFieldValueMutation) -> dict:
                 active=mutation.active, canonical_text=mutation.canonical_text)
 
 
+
+def validate_kinds(db, patch, expected) -> None:
+    """Check captured caller kinds against current company definitions."""
+    if not expected.root:
+        return
+    definitions = {d["id"]: d for d in cf._applicable_definitions(cf._conn(db), "journal_entry")}
+    for key, kind in expected.root.items():
+        if key not in patch.root or patch.root[key] is None:
+            raise cf._validation(f"custom_field_kinds.{key}", "must accompany a supplied non-null custom value")
+        if key not in definitions:
+            raise cf._record_not_found(key)
+        if definitions[key]["kind"] != kind:
+            raise cf._validation(f"custom_fields.{key}", "field type changed; review the original attempt and explicitly use the current type or omit it")
+
+
 def prepare(db: Database | sa.Connection, record_id: str, patch: CustomFieldValuePatch,
             previous_snapshot: dict, *, creating: bool, refresh: bool = False) -> JournalCustomFieldPlan:
     """Plan stable slots and a complete revision snapshot without writing."""

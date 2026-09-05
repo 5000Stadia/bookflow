@@ -136,7 +136,8 @@ Post a domestic account movement with a category or signed split allocations and
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `custom_fields.root` | `--custom-fields-root` | object[string, any \| null] | yes | no | — | — |
+| `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Optional captured kinds for supplied non-null custom values. A current kind mismatch rejects the write without reinterpreting a draft. |
+| `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | Journal header custom-field patch by definition ID. Omitted keys preserve values on update; null clears an optional value. Numbers are decimal strings. |
 | `account` | `--account` | string | yes | no | — | minimum length 1 |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
 | `number` | `--number` | string \| null | no | yes | null | — |
@@ -789,7 +790,8 @@ Replace the complete editable register entry while retaining selected and suppli
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `custom_fields.root` | `--custom-fields-root` | object[string, any \| null] | yes | no | — | — |
+| `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Optional captured kinds for supplied non-null custom values. A current kind mismatch rejects the write without reinterpreting a draft. |
+| `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | Journal header custom-field patch by definition ID. Omitted keys preserve values on update; null clears an optional value. Numbers are decimal strings. |
 | `account` | `--account` | string | yes | no | — | minimum length 1 |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
 | `number` | `--number` | string \| null | no | yes | null | — |

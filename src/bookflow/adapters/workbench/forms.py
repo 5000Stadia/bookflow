@@ -337,7 +337,7 @@ def custom_field_descriptors(
             state = "clear"
         out.append(dict(path=f"custom_fields.{identifier}", form_key=f"cf:{identifier}",
             definition_id=identifier, label=d["name"] if d else attempted.get(f"cf-label:{identifier}", identifier),
-            kind=f"custom-{kind}", wire_kind=kind, choices=choices, selected=selected,
+            kind=f"custom-{kind}", wire_kind=kind, current_kind=d["kind"] if d else None, choices=choices, selected=selected,
             choice_ids={str(c["value"]): c["id"] for c in d.get("choices", []) if c.get("active", True) and c.get("id")} if d else {},
             value=value, state=state, update=update, date_input=date_input, unavailable=d is None or kind != d["kind"],
             description="Unavailable attempt — change or clear explicitly." if d is None else "Keep preserves the value; Set includes an empty text value; Clear removes it.",
@@ -639,6 +639,9 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
             custom_patch[definition_id] = parsed
     if custom_patch:
         raw["custom_fields"] = custom_patch
+        if "custom_field_kinds" in cmd.input_model.model_fields:
+            raw["custom_field_kinds"] = {key: form[f"cf-kind:{key}"] for key, value in custom_patch.items()
+                if value is not None and f"cf-kind:{key}" in form}
     for name, header in (("reason", "X-Bookflow-Reason"), ("source_ref", "X-Bookflow-Source-Ref"), ("directive", "X-Bookflow-Directive"), ("idempotency_key", "Idempotency-Key")):
         v = form.get(f"ctx:{name}")
         if v:

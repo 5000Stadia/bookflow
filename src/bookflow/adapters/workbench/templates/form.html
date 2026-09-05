@@ -89,7 +89,7 @@
 <input type="hidden" name="cf-kind:{{ l.definition_id }}" value="{{ l.wire_kind }}">
 <input type="hidden" name="cf-label:{{ l.definition_id }}" value="{{ l.label }}">
 <label>Action <select name="cf-state:{{ l.definition_id }}"><option value="keep"{% if l.state == 'keep' %} selected{% endif %}>{{ 'Keep stored value or absence' if l.update else 'Use creation default / omit' }}</option><option value="set"{% if l.state == 'set' %} selected{% endif %}>Set value (including empty text)</option><option value="clear"{% if l.state == 'clear' %} selected{% endif %}>Clear</option></select></label>
-{% if l.unavailable %}<strong role="alert">Unavailable field attempt</strong>{% endif %}
+{% if l.unavailable %}<strong role="alert">Unavailable field attempt</strong>{% if l.current_kind and l.current_kind != l.wire_kind %}<button type="button" data-custom-adopt="{{ l.definition_id }}" data-current-kind="{{ l.current_kind }}">Use {{ l.current_kind }} type and preview</button>{% endif %}{% endif %}
 {% if l.wire_kind in ('choice', 'bool') %}
 <select id="control-{{ index }}" name="{{ form_name }}" style="min-width:0;max-width:100%">
 {% if l.wire_kind == 'choice' %}

@@ -7,7 +7,7 @@ from bookflow.company.journal_models import (
     _Input, _Date, _Number, _Selector, _Version, MoneyInput,
 )
 from bookflow.company.journal_outputs import JournalMoneyOutput, JournalWriteOutput
-from bookflow.company.custom_fields import CustomFieldValuePatch
+from bookflow.company.custom_fields import CustomFieldValuePatch, CustomFieldKindExpectations
 
 Direction = Literal['increase', 'decrease']
 JournalMoneyInput = MoneyInput
@@ -39,6 +39,10 @@ _Allocations = Annotated[list[RegisterAllocation], Field(min_length=1, max_lengt
 
 
 class _RegisterShape(_Input):
+    custom_field_kinds: CustomFieldKindExpectations = Field(
+        default_factory=lambda: CustomFieldKindExpectations({}),
+        description="Optional captured kinds for supplied non-null custom values. A current kind mismatch rejects the write without reinterpreting a draft.",
+    )
     custom_fields: CustomFieldValuePatch = Field(
         default_factory=lambda: CustomFieldValuePatch({}),
         description="Journal header custom-field patch by definition ID. Omitted keys preserve values on update; null clears an optional value. Numbers are decimal strings.",

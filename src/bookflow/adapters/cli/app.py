@@ -53,6 +53,8 @@ def _flatten(model: type[BaseModel], prefix: str = "") -> list[tuple[str, str, A
         if origin is Union or origin is types.UnionType:
             args = [a for a in get_args(ann) if a is not type(None)]
             base = args[0] if args else str
+        if getattr(base, "__pydantic_root_model__", False):
+            ann = base = base.model_fields["root"].annotation
         if inspect.isclass(base) and issubclass(base, BaseModel):
             out += _flatten(base, prefix + name + ".")
             continue

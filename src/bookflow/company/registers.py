@@ -141,7 +141,7 @@ def translate(inp, s, operation):
                 'amount_minor_units': amount.minor_units,
                 'allocation_net_minor_units': total, 'currency': currency,
             })
-    values = dict(date=inp.date, memo=inp.memo, lines=[main, *offsets], custom_fields=inp.custom_fields)
+    values = dict(date=inp.date, memo=inp.memo, lines=[main, *offsets], custom_fields=inp.custom_fields, custom_field_kinds=inp.custom_field_kinds)
     if inp.number is not None:
         values['number'] = inp.number
     if header:

@@ -191,7 +191,8 @@ Post two through 200 balanced domestic journal lines with an explicit or automat
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `custom_fields.root` | `--custom-fields-root` | object[string, any \| null] | yes | no | — | — |
+| `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Optional captured kinds for supplied non-null custom values. A current kind mismatch rejects the write without reinterpreting a draft. |
+| `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | Header values keyed by journal_entry custom-field definition ID. Omitted keys preserve values on update; null clears an optional value. Numbers are exact decimal strings. |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
@@ -966,7 +967,8 @@ Append an immutable correction with an exact old-date reversal and a full new-da
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `custom_fields.root` | `--custom-fields-root` | object[string, any \| null] | yes | no | — | — |
+| `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Optional captured kinds for supplied non-null custom values. A current kind mismatch rejects the write without reinterpreting a draft. |
+| `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | Header values keyed by journal_entry custom-field definition ID. Omitted keys preserve values on update; null clears an optional value. Numbers are exact decimal strings. |
 | `journal` | `JOURNAL` | string | yes | no | — | minimum length 1 |
 | `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
 | `date` | `--date` | string \| null | no | yes | null | — |

@@ -237,6 +237,7 @@ def prepare(s, ctx, inp, operation):
     old_lines = rows(s, c.document_lines, c.document_lines.c.revision_id == old_r['id'], order=c.document_lines.c.position) if old_r else []
     current_batch = rows(s, c.posting_batches, c.posting_batches.c.revision_id == old_r['id'], c.posting_batches.c.kind != 'reversal')[0] if old_r else None
     if operation != 'void':
+        custom.validate_kinds(s.company, inp.custom_fields, inp.custom_field_kinds)
         custom_plan = custom.prepare(s.company, h['id'], inp.custom_fields,
             json.loads(old_r['custom_fields_snapshot']) if old_r else {},
             creating=old_h is None, refresh=getattr(inp, 'refresh_defaults', False))
@@ -302,7 +303,7 @@ def prepare(s, ctx, inp, operation):
             pending['posting_lines'].append(leg)
             pending['posting_line_sources'].append(dict(**created(), transaction_id=h['id'], posting_line_id=leg['id'],
                 revision_id=r['id'], document_line_id=line['id'], amount_minor_units=line['amount_minor_units'], currency=line['currency'], reversed_source_id=None))
-    validate_pending_aggregate(s, h, pending, custom_plan)
+    validate_pending_aggregate(s, h, pending, custom_plan, custom_input=inp, creating=old_h is None)
     view_pending = pending if operation != 'void' else {k: v for k, v in pending.items() if k != 'document_lines'}
     output = JournalWriteOutput(**summary(h, r), revision=revision_output(s, r, view_pending), warnings=warnings,
         changed_fields=['journal'] if old_h else [])
@@ -310,7 +311,7 @@ def prepare(s, ctx, inp, operation):
                             pending=pending, sequence=sequence, event=event, custom_plan=custom_plan))
 
 
-def validate_pending_aggregate(s, header, pending, custom_plan=None):
+def validate_pending_aggregate(s, header, pending, custom_plan=None, *, custom_input=None, creating=None):
     """Independently verify generated accounting effects before any audit or row write.
 
     Stored reversal targets are checked too: copying corrupt attribution must never
@@ -334,6 +335,11 @@ def validate_pending_aggregate(s, header, pending, custom_plan=None):
 
     if pending['transaction_revisions']:
         require(custom_plan is not None, 'missing custom-field plan for new revision')
+        require(custom_input is not None and type(creating) is bool, 'missing original custom-field intent')
+        require(custom_plan.owner_plan.creating is creating, 'custom-field creation state differs from command')
+        require(json.loads(custom_plan.patch_json) == custom_input.custom_fields.root, 'custom-field values differ from command')
+        require(custom_plan.refresh is getattr(custom_input, 'refresh_defaults', False), 'custom-field refresh differs from command')
+        custom.validate_kinds(s.company, custom_input.custom_fields, custom_input.custom_field_kinds)
         for proposed in pending['transaction_revisions']:
             custom.validate(s.company, custom_plan, document_id, json.loads(proposed['custom_fields_snapshot']))
     else:
@@ -473,7 +479,7 @@ def persist_prepared(fresh, ctx, s, *, command_name):
     d = fresh.data
     h, old, pending = d['header'], d['before'], d['pending']
     custom_plan = d.get('custom_plan')
-    validate_pending_aggregate(s, h, pending, custom_plan)
+    validate_pending_aggregate(s, h, pending, custom_plan, custom_input=d['input'], creating=old is None)
     touched = [Touched('transaction', h['id'], 'update' if old else 'create', old['version'] if old else None,
                        h['version'], h, old, db='company')]
     for table, kind in zip(TABLES, TYPES):

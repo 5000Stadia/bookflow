@@ -291,6 +291,15 @@ class CustomFieldValuePatch(RootModel[dict[str, Any | None]]):
         return normalized
 
 
+class CustomFieldKindExpectations(RootModel[dict[str, CustomFieldKind]]):
+    """Optional caller-captured kinds for explicitly supplied custom values."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def stable_keys(cls, value: Any) -> dict:
+        return CustomFieldValuePatch._keys_are_stable_ids(value)
+
+
 def _validate_choice_collection(
     kind: CustomFieldKind,
     choices: tuple[CustomFieldChoiceInput, ...],
@@ -834,6 +843,7 @@ def plan_owner_value_patch(
     patch: CustomFieldValuePatch | Mapping[str, Any | None] | None,
     creating: bool = False,
     id_factory: Callable[[], str] = new_id,
+    restore_choice_spelling: bool = False,
 ) -> OwnerCustomFieldPlan:
     """Plan owner-value inserts/updates; absent keys preserve and null clears."""
 
@@ -905,6 +915,10 @@ def plan_owner_value_patch(
                 field=f"custom_fields.{definition_id}",
                 choices=choices,
             )[0]
+            if restore_choice_spelling and definition["kind"] == "choice":
+                # The inverse restores an audited canonical spelling after the
+                # active choice lookup has validated the same logical choice.
+                requested_canonical = _normalize_label(requested, field=f"custom_fields.{definition_id}")[0]
             if old is not None and old["active"] and old["canonical_text"] == requested_canonical:
                 continue
             if not definition["active"]:

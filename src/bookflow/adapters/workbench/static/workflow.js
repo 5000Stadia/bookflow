@@ -156,6 +156,14 @@
     const next = (current + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
     buttons[next]?.focus();
   });
+  document.addEventListener('click', event => {
+    const button = event.target.closest('[data-custom-adopt]');
+    if (!button) return;
+    const form = button.closest('[data-generated-form]'), id = button.dataset.customAdopt;
+    named(form, 'cf-kind:' + id).value = button.dataset.currentKind;
+    named(form, 'cf-state:' + id).value = 'set';
+    form.requestSubmit(form.querySelector('button[value="preview"]'));
+  });
   document.addEventListener('input', event => {
     if (!event.target.name?.startsWith('cf:')) return;
     const form = event.target.closest('[data-generated-form]');

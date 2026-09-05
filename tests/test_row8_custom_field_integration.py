@@ -32,7 +32,7 @@ def snapshot(result):
 
 def test_preserved_and_refreshed_facts_do_not_rewrite_history(client, journal_accounts):
     field=definition(client,'Original work order')
-    choice=definition(client,'Source',kind='choice',choices=[{'value':'Web'},{'value':'Phone'}])
+    choice=definition(client,'Integration source',kind='choice',choices=[{'value':'Web'},{'value':'Phone'}])
     first=post(client,journal_accounts,custom_fields={field['id']:'WO-7',choice['id']:'Web'})
     original=copy.deepcopy(snapshot(first))
     client.run('custom-field update', {'custom_field':field['id'],'name':'Renamed work order'},company=COMPANY)

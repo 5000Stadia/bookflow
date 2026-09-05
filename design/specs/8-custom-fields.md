@@ -160,3 +160,33 @@ rollback, company copy and unchanged legacy list contracts except the explicit
 required-null consistency rule. Actual Chrome verifies generated and dedicated
 forms at desktop/390px, empty/false/zero/clear, more than 45 definitions, keyboard
 entry with splits, and dropped-response recovery after definition changes.
+
+
+## Captured input types and original command intent
+
+Journal and register post/update accept optional `custom_field_kinds`, an object
+keyed by definition ID with values `text`, `number`, `date`, `bool` or `choice`.
+Each key accompanies a supplied non-null custom-field value. The core compares
+the captured kind with the current company definition during preview and again
+in the writer; a mismatch returns E_VALIDATION before effects. Omitted kinds
+retain ordinary API interpretation against current definitions.
+
+Browser journal and register forms supply the captured kinds automatically.
+A changed kind preserves the exact old attempt and rejects preview/save. An
+explicit Use current type action adopts the new kind; the generated form
+previews it before save. Keep or Clear remain explicit alternatives. Pending
+uncertain requests retain the original payload, kinds and retry key.
+
+The final journal aggregate validator binds a custom-field plan's original patch,
+creating state and refresh flag to the command input and header creation state.
+A coherently rewritten internal plan cannot substitute an unrequested value or
+omit creation defaults/required fields. A mismatch returns E_INTERNAL before
+audit, ledger, slot, numbering or retry effects commit.
+
+Custom-field objects remain one JSON CLI option, `--custom-fields`, with optional
+`--custom-field-kinds`. Root-model implementation details do not add a `root`
+component to the public input path or flags. Compensating list undo restores
+the exact audited canonical choice spelling after a same-key choice-label
+rename, while validating that the active choice still represents that value.
+Ordinary writes continue using current configured choice spellings for changed
+values and preserve unchanged populated values.

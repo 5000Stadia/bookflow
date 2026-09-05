@@ -1825,6 +1825,7 @@ def _apply_custom_values(
             record_id=str(desired["id"]),
             patch=patch,
             creating=False,
+            restore_choice_spelling=True,
         )
         custom_fields.apply_owner_value_plan(connection, custom_plan)
     except BookflowError as exc:
