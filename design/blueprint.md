@@ -1225,6 +1225,27 @@ Release 2 reports: trial balance, general ledger, profit and loss (standard, det
 
 Trial balance and general ledger ship with the ledger in release 1.
 
+`report profit-and-loss` accepts inclusive `date_from`/`date_to` and returns
+income, cost of goods sold, expenses, other income/expenses, gross profit, net
+operating income and net income. `report balance-sheet` accepts as-of `date_to`
+and returns assets, liabilities, posted equity, derived prior earnings/current
+fiscal-year income, total equity, liabilities plus equity and their difference
+from assets. Both currently accept only `basis=accrual`, `include_zero=false`,
+`limit=1..200` and an optional authenticated continuation. Account detail is paged;
+totals cover the whole statement. Each account row contains its own normal-side
+net, not descendants, with current labels and presentation preferences. Nonzero
+inactive accounts remain. Non-posting accounts never appear.
+
+Derived earnings negate raw debit-minus-credit income/expense effects, split at
+the company's fiscal-year start. They are separate from posted equity. Every
+ordinary journal effect is included exactly as entered, including manual transfers
+out of income/expense; such transfers change reported profit. There is no inferred
+closing operation or automatic closing posting. Any audited company write stales
+these two statements' continuations. Browser forms retain filters and show readable
+totals/detail plus GL links with the original accounting dates; drill-down opens
+current books and flags changed audit watermarks. Current implementation and
+shared report mechanics are described in design/architecture.md.
+
 ### 14.1 Import and export
 
 `import <noun> <file.csv>` reads one row per record, maps columns to the noun's `create` input model by header name, and runs one `create` command per row through the registry, so every row is validated, audited, and idempotent (the idempotency key is the file hash plus row number). The output reports created, replayed, and rejected rows with their errors. `--dry-run` validates every row and writes nothing. Import of transactions uses the same mechanism with one file per transaction type. Export is `list --csv` on any noun and `report <name> --csv`. IIF import is a later addition that maps IIF sections onto the same imports. Import and export are release 2.

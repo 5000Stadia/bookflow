@@ -434,3 +434,33 @@ Ledger tables and indexes alone occupy 566,243,328 bytes. Audit-only reductions
 cannot meet the complete company budget. Repeated issuer and account snapshots
 identify a candidate for lossless storage experiments, but measured repetition
 is not a measured saving. Storage remediation remains a separate unfinished pass.
+
+## Standard accrual financial statements
+
+`company/financial_statements.py` supplies `report profit-and-loss` and `report
+balance-sheet` through the shared registry and reports capability. It streams
+grouped immutable ledger effects using the existing arbitrary-precision sum;
+signed64 checks apply to every account and output total before paging. No schema,
+closing transaction, cached balance or posting-cost change is introduced.
+
+P&L computes normal-side income/COGS/expense/other amounts for inclusive dates.
+Balance sheet computes as-of assets/liabilities/posted equity and splits raw
+income/expense effects into prior earnings and current fiscal-year income. It
+adds those residual earnings to posted equity once. Ordinary manually entered
+transfers affect the reported result; there is no special closing inference.
+
+Account rows are own-account nets with IDs, full/current/display labels, number,
+type, parent and active state. Section/name-key/ID order is stable. Totals cover
+all accounts on every bounded page. Statement continuation extends the shared
+HMAC state with complete account presentation/classification, company fiscal and
+label preferences and company audit watermark. Any audited company write stales
+these continuations, preserving their original generation metadata across pages.
+Existing TB/GL continuation semantics remain unchanged.
+
+Workbench `statements.py` and `statement.html` project these results without
+accounting logic. The filter form restarts a report; a separate Next account page
+form preserves its validated input and cursor. All report submissions display
+read results directly rather than a saved-write flash. GL drill-down carries the
+source watermark only as browser context, compares it with returned metadata and
+warns when the books changed. Both demo seed files execute both read commands.
+The reference-year guide supplies examples and independent annual totals.

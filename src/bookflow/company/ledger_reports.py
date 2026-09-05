@@ -278,7 +278,10 @@ def _state(s, inp, report, principal_id, account_id):
         WHERE b.effective_date<=:date_to AND (:account IS NULL OR l.account_id=:account)
         """, {"date_to": inp.date_to, "account": account_id}).fetchone()
     labels = hashlib.sha256()
-    if report == "trial-balance":
+    statement = report in {"profit-and-loss", "balance-sheet"}
+    if statement:
+        label_query = "SELECT id, full_name, full_name_key, name, number, type, parent_id, active FROM accounts ORDER BY id"
+    elif report == "trial-balance":
         label_query = _EFFECTS + """SELECT a.id, a.full_name, a.active FROM accounts a
             LEFT JOIN balances b ON b.account_id=a.id
             WHERE :include_zero OR coalesce(b.closing,'0')!='0' ORDER BY a.id"""
@@ -292,7 +295,12 @@ def _state(s, inp, report, principal_id, account_id):
         labels.update(json.dumps(tuple(row), separators=(",", ":")).encode())
     currency = raw.execute("SELECT home_currency FROM company_info").fetchone()[0]
     revision = raw.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-    watermark = _hash([tuple(effect), labels.hexdigest(), currency, revision])
+    extra_state = None
+    if statement:
+        extra_state = [tuple(raw.execute("""SELECT fiscal_year_start_month,
+            use_account_numbers, show_lowest_subaccount_only FROM company_info""").fetchone()),
+            raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]]
+    watermark = _hash([tuple(effect), labels.hexdigest(), currency, revision, extra_state]) if statement else _hash([tuple(effect), labels.hexdigest(), currency, revision])
     permissions = _hash([permission_fingerprint(s, principal_id), s.memberships])
     query = _hash([report, inp.model_dump(exclude={"cursor"})])
     company = str(s.company_row["id"])

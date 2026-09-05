@@ -1,0 +1,17 @@
+<section id="financial-statement" aria-label="Financial statement">
+<h2>{{ 'Profit and loss' if verb == 'profit-and-loss' else 'Balance sheet' }}</h2>
+<p>{{ company_label }} · {{ statement.metadata.basis|capitalize }} · {{ statement.metadata.currency }} ·
+{% if statement.metadata.period.date_from %}{{ statement.metadata.period.date_from }} through {% else %}As of {% endif %}{{ statement.metadata.period.date_to }}</p>
+{% if statement.fiscal_year_start %}<p>Current fiscal year starts {{ statement.fiscal_year_start }}. Prior earnings and current-year income are calculated; posted equity is shown separately.</p>{% endif %}
+<p class="muted">These reports include every journal effect as entered. A manual transfer out of an income or expense account changes reported profit; Bookflow does not automatically post closing transfers.</p>
+<div class="table-wrap"><table id="statement-totals"><caption>Whole-statement totals — all pages</caption><thead><tr><th scope="col">Total</th><th scope="col">{{ statement.metadata.currency }}</th></tr></thead><tbody>
+{% for key, value in statement.totals.items() %}<tr data-total="{{ key }}"><th scope="row">{{ key.replace('_', ' ')|capitalize }}</th><td>{{ value.amount }}</td></tr>{% endfor %}
+</tbody></table></div>
+<p>Account detail: {{ statement.count }} rows on this page{% if statement.next_cursor %}; more available{% endif %}. Each amount covers only that account. Subaccounts appear separately. Select an amount to open its current general ledger. Income, liability and equity amounts have the opposite sign to ledger debit-minus-credit nets.</p>
+<div class="table-wrap"><table id="statement-accounts"><thead><tr><th scope="col">Section</th><th scope="col">Account</th><th scope="col">{{ statement.metadata.currency }}</th></tr></thead><tbody>
+{% for row in statement.rows %}<tr><td>{{ row.section.replace('_', ' ')|capitalize }}</td><td title="{{ row.current_account_label }}">{{ row.display_account_label }}{% if not row.active %} (inactive){% endif %}</td><td><a href="{{ row.ledger_url }}">{{ row.amount.amount }}</a></td></tr>{% else %}<tr><td colspan="3">No matching account balances.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if statement.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="statement-next-page">{% for name, value in statement.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}<button name="action" value="submit">Next account page</button></form>{% endif %}
+<p class="muted">Generated {{ statement.metadata.generation_time }} · Audit watermark {{ statement.metadata.audit_watermark }}. Any audited company change requires restarting the report. Change the filters below to start a new report.</p>
+<details><summary>Structured report data</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
+</section>

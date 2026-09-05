@@ -19,6 +19,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from bookflow.adapters.workbench import forms as F
 from bookflow.adapters.workbench import workflows as W
+from bookflow.adapters.workbench import statements as S
 from bookflow.core import registry
 from bookflow.core.errors import BookflowError
 from bookflow.core.models import list_columns
@@ -896,6 +897,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         preview: bool = False,
         attempted: dict[str, str] | None = None,
         workflow_note: str | None = None,
+        report_input: dict | None = None,
     ):
         cmd = registry.get(f"{noun} {verb}".strip())
         if cmd is None or cmd.local_only:
@@ -919,6 +921,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 "capability": cmd.capability, "required_role": cmd.required_role,
             }))
         attempted = attempted or {}
+        source_report_watermark = attempted.get("_source_report_watermark", request.query_params.get("source_report_watermark"))
+        if source_report_watermark is not None and (not source_report_watermark.isascii() or not source_report_watermark.isdigit() or len(source_report_watermark) > 20):
+            source_report_watermark = None
         if noun == "report" and not cmd.is_write and not attempted:
             for field in cmd.input_model.model_fields:
                 value = request.query_params.get("f:" + field, request.query_params.get(field))
@@ -1013,6 +1018,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         if definition is not None and definition.custom_fields:
             originals["custom_fields"] = _custom_value_map(originals.get("custom_fields"))
         described = F.describe_fields(noun, verb, cmd.input_model, originals, attempted)
+        if cmd.name in S.COMMANDS:
+            # The visible filter form always starts fresh; continuation has its
+            # own immutable filter fields and signed cursor in a separate form.
+            described = [leaf for leaf in described if leaf["path"] != "cursor"]
         for index, leaf in enumerate(described, 1):
             leaf["index"] = index
             if noun == "customer":
@@ -1173,6 +1182,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       captured_foreign_lines=[line for line in (shown or {}).get("revision", {}).get("lines", []) if line.get("original_amount")],
                       annotations=annotations(company_id, noun, record_id, shown, authorized_company, cred),
                       ctx_fields=F.context_fields(cmd), result=result, error=error,
+                      statement=S.view(result, report_input, company_id) if result and report_input is not None and cmd.name in S.COMMANDS else None,
+                      source_report_watermark=source_report_watermark,
                       preview=preview, get=F.get_path, form_value=F.form_value,
                       return_context=return_context, workflow_note=workflow_note,
                       reference_values=reference_values,
@@ -1285,6 +1296,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return form_page(request, company_id, noun, verb, record_id, error=e.to_dict(), attempted=form)
         if preview:
             return form_page(request, company_id, noun, verb, record_id, result=out, preview=True, attempted=form)
+        if noun == "report" and not cmd.is_write:
+            return form_page(request, company_id, noun, verb, record_id, result=out, attempted=form,
+                             report_input=cmd.input_model.model_validate(raw).model_dump())
         return_token = form.get("_return_token")
         return_target = form.get("_return_target")
         created_id = _output_identifier(noun, registry.noun_meta(noun), out)

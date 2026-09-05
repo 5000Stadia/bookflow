@@ -95,9 +95,8 @@ Professional Fees 330000, Insurance Expense 120000 and Depreciation Expense
 6925000, Opening Balance Equity 1000000 and Business Credit Card 20000.
 Income is `6925000 - 330000 - 120000 - 60000 = 6415000`.
 Net assets are `7255000 + 240000 - 60000 - 20000 = 7415000`, equal to
-capital plus income. AR and AP are zero. Income, net-assets and AR/AP values
-are arithmetic regression oracles; profit-and-loss, balance-sheet and aging
-report commands are not exposed yet.
+capital plus income. AR and AP are zero. Income and net-assets values are independent arithmetic regression oracles for
+the profit-and-loss and balance-sheet commands. Aging remains unavailable.
 
 The ordinary demo contains ten journals, trial balance 664595 on each side and
 Checking 612095. Account show/list express balances on each account's normal
@@ -116,3 +115,43 @@ bookflow docs generate --output docs --check
 ```
 
 The generated [demo command reference](cli/demo.md) contains the typed contract.
+
+## Financial statements
+
+<!-- bookflow-example: illustrative -->
+```sh
+bookflow report profit-and-loss --company "Reference Plumbing Co" --date-from 2026-01-01 --date-to 2026-12-31 --json
+bookflow report balance-sheet --company "Reference Plumbing Co" --date-to 2026-12-31 --json
+```
+
+In the browser choose the reference company, Accounting → Report, then
+profit-and-loss or balance-sheet. Set the dates and choose **Run report**.
+The statement table shows home-currency totals, bounded account detail and
+links to the current general ledger with the same dates. A drill-down warns
+when the books have changed since the source statement.
+
+Annual P&L income is6925000, expense510000 and net income6415000 minor units.
+Balance-sheet assets are7435000, liabilities20000, posted equity1000000,
+prior earnings0 and current-year income6415000. Total equity7415000 plus
+liabilities20000 equals assets7435000; difference0. In2027 with no new entries,
+those6415000 become prior earnings and current-year income is0.
+
+Both reports support **accrual only**; cash returns E_VALIDATION. P&L dates are
+inclusive; balance sheet includes all effects through its as-of date. Each account
+amount excludes descendants; subaccounts appear separately and totals count each
+effect once. Inactive nonzero accounts remain, zero balances are omitted unless
+include_zero is true, and contra balances retain their signs. Display labels obey
+account number and lowest-subaccount preferences; full names remain in JSON.
+
+Prior earnings and current fiscal-year income are calculated from raw income/expense
+effects and are separate from posted equity. Reports include ordinary journal
+transfers exactly as entered, so manually moving balances out of income/expense
+changes reported profit. Bookflow does not automatically post closing transfers or
+infer a special closing operation from a journal memo.
+
+The row limit applies only to account detail: totals always cover the whole
+statement. Next account page keeps the original inputs; changing filters starts
+fresh. Any audited company write invalidates an old statement cursor with
+E_QUERY_STALE. Preserve the complete output and its metadata if you need an
+issued report; a continuation cursor is not an archived report. Amounts always
+carry integer minor units and currency; overflows return E_VALUE_RANGE, not floats.

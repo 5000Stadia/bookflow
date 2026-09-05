@@ -723,3 +723,11 @@ input = { date = "2026-07-15", number = "DEMO-JPY", memo = "Foreign service rece
 command = "rate set"
 reason = "Change the current yen quote while retaining the posted receipt's historical rate"
 input = { date = "2026-07-15", from_currency = "JPY", rate = "0.007", expected_version = "${jpy_rate.version}" }
+
+[[commands]]
+command = "report profit-and-loss"
+input = { date_from = "2026-01-01", date_to = "2026-12-31" }
+
+[[commands]]
+command = "report balance-sheet"
+input = { date_to = "2026-12-31" }

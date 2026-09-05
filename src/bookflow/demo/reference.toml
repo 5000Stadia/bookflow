@@ -224,3 +224,11 @@ input = { date = "2026-12-27", number = "REF-CARD-PAYMENT", memo = "Partial card
 command = "journal post"
 reason = "Month 12 explicit depreciation journal"
 input = { date = "2026-12-28", number = "REF-DEPRECIATION-12", memo = "Month 12 explicit depreciation journal", lines = [{ account = "Depreciation Expense", side = "debit", amount = "100.00" }, { account = "Accumulated Depreciation", side = "credit", amount = "100.00" }] }
+
+[[commands]]
+command = "report profit-and-loss"
+input = { date_from = "2026-01-01", date_to = "2026-12-31" }
+
+[[commands]]
+command = "report balance-sheet"
+input = { date_to = "2026-12-31" }
