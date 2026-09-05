@@ -157,3 +157,55 @@ def test_openapi_projects_external_binary_contract(hosted):
     header = next(p for p in add['parameters'] if p['name'] == 'X-Bookflow-Input')
     assert 'original_filename' in header['x-bookflow-input-schema']['properties']
     assert '/companies/{company_id}/commands/attachment.add' not in paths
+
+
+@pytest.mark.parametrize("phase", ["prepare", "write"])
+def test_cancelled_http_preparation_keeps_owner_until_worker_finishes(hosted, monkeypatch, phase):
+    import threading
+    from bookflow.adapters.http import transfers as adapter
+    actual = adapter.HostedTransfer
+    started, release, completed = threading.Event(), threading.Event(), threading.Event()
+    created = []
+    def delayed(*args, **kwargs):
+        transfer = actual(*args, **kwargs)
+        created.append(transfer)
+        if phase == "prepare":
+            started.set()
+            assert release.wait(5)
+            completed.set()
+        return transfer
+    monkeypatch.setattr(adapter, 'HostedTransfer', delayed)
+    if phase == 'write':
+        from bookflow.core.transfers import InputBody
+        actual_write = InputBody.write
+        def delayed_write(self, chunk):
+            actual_write(self, chunk)
+            started.set()
+            assert release.wait(5)
+            completed.set()
+        monkeypatch.setattr(InputBody, 'write', delayed_write)
+    rid = target(hosted)
+    async def receive():
+        return {'type': 'http.request', 'body': b'partial', 'more_body': False}
+    req = request_for(hosted, {'record_type': 'customer', 'record_id': rid, 'original_filename': 'cancelled.pdf'}, receive)
+    async def exercise():
+        task = asyncio.create_task(endpoint(hosted)(hosted.company_id, 'attachment.add', req))
+        assert await asyncio.to_thread(started.wait, 5)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert len(hosted.handle.host._transfers) == 1
+        assert list((Path(hosted.info()["path"]) / "attachments").glob(".attachment-*.tmp"))
+        release.set()
+        assert await asyncio.to_thread(completed.wait, 5)
+        for _ in range(100):
+            if not hosted.handle.host._transfers:
+                break
+            await asyncio.sleep(.01)
+        assert not hosted.handle.host._transfers
+    try:
+        asyncio.run(exercise())
+    finally:
+        release.set()
+        for transfer in created:
+            transfer.close()

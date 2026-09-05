@@ -58,6 +58,14 @@ def compact(client, **kw):
     return client.company.compact(company=COMPANY, **kw)
 
 
+def completion(catalog):
+    with open_database(catalog[0], False) as db:
+        snapshots = db.conn.execute(sa.select(c.audit_entries.c.after).where(
+            c.audit_entries.c.record_type == "attachment_collection")).scalars().all()
+    assert len(snapshots) == 1
+    return gc.audit.decode_snapshot(snapshots[0])
+
+
 def recover(client):
     from bookflow.core import dispatch, registry
     from bookflow.core.config import Config, os_login
@@ -102,6 +110,78 @@ def test_dry_run_projects_without_files_or_intent(client, catalog):
     assert result["operation_id"] is None and result["dry_run"]
     assert result["collected_count"] == 1 and result["bytes_collected"] == 4
     assert path.read_bytes() == b"body" and state(catalog) == before
+
+
+@pytest.mark.parametrize("present", [None, b"", b"actual bytes"])
+def test_missing_before_selection_contributes_zero(client, catalog, present):
+    missing, row = body(catalog, b"already missing")
+    missing.unlink()
+    if present is not None:
+        path, _ = body(catalog, present)
+    live, _ = body(catalog, b"linked", linked=True)
+    before = state(catalog)
+    count, size = int(present is not None), len(present or b"")
+    projection = compact(client, dry_run=True)
+    assert (projection["collected_count"], projection["bytes_collected"]) == (count, size)
+    assert state(catalog) == before and not missing.exists()
+    if present is not None:
+        assert path.read_bytes() == present
+    result = compact(client, idempotency_key="initial-presence")
+    assert (result["collected_count"], result["bytes_collected"]) == (count, size)
+    snapshot = completion(catalog)
+    assert (snapshot["collected_count"], snapshot["bytes_collected"]) == (count, size)
+    done = state(catalog)
+    collected = next(r for r in done["attachments"] if r["id"] == row["id"])
+    assert collected["collected_at"] and collected["version"] == 2
+    assert live.read_bytes() == b"linked" and not missing.exists()
+    if present is not None:
+        assert not path.exists()
+    assert compact(client, idempotency_key="initial-presence") == dict(result, idempotent_replay=True)
+    assert state(catalog) == done
+
+
+@pytest.mark.parametrize("actual", [b"", b"short", b"corrupt and longer than the original"])
+def test_unlinked_corrupt_body_counts_actual_size(client, catalog, actual):
+    path, row = body(catalog, b"original body")
+    path.write_bytes(actual)
+    before = state(catalog)
+    projection = compact(client, dry_run=True)
+    assert projection["collected_count"] == 1 and projection["bytes_collected"] == len(actual)
+    assert path.read_bytes() == actual and state(catalog) == before
+    result = compact(client)
+    assert result["collected_count"] == 1 and result["bytes_collected"] == len(actual)
+    assert completion(catalog)["bytes_collected"] == len(actual) and not path.exists()
+    collected = next(r for r in state(catalog)["attachments"] if r["id"] == row["id"])
+    assert collected["collected_at"] and collected["size_bytes"] == row["size_bytes"]
+
+
+def test_disappeared_after_intent_retains_initial_totals(client, catalog, monkeypatch):
+    path, row = body(catalog, b"original body")
+    path.write_bytes(b"short")
+    missing, missing_row = body(catalog, b"missing before intent")
+    missing.unlink()
+    with monkeypatch.context() as patch:
+        patch.setattr(gc, "_finish", lambda *a: (_ for _ in ()).throw(OSError("after intent")))
+        with pytest.raises(BookflowError):
+            compact(client, idempotency_key="disappeared")
+    pending = state(catalog)
+    payload = json.loads(pending["intent"][0]["payload"])
+    items = {item["sha256"]: item for item in payload["candidates"]}
+    assert items[row["sha256"]]["initial_present"] is True
+    assert items[row["sha256"]]["size_bytes"] == 5
+    assert items[missing_row["sha256"]]["initial_present"] is False
+    assert items[missing_row["sha256"]]["size_bytes"] == 0
+    assert payload["output"]["collected_count"] == 1 and payload["output"]["bytes_collected"] == 5
+    path.unlink()
+    recover(client)
+    done = state(catalog)
+    assert not done["intent"] and len(done["events"]) == len(done["keys"]) == 1
+    collected = [r for r in done["attachments"] if r["id"] in (row["id"], missing_row["id"])]
+    assert len(collected) == 2 and all(r["collected_at"] and r["version"] == 2 for r in collected)
+    assert completion(catalog)["collected_count"] == 1 and completion(catalog)["bytes_collected"] == 5
+    recover(client)
+    assert compact(client, idempotency_key="disappeared") == dict(payload["output"], idempotent_replay=True)
+    assert state(catalog) == done
 
 
 @pytest.mark.parametrize("boundary", ["unlink", "sync", "audit", "idempotency"])
@@ -184,6 +264,7 @@ def test_gate_precedes_candidates_and_reopens(client, catalog, monkeypatch):
     body(catalog)
     from bookflow.core.session import Session
     original_release, original_candidates = Session.release_company, gc.metadata_candidates
+    original_entry = gc._entry
     events = []
     def release(s, company_id):
         events.append("gate")
@@ -193,8 +274,12 @@ def test_gate_precedes_candidates_and_reopens(client, catalog, monkeypatch):
         assert events == ["gate"] and s.company.writable
         events.append("select")
         return original_candidates(s, limit)
+    def entry(path):
+        assert events == ["gate", "select"]
+        return original_entry(path)
     monkeypatch.setattr(Session, "release_company", release)
     monkeypatch.setattr(gc, "metadata_candidates", candidates)
+    monkeypatch.setattr(gc, "_entry", entry)
     compact(client)
     assert events == ["gate", "select"]
 

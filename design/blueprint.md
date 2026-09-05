@@ -1093,6 +1093,9 @@ It processes at most 200 bodies per invocation, reports continuation, and retain
 all attachment/link/audit metadata. Linked bodies are never candidates. Under the
 writer transaction it records a bounded durable collection intent containing an
 operation ID, candidate digests/sizes and the caller's audit/idempotency context.
+Initial selection records actual file presence and logical byte size: bodies already
+missing contribute zero reclaimed files/bytes, while their metadata is still marked
+collected. Those committed totals remain stable if bodies disappear during recovery.
 The intent commits before removal. New attachment writes cannot relink candidates
 until pending collection converges. Recovery validates that no selected body has
 an active link, removes only exact regular digest paths, synchronizes affected

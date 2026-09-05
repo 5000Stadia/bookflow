@@ -70,6 +70,22 @@ def _entry(path):
     return st
 
 
+def metadata_items(s, rows):
+    """Measure initial bodies under exclusion, or read-only for a projection."""
+    store = s.company.path.parent / "attachments"
+    items = []
+    try:
+        for row in rows:
+            item = {"relative": f"{row['sha256'][:2]}/{row['sha256']}",
+                    "sha256": row["sha256"], "before": row}
+            st = _entry(_candidate_path(store, item))
+            item.update(initial_present=st is not None, size_bytes=st.st_size if st is not None else 0)
+            items.append(item)
+    except OSError as exc:
+        raise _io() from exc
+    return items
+
+
 def _scan_page(path, cookie, budget):
     """Read at most budget directory entries, resuming a POSIX directory cookie.
 
@@ -168,7 +184,7 @@ def discover(s, remaining, cursor):
             st = _entry(path / name)
             if st is not None:
                 selected.append({"relative": str((path / name).relative_to(store)), "sha256": digest,
-                                 "size_bytes": st.st_size, "before": None})
+                                 "initial_present": True, "size_bytes": st.st_size, "before": None})
                 remaining -= 1
         if not done:
             cursor["cookie"] = cookie
@@ -295,12 +311,11 @@ def collect(s, ctx, limit, input_hash):
         from bookflow.core.dispatch import _upsert_principals
         _upsert_principals(s, ctx)
         rows, more = metadata_candidates(s, limit)
-        items = [{"relative": f"{r['sha256'][:2]}/{r['sha256']}", "sha256": r["sha256"],
-                  "size_bytes": r["size_bytes"], "before": r} for r in rows]
+        items = metadata_items(s, rows)
         orphans, cursor, scan_more = discover(s, limit - len(items), _last_cursor(s))
         items.extend(orphans)
         operation_id = new_id()
-        output = {"operation_id": operation_id, "collected_count": len(items),
+        output = {"operation_id": operation_id, "collected_count": sum(item["initial_present"] for item in items),
                   "bytes_collected": sum(item["size_bytes"] for item in items), "has_more": more or scan_more,
                   "dry_run": False, "warnings": list(s.warnings), "idempotent_replay": False}
         if scan_more:

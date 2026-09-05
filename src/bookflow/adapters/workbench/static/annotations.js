@@ -21,11 +21,12 @@
     const config = JSON.parse(panel.dataset.annotations);
     const base = '/companies/' + encodeURIComponent(config.company);
     const sections = {};
-    function headers() {
+    function headers(name) {
       const result = {'X-Bookflow-Workbench': '1', 'X-Bookflow-Company': config.company,
         'X-Bookflow-Client-Name': 'bookflow-workbench'};
       const names = {'reason': 'X-Bookflow-Reason', 'source_ref': 'X-Bookflow-Source-Ref', 'directive': 'X-Bookflow-Directive'};
-      for (const [field, header] of Object.entries(names)) {
+      const writes = config.writes.includes(name);
+      for (const [field, header] of Object.entries(writes ? names : {})) {
         const value = document.querySelector(`[name="ctx:${field}"]`)?.value;
         if (value) result[header] = value;
       }
@@ -38,7 +39,7 @@
     }
     async function command(name, input, body) {
       const binary = body !== undefined;
-      const requestHeaders = headers();
+      const requestHeaders = headers(name);
       requestHeaders['Content-Type'] = binary ? 'application/octet-stream' : 'application/json';
       if (binary) {
         const metadata = new TextEncoder().encode(JSON.stringify(input));
@@ -152,6 +153,7 @@
         message(section.status, 'Finish the current action or cancel your note edit before refreshing. Your draft is unchanged.'); return;
       }
       section.loading = true;
+      section.root.setAttribute('aria-busy', 'true');
       section.refresh.disabled = section.more.disabled = true;
       message(section.status, 'Loading…');
       try {
@@ -166,7 +168,7 @@
         section.more.hidden = !result.has_more;
         message(section.status, result.items.length ? (result.has_more ? 'More entries available.' : 'All entries loaded.') : 'No entries.');
       } catch (error) { message(section.status, `${error.message} Use Refresh to restart a stale list.`, true); }
-      finally { section.loading = false; section.refresh.disabled = section.more.disabled = false; }
+      finally { section.loading = false; section.root.removeAttribute('aria-busy'); section.refresh.disabled = section.more.disabled = false; }
     }
     for (const [kind, name, draw] of [['notes', 'note list', noteEntry], ['files', 'attachment list', fileEntry], ['activity', 'activity', activityEntry]]) {
       const root = panel.querySelector(`[data-section="${kind}"]`);

@@ -413,7 +413,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                          "attachment list", "attachment unlink", "activity")
         }
         return {"company": company_id, "target": {"record_type": record_type, "record_id": key},
-                "allowed": allowed}
+                "allowed": allowed, "writes": [name for name in allowed if registry.get(name).is_write]}
 
     @app.get("/static/{name}")
     def static(name: str):

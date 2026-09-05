@@ -315,6 +315,7 @@ def _assert_navigation_contained(browser: _Cdp) -> None:
 def _assert_rendered_page(
     browser: _Cdp, label: str, *, viewport: tuple[int, int]
 ) -> None:
+    browser.wait_for("[...document.querySelectorAll('[data-annotations] [data-refresh]')].every(button => !button.disabled)")
     layout = browser.evaluate(
         """
         (() => {

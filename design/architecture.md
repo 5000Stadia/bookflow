@@ -152,6 +152,10 @@ admitted, then closes the snapshot. Downloads use short authorization rechecks
 between chunks. Accepted writer jobs own their staged resources through database
 cleanup even when callers time out; failed cleanup retains slots and root ownership
 for retry. Standalone execution holds RootLock through transfer and cleanup.
+HTTP cancellation marks the request owner closed immediately. An active preparation,
+read or write worker retains its resources until the actual worker returns and then
+cleans them; cancelling its async waiter cannot abandon a stage or close an active
+descriptor. Accepted writer jobs retain their existing ownership through completion.
 Shutdown cancels caller I/O and retains the root lock while owners remain active.
 Arbitrary synchronous Python streams and cleanup callbacks must cooperate; they
 cannot be forcibly interrupted.

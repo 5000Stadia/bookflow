@@ -254,3 +254,38 @@ def test_browser_company_account_file_pages_pending_and_refresh_race(browser_sit
         assert 'checksum verification failed' in browser.evaluate("document.querySelector('[data-link-id] [role=status]').textContent")
     finally:
         browser.close()
+
+
+@pytest.mark.skipif(not CHROME.is_file(), reason='real Chrome is not installed')
+@pytest.mark.timeout(120)
+def test_annotation_reads_and_download_ignore_pending_form_directive(browser_site, tmp_path):
+    browser = _Cdp(tmp_path / 'chrome-directive-annotations')
+    site = browser_site
+    downloads = tmp_path / 'downloads'
+    downloads.mkdir()
+    try:
+        browser.call('Browser.setDownloadBehavior', {'behavior': 'allow', 'downloadPath': str(downloads)})
+        _login(browser, site)
+        directive = _api(browser, site, 'directive.list', {})['items'][0]['code']
+        browser.navigate(f'{site.base_url}/c/{site.company_id}/company/self/update')
+        browser.wait_for("!!document.querySelector('[data-link-id]') && [...document.querySelectorAll('[data-refresh]')].every(b=>!b.disabled)")
+        browser.evaluate(f"document.querySelector('[name=\"ctx:directive\"]').value={json.dumps(directive)}")
+        browser.evaluate("""window.annotationRequests=[];window.originalAnnotationFetch=fetch;
+          window.fetch=async (url, options) => {
+            if (String(url).includes('/commands/') || String(url).includes('/transfers/'))
+              annotationRequests.push({url:String(url), headers:options.headers});
+            return originalAnnotationFetch(url, options);
+          };
+          document.querySelectorAll('[data-refresh]').forEach(button=>button.click());""")
+        browser.wait_for("annotationRequests.length >= 3 && [...document.querySelectorAll('[data-refresh]')].every(b=>!b.disabled)")
+        assert browser.evaluate("[...document.querySelectorAll('[data-list-status]')].every(n=>n.dataset.failed!=='true')")
+        browser.evaluate("document.querySelector('[data-link-id] button').click()")
+        browser.wait_for("document.querySelector('[data-link-id] [role=status]').textContent.includes('Download handed')")
+        assert browser.evaluate("annotationRequests.filter(r=>/note.list|attachment.list|commands\\/activity|attachment.get/.test(r.url)).every(r=>!r.headers['X-Bookflow-Directive'])")
+        browser.evaluate("document.querySelector('#annotation-note').value='Directive belongs to this new note';document.querySelector('[data-note-add]').requestSubmit()")
+        browser.wait_for("document.querySelector('[data-note-add] [role=status]').textContent==='Note added.' && [...document.querySelectorAll('[data-note-id]')].some(n=>n.textContent.includes('Directive belongs to this new note'))")
+        note_id = browser.evaluate("[...document.querySelectorAll('[data-note-id]')].find(n=>n.textContent.includes('Directive belongs to this new note')).dataset.noteId")
+        audit = _api(browser, site, 'audit.list', {'record_type': 'note', 'record_id': note_id})['items']
+        assert audit[0]['directive_code'] == directive
+    finally:
+        browser.close()

@@ -32,7 +32,9 @@ def plan_company_compact(inp, ctx, s):
         raise BookflowError("E_DB_BUSY", "Attachment collection requires recovery.")
     # A real run chooses candidates only after acquiring filesystem exclusion.
     rows, more = gc.metadata_candidates(s, inp.limit) if s.dry_run else ([], False)
-    return Plan(CompactOutput(collected_count=len(rows), bytes_collected=sum(r["size_bytes"] for r in rows),
+    items = gc.metadata_items(s, rows) if s.dry_run else []
+    return Plan(CompactOutput(collected_count=sum(item["initial_present"] for item in items),
+                              bytes_collected=sum(item["size_bytes"] for item in items),
                               has_more=more or s.dry_run, dry_run=s.dry_run,
                               warnings=["Projection includes metadata candidates; orphan discovery requires filesystem exclusion."] if s.dry_run else []),
                 {"limit": inp.limit, "input_hash": idempotency.input_hash(inp.model_dump(mode="json"), s.company_id)})
