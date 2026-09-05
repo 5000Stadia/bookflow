@@ -38,7 +38,8 @@ They are not ledger commands. Updates/copies/completion require a positive
 expected_version. Create rejects supplied persistent line identities. Update
 replaces the submitted ordered line collection as a whole; omitted lines retain
 it. Existing line_id values must belong to that document, occur once, and preserve
-identity. New lines receive new identities. Whole-document version conflicts never
+identity. Only identities in the current revision can be submitted; removed line
+identities are permanently retired and cannot be reintroduced. New lines receive new identities. Whole-document version conflicts never
 merge disjoint fields. Every supplied null has an explicit clear/reject meaning.
 
 Show selects current or a positive revision_number. Query filters exact customer,
@@ -129,8 +130,13 @@ or paid: those are derived from future linked accounting documents. Between draf
 scheduled, in_progress and on_hold, explicit transitions are allowed subject to
 the destination timestamp constraints. Any of those may cancel with a reason or
 complete once all completion constraints hold. Complete and cancelled may only
-reopen as specified above. Direct update to complete requires both timestamps and
-completed quantities already equal to ordered quantities.
+reopen as specified above. Every resulting complete aggregate, on every write including same-status edits,
+requires both timestamps and completed quantities equal to ordered quantities.
+Changing scope text, adding/removing lines, changing ordered quantity or reducing
+completed quantity on complete work requires explicitly reopening first (or in the
+same update with a reason). This also applies to initially unpriced work.
+Direct update to complete requires those completed quantities to be supplied or
+already saved; only the complete command fills the remainder.
 
 Work-order lines capture completed_quantity (exact nonnegative decimal,6places,
 default0, at most ordered quantity). Proposal/estimate lines reject this input.
@@ -165,6 +171,15 @@ One selling-price mode is authoritative:
 Supplying more than one of unit_price, markup_percent and net_amount is invalid.
 Explicit price_level together with markup/net_amount is invalid. An inherited
 price-level may remain in the header but is not applied on those overridden lines.
+A newly supplied non-null unit_price, markup_percent or net_amount selects that
+mode and clears the other saved authoritative inputs and their mode origins. This
+is identical for every pair of modes; the request cannot submit two such inputs,
+even if one would equal its old value. Null is rejected for each authoritative
+input; use_defaults unit_price explicitly returns to catalog. Explicit price_level
+selects catalog pricing and clears a saved manual/markup/amount override unless a
+unit_price is also supplied, in which case the manual rate wins and the rule is
+captured as unused. Cost and its origin survive all price-mode switches unless
+separately edited or reset; price origin becomes explicit for each manual switch.
 Markup is distinct from a price-level adjustment percentage and from margin.
 
 Ordinary edits retain the saved pricing mode. Quantity changes recalculate rate-
@@ -196,7 +211,8 @@ Choosing a different alternative requires explicitly superseding the previously
 accepted one first. No silent group-wide acceptance/status mutations.
 
 Copy requires canonical source id, expected_version, destination date and optional
-number/title; estimate additionally accepts expiry and copy_mode. Other source
+number/title plus destination custom_fields/custom_field_kinds; estimate additionally
+accepts expiry and copy_mode. Other source
 fields cannot be overridden in copy: revise the resulting draft explicitly.
 Copy may inspect any source status, including inactive; it creates an active draft.
 
@@ -210,14 +226,14 @@ and billing roots are allocated. Source files/notes remain linked through ancest
 
 `proposal estimate` takes canonical proposal id, expected_version, required
 conversion_key (1–128 characters), destination date, optional number, optional
-expiry, and preview fingerprint. Source must be draft/open/accepted, active and
+expiry, destination custom_fields/custom_field_kinds, and preview fingerprint. Source must be draft/open/accepted, active and
 have at least one priced line. It creates an estimate draft carrying the exact
 selected source revision, customer/scope/lines and eligible custom values.
 Different explicit keys can produce alternative estimates. Proposal revisions
 remain editable; no revision changes existing estimates.
 
 `estimate work-order` has the same durable-key/version/date/number inputs and
-optional scheduling/assignee fields. It requires the group's accepted estimate
+optional scheduling/assignee fields and destination custom_fields/custom_field_kinds. It requires the group's accepted estimate
 revision. It creates one draft work order carrying source facts and the estimate's
 billing-root identities. It does not mark work scheduled, complete or invoiced.
 There is at most one work-order destination per estimate identity, permanently;
@@ -241,6 +257,12 @@ new version. Source and destination show both birth revision and current state.
 
 An estimate with a work-order destination cannot revise agreed customer, scope,
 addresses, terms, line item/unit/quantity/price/tax facts or revoke acceptance.
+The converted work-order header also binds its customer, captured commercial
+profile (addresses, terms, PO, tax/rule choices), title, scope, inclusions, exclusions,
+timing and commercial_terms to the accepted source. It may change its own number,
+date, memo, availability, site_address, operational fields and destination custom
+values; those do not alter the source agreement. Agreed header changes reject
+atomically with E_WORK_DEPENDENCY.
 Its linked work-order lines retain those source economics and cannot be removed or
 repriced. Operational scheduling, assignees, memo, availability, status and billable
 flags remain editable. New explicit work-order lines are independent added scope
@@ -281,7 +303,24 @@ bytes. Show source annotations as internal and never automatically render them a
 customer-facing scope. Custom scopes proposal, estimate and work_order use the
 existing typed owner slots and immutable revision snapshots. Conversion copies
 only definitions enabled for the destination scope, preserving kind/value facts
-with destination-owned value ids; omitted values are listed in preview. Any explicit
+with destination-owned value ids; omitted values are listed in preview. Copies and operational conversions preserve captured customer/item/unit/tax/account
+facts even if those masters are now inactive, with explicit preview warnings; the
+source document itself must be active for conversion. Referenced identities must
+still exist in this company, and no current master facts replace the saved economics.
+New explicit selections, including destination assignees, require current eligibility.
+This is a non-posting historical carry rule; financial conversion will validate its
+own current posting eligibility.
+
+Destination custom values follow creation requirements: carry only currently active
+definitions enabled for the destination and currently eligible choices with matching
+kinds; list every omitted value/reason in preview. The destination patch is applied
+over carried values, then ordinary current defaults supply any still-absent eligible
+values. Required missing values reject with the exact definition ids and can be
+provided through that patch in the same copy/conversion. Explicit null clears a
+carried value but cannot evade a required field. New destination-owned value ids
+are always allocated; carried kind/value/label snapshots remain inspectable together
+with their source snapshot, and current destination validation does not rewrite the
+source. The same rules cover copies after definitions change. Any explicit
 new selection validates current definition/choice eligibility. Existing attachment
 integrity and source ownership do not change.
 
