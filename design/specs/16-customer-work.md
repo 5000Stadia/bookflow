@@ -45,7 +45,7 @@ merge disjoint fields. Every supplied null has an explicit clear/reject meaning.
 Show selects current or a positive revision_number. Query filters exact customer,
 number/title text, date interval, status, active (default true; null means both),
 and inclusive minimum/maximum net amount. It orders by date then stable id,
-limits50/default,200/max, and uses the existing signed audit-watermark continuation.
+limits50/default,200/max, and uses the existing scope/permission-hash-checked audit-watermark continuation.
 History is revision-number ordered and bounded. Query summaries do not materialize
 all lines. Referenced records resolve only in the selected company.
 

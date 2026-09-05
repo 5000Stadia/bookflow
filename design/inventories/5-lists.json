@@ -844,7 +844,7 @@
     {"id": "person-derived-rep-initials", "owner": "list-center pass", "state": "initials entered manually in Row 5; derivation from the source person and in-place source correction staged", "w": "deferred"},
     {"id": "class-prompt-default-linkage", "owner": "transaction class-prompting pass", "state": "prompt_for_class requires use_classes but is not enabled automatically with it", "w": "deferred"},
     {"id": "activation-cascade", "owner": "list-center pass", "state": "deactivate cascades; activate does not; rows are activated parents-first", "w": "deferred"},
-    {"id": "job-status-label-settings", "owner": "company settings pass, pending human decision", "state": "job_status vocabulary is a fixed enum; renamable labels staged", "w": "deferred"}
+    {"id": "job-status-label-settings", "owner": "company settings pass", "state": "job_status vocabulary is a fixed enum; renamable labels staged", "w": "deferred"}
   ],
   "browser_and_documentation": {
     "ui_group_assignments": {
