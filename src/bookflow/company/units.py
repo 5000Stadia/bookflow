@@ -359,22 +359,28 @@ def validate_factor_changes(
     before: Sequence[Mapping[str, Any]],
     after: Sequence[Mapping[str, Any]],
 ) -> None:
-    """Protect factors referenced by any immutable sale revision, including history."""
+    """Protect factors referenced by immutable sale or work revisions, including history."""
     old = {row["id"]: row["base_factor_nanounits"] for row in before}
     changed = [row["id"] for row in after
                if row["id"] in old and row["base_factor_nanounits"] != old[row["id"]]]
-    if not changed or not sa.inspect(connection).has_table("sales_line_profiles"):
+    if not changed:
         return
-    # Query the persisted dependency directly; legacy company schemas may lack it.
-    profiles = sa.table("sales_line_profiles", sa.column("unit_id"))
-    count = connection.execute(sa.select(sa.func.count()).select_from(profiles).where(
-        profiles.c.unit_id.in_(changed)
-    )).scalar_one()
-    if count:
-        raise BookflowError("E_ACTIVE_DEPENDENTS", details={
-            "fields": [{"field": "units.base_factor", "problem": "a posted sale revision uses this unit factor"}],
-            "dependents": [{"record_type": "sales_line_profiles", "count": count}],
-        })
+    # Persisted history remains a dependency even after a line is removed.
+    for table_name, problem in (
+        ("sales_line_profiles", "a posted sale revision uses this unit factor"),
+        ("work_lines", "a saved work revision uses this unit factor"),
+    ):
+        if not sa.inspect(connection).has_table(table_name):
+            continue
+        profiles = sa.table(table_name, sa.column("unit_id"))
+        count = connection.execute(sa.select(sa.func.count()).select_from(profiles).where(
+            profiles.c.unit_id.in_(changed)
+        )).scalar_one()
+        if count:
+            raise BookflowError("E_ACTIVE_DEPENDENTS", details={
+                "fields": [{"field": "units.base_factor", "problem": problem}],
+                "dependents": [{"record_type": table_name, "count": count}],
+            })
 
 
 def plan_unit_update(
