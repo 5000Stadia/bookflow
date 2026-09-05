@@ -20,6 +20,27 @@ labels. Label support includes sheet layouts with defined label dimensions and
 spacing, and a suitable path for dedicated label printers. Exact stock catalogs,
 printer integrations and editor technology are chosen in the later owning plan.
 
+Predetermined paper profiles also include receipt widths with content-dependent
+length. Receipt-width output applies to invoices, sales receipts and estimates,
+not only to the future [POS workspace](pos-workspace.md).
+
+## Content-dependent layout
+
+The editor supports repeating document elements such as “items on the invoice”.
+One item and many items use the same template. Some elements grow to fit the
+resolved data, including wrapped descriptions and repeated item rows; subsequent
+content moves with them so totals, notes and other elements do not overlap or clip.
+The rendered output is laid out with its actual data and resulting page shape
+before submission to printing. A fixed-height placeholder must not truncate the
+item list or leave a short receipt padded to an arbitrary long page.
+
+For receipt media, width is selected from the paper profile and output length
+follows the content. For fixed-size pages, growing content flows onto additional
+pages. The preview shows the resulting output, rather than only the empty template.
+The later renderer plan will define page breaks, repeated headings, totals placement
+and supported printer length limits. It must preserve every item and exact amount
+while fitting the selected medium. No printer protocol is selected by this note.
+
 Every supported built-in document/report has a supplied basic default template
 with the familiar field arrangement of the accounting anchor. Users can choose
 another template without first designing one. The layout bar is conventional
@@ -94,6 +115,10 @@ system or printer-driver mechanism or promise unattended hardware tray control.
 - Batch a letter-plus-envelope group for 200 customers with correct customer data,
   stable association/order and a separate paper-selection step where configured.
 - Design and preview a label layout against its actual sheet or roll dimensions.
+- Render the same invoice, sales-receipt or estimate template with one item and
+  many items: rows and descriptions expand, totals follow the items, and all data
+  remains visible. Receipt width stays fixed while length grows; fixed-size pages
+  paginate with no clipping or overlapping content.
 
 Template grouping, data references and paper profiles are part of the future
 system's design from the outset; expanded document coverage and batch execution

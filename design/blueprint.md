@@ -1238,6 +1238,18 @@ follow. Physical paper profiles include standard pages, envelopes and labels;
 per-template separate print-dialog prompts support paper changes and later batch
 printing. This is future design, not an active implementation row.
 
+Receipt-width profiles have content-dependent length for invoices, sales receipts
+and estimates. Repeating item elements grow with actual data, move following
+content, and paginate on fixed-size pages before output is sent to printing.
+
+### 13.6 Point of sale workspace — future roadmap
+
+[POS workspace](pos-workspace.md) records a later sales-receipt mode with multiple
+pages of easy-touch item selection. User administration includes a starting
+location and a POS-only access configuration so a dedicated operator logs directly
+into the permitted POS workspace. A possible invoice/receipt hybrid remains open
+for later design. This adds no active implementation row or immediate role changes.
+
 ## 14. Reports
 
 Standard financial statement controls and their explicit staged coverage are
