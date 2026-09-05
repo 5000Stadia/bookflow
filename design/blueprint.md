@@ -999,6 +999,114 @@ Table `attachment_links`: `attachment_id`, `record_type`, `record_id`, `linked_b
 
 Commands: `attachment add <record_type> <record_id> <path>`, `attachment link`, `attachment unlink`, `attachment list`, `attachment get <id> --out <path>`. Maximum size per file is a company setting, default 25 MB. Unlinking the last link does not delete the body; `company compact` removes unlinked bodies and is audited.
 
+#### Transfer contract
+
+The registry declares binary input or output separately from the JSON model. One
+invocation transfers one body. Add's JSON input contains the target tuple,
+basename-only original filename, media type and caption; paths and stream objects
+are never JSON fields. Actual SHA-256 and size join validated metadata in the retry
+hash. Python supplies a binary stream or sink; CLI input/output paths are opened
+only on the calling machine. Content size is at most the lesser of the company
+limit and 100,000,000 bytes; the default is 25,000,000 bytes. Counts use received
+bytes, including when Content-Length is absent or false. Dry-run input is hashed
+without persistent staging.
+
+The shared preparation boundary authenticates the actor, resolves company/target,
+validates command input, role, reason/directive and size setting before reading
+body bytes. It reserves a filesystem lease while the short authorized snapshot is
+still held, then closes database snapshots before I/O. Final execution repeats
+authorization, target and limit validation in the ordinary command pipeline.
+Downloads verify digest and size before a successful response and use short
+authorization rechecks before each output chunk, without retaining database
+snapshots across network writes. Row7 additionally binds and rechecks authority
+epochs; previously emitted bytes cannot be recalled.
+
+HTTP binary routes use `POST /companies/<id>/transfers/<noun.verb>` for both
+directions. `X-Bookflow-Input` contains unpadded base64url-encoded UTF-8 JSON, at
+most 8,192 encoded bytes and 6,144 decoded bytes, with an object at its root. Usual
+context/authentication/CSRF headers apply. Upload body is
+`application/octet-stream`; downloads carry an empty request body. No framework
+multipart parser consumes unauthenticated uploads. The browser sends the selected
+File directly and encodes form metadata in the header. Output bytes use
+`Content-Disposition: attachment` with a sanitized ASCII fallback and RFC5987
+UTF-8 filename, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, and
+verified Content-Length. Failures before response headers use normal JSON errors;
+failures during output truncate the response and never claim a complete download.
+
+Local forwarding retains the existing JSON envelope for ordinary commands. A
+binary envelope is at most 8,192 bytes and declares `transfer: {version: 1,
+direction: "input" | "output"}`. The server validates kernel peer identity and
+metadata before sending a framed JSON ready response. Input ready contains the
+effective byte limit. Then each body chunk has an unsigned four-byte big-endian
+length of 1–65,536 followed by exactly that many bytes; a zero-length frame ends
+the body. The final framed JSON result/error is at most 65,536 bytes. Download
+ready includes the verified digest, size and presentation metadata, followed by
+body frames and a final JSON completion/error. A client accepts a download only
+after matching digest/size and reading the successful final response. Partial
+headers/chunks, missing terminal/final frames and timeouts are interrupted I/O.
+A forwarded write never falls back to standalone execution after its envelope
+has been sent; an interrupted result may have committed and is retried with the
+same idempotency key and bytes.
+
+#### Resource lifetime
+
+Each host admits at most eight transfers and at most two per effective principal,
+across upload/download and all companies. Admission is immediate: exhaustion or
+a filesystem gate returns `E_DB_BUSY`, with no waiting in a database transaction.
+Each transfer has a 300-second absolute lifetime and a 30-second transport
+inactivity bound measured with a monotonic clock. Input/output chunks are at most
+65,536 bytes. A bound violation or disconnected transport reports `E_IO`; excess
+body bytes report `E_VALUE_RANGE`, and malformed metadata/framing reports
+`E_VALIDATION`. Arbitrary Python streams must cooperate with bounded reads; a
+blocked caller-owned read cannot be forcibly interrupted. Such a resource keeps
+its lease and the host lock until its actual owner finishes.
+
+A lease holds no database handle. Ordinary writes may run while transfers wait
+for I/O. Folder moves, detach/reset and compact take the existing root-wide
+filesystem gate, reject new leases, and wait at most five seconds for existing
+readers and transfers. A busy transfer fails that filesystem operation rather
+than moving its store. A transfer never invokes an exclusive folder operation
+while holding its own lease.
+
+Resource state is caller-owned, writer-owned, or closed. A caller owns its private
+stage and lease until handing both to a queued writer job. Submission transfers
+ownership even if admission subsequently fails: rejection closes it immediately;
+accepted work closes it only after job execution and database cleanup. Caller
+context exit, timeout or cancellation cannot close a writer-owned stage. A queued
+job checks cancellation/deadline before starting; a started commit finishes even
+if its response is abandoned. Cleanup runs exactly once, closes temporary files
+before releasing capacity/lease, and never deletes a published digest. A cleanup
+failure keeps the lease held for retry; cleanup is not reported as success.
+
+Shutdown closes admission and cancels caller-owned transfers so their transport
+loops unwind. Accepted writer jobs retain their resources and drain through the
+same completion cleanup. Shutdown retains the root lock if readers, transfers or
+writer cleanup have not finished; retry shutdown after the owner releases them.
+No timeout authorizes deleting another invocation's stage.
+
+#### Collection and recovery
+
+Compact is owner/admin-only and takes filesystem exclusion without an I/O lease.
+It processes at most 200 bodies per invocation, reports continuation, and retains
+all attachment/link/audit metadata. Linked bodies are never candidates. Under the
+writer transaction it records a bounded durable collection intent containing an
+operation ID, candidate digests/sizes and the caller's audit/idempotency context.
+The intent commits before removal. New attachment writes cannot relink candidates
+until pending collection converges. Recovery validates that no selected body has
+an active link, removes only exact regular digest paths, synchronizes affected
+directories, then marks the candidates collected and writes one completion audit
+event/idempotency result in a single transaction with intent clearance. Missing
+candidate bodies on retry count only once against their committed intent. An
+unexpected active link or unsafe filesystem entry halts recovery with `E_IO`.
+
+Unreferenced published bodies and abandoned stage files may be discovered only
+under the same exclusion, with no active invocation and a bounded scan cursor.
+Discovery never follows symlinks or deletes directories, database files, or
+unrecognized names. A collected digest requires fresh verified bytes before
+relinking. Read-only verification reports missing/corrupt linked bodies and does
+not repair them. Exact metadata migration and collection commands are implemented
+together after the transfer ownership boundary is verified.
+
 ### 12.3 Activity feed
 
 `activity <record_type> <record_id>` returns, in time order, every audit entry for the record, every note, and every attachment link, each tagged with its kind and actor. `--since`, `--until`, and `--kinds` filter it. This is the chronological job history the GUI shows on any record.

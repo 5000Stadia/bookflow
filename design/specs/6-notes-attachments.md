@@ -159,6 +159,65 @@ same-content deduplication, corrupt existing and tampered staged bytes, unsafe
 paths, unsupported hard links, file/directory sync failures, no-replace races,
 and retry after publication but before its directory sync completes.
 
+### Increment 2b: bounded transfer resources and framing
+
+Implement the internal resource and transport boundary in blueprint 12.2 before
+registering attachment commands. This increment changes host lifecycle semantics
+only for explicitly owned jobs; ordinary `submit` timeouts retain their current
+behavior. It adds no schema, dependency, endpoint, demo data or exposed upload.
+
+`core/transfer_resources.py` supplies `TransferLease(principal_id, company_id,
+release, lifetime_seconds=300, clock=time.monotonic)`. `add_cleanup(callback)`
+registers caller-owned cleanup in LIFO order; `handoff()` moves to writer
+ownership, `close()`/context exit close only caller-owned resources, and `finish()`
+is the writer's completion path. Completed callbacks are removed; failed callbacks
+remain for explicit retry, with capacity/lease retained. `cleanup_pending` becomes
+true only after a completed owner's failed cleanup, never while its work runs.
+All ownership and callback bookkeeping is thread-safe. `cancel()` signals only
+caller-owned I/O; `check_io()` and `check_start()` reject cancellation/expiry with
+`E_IO`. A started writer job does not periodically cancel a database commit.
+Closed resources reject further use; repeated successful cleanup is harmless.
+
+`Host.acquire_transfer(principal_id, company_id)` uses the same condition as reader
+admission and the filesystem gate, with default limits eight global/two principal.
+The active set retains resources until successful cleanup releases them.
+`submit(..., resource=lease)` consumes ownership on entry and rejects resources
+from another host or already handed off; queue-admission failures close its owned
+resource. The accepted `_Job` owns it through execution and `_leave_clean`, and
+sets done only after resource cleanup. A submitter timeout never closes an accepted
+job's resources. `run_write(..., resource=lease, timeout=...)` uses the same path.
+Existing token-refresh/maintenance jobs need no resource. `retry_transfer_cleanup`
+retries only failed completed cleanup; shutdown uses it outside admission locks,
+cancels caller-owned I/O, and waits for both readers and transfers before releasing
+the data-root lock. A writer still alive after the final join retains that lock.
+Filesystem release waits for readers and transfers; ordinary writes never wait
+for transfers. Release timeout uses existing `E_DB_BUSY` behavior. Capacity/lifetime
+overrides are constructor-only for deterministic tests, with positive bounds.
+
+`core/transfer_protocol.py` supplies internal bounded metadata and binary framing
+helpers. `encode_input`/`decode_input` implement the header contract exactly and
+reject duplicate JSON keys, non-object roots, invalid base64/UTF-8, non-finite JSON
+numbers and excessive sizes. `FramedReader(socket, limit, lifetime_seconds=300,
+idle_seconds=30, check=callback)` presents bounded `.read(n)` over body chunks and
+accepts EOF only at a zero terminal frame. It requests at most 65,536 bytes from
+the socket, enforces length before reading a frame, and holds at most one frame.
+`send_body(socket, stream, limit, ..., check=callback)` sends bounded chunks and a
+zero terminator only after successful EOF. Partial send/receive progress cannot
+reset the absolute deadline. `send_json`/`recv_json` use bounded four-byte lengths
+and exact JSON objects with the same syntax guards. All socket waits use the
+lesser of inactivity and remaining lifetime. Framing errors are `E_VALIDATION`,
+premature EOF/socket failures/deadlines are `E_IO`, and excess actual body bytes
+are `E_VALUE_RANGE`. Helpers do not authenticate, issue commands, auto-retry,
+fall back, or claim final command completion on the zero terminator.
+
+Witnesses use deterministic ownership barriers and socket pairs: capacity and
+principal limits, cancellation/deadline, cleanup failure/retry, shutdown retaining
+the root lock, filesystem exclusion, normal writes during I/O, a queued upload
+outliving a submitter timeout, rejected/failed jobs releasing resources, fragmentary
+frames, empty/exact/over-limit content, interrupted terminal frame, bounded reads,
+slow peers and syntax/metadata bounds. The assembled host/resource boundary gets
+a focused independent artifact review with an isolated mutation witness.
+
 ## Increment 3: activity and browser
 
 `activity` combines target audit entries with note and attachment events, including
