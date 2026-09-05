@@ -304,7 +304,7 @@ NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
     "journal": {"record_type": "transaction", "identifier": "journal", "output_identifier": "id", "ui_group": "Accounting", "display_field": "number", "singular_label": "Journal", "plural_label": "Journals"},
     "register": {"record_type": None, "identifier": None, "ui_group": "Accounting"},
     "report": {"record_type": None, "identifier": None, "ui_group": "Accounting"},
-    "rate": {"record_type": None, "identifier": "rate_id", "output_identifier": "id", "ui_group": "Accounting"},
+    "rate": {"record_type": "exchange_rate", "identifier": "rate_id", "output_identifier": "id", "ui_group": "Accounting"},
     "audit": {"record_type": "audit_event", "identifier": "event"},
     "hub audit": {"record_type": "audit_event", "identifier": "event"},
 }

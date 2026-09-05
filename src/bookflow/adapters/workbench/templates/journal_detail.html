@@ -1,4 +1,5 @@
 {% set revision = record.revision %}
+{% set foreign_lines = revision.lines | selectattr('original_amount') | list %}
 <section class="workspace-card" aria-label="Journal entry">
 <h2>Journal {{ revision.number }}</h2>
 {% if revision.number != record.number %}<p class="muted">Current journal number: {{ record.number }}</p>{% endif %}
@@ -11,13 +12,14 @@
 {% if revision.id != record.current_revision_id %}<a href="{{ base }}/{{ record_id }}?revision_number={{ revision.revision_number + 1 }}">Next revision</a><a href="{{ base }}/{{ record_id }}">Current revision</a>{% endif %}
 </nav>
 <div class="table-wrap"><table class="ledger-table">
-<thead><tr><th>Account</th><th>Description</th><th>Name</th><th>Class</th><th>Debit</th><th>Credit</th></tr></thead>
+<thead><tr><th>Account</th><th>Description</th><th>Name</th><th>Class</th><th>Debit</th><th>Credit</th>{% if foreign_lines %}<th>Original / rate</th>{% endif %}</tr></thead>
 <tbody>{% for line in revision.lines %}<tr>
 <td>{{ line.account_snapshot.full_name or line.account_snapshot.name }}</td>
 <td>{{ line.description or '' }}</td><td>{{ line.party_name or '' }}</td><td>{{ line.class_name or '' }}</td>
 <td>{{ line.amount.amount if line.side == 'debit' else '' }}</td><td>{{ line.amount.amount if line.side == 'credit' else '' }}</td>
+{% if foreign_lines %}<td>{% if line.original_amount %}{{ line.original_amount.amount }} {{ line.original_amount.currency }} · {{ line.rate_used }} {{ revision.currency }} per {{ line.original_currency }} · {{ line.rate_source }}{% endif %}</td>{% endif %}
 </tr>{% endfor %}</tbody>
-<tfoot><tr><th colspan="4">Total ({{ revision.currency }})</th><th>{{ revision.debit_total.amount }}</th><th>{{ revision.credit_total.amount }}</th></tr></tfoot>
+<tfoot><tr><th colspan="4">Total ({{ revision.currency }})</th><th>{{ revision.debit_total.amount }}</th><th>{{ revision.credit_total.amount }}</th>{% if foreign_lines %}<td></td>{% endif %}</tr></tfoot>
 </table></div>
 </section>
 <section class="workspace-card" aria-label="Accounting history">

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import sqlalchemy as sa
-from bookflow.company import schema as c, accounts, parties, list_service, journal_custom_fields as custom
+from bookflow.company import schema as c, accounts, parties, list_service, journal_custom_fields as custom, journal_foreign as foreign
 from bookflow.company.journal_models import JournalLineInput, parse_domestic_amount, checked_sum
 from bookflow.company.journal_outputs import (
     JournalOutput, JournalWriteOutput, JournalRevisionOutput, JournalBatchOutput,
@@ -105,7 +105,9 @@ def revision_output(s, rev, pending=None, *, summary_only=False):
     return JournalRevisionOutput(**values, line_count=len(lines), batches=summaries,
         issuer_snapshot=json.loads(rev['issuer_snapshot']), custom_fields_snapshot=json.loads(rev['custom_fields_snapshot']),
         custom_fields=custom.project(json.loads(rev['custom_fields_snapshot'])),
-        lines=[dict(decoded(l), amount=Money(l['amount_minor_units'], l['currency']).to_dict()) for l in lines])
+        lines=[dict(decoded(l), amount=Money(l['amount_minor_units'], l['currency']).to_dict(),
+                    original_amount=Money(l['original_minor_units'], l['original_currency']).to_dict()
+                    if l['original_currency'] is not None else None) for l in lines])
 
 
 def summary(header, rev):
@@ -151,13 +153,13 @@ def active(row, kind):
     return row
 
 
-def line_values(s, inp, currency, old=None, refresh=False):
+def line_values(s, inp, currency, old=None, refresh=False, *, date=None, rate=None, refresh_rates=False, rate_cache=None):
     account = active(accounts.resolve_account(s.company, inp.account), 'account')
     if account['type'] == 'non_posting':
         raise invalid('account', 'must be a posting account')
     if account.get('currency') not in (None, currency):
         raise invalid('account', 'account currency must match the home currency for a domestic journal')
-    amount = parse_domestic_amount(inp.amount, currency).minor_units
+    money = foreign.line_money(s, inp.amount, currency, date, old, rate, refresh_rates, rate_cache)
     party = active(parties.resolve_party(s.company, inp.name_type.replace('_', '-'), inp.name_id), inp.name_type) if inp.name_id else None
     required = {'accounts_receivable': 'customer', 'accounts_payable': 'vendor'}.get(account['type'])
     if required and inp.name_type != required:
@@ -166,12 +168,12 @@ def line_values(s, inp, currency, old=None, refresh=False):
     if inp.class_id:
         from bookflow.company.lists import get_list_definition
         klass = active(list_service.resolve_selector(s.company, c.classes, get_list_definition('class'), inp.class_id), 'class')
-    result = dict(account_id=account['id'], side=inp.side, amount_minor_units=amount, currency=currency,
+    result = dict(account_id=account['id'], side=inp.side, **money,
         account_snapshot=json.dumps({k: account.get(k) for k in ('id', 'name', 'full_name', 'number', 'type')} | {'normal_balance': accounts.NORMAL_BALANCE[account['type']]}, sort_keys=True),
         name_type=inp.name_type, name_id=party['id'] if party else None,
         party_name=(party.get('full_name') or party.get('name') or party.get('display_name')) if party else None,
         class_id=klass['id'] if klass else None, class_name=(klass.get('full_name') or klass.get('name')) if klass else None,
-        description=inp.description, **dict.fromkeys(FACTS))
+        description=inp.description)
     if old and not refresh:
         if result['account_id'] == old['account_id']:
             result['account_snapshot'] = old['account_snapshot']
@@ -179,14 +181,12 @@ def line_values(s, inp, currency, old=None, refresh=False):
             result['party_name'] = old['party_name']
         if result['class_id'] == old['class_id']:
             result['class_name'] = old['class_name']
-    if old and all(result[k] == old[k] for k in ('account_id', 'side', 'amount_minor_units', 'currency')):
-        result.update({k: old[k] for k in FACTS})
     return result
 
 
 def existing_input(l):
     return JournalLineInput(line_id=l['line_id'], account=l['account_id'], side=l['side'],
-        amount={'minor_units': l['amount_minor_units'], 'currency': l['currency']},
+        amount=foreign.original_input(l),
         name_type=l['name_type'], name_id=l['name_id'], class_id=l['class_id'], description=l['description'])
 
 
@@ -244,6 +244,8 @@ def prepare(s, ctx, inp, operation):
         number, sequence = allocate(s, inp.number if inp.number is not None else (old_h['number'] if old_h else None), h['id'])
         currency = old_r['currency'] if old_r else company_info['home_currency']
         entered = inp.lines if inp.lines is not None else [existing_input(l) for l in old_lines]
+        foreign.override_scope(entered, currency, inp.rate)
+        rate_cache = {}
         prior = {l['line_id']: l for l in old_lines}
         seen, values = set(), []
         for line in entered:
@@ -252,7 +254,8 @@ def prepare(s, ctx, inp, operation):
                 raise invalid('line_id', 'must be a unique current line identity owned by this journal; retired identities cannot return')
             seen.add(key) if key else None
             old = prior.get(key)
-            values.append((key, line_values(s, line, currency, old, getattr(inp, 'refresh_defaults', False))))
+            values.append((key, line_values(s, line, currency, old, getattr(inp, 'refresh_defaults', False),
+                date=date, rate=inp.rate, refresh_rates=getattr(inp, 'refresh_rates', False), rate_cache=rate_cache)))
         debit = checked_sum((v['amount_minor_units'] for _, v in values if v['side'] == 'debit'), 'debits')
         credit = checked_sum((v['amount_minor_units'] for _, v in values if v['side'] == 'credit'), 'credits')
         if debit != credit:
@@ -480,6 +483,7 @@ def persist_prepared(fresh, ctx, s, *, command_name):
     h, old, pending = d['header'], d['before'], d['pending']
     custom_plan = d.get('custom_plan')
     validate_pending_aggregate(s, h, pending, custom_plan, custom_input=d['input'], creating=old is None)
+    foreign.validate(s, h, pending, d['input'])
     touched = [Touched('transaction', h['id'], 'update' if old else 'create', old['version'] if old else None,
                        h['version'], h, old, db='company')]
     for table, kind in zip(TABLES, TYPES):

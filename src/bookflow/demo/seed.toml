@@ -706,3 +706,20 @@ input = { custom_field = "${journal_source.id}", expected_version = "${journal_s
 [[commands]]
 command = "journal show"
 input = { journal = "${service_journal.id}", revision_number = 1 }
+
+[[commands]]
+command = "rate set"
+capture = "jpy_rate"
+reason = "Enter the exact-date yen rate for the foreign service receipt"
+input = { date = "2026-07-15", from_currency = "JPY", rate = "0.0068", expected_version = 0 }
+
+[[commands]]
+command = "journal post"
+capture = "foreign_journal"
+reason = "Record a yen service receipt with its captured USD conversion"
+input = { date = "2026-07-15", number = "DEMO-JPY", memo = "Foreign service receipt: original yen and captured dollar conversion", lines = [{ account = "Checking", side = "debit", amount = "2345 JPY" }, { account = "Service Income", side = "credit", amount = "15.95" }] }
+
+[[commands]]
+command = "rate set"
+reason = "Change the current yen quote while retaining the posted receipt's historical rate"
+input = { date = "2026-07-15", from_currency = "JPY", rate = "0.007", expected_version = "${jpy_rate.version}" }

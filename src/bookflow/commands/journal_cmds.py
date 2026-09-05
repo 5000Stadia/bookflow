@@ -14,7 +14,7 @@ def _write(verb, model):
     def planner(inp, ctx, s):
         return journals.prepare(s, ctx, inp, verb)
     cmd = command('journal ' + verb, scope='company', description={
-        'post': 'Post two through 200 balanced domestic journal lines with an explicit or automatically allocated number and typed header custom fields.',
+        'post': 'Post two through 200 balanced journal lines, converting foreign amounts at exact-date stored or explicit manual rates and capturing original money and typed custom fields.',
         'update': 'Append an immutable correction with an exact old-date reversal and a full new-date replacement.',
         'void': 'Void a journal with a required context reason and an exact reversal at its current accounting date.',
     }[verb], input_model=model, output_model=JournalWriteOutput, writes={'company'},
@@ -23,7 +23,7 @@ def _write(verb, model):
         version_source=None if verb == 'post' else ('journal show', 'journal', 'version'),
         error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_UNBALANCED_ENTRY',
                      'E_PERIOD_CLOSED', 'E_DUPLICATE_NUMBER', 'E_INACTIVE_REFERENCE',
-                     'E_VALUE_RANGE', 'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED'])(planner)
+                     'E_VALUE_RANGE', 'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED'] + (['E_NO_EXCHANGE_RATE'] if verb != 'void' else []))(planner)
     cmd.ledger = True
     cmd.applier(journals.apply)
     return cmd

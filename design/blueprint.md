@@ -425,6 +425,11 @@ When a foreign-tagged payment settles a home-currency receivable or payable and 
 
 Rates are entered with `rate set` or fetched with `rate fetch --date <date> --from <code>`, which asks the configured provider and stores the result with `source` naming it. Providers implement one interface, `rate(date, from, to)`; the first is the European Central Bank's published reference rates through a keyless public API, and others are added as providers. The company setting `rates.auto_fetch`, off by default, lets a posting with a foreign amount and no stored rate fetch one first. A fetch sends only currency codes and a date, and the documentation of `rate fetch` and of the setting says so, which is what the intention's rule about data leaving the machine requires.
 
+Manual rate set/show/query and foreign-tagged journal posting follow the bounded
+[foreign journal contract](specs/8-foreign-journals.md). Current journal commands
+use exact-date manual rates and explicit overrides, half-even conversion and
+explicit repricing; provider fetching and foreign settlements remain later work.
+
 ## 9. Company
 
 ### 9.1 Company info

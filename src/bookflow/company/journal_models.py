@@ -13,11 +13,12 @@ from bookflow.company.custom_fields import CustomFieldValuePatch, CustomFieldKin
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import INT64_MAX, _parse_scaled_decimal, _require_i64
 from bookflow.core.money import Money, is_currency, minor_units_of
+from bookflow.core.exchange import canonical_rate
 
 __all__ = [
     "MoneyInput", "JournalLineInput", "JournalPostInput", "JournalUpdateInput",
     "JournalVoidInput", "JournalShowInput", "JournalQueryInput", "JournalHistoryInput",
-    "parse_domestic_amount", "checked_sum",
+    "parse_domestic_amount", "parse_tagged_amount", "checked_sum",
 ]
 
 _AMOUNT = re.compile(r"\s*(-?[0-9]+(?:\.[0-9]+)?)\s*([A-Z]{3})?\s*")
@@ -27,7 +28,7 @@ def _invalid(field: str, problem: str) -> BookflowError:
     return BookflowError("E_VALIDATION", details={"fields": [{"field": field, "problem": problem}]})
 
 
-def _parse_string(value: str, home_currency: str, field: str) -> Money:
+def _parse_string(value: str, home_currency: str, field: str, *, foreign: bool = False) -> Money:
     match = _AMOUNT.fullmatch(value)
     if match is None:
         raise _invalid(field, "must be a plain decimal string with an optional currency code")
@@ -35,7 +36,7 @@ def _parse_string(value: str, home_currency: str, field: str) -> Money:
     currency = explicit_currency or home_currency
     if not is_currency(currency):
         raise _invalid(field, "unknown currency code")
-    if currency != home_currency:
+    if currency != home_currency and not foreign:
         raise _invalid(field, "foreign currency amounts are not supported; use home currency")
     places = minor_units_of(currency)
     fraction = number.partition(".")[2]
@@ -75,7 +76,7 @@ class MoneyInput(_Input):
         return self
 
 
-def parse_domestic_amount(value: Any, home_currency: str, field: str = "amount") -> Money:
+def _parse_amount(value: Any, home_currency: str, field: str = "amount", *, foreign: bool = False) -> Money:
     """Return positive i64 home-currency money without numeric coercion.
 
     Inputs are decimal strings, MoneyInput objects or dictionaries of that shape.
@@ -85,7 +86,7 @@ def parse_domestic_amount(value: Any, home_currency: str, field: str = "amount")
     if not is_currency(home_currency):
         raise _invalid(field, "unknown home currency code")
     if isinstance(value, str):
-        return _parse_string(value, home_currency, field)
+        return _parse_string(value, home_currency, field, foreign=foreign)
     if isinstance(value, MoneyInput):
         value = value.model_dump(exclude_unset=True)
     if not isinstance(value, dict):
@@ -96,7 +97,7 @@ def parse_domestic_amount(value: Any, home_currency: str, field: str = "amount")
     currency = value["currency"]
     if not is_currency(currency):
         raise _invalid(field, "unknown currency code")
-    if currency != home_currency:
+    if currency != home_currency and not foreign:
         raise _invalid(field, "foreign currency amounts are not supported; use home currency")
     if "amount" in value:
         if not isinstance(value["amount"], str):
@@ -104,6 +105,14 @@ def parse_domestic_amount(value: Any, home_currency: str, field: str = "amount")
         if _parse_string(value["amount"], currency, field).minor_units != units:
             raise _invalid(field, "amount contradicts minor_units")
     return Money(units, currency)
+
+
+def parse_domestic_amount(value: Any, home_currency: str, field: str = "amount") -> Money:
+    return _parse_amount(value, home_currency, field)
+
+
+def parse_tagged_amount(value: Any, home_currency: str, field: str = "amount") -> Money:
+    return _parse_amount(value, home_currency, field, foreign=True)
 
 
 def checked_sum(values: Iterable[int], field: str) -> int:
@@ -127,6 +136,7 @@ _Date = Annotated[str, Field(min_length=10, max_length=10, pattern=r"^[0-9]{4}-[
 _Selector = Annotated[str, Field(min_length=1), BeforeValidator(_trim)]
 _Number = Annotated[str, Field(min_length=1, max_length=64), BeforeValidator(_trim)]
 _Version = Annotated[int, Field(strict=True, ge=1)]
+_Rate = Annotated[str, BeforeValidator(canonical_rate)]
 
 
 class JournalLineInput(_Input):
@@ -150,6 +160,7 @@ _Lines = Annotated[list[JournalLineInput], Field(min_length=2, max_length=200)]
 
 
 class JournalPostInput(_Input):
+    rate: _Rate | None = Field(default=None, description="Explicit home major units per one foreign major unit; applies only when the entry has exactly one foreign currency. Omit to use exact-date stored rates.")
     custom_field_kinds: CustomFieldKindExpectations = Field(
         default_factory=lambda: CustomFieldKindExpectations({}),
         description="Optional captured kinds for supplied non-null custom values. A current kind mismatch rejects the write without reinterpreting a draft.",
@@ -165,12 +176,16 @@ class JournalPostInput(_Input):
 
     @model_validator(mode="after")
     def new_line_ids(self) -> Self:
+        if "rate" in self.model_fields_set and self.rate is None:
+            raise ValueError("rate cannot be null; omit it for stored rates")
         if any("line_id" in line.model_fields_set for line in self.lines):
             raise ValueError("line_id cannot be supplied when posting a new journal")
         return self
 
 
 class JournalUpdateInput(_Input):
+    rate: _Rate | None = Field(default=None, description="Explicit manual override for exactly one foreign currency. Omit to retain unchanged captured conversions.")
+    refresh_rates: bool = Field(default=False, description="Explicitly reprice foreign lines using the effective date's stored rates, unless a manual override is supplied. Date or memo changes alone preserve captured conversions.")
     custom_field_kinds: CustomFieldKindExpectations = Field(
         default_factory=lambda: CustomFieldKindExpectations({}),
         description="Optional captured kinds for supplied non-null custom values. A current kind mismatch rejects the write without reinterpreting a draft.",
@@ -189,7 +204,7 @@ class JournalUpdateInput(_Input):
 
     @model_validator(mode="after")
     def required_when_supplied(self) -> Self:
-        for field in ("date", "number", "lines"):
+        for field in ("date", "number", "lines", "rate"):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be cleared")
         return self

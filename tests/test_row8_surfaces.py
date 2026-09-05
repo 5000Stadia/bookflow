@@ -10,7 +10,7 @@ COMPANY = 'Demo Plumbing Co'
 
 def test_demo_account_balances_and_reports_reconcile(client):
     journals = client.journal.query(company=COMPANY)['items']
-    assert len(journals) == 9
+    assert len(journals) == 10
     assert sum(j['status'] == 'voided' for j in journals) == 1
     service = next(j for j in journals if j['number'] == 'DEMO-SERVICE')
     assert service['version'] == 2
@@ -30,16 +30,16 @@ def test_demo_account_balances_and_reports_reconcile(client):
     assert current[key]['value_id'] == old_split[key]['value_id']
 
     tb = client.run('report trial-balance', {'date_to': '2026-12-31'}, company=COMPANY)
-    assert tb['totals']['debit']['minor_units'] == tb['totals']['credit']['minor_units'] == 663000
+    assert tb['totals']['debit']['minor_units'] == tb['totals']['credit']['minor_units'] == 664595
     nets = {r['account_id']: r['signed_net']['minor_units'] for r in tb['rows']}
-    expected_balances = {'Checking': 610500, 'Professional Fees': 52500,
-                         'Service Income': 160000, 'Opening Balance Equity': 500000,
+    expected_balances = {'Checking': 612095, 'Professional Fees': 52500,
+                         'Service Income': 161595, 'Opening Balance Equity': 500000,
                          'Business Credit Card': 3000}
     for name, amount in expected_balances.items():
         assert client.account.show(account=name, company=COMPANY)['balance']['minor_units'] == amount
     bank_register = client.register.query(account='Checking', date_from='2026-01-01',
                                          date_to='2026-12-31', company=COMPANY)
-    assert bank_register['totals']['closing']['minor_units'] == 610500
+    assert bank_register['totals']['closing']['minor_units'] == 612095
     split = next(row for row in bank_register['rows'] if row['transaction_number'] == 'REG-SPLIT' and row['batch_kind'] == 'replacement')
     assert split['decrease']['minor_units'] == 10000 and split['category_label'] == 'Splits'
     listed = client.account.list(company=COMPANY)['items']

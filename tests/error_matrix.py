@@ -178,3 +178,11 @@ MATRIX['register calculate'] = {code: _LEDGER_WRITE_ERRORS[code] for code in (
     'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_VALUE_RANGE', 'E_AMOUNT_PRECISION')}
 MATRIX['register query'] = dict(MATRIX['report general-ledger'])
 MATRIX['register query'].update({code: _LEDGER_WRITE_ERRORS[code] for code in ('E_INACTIVE_REFERENCE', 'E_AMOUNT_PRECISION')})
+
+for _verb in ('post', 'update'):
+    MATRIX['journal ' + _verb]['E_NO_EXCHANGE_RATE'] = 'no exact-date original-to-home rate and no manual override'
+MATRIX.update({
+    'rate set': {'E_VERSION_CONFLICT': 'expected version is not the exact current pair version', 'E_VALUE_RANGE': 'next rate version exceeds integer storage', 'E_IDEMPOTENCY_MISMATCH': 'retry key reused with a different rate', 'E_DIRECTIVE_NOT_FOUND': 'unknown directive', 'E_DIRECTIVE_INACTIVE': 'inactive directive'},
+    'rate show': {'E_RECORD_NOT_FOUND': 'id or exact date pair absent in selected company'},
+    'rate query': {'E_QUERY_STALE': 'company audit changed between rate pages'},
+})

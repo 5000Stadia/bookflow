@@ -147,8 +147,11 @@ read there with home balances, but are not editable through its restricted shape
 they link to the generated journal editor. Direct register.update rejects such a
 journal, and existing domestic register behavior remains unchanged.
 
-The ordinary demo gains a dated JPY rate and a small balanced foreign journal,
-followed by a rate change that demonstrates preserved historical capture. The
+The ordinary demo sets the2026-07-15 JPY rate to0.0068, posts DEMO-JPY
+(debit Checking2345JPY, credit Service Income15.95USD), then changes the table
+rate to0.007. The journal retains its original0.0068 conversion. Checking becomes
+612095minor units, Service Income161595 and trial balance664595 each; ten
+journal headers remain. The
 reference2026 source/oracles are unchanged. Existing fixed-count and balance
 demo tests are extended with explicit new expected totals. The preserved human
 demo is upgraded additively through public commands after backup; no reset.

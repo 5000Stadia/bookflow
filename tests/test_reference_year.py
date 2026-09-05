@@ -165,9 +165,9 @@ def assert_balances(c):
         assert shown['balance']['currency'] == 'USD'
         assert shown['id'] != c.account.show(company=DEMO,account='Checking')['id']
     assert c.report.trial_balance(company=REFERENCE,date_to='2026-12-31')['totals']['debit']['minor_units'] == 8005000
-    assert c.report.trial_balance(company=DEMO,date_to='2026-12-31')['totals']['debit']['minor_units'] == 663000
-    assert c.account.show(company=DEMO,account='Checking')['balance']['minor_units'] == 610500
-    assert c.journal.query(company=DEMO)['count'] == 9
+    assert c.report.trial_balance(company=DEMO,date_to='2026-12-31')['totals']['debit']['minor_units'] == 664595
+    assert c.account.show(company=DEMO,account='Checking')['balance']['minor_units'] == 612095
+    assert c.journal.query(company=DEMO)['count'] == 10
 
 
 def test_company_selection_balances_audit_and_closed_root_copy(reference_client, tmp_path, monkeypatch):
@@ -272,7 +272,7 @@ def test_partial_seed_failure_reports_committed_effects_and_rerun_recovers(refer
     assert error.details['incomplete_company_id'] == c.company.show(company=REFERENCE)['company_id']
     assert len(error.details['company_ids']) == 2 and error.details['request_id']
     assert c.account.show(company=REFERENCE,account='Checking')['balance']['minor_units'] == 1000000
-    assert c.account.show(company=DEMO,account='Checking')['balance']['minor_units'] == 610500
+    assert c.account.show(company=DEMO,account='Checking')['balance']['minor_units'] == 612095
     monkeypatch.setattr(hub_cmds,'_load_seed',load)
     assert c.demo.reset(include_reference=True)['trashed_path']
     assert_balances(c)
@@ -299,7 +299,7 @@ def test_public_boolean_schema_defaults_and_first_default_reset(tmp_path, monkey
     result = c.demo.reset()
     assert result['trashed_path'] is result['reference_company_id'] is result['reference_display_name'] is None
     assert [r['display_name'] for r in c.company.list()['items']] == [DEMO]
-    assert c.journal.query(company=DEMO)['count'] == 9
+    assert c.journal.query(company=DEMO)['count'] == 10
     help_result = subprocess.run([sys.executable,'-m','bookflow.adapters.cli.app','demo','reset','--help'],
         capture_output=True,text=True,env={**os.environ,'NO_COLOR':'1'})
     assert help_result.returncode == 0 and '--include-reference' in help_result.stdout

@@ -174,7 +174,9 @@ def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
             "custom_fields": _custom_value_map(revision.get("custom_fields")),
             "lines": [{
                 "line_id": line["line_id"], "account": line["account_id"],
-                "side": line["side"], "amount": line["amount"]["amount"],
+                "side": line["side"], "amount": (
+                    f"{line['original_amount']['amount']} {line['original_amount']['currency']}"
+                    if line.get("original_amount") else line["amount"]["amount"]),
                 **{key: line[key] for key in ("name_type", "name_id", "class_id", "description") if line.get(key) is not None},
             } for line in revision.get("lines", [])],
         }
@@ -294,6 +296,8 @@ def _decorate_collection_references(
 
 
 def _record_selector(cmd: registry.Command, noun: str) -> str | None:
+    if cmd.name == "rate set":
+        return None
     if cmd.version_source:
         return cmd.version_source[1]
     conventional = noun.replace("-", "_").replace(" ", "_")
@@ -333,6 +337,8 @@ def _inactive_toggle(path: str, request: Request, *, include: bool) -> str:
 def _success_target(cmd: registry.Command, company_id: str | None, noun: str, record_id: str | None,
                     output: dict[str, Any]) -> str:
     route_noun = noun.replace(" ", "-")
+    if company_id and cmd.name == "rate set" and output.get("id"):
+        return f"/c/{company_id}/rate/{output['id']}"
     if company_id and cmd.name in ("register post", "register update") and output.get("id"):
         return f"/c/{company_id}/journal/{output['id']}"
     if record_id is not None:
@@ -934,6 +940,13 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         elif cmd.version_source and record_id is None:
             return page_error(request, BookflowError("E_USAGE", message="open this update from a record page"))
         originals = originals or {}
+        if cmd.name == "rate set" and record_id is not None:
+            try:
+                shown = run(request, "rate show", {"rate_id": record_id}, company_id)
+            except BookflowError as err:
+                return page_error(request, err)
+            originals = {key: shown[key] for key in ("date", "from_currency", "rate")}
+            originals["expected_version"] = shown["version"]
         if noun == "register" and shown and shown.get("revision", {}).get("lines"):
             from bookflow.adapters.workbench.register import edit_projection
             try:
@@ -1155,6 +1168,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         return render("form.html", request, company_id=company_id, noun=noun, verb=verb, cmd=cmd, leaves=described, originals=originals,
                       attempted=attempted, record_id=record_id, runtime_fields=runtime_fields,
                       captured_custom_fields=(shown or {}).get("revision", {}).get("custom_fields", []),
+                      captured_foreign_lines=[line for line in (shown or {}).get("revision", {}).get("lines", []) if line.get("original_amount")],
                       annotations=annotations(company_id, noun, record_id, shown, authorized_company, cred),
                       ctx_fields=F.context_fields(cmd), result=result, error=error,
                       preview=preview, get=F.get_path, form_value=F.form_value,
@@ -1255,7 +1269,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             if unresolved:
                 raise BookflowError("E_VALIDATION", details={"fields": [{"field": key, "problem": "Choose a matching record by name, or use Clear."} for key in unresolved]})
             raw, headers, preview = F.translate(cmd, form, originals if originals else None)
-            if cmd.version_source and record_id is not None and "expected_version" not in raw and form.get("f:expected_version"):
+            if (cmd.version_source or cmd.name == "rate set") and record_id is not None and "expected_version" not in raw and form.get("f:expected_version"):
                 raw["expected_version"] = int(form["f:expected_version"])
             selector = _record_selector(cmd, noun) if record_id is not None else None
             if selector:

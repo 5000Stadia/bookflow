@@ -3,6 +3,8 @@
 {% set action = ((base ~ "/" ~ record_id) if record_id else base) ~ (("/" ~ verb) if verb else "") %}
 <nav class="crumbs"><a href="{{ base }}">{{ noun }}</a> / {{ verb or "run" }}</nav>
 <h1>{{ noun }} {{ verb }}</h1><p class="muted">{{ cmd.description }}</p>
+{% if noun == 'journal' and verb in ('post', 'update') %}<p class="workflow-note">Enter a currency with an amount, such as <code>2345 JPY</code>. Rates mean home-currency units per one foreign unit. Leave Rate empty to use saved conversions or the exact-date rate. Changing a saved entry's date or memo preserves unchanged conversions; choose Refresh rates to reprice them.</p>{% endif %}
+{% if captured_foreign_lines %}<details><summary>Saved currency conversions</summary><div class="table-wrap"><table><thead><tr><th>Line</th><th>Original</th><th>Home amount</th><th>Rate</th><th>Source</th></tr></thead><tbody>{% for line in captured_foreign_lines %}<tr><td>{{ line.position }}</td><td>{{ line.original_amount.amount }} {{ line.original_currency }}</td><td>{{ line.amount.amount }} {{ line.currency }}</td><td>{{ line.rate_used }}</td><td>{{ line.rate_source }}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}
 {% if error %}<div class="error"><b>{{ error.code }}</b> {{ error.message }}{% if error.details.fields %}<ul>{% for f in error.details.fields %}<li>{{ f.field }}: {{ f.problem }}</li>{% endfor %}</ul>{% endif %}{% if error.details.suggestions %}<p>Did you mean: {{ error.details.suggestions | join(", ") }}</p>{% endif %}</div>{% endif %}
 {% if error and error.code == 'E_VERSION_CONFLICT' %}<div class="workflow-note" role="alert">Someone changed this record while you were editing. Your entered values and attempted version are preserved below. Changed fields: {{ error.details.changed_fields | join(', ') }}. <a href="{{ base }}/{{ record_id }}" target="_blank" rel="noopener">Review the saved record in another tab</a> before starting a new edit; submitting this stale version again does not overwrite their changes.</div>{% endif %}
 {% if result %}<div class="{{ 'warn' if preview else 'field' }}"><b>{{ "Preview (nothing written)" if preview else "Result" }}</b><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></div>{% endif %}
@@ -102,7 +104,7 @@
 {% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"{% if l.date_input %} type="date"{% elif l.wire_kind == 'number' %} inputmode="decimal"{% endif %}>{% endif %}
 {% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}" {% if l.kind == "number" %}inputmode="numeric"{% endif %}>{% endif %}
 </div>
-<span>{% if cmd.clearable and not l.runtime and l.nullable and l.kind != "json" %}<label class="clear-control"><input type="checkbox" name="clear:{{ l.path }}" value="1" {% if attempted.get("clear:" ~ l.path) == "1" %}checked{% endif %}> clear</label>{% endif %}</span>
+<span>{% if cmd.clearable and not l.runtime and l.nullable and l.kind != "json" and not (noun == 'journal' and l.path == 'rate') %}<label class="clear-control"><input type="checkbox" name="clear:{{ l.path }}" value="1" {% if attempted.get("clear:" ~ l.path) == "1" %}checked{% endif %}> clear</label>{% endif %}</span>
 </div>
 {% endmacro %}
 

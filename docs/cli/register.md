@@ -328,6 +328,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].description` | string \| null | yes | yes | — | — |
 | `revision.lines[].original_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.lines[].original_amount` | object \| null | yes | yes | — | — |
+| `revision.lines[].original_amount.amount` | string | yes | no | — | — |
+| `revision.lines[].original_amount.currency` | string | yes | no | — | — |
+| `revision.lines[].original_amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].original_currency` | string \| null | yes | yes | — | — |
 | `revision.lines[].rate_used` | string \| null | yes | yes | — | — |
 | `revision.lines[].rate_source` | string \| null | yes | yes | — | — |
@@ -987,6 +991,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].description` | string \| null | yes | yes | — | — |
 | `revision.lines[].original_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.lines[].original_amount` | object \| null | yes | yes | — | — |
+| `revision.lines[].original_amount.amount` | string | yes | no | — | — |
+| `revision.lines[].original_amount.currency` | string | yes | no | — | — |
+| `revision.lines[].original_amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].original_currency` | string \| null | yes | yes | — | — |
 | `revision.lines[].rate_used` | string \| null | yes | yes | — | — |
 | `revision.lines[].rate_source` | string \| null | yes | yes | — | — |

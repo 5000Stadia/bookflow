@@ -171,7 +171,7 @@ Example JSON output:
 
 ## `journal post`
 
-Post two through 200 balanced domestic journal lines with an explicit or automatically allocated number and typed header custom fields.
+Post two through 200 balanced journal lines, converting foreign amounts at exact-date stored or explicit manual rates and capturing original money and typed custom fields.
 
 | Contract | Value |
 |---|---|
@@ -191,6 +191,7 @@ Post two through 200 balanced domestic journal lines with an explicit or automat
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `rate` | `--rate` | string \| null | no | yes | null | Explicit home major units per one foreign major unit; applies only when the entry has exactly one foreign currency. Omit to use exact-date stored rates. |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Optional captured kinds for supplied non-null custom values. A current kind mismatch rejects the write without reinterpreting a draft. |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | Header values keyed by journal_entry custom-field definition ID. Omitted keys preserve values on update; null clears an optional value. Numbers are exact decimal strings. |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
@@ -375,6 +376,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].description` | string \| null | yes | yes | — | — |
 | `revision.lines[].original_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.lines[].original_amount` | object \| null | yes | yes | — | — |
+| `revision.lines[].original_amount.amount` | string | yes | no | — | — |
+| `revision.lines[].original_amount.currency` | string | yes | no | — | — |
+| `revision.lines[].original_amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].original_currency` | string \| null | yes | yes | — | — |
 | `revision.lines[].rate_used` | string \| null | yes | yes | — | — |
 | `revision.lines[].rate_source` | string \| null | yes | yes | — | — |
@@ -496,6 +501,7 @@ Example JSON output:
 | `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
 | `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
 | `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_NO_EXCHANGE_RATE` | No exchange rate exists for the exact accounting date and currency pair. |
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
@@ -829,6 +835,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].description` | string \| null | yes | yes | — | — |
 | `revision.lines[].original_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.lines[].original_amount` | object \| null | yes | yes | — | — |
+| `revision.lines[].original_amount.amount` | string | yes | no | — | — |
+| `revision.lines[].original_amount.currency` | string | yes | no | — | — |
+| `revision.lines[].original_amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].original_currency` | string \| null | yes | yes | — | — |
 | `revision.lines[].rate_used` | string \| null | yes | yes | — | — |
 | `revision.lines[].rate_source` | string \| null | yes | yes | — | — |
@@ -967,6 +977,8 @@ Append an immutable correction with an exact old-date reversal and a full new-da
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `rate` | `--rate` | string \| null | no | yes | null | Explicit manual override for exactly one foreign currency. Omit to retain unchanged captured conversions. |
+| `refresh_rates` | `--refresh-rates` | boolean | no | no | false | Explicitly reprice foreign lines using the effective date's stored rates, unless a manual override is supplied. Date or memo changes alone preserve captured conversions. |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Optional captured kinds for supplied non-null custom values. A current kind mismatch rejects the write without reinterpreting a draft. |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | Header values keyed by journal_entry custom-field definition ID. Omitted keys preserve values on update; null clears an optional value. Numbers are exact decimal strings. |
 | `journal` | `JOURNAL` | string | yes | no | — | minimum length 1 |
@@ -1155,6 +1167,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].description` | string \| null | yes | yes | — | — |
 | `revision.lines[].original_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.lines[].original_amount` | object \| null | yes | yes | — | — |
+| `revision.lines[].original_amount.amount` | string | yes | no | — | — |
+| `revision.lines[].original_amount.currency` | string | yes | no | — | — |
+| `revision.lines[].original_amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].original_currency` | string \| null | yes | yes | — | — |
 | `revision.lines[].rate_used` | string \| null | yes | yes | — | — |
 | `revision.lines[].rate_source` | string \| null | yes | yes | — | — |
@@ -1276,6 +1292,7 @@ Example JSON output:
 | `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
 | `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
 | `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_NO_EXCHANGE_RATE` | No exchange rate exists for the exact accounting date and currency pair. |
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
@@ -1486,6 +1503,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].class_name` | string \| null | yes | yes | — | — |
 | `revision.lines[].description` | string \| null | yes | yes | — | — |
 | `revision.lines[].original_minor_units` | integer \| null | yes | yes | — | — |
+| `revision.lines[].original_amount` | object \| null | yes | yes | — | — |
+| `revision.lines[].original_amount.amount` | string | yes | no | — | — |
+| `revision.lines[].original_amount.currency` | string | yes | no | — | — |
+| `revision.lines[].original_amount.minor_units` | integer | yes | no | — | — |
 | `revision.lines[].original_currency` | string \| null | yes | yes | — | — |
 | `revision.lines[].rate_used` | string \| null | yes | yes | — | — |
 | `revision.lines[].rate_source` | string \| null | yes | yes | — | — |

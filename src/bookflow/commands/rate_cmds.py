@@ -16,7 +16,7 @@ rate_set.applier(rates.apply)
 
 
 @command('rate show', scope='company', description='Show a manual rate by stable id or exact date and original currency.',
-    input_model=RateShowInput, output_model=RateOutput, required_role='member', capability='ledger.read', error_codes=['E_RECORD_NOT_FOUND'])
+    input_model=RateShowInput, output_model=RateOutput, required_role='member', capability='ledger.read', positional=['rate_id'], error_codes=['E_RECORD_NOT_FOUND'])
 def rate_show(inp, ctx, s):
     return Plan(rates.show(s, inp))
 

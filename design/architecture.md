@@ -363,3 +363,27 @@ samples of a 20-line journal on the same 10,000-account fixture have median
 43.57 ms and maximum 45.84 ms. Garbage collection is enabled. These samples
 exclude host startup and include dispatch, authorization, company writer, audit
 and commit. They do not measure a journal populated with dozens of custom values.
+
+## Manual rates and foreign journal conversion
+
+Company migration co0008 adds the declared versioned exchange_rates table.
+Rate set/show/query share company dispatch, current ledger permissions, exact
+expected versions, previews, audit and idempotent receipts. Rate continuation
+uses the existing company paging contract authenticated with the company report
+key. No provider or network path is installed.
+
+core/exchange.py validates canonical positive decimal rate strings and converts
+positive integer Money through arbitrary-width integer intermediates and one
+half-even rounding. company/journal_foreign.py selects exact-date or explicit
+manual rates, preserves unchanged captured originals by stable line identity,
+and validates generated conversions against original command inputs and saved
+lines. Domestic lines require no rate-table lookup. Journal corrections and voids
+retain the existing single audit/ledger/retry transaction and exact reversals.
+
+Journal output exposes home Money and original Money separately. Generated edit
+forms submit original tagged money, and a separate refresh_rates input controls
+repricing; changing date or master metadata alone preserves conversion history.
+The dedicated register displays home effects of foreign entries and routes their
+edits to the journal form. The demo includes a yen receipt and a later quote change
+that does not modify its captured rate. Reference-year accounting oracles are
+independent of the added ordinary-demo journal.

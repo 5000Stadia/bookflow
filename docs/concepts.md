@@ -171,3 +171,61 @@ client.run("journal update", {
 List-record undo restores the audited canonical choice spelling when a choice
 was renamed with the same normalized key. It still requires the corresponding
 active choice for a changing value; it does not recreate a retired choice.
+
+## Foreign-tagged journals and manual rates
+
+Journal `post` and `update` accept foreign-tagged amounts such as `2345 JPY`, or
+an integer Money object naming JPY. Ledger amounts and balances remain in the
+company's immutable home currency. Each foreign line returns both `amount` (home
+Money) and `original_amount` (original Money), plus `rate_used` and `rate_source`.
+Domestic lines have null original/rate fields. Historical output uses captured
+facts and never reads today's rate table.
+
+`rate set --date 2026-07-15 --from-currency JPY --rate 0.0068 --expected-version 0`
+creates that date's JPY-to-home rate. Version zero creates only. Read with
+`rate show --date 2026-07-15 --from-currency JPY` or `rate show <id>`; pass the
+returned version to change the rate. An unchanged canonical rate at the expected
+version is a no-op. `rate query` pages dates and original currencies. All commands
+require the usual company selection. Rate writes use ledger posting permissions,
+ordinary audit, previews and idempotency; their saved records open in the workbench.
+
+A rate is **home major units per one original major unit**. It is a positive plain
+decimal string, with at most twelve integer and eighteen fractional digits.
+Leading/trailing insignificant zeros normalize away. Floats, booleans, null, zero,
+negative numbers and exponent notation are invalid. Conversion uses integer
+intermediates and one ties-to-even rounding at home precision. Each original and
+converted amount must be positive and fit signed64-bit storage; a conversion
+rounding to zero is rejected. JPY2345 at0.0068 becomes USD15.95. JPY125 at0.0002
+becomes USD0.02; JPY175 at that rate becomes USD0.04. Debit/credit home totals
+must balance without an automatic rounding or exchange-gain/loss line.
+
+Without a journal `--rate`, new foreign inputs use the exact accounting date's
+stored rate. There is no previous-date fallback, inversion or triangulation;
+absence returns E_NO_EXCHANGE_RATE. A manual journal `--rate` requires exactly
+one foreign currency among its lines and overrides that currency's table rate.
+Different foreign currencies can use their own stored rates in the same journal.
+Table selection captures source `table:manual`; command override captures `manual`.
+Preview is advisory: the writer resolves a new posting's rate again, while retry
+replays the originally committed receipt.
+
+Corrections retain the captured conversion when the stable line identity and
+original amount/currency are unchanged. Memo, account, side, dimension, custom-field
+and accounting-date edits alone do not reprice that original. `refresh_defaults`
+only refreshes displayed metadata. Use `journal update --refresh-rates` to
+explicitly reprice all foreign lines at the effective date's stored rates, or
+supply `--rate` for an explicit override. Changing an entered original amount or
+currency also selects a rate again. Repricing can create a revision even when the
+rounded home amount is unchanged, because the captured rate/source changed.
+Reversals and voids copy exact old amounts and rate facts without looking up a rate.
+
+The journal editor displays and submits original tagged amounts and preserves
+line identities. Saved conversion details are available beside the explicit rate
+controls. The bank/card register reads foreign entries in home amounts and opens
+them in the journal editor; its row composer remains home-currency entry.
+
+The demo's DEMO-JPY captures JPY2345 at0.0068 as USD15.95. Its current table quote
+is then changed to0.007 without changing that saved journal. Demo Checking is
+612095minor units; trial balance totals are664595 each. Reference Plumbing Co's
+fixed2026 figures are unchanged. Rate fetching, automatic fetching and foreign
+settlement accounting are not implemented; these manual commands send no data
+outside the machine.

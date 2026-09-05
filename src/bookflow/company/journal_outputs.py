@@ -39,6 +39,7 @@ class JournalLineOutput(CreatedOutput):
     class_name: str | None
     description: str | None
     original_minor_units: int | None
+    original_amount: JournalMoneyOutput | None
     original_currency: str | None
     rate_used: str | None
     rate_source: str | None

@@ -99,8 +99,8 @@ capital plus income. AR and AP are zero. Income, net-assets and AR/AP values
 are arithmetic regression oracles; profit-and-loss, balance-sheet and aging
 report commands are not exposed yet.
 
-The ordinary demo remains nine journals, trial balance 663000 on each side and
-Checking 610500. Account show/list express balances on each account's normal
+The ordinary demo contains ten journals, trial balance 664595 on each side and
+Checking 612095. Account show/list express balances on each account's normal
 side; reports use debit-minus-credit values. Both companies remain ordinary
 independent companies selectable through company show/list and the browser
 picker. The reference Checking register shows `72550.00 USD`.
