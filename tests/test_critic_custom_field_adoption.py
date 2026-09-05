@@ -52,7 +52,9 @@ def test_explicit_adoption_preserves_displayed_value_and_new_wire_type(register_
         b.wait_for("!document.querySelector('#register-fields').disabled")
     else:
         _tab(b, 'button[value="submit"]'); _key(b, 'Enter')
-        b.wait_for("!document.querySelector('[data-generated-form]') || document.body.textContent.includes('E_VALIDATION')")
+        # A top-level Save redirect briefly has no form and no body. Wait for
+        # the authoritative detail (or a rendered error), not that empty frame.
+        b.wait_for("document.readyState === 'complete' && !!document.querySelector('main') && ((!document.querySelector('[data-generated-form]') && !!document.querySelector('.ledger-table')) || !!document.querySelector('.error'))")
     shown = _command(b, env.site, 'journal.show', {'journal': journal['id']})
     name = f'adopt-{surface}-{old_kind}-{new_kind}'
     area = tmp_path

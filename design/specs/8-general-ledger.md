@@ -125,15 +125,16 @@ history, exact overflow, readonly denial, and CLI/Python/HTTP/generated-form par
 A backdated posting between report pages must reject continuation and reconcile
 on restart; it must not silently change a later running balance.
 
-## Following increments
+## Related increments and remaining scope
 
-Journal custom-field entry and immutable definition/value snapshots follow the domestic core.
-Manual dated exchange rates and foreign-tagged posting follow a separately fixed
-rounding and rate-scope contract. Functional register entry uses the same journal
-service, supports keyboard entry and displays the authoritative posted result in
-place. Its field inventory, split behavior and human usability checkpoint remain
-explicit work before row closure. Full agent isolation remains dependent on the
-unfinished identity integration. Invoice, payment, allocation, banking, inventory,
-commercial-tax and cash-basis workflows are outside this journal increment.
+The domestic core is extended by the implemented [register](8-register.md),
+[journal custom fields](8-custom-fields.md), [reference year](8-reference-year.md)
+and [manual rates and foreign journals](8-foreign-journals.md) contracts. They
+share the same accounting service, retained document history and audit boundary.
 
-Register field inventory and implementation contract: [8-register.md](8-register.md).
+The 100,000-transaction storage budget and broader human workflow/anchor acceptance
+remain open. Full agent isolation depends on the unfinished identity integration.
+Invoice, payment, allocation, banking, inventory, commercial-tax and cash-basis
+workflows are outside this journal increment. The planned
+[customer-work workflow](../customer-work-and-billing.md) connects contractor
+scope documents, estimates and work orders to later invoice and sales-receipt forms.

@@ -387,3 +387,16 @@ The dedicated register displays home effects of foreign entries and routes their
 edits to the journal form. The demo includes a yen receipt and a later quote change
 that does not modify its captured rate. Reference-year accounting oracles are
 independent of the added ordinary-demo journal.
+
+The foreign increment passes independent artifact review, including mutations of
+rounding, captured-rate preservation, original-command validation, browser
+original-money input and currency filtering. The complete suite produced 1,789
+passes and four test failures: a Save-redirect observation race, a read-command
+inventory missing the two rate reads, and two obsolete seeded-balance assertions.
+Test-only corrections and all nine affected/adjoining checks passed; application
+code is identical to that complete run. All 1,793 distinct tests are covered.
+
+A quiet resident-host measurement with foreign support enabled, normal garbage
+collection and the existing 10,000-account / over-100,000-posting-line fixture has
+20 samples: median 45.21 ms, maximum 47.35 ms for a 20-line domestic journal. All
+20 are below 50 ms. This is a measured sample, not a universal tail guarantee.
