@@ -5,6 +5,11 @@ and work orders have shared commands and browser forms. [Linked work billing](sp
 connects whole source lines to invoices and receipts next; partial/progress billing,
 settlement and delivery remain subsequent increments.
 
+The later [print-template system](print-templates.md) supplies editable output
+layouts, dynamic custom proposals/forms and ordered groups that can combine these
+documents with reports, customer letters, envelopes or labels. It remains future
+roadmap work, separate from the active accounting implementation sequence.
+
 ## Customer workspace
 
 The browser provides a connected section for proposals, estimates, work orders

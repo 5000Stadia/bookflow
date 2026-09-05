@@ -1228,6 +1228,16 @@ OAuth providers use authorization code with PKCE, persist refresh tokens across 
 
 Dependency updates for the whole project, including the optional email package, run through the repository's automated dependency update service; an update that passes the test suite merges.
 
+### 13.5 Print templates and form editor — future roadmap
+
+[Print templates and form editor](print-templates.md) records the later WYSIWYG
+output system: multiple templates, company-defined forms with dynamic business
+references, and ordered template groups that can mix document/report sections.
+Receipts, invoices and reports come first; work orders, proposals and custom forms
+follow. Physical paper profiles include standard pages, envelopes and labels;
+per-template separate print-dialog prompts support paper changes and later batch
+printing. This is future design, not an active implementation row.
+
 ## 14. Reports
 
 Standard financial statement controls and their explicit staged coverage are
