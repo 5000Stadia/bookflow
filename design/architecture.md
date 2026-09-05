@@ -400,3 +400,37 @@ A quiet resident-host measurement with foreign support enabled, normal garbage
 collection and the existing 10,000-account / over-100,000-posting-line fixture has
 20 samples: median 45.21 ms, maximum 47.35 ms for a 20-line domestic journal. All
 20 are below 50 ms. This is a measured sample, not a universal tail guarantee.
+
+## Actual transaction-count storage witness
+
+A separate witness at baseline `18e1d5c` uses 100,000 public journal posts through
+the resident host writer. Every journal is the minimum balanced two-line shape:
+USD 1.00 debit to Checking and credit to Opening Balance Equity, with the general
+chart, normal snapshots, audit and durable commits. There are no attachments,
+corrections, foreign amounts or custom values. It is distinct from the earlier
+100,000-posting-line performance fixture.
+
+The closed, checkpointed company database is **1,246,519,296 bytes**. Including
+the hub gives **1,246,703,616 bytes**. The 500,000,000-byte company budget fails.
+
+| Company allocation | Bytes |
+|---|---:|
+| Ledger tables | 348,459,008 |
+| Ledger indexes | 217,784,320 |
+| Audit tables | 522,493,952 |
+| Audit indexes | 156,651,520 |
+| Other tables and indexes | 1,126,400 |
+| Reserved SQLite page | 4,096 |
+
+All 100,000 transaction/revision/batch identities, 200,000 entered lines and
+posting lines, per-batch balance, source links, audit counts and foreign keys
+are verified. The closed root is copied and selected complete public journal
+receipts reopen unchanged. WAL, synchronous FULL, foreign keys and normal garbage
+collection remain enabled. No vacuum, history removal or application change is
+used to reduce the result. Diagnostic repairs and pauses do not support a latency
+claim from this run.
+
+Ledger tables and indexes alone occupy 566,243,328 bytes. Audit-only reductions
+cannot meet the complete company budget. Repeated issuer and account snapshots
+identify a candidate for lossless storage experiments, but measured repetition
+is not a measured saving. Storage remediation remains a separate unfinished pass.
