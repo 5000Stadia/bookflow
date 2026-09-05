@@ -38,6 +38,26 @@ including populated values of voided journals. Definition undo cannot bypass
 first-use, active-value or active-owner dependency protections. Ledger events
 remain non-undoable through the list undo command.
 
+Choice equality uses the shared normalized label key (NFC, trim and casefold)
+within a stable definition. If a supplied choice has the same key as an active
+slot, preserve the slot's existing canonical_text; it is not a value mutation,
+even after a spelling-only rename or definition deactivation. New or changed
+choices resolve to an active choice and store its current canonical label. Choice
+retirement and undo guards compare normalized keys across all active owner slots,
+not literal display strings; removing/replacing an in-use choice ID is rejected
+even when a new choice would have the same label. Cleared slots do not block
+retirement, and later reactivation captures the then-selected choice identity.
+
+For choice snapshots, `value` always decodes canonical_text and therefore retains
+its original spelling on preservation or refresh. `choice_id` identifies the
+selected choice. `choice_label` is its captured display label: unchanged on
+preservation, refreshed from that same choice ID only on explicit refresh.
+Refresh does not resolve a different choice by label. Historical human display
+uses choice_label; exact typed projection still returns value/canonical_text and
+both choice metadata fields. Current form selection matches the normalized value
+while untouched fields remain omitted patches. Thus Web→WEB can refresh display
+without changing the original canonical value or losing retirement protection.
+
 ## Immutable revision facts
 
 Each revision's existing `custom_fields_snapshot` object is keyed by definition
@@ -97,6 +117,17 @@ and physical transaction annotation targets. Use shared authorized reads for
 current definitions and selected-revision values for editing originals. The
 historical detail page displays captured labels and typed values without requiring
 raw JSON. Generated CLI/HTTP/Python examples accept the same typed mapping.
+
+Generated journal/register forms preserve attempted values and explicit field
+states through preview/errors even if definitions deactivate, disappear from the
+active inventory, or retire a selected choice between requests. Re-render from
+the union of current controls and attempted field IDs. Unavailable attempts remain
+visible with escaped captured/fallback labels and an explicit invalid/unavailable
+state; a removed select option remains visibly selected as an invalid attempt.
+Subsequent submission retains that exact attempt and is rejected until the user
+explicitly changes or clears it. Do not substitute a new default, omit an invalid
+field, or silently reinterpret its type. User-supplied presentation metadata never
+grants validity or overrides server-side scope/type/authority validation.
 
 Register translation forwards the custom-field patch to the journal service.
 Compatible register edits preserve omitted values and snapshots, including
