@@ -2,8 +2,8 @@
 <h1>Log in</h1>{% if error %}<div class="error">{{ error }}</div>{% endif %}
 <form hx-post="/login" hx-swap="none" hx-on::after-request="if(!event.detail.successful){document.getElementById('err').textContent='Login failed.'}">
 <input type="hidden" name="next" value="{{ next }}">
-<div class="row"><label>username</label><input name="username" autofocus></div>
-<div class="row"><label>password</label><input name="password" type="password"></div>
+<div class="row"><label for="username">username</label><input id="username" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" autofocus></div>
+<div class="row"><label for="password">password</label><input id="password" name="password" type="password" autocomplete="current-password"></div>
 <div class="row"><span></span><button>log in</button></div></form><div id="err" class="muted"></div>
 <p class="muted">Signed in? <a href="/hub/user/set-password">Change your password</a>. If you cannot sign in, ask a hub administrator to set it.</p>
 {% endblock %}

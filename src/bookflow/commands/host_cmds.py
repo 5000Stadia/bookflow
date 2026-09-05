@@ -51,7 +51,11 @@ def _find_user(s: Session, selector: str) -> dict[str, Any] | None:
 
 def _is_self(s: Session, selector: str) -> bool:
     a = s.actor
-    return bool(a and (selector == a.id or selector == a.username or (is_ulid(selector) and normalize_ulid(selector) == a.id)))
+    if not a or not (users.username_key(selector) == users.username_key(a.username)
+                     or (is_ulid(selector) and normalize_ulid(selector) == a.id)):
+        return False
+    row = _find_user(s, selector)
+    return bool(row and row["id"] == a.id)
 
 
 def _actor_row(s: Session) -> dict[str, Any]:

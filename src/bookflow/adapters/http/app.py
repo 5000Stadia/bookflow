@@ -22,6 +22,7 @@ from bookflow.core.errors import ALL_CODES, INFRASTRUCTURE_CODES, BookflowError
 from bookflow.core.ids import is_ulid, new_id, normalize_ulid
 from bookflow.core.session import Session
 from bookflow.hub import schema as h
+from bookflow.hub import users
 
 log = logging.getLogger("bookflow.http")
 
@@ -244,12 +245,14 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
         auth.throttle_login(source)
         try:
             with _reader_hub(host) as db:
-                row = db.conn.execute(sa.select(h.users).where(h.users.c.username == username, h.users.c.active.is_(True), h.users.c.kind == "human")).mappings().first()
+                row = users.find_by_username(db, username)
+                if row and (not row["active"] or row["kind"] != "human"):
+                    row = None
             ok = auth.verify_password(row["password_hash"] if row else None, password)
             if not ok or row is None:
                 time.sleep(0.5)
                 raise BookflowError("E_LOGIN_FAILED")
-            secret = _issue_session(host, row["id"], expected_password_hash=row["password_hash"])
+            secret = _issue_session(host, row["id"], username=username, expected_password_hash=row["password_hash"])
         finally:
             auth.release_login(source)
         resp = JSONResponse({"ok": True, "user_id": row["id"], "username": row["username"]})
@@ -421,13 +424,13 @@ def _reader_hub(host):
     return reader()
 
 
-def _issue_session(host, user_id: str, *, expected_password_hash: str) -> str:
+def _issue_session(host, user_id: str, *, username: str, expected_password_hash: str) -> str:
     def job(s: Session):
         from bookflow.core.audit import write_event_to
         from bookflow.core.registry import Touched
         s.hub.raw.execute("BEGIN IMMEDIATE")
-        user = s.hub.conn.execute(sa.select(h.users).where(h.users.c.id == user_id)).mappings().first()
-        if (user is None or not user["active"] or user["kind"] != "human"
+        user = users.find_by_username(s.hub, username)
+        if (user is None or user["id"] != user_id or not user["active"] or user["kind"] != "human"
                 or user["password_hash"] != expected_password_hash):
             raise BookflowError("E_LOGIN_FAILED")
         row, secret = auth.issue_token(s.hub, user_id=user_id, kind="session", label="browser session", days=None, via="http", actor_id=user_id)

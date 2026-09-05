@@ -105,7 +105,7 @@ def run_init(cmd, inp: InitInput, ctx: Context, s: Session) -> dict[str, Any]:
                 if system and humans:
                     me = next((u for u in humans if mapped and u["id"] == mapped.get("user_id")), None)
                     if me is not None:
-                        if inp.username and inp.username != me["username"]:
+                        if inp.username and users.username_key(inp.username) != users.username_key(me["username"]):
                             raise BookflowError("E_INIT_CONFLICT", details={"username": me["username"]})
                         out = InitOutput(dry_run=s.dry_run, data_root=str(root), created=False, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
                         return redact_paths(out.model_dump(mode="json"), me["hub_admin"])
@@ -131,7 +131,7 @@ def run_init(cmd, inp: InitInput, ctx: Context, s: Session) -> dict[str, Any]:
                 if s.dry_run:
                     out = InitOutput(dry_run=True, data_root=str(root), created=True, user_id=new_id(), hub_admin=True, username=username, display_name=display_name, system_user_id=new_id())
                     return out.model_dump(mode="json")
-                if users.find_user(s, username=username):
+                if users.username_key(username) == "system" or users.username_matches(hub, username):
                     raise BookflowError("E_INIT_CONFLICT", details={"username": username})
                 hub.raw.execute("BEGIN IMMEDIATE")
                 try:

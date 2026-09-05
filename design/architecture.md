@@ -81,6 +81,8 @@ src/bookflow/
   adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
 ```
 
+Hub username resolution uses `hub/users.py`: Unicode NFC and case folding through a connection-local SQLite function, at most two candidate rows, and no match for ambiguous names. This lookup scans the users table; no schema migration or stored-name rewrite is required. Login resolves across all user kinds and active states before enforcing human/active status, verifies the password outside the read snapshot, then rechecks the username, user ID and password hash in the writer transaction before issuing a session. Password and token self-service resolves the selected account ID before allowing a case-variant username. Human creation rejects existing normalized names. OS-login mappings and passwords retain case sensitivity.
+
 The repository root carries `uv.lock`; source-checkout documentation trials sync a dedicated environment inside their disposable trial root, then use `uv run --frozen --no-sync`, so executing the guide does not update the checkout's lock or replace packages in a shared environment.
 
 Multi-word nouns (`hub audit`) become nested CLI groups and attribute chains on the client (`client.hub.audit.list()`).

@@ -135,6 +135,8 @@ Table `users` in hub.db.
 | active | bool | |
 | created_at, updated_at, version | | see section 6 |
 
+Username matching uses Unicode NFC normalization and case folding; stored spelling is preserved. Passwords remain case-sensitive. Creation rejects a username that matches an existing human, agent, or system handle, including inactive users. Legacy ambiguous names do not resolve by username; authenticated commands can still use stable user IDs. OS-login mappings in `config.toml` retain the operating system's exact spelling.
+
 There is exactly one `system` user per data root, created by `bookflow init`. Scheduled jobs and migrations act as it. Its `created_by` is its own id; it is the only self-referencing row. The first human user, created by `init`, is a hub admin. Hub admins are the operators of the data root: they see every organization and company and their folder paths, and they create organizations. Every other user sees only what their memberships grant and never a path.
 
 `organization new` creates no membership; a hub admin grants the organization's first owner with `user add` and `membership grant` (row 7).
