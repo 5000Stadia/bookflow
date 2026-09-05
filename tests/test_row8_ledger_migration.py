@@ -45,11 +45,10 @@ def test_populated_co6_upgrades_without_changing_notes_or_existing_history(tmp_p
         assert conn.execute('PRAGMA integrity_check').fetchone() == ('ok',)
 
 
-def test_ledger_revision_uses_frozen_ddl_and_live_metadata_matches(tmp_path, monkeypatch):
-    old, fresh = tmp_path / 'old.db', tmp_path / 'fresh.db'
-    _make_revision(old, 'company', 'co0006', _old_data)
-    _make_revision(fresh, 'company', 'co0007', _old_data)
-    with open_database(fresh, writable=True) as db:
+def test_current_ledger_metadata_matches_head(tmp_path):
+    fresh = tmp_path / 'head.db'
+    with open_database(fresh, writable=True, create=True) as db:
+        assert migrate_to_head(db, 'company', None) == (None, HEADS['company'])
         for name in TABLES:
             expected = c.metadata.tables[name]
             reflected = sa.Table(name, sa.MetaData(), autoload_with=db.conn)
@@ -57,6 +56,22 @@ def test_ledger_revision_uses_frozen_ddl_and_live_metadata_matches(tmp_path, mon
                 (x.name, str(x.type), x.nullable, x.primary_key) for x in expected.c]
             assert {(f.parent.name, f.target_fullname) for f in reflected.foreign_keys} == {
                 (f.parent.name, f.target_fullname) for f in expected.foreign_keys}
+
+
+@pytest.mark.parametrize('revision', ['co0007', 'co0008'])
+def test_ledger_revision_uses_frozen_ddl(tmp_path, monkeypatch, revision):
+    old, fresh = tmp_path / 'old.db', tmp_path / 'fresh.db'
+    _make_revision(old, 'company', 'co0006', _old_data)
+    _make_revision(fresh, 'company', revision, _old_data)
+    with open_database(fresh, writable=True) as db:
+        # Historical journal-only schemas require these columns, unlike co0009's
+        # shared commercial envelope. Keep this witness at its original version.
+        reflected = sa.Table('document_lines', sa.MetaData(), autoload_with=db.conn)
+        for name in ('account_id', 'side', 'amount_minor_units', 'account_snapshot'):
+            assert reflected.c[name].nullable is False
+        assert 'tax_component_id' not in sa.Table(
+            'posting_line_sources', sa.MetaData(), autoload_with=db.conn,
+        ).c
         triggers = {row[0] for row in db.raw.execute("SELECT name FROM sqlite_schema WHERE type='trigger'")}
         assert 'transactions_no_delete' in triggers
         assert {f'{name}_no_{operation}' for name in TABLES[1:] for operation in ('update', 'delete')} <= triggers
@@ -66,7 +81,7 @@ def test_ledger_revision_uses_frozen_ddl_and_live_metadata_matches(tmp_path, mon
     for name in TABLES:
         monkeypatch.setattr(c, name, future)
     with open_database(old, writable=True) as db:
-        command.upgrade(_config('company', db.conn), 'co0007')
+        command.upgrade(_config('company', db.conn), revision)
     assert _schema_semantics(old) == _schema_semantics(fresh)
     module = importlib.import_module('bookflow.storage.company_migrations.versions.0007_ledger')
     assert all(type(statement) is str for statement in module.DDL)

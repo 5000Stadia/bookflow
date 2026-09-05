@@ -179,6 +179,42 @@ MATRIX['register calculate'] = {code: _LEDGER_WRITE_ERRORS[code] for code in (
 MATRIX['register query'] = dict(MATRIX['report general-ledger'])
 MATRIX['register query'].update({code: _LEDGER_WRITE_ERRORS[code] for code in ('E_INACTIVE_REFERENCE', 'E_AMOUNT_PRECISION')})
 
+for _verb in ('show', 'list', 'query', 'activate', 'deactivate'):
+    MATRIX['customer ' + _verb]['E_VALUE_RANGE'] = 'exact own or family receivable balance exceeds signed 64-bit range'
+
+_SALES_WRITE_ERRORS = {
+    'E_RECORD_NOT_FOUND': 'sale, customer, item, unit or referenced rule absent from selected company',
+    'E_VERSION_CONFLICT': 'whole-document expected version is stale, including no-op and repeated void',
+    'E_PERIOD_CLOSED': 'original or replacement accounting date is closed',
+    'E_DUPLICATE_NUMBER': 'number already reserved by this document type, including voided documents',
+    'E_INACTIVE_REFERENCE': 'newly selected reference or replacement posting account is inactive',
+    'E_VALUE_RANGE': 'exact amount, quantity, unit conversion or accumulated total exceeds supported range',
+    'E_AMOUNT_PRECISION': 'money input has more fractional digits than the home currency supports',
+    'E_REASON_REQUIRED': 'void lacks a reason or agent/system write lacks reason or directive',
+    'E_IDEMPOTENCY_MISMATCH': 'retry key reused with different original input',
+    'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
+    'E_DIRECTIVE_INACTIVE': 'context directive inactive',
+}
+for _noun in ('invoice', 'sales-receipt'):
+    for _verb in ('post', 'update', 'void'):
+        MATRIX[f'{_noun} {_verb}'] = dict(_SALES_WRITE_ERRORS)
+        if _verb != 'void':
+            MATRIX[f'{_noun} {_verb}']['E_PREVIEW_STALE'] = 'resolved commercial facts differ from the successful preview fingerprint'
+    MATRIX[f'{_noun} show'] = {'E_RECORD_NOT_FOUND': 'document of the requested type or revision absent'}
+    MATRIX[f'{_noun} query'] = {
+        'E_RECORD_NOT_FOUND': 'customer filter does not resolve',
+        'E_QUERY_STALE': 'company audit changed between query pages',
+    }
+    MATRIX[f'{_noun} history'] = {
+        'E_RECORD_NOT_FOUND': 'document of the requested type absent',
+        'E_QUERY_STALE': 'company audit changed between immutable revision pages',
+    }
+for _report in ('profit-and-loss', 'balance-sheet'):
+    MATRIX['report ' + _report] = {
+        'E_QUERY_STALE': 'posting or display facts changed between statement pages',
+        'E_VALUE_RANGE': 'public account amount or statement total exceeds signed 64-bit range',
+    }
+
 for _verb in ('post', 'update'):
     MATRIX['journal ' + _verb]['E_NO_EXCHANGE_RATE'] = 'no exact-date original-to-home rate and no manual override'
 MATRIX.update({

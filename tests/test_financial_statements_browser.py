@@ -32,21 +32,23 @@ def test_statements_from_navigation_paging_and_current_ledger(reference_site,tmp
         browser.wait_for("!!document.querySelector('a[href$=\"/report/profit-and-loss\"]')")
         browser.evaluate("document.querySelector('a[href$=\"/report/profit-and-loss\"]').click()")
         browser.wait_for("!!document.querySelector('[name=\"f:date_from\"]')")
+        # September adds two $120 net sales, $16 tax, $128 each in bank/AR.
+        # Annual/H2 profit and equity rise $240; assets rise $256.
         fill(browser,{"date_from":"2026-01-01","date_to":"2026-12-31","limit":"2"})
-        browser.wait_for("document.querySelector('[data-total=net_income]')?.textContent.includes('64150.00')")
+        browser.wait_for("document.querySelector('[data-total=net_income]')?.textContent.includes('64390.00')")
         assert browser.evaluate("document.querySelector('[name=\"f:date_from\"]').value") == "2026-01-01"
         first=browser.evaluate("document.querySelector('#statement-accounts tbody').textContent")
         browser.evaluate("document.querySelector('#statement-next-page button').click()")
         browser.wait_for("document.querySelector('#statement-accounts tbody')?.textContent!==%s" % json.dumps(first))
-        assert '64150.00' in browser.evaluate("document.querySelector('[data-total=net_income]').textContent")
+        assert '64390.00' in browser.evaluate("document.querySelector('[data-total=net_income]').textContent")
         assert browser.evaluate("document.querySelectorAll('form[data-generated-form] [name=\"f:cursor\"]').length") == 0
         fill(browser,{"date_from":"2026-07-01","date_to":"2026-12-31","limit":"2"})
-        browser.wait_for("document.querySelector('[data-total=net_income]')?.textContent.includes('41100.00')")
+        browser.wait_for("document.querySelector('[data-total=net_income]')?.textContent.includes('41340.00')")
         browser.navigate(site.base_url+company_path+"/report/balance-sheet")
         browser.wait_for("!!document.querySelector('[name=\"f:date_to\"]')")
         fill(browser,{"date_to":"2026-12-31","limit":"50"})
-        browser.wait_for("document.querySelector('[data-total=total_equity]')?.textContent.includes('74150.00')")
-        assert '74350.00' in browser.evaluate("document.querySelector('[data-total=assets]').textContent")
+        browser.wait_for("document.querySelector('[data-total=total_equity]')?.textContent.includes('74390.00')")
+        assert '74606.00' in browser.evaluate("document.querySelector('[data-total=assets]').textContent")
         assert browser.evaluate("document.documentElement.scrollWidth") <= width+1
         image=browser.call('Page.captureScreenshot',{'format':'png','captureBeyondViewport':False})
         (tmp_path/f"balance-sheet-{width}.png").write_bytes(base64.b64decode(image['data']))
@@ -54,7 +56,7 @@ def test_statements_from_navigation_paging_and_current_ledger(reference_site,tmp
         browser.wait_for("!!document.querySelector('#report-source-state')")
         assert browser.evaluate("document.querySelector('[name=\"f:date_from\"]').value") == "0001-01-01"
         fill(browser,{"limit":"2"})
-        browser.wait_for("document.querySelector('main pre')?.textContent.includes('72550.00')")
+        browser.wait_for("document.querySelector('main pre')?.textContent.includes('72678.00')")
         assert 'books changed' not in browser.evaluate("document.querySelector('#report-source-state').textContent")
         # A source watermark from an earlier information boundary must be explicit.
         browser.evaluate("document.querySelector('[name=_source_report_watermark]').value='0'")

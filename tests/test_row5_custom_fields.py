@@ -385,17 +385,39 @@ def test_employee_requirement_paths_accept_only_declared_or_active_employee_defi
     )
 
 
-def test_unknown_definition_and_transaction_values_are_rejected(conn: sa.Connection) -> None:
+def test_unknown_definition_and_unsupported_transaction_values_are_rejected(conn: sa.Connection) -> None:
     _assert_code(
         "E_RECORD_NOT_FOUND",
         lambda: plan_owner_value_patch(
             conn, record_type="customer", record_id=new_id(), patch={new_id(): "x"}, creating=True
         ),
     )
-    definition = _definition(conn, name="Invoice note", scopes=("invoice",))
+    definition = _definition(conn, name="Estimate note", scopes=("estimate",))
     _assert_code(
         "E_VALIDATION",
         lambda: plan_owner_value_patch(
-            conn, record_type="invoice", record_id=new_id(), patch={definition["id"]: "x"}, creating=True
+            conn, record_type="estimate", record_id=new_id(), patch={definition["id"]: "x"}, creating=True
+        ),
+    )
+
+
+@pytest.mark.parametrize("record_type", ["invoice", "sales_receipt"])
+def test_supported_sales_custom_values_round_trip(conn: sa.Connection, record_type: str) -> None:
+    definition = _definition(conn, name="Sale note", scopes=(record_type,))
+    owner = new_id()
+    plan = plan_owner_value_patch(
+        conn, record_type=record_type, record_id=owner,
+        patch={definition["id"]: "x"}, creating=True,
+    )
+    assert plan.logical_paths == (custom_field_logical_path(definition["id"]),)
+    apply_owner_value_plan(conn, plan)
+    shown, = read_owner_values(conn, record_type=record_type, record_id=owner)
+    assert shown["value"] == "x"
+    other_type = "sales_receipt" if record_type == "invoice" else "invoice"
+    _assert_code(
+        "E_RECORD_NOT_FOUND",
+        lambda: plan_owner_value_patch(
+            conn, record_type=other_type, record_id=new_id(),
+            patch={definition["id"]: "x"}, creating=True,
         ),
     )

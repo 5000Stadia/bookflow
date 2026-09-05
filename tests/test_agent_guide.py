@@ -58,17 +58,19 @@ def classified_fences(text: str) -> list[Fence]:
 
 
 def test_every_hand_authored_fence_is_classified():
-    fences = []
-    for name in ("concepts.md", "agent-guide.md", "reference-year.md"):
-        fences.extend(classified_fences(resource_text(name)))
-    assert [(fence.classification, fence.language) for fence in fences] == [
-        ("illustrative", "python"),
-        ("illustrative", "bash"),
-        ("executable", "python"),
-        ("illustrative", "bash"),
-        ("illustrative", "sh"),
-        ("illustrative", "sh"),
-    ]
+    expected = {
+        "concepts.md": [("illustrative", "python")],
+        "agent-guide.md": [
+            ("illustrative", "bash"),
+            ("executable", "python"),
+            ("illustrative", "bash"),
+        ],
+        # Seed/serve, documentation generation, and financial statement examples.
+        "reference-year.md": [("illustrative", "sh")] * 3,
+    }
+    for name, classifications in expected.items():
+        fences = classified_fences(resource_text(name))
+        assert [(f.classification, f.language) for f in fences] == classifications, name
 
 
 def test_agent_guide_covers_a_source_checkout_and_the_complete_trial_lifecycle():

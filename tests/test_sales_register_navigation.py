@@ -1,4 +1,6 @@
 """Sale effects remain typed, inspectable history and never register edits."""
+import json
+
 import pytest
 
 from bookflow import BookflowError
@@ -34,9 +36,12 @@ def test_sales_register_all_effects_and_journal_fences(client, document_type):
     noun = document_type.replace('_', '-')
     changed = run(noun + ' update', {document_type: sale['id'], 'expected_version': 1,
         'date': '2026-02-01', 'memo': 'Corrected sale'})
+    # Seed AR retains $100 taxable service + $8 tax + $20 exempt; the
+    # other seed invoice is void. Navigation bank/income start at zero.
+    baseline = {control: 10000 + 800 + 2000 if document_type == 'invoice' else 0, income: 0}
     for account in (control, income):
         current = run('register query', dict(account=account, date_from='2026-01-01', date_to='2026-12-31'))
-        assert current['current_balance']['balance']['minor_units'] == 1000
+        assert current['current_balance']['balance']['minor_units'] == baseline[account] + 1000
     run(noun + ' void', {document_type: sale['id'], 'expected_version': changed['version']}, reason='Navigation witness')
     for account in (control, income):
         for command in ('register query', 'report general-ledger'):
@@ -48,14 +53,14 @@ def test_sales_register_all_effects_and_journal_fences(client, document_type):
                 cursor = page['next_cursor']
                 if not cursor:
                     break
-            effects = [r for r in rows if r['kind'] == 'posting']
+            effects = [r for r in rows if r['kind'] == 'posting' and r['transaction_id'] == sale['id']]
             assert len(effects) == 4
             assert {r['transaction_type'] for r in effects} == {document_type}
             assert {r['transaction_id'] for r in effects} == {sale['id']}
             assert sorted(r['batch_kind'] for r in effects) == ['original', 'replacement', 'reversal', 'reversal']
             assert {r['transaction_type'] for r in rows if r['kind'] != 'posting'} == {None}
             if command == 'register query':
-                assert page['current_balance']['balance']['minor_units'] == 0
+                assert page['current_balance']['balance']['minor_units'] == baseline[account]
                 assert {r['category_label'] for r in effects} == {'Invoice' if document_type == 'invoice' else 'Sales receipt'}
                 assert {(r['revision_number'], r['memo']) for r in effects} == {(1, 'Original sale'), (2, 'Corrected sale')}
     assert edit_projection(sale, {'id': control}, lambda r: r['name']) is None
@@ -82,9 +87,14 @@ def test_browser_sale_history_links_and_no_journal_actions(register_browser, doc
     run(noun + ' update', {document_type: sale['id'], 'expected_version': 1, 'memo': 'Corrected sale'})
     path = f'/c/{env.site.company_id}/account/{control}/register'
     env.browser.navigate(env.site.base_url + path + '?date_from=2026-01-01&date_to=2026-12-31')
-    env.browser.wait_for("document.querySelectorAll('#register-history tr[data-kind=posting]').length === 3")
-    rows = env.browser.evaluate("""Array.from(document.querySelectorAll('#register-history tr[data-kind=posting]')).map(r => ({
-        text: r.textContent, links: Array.from(r.querySelectorAll('a')).map(a => ({text:a.textContent, href:a.getAttribute('href')}))}))""")
+    # The shared AR register also contains the seed invoices. Scope history
+    # assertions to this document, while checking the complete account balance.
+    selector = json.dumps(f'#register-history tr[data-kind=posting]:has(a[href^="/c/{env.site.company_id}/{noun}/{sale["id"]}?"])')
+    env.browser.wait_for(f"document.querySelectorAll({selector}).length === 3")
+    expected_balance = '138.00' if document_type == 'invoice' else '10.00'
+    assert expected_balance in env.browser.evaluate("document.querySelector('#register-current').textContent")
+    rows = env.browser.evaluate("""Array.from(document.querySelectorAll(%s)).map(r => ({
+        text: r.textContent, links: Array.from(r.querySelectorAll('a')).map(a => ({text:a.textContent, href:a.getAttribute('href')}))}))""" % selector)
     assert all(('Invoice' if document_type == 'invoice' else 'Sales receipt') in r['text'] for r in rows)
     assert all([a['text'] for a in r['links']] == ['History'] for r in rows)
     targets = [r['links'][0]['href'] for r in rows]

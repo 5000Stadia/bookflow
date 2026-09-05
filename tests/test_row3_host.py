@@ -630,6 +630,13 @@ def _read_calls(hosted):
         calls[f"{noun} list"] = ({}, cid)
         calls[f"{noun} query"] = ({"limit": 2}, cid)
         calls[f"{noun} show"] = ({noun.replace("-", "_"): listed["items"][0]["id"]}, cid)
+    for noun in ("invoice", "sales-receipt"):
+        sales = hosted.ok(f"{noun}.query", {"status": "posted"}, company=cid)["items"]
+        assert sales, noun
+        selector = {noun.replace("-", "_"): sales[0]["id"]}
+        calls[f"{noun} query"] = ({"status": "posted", "limit": 2}, cid)
+        calls[f"{noun} show"] = (selector, cid)
+        calls[f"{noun} history"] = ({**selector, "limit": 2}, cid)
     journal = hosted.ok("journal.query", company=cid)["items"][0]
     calls.update({
         "journal query": ({}, cid),
@@ -1296,6 +1303,16 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
     from bookflow.adapters.workbench import forms as F
     from bookflow.core import registry
     registry.load_all()
+    commercial_fields = {}
+    for noun in ("invoice", "sales-receipt"):
+        scope = noun.replace("-", "_")
+        hosted.ok("custom-field.create", {
+            "name": f"{noun} form ownership", "kind": "text", "scopes": [scope],
+        }, company=hosted.company_id)
+        definitions = hosted.ok("custom-field.list", {
+            "filter": [f"target_type={scope}"],
+        }, company=hosted.company_id)["items"]
+        commercial_fields[noun] = {field["id"] for field in definitions}
     api = TestClient(hosted.handle.app)
     assert api.post("/login", json={"username": hosted.login, "password": PASSWORD}).status_code == 200
     for cmd in registry.routed_commands():
@@ -1306,16 +1323,27 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
         for leaf in F.leaves(cmd.input_model):
             if leaf["path"] == "custom_fields" and (
                 getattr(definition, "runtime_field_provider", None) == "custom-fields"
-                or (cmd.noun in ("journal", "register") and cmd.verb in ("post", "update"))
+                or (cmd.noun in ("journal", "register", "invoice", "sales-receipt")
+                    and cmd.verb in ("post", "update"))
             ):
                 assert 'name="f:custom_fields"' not in page.text, cmd.name
                 assert 'name="cf:' in page.text, cmd.name
-            elif leaf["path"] == "custom_field_kinds" and cmd.noun in ("journal", "register"):
+            elif leaf["path"] == "custom_field_kinds" and cmd.noun in (
+                "journal", "register", "invoice", "sales-receipt"
+            ):
                 assert 'name="f:custom_field_kinds"' not in page.text, cmd.name
                 kinds = re.findall(r'name="cf-kind:([^"]+)"', page.text)
                 values = re.findall(r'name="cf:([^"]+)"', page.text)
                 assert kinds and sorted(kinds) == sorted(values), cmd.name
                 assert len(kinds) == len(set(kinds)), cmd.name
+                if cmd.noun in commercial_fields:
+                    assert set(values) == commercial_fields[cmd.noun], cmd.name
+            elif leaf["path"] == "cursor" and cmd.name in (
+                "report balance-sheet", "report profit-and-loss"
+            ):
+                # Statement continuations belong to the result's Next form;
+                # rerunning the filter form must always start a fresh report.
+                assert 'name="f:cursor"' not in page.text, cmd.name
             elif leaf["kind"] == "collection":
                 assert page.text.count(
                     f'name="collection:{leaf["path"]}"'

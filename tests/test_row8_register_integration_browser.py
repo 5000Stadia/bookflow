@@ -40,8 +40,9 @@ def test_seeded_register_demo_balances_and_layout(register_browser, width, heigh
     browser.viewport(width, height)
     url = f'{env.site.base_url}/c/{env.site.company_id}/account/{bank["id"]}/register?date_from=2026-01-01&date_to=2026-12-31'
     browser.navigate(url)
-    browser.wait_for("document.querySelector('#register-current').textContent.includes('6120.95')")
-    assert '6120.95' in browser.evaluate("document.querySelector('#register-period-totals').textContent")
+    # $6,120.95 unchanged journals + $100 service + $8 tax + $20 exempt.
+    browser.wait_for("document.querySelector('#register-current').textContent.includes('6248.95')")
+    assert '6248.95' in browser.evaluate("document.querySelector('#register-period-totals').textContent")
     assert 'DEMO-JPY' in browser.evaluate("document.querySelector('#register-history').textContent")
     assert 'REG-SPLIT' in browser.evaluate("document.querySelector('#register-history').textContent")
     assert 'Splits' in browser.evaluate("document.querySelector('#register-history').textContent")

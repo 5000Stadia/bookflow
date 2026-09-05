@@ -61,7 +61,12 @@ def _insert_reference_fixture(client) -> tuple[str, str, str, str]:
 
 
 def test_row5_defaults_are_visible_as_typed_company_info(client):
-    info = client.company.show(company="Demo Plumbing Co")["info"]
+    client.organization.new(name="Default Settings Org")
+    made = client.company.new(
+        legal_name="Default Settings Co", home_currency="USD",
+        organization="Default Settings Org", timezone="UTC",
+    )
+    info = client.company.show(company=made["company_id"])["info"]
     assert info["use_account_numbers"] is True
     assert info["show_lowest_subaccount_only"] is False
     assert info["required_employee_profile_fields"] == DEFAULT_REQUIREMENTS
@@ -76,6 +81,11 @@ def test_row5_defaults_are_visible_as_typed_company_info(client):
 
 
 def test_company_update_round_trips_all_nonreference_settings(client):
+    # The sales demo enables tax; start from rollout settings so enabling it
+    # remains a real changed field in the update receipt.
+    client.company.update(
+        sales_tax_enabled=False, default_sales_tax_item_id=None, company="Demo Plumbing Co",
+    )
     out = client.company.update(
         use_account_numbers=False,
         show_lowest_subaccount_only=True,
@@ -99,6 +109,7 @@ def test_company_update_round_trips_all_nonreference_settings(client):
     }
     info = client.company.show(company="Demo Plumbing Co")["info"]
     assert info["required_employee_profile_fields"] == [["name"], ["phone", "email"]]
+    assert info["sales_tax_enabled"] is True
     assert info["sales_tax_liability_basis"] == "payment_receipt"
     assert info["free_on_board"] == "Origin"
 
