@@ -44,8 +44,10 @@ returns E_VERSION_CONFLICT without changing anything. No blind overwrite exists.
 An unchanged canonical rate at the expected version is a no-op. Changing a rate
 increments its version by one. Request idempotency replays the committed receipt.
 
-`rate show` takes `date` and `from_currency`, returning the exact pair or
-E_RECORD_NOT_FOUND. `rate query` accepts optional inclusive date_from/date_to and
+`rate show` takes either `rate_id` or both `date` and `from_currency`, returning
+the selected row or E_RECORD_NOT_FOUND. Supplying both selector forms, an incomplete
+pair, or neither is E_VALIDATION. Stable-id selection supports a saved rate detail
+link; it does not change exact-date lookup during posting. `rate query` accepts optional inclusive date_from/date_to and
 from_currency filters, limit1–200 (default50), and cursor. It orders by date,
 from_currency and stable id. Existing authenticated company query continuation
 binds actor, permission state, filters and watermark; a changed rate invalidates
@@ -58,8 +60,8 @@ entered_by/entered_at. Write output also identifies changed/no-op and dry_run.
 The rate table is not a master-data list and has no activate/deactivate or list
 undo operation. Its current value and previous versions remain in ordinary audit.
 Rate forms expose all inputs and results through the generated workbench;
-rate query is reachable from the Accounting navigation group. Record details are
-selected by date/currency; successful set can return to its populated result form.
+rate query is reachable from the Accounting navigation group. Record details support the stable id or date/currency; successful set opens its
+authoritative detail by id.
 
 ## Storage and atomicity
 
