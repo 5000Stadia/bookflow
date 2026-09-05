@@ -390,10 +390,17 @@ def execute(cmd: Command, raw_input: dict[str, Any], ctx: Context, s: Session, *
 
 def run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: str | None = None,
         company_selector: str | None = None, company_source: str = "option", dry_run: bool = False,
-        _login: str | None = None) -> dict[str, Any]:
+        _login: str | None = None, input_stream=None, output_stream=None) -> dict[str, Any]:
     """Execute a command from a fresh process: data root, hand-off to a live host, lock, hub, actor, migration, execute."""
     if performance.enabled():
         performance.protect_selection(data_root)
+    if cmd.transfer is not None:
+        from bookflow.core.transfer_run import run_transfer
+        return run_transfer(cmd, raw_input, ctx, data_root=data_root, selector=company_selector,
+                            source=company_source, dry_run=dry_run, login=_login,
+                            input_stream=input_stream, output_stream=output_stream)
+    if input_stream is not None or output_stream is not None:
+        raise BookflowError("E_USAGE", message="This command does not accept a binary stream.")
     with performance.span("command", command=cmd.name, mode="offline"):
         return _run(cmd, raw_input, ctx, data_root=data_root, company_selector=company_selector,
                     company_source=company_source, dry_run=dry_run, _login=_login)
@@ -453,12 +460,9 @@ def _run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: st
     return guard(under_lock, lambda: s.is_hub_admin)
 
 
-def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, company_selector: str | None = None,
-                   company_source: str = "option", dry_run: bool = False) -> dict[str, Any]:
-    """Run a command inside an open, locked session with a loaded actor. Used by run(), demo reset, and later the host."""
-    from bookflow.core import idempotency
-    s.dry_run = dry_run
-    s.hub_touched, s.company_touched = [], []
+def authorize(cmd: Command, ctx: Context, s: Session, *, company_selector: str | None = None,
+              company_source: str = "option", dry_run: bool = False, read_only: bool = False) -> Context:
+    """Shared company, role, directive and reason checks, with optional read-only opening."""
     if cmd.scope == "company":
         if s.company_row is None or (company_selector is not None):
             s.close_company()
@@ -470,7 +474,7 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
             raise BookflowError("E_PERMISSION", details={"capability": cmd.capability, "required_role": cmd.required_role, "role": role})
         ctx = ctx.model_copy(update={"company_id": s.company_row["id"]})
         if s.company is None:
-            open_company(s, ctx, "company" in cmd.writes and not dry_run)
+            open_company(s, ctx, "company" in cmd.writes and not dry_run and not read_only)
     elif cmd.required_role == "hub_admin" and not s.is_hub_admin:
         raise BookflowError("E_PERMISSION", details={"capability": cmd.capability, "required_role": "hub_admin"})
     # directive resolution and the reason gate (blueprint 5.8)
@@ -484,6 +488,29 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
         s.directive_code = drow["code"]
     if cmd.is_write and s.actor.kind in ("agent", "system") and not ctx.reason and not ctx.directive_id:
         raise BookflowError("E_REASON_REQUIRED")
+    if ctx.idempotency_key and not cmd.accepts_idempotency_key:
+        raise BookflowError("E_USAGE", message=f"`{cmd.name}` does not accept an idempotency key.")
+    return ctx
+
+
+def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, company_selector: str | None = None,
+                   company_source: str = "option", dry_run: bool = False) -> dict[str, Any]:
+    """Run a command inside an open, locked session with a loaded actor. Used by run(), demo reset, and later the host."""
+    from bookflow.core import idempotency
+    s.dry_run = dry_run
+    s.hub_touched, s.company_touched = [], []
+    ctx = authorize(cmd, ctx, s, company_selector=company_selector,
+                    company_source=company_source, dry_run=dry_run)
+    if cmd.transfer is not None:
+        from bookflow.core.transfers import validate_resource
+        validate_resource(cmd, inp, ctx, s)
+    if cmd.name in ("attachment link", "attachment unlink", "company compact"):
+        from bookflow.company.attachment_gc import pending, recover_pending
+        if dry_run:
+            if pending(s):
+                raise BookflowError("E_DB_BUSY", message="Attachment collection requires recovery before preview.")
+        else:
+            recover_pending(s, ctx)
     # idempotency lookup (blueprint 6.5)
     key_db = None
     ihash = None
@@ -491,7 +518,11 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
         if not cmd.accepts_idempotency_key:
             raise BookflowError("E_USAGE", message=f"`{cmd.name}` does not accept an idempotency key.")
         key_db = s.company if cmd.truth == "company" else s.hub
-        ihash = idempotency.input_hash(inp.model_dump(mode="json"), s.company_row["id"] if s.company_row else None)
+        retry_input = inp.model_dump(mode="json")
+        if cmd.transfer is not None and cmd.transfer.direction == "input":
+            retry_input = {"input": retry_input, "body": {
+                "sha256": s.transfer.info.sha256, "size_bytes": s.transfer.info.size_bytes}}
+        ihash = idempotency.input_hash(retry_input, s.company_row["id"] if s.company_row else None)
         hit = idempotency.lookup(key_db, s.actor.id, ctx.idempotency_key, cmd.name, ihash)
         if hit is not None:
             replay = _replay(cmd, hit, s)
@@ -562,6 +593,10 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
     try:
         with performance.span("command.apply", command=cmd.name):
             applied = cmd.apply(plan, ctx, s)
+        if applied.finalized:
+            if any(db is not None and db.write_transaction for db in (s.company, s.hub)):
+                raise BookflowError("E_INTERNAL", message="A finalized command left an unfinished transaction.")
+            return applied
         if s.pending_config:
             s.config.stage_pending(s.hub, request_id=ctx.request_id)
         if cmd.kind == "advisory":
@@ -575,7 +610,9 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
         changed = bool(applied.touched) or applied.audited or bool(s.hub_touched) or s.pending_config
         output = applied.output.model_dump(mode="json")
         if not changed:
-            # a no-op records no event and bumps no version, but the principals mirror and the projection repair still apply
+            # A no-op keeps its successful retry result without creating an audit event.
+            if key_db is not None and ihash:
+                idempotency.store(key_db, s.actor.id, ctx.idempotency_key, cmd.name, ihash, ctx.request_id, output)
             if s.company is not None and s.company.write_transaction:
                 s.company.raw.execute("COMMIT")
             if s.hub is not None and s.hub.writable:

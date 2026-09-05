@@ -64,7 +64,8 @@ def _schema_semantics(path):
         }
 
 
-def test_company_notes_fresh_upgrade_data_and_verified_backup(tmp_path):
+def test_company_notes_fresh_upgrade_data_and_verified_backup(tmp_path, monkeypatch):
+    monkeypatch.setitem(HEADS, "company", "co0005")
     fresh, upgraded = tmp_path / "fresh.db", tmp_path / "upgraded.db"
     _make_revision(fresh, "company", HEADS["company"], _populate_principal)
     _make_revision(upgraded, "company", "co0004", _populate_principal)
@@ -137,7 +138,8 @@ def test_notes_migration_downgrade_is_additive_and_frozen(tmp_path):
         assert db.raw.execute("SELECT display_name FROM principals").fetchone() == ("Bookkeeper",)
 
 
-def test_hub_note_capabilities_preserve_historical_seed_and_custom_rows(tmp_path):
+def test_hub_note_capabilities_preserve_historical_seed_and_custom_rows(tmp_path, monkeypatch):
+    monkeypatch.setitem(HEADS, "hub", "hub0007")
     assert "bookflow.core.registry" not in inspect.getsource(HUB0007)
     path = tmp_path / "hub.db"
     _make_revision(path, "hub", "hub0005", lambda _conn: None)
@@ -150,7 +152,7 @@ def test_hub_note_capabilities_preserve_historical_seed_and_custom_rows(tmp_path
         before = _normalized_schema(db.raw)
         assert migrate_to_head(db, "hub", tmp_path / "backups") == ("hub0006", "hub0007")
         assert _normalized_schema(db.raw) == before
-        assert tuple(db.raw.execute(query)) == tuple(sorted((*CURRENT_ROLE_CAPABILITY_SEED, custom)))
+        assert tuple(db.raw.execute(query)) == tuple(sorted((*HUB0005.ROLE_CAPABILITY_SEED, *HUB0007.ROLE_CAPABILITY_SEED, custom)))
         assert {row for row in db.raw.execute(query) if row[1] == "note"} == {
             (role, "note", required)
             for role in ("readonly", "standard", "admin", "owner", "hub_admin")

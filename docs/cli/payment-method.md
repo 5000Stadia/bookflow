@@ -14,6 +14,7 @@ Activate a payment method.
 | Capability | payment-method |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/payment-method.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -144,6 +145,7 @@ Create a payment method.
 | Capability | payment-method |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/payment-method.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -273,6 +275,7 @@ Deactivate a payment method.
 | Capability | payment-method |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/payment-method.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -404,6 +407,7 @@ List payment methods.
 | Capability | payment-method |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/payment-method.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -508,6 +512,7 @@ Query a bounded page of payment methods.
 | Capability | payment-method |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/payment-method.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -614,6 +619,7 @@ Show one payment method.
 | Capability | payment-method |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/payment-method.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -722,6 +728,7 @@ Update a payment method.
 | Capability | payment-method |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/payment-method.update` |
+| External binary body | none |
 
 ### CLI
 

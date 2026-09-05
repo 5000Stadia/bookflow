@@ -14,6 +14,7 @@ Say that you stopped editing a record.
 | Capability | presence |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/presence.clear` |
+| External binary body | none |
 
 ### CLI
 
@@ -105,6 +106,7 @@ Say that you are editing a record, so other people's screens can show it; adviso
 | Capability | presence |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/presence.set` |
+| External binary body | none |
 
 ### CLI
 

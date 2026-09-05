@@ -32,6 +32,31 @@ The secret is shown once. Programs and agents send it as `Authorization: Bearer 
 
 CLI commands run on the same machine are handed to a running host automatically.
 
+Attach a local PDF using a customer id from `bookflow customer query --company "Demo Plumbing Co" --json`:
+
+```sh
+uv run bookflow attachment add customer "$customer_id" receipt.pdf --company "Demo Plumbing Co" --json
+uv run bookflow attachment get "$attachment_id" --out downloaded-receipt.pdf --company "Demo Plumbing Co" --json
+```
+
+Set `attachment_id` to the upload result's `attachment.id`. Downloads require a new output path and publish atomically after verification. Python accepts an open binary file:
+
+```python
+from bookflow import connect
+
+client = connect()
+client.use_company("Demo Plumbing Co")
+customer_id = client.customer.query(limit=1)["items"][0]["id"]
+with open("receipt.pdf", "rb") as source:
+    result = client.attachment.add(
+        record_type="customer", record_id=customer_id,
+        original_filename="receipt.pdf", media_type="application/pdf",
+        input_stream=source,
+    )
+```
+
+See [binary transfers](docs/transfers.md) for Python downloads, HTTP bodies, limits, and retry behavior.
+
 ## Documentation
 
 The generated [documentation index](docs/index.md) includes the complete command and database-schema references, core concepts, and an executable guide for a fresh agent. Regenerate it after changing a command or schema and verify that the committed tree is current:

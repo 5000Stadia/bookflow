@@ -14,6 +14,7 @@ Activate a class.
 | Capability | class |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/class.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -150,6 +151,7 @@ Create a class.
 | Capability | class |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/class.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -285,6 +287,7 @@ Deactivate a class.
 | Capability | class |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/class.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -423,6 +426,7 @@ List classes.
 | Capability | class |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/class.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -530,6 +534,7 @@ Query a bounded page of classes.
 | Capability | class |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/class.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -636,6 +641,7 @@ Show one class.
 | Capability | class |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/class.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -750,6 +756,7 @@ Update a class.
 | Capability | class |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/class.update` |
+| External binary body | none |
 
 ### CLI
 

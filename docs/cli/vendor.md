@@ -14,6 +14,7 @@ Activate a vendor.
 | Capability | vendor |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/vendor.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -308,6 +309,7 @@ Create a vendor.
 | Capability | vendor |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/vendor.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -657,6 +659,7 @@ Deactivate a vendor.
 | Capability | vendor |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/vendor.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -952,6 +955,7 @@ List vendors.
 | Capability | vendor |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/vendor.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -1169,6 +1173,7 @@ Query a bounded page of vendors.
 | Capability | vendor |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/vendor.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -1283,6 +1288,7 @@ Show one vendor.
 | Capability | vendor |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/vendor.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -1555,6 +1561,7 @@ Update a vendor.
 | Capability | vendor |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/vendor.update` |
+| External binary body | none |
 
 ### CLI
 

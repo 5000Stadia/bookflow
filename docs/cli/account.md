@@ -14,6 +14,7 @@ Activate a account.
 | Capability | account |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/account.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -209,6 +210,7 @@ Create a account.
 | Capability | account |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/account.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -418,6 +420,7 @@ Deactivate a account.
 | Capability | account |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/account.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -614,6 +617,7 @@ List accounts.
 | Capability | account |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/account.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -751,6 +755,7 @@ Query a bounded page of accounts.
 | Capability | account |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/account.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -863,6 +868,7 @@ Show one account.
 | Capability | account |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/account.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -1035,6 +1041,7 @@ Update a account.
 | Capability | account |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/account.update` |
+| External binary body | none |
 
 ### CLI
 

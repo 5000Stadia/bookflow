@@ -14,6 +14,7 @@ Generate the complete command, schema, concepts, and agent-guide documentation t
 | Capability | none |
 | Feature | — |
 | HTTP | Local only; no HTTP route. |
+| External binary body | none |
 
 ### CLI
 

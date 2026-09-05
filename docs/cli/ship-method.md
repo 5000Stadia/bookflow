@@ -14,6 +14,7 @@ Activate a ship method.
 | Capability | ship-method |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/ship-method.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -144,6 +145,7 @@ Create a ship method.
 | Capability | ship-method |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/ship-method.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -273,6 +275,7 @@ Deactivate a ship method.
 | Capability | ship-method |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/ship-method.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -404,6 +407,7 @@ List ship methods.
 | Capability | ship-method |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/ship-method.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -508,6 +512,7 @@ Query a bounded page of ship methods.
 | Capability | ship-method |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/ship-method.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -614,6 +619,7 @@ Show one ship method.
 | Capability | ship-method |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/ship-method.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -722,6 +728,7 @@ Update a ship method.
 | Capability | ship-method |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/ship-method.update` |
+| External binary body | none |
 
 ### CLI
 

@@ -14,6 +14,7 @@ Activate a price level.
 | Capability | price-level |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/price-level.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -189,6 +190,7 @@ Create a price level.
 | Capability | price-level |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/price-level.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -375,6 +377,7 @@ Deactivate a price level.
 | Capability | price-level |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/price-level.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -551,6 +554,7 @@ List price levels.
 | Capability | price-level |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/price-level.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -682,6 +686,7 @@ Query a bounded page of price levels.
 | Capability | price-level |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/price-level.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -791,6 +796,7 @@ Show one price level.
 | Capability | price-level |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/price-level.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -944,6 +950,7 @@ Update a price level.
 | Capability | price-level |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/price-level.update` |
+| External binary body | none |
 
 ### CLI
 

@@ -14,6 +14,7 @@ Create, or move to trash and recreate, the demo organization and its demo compan
 | Capability | demo |
 | Feature | — |
 | HTTP | `POST /commands/demo.reset` |
+| External binary body | none |
 
 ### CLI
 

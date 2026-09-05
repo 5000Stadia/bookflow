@@ -385,6 +385,97 @@ def make_local_handler(host, version: str):
             finally:
                 host.reader_done()
 
+    def transfer(login, envelope, socket, *, check=None):
+        from pydantic import ValidationError
+        from bookflow.adapters.http.local import validate_transfer_envelope
+        from bookflow.core import registry
+        from bookflow.core.transfer_protocol import FramedReader, _encode, send_body, send_json
+        from bookflow.core.transfer_resources import TransferLease
+        from bookflow.core.transfers import HostedTransfer
+
+        transport = TransferLease("", "", lambda lease: None)
+        outer_check = check or transport.check_io
+        hosted = None
+        output_started = False
+        try:
+            validate_transfer_envelope(envelope)
+            try:
+                ctx = context_from_envelope(envelope)
+            except (ValidationError, TypeError, ValueError) as exc:
+                raise BookflowError("E_VALIDATION", message="Invalid transfer context.") from exc
+            sent = envelope.get("version") or ctx.client_version
+            if sent != version:
+                raise BookflowError("E_VERSION_MISMATCH", details={"host": version, "client": sent})
+            cmd = registry.get(envelope["command"])
+            if (cmd is None or cmd.bootstrap or cmd.transfer is None
+                    or cmd.transfer.direction != envelope["transfer"]["direction"]):
+                raise BookflowError("E_USAGE", message="Command does not support this transfer direction.")
+            user_id = user_for_login(host, login)
+            hosted = HostedTransfer(host, cmd, envelope["input"], ctx, user_id, login,
+                                    selector=envelope.get("company_selector"),
+                                    source=envelope.get("company_source", "option"),
+                                    dry_run=envelope.get("dry_run", False))
+
+            def check_io():
+                outer_check()
+                hosted.resource.lease.check_io()
+
+            if cmd.transfer.direction == "input":
+                send_json(socket, {"ready": True, "limit": hosted.prepared.limit}, check=check_io)
+                hosted.receive(FramedReader(socket, hosted.prepared.limit, check=check_io))
+                output = hosted.finish_input()
+            else:
+                info = hosted.prepared.info
+                ready = dict(hosted.prepared.metadata or {})
+                ready.update(ready=True, sha256=info.sha256, size_bytes=info.size_bytes)
+                # Once ready starts, failure must truncate rather than masquerade as a body frame.
+                _encode(ready, 65536)
+                output_started = True
+                send_json(socket, ready, check=check_io)
+
+                def check_output():
+                    outer_check()
+                    hosted.check_output()
+
+                class VerifiedReader:
+                    def __init__(self):
+                        import hashlib
+                        self.digest = hashlib.sha256()
+                        self.size = 0
+
+                    def read(self, size):
+                        chunk = hosted.reader.read(size)
+                        if not isinstance(chunk, bytes):
+                            raise BookflowError("E_IO", message="Invalid download body.")
+                        self.digest.update(chunk)
+                        self.size += len(chunk)
+                        if self.size > info.size_bytes or (not chunk and (
+                                self.size != info.size_bytes or self.digest.hexdigest() != info.sha256)):
+                            raise BookflowError("E_IO", message="Download body changed during transfer.")
+                        return chunk
+
+                send_body(socket, VerifiedReader(), info.size_bytes, check=check_output)
+                check_output()
+                output = hosted.output
+            hosted.close()
+            send_json(socket, {"output": output}, check=outer_check)
+        except Exception as exc:
+            if not output_started:
+                error = exc if isinstance(exc, BookflowError) else BookflowError(
+                    "E_IO" if isinstance(exc, (OSError, TimeoutError)) else "E_INTERNAL",
+                    message="Local transfer failed.")
+                try:
+                    send_json(socket, {"error": error.to_dict()}, check=outer_check)
+                except (BookflowError, OSError):
+                    pass
+        finally:
+            try:
+                if hosted is not None:
+                    hosted.close()
+            finally:
+                transport.close()
+
+    handler.transfer = transfer
     return handler
 
 

@@ -349,7 +349,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("style.css", "htmx.min.js", "workflow.js")
+        for name in ("style.css", "htmx.min.js", "workflow.js", "annotations.js")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -393,6 +393,27 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         if name == "company show":
             request.state.workbench_company = result
         return result
+
+    def annotations(company_id, noun, record_id, shown, role_view, cred):
+        """Project target metadata and existing UI authority; commands own all data access."""
+        if not company_id or not record_id:
+            return None
+        from bookflow.company.records import target_types
+        record_type = registry.noun_meta(noun).get("record_type")
+        if record_type not in target_types():
+            return None
+        shown = shown or {}
+        key = shown.get("company_id") if noun == "company" else shown.get("id")
+        key = key or (company_id if noun == "company" else record_id)
+        if key == "self":
+            return None
+        allowed = {
+            name: bool((cmd := registry.get(name)) and _role_allows(cmd, role_view or {}, hub_admin=cred.hub_admin))
+            for name in ("note add", "note edit", "note list", "attachment add", "attachment get",
+                         "attachment list", "attachment unlink", "activity")
+        }
+        return {"company": company_id, "target": {"record_type": record_type, "record_id": key},
+                "allowed": allowed}
 
     @app.get("/static/{name}")
     def static(name: str):
@@ -812,6 +833,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             }
         return render("record.html", request, company_id=company_id, noun=noun, record_id=record_id, record=visible_record, record_title=record_title, audit=audit, meta=meta, verbs=verbs,
                       audit_undo=audit_undo, contact_copy=contact_copy, workspace=workspace,
+                      annotations=annotations(company_id, noun, record_id, out, role_view, cred),
                       presence=(meta["record_type"] in _presence_types()) and company_id is not None
                                and _may_publish_presence(role_view, hub_admin=cred.hub_admin),
                       editing=(out.get("editing_by") or []) if _may_publish_presence(role_view, hub_admin=cred.hub_admin) else [])
@@ -1089,6 +1111,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return_context = {"token": return_token, "target": return_target}
         return render("form.html", request, company_id=company_id, noun=noun, verb=verb, cmd=cmd, leaves=described, originals=originals,
                       attempted=attempted, record_id=record_id, runtime_fields=runtime_fields,
+                      annotations=annotations(company_id, noun, record_id, shown, authorized_company, cred),
                       ctx_fields=F.context_fields(cmd), result=result, error=error,
                       preview=preview, get=F.get_path, form_value=F.form_value,
                       return_context=return_context, workflow_note=workflow_note,

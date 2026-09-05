@@ -6,7 +6,7 @@ Bookflow exposes named commands with declared input and output models, scope, wr
 
 A command is either hub-scoped or company-scoped. Hub commands operate on the registry and do not need a selected company. Company commands resolve one visible company before they open its database. `init`, `serve`, `company use`, and documentation generation are local operations rather than HTTP routes.
 
-The Python API returns JSON-shaped dictionaries and raises `BookflowError`. The CLI can render those dictionaries for people or return the same shape with `--json`. HTTP uses JSON request and response bodies. The workbench invokes the same commands through the host. Adapter-only concerns such as CLI formatting, HTTP authentication, and browser form rendering do not change command validation or authorization.
+The Python API returns JSON-shaped dictionaries and raises `BookflowError`. The CLI can render those dictionaries for people or return the same shape with `--json`. Ordinary HTTP commands use JSON request and response bodies. Commands with a registry transfer descriptor use a separate raw binary route and external Python streams; see [binary transfers](transfers.md). The workbench invokes the same commands through the host. Adapter-only concerns such as CLI formatting, HTTP authentication, and browser form rendering do not change command validation or authorization.
 
 ## Company selection
 

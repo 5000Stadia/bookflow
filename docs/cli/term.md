@@ -14,6 +14,7 @@ Activate a term.
 | Capability | term |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/term.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -164,6 +165,7 @@ Create a term.
 | Capability | term |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/term.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -319,6 +321,7 @@ Deactivate a term.
 | Capability | term |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/term.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -470,6 +473,7 @@ List terms.
 | Capability | term |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/term.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -584,6 +588,7 @@ Query a bounded page of terms.
 | Capability | term |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/term.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -692,6 +697,7 @@ Show one term.
 | Capability | term |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/term.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -821,6 +827,7 @@ Update a term.
 | Capability | term |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/term.update` |
+| External binary body | none |
 
 ### CLI
 

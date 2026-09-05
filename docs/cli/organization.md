@@ -14,6 +14,7 @@ List the organizations the acting user can see.
 | Capability | organization |
 | Feature | — |
 | HTTP | `POST /commands/organization.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -115,6 +116,7 @@ Create an organization, the business entity that holds one or more companies.
 | Capability | organization |
 | Feature | — |
 | HTTP | `POST /commands/organization.new` |
+| External binary body | none |
 
 ### CLI
 
@@ -240,6 +242,7 @@ Rename an organization, optionally moving its folder.
 | Capability | organization |
 | Feature | — |
 | HTTP | `POST /commands/organization.rename` |
+| External binary body | none |
 
 ### CLI
 
@@ -345,6 +348,7 @@ Show one organization.
 | Capability | organization |
 | Feature | — |
 | HTTP | `POST /commands/organization.show` |
+| External binary body | none |
 
 ### CLI
 

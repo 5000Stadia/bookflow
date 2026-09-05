@@ -14,6 +14,7 @@ Activate a unit of measure set.
 | Capability | unit-of-measure |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/unit-of-measure.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -203,6 +204,7 @@ Create a unit of measure set.
 | Capability | unit-of-measure |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/unit-of-measure.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -399,6 +401,7 @@ Deactivate a unit of measure set.
 | Capability | unit-of-measure |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/unit-of-measure.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -589,6 +592,7 @@ List units of measure.
 | Capability | unit-of-measure |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/unit-of-measure.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -736,6 +740,7 @@ Query a bounded page of units of measure.
 | Capability | unit-of-measure |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/unit-of-measure.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -874,6 +879,7 @@ Show one unit of measure set.
 | Capability | unit-of-measure |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/unit-of-measure.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -1041,6 +1047,7 @@ Update a unit of measure set.
 | Capability | unit-of-measure |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/unit-of-measure.update` |
+| External binary body | none |
 
 ### CLI
 

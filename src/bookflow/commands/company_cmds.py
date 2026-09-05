@@ -163,6 +163,7 @@ class UpdateOutput(_WriteOutput):
 class CompanyUpdateInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     expected_version: int | None = Field(None, ge=1, description="The info_version you read; omit for a blind write")
+    attachment_max_bytes: int | None = Field(None, strict=True, ge=1, le=100000000, description="Maximum actual upload bytes per file; default 25,000,000.")
     legal_name: str | None = Field(None, max_length=200, description="Name on tax forms; also updates the registry copy")
     tax_id_kind: Literal["ein", "ssn"] | None = Field(None, description="Kind of tax id")
     tax_id: str | None = Field(None, description="NN-NNNNNNN for ein, NNN-NN-NNNN for ssn")
@@ -211,7 +212,7 @@ NOT_NULLABLE = {
     "use_account_numbers", "show_lowest_subaccount_only", "required_employee_profile_fields",
     "use_classes", "prompt_for_class", "enable_price_levels", "units_of_measure_mode",
     "sales_tax_enabled", "sales_tax_liability_basis", "sales_tax_remittance_frequency",
-    "order_printable_checks",
+    "order_printable_checks", "attachment_max_bytes",
 }
 
 

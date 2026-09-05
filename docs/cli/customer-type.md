@@ -14,6 +14,7 @@ Activate a customer type.
 | Capability | customer-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer-type.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -148,6 +149,7 @@ Create a customer type.
 | Capability | customer-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer-type.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -281,6 +283,7 @@ Deactivate a customer type.
 | Capability | customer-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer-type.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -417,6 +420,7 @@ List customer types.
 | Capability | customer-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer-type.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -523,6 +527,7 @@ Query a bounded page of customer types.
 | Capability | customer-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer-type.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -629,6 +634,7 @@ Show one customer type.
 | Capability | customer-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer-type.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -741,6 +747,7 @@ Update a customer type.
 | Capability | customer-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer-type.update` |
+| External binary body | none |
 
 ### CLI
 

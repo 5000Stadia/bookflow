@@ -16,6 +16,7 @@ Database: `company`.
 | `updated_at` | VARCHAR(32) | no | — | — | — | — | UTC timestamp of the latest update to this record. |
 | `updated_by` | VARCHAR(26) | no | — | — | — | — | User id recorded for the latest update to this record. |
 | `updated_via` | VARCHAR(16) | no | — | — | — | — | Interface recorded for the latest update to this record. |
+| `attachment_max_bytes` | INTEGER | no | — | — | — | — | Maximum attachment bytes, from 1 through 100,000,000. |
 | `legal_name` | VARCHAR(200) | no | — | — | — | — | Company name used on legal and tax records. |
 | `display_name` | VARCHAR(200) | no | — | — | — | — | Company name shown to users. |
 | `tax_id_kind` | VARCHAR(3) | no | "ein" | — | — | — | Tax identifier kind: ein or ssn. |

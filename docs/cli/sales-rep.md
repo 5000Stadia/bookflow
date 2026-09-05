@@ -14,6 +14,7 @@ Activate a sales representative.
 | Capability | sales-rep |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/sales-rep.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -152,6 +153,7 @@ Create a sales representative.
 | Capability | sales-rep |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/sales-rep.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -291,6 +293,7 @@ Deactivate a sales representative.
 | Capability | sales-rep |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/sales-rep.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -430,6 +433,7 @@ List sales representatives.
 | Capability | sales-rep |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/sales-rep.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -538,6 +542,7 @@ Query a bounded page of sales representatives.
 | Capability | sales-rep |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/sales-rep.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -646,6 +651,7 @@ Show one sales representative.
 | Capability | sales-rep |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/sales-rep.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -762,6 +768,7 @@ Update a sales representative.
 | Capability | sales-rep |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/sales-rep.update` |
+| External binary body | none |
 
 ### CLI
 

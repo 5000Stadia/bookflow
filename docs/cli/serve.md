@@ -14,6 +14,7 @@ Serve every routed command over HTTP and the loopback socket, holding the data-r
 | Capability | serve |
 | Feature | — |
 | HTTP | Local only; no HTTP route. |
+| External binary body | none |
 
 ### CLI
 

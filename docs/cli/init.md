@@ -14,6 +14,7 @@ Create the data root, the system user, and the first hub-admin user mapped from 
 | Capability | init |
 | Feature | — |
 | HTTP | Local only; no HTTP route. |
+| External binary body | none |
 
 ### CLI
 

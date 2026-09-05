@@ -14,6 +14,7 @@ Issue a bearer token a program can send to the host; the secret is shown once.
 | Capability | token |
 | Feature | — |
 | HTTP | `POST /commands/token.issue` |
+| External binary body | none |
 
 ### CLI
 
@@ -123,6 +124,7 @@ List the bearer tokens you may see; hub admins see everyone's.
 | Capability | token |
 | Feature | — |
 | HTTP | `POST /commands/token.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -227,6 +229,7 @@ Revoke a bearer token so it stops working immediately.
 | Capability | token |
 | Feature | — |
 | HTTP | `POST /commands/token.revoke` |
+| External binary body | none |
 
 ### CLI
 

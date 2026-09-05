@@ -102,7 +102,21 @@ def _set_path(d: dict[str, Any], path: str, value: Any) -> None:
 
 
 def _input_value(annotation: Any, value: Any, path: str) -> Any:
-    """Translate integer flag text without weakening the command's model."""
+    """Translate structured and integer flag text without weakening the model."""
+    base = annotation
+    if get_origin(base) in (Union, types.UnionType):
+        branches = [arg for arg in get_args(base) if arg is not type(None)]
+        if len(branches) == 1:
+            base = branches[0]
+    if isinstance(value, str) and get_origin(base) in (list, dict):
+        import json
+        try:
+            parsed = json.loads(value)
+            if not isinstance(parsed, get_origin(base)):
+                raise ValueError
+            return parsed
+        except ValueError:
+            raise BookflowError("E_VALIDATION", details={"fields": [{"field": path, "problem": "expected a JSON array or object"}]}) from None
     if not isinstance(value, str) or _leaf_type(annotation)[0] is not int:
         return value
     text = value.strip()
@@ -117,8 +131,17 @@ def _input_value(annotation: Any, value: Any, path: str) -> Any:
 
 def _build_command(cmd: registry.Command):
     leaves = _flatten(cmd.input_model)
+    leaves.sort(key=lambda leaf: cmd.positional.index(leaf[0]) if leaf[0] in cmd.positional else len(cmd.positional))
+    transfer = cmd.transfer
     params: list[inspect.Parameter] = []
     for path, flag, ann, help_, required, dflt in leaves:
+        if transfer is not None and transfer.direction == "input":
+            if path == "original_filename":
+                required, dflt = False, None
+                help_ += " Defaults to the input PATH basename."
+            elif path == "media_type":
+                dflt = None
+                help_ += " Defaults to MIME inferred from PATH, else application/octet-stream."
         py_t, choices = _leaf_type(ann)
         is_positional = path in cmd.positional
         text = _help_text(help_, py_t, choices, required, dflt)
@@ -133,6 +156,14 @@ def _build_command(cmd: registry.Command):
             default = typer.Option(None, f"--{flag}", help=text, metavar=_METAVAR.get(py_t, "TEXT"))
             annotation = str | None
         params.append(inspect.Parameter(pname, inspect.Parameter.KEYWORD_ONLY, default=default, annotation=annotation))
+    if transfer is not None:
+        if transfer.direction == "input":
+            default = typer.Argument(..., help="Local binary input file; opened only by this CLI, never sent as a JSON path.", metavar="PATH")
+            pname = "transfer_path"
+        else:
+            default = typer.Option(..., "--out", help="Local output file; published atomically after verified completion. Must not already exist.", metavar="PATH")
+            pname = "transfer_out"
+        params.append(inspect.Parameter(pname, inspect.Parameter.KEYWORD_ONLY, default=default, annotation=str))
     params.append(inspect.Parameter("json_", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--json", help="Print the output as one JSON object"), annotation=bool))
     if not cmd.standalone:
         params.append(inspect.Parameter("data_root", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--data-root", help="Data root; else BOOKFLOW_DATA_ROOT, else ~/.bookflow", metavar="TEXT"), annotation=str | None))
@@ -264,7 +295,29 @@ def _build_command(cmd: registry.Command):
                     _time.sleep(2)
                 except KeyboardInterrupt:
                     return
-        out = dispatch_run(cmd, raw, ctx, data_root=data_root, company_selector=company, company_source=source, dry_run=dry_run)
+        dispatch_options = dict(data_root=data_root, company_selector=company, company_source=source, dry_run=dry_run)
+        if transfer is None:
+            out = dispatch_run(cmd, raw, ctx, **dispatch_options)
+        else:
+            from pathlib import Path
+            from bookflow.core.dispatch import guard
+            from bookflow.core.transfer_paths import atomic_output
+
+            def transfer_run():
+                if transfer.direction == "input":
+                    import mimetypes
+                    input_path = Path(kw["transfer_path"])
+                    if "original_filename" in cmd.input_model.model_fields:
+                        raw.setdefault("original_filename", input_path.name)
+                    if "media_type" in cmd.input_model.model_fields:
+                        raw.setdefault("media_type", mimetypes.guess_type(input_path.name)[0] or "application/octet-stream")
+                    with input_path.open("rb") as stream:
+                        return dispatch_run(cmd, raw, ctx, input_stream=stream, **dispatch_options)
+                with atomic_output(Path(kw["transfer_out"])) as stream:
+                    result = dispatch_run(cmd, raw, ctx, output_stream=stream, **dispatch_options)
+                return result
+
+            out = guard(transfer_run)
         for w_ in (out.get("warnings") or []) if isinstance(out, dict) else []:
             typer.echo(f"warning: {w_}", err=True)
         with span("cli.render"):

@@ -14,6 +14,7 @@ List hub audit events the acting user may see, newest first.
 | Capability | hub |
 | Feature | — |
 | HTTP | `POST /commands/hub.audit.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -144,6 +145,7 @@ Show one hub audit event with its entries and field diffs.
 | Capability | hub |
 | Feature | — |
 | HTTP | `POST /commands/hub.audit.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -283,6 +285,7 @@ Hub audit events newer than a cursor, oldest first; the event feed.
 | Capability | hub |
 | Feature | — |
 | HTTP | `POST /commands/hub.audit.tail` |
+| External binary body | none |
 
 ### CLI
 

@@ -905,7 +905,7 @@ def _apply_seed_history(s: Session, ctx: Context, seed: dict[str, Any], row: dic
             run_in_session(_registry.get("company update"), _registry.get("company update").input_model(**fields), ctx.model_copy(update={"company_id": row["id"]}), s)
         captures: dict[str, dict[str, Any]] = {}
         for index, entry in enumerate(seed.get("commands", []), start=1):
-            unexpected = set(entry) - {"command", "capture", "input"}
+            unexpected = set(entry) - {"command", "capture", "input", "body_fixture"}
             if unexpected:
                 raise ValueError(
                     f"demo seed command {index} has unknown keys: {sorted(unexpected)}"
@@ -922,12 +922,32 @@ def _apply_seed_history(s: Session, ctx: Context, seed: dict[str, Any], row: dic
             if not isinstance(raw, dict):
                 raise ValueError(f"demo seed command {index} input is not a table")
             raw_input = _resolve_seed_references(raw, captures)
-            output = run_in_session(
-                cmd,
-                cmd.input_model.model_validate(raw_input),
-                ctx.model_copy(update={"company_id": row["id"]}),
-                s,
-            )
+            seed_ctx = ctx.model_copy(update={"company_id": row["id"]})
+            if cmd.transfer is not None:
+                if cmd.transfer.direction != "input" or entry.get("body_fixture") != "example.pdf":
+                    raise ValueError("demo transfers require the packaged example.pdf fixture")
+                from importlib.resources import files
+                from bookflow.core.transfers import InputBody, TransferResource, prepare
+                from bookflow.core.transfer_resources import TransferLease
+                prepared = prepare(cmd, raw_input, seed_ctx, s)
+                # Demo reset already owns root-wide filesystem exclusion. Its
+                # finite packaged fixture runs synchronously on that same owner.
+                lease = TransferLease(s.actor.id, row["id"], lambda lease: None)
+                saved_transfer = s.transfer
+                try:
+                    s.transfer = TransferResource(lease, prepared.store)
+                    body = InputBody(s.transfer, prepared.limit, False)
+                    with files("bookflow.demo").joinpath("example.pdf").open("rb") as source:
+                        body.receive(source)
+                    body.complete()
+                    output = run_in_session(cmd, cmd.input_model.model_validate(raw_input), seed_ctx, s)
+                finally:
+                    s.transfer = saved_transfer
+                    lease.close()
+            else:
+                if entry.get("body_fixture") is not None:
+                    raise ValueError("a non-transfer demo command cannot have a body fixture")
+                output = run_in_session(cmd, cmd.input_model.model_validate(raw_input), seed_ctx, s)
             capture = entry.get("capture")
             if capture is not None:
                 if (

@@ -14,6 +14,7 @@ Activate a other name.
 | Capability | other-name |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/other-name.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -193,6 +194,7 @@ Convert an active other name into a new customer, vendor, or employee.
 | Capability | other-name |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/other-name.convert` |
+| External binary body | none |
 
 ### CLI
 
@@ -314,6 +316,7 @@ Create a other name.
 | Capability | other-name |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/other-name.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -509,6 +512,7 @@ Deactivate a other name.
 | Capability | other-name |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/other-name.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -688,6 +692,7 @@ List other names.
 | Capability | other-name |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/other-name.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -822,6 +827,7 @@ Query a bounded page of other names.
 | Capability | other-name |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/other-name.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -931,6 +937,7 @@ Show one other name.
 | Capability | other-name |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/other-name.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -1087,6 +1094,7 @@ Update a other name.
 | Capability | other-name |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/other-name.update` |
+| External binary body | none |
 
 ### CLI
 

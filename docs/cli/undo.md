@@ -14,6 +14,7 @@ Compensate an eligible Row 5 list audit event without deleting history.
 | Capability | undo |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/undo` |
+| External binary body | none |
 
 ### CLI
 

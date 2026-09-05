@@ -14,6 +14,7 @@ Migrate the hub database and every company database the acting user may write to
 | Capability | upgrade |
 | Feature | — |
 | HTTP | `POST /commands/upgrade` |
+| External binary body | none |
 
 ### CLI
 

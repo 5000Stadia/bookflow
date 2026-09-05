@@ -18,6 +18,7 @@ from typing import BinaryIO, Iterator
 
 from bookflow.core.durability import sync_directory
 from bookflow.core.errors import BookflowError
+from bookflow.core.transfer_resources import TransferLease
 
 CHUNK_SIZE = 65_536
 MAX_SIZE = 100_000_000
@@ -95,6 +96,130 @@ def scan(stream: BinaryIO, limit: int) -> BodyInfo:
         raise _io("stream_read") from None
 
 
+class OwnedStage:
+    """Incremental bytes owned through the lease's cleanup, including failures.
+
+    Callers check the lease around their input loop, then complete and hand off
+    the lease with the returned resource. Use lease.close() on caller exit and
+    lease.finish() on writer completion; do not call this object's close() from
+    an abandoned caller after handoff. Operations require a single current owner.
+    Dry runs use scan(), without constructing an OwnedStage.
+    """
+
+    def __init__(self, store: Path, limit: int, lease: TransferLease):
+        self._path: Path | None = None
+        self._writer: BinaryIO | None = None
+        self._fd: int | None = None
+        self._resource: StagedAttachment | None = None
+        self._state = "initializing"
+        self._lease = lease
+        # Even failed construction remains reachable for cleanup retries.
+        lease.add_cleanup(self.close)
+        try:
+            lease.check_io()
+            if type(limit) is not int or not 0 < limit <= MAX_SIZE:
+                raise BookflowError("E_VALIDATION", "Attachment limit must be 1 to 100000000 bytes.")
+            self._limit = limit
+            self._size = 0
+            self._digest = hashlib.sha256()
+            self._store = Path(store).absolute()
+            _directory(self._store)
+            self._fd, name = tempfile.mkstemp(
+                prefix=".attachment-", suffix=".tmp", dir=self._store)
+            self._path = Path(name)
+            self._writer = os.fdopen(self._fd, "w+b")
+            self._fd = None
+            self._state = "writing"
+        except BaseException as exc:
+            try:
+                self.close()
+            except BaseException:
+                pass  # The registered callback retains unfinished cleanup.
+            if isinstance(exc, OSError):
+                raise _io("stage") from None
+            raise
+
+    def _require_writing(self) -> None:
+        if self._state != "writing":
+            raise _io("staged_resource")
+
+    def write(self, chunk: bytes) -> None:
+        """Accept at most 65,536 actual bytes; an empty chunk is harmless."""
+        self._require_writing()
+        try:
+            if not isinstance(chunk, bytes) or len(chunk) > CHUNK_SIZE:
+                raise BookflowError("E_VALIDATION", "Attachment stream returned invalid bytes.")
+            if self._size + len(chunk) > self._limit:
+                raise BookflowError("E_VALUE_RANGE", "Attachment exceeds its byte limit.")
+            if self._writer.write(chunk) != len(chunk):
+                raise _io("stage_write")
+            self._digest.update(chunk)
+            self._size += len(chunk)
+        except BaseException as exc:
+            self._state = "failed"
+            if isinstance(exc, OSError):
+                raise _io("stage_write") from None
+            raise
+
+    def read_from(self, stream: BinaryIO) -> StagedAttachment:
+        """Read cooperatively with lease checks, leaving the source caller-owned.
+
+        Read at most one byte beyond the remaining limit. On any error the
+        caller must close its lease; failed cleanup can be retried on that lease.
+        """
+        self._require_writing()
+        try:
+            while True:
+                self._lease.check_io()
+                requested = min(CHUNK_SIZE, self._limit - self._size + 1)
+                chunk = stream.read(requested)
+                self._lease.check_io()
+                if not isinstance(chunk, bytes) or len(chunk) > requested:
+                    raise BookflowError("E_VALIDATION", "Attachment stream returned invalid bytes.")
+                if not chunk:
+                    return self.complete()
+                self.write(chunk)
+        except BaseException as exc:
+            self._state = "failed"
+            if isinstance(exc, OSError):
+                raise _io("stream_read") from None
+            raise
+
+    def complete(self) -> StagedAttachment:
+        """Seal input and return the live resource accepted by publish()."""
+        self._require_writing()
+        self._state = "failed"
+        try:
+            self._resource = StagedAttachment(
+                self._store, self._path, self._writer,
+                BodyInfo(self._digest.hexdigest(), self._size), _token=_STAGING_TOKEN)
+        except OSError:
+            raise _io("stage") from None
+        self._state = "complete"
+        return self._resource
+
+    def close(self) -> None:
+        """Invalidate input and retry unfinished close/unlink steps only.
+
+        Cleanup never releases the lease itself and never removes a digest body.
+        """
+        self._state = "closed"
+        if self._resource is not None:
+            self._resource._consumed = True
+        try:
+            if self._writer is not None:
+                self._writer.close()
+                self._writer = None
+            if self._fd is not None:
+                os.close(self._fd)
+                self._fd = None
+            if self._path is not None:
+                self._path.unlink(missing_ok=True)
+                self._path = None
+        except OSError:
+            raise _io("stage_cleanup") from None
+
+
 @contextmanager
 def stage(store: Path, stream: BinaryIO, limit: int) -> Iterator[StagedAttachment]:
     """Stage bytes privately; remove only this invocation's temporary on exit."""
@@ -166,6 +291,45 @@ def _existing(path: Path, info: BodyInfo) -> None:
     with reader:
         _verify(reader, info, "body_content")
         os.fsync(reader.fileno())
+
+
+def open_verified(store: Path, info: BodyInfo) -> BinaryIO:
+    """Return a verified read-only body at offset zero, owned by the caller.
+
+    The caller holds the company filesystem lease across this operation and
+    registers the returned stream's close with that lease before output I/O.
+    """
+    if (not isinstance(info, BodyInfo) or not isinstance(info.sha256, str)
+            or len(info.sha256) != 64
+            or any(char not in "0123456789abcdef" for char in info.sha256)
+            or type(info.size_bytes) is not int
+            or not 0 <= info.size_bytes <= MAX_SIZE):
+        raise BookflowError("E_VALIDATION", "Invalid attachment body metadata.")
+    reader = None
+    try:
+        store = Path(store).absolute()
+        _directory(store)
+        shard = store / info.sha256[:2]
+        _directory(shard)
+        path = shard / info.sha256
+        if not stat.S_ISREG(path.lstat().st_mode):
+            raise _io("body_type")
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                     | getattr(os, "O_NONBLOCK", 0))
+        try:
+            reader = os.fdopen(fd, "rb")
+        except BaseException:
+            os.close(fd)
+            raise
+        _verify(reader, info, "body_content")
+        reader.seek(0)
+        return reader
+    except BaseException as exc:
+        if reader is not None:
+            reader.close()
+        if isinstance(exc, OSError):
+            raise _io("body_read") from None
+        raise
 
 
 def publish(store: Path, staged: StagedAttachment) -> Publication:

@@ -14,6 +14,7 @@ Activate a custom field.
 | Capability | custom-field |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/custom-field.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -162,6 +163,7 @@ Create a custom field.
 | Capability | custom-field |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/custom-field.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -318,6 +320,7 @@ Deactivate a custom field.
 | Capability | custom-field |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/custom-field.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -467,6 +470,7 @@ List custom fields.
 | Capability | custom-field |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/custom-field.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -584,6 +588,7 @@ Query a bounded page of custom fields.
 | Capability | custom-field |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/custom-field.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -693,6 +698,7 @@ Show one custom field.
 | Capability | custom-field |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/custom-field.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -819,6 +825,7 @@ Update a custom field.
 | Capability | custom-field |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/custom-field.update` |
+| External binary body | none |
 
 ### CLI
 

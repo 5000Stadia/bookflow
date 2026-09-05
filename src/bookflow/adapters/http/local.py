@@ -100,35 +100,65 @@ class LocalListener:
             threading.Thread(target=self._serve_one, args=(conn,), daemon=True).start()
 
     def _serve_one(self, conn: socket.socket) -> None:
-        with conn:
+        from bookflow.core.transfer_protocol import _IO, _decode, send_json
+        from bookflow.core.transfer_resources import TransferLease
+        import time
+
+        with conn, TransferLease("", "", lambda lease: None) as lease:
+            binary = False
             try:
                 conn.settimeout(CONNECTION_TIMEOUT_SECONDS)
-                head = _recv_exact(conn, 4)
-                if head is None:
-                    return
-                size = int.from_bytes(head, "big")
+                wire = _IO(300, 30, lease.check_io, time.monotonic)
+                size = int.from_bytes(wire.exact(conn, 4), "big")
                 if size > MAX_FRAME_BYTES:
                     raise BookflowError("E_VALIDATION", details={"fields": [{
                         "field": "frame", "problem": f"must be at most {MAX_FRAME_BYTES} bytes",
                     }]})
-                body = _recv_exact(conn, size)
-                if body is None:
-                    return
-                envelope = json.loads(body.decode("utf-8"))
+                body = wire.exact(conn, size)
+                envelope = _decode(body)
+                binary = "transfer" in envelope
                 login = peer_login(conn)
-                try:
-                    reply = {"output": self.handler(login, envelope)}
-                except BookflowError as e:
-                    reply = {"error": e.to_dict()}
+                if binary:
+                    validate_transfer_envelope(envelope, size)
+                    transfer = getattr(self.handler, "transfer", None)
+                    if transfer is None:
+                        raise BookflowError("E_USAGE", message="Binary forwarding is unavailable.")
+                    transfer(login, envelope, conn, check=lease.check_io)
+                    return
+                reply = {"output": self.handler(login, envelope)}
             except BookflowError as e:
                 reply = {"error": e.to_dict()}
             except Exception as e:  # noqa: BLE001
                 reply = {"error": BookflowError("E_INTERNAL", message="host failure", details={"cause": type(e).__name__}).to_dict()}
-            payload = json.dumps(reply, default=str).encode("utf-8")
             try:
-                conn.sendall(len(payload).to_bytes(4, "big") + payload)
-            except OSError:
+                if binary:
+                    send_json(conn, reply, check=lease.check_io)
+                else:
+                    payload = json.dumps(reply, default=str).encode("utf-8")
+                    conn.sendall(len(payload).to_bytes(4, "big") + payload)
+            except (OSError, BookflowError):
                 pass
+
+
+def validate_transfer_envelope(envelope, size=None):
+    """Validate binary transport fields before command dispatch or body reads."""
+    from bookflow.core.transfer_protocol import _encode
+    _encode(envelope, 8192)
+    allowed = {"command", "input", "context", "company_selector", "company_source",
+               "dry_run", "transfer", "version"}
+    transfer = envelope.get("transfer")
+    if (size is not None and size > 8192
+            or set(envelope) - allowed
+            or type(transfer) is not dict or set(transfer) != {"version", "direction"}
+            or type(transfer.get("version")) is not int or transfer["version"] != 1
+            or transfer.get("direction") not in ("input", "output")
+            or not isinstance(envelope.get("command"), str)
+            or type(envelope.get("input")) is not dict
+            or type(envelope.get("context", {})) is not dict
+            or type(envelope.get("dry_run", False)) is not bool
+            or envelope.get("company_selector") is not None and not isinstance(envelope["company_selector"], str)
+            or not isinstance(envelope.get("company_source", "option"), str)):
+        raise BookflowError("E_VALIDATION", message="Invalid binary transfer envelope.")
 
 
 def _recv_exact(conn: socket.socket, size: int) -> bytes | None:

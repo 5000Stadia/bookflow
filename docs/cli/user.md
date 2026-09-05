@@ -14,6 +14,7 @@ Set a user's password so they can log in to the workbench.
 | Capability | user |
 | Feature | — |
 | HTTP | `POST /commands/user.set-password` |
+| External binary body | none |
 
 ### CLI
 

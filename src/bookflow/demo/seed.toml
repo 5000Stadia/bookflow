@@ -576,3 +576,18 @@ input = { record_type = "customer", record_id = "${customer.id}", body = "Call b
 [[commands]]
 command = "note add"
 input = { record_type = "account", record_id = "${income_account.id}", body = "Service income for completed plumbing work." }
+
+[[commands]]
+command = "attachment add"
+body_fixture = "example.pdf"
+input = { record_type = "company_info", record_id = "${annotation_company.company_id}", original_filename = "Example service document.pdf", media_type = "application/pdf", caption = "Sample PDF for the demo" }
+
+[[commands]]
+command = "attachment add"
+body_fixture = "example.pdf"
+input = { record_type = "customer", record_id = "${customer.id}", original_filename = "Example service document.pdf", media_type = "application/pdf", caption = "Sample PDF for the demo" }
+
+[[commands]]
+command = "attachment add"
+body_fixture = "example.pdf"
+input = { record_type = "account", record_id = "${income_account.id}", original_filename = "Example service document.pdf", media_type = "application/pdf", caption = "Sample PDF for the demo" }

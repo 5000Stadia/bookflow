@@ -218,6 +218,75 @@ frames, empty/exact/over-limit content, interrupted terminal frame, bounded read
 slow peers and syntax/metadata bounds. The assembled host/resource boundary gets
 a focused independent artifact review with an isolated mutation witness.
 
+### Increment 2c: metadata and command integration
+
+Company revision co0006 adds `company_info.attachment_max_bytes` (1 through
+100,000,000; default25,000,000), common versioned `attachments` and
+`attachment_links`, and a bounded internal `attachment_collection` intent table.
+Attachments have unique SHA-256, nonnegative size, media type, original filename,
+immutable uploaded_by/uploaded_at and nullable collected_at. Links have an
+attachment foreign key, target tuple, immutable linked_by/linked_at, caption and
+active flag. A partial unique index covers active attachment/target associations;
+an index covers target/id. Unlink changes active/version while retaining history;
+a later link creates a new occurrence. Byte deduplication retains the first upload's
+presentation metadata. A fresh upload can restore a collected body. The frozen
+migration contains its own DDL; hub0008 adds attachment, activity and compact role
+capabilities without changing existing grants.
+
+`attachment add` takes record_type, record_id, original_filename, media_type
+(default application/octet-stream), caption (default empty), plus one external
+binary stream. Names are UTF-8 basenames of at most255bytes, with no path separator,
+control character, dot or dot-dot name. Media types are ASCII type/subtype tokens
+of at most127characters. Caption is at most2048UTF-8bytes. `attachment link` takes
+attachment, record_type, record_id and caption. `attachment unlink` takes link and
+required expected_version. `attachment list` takes target, limit1..200(default50)
+and a bounded cursor; returns active links with metadata. `attachment get` takes
+attachment and emits verified bytes plus typed attachment metadata. Member access
+permits reads; standard permits add/link/unlink; ordinary agent reason rules apply.
+Adding/linking an already-active association returns the existing association
+without changing attribution or caption. Unlinking an inactive association is a
+no-op only after its version check. Missing/collected bodies return E_IO for get
+and link; upload can restore collected bytes. Publication occurs before the single
+metadata/link/audit transaction commits and rollback never removes a digest.
+
+The registry's TransferDescriptor carries direction and a preparation callback.
+Shared authorize-only preparation validates input/context, company, role,
+reason/directive and callback business constraints without running an upload plan.
+Callback output includes resolved store, effective byte limit and (for output)
+BodyInfo plus presentation metadata. The caller reserves its TransferLease while
+the preparation reader remains admitted. Session.transfer holds only the internal
+resource (store, BodyInfo, optional staged body); JSON models never hold it. Final
+execute requires this resource and repeats preparation constraints before retry
+lookup; input_hash includes verified digest/size. OwnedStage registers retryable
+cleanup before reading and supports bounded incremental write/complete so HTTP
+can consume async chunks without holding a database or buffering a full file.
+CLI/Python standalone operations retain RootLock throughout transfer; hosted
+operations share Host slots and writer ownership. All adapters use the same
+preparation, staging, execution and verified output helpers.
+
+The collection intent is internal operational state: operation ID primary key,
+serialized bounded candidate list, serialized original command context and retry
+identity. Compact limit1..200(default200) returns operation ID, collected count,
+bytes and has_more. It acquires filesystem exclusion before selecting candidates,
+commits the intent, removes exact regular bodies and syncs directories, then
+atomically marks metadata collected, audits, stores the true completed retry
+result and clears the intent. Completion owns its audit and idempotency within
+that final transaction; ordinary dispatch must not store an earlier result.
+Pending recovery precedes attachment mutation and compact, using original context
+and the committed candidates. Transfers run recovery in a separate writer operation
+before reader admission and before acquiring a lease. Preparation checks for a
+pending intent in the admitted snapshot, reserves the lease before closing that
+snapshot and returns E_DB_BUSY if pending work requires a new recovery attempt.
+This check/reservation cannot race compact's reader/transfer exclusion. Final
+execution with a transfer lease never requests collection recovery or a folder gate.
+Dry runs never create/complete intents, recover, remove bytes or mutate metadata.
+Compact dry-run returns projected candidate count/bytes with dry_run=true and no
+operation ID; if an intent is pending it returns E_DB_BUSY without any recovery.
+Dry-run uploads likewise reject pending collection without changing any storage. Failure preserves intent and reports E_IO. The
+company connection is reopened under the gate after pooled handle release.
+Discovery of unindexed bodies/temporary files is bounded separately and may report
+continuation without pretending all orphans were scanned. No active link is deleted.
+
 ## Increment 3: activity and browser
 
 `activity` combines target audit entries with note and attachment events, including

@@ -104,4 +104,5 @@
 {% for c in ctx_fields %}<div class="row"><label>{{ c }}<small>context, sent as a header</small></label><input name="ctx:{{ c }}" value="{{ attempted.get('ctx:' ~ c, '') }}"><span></span></div>{% endfor %}
 <div class="row form-submit"><span></span><span>{% if cmd.is_write %}<button name="action" value="preview">Preview</button>{% endif %}<button name="action" value="submit">{{ 'Save ' ~ ('job' if originals.parent_id else 'customer') if noun == 'customer' and verb in ('create', 'update') else 'Submit' }}</button></span></div></form>
 
+{% include "annotations.html" %}
 {% endblock %}

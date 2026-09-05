@@ -38,8 +38,21 @@ class Applied:
     output: BaseModel
     touched: list[Touched]
     summary: str
+    finalized: bool = False  # apply durably completed its own audit and idempotency transaction
     audited: bool = False  # True when apply wrote its own audit events
     after_commit: Callable[[], None] | None = None  # runs once the command's own transactions are durable (demo seed history)
+
+
+@dataclass(frozen=True)
+class TransferDescriptor:
+    """One out-of-band body and an authorization-time business preparation callback."""
+
+    direction: str
+    prepare: Callable[..., Any]
+
+    def __post_init__(self):
+        if self.direction not in ("input", "output") or not callable(self.prepare):
+            raise ValueError("a transfer requires input/output direction and a preparation callback")
 
 
 @dataclass
@@ -67,6 +80,7 @@ class Command:
     local_only: bool = False  # acts on the calling process or its OS login; never routed over HTTP
     version_source: tuple[str, str | None, str] | None = None  # (show command, identifying positional or None, output field) for expected_version
     standalone_runner: Callable[..., dict[str, Any]] | None = None  # explicit rootless runner: no data root, lock, actor, or forwarding
+    transfer: TransferDescriptor | None = None
     authorization: str | None = None  # exact human-readable rule when required_role alone cannot express it
 
     @property
@@ -108,7 +122,8 @@ def command(name: str, *, scope: str, description: str, input_model: type[BaseMo
             kind: str | None = None, truth: str | None = None, accepts_idempotency_key: bool = False,
             clearable: bool = False, streams: bool = False, capability: str | None = None, feature: str | None = None,
             local_only: bool = False, version_source: tuple[str, str | None, str] | None = None,
-            standalone_runner: Callable[..., dict[str, Any]] | None = None, authorization: str | None = None):
+            standalone_runner: Callable[..., dict[str, Any]] | None = None, authorization: str | None = None,
+            transfer: TransferDescriptor | None = None):
     """Register ``plan`` (and, via ``.apply``, the apply function) under ``name``."""
     bad = set(input_model.model_fields) & CONTEXT_FIELD_NAMES
     if bad:
@@ -147,6 +162,12 @@ def command(name: str, *, scope: str, description: str, input_model: type[BaseMo
         if any((accepts_idempotency_key, clearable, streams, version_source is not None)):
             raise ValueError(f"{name}: a standalone command cannot declare database command behavior")
 
+    if transfer is not None:
+        if scope != "company" or standalone_runner is not None or bootstrap or streams:
+            raise ValueError(f"{name}: transfers require a routed company command")
+        if (transfer.direction == "input") != bool(writes):
+            raise ValueError(f"{name}: input transfers write; output transfers read")
+
     def register(plan_fn: Callable[..., Plan]) -> Command:
         resolved_capability = None if standalone_runner is not None else (capability or name.split(" ")[0])
         cmd = Command(name=name, scope=scope, description=description, input_model=input_model, output_model=output_model,
@@ -154,7 +175,7 @@ def command(name: str, *, scope: str, description: str, input_model: type[BaseMo
                       positional=list(positional or []), error_codes=list(error_codes or []), bootstrap=bootstrap,
                       kind=kind, truth=truth, accepts_idempotency_key=accepts_idempotency_key, clearable=clearable, streams=streams,
                       capability=resolved_capability, feature=feature, local_only=local_only, version_source=version_source,
-                      standalone_runner=standalone_runner, authorization=authorization)
+                      standalone_runner=standalone_runner, authorization=authorization, transfer=transfer)
         REGISTRY[name] = cmd
 
         def applier(apply_fn: Callable[..., Applied]) -> Callable[..., Applied]:
@@ -196,6 +217,9 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.company_cmds": ["company", "directive", "presence"],
     "bookflow.commands.audit_cmds": ["audit", "hub audit"],
     "bookflow.commands.note_cmds": ["note"],
+    "bookflow.commands.attachment_cmds": ["attachment"],
+    "bookflow.commands.activity_cmds": ["activity"],
+    "bookflow.commands.compact_cmds": ["company"],
     "bookflow.commands.host_cmds": ["serve", "user", "token"],
     "bookflow.commands.docs_cmds": ["docs"],
     "bookflow.commands.account_cmds": ["account"],
@@ -221,6 +245,7 @@ NOUN_MODULES: dict[str, list[str]] = {
 # Full registry loads and noun-level help still include every declared verb.
 MODULE_VERBS: dict[str, frozenset[str]] = {
     "bookflow.commands.query_cmds": frozenset({"query"}),
+    "bookflow.commands.compact_cmds": frozenset({"compact"}),
 }
 
 _loaded: set[str] = set()

@@ -286,7 +286,7 @@ def test_openapi_lists_the_routed_commands_only(hosted):
     registry.load_all()
     expected = {
         (f"/commands/{cmd.name.replace(' ', '.')}" if cmd.scope == "hub" else
-         f"/companies/{{company_id}}/commands/{cmd.name.replace(' ', '.')}")
+         f"/companies/{{company_id}}/{'transfers' if cmd.transfer else 'commands'}/{cmd.name.replace(' ', '.')}")
         for cmd in registry.all_commands() if not cmd.local_only
     }
     actual = {path for path, methods in doc["paths"].items() if path != "/login" and "post" in methods}
@@ -296,7 +296,10 @@ def test_openapi_lists_the_routed_commands_only(hosted):
         op = doc["paths"][path]["post"]
         assert op["summary"].endswith(".") and op["security"] == [{"bearer": []}, {"cookie": []}]
         assert "E_UNAUTHENTICATED" in op["x-bookflow-error-codes"]
-        assert op["requestBody"]["required"] is True
+        if op.get("x-bookflow-transfer") == "output":
+            assert "requestBody" not in op
+        else:
+            assert op["requestBody"]["required"] is True
         if "/companies/" in path:
             company = next(p for p in op["parameters"] if p["name"] == "X-Bookflow-Company")
             assert "must be the same company id" in company["description"]
@@ -568,6 +571,9 @@ def _read_calls(hosted):
         "directive show": ({"directive": directive["code"]}, cid),
         "note list": ({"record_type": "company_info", "record_id": cid}, cid),
         "note show": ({"note": note["id"]}, cid),
+        "attachment list": ({"record_type": "company_info", "record_id": cid}, cid),
+        "attachment get": ({"attachment": hosted.ok("attachment.list", {"record_type": "company_info", "record_id": cid}, company=cid)["items"][0]["attachment_id"]}, cid),
+        "activity": ({"record_type": "company_info", "record_id": cid}, cid),
         "hub audit list": ({"limit": 5}, None),
         "hub audit show": ({"event": hub_event}, None),
         "hub audit tail": ({"limit": 5}, None),
@@ -634,11 +640,26 @@ def test_every_routed_read_returns_the_same_document_over_http_as_in_the_library
     calls = _read_calls(hosted)
     routed_reads = {c.name for c in registry.routed_commands() if c.kind == "read"}
     assert routed_reads == set(calls), "every routed read command needs a parity call here"
-    over_http = {name: hosted.ok(name.replace(" ", "."), body, company=company) for name, (body, company) in calls.items()}
+    from bookflow.core.transfer_protocol import encode_input, decode_input
+    import io
+    over_http, bodies = {}, {}
+    for name, (body, company) in calls.items():
+        if registry.get(name).transfer:
+            response = hosted.api.post(f"/companies/{company}/transfers/{name.replace(' ', '.')}",
+                headers={**hosted.bearer, "X-Bookflow-Input": encode_input(body)})
+            assert response.status_code == 200, response.text
+            over_http[name] = decode_input(response.headers["X-Bookflow-Output"])
+            bodies[name] = response.content
+        else:
+            over_http[name] = hosted.ok(name.replace(" ", "."), body, company=company)
     hosted.handle.stop()  # the library takes the data-root lock, so the host lets go first
     c = bookflow.connect(data_root=str(root))
     for name, (body, company) in calls.items():
-        assert normalize(c.run(name, body, company=company)) == normalize(over_http[name]), name
+        sink = io.BytesIO()
+        streams = {"output_stream": sink} if registry.get(name).transfer else {}
+        assert normalize(c.run(name, body, company=company, **streams)) == normalize(over_http[name]), name
+        if streams:
+            assert sink.getvalue() == bodies[name]
 
 
 def test_write_errors_carry_the_same_document_and_the_mapped_status(hosted, root):

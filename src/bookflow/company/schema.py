@@ -159,6 +159,8 @@ def _owned_child(owner_column: str, owner_table: str) -> list[sa.Column]:
 company_info = _table(
     "company_info",
     *_common(),
+    _column("attachment_max_bytes", sa.Integer, "Maximum attachment bytes, from 1 through 100,000,000.", nullable=False, server_default="25000000"),
+    sa.CheckConstraint("attachment_max_bytes BETWEEN 1 AND 100000000", name="ck_company_attachment_max_bytes"),
     _column("legal_name", sa.String(200), "Company name used on legal and tax records.", nullable=False),
     _column("display_name", sa.String(200), "Company name shown to users.", nullable=False),
     _column("tax_id_kind", sa.String(3), "Tax identifier kind: ein or ssn.", nullable=False, default="ein"),
@@ -1000,4 +1002,42 @@ notes = _table(
     sa.CheckConstraint("kind IN ('comment', 'system')", name="ck_notes_kind"),
     sa.Index("ix_notes_target_id", "record_type", "record_id", "id"),
     description="Versioned company-local notes attached to persistent records.",
+)
+
+
+attachments = _table(
+    "attachments", *_common(),
+    _column("sha256", sa.String(64), "Lowercase SHA-256 of the verified body.", nullable=False, unique=True),
+    _column("size_bytes", sa.BigInteger, "Verified body size in bytes.", nullable=False),
+    _column("media_type", sa.String(127), "Original validated media type.", nullable=False),
+    _column("original_filename", sa.String(255), "Original basename, at most 255 UTF-8 bytes.", nullable=False),
+    _column("uploaded_by", sa.String(26), "Original uploading principal.", nullable=False),
+    _column("uploaded_at", sa.String(32), "Original upload UTC timestamp.", nullable=False),
+    _column("collected_at", sa.String(32), "Collection UTC timestamp; null while available.", nullable=True),
+    sa.CheckConstraint("size_bytes >= 0", name="ck_attachments_size"),
+    sa.CheckConstraint("length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'", name="ck_attachments_sha256"),
+    sa.CheckConstraint("length(CAST(original_filename AS BLOB)) BETWEEN 1 AND 255", name="ck_attachments_filename"),
+    description="Content-addressed attachment metadata retaining original provenance after collection.",
+)
+attachment_links = _table(
+    "attachment_links", *_common(),
+    _column("attachment_id", sa.String(26), "Linked attachment identity.", sa.ForeignKey("attachments.id", ondelete="RESTRICT"), nullable=False),
+    _column("record_type", sa.String(64), "Canonical annotation target type.", nullable=False),
+    _column("record_id", sa.String(26), "Stable annotation target id.", nullable=False),
+    _column("linked_by", sa.String(26), "Principal creating this link occurrence.", nullable=False),
+    _column("linked_at", sa.String(32), "Original link UTC timestamp.", nullable=False),
+    _column("caption", sa.Text, "Association caption, at most 2048 UTF-8 bytes.", nullable=False),
+    _column("active", sa.Boolean, "Whether this occurrence remains linked.", nullable=False),
+    sa.CheckConstraint("length(CAST(caption AS BLOB)) <= 2048", name="ck_attachment_links_caption"),
+    sa.Index("ix_attachment_links_attachment_id", "attachment_id"),
+    sa.Index("ix_attachment_links_target_id", "record_type", "record_id", "id"),
+    sa.Index("uq_attachment_links_active", "attachment_id", "record_type", "record_id", unique=True, sqlite_where=sa.text("active = 1")),
+    description="Versioned soft-unlinked attachment association occurrences.",
+)
+attachment_collection = _table(
+    "attachment_collection",
+    _column("id", sa.String(26), "Collection operation ULID.", primary_key=True),
+    _column("payload", sa.Text, "Operational JSON containing bounded candidates and original invocation context.", nullable=False),
+    sa.CheckConstraint("length(CAST(payload AS BLOB)) <= 262144 AND json_valid(payload)", name="ck_attachment_collection_payload"),
+    description="Internal durable attachment collection intents, bounded to 262144 UTF-8 bytes.",
 )

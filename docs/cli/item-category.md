@@ -14,6 +14,7 @@ Activate a item category.
 | Capability | item-category |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/item-category.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -150,6 +151,7 @@ Create a item category.
 | Capability | item-category |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/item-category.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -285,6 +287,7 @@ Deactivate a item category.
 | Capability | item-category |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/item-category.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -423,6 +426,7 @@ List item categories.
 | Capability | item-category |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/item-category.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -530,6 +534,7 @@ Query a bounded page of item categories.
 | Capability | item-category |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/item-category.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -636,6 +641,7 @@ Show one item category.
 | Capability | item-category |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/item-category.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -750,6 +756,7 @@ Update a item category.
 | Capability | item-category |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/item-category.update` |
+| External binary body | none |
 
 ### CLI
 

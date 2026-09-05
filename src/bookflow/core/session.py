@@ -51,6 +51,7 @@ class Session:
     hub_touched: list = field(default_factory=list)  # entries the dispatcher adds to the command's hub event (migrations, projection repair)
     company_touched: list = field(default_factory=list)
     company_info_row: dict | None = None
+    transfer: Any = None  # internal owned binary resource; never command JSON
     company_opener: Any = None  # host hook: (row, writable, db_path) -> a Database the host owns; never closed here
     company_releaser: Any = None  # host hook: called with the company id when the session lets go of it
 

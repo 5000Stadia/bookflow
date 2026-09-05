@@ -14,6 +14,7 @@ Activate a vendor type.
 | Capability | vendor-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/vendor-type.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -148,6 +149,7 @@ Create a vendor type.
 | Capability | vendor-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/vendor-type.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -281,6 +283,7 @@ Deactivate a vendor type.
 | Capability | vendor-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/vendor-type.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -417,6 +420,7 @@ List vendor types.
 | Capability | vendor-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/vendor-type.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -523,6 +527,7 @@ Query a bounded page of vendor types.
 | Capability | vendor-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/vendor-type.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -629,6 +634,7 @@ Show one vendor type.
 | Capability | vendor-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/vendor-type.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -741,6 +747,7 @@ Update a vendor type.
 | Capability | vendor-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/vendor-type.update` |
+| External binary body | none |
 
 ### CLI
 

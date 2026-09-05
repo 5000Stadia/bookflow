@@ -14,6 +14,7 @@ Register a company folder that already sits inside an organization's folder.
 | Capability | company |
 | Feature | — |
 | HTTP | `POST /commands/company.attach` |
+| External binary body | none |
 
 ### CLI
 
@@ -107,6 +108,117 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 
+## `company compact`
+
+Collect at most 200 unlinked attachment bodies and continue bounded orphan discovery.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | admin |
+| Capability | attachment |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/company.compact` |
+| External binary body | none |
+
+### CLI
+
+`bookflow company compact --company "Demo Plumbing Co" --limit 200 --dry-run --reason "Preview unlinked file collection" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `limit` | `--limit` | integer | no | no | 200 | Maximum bodies collected in this invocation.; minimum 1; maximum 200 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/company.compact`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `operation_id` | string \| null | no | yes | null | — |
+| `collected_count` | integer | yes | no | — | — |
+| `bytes_collected` | integer | yes | no | — | — |
+| `has_more` | boolean | yes | no | — | — |
+| `idempotent_replay` | boolean | no | no | false | — |
+
+Example JSON output:
+
+```json
+{
+  "bytes_collected": 1,
+  "collected_count": 1,
+  "dry_run": false,
+  "has_more": false,
+  "idempotent_replay": false,
+  "operation_id": null,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `company detach`
 
 Remove a company from the registry, leaving its folder in place.
@@ -119,6 +231,7 @@ Remove a company from the registry, leaving its folder in place.
 | Capability | company |
 | Feature | — |
 | HTTP | `POST /commands/company.detach` |
+| External binary body | none |
 
 ### CLI
 
@@ -216,6 +329,7 @@ List the companies the acting user can see.
 | Capability | company |
 | Feature | — |
 | HTTP | `POST /commands/company.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -321,6 +435,7 @@ Create a company inside an organization: its folder, database, and company infor
 | Capability | company |
 | Feature | — |
 | HTTP | `POST /commands/company.new` |
+| External binary body | none |
 
 ### CLI
 
@@ -477,6 +592,7 @@ Rename the selected company, optionally moving its folder.
 | Capability | company |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/company.rename` |
+| External binary body | none |
 
 ### CLI
 
@@ -588,6 +704,7 @@ Show the selected company: registration, company information, and who created it
 | Capability | company |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/company.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -722,6 +839,7 @@ Update the selected company's information; versioned, blind, or merged per the c
 | Capability | company |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/company.update` |
+| External binary body | none |
 
 ### CLI
 
@@ -732,6 +850,7 @@ Update the selected company's information; versioned, blind, or merged per the c
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `expected_version` | `--expected-version` | integer \| null | no | yes | null | The info_version you read; omit for a blind write |
+| `attachment_max_bytes` | `--attachment-max-bytes` | integer \| null | no | yes | null | Maximum actual upload bytes per file; default 25,000,000. |
 | `legal_name` | `--legal-name` | string \| null | no | yes | null | Name on tax forms; also updates the registry copy |
 | `tax_id_kind` | `--tax-id-kind` | literal["ein", "ssn"] \| null | no | yes | null | Kind of tax id |
 | `tax_id` | `--tax-id` | string \| null | no | yes | null | NN-NNNNNNN for ein, NNN-NN-NNNN for ssn |
@@ -894,6 +1013,7 @@ Save a company as this login's default for later commands.
 | Capability | company |
 | Feature | — |
 | HTTP | Local only; no HTTP route. |
+| External binary body | none |
 
 ### CLI
 

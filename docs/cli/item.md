@@ -14,6 +14,7 @@ Activate a item.
 | Capability | item |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/item.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -360,6 +361,7 @@ Create a item.
 | Capability | item |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/item.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -771,6 +773,7 @@ Deactivate a item.
 | Capability | item |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/item.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -1118,6 +1121,7 @@ List items.
 | Capability | item |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/item.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -1358,6 +1362,7 @@ Query a bounded page of items.
 | Capability | item |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/item.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -1475,6 +1480,7 @@ Show one item.
 | Capability | item |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/item.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -1798,6 +1804,7 @@ Update a item.
 | Capability | item |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/item.update` |
+| External binary body | none |
 
 ### CLI
 

@@ -142,3 +142,75 @@ def try_forward(data_root: Path, cmd, raw_input: dict[str, Any], ctx: Context, c
         err = reply["error"]
         raise BookflowError(err["code"], message=err.get("message"), details=err.get("details") or {})
     return reply["output"]
+
+
+def try_forward_transfer(root, cmd, raw, ctx, selector, source, dry_run,
+                         input_stream=None, output_stream=None) -> dict | None:
+    """Forward one binary conversation; never retry locally after sending begins."""
+    from bookflow.company.attachment_store import BodyInfo
+    from bookflow.core.transfer_protocol import FramedReader, recv_json, send_body, send_json
+    from bookflow.core.transfer_resources import TransferLease
+    from bookflow.core.transfers import copy_output
+
+    if cmd.bootstrap:
+        return None
+    desc = read_descriptor(root)
+    if not desc or desc.get("pid") == os.getpid() or not _pid_alive(int(desc.get("pid", 0))):
+        return None
+    if desc.get("version") != client_version():
+        raise BookflowError("E_VERSION_MISMATCH", details={"host": desc.get("version"), "client": client_version()})
+    transfer = cmd.transfer
+    if transfer is None or (transfer.direction == "input" and input_stream is None) or (
+            transfer.direction == "output" and output_stream is None):
+        raise BookflowError("E_USAGE", message="A binary transfer requires its stream or sink.")
+    envelope = {"command": cmd.name, "input": raw, "company_selector": selector,
+                "company_source": source, "dry_run": dry_run,
+                "context": ctx.model_dump(mode="json"),
+                "transfer": {"version": 1, "direction": transfer.direction}}
+
+    def result(reply):
+        if "error" in reply:
+            err = reply["error"]
+            if not isinstance(err, dict) or not isinstance(err.get("code"), str):
+                raise BookflowError("E_IO", message="Invalid transfer error response.")
+            raise BookflowError(err["code"], message=err.get("message"), details=err.get("details") or {})
+        if set(reply) != {"output"} or not isinstance(reply["output"], dict):
+            raise BookflowError("E_IO", message="Missing successful transfer completion.")
+        return reply["output"]
+
+    with TransferLease("", "", lambda lease: None) as lease:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sk:
+            sk.settimeout(30)
+            try:
+                sk.connect(desc["socket"])
+            except OSError:
+                return None
+            try:
+                send_json(sk, envelope, limit=8192, check=lease.check_io)
+                ready = recv_json(sk, check=lease.check_io)
+                if "error" in ready:
+                    result(ready)
+                if ready.get("ready") is not True:
+                    raise BookflowError("E_IO", message="Missing transfer ready response.")
+                if transfer.direction == "input":
+                    limit = ready.get("limit")
+                    if type(limit) is not int or not 0 < limit <= 100_000_000:
+                        raise BookflowError("E_IO", message="Invalid transfer byte limit.")
+                    send_body(sk, input_stream, limit, check=lease.check_io)
+                else:
+                    size, sha = ready.get("size_bytes"), ready.get("sha256")
+                    if (type(size) is not int or not 0 <= size <= 100_000_000
+                            or not isinstance(sha, str) or len(sha) != 64
+                            or any(c not in "0123456789abcdef" for c in sha)):
+                        raise BookflowError("E_IO", message="Invalid download metadata.")
+                    reader = FramedReader(sk, 100_000_000, check=lease.check_io)
+                    copy_output(reader, output_stream, BodyInfo(sha, size), lease.check_io)
+                return result(recv_json(sk, check=lease.check_io))
+            except BookflowError as exc:
+                if exc.code != "E_IO":
+                    raise
+                raise BookflowError("E_IO", message="Transfer interrupted; a write may have committed.",
+                                    details={**exc.details, "may_have_committed": transfer.direction == "input"}) from exc
+            except (OSError, ValueError) as exc:
+                raise BookflowError("E_IO", message="Transfer interrupted; a write may have committed.",
+                                    details={"may_have_committed": transfer.direction == "input"}) from exc

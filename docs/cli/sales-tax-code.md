@@ -14,6 +14,7 @@ Activate a sales tax code.
 | Capability | sales-tax-code |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/sales-tax-code.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -146,6 +147,7 @@ Create a sales tax code.
 | Capability | sales-tax-code |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/sales-tax-code.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -278,6 +280,7 @@ Deactivate a sales tax code.
 | Capability | sales-tax-code |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/sales-tax-code.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -411,6 +414,7 @@ List sales tax codes.
 | Capability | sales-tax-code |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/sales-tax-code.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -516,6 +520,7 @@ Query a bounded page of sales tax codes.
 | Capability | sales-tax-code |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/sales-tax-code.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -623,6 +628,7 @@ Show one sales tax code.
 | Capability | sales-tax-code |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/sales-tax-code.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -733,6 +739,7 @@ Update a sales tax code.
 | Capability | sales-tax-code |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/sales-tax-code.update` |
+| External binary body | none |
 
 ### CLI
 

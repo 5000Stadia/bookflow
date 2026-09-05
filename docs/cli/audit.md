@@ -14,6 +14,7 @@ List this company's audit events, newest first.
 | Capability | audit |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/audit.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -146,6 +147,7 @@ Show one of this company's audit events with its entries and field diffs.
 | Capability | audit |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/audit.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -287,6 +289,7 @@ This company's audit events newer than a cursor, oldest first; the event feed.
 | Capability | audit |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/audit.tail` |
+| External binary body | none |
 
 ### CLI
 

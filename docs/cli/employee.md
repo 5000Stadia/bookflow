@@ -14,6 +14,7 @@ Activate a employee.
 | Capability | employee |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/employee.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -202,6 +203,7 @@ Create a employee.
 | Capability | employee |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/employee.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -412,6 +414,7 @@ Deactivate a employee.
 | Capability | employee |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/employee.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -601,6 +604,7 @@ List employees.
 | Capability | employee |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/employee.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -740,6 +744,7 @@ Query a bounded page of employees.
 | Capability | employee |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/employee.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -850,6 +855,7 @@ Show one employee.
 | Capability | employee |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/employee.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -1016,6 +1022,7 @@ Update a employee.
 | Capability | employee |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/employee.update` |
+| External binary body | none |
 
 ### CLI
 

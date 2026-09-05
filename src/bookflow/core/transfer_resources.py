@@ -90,6 +90,11 @@ class TransferLease:
     def check_io(self) -> None:
         self._check("caller")
 
+    def remaining_seconds(self) -> float:
+        """Remaining caller I/O lifetime, for transport timeout composition."""
+        self.check_io()
+        return max(0.0, self._deadline - self._clock())
+
     def check_start(self) -> None:
         self._check("writer")
 

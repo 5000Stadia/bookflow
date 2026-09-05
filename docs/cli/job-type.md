@@ -14,6 +14,7 @@ Activate a job type.
 | Capability | job-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/job-type.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -148,6 +149,7 @@ Create a job type.
 | Capability | job-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/job-type.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -281,6 +283,7 @@ Deactivate a job type.
 | Capability | job-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/job-type.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -417,6 +420,7 @@ List job types.
 | Capability | job-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/job-type.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -523,6 +527,7 @@ Query a bounded page of job types.
 | Capability | job-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/job-type.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -629,6 +634,7 @@ Show one job type.
 | Capability | job-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/job-type.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -741,6 +747,7 @@ Update a job type.
 | Capability | job-type |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/job-type.update` |
+| External binary body | none |
 
 ### CLI
 

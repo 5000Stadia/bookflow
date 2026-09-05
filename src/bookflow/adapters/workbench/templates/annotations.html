@@ -1,0 +1,26 @@
+{% if annotations %}
+<section class="annotations workspace-card" aria-labelledby="annotations-title" data-annotations='{{ annotations | tojson }}'>
+<h2 id="annotations-title">Notes, files and activity</h2>
+<p class="muted">Changes here save independently of the record form.</p>
+<noscript>JavaScript is required to load notes, files and activity.</noscript>
+<div class="annotation-columns">
+<section data-section="notes" aria-labelledby="annotation-notes-title"><h3 id="annotation-notes-title">Notes</h3>
+{% if annotations.allowed['note add'] %}<form data-note-add>
+<label for="annotation-note">New note</label><textarea id="annotation-note" name="body" required maxlength="65536" rows="3"></textarea>
+<button>Add note</button><p role="status" data-status></p></form>{% else %}<p class="muted">Notes are read only.</p>{% endif %}
+<div data-items></div><p role="status" data-list-status></p><button type="button" data-refresh>Refresh notes</button> <button type="button" data-more hidden>More notes</button>
+</section>
+<section data-section="files" aria-labelledby="annotation-files-title"><h3 id="annotation-files-title">Files</h3>
+{% if annotations.allowed['attachment add'] %}<form data-file-add>
+<label for="annotation-file">Choose a file</label><input id="annotation-file" type="file" name="file" required>
+<label for="annotation-caption">Caption (optional)</label><input id="annotation-caption" name="caption" maxlength="2048">
+<button>Attach file</button><p role="status" data-status></p></form>{% else %}<p class="muted">Files are read only.</p>{% endif %}
+<div data-items></div><p role="status" data-list-status></p><button type="button" data-refresh>Refresh files</button> <button type="button" data-more hidden>More files</button>
+</section>
+</div>
+<section data-section="activity" aria-labelledby="annotation-activity-title"><h3 id="annotation-activity-title">Activity</h3><p class="muted">Oldest first. Continue to see later events.</p>
+<ol data-items></ol><p role="status" data-list-status></p><button type="button" data-refresh>Refresh activity</button> <button type="button" data-more hidden>Continue activity</button>
+</section>
+</section>
+<script src="{{ static_urls['annotations.js'] }}" defer></script>
+{% endif %}

@@ -14,6 +14,7 @@ Add an attributed comment to a persistent company record without changing its ve
 | Capability | note |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/note.add` |
+| External binary body | none |
 
 ### CLI
 
@@ -162,6 +163,7 @@ Correct a comment with an expected version; previous text remains in audit histo
 | Capability | note |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/note.edit` |
+| External binary body | none |
 
 ### CLI
 
@@ -308,6 +310,7 @@ Page current comments for a record, newest id first; refresh to see newly added 
 | Capability | note |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/note.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -423,6 +426,7 @@ Show a note's current text, version and original author.
 | Capability | note |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/note.show` |
+| External binary body | none |
 
 ### CLI
 

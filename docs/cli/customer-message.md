@@ -14,6 +14,7 @@ Activate a customer message.
 | Capability | customer-message |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer-message.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -146,6 +147,7 @@ Create a customer message.
 | Capability | customer-message |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer-message.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -278,6 +280,7 @@ Deactivate a customer message.
 | Capability | customer-message |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer-message.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -411,6 +414,7 @@ List customer messages.
 | Capability | customer-message |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer-message.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -516,6 +520,7 @@ Query a bounded page of customer messages.
 | Capability | customer-message |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer-message.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -623,6 +628,7 @@ Show one customer message.
 | Capability | customer-message |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer-message.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -733,6 +739,7 @@ Update a customer message.
 | Capability | customer-message |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer-message.update` |
+| External binary body | none |
 
 ### CLI
 

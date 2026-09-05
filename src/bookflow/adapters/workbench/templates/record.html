@@ -25,4 +25,5 @@
 {% if workspace %}<details class="technical-details"><summary>All fields and technical details</summary>{{ fields(record, "") }}</details>{% else %}{{ fields(record, "") }}{% endif %}
 {% if audit is not none %}<h3>Audit</h3><div class="table-wrap"><table><tr><th>at</th><th>command</th><th>actor</th><th>interface</th><th>reason</th><th>summary</th></tr>
 {% for e in audit %}<tr><td>{{ e.at }}</td><td>{{ e.command }}</td><td>{{ e.actor_name or e.actor_id }}</td><td>{{ e.interface }}</td><td>{{ e.reason or "" }}{% if e.directive_code %} ({{ e.directive_code }}){% endif %}</td><td>{{ e.summary }}</td></tr>{% endfor %}</table></div>{% endif %}
+{% include "annotations.html" %}
 {% endblock %}

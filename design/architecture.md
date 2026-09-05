@@ -37,8 +37,8 @@ src/bookflow/
     engine.py            Database (sqlite3 + SQLAlchemy Core); explicit read-only snapshots, verified WAL/FULL/foreign-key writers, writable-transaction detection and exception-safe cleanup; percent-encoded URIs; create=True only for init/rollout
     traced_sqlite.py      capture-enabled per-connection native subclasses; bounded statement classification, execute/fetch/transaction timing, caller factories preserved
     migrate.py           HEADS constants; classify(); backup via sqlite backup API; migrate_to_head(); Alembic loaded only when migrating
-    hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection), hub0007 (note capabilities)
-    company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit/presence/directives), co0003 (20 supporting lists), co0004 (job delivery inheritance), co0005 (notes)
+    hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection), hub0007 (note capabilities), hub0008 (attachment/activity capabilities)
+    company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit/presence/directives), co0003 (20 supporting lists), co0004 (job delivery inheritance), co0005 (notes), co0006 (attachments, links, collection intent, byte limit)
     migrate.py           + migrate_company(): the one owner of company migrations: migrate entry by the system user, baseline entry, marker, hub projection entry
   hub/
     schema.py            users, api_tokens, organizations, companies, memberships, role_capabilities, features, audit_events, audit_entries; co-located table and column descriptions
@@ -55,7 +55,8 @@ src/bookflow/
     presence.py          set/clear/live_for/prune; 90 s TTL; never audited
     directives.py        add/resolve/deactivate/list_all; SI-<n> codes from sequences, never reused
     records.py           explicit persistent annotation targets, including inactive list and owned-child identities; selected-company primary-key lookups
-    attachment_store.py  internal bounded SHA-256 scan, private invocation staging, verified no-replace hard-link publication; not yet connected to commands or adapters
+    attachment_store.py  bounded SHA-256 scan, owned invocation staging, verified no-replace publication and held-descriptor reads
+    attachment_gc.py     bounded durable collection intents, recovery and orphan discovery
     query.py             strict bounded query inputs, reference rows, scoped/permission-bound continuation contract
     query_providers.py   SQL-first noun selection and summary/reference projection; audit-watermark continuation validation
   commands/
@@ -106,7 +107,7 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - The event stream validates its cursor before sending a streaming response. Each worker call drains at most 100 events, closes its snapshot before yielding frames, and immediately redrains a full page. It reauthenticates between batches. Idle streams wait on `asyncio.Event` without a reader or worker. Canonical database ids and subscribe/redrain sequence comparison close the drain/wait race. Disconnect and shutdown unregister subscriptions.
 - Company API paths require a ULID. An accompanying `X-Bookflow-Company` must be the same ULID after normalization; mismatch is `E_VALIDATION` before visibility lookup. Header-only company selection through `/commands/<noun.verb>` retains the ordinary selector rules.
 - Session and bearer liveness refreshes are throttled to five minutes. A browser session's database expiry and cookie `Max-Age` renew together; SSE does not renew the cookie. Password changes revoke every other session for the target and preserve bearer tokens.
-- Hub head `hub0007` adds note capability rows after `hub0006`'s recoverable pending configuration contents. Company head `co0005` adds versioned notes. Membership grants/denies and capability/feature projections remain compatibility state; enforcement remains role-based until row 7. The planned agent-authority epochs and immutable ledger document/posting contracts are not implemented tables.
+- Hub head `hub0008` adds attachment/activity capability rows. Company head `co0006` adds attachment metadata, active/historical record links, collection intent and the company byte limit. Membership grants/denies and capability/feature projections remain compatibility state; enforcement remains role-based until row 7. The planned agent-authority epochs and immutable ledger document/posting contracts are not implemented tables.
 - A single-word command (`upgrade`) has no verb: its noun page is its form, and it submits to `/hub/<noun>`.
 - `docs generate` is a rootless standalone command: no data root, lock, actor, capability, forwarding, or HTTP route. It renders all registered commands including standalone tooling, validates examples and schema descriptions, and copies packaged prose resources. Generation accepts only an absent, empty, or exactly marked real directory; it refuses symlinks and unrelated trees, validates a sibling stage, swaps it atomically, and restores the previous complete tree if publication fails. `--check` performs a read-only byte/path comparison and reports sorted missing, extra, and changed paths as `E_DOCS_STALE`.
 - The cold-start test budgets `bookflow --help` below 300 ms; neither root help nor command discovery imports FastAPI, uvicorn, or the workbench.
@@ -115,17 +116,73 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 
 ## Verified on this machine (Linux, ext4, Python 3.12)
 
-Record notes use one new company table and its target/id index, with no added runtime dependency or background service. Note bodies are at most 65,536 UTF-8 bytes; list pages contain at most 200 notes and 262,144 body bytes. Existing audit snapshots preserve edits and existing request idempotency handles add retries. Notes do not change target versions or block soft retirement. CLI, Python and HTTP expose add/show/edit/list; the generic workbench has safe note display/edit and a target-input form for record-scoped lists. A record-local Notes and files panel, attachment transfer/metadata/links and merged activity remain unimplemented portions of row 6.
+Record notes use a company table and target/id index. Bodies are at most65,536
+UTF-8bytes; pages contain at most200 notes and262,144 body bytes. Edits preserve
+original attribution and immutable audit history. Notes and attachment links do
+not change their target's version or prevent soft retirement. The workbench's
+shared Notes, files and activity panel appears on record details and existing
+record forms, including customer/job workflows. Annotation saves preserve unsaved
+master fields. Readonly users have read/download controls; stale note edits retain
+the draft. Activity pages read immutable audit snapshots, limit SQL candidates
+before decoding, batch actor names, and bind chronological continuations to a
+fixed high-water and the authorized target/filter scope.
 
-The internal attachment byte primitive is independent of command execution. `scan(stream, limit)` hashes without filesystem writes; `stage(store, stream, limit)` owns a private temporary for its context; `publish(store, staged)` consumes it and returns digest, size and whether a body was newly published. Reads request at most 65,536 bytes and limits cannot exceed 100,000,000 bytes. Staged bytes are reverified, fsynced and closed before atomic no-replace hard-link publication. Deduplication verifies and synchronizes the existing body; directory synchronization failures remain failures and retries use a new invocation. Cleanup removes only its temporary, never a published digest. Corrupt, symlinked or non-regular bodies are refused. Unsupported hard-link filesystems fail closed. No production caller uses this primitive yet: authorization, attachment metadata/links and compact recovery remain integration work. Process crashes can leave orphan bodies or staging files. Cross-platform hardware durability is not claimed.
+Attachment commands share registry TransferDescriptor metadata and one binary
+resource outside JSON. Authorization-only preparation validates company, target,
+role, reason/directive and company limit before consuming bytes; final execution
+rechecks authority and binds actual digest/size to idempotency. The company limit
+is configurable through company update, default25,000,000bytes, maximum100,000,000.
+Uploads retain first-upload metadata for duplicate bytes; active links are unique
+per attachment/target, and unlink/relink preserves separate historical occurrences.
+No-op writes retain successful retry results without extra audit events.
 
-The host provides internal transfer admission and filesystem leases with eight global slots, two per principal, and a 300-second lifetime. Leases hold no database connection. Caller-owned I/O is cancelled during shutdown; accepted writer jobs retain staged resources through database cleanup even when submitters time out. Cleanup callbacks run once on success, in reverse registration order; failed callbacks retain the lease for explicit retry. Callbacks must support retry after partial effects. Filesystem changes wait for both readers and transfers, while ordinary writes remain available. Shutdown keeps the data-root lock while readers, transfers or the writer are unfinished. Transport cancellation is cooperative; a blocked arbitrary Python stream or cleanup callback cannot be forcibly interrupted.
+`OwnedStage` registers retryable cleanup before initialization or reading.
+Incremental writes are at most65,536bytes. Dry runs hash without creating a stage.
+Publication reverifies, fsyncs and closes the staging writer before a no-replace
+hard link, then synchronizes shard/store directories. Existing digest paths are
+verified and synchronized too. Rollback removes only the invocation's temporary;
+published bytes can remain as orphans. `open_verified` returns a read-only held
+file descriptor after exact digest/size verification. Symlinks and non-regular
+bodies are refused; unsupported hard-link filesystems fail closed.
 
-`core/transfer_protocol.py` implements bounded strict JSON metadata, unpadded base64url headers, and four-byte binary chunk framing. Metadata headers are at most 8,192 encoded bytes; body chunks and final JSON frames are at most 65,536 bytes. Socket waits apply inactivity and absolute deadlines, with a transfer-wide lease check supplied across helper calls. Duplicate JSON keys, non-finite numbers, oversized frames, truncated streams and expanded limit overrides are rejected. A terminal body frame is not proof of command completion. These are internal helpers; HTTP/local binary routes and registry transfer descriptors are not exposed yet.
+Hosts admit eight transfers globally and two per principal, with a300-second
+absolute lifetime and30-second transport inactivity limit. Leases hold no database
+connection. Preparation reserves a lease while its authorized reader is still
+admitted, then closes the snapshot. Downloads use short authorization rechecks
+between chunks. Accepted writer jobs own their staged resources through database
+cleanup even when callers time out; failed cleanup retains slots and root ownership
+for retry. Standalone execution holds RootLock through transfer and cleanup.
+Shutdown cancels caller I/O and retains the root lock while owners remain active.
+Arbitrary synchronous Python streams and cleanup callbacks must cooperate; they
+cannot be forcibly interrupted.
 
-Transfer resources/protocol/host tests pass 115 cases, including an actual queued staged body outliving a submitter timeout before publication. The host/shutdown/storage/tracing integration group passes 45 tests. The assembled artifact `e656b41` passes the complete suite: 938 tests in 509.70 seconds, with 11 existing dependency/schema-order/JUnit-property warnings. Cold root help is 219.42 ms; cold company/customer/term reads are 521.41/771.38/593.68 ms. Root help and warm query gates pass; cold reads remain diagnostic. No database migration, dependency, background service, command, demo seed or upload UI is added by this internal increment.
+Python accepts input_stream/output_stream separately from command JSON. CLI opens
+paths only on the calling machine, defaults upload filename/MIME from that path,
+and publishes verified downloads through a private temporary and no-replace final
+link. HTTP transfers use raw authenticated bodies and bounded X-Bookflow-Input
+base64url metadata; output includes no-store/nosniff, disposition, size, SHA-256 and
+X-Bookflow-Output typed metadata. Local forwarding validates kernel identity and
+metadata before ready, frames chunks at65,536bytes and requires successful final
+JSON after the terminal body frame. Interrupted forwarded writes never fall back
+to standalone execution after transmission begins. Browser downloads verify actual
+size and SHA-256 before handing a file to the browser; local HTTP uses the bundled
+SHA-256 fallback when SubtleCrypto is unavailable.
 
-The byte primitive passes 49 focused tests for bounds, private modes, malformed streams, corruption, duplicate publication, sparse-file rejection, cancellation, failed synchronization, consumed resources and cleanup failures. The combined attachment/durable-files/documentation/registry group passes 93 tests in 42.79 seconds with seven existing schema-order warnings. This focused group follows the notes full-suite run; it is not a second full-suite result.
+Company compact is owner/admin-only, processes at most200 bodies and retains all
+attachment/link/audit history. Root-wide filesystem exclusion drains existing
+readers and transfers before candidate selection. A bounded durable intent commits
+before body removal; completion synchronizes directories, marks metadata collected,
+writes one original-context audit/idempotency result and clears intent atomically.
+Recovery precedes new attachment write admission and never runs while owning a
+transfer lease. Dry runs never recover or delete; pending recovery is E_DB_BUSY.
+Orphan discovery examines at most512 directory entries per invocation, with a
+continuation in completion audit snapshots. Directory-cookie discovery is supported
+on64-bit Linux; other platforms report incomplete discovery. Cookies are local
+filesystem continuation hints; directory replacement restarts discovery and a
+completed traversal wraps to the beginning. Collected bytes require a fresh
+verified upload before linking again. Company copies include the attachment folder.
+The demo seed attaches a packaged one-page PDF and comments to a customer, account
+and company using the registered command path.
 
 The notes checkpoint passed the complete correctness suite: 759 tests in 484.93 seconds, with 11 dependency/schema-order/JUnit-property warnings and 95 generated documentation files. The same run recorded cold root help at 219.98 ms, company list at 532.38 ms, customer list at 779.55 ms and term list at 596.80 ms; cold reads are diagnostics, while root help and the 10,000-record warm-query gate passed their strict limits. Customer/job and nested reference workflows have real-Chrome desktop/narrow-screen witnesses. Human browser acceptance of the wider list workbench remains pending.
 

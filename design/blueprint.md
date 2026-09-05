@@ -1030,7 +1030,9 @@ multipart parser consumes unauthenticated uploads. The browser sends the selecte
 File directly and encodes form metadata in the header. Output bytes use
 `Content-Disposition: attachment` with a sanitized ASCII fallback and RFC5987
 UTF-8 filename, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, and
-verified Content-Length. Failures before response headers use normal JSON errors;
+verified Content-Length. `X-Bookflow-Output` carries the typed command metadata
+using the same bounded base64url JSON encoding as the input header.
+Failures before response headers use normal JSON errors;
 failures during output truncate the response and never claim a complete download.
 
 Local forwarding retains the existing JSON envelope for ordinary commands. A

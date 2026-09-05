@@ -14,6 +14,7 @@ Record a standing instruction that later writes can cite by code instead of repe
 | Capability | directive |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/directive.add` |
+| External binary body | none |
 
 ### CLI
 
@@ -161,6 +162,7 @@ Deactivate a standing instruction so it can no longer be cited.
 | Capability | directive |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/directive.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -303,6 +305,7 @@ List this company's standing instructions.
 | Capability | directive |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/directive.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -411,6 +414,7 @@ Show one standing instruction.
 | Capability | directive |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/directive.show` |
+| External binary body | none |
 
 ### CLI
 

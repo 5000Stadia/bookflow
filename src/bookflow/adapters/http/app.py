@@ -233,6 +233,10 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
         raw = await body_of(request)
         return await run_in_threadpool(serve_command, route, request, raw, company_id)
 
+    from bookflow.adapters.http.transfers import install as install_transfers
+    install_transfers(app, host, credential=credential, lookup=lookup, selector_of=selector_of,
+                      make_context=make_context, secret_of=secret_of)
+
     # ------------------------------------------------------------ login / logout
     @app.post("/login")
     async def login(request: Request):
@@ -472,6 +476,22 @@ def build_openapi(version: str) -> dict[str, Any]:
             "security": [{"bearer": []}, {"cookie": []}],
             "x-bookflow-error-codes": errors,
         }
+        if cmd.transfer is not None:
+            path = f"/companies/{{company_id}}/transfers/{route_name(cmd.name)}"
+            op["parameters"].append({"name": "X-Bookflow-Input", "in": "header", "required": True,
+                "schema": {"type": "string", "maxLength": 8192},
+                "description": "Unpadded base64url UTF-8 JSON object, at most 6144 decoded bytes.",
+                "x-bookflow-input-schema": cmd.input_model.model_json_schema()})
+            op["x-bookflow-transfer"] = cmd.transfer.direction
+            if cmd.transfer.direction == "input":
+                op["requestBody"] = {"required": True, "content": {
+                    "application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}}
+            else:
+                op.pop("requestBody")
+                op["responses"]["200"] = {"description": "Verified binary attachment; empty request body required.",
+                    "headers": {name: {"schema": {"type": "string"}} for name in
+                                ("Content-Disposition", "Content-Length", "X-Bookflow-SHA256", "X-Bookflow-Output")},
+                    "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}}
         paths[path] = {"post": op}
     paths["/login"] = {"post": {"summary": "Log in with username and password; sets the session cookie.", "requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {"username": {"type": "string"}, "password": {"type": "string", "format": "password"}}}}}}}}
     return {"openapi": "3.1.0", "info": {"title": "Bookflow", "version": version}, "paths": paths,

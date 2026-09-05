@@ -14,6 +14,7 @@ Apply a packaged supporting-data profile without replacing edits.
 | Capability | profile |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/profile.apply` |
+| External binary body | none |
 
 ### CLI
 
@@ -125,6 +126,7 @@ List packaged supporting-data profiles.
 | Capability | profile |
 | Feature | — |
 | HTTP | `POST /commands/profile.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -214,6 +216,7 @@ Show one packaged supporting-data profile.
 | Capability | profile |
 | Feature | — |
 | HTTP | `POST /commands/profile.show` |
+| External binary body | none |
 
 ### CLI
 

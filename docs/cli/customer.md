@@ -14,6 +14,7 @@ Activate a customer or job.
 | Capability | customer |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer.activate` |
+| External binary body | none |
 
 ### CLI
 
@@ -426,6 +427,7 @@ Create a customer or job.
 | Capability | customer |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer.create` |
+| External binary body | none |
 
 ### CLI
 
@@ -914,6 +916,7 @@ Deactivate a customer or job.
 | Capability | customer |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer.deactivate` |
+| External binary body | none |
 
 ### CLI
 
@@ -1328,6 +1331,7 @@ Link one active customer or job to one active vendor.
 | Capability | customer |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer.link-vendor` |
+| External binary body | none |
 
 ### CLI
 
@@ -1450,6 +1454,7 @@ List customers and jobs.
 | Capability | customer |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -1742,6 +1747,7 @@ Query a bounded page of customers and jobs.
 | Capability | customer |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer.query` |
+| External binary body | none |
 
 ### CLI
 
@@ -1856,6 +1862,7 @@ Show one customer or job.
 | Capability | customer |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer.show` |
+| External binary body | none |
 
 ### CLI
 
@@ -2246,6 +2253,7 @@ Unlink a customer or job from its current vendor.
 | Capability | customer |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer.unlink-vendor` |
+| External binary body | none |
 
 ### CLI
 
@@ -2365,6 +2373,7 @@ Update a customer or job.
 | Capability | customer |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/customer.update` |
+| External binary body | none |
 
 ### CLI
 

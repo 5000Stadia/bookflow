@@ -30,10 +30,12 @@ class _Noun:
             directive = kwargs.pop("directive", None) if "directive" not in fields else None
             idempotency_key = kwargs.pop("idempotency_key", None)
             clear = kwargs.pop("clear", None)
+            input_stream = kwargs.pop("input_stream", None)
+            output_stream = kwargs.pop("output_stream", None)
             company = None
             if registry.get(name).scope == "company" and "company" not in fields:
                 company = kwargs.pop("company", None)
-            return self._client.run(name, kwargs, company=company, dry_run=dry_run, reason=reason, source_ref=source_ref, directive=directive, idempotency_key=idempotency_key, clear=clear)
+            return self._client.run(name, kwargs, company=company, dry_run=dry_run, reason=reason, source_ref=source_ref, directive=directive, idempotency_key=idempotency_key, clear=clear, input_stream=input_stream, output_stream=output_stream)
         return call
 
 
@@ -51,7 +53,7 @@ class Client:
 
     def run(self, name: str, input: dict[str, Any] | None = None, *, company: str | None = None, dry_run: bool = False,
             reason: str | None = None, source_ref: str | None = None, directive: str | None = None, idempotency_key: str | None = None,
-            clear: list[str] | None = None) -> dict[str, Any]:
+            clear: list[str] | None = None, input_stream=None, output_stream=None) -> dict[str, Any]:
         cmd = registry.get(name)
         if cmd is None:
             raise BookflowError("E_USAGE", message=f"unknown command {name!r}")
@@ -77,7 +79,7 @@ class Client:
                 table = cfg.user_table(self._login or os_login()) or {}
                 if table.get("default_company"):
                     selector, source = table["default_company"], "default"
-        return dispatch_run(cmd, input or {}, ctx, data_root=self.data_root, company_selector=selector, company_source=source, dry_run=dry_run, _login=self._login)
+        return dispatch_run(cmd, input or {}, ctx, data_root=self.data_root, company_selector=selector, company_source=source, dry_run=dry_run, _login=self._login, input_stream=input_stream, output_stream=output_stream)
 
     def __getattr__(self, noun: str):
         if noun.startswith("_"):
@@ -87,7 +89,10 @@ class Client:
                 dry_run = kwargs.pop("dry_run", False)
                 reason = kwargs.pop("reason", None)
                 source_ref = kwargs.pop("source_ref", None)
-                return self.run(noun, kwargs, dry_run=dry_run, reason=reason, source_ref=source_ref, idempotency_key=kwargs.pop("idempotency_key", None))
+                cmd = registry.get(noun)
+                company = kwargs.pop("company", None) if cmd.scope == "company" and "company" not in cmd.input_model.model_fields else None
+                return self.run(noun, kwargs, company=company, dry_run=dry_run, reason=reason, source_ref=source_ref,
+                                idempotency_key=kwargs.pop("idempotency_key", None), directive=kwargs.pop("directive", None))
             return call
         return _Noun(self, noun)
 

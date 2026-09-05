@@ -15,6 +15,13 @@ class Example:
 ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
 EXAMPLES: dict[str, Example] = {
+    "activity": Example(f'bookflow activity customer {ID} --company "Demo Plumbing Co" --kinds \'["note","attachment"]\' --limit 25 --json', {"record_type": "customer", "record_id": ID, "kinds": ["note", "attachment"], "limit": 25}),
+    "attachment add": Example(f'bookflow attachment add customer {ID} receipt.pdf --company "Demo Plumbing Co" --caption "Service receipt" --reason "File service receipt" --json', {"record_type": "customer", "record_id": ID, "original_filename": "receipt.pdf", "media_type": "application/pdf", "caption": "Service receipt"}),
+    "attachment link": Example(f'bookflow attachment link {ID} customer {ID} --company "Demo Plumbing Co" --caption "Related receipt" --reason "Link receipt" --json', {"attachment": ID, "record_type": "customer", "record_id": ID, "caption": "Related receipt"}),
+    "attachment unlink": Example(f'bookflow attachment unlink {ID} --expected-version 1 --company "Demo Plumbing Co" --reason "Remove association" --json', {"link": ID, "expected_version": 1}),
+    "attachment list": Example(f'bookflow attachment list customer {ID} --company "Demo Plumbing Co" --limit 25 --json', {"record_type": "customer", "record_id": ID, "limit": 25}),
+    "attachment get": Example(f'bookflow attachment get {ID} --out downloaded-receipt.pdf --company "Demo Plumbing Co" --json', {"attachment": ID}),
+    "company compact": Example('bookflow company compact --company "Demo Plumbing Co" --limit 200 --dry-run --reason "Preview unlinked file collection" --json', {"limit": 200}),
     "audit list": Example('bookflow audit list --company "Demo Plumbing Co" --limit 5 --json', {"limit": 5}),
     "audit show": Example(f'bookflow audit show {ID} --company "Demo Plumbing Co" --json', {"event": ID}),
     "audit tail": Example('bookflow audit tail --company "Demo Plumbing Co" --after 42 --json', {"after": 42}),

@@ -14,6 +14,7 @@ Apply one complete packaged chart to a chartless company.
 | Capability | chart |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/chart.apply` |
+| External binary body | none |
 
 ### CLI
 
@@ -125,6 +126,7 @@ List packaged chart templates.
 | Capability | chart |
 | Feature | — |
 | HTTP | `POST /commands/chart.list` |
+| External binary body | none |
 
 ### CLI
 
@@ -215,6 +217,7 @@ Show one packaged chart template and its ordered accounts.
 | Capability | chart |
 | Feature | — |
 | HTTP | `POST /commands/chart.show` |
+| External binary body | none |
 
 ### CLI
 

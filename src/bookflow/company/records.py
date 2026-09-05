@@ -23,6 +23,8 @@ _TARGETS.update({
     "audit_entry": ("audit_entries", "id"),
     "customer_vendor_link": ("customer_vendor_links", "id"),
     "note": ("notes", "id"),
+    "attachment": ("attachments", "id"),
+    "attachment_link": ("attachment_links", "id"),
     "customer_address": ("customer_addresses", "id"),
     "customer_contact": ("customer_contacts", "id"),
     "customer_contact_point": ("customer_contact_points", "id"),

@@ -6,10 +6,13 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 
 - [Agent guide](agent-guide.md) — install or select the command, start an isolated host, and complete a versioned audited write.
 - [Concepts](concepts.md) — selection, context, concurrency, audit, identity, money, and error behavior.
+- [Binary transfers](transfers.md) — CLI files, Python streams, HTTP raw bodies, and verified completion.
 
 ## Command reference
 
 - [`account`](cli/account.md)
+- [`activity`](cli/activity.md)
+- [`attachment`](cli/attachment.md)
 - [`audit`](cli/audit.md)
 - [`chart`](cli/chart.md)
 - [`class`](cli/class.md)
@@ -50,6 +53,9 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 ## Schema reference
 
 - [`company/accounts`](schema/company/accounts.md)
+- [`company/attachment_collection`](schema/company/attachment_collection.md)
+- [`company/attachment_links`](schema/company/attachment_links.md)
+- [`company/attachments`](schema/company/attachments.md)
 - [`company/audit_entries`](schema/company/audit_entries.md)
 - [`company/audit_events`](schema/company/audit_events.md)
 - [`company/classes`](schema/company/classes.md)
