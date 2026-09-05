@@ -302,3 +302,25 @@ class inheritance modes. General journals outside the editable register shape
 remain readable and link to the journal editor. The browser retains one bounded
 pending write per tab, including its payload and retry key, before submission;
 uncertain results require resolving that same intent before another write.
+
+
+### Ledger performance measurements
+
+Audit entry snapshots are encoded in their existing format and inserted as one
+parameter batch inside the caller's write transaction. Each touched record keeps
+its individual audit entry ID, event ID, versions and before/after snapshots.
+An error partway through entry insertion rolls back the event and business write.
+
+With 10,000 accounts and over 100,000 posting lines on the local SSD, twenty warm
+resident-host samples of a 20-line journal have a median of 36.67 ms and maximum
+of 39.29 ms. Host startup/shutdown are outside the samples; dispatch, current
+permission checks, writer validation, audit and durable commit are inside.
+Repeated offline library calls include per-call connection open/close and
+checkpoint work; their median is 63.37 ms, maximum 123.46 ms across twenty samples.
+
+Six library trial-balance reads over 100,514 posting lines return the independently
+expected 5,665,000 USD minor units on each side. The five subsequent warm samples
+have a median of 1,140.13 ms and maximum of 1,154.92 ms. This fixture uses 500
+200-line journals posted through public commands and a bulk-created master-data
+fixture. Its database occupies 441,896,960 bytes. This is not the separate
+100,000-transaction storage-budget witness, which remains outstanding.
