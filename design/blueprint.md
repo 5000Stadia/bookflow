@@ -53,7 +53,10 @@ A command is a function plus an input model and an output model. The registry ma
 | Tests | pytest |
 | Identifiers | ULID strings, generated in the core |
 
-Everything must remain portable to PostgreSQL. No SQLite-only SQL in repositories. No triggers.
+Everything must remain portable to PostgreSQL. No SQLite-only SQL in repositories.
+Business calculations and audit orchestration run in the application, not in
+triggers. Storage migrations may install rejection-only guards against updating
+or deleting immutable ledger history; these guards do not calculate or write data.
 
 ## 3. Data on disk
 
@@ -469,7 +472,7 @@ Table `company_info` in company.db, exactly one row. This table and the rollout 
 | use_account_numbers | whether ordinary forms, tables, and pickers display stored account numbers; default true so a new company exposes the identifiers it records |
 | show_lowest_subaccount_only | whether account pickers display leaf names instead of full names; default false |
 | required_employee_profile_fields | ordered requirements encoded as arrays of alternative registered non-secret employee field paths; each requirement needs one populated alternative |
-| use_classes, prompt_for_class | whether later forms expose and require a class; both default false |
+| use_classes, prompt_for_class | whether later forms expose class entry and warn for missing classes; both default false |
 | enable_price_levels | whether later sales forms expose price-level defaults; default false |
 | units_of_measure_mode | `disabled`, `single_unit_per_item`, or `multiple_related_units`; default `disabled` |
 | sales_tax_enabled | whether later sales forms calculate sales tax; default false |
