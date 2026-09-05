@@ -613,6 +613,8 @@ Table `transactions` is the current document header and carries the common versi
 | status | `posted` or `voided` for posting types; a non-posting type has its explicitly defined workflow status |
 | voided_at, voided_by, void_reason, void_posting_batch_id | null unless voided; the batch is the final reversal, not a second invoice or payment |
 
+Journal-entry numbers begin at `1` with an empty prefix. Automatic allocation skips numbers already used by the type, including voided documents, within the posting transaction. Explicit numbers are nonblank trimmed case-sensitive text and do not advance the counter. A rolled-back or replayed post consumes no new number. A journal revision's total is its home debit total; output also exposes debit and credit totals separately. Account balance is the account's own posting balance, positive on its normal side, without descendant rollup. Reports explicitly identify signed debit-minus-credit amounts and currency.
+
 Table `transaction_revisions` stores `id`, `transaction_id`, sequential `revision_number`, `supersedes_revision_id`, `date`, `number`, `name_type`, `name_id`, `memo`, exact home-currency `total`, `audit_event_id`, and creation provenance. A revision snapshots all facts needed to reproduce the document: issuer/payee names and addresses, shipping address, applied terms and due date, and the type's relevant form fields. Type-specific tables such as `invoices` are keyed by **revision id**, not a mutable transaction id. A new revision never modifies the old revision or its child rows. The current header pointer and all new history rows commit atomically.
 
 Table `document_lines` holds the commercial or entered lines of each revision.
