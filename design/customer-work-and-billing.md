@@ -2,8 +2,9 @@
 
 This workflow extends blueprint sections 10.3, 13.1 and 13.4. Proposals, estimates
 and work orders have shared commands and browser forms. [Linked work billing](work-billing.md)
-connects whole source lines to invoices and receipts; partial/progress billing,
-settlement and delivery remain subsequent increments.
+connects source lines to invoices and receipts. The [progress allocation contract](specs/18-progress-billing.md)
+supports quantity, net amount, original-scope percentage and exact rebilling.
+Settlement and delivery remain subsequent increments.
 
 The later [print-template system](print-templates.md) supplies editable output
 layouts, dynamic custom proposals/forms and ordered groups that can combine these
@@ -40,8 +41,8 @@ obligations. The workflow shows existing billing before offering its next action
 Conversion creates a linked destination document and retains the source and its
 history. Source and destination show their relationship and status. Retrying a
 conversion cannot duplicate billing. Partial/progress billing retains the billed
-and remaining quantities or amounts against source lines; the detailed sales
-spec defines its exact rules before implementation. A source correction does not
+and remaining quantities or amounts against source lines under the allocation
+contract. A source correction does not
 silently rewrite an issued invoice or its accounting history.
 
 ## Agent and command vocabulary

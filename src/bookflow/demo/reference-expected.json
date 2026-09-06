@@ -556,8 +556,8 @@
       },
       "gross_debits_credits": {
         "Checking": [
-          6105681,
-          1152881
+          6111081,
+          1158281
         ],
         "Equipment": [
           240000,
@@ -580,8 +580,8 @@
           30000
         ],
         "Service Income": [
-          678504,
-          5227504
+          759252,
+          5308252
         ],
         "Opening Balance Equity": [
           0,
@@ -592,12 +592,12 @@
           0
         ],
         "Accounts Receivable": [
-          137383,
-          124583
+          219191,
+          206391
         ],
         "Sales Tax Payable": [
-          13960,
-          15560
+          20420,
+          22020
         ]
       },
       "trial_balance": 5580600,
@@ -623,8 +623,8 @@
       },
       "gross_debits_credits": {
         "Checking": [
-          6855681,
-          1177881
+          6861081,
+          1183281
         ],
         "Equipment": [
           240000,
@@ -647,8 +647,8 @@
           40000
         ],
         "Service Income": [
-          678504,
-          5977504
+          759252,
+          6058252
         ],
         "Opening Balance Equity": [
           0,
@@ -659,12 +659,12 @@
           0
         ],
         "Accounts Receivable": [
-          137383,
-          124583
+          219191,
+          206391
         ],
         "Sales Tax Payable": [
-          13960,
-          15560
+          20420,
+          22020
         ]
       },
       "trial_balance": 6340600,
@@ -690,8 +690,8 @@
       },
       "gross_debits_credits": {
         "Checking": [
-          7745681,
-          1292881
+          7751081,
+          1298281
         ],
         "Equipment": [
           240000,
@@ -714,8 +714,8 @@
           50000
         ],
         "Service Income": [
-          768504,
-          6867504
+          849252,
+          6948252
         ],
         "Opening Balance Equity": [
           0,
@@ -726,12 +726,12 @@
           0
         ],
         "Accounts Receivable": [
-          137383,
-          124583
+          219191,
+          206391
         ],
         "Sales Tax Payable": [
-          13960,
-          15560
+          20420,
+          22020
         ]
       },
       "trial_balance": 7150600,
@@ -757,8 +757,8 @@
       },
       "gross_debits_credits": {
         "Checking": [
-          8595681,
-          1327881
+          8601081,
+          1333281
         ],
         "Equipment": [
           240000,
@@ -781,8 +781,8 @@
           60000
         ],
         "Service Income": [
-          768504,
-          7717504
+          849252,
+          7798252
         ],
         "Opening Balance Equity": [
           0,
@@ -793,12 +793,12 @@
           30000
         ],
         "Accounts Receivable": [
-          137383,
-          124583
+          219191,
+          206391
         ],
         "Sales Tax Payable": [
-          13960,
-          15560
+          20420,
+          22020
         ]
       },
       "trial_balance": 8030600,
@@ -825,8 +825,8 @@
     },
     "gross_debits_credits": {
       "Checking": [
-        8595681,
-        1327881
+        8601081,
+        1333281
       ],
       "Equipment": [
         240000,
@@ -849,8 +849,8 @@
         60000
       ],
       "Service Income": [
-        768504,
-        7717504
+        849252,
+        7798252
       ],
       "Opening Balance Equity": [
         0,
@@ -861,12 +861,12 @@
         30000
       ],
       "Accounts Receivable": [
-        137383,
-        124583
+        219191,
+        206391
       ],
       "Sales Tax Payable": [
-        13960,
-        15560
+        20420,
+        22020
       ]
     },
     "trial_balance": 8030600,
@@ -893,8 +893,8 @@
     },
     "gross_debits_credits": {
       "Checking": [
-        4520681,
-        317881
+        4526081,
+        323281
       ],
       "Equipment": [
         0,
@@ -917,8 +917,8 @@
         60000
       ],
       "Service Income": [
-        268504,
-        4642504
+        349252,
+        4723252
       ],
       "Opening Balance Equity": [
         0,
@@ -929,12 +929,12 @@
         30000
       ],
       "Accounts Receivable": [
-        137383,
-        124583
+        219191,
+        206391
       ],
       "Sales Tax Payable": [
-        13960,
-        15560
+        20420,
+        22020
       ]
     }
   }

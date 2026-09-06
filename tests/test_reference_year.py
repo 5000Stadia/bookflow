@@ -97,6 +97,20 @@ def source_effects():
     billed('REF-BILL-INV-3', '2026-09-20', 'Accounts Receivable', [('original', labor)])
     billed('REF-BILL-SR-2', '2026-09-15', 'Checking', [('original', repair)])
     billed('REF-BILL-INV-AMT', '2026-09-21', 'Accounts Receivable', [('original', amount)])
+    # Row 18 partial billing demonstrations: per-line legs of each installment, each voided on its own date.
+    # Kitchen quote: L0 4 x 100.00 (40000), L1 3 units for 0.99 (99), L2 one microunit for 1.00 (100); tax 8% half-even per line.
+    def line(net):
+        t = (net * 8) // 100 + ((net * 8) % 100 > 50 or ((net * 8) % 100 == 50 and ((net * 8) // 100) % 2 == 1))
+        return [('{control}', net + t, 0), ('Service Income', 0, net), ('Sales Tax Payable', 0, t)]
+    billed('REF-PROG-INV-1', '2026-09-23', 'Accounts Receivable', [('original', line(10000))])
+    billed('REF-PROG-INV-2', '2026-09-24', 'Accounts Receivable', [('original', line(40))])
+    billed('REF-PROG-INV-3', '2026-09-25', 'Accounts Receivable', [('original', line(50))])
+    billed('REF-PROG-INV-4', '2026-09-26', 'Accounts Receivable', [('original', line(10000) + line(24) + line(25)),
+                                                                  ('replacement', line(10000) + line(24) + line(25) + line(500))])
+    billed('REF-PROG-INV-6', '2026-09-27', 'Accounts Receivable', [('original', line(10000))])
+    billed('REF-PROG-INV-5', '2026-09-28', 'Accounts Receivable', [('original', line(20000) + line(25) + line(35))])
+    billed('REF-PROG-SR-1', '2026-09-24', 'Checking', [('original', line(5000))])
+    billed('REF-PROG-INV-7', '2026-09-29', 'Accounts Receivable', [('original', line(15000))])
     return rows
 
 

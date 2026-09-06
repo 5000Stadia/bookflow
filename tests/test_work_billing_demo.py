@@ -32,7 +32,7 @@ def test_manifests_append_all_six_billing_commands_after_the_old_entries(resourc
     assert not [e for e in old if e["command"] in BILLING]
     assert {e["command"] for e in new if e["command"] in BILLING} == BILLING
     prefix = ("DEMO" if resource == "seed.toml" else "REF") + "-BILL-"
-    numbers = [e["input"]["number"] for e in new if "number" in e["input"]]
+    numbers = [e["input"]["number"] for e in new if "number" in e["input"] and "-BILL-" in e["input"]["number"]]
     assert numbers and all(n.startswith(prefix) for n in numbers)
     assert not [e for e in old if str(e.get("input", {}).get("number", "")).startswith(prefix)]
     for entry in new:
@@ -44,7 +44,7 @@ def test_manifests_append_all_six_billing_commands_after_the_old_entries(resourc
               for e in new if e["command"] in ("invoice void", "sales-receipt void")}
     created = {"${" + e["capture"] + ".id}" for e in financial if not e["capture"].endswith(("_retry", "_after_void"))}
     assert created <= voided, created - voided  # every new financial demonstration ends voided
-    assert [e["command"] for e in new if e.get("body_fixture")] == ["attachment add"]
+    assert {e["command"] for e in new if e.get("body_fixture")} == {"attachment add"}
 
 
 @pytest.mark.parametrize("company,prefix", COMPANIES)

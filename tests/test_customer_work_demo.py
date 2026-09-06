@@ -68,10 +68,11 @@ def work_counts(client, company, prefix):
         for name in ("work_revisions", "work_lines", "work_line_identities"):
             counts[name] = db.execute(f'SELECT count(*) FROM "{name}" WHERE document_id IN ({docs})', (like,)).fetchone()[0]
         counts["work_links"] = db.execute(f"SELECT count(*) FROM work_links WHERE source_document_id IN ({docs})", (like,)).fetchone()[0]
-        prior_sales = "SELECT id FROM transactions WHERE number NOT LIKE ?"
-        counts['transactions'] = db.execute(f'SELECT count(*) FROM ({prior_sales})', (prefix + '-BILL-%',)).fetchone()[0]
+        prior_sales = "SELECT id FROM transactions WHERE number NOT LIKE ? AND number NOT LIKE ?"
+        later = (prefix + '-BILL-%', prefix + '-PROG-%')  # Row 17 and Row 18 voided billing demos
+        counts['transactions'] = db.execute(f'SELECT count(*) FROM ({prior_sales})', later).fetchone()[0]
         counts.update({name: db.execute(f'SELECT count(*) FROM "{name}" WHERE transaction_id IN ({prior_sales})',
-                       (prefix + '-BILL-%',)).fetchone()[0]
+                       later).fetchone()[0]
                        for name in ("transaction_revisions", "posting_batches", "posting_lines")})
         return counts
 
