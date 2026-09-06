@@ -120,6 +120,9 @@
 {{ reference_control(l.reference, form_name, cur, "control-" ~ index, l.reference.current, l.nullable or not l.required) }}
 {% elif l.kind == "choice" %}
 <select id="control-{{ index }}" name="{{ form_name }}"><option value="">{{ "(choose)" if l.required and not record_id else "(unchanged)" }}</option>{% for c in l.choices %}<option value="{{ c }}" {% if cur == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+{% elif l.definition_default %}<span data-definition-default>
+{% if l.default_kind == 'bool' %}<select id="control-{{ index }}" name="{{ form_name }}"><option value="">(no default)</option><option value="true"{% if cur is sameas true or cur == 'true' %} selected{% endif %}>true</option><option value="false"{% if cur is sameas false or cur == 'false' %} selected{% endif %}>false</option></select>
+{% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"{{ math_attrs(l, form_name) }}>{% endif %}</span>
 {% elif l.kind == "bool" %}
 <select id="control-{{ index }}" name="{{ form_name }}"><option value="unset">(unset)</option><option value="true" {% if cur == true or cur == "true" %}selected{% endif %}>true</option><option value="false" {% if cur == false or cur == "false" %}selected{% endif %}>false</option></select>
 {% elif l.kind == "secret" %}<input id="control-{{ index }}" type="password" name="{{ form_name }}">

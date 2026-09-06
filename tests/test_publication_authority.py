@@ -128,6 +128,7 @@ def test_company_list_cannot_publish_detached_registration_with_unchanged_org_me
             release.set()
         result = pending.result(10)
     assert result.status_code == 403
+    assert result.json()["code"] == "E_PERMISSION"
     assert result.json()["details"]["outcome"] == "unknown"
     assert hosted.company_id not in result.text
     assert hosted.call("company.list", {}, headers={"Authorization": "Bearer " + secret}).json()["items"] == []

@@ -114,11 +114,11 @@ def _input_value(annotation: Any, value: Any, path: str) -> Any:
             if len(branches) != 1:
                 break
             base = branches[0]
-    if isinstance(value, str) and get_origin(base) in (list, dict):
+    if isinstance(value, str) and get_origin(base) in (list, tuple, set, frozenset, dict):
         import json
         try:
             parsed = json.loads(value)
-            if not isinstance(parsed, get_origin(base)):
+            if not isinstance(parsed, dict if get_origin(base) is dict else list):
                 raise ValueError
             return parsed
         except ValueError:
@@ -151,6 +151,8 @@ def _build_command(cmd: registry.Command):
         py_t, choices = _leaf_type(ann)
         is_positional = path in cmd.positional
         text = _help_text(help_, py_t, choices, required, dflt)
+        if cmd.name in {"custom-field create", "custom-field update"} and path == "default":
+            text += " With --kind bool, use true or false; supply --kind when changing a boolean default."
         pname = "f__" + path.replace(".", "__")
         metadata = cmd.input_model.model_fields.get(path)
         if metadata is not None and isinstance(metadata.json_schema_extra, dict):
@@ -241,6 +243,8 @@ def _build_command(cmd: registry.Command):
             v = kw.get("f__" + path.replace(".", "__"))
             if v is not None:
                 _set_path(raw, path, _input_value(ann, v, path))
+        from bookflow.adapters.typed_defaults import decode_definition_default
+        decode_definition_default(cmd, raw)
         if clears:
             from bookflow.core.clearing import apply_clears
             apply_clears(cmd, raw, list(clears))

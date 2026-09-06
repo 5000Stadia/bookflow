@@ -542,7 +542,7 @@ billing_links. Both operational and financial conversions share permanent compan
 key identity across their durable stores, including replay after generic cache
 expiry and after void. Composite resource requirements and conditional source
 reads are checked before cached responses or preview; granular grants/denies remain
-Row7 and actual MCP transport remains Row9.
+Row7. The MCP adapter uses these same registered predicates.
 
 Amount-priced sales retain net_amount and positive descriptive quantity with a
 null unit price. Version2 amount profiles have an explicit pricing basis; version1
@@ -663,3 +663,53 @@ unresolved requests are canceled. Ordinary input/change events invalidate sales
 previews. Register Record/Recalculate normalize before constructing payloads;
 retained retry bytes are not reevaluated. Posted money and command schemas retain
 their existing contracts.
+
+
+## MCP transport and publication
+
+`commands/mcp_cmds.py` supplies the rootless `bookflow mcp` stdio launcher.
+The optional official SDK owns protocol framing and the three tools; catalog,
+help and input/output schemas come from the command registry. Help bridge v2
+uses usage/input_schema/output_schema/full, with complete input constraints in
+usage and a catalog page default of20. Mixed bridge versions reject explicitly.
+`core/context_options.py` normalizes inactive/unsupported context across adapters;
+`core/company_selection.py` applies caller-owned explicit/environment/configuration
+precedence. Process sessions and client labels are provenance, not authority.
+
+`adapters/mcp/runtime.py` connects host-owned intents to the shared executor and
+registered transfers. Each intent has one execution identity under both reference
+aliases. Preparation, accepted callbacks, delivery slots, bounded retained receipts
+and original absolute deadlines have separate owners; recovery does not dispatch
+committed work. `intents.py` accounts retained value graphs, while host-owned cleanup
+keeps queued/active work pinned until its actual owner exits. `client.py` handles
+permitted input/output paths, hashing, binary streaming and atomic verified files.
+`files.py` verifies directory and descriptor lineage; these file capabilities are
+POSIX-only, with Linux tested and no macOS/WSL execution claim. `inspection.py`
+provides authorized bounded navigation of mapped, verified result files.
+
+`framing.py` authenticates complete JSON/binary delivery using ordered bounded
+records and terminal sizes/digests. `json_validation.py` validates syntax without
+assembling scalars, keys, numeric lexemes or object paths. Validation holds one
+decoded record, eight token-prefix characters, three error-field markers and a
+stack proportional to JSON nesting depth. Inline result assembly and an explicitly
+requested inspection item remain separate from this syntax-validation memory.
+`BOOKFLOW_MCP_JSON_SECONDS` configures JSON delivery between30 and86400seconds;
+preparation, retained-result and binary lease deadlines remain independently owned.
+
+`core/publication.py` retains a value-only authority certificate and rechecks the
+original credential, actor, memberships, selected/returned registrations and shared
+conditional predicates before result publication. Pure dependency-resolution
+failures become E_PERMISSION, authentication loss remains E_UNAUTHENTICATED,
+and operational/certificate failures keep their operational category. This does
+not rewrite a valid original command error. Exact original token-self-revocation
+and audited own-detach effects have narrow postcondition rules. Middleware checks
+headers/body publication and delayed workbench receipts; committed writes are
+never reexecuted or compensated to recover a response.
+
+CLI collection flags decode JSON arrays for list/tuple/set/frozenset annotations.
+`adapters/typed_defaults.py` converts true/false text controls for an explicitly
+selected boolean custom-field definition kind, leaving core validation unchanged.
+The CLI supplies --kind with a boolean default; generated browser forms use the
+selected or retained kind and a boolean selector; definition scope objects from
+show are projected to the scope names accepted by update. Text false stays text, omission
+stays omission, and explicit clear remains null.

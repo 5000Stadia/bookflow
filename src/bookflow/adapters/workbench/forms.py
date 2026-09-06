@@ -275,6 +275,8 @@ def describe_fields(
     }
     for leaf in described:
         if noun == 'custom-field' and leaf['path'] == 'default':
+            leaf['definition_default'] = True
+            leaf['default_kind'] = selected_value('kind', originals, attempted)
             leaf['math'] = {'scale': 9, 'active': [{'name': 'f:kind', 'values': ['number']}]}
         if leaf["kind"] == "collection":
             schema = collection_schema(leaf["annotation"])
@@ -630,6 +632,8 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
         ):
             continue
         set_path(raw, path, v)
+    from bookflow.adapters.typed_defaults import decode_definition_default
+    decode_definition_default(cmd, raw, originals)
     custom_patch: dict[str, Any | None] = {}
     original_custom = get_path(originals, "custom_fields") if originals is not None else None
     original_custom = original_custom if isinstance(original_custom, dict) else {}

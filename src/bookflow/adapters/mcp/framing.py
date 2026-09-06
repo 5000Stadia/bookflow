@@ -10,6 +10,7 @@ import struct
 
 from bookflow.core.errors import BookflowError
 from bookflow.core.transfers import CHUNK_BYTES
+from .json_validation import JsonDocumentValidator
 
 MAGIC = b"BFMC1\n"
 HEADER = struct.Struct("!cI")
@@ -112,7 +113,7 @@ def _unique_object(pairs):
 def _recovery(value):
     if not isinstance(value, dict) or set(value) != {"mode", "retained_until", "receipt_available", "inspection_available"}:
         raise invalid("invalid_recovery")
-    if value["mode"] not in {"retained", "unavailable"} or any(type(value[key]) is not bool for key in ("receipt_available", "inspection_available")):
+    if not isinstance(value["mode"], str) or value["mode"] not in {"retained", "unavailable"} or any(type(value[key]) is not bool for key in ("receipt_available", "inspection_available")):
         raise invalid("invalid_recovery")
     if value["mode"] == "unavailable":
         if value["retained_until"] is not None or value["receipt_available"] or value["inspection_available"]:
@@ -128,54 +129,10 @@ def _recovery(value):
             raise invalid("invalid_recovery") from None
 
 
-class JsonDocumentValidator:
-    """Validate the complete JSON channel incrementally, without retaining its rows."""
-
-    def __init__(self):
-        import ijson
-        self.json_error = ijson.JSONError
-        self.started = self.complete = False
-        self.count = 0
-        self.error_fields = set()
-
-        def events():
-            while True:
-                prefix, event, value = yield
-                if not self.started:
-                    if prefix != "" or event != "start_map":
-                        raise ValueError("business document must be an object")
-                    self.started = True
-                if prefix == "" and event == "end_map":
-                    self.complete = True
-                if prefix == "" and event == "map_key":
-                    self.count += 1
-                if ((prefix == "code" and event == "string" and value.startswith("E_"))
-                    or (prefix == "message" and event == "string")
-                    or (prefix == "details" and event == "start_map")):
-                    self.error_fields.add(prefix)
-
-        target = events()
-        next(target)
-        self.parser = ijson.parse_coro(target, use_float=False)
-
-    def feed(self, chunk):
-        try:
-            self.parser.send(chunk)
-        except (ValueError, UnicodeError, self.json_error):
-            raise invalid("invalid_json") from None
-
-    def finish(self, is_error):
-        try:
-            self.parser.close()
-        except (ValueError, UnicodeError, self.json_error):
-            raise invalid("invalid_json") from None
-        error_document = self.count == 3 and self.error_fields == {"code", "message", "details"}
-        if not self.complete or error_document != is_error:
-            raise invalid("invalid_business_completion")
 
 
 class Decoder:
-    """Incremental decoder retaining at most one bounded record, never a result."""
+    """Incremental decoder retaining one bounded record and the JSON syntax stack."""
 
     def __init__(self, json_sink, binary_sink, *, operation_ref):
         self.sinks = {b"J": json_sink, b"B": binary_sink}

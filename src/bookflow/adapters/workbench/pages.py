@@ -181,6 +181,8 @@ def _noun_meta(noun):
 
 def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
     """Project the authoritative editable object from a show result."""
+    if noun == "custom-field":
+        return {**shown, "scopes": [scope["record_type"] for scope in shown["scopes"]]}
     if noun in Work.NOUNS:
         return Work.editable_values(shown)
     if noun in ('invoice', 'sales-receipt'):

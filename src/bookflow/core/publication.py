@@ -173,6 +173,18 @@ class PublicationPermit:
         return True
 
     def check(self, host, cred, *, original_response=False):
+        try:
+            self._check(host, cred, original_response=original_response)
+        except BookflowError as exc:
+            # These are new failures of a pure publication predicate, not the
+            # original command error. Missing/changed dependencies deny release.
+            # Authentication and operational failures retain their own category.
+            if exc.code in {"E_UNAUTHENTICATED", "E_IO", "E_DB_BUSY", "E_INTERNAL",
+                            "E_CONFIG_INVALID", "E_SCHEMA_UNKNOWN", "E_SCHEMA_BEHIND"}:
+                raise
+            _deny()
+
+    def _check(self, host, cred, *, original_response=False):
         with publication_reader(host, cred) as s:
             try:
                 cred.revalidate(s.hub)
