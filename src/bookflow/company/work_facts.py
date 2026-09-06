@@ -86,6 +86,8 @@ class WorkLineFacts(StrictModel):
 
     @model_validator(mode='after')
     def consistency(self):
+        if self.profile.pricing_basis == 'allocated':
+            raise ValueError('work quotes cannot contain allocated sale facts')
         if self.item_id != self.profile.item.id:
             raise ValueError('item_id disagrees with captured item')
         unit = self.profile.unit

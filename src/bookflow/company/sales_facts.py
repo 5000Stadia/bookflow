@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import Field, model_serializer, model_validator
 
 from bookflow.company.sales_models import Address, StrictModel
+from bookflow.company.billing_facts import AllocationProof
 from bookflow.core.exact import INT64_MAX
 
 
@@ -133,7 +134,7 @@ class SalesProfile(CommercialProfile):
 
 
 class SalesLineProfile(StrictModel):
-    schema_version: Literal[1, 2] = 1
+    schema_version: Literal[1, 2, 3] = 1
     item: Reference
     item_type: Literal["service", "non_inventory_part", "other_charge"]
     income_account: Account
@@ -146,8 +147,9 @@ class SalesLineProfile(StrictModel):
     price_basis_minor_units: int | None = None
     origins: dict[str, Origin] = Field(default_factory=dict)
 
-    pricing_basis: Literal["unit", "amount"] = "unit"
+    pricing_basis: Literal["unit", "amount", "allocated"] = "unit"
     net_amount_minor_units: int | None = Field(default=None, ge=0, le=INT64_MAX)
+    allocation_proof: AllocationProof | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -158,6 +160,12 @@ class SalesLineProfile(StrictModel):
 
     @model_validator(mode="after")
     def pricing_consistency(self):
+        if self.pricing_basis == 'allocated':
+            if self.schema_version != 3 or self.allocation_proof is None or self.net_amount_minor_units is not None:
+                raise ValueError('allocated pricing requires version three and an allocation proof')
+            return self
+        if self.allocation_proof is not None:
+            raise ValueError('ordinary sale facts cannot carry an allocation proof')
         if self.pricing_basis == "amount":
             if self.net_amount_minor_units is None or self.schema_version != 2:
                 raise ValueError("amount pricing requires version two and an exact net amount")
@@ -168,6 +176,8 @@ class SalesLineProfile(StrictModel):
     @model_serializer(mode="wrap")
     def legacy_unit_facts(self, handler):
         values = handler(self)
+        if self.pricing_basis != 'allocated':
+            values.pop('allocation_proof', None)
         if self.pricing_basis == "unit":
             values.pop("pricing_basis", None)
             values.pop("net_amount_minor_units", None)

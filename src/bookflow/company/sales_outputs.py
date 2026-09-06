@@ -7,6 +7,7 @@ from bookflow.company.journal_custom_fields import SnapshotField
 from bookflow.company.journal_outputs import CreatedOutput, JournalBatchOutput, JournalMoneyOutput
 from bookflow.company.sales_facts import SalesProfile, SalesLineProfile, SalesTaxComponent
 from bookflow.company.sales_models import StrictModel
+from bookflow.company.billing_facts import AllocationProof, ExactFraction
 from bookflow.core.models import WriteOutput
 
 MoneyOutput = JournalMoneyOutput
@@ -37,12 +38,15 @@ class SalesLineOutput(CreatedOutput):
     description: str | None
     quantity: str
     base_quantity: str
-    quantity_microunits: int
-    base_quantity_microunits: int
+    quantity_microunits: int | None
+    base_quantity_microunits: int | None
+    quantity_fraction: ExactFraction | None = None
+    base_quantity_fraction: ExactFraction | None = None
+    quoted_quantity: str | None = None
     unit_id: str | None
     unit_factor_nanounits: int
     unit_price: MoneyOutput | None
-    pricing_basis: Literal["unit", "amount"] = "unit"
+    pricing_basis: Literal["unit", "amount", "allocated"] = "unit"
     net: MoneyOutput
     tax: MoneyOutput
     gross: MoneyOutput
@@ -69,11 +73,13 @@ class BillingSourceOutput(CreatedOutput):
     root_document_id: str
     root_line_id: str
     document_line_id: str
-    quantity_microunits: int
+    quantity_microunits: int | None
     net_minor_units: int
     tax_minor_units: int
     gross_minor_units: int
     facts_snapshot: dict
+    allocation_version: Literal[1, 2] = 1
+    allocation_proof: AllocationProof | None = None
 
 
 class SalesRevisionSummaryOutput(CreatedOutput):
