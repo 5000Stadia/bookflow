@@ -776,3 +776,223 @@ input = { "estimate" = "${bill_estimate.id}" }
 [[commands]]
 command = "invoice query"
 input = { "customer" = "${bill_customer.id}", "date_from" = "2026-01-01", "date_to" = "2026-12-31" }
+
+# Row 18 progress billing: partial quantity, net-amount and percentage
+# installments against independent sources, exact rebill of a voided
+# installment, a retained-proof correction with an unlinked extra line, and a
+# paid receipt plus remaining invoice from a work order. Every financial
+# demonstration ends voided, so the balances above are unchanged.
+
+[[commands]]
+command = "customer create"
+capture = "prog_customer"
+reason = "Create the customer for progress billing examples"
+input = { "name" = "Progress Example Customer" }
+
+[[commands]]
+command = "estimate create"
+capture = "prog_estimate"
+reason = "Quote a kitchen remodel with catalog, amount and sub-microunit lines"
+input = { "date" = "2026-09-22", "number" = "REF-PROG-EST-1", "customer" = "${prog_customer.id}", "title" = "Kitchen remodel", "sales_tax_item" = "${sale_tax.id}", "customer_tax_code" = "${sale_taxable.id}", "scope" = "Four phases of remodel work billed as milestones are reached.", "lines" = [{ "item" = "${sale_service.id}", "quantity" = "4", "description" = "Remodel phases at catalog rate" }, { "item" = "${sale_service.id}", "quantity" = "3", "description" = "Three fixture swaps quoted as one amount", "net_amount" = "0.99" }, { "item" = "${sale_service.id}", "quantity" = "0.000001", "description" = "Smallest quotable scope, one dollar", "net_amount" = "1.00" }] }
+
+[[commands]]
+command = "attachment add"
+capture = "prog_estimate_file"
+body_fixture = "example.pdf"
+input = { record_type = "work_document", record_id = "${prog_estimate.id}", original_filename = "Example service document.pdf", media_type = "application/pdf", caption = "Kitchen plan" }
+
+[[commands]]
+command = "estimate update"
+capture = "prog_estimate_accepted"
+reason = "Record acceptance so milestones can be billed"
+input = { "estimate" = "${prog_estimate.id}", "expected_version" = "${prog_estimate.version}", "status" = "accepted", "decision_note" = "Accepted with milestone billing" }
+
+[[commands]]
+command = "estimate billing"
+capture = "prog_billing_0"
+input = { "estimate" = "${prog_estimate.id}" }
+
+[[commands]]
+command = "estimate invoice"
+capture = "prog_inv_1"
+reason = "Bill the first completed phase as a quantity of one"
+input = { "estimate" = "${prog_estimate.id}", "expected_version" = "${prog_billing_0.source_version}", "conversion_key" = "REF-PROG-EST-1 phase one", "date" = "2026-09-23", "number" = "REF-PROG-INV-1", "selections" = [{ "line_id" = "${prog_estimate.revision.lines.0.line_id}", "quantity" = "1" }] }
+
+[[commands]]
+command = "estimate billing"
+capture = "prog_billing_1"
+input = { "estimate" = "${prog_estimate.id}" }
+
+[[commands]]
+command = "estimate invoice"
+capture = "prog_inv_2"
+reason = "Bill forty cents of the one-dollar scope as an entered net amount"
+input = { "estimate" = "${prog_estimate.id}", "expected_version" = "${prog_billing_1.source_version}", "conversion_key" = "REF-PROG-EST-1 forty cents", "date" = "2026-09-24", "number" = "REF-PROG-INV-2", "selections" = [{ "line_id" = "${prog_estimate.revision.lines.2.line_id}", "net_amount" = "0.40" }] }
+
+[[commands]]
+command = "estimate invoice"
+capture = "prog_inv_2_retry"
+reason = "Retry the identical partial conversion; the permanent key returns the same invoice"
+input = { "estimate" = "${prog_estimate.id}", "expected_version" = "${prog_billing_1.source_version}", "conversion_key" = "REF-PROG-EST-1 forty cents", "date" = "2026-09-24", "number" = "REF-PROG-INV-2", "selections" = [{ "line_id" = "${prog_estimate.revision.lines.2.line_id}", "net_amount" = "0.40" }] }
+
+[[commands]]
+command = "estimate billing"
+capture = "prog_billing_2"
+input = { "estimate" = "${prog_estimate.id}" }
+
+[[commands]]
+command = "estimate invoice"
+capture = "prog_inv_3"
+reason = "Bill half of the fixture line by its original-scope percentage"
+input = { "estimate" = "${prog_estimate.id}", "expected_version" = "${prog_billing_2.source_version}", "conversion_key" = "REF-PROG-EST-1 fixtures half", "date" = "2026-09-25", "number" = "REF-PROG-INV-3", "selections" = [{ "line_id" = "${prog_estimate.revision.lines.1.line_id}", "percent" = "50" }] }
+
+[[commands]]
+command = "estimate billing"
+capture = "prog_billing_3"
+input = { "estimate" = "${prog_estimate.id}" }
+
+[[commands]]
+command = "estimate invoice"
+capture = "prog_inv_4"
+reason = "Bill twenty-five percent of the original scope of every remaining line"
+input = { "estimate" = "${prog_estimate.id}", "expected_version" = "${prog_billing_3.source_version}", "conversion_key" = "REF-PROG-EST-1 quarter milestone", "date" = "2026-09-26", "number" = "REF-PROG-INV-4", "percent" = "25" }
+
+[[commands]]
+command = "invoice update"
+capture = "prog_inv_4_corrected"
+reason = "Keep the quoted lines as billed and add an unlinked disposal fee"
+input = { "invoice" = "${prog_inv_4.id}", "expected_version" = "${prog_inv_4.version}", "lines" = [{ "item" = "${sale_service.id}", "line_id" = "${prog_inv_4.revision.lines.0.line_id}" }, { "item" = "${sale_service.id}", "line_id" = "${prog_inv_4.revision.lines.1.line_id}" }, { "item" = "${sale_service.id}", "line_id" = "${prog_inv_4.revision.lines.2.line_id}" }, { "item" = "${sale_service.id}", "quantity" = "1", "net_amount" = "5.00", "description" = "Debris disposal, not part of the quote" }] }
+
+[[commands]]
+command = "invoice show"
+input = { "invoice" = "${prog_inv_4.id}", "revision_number" = 1 }
+
+[[commands]]
+command = "invoice history"
+input = { "invoice" = "${prog_inv_4.id}" }
+
+[[commands]]
+command = "invoice void"
+reason = "Void the phase-one invoice; its exact spans become free again"
+input = { "invoice" = "${prog_inv_1.id}", "expected_version" = "${prog_inv_1.version}" }
+
+[[commands]]
+command = "estimate billing"
+capture = "prog_billing_4"
+input = { "estimate" = "${prog_estimate.id}" }
+
+[[commands]]
+command = "estimate invoice"
+capture = "prog_inv_6"
+reason = "Rebill exactly the voided phase-one allocation with a new key"
+input = { "estimate" = "${prog_estimate.id}", "expected_version" = "${prog_billing_4.source_version}", "conversion_key" = "REF-PROG-EST-1 phase one rebill", "date" = "2026-09-27", "number" = "REF-PROG-INV-6", "selections" = [{ "line_id" = "${prog_estimate.revision.lines.0.line_id}", "rebill_allocation_id" = "${prog_inv_1.revision.billing_sources.0.id}" }] }
+
+[[commands]]
+command = "estimate billing"
+capture = "prog_billing_5"
+input = { "estimate" = "${prog_estimate.id}" }
+
+[[commands]]
+command = "estimate invoice"
+capture = "prog_inv_5"
+reason = "Bill everything that remains on the quote"
+input = { "estimate" = "${prog_estimate.id}", "expected_version" = "${prog_billing_5.source_version}", "conversion_key" = "REF-PROG-EST-1 remaining", "date" = "2026-09-28", "number" = "REF-PROG-INV-5" }
+
+[[commands]]
+command = "estimate billing"
+capture = "prog_billing_6"
+input = { "estimate" = "${prog_estimate.id}" }
+
+[[commands]]
+command = "invoice show"
+input = { "invoice" = "${prog_inv_6.id}" }
+
+[[commands]]
+command = "invoice void"
+reason = "Void the forty-cent invoice so the demonstration leaves balances unchanged"
+input = { "invoice" = "${prog_inv_2.id}", "expected_version" = "${prog_inv_2.version}" }
+
+[[commands]]
+command = "invoice void"
+reason = "Void the fixture invoice so the demonstration leaves balances unchanged"
+input = { "invoice" = "${prog_inv_3.id}", "expected_version" = "${prog_inv_3.version}" }
+
+[[commands]]
+command = "invoice void"
+reason = "Void the corrected milestone invoice so the demonstration leaves balances unchanged"
+input = { "invoice" = "${prog_inv_4.id}", "expected_version" = "${prog_inv_4_corrected.version}" }
+
+[[commands]]
+command = "invoice void"
+reason = "Void the rebilled phase-one invoice so the demonstration leaves balances unchanged"
+input = { "invoice" = "${prog_inv_6.id}", "expected_version" = "${prog_inv_6.version}" }
+
+[[commands]]
+command = "invoice void"
+reason = "Void the remaining-work invoice so the demonstration leaves balances unchanged"
+input = { "invoice" = "${prog_inv_5.id}", "expected_version" = "${prog_inv_5.version}" }
+
+[[commands]]
+command = "estimate billing"
+input = { "estimate" = "${prog_estimate.id}" }
+
+[[commands]]
+command = "estimate history"
+input = { "estimate" = "${prog_estimate.id}" }
+
+[[commands]]
+command = "estimate create"
+capture = "prog_estimate_2"
+reason = "Quote two days of service that will be scheduled as a work order"
+input = { "date" = "2026-09-22", "number" = "REF-PROG-EST-2", "customer" = "${prog_customer.id}", "title" = "Two-day service visit", "sales_tax_item" = "${sale_tax.id}", "customer_tax_code" = "${sale_taxable.id}", "lines" = [{ "item" = "${sale_service.id}", "quantity" = "2", "description" = "Service days" }] }
+
+[[commands]]
+command = "estimate update"
+capture = "prog_estimate_2_accepted"
+reason = "Record acceptance of the service quote"
+input = { "estimate" = "${prog_estimate_2.id}", "expected_version" = "${prog_estimate_2.version}", "status" = "accepted", "decision_note" = "Accepted by telephone" }
+
+[[commands]]
+command = "estimate work-order"
+capture = "prog_work_order"
+reason = "Schedule the accepted service visit as a work order"
+input = { "estimate" = "${prog_estimate_2.id}", "expected_version" = "${prog_estimate_2_accepted.version}", "conversion_key" = "REF-PROG-EST-2 work order", "date" = "2026-09-23", "number" = "REF-PROG-WO-1" }
+
+[[commands]]
+command = "work-order sales-receipt"
+capture = "prog_receipt"
+reason = "They paid for half a day on site; record the partial paid sale"
+input = { "work_order" = "${prog_work_order.id}", "expected_version" = "${prog_work_order.version}", "conversion_key" = "REF-PROG-WO-1 half day paid", "date" = "2026-09-24", "number" = "REF-PROG-SR-1", "deposit_to" = "Checking", "payment_method" = "Check", "payment_reference" = "REF-PROG-CHECK-1", "amount_received" = "54.00", "selections" = [{ "line_id" = "${prog_work_order.revision.lines.0.line_id}", "quantity" = "0.5" }] }
+
+[[commands]]
+command = "work-order billing"
+capture = "prog_wo_billing"
+input = { "work_order" = "${prog_work_order.id}" }
+
+[[commands]]
+command = "work-order invoice"
+capture = "prog_inv_7"
+reason = "Invoice the remaining day and a half"
+input = { "work_order" = "${prog_work_order.id}", "expected_version" = "${prog_wo_billing.source_version}", "conversion_key" = "REF-PROG-WO-1 remaining", "date" = "2026-09-29", "number" = "REF-PROG-INV-7" }
+
+[[commands]]
+command = "sales-receipt show"
+input = { "sales_receipt" = "${prog_receipt.id}" }
+
+[[commands]]
+command = "sales-receipt void"
+reason = "Void the half-day receipt so the bank balance is unchanged"
+input = { "sales_receipt" = "${prog_receipt.id}", "expected_version" = "${prog_receipt.version}" }
+
+[[commands]]
+command = "invoice void"
+reason = "Void the remaining-day invoice so the demonstration leaves balances unchanged"
+input = { "invoice" = "${prog_inv_7.id}", "expected_version" = "${prog_inv_7.version}" }
+
+[[commands]]
+command = "work-order billing"
+input = { "work_order" = "${prog_work_order.id}" }
+
+[[commands]]
+command = "invoice query"
+input = { "customer" = "${prog_customer.id}", "date_from" = "2026-01-01", "date_to" = "2026-12-31" }
