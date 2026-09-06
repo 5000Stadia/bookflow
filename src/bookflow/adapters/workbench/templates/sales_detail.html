@@ -17,9 +17,9 @@
 {% for key, label in [('ship_date','Ship date'), ('ship_method','Ship method'), ('sales_rep','Sales rep'), ('class_id','Class'), ('customer_purchase_order','Customer purchase order'), ('customer_tax_code','Customer tax code'), ('sales_tax_item','Sales tax'), ('price_level','Price level')] %}
 {% if p[key] is not none %}<dt>{{ label }}</dt><dd>{{ p[key].label if p[key] is mapping else p[key] }}</dd>{% endif %}{% endfor %}
 </dl>
-<div class="table-wrap"><table class="ledger-table"><thead><tr><th>Item / description</th><th>Quantity</th><th>Unit</th><th>Unit price</th><th>Net</th><th>Tax</th><th>Gross</th></tr></thead><tbody>
-{% for line in r.lines %}<tr><td>{{ line.item_snapshot.item.label }}{% if line.description is not none %}<div>{{ line.description }}</div>{% endif %}</td><td>{{ line.quantity }}</td><td>{{ line.item_snapshot.unit.label if line.item_snapshot.unit else '—' }}</td><td>{{ line.unit_price.amount }}</td><td>{{ line.net.amount }}</td><td>{{ line.tax.amount }}</td><td>{{ line.gross.amount }}</td></tr>{% endfor %}
-</tbody><tfoot><tr><th colspan="4">Total ({{ r.currency }})</th><th>{{ r.subtotal.amount }}</th><th>{{ r.tax.amount }}</th><th>{{ r.total.amount }}</th></tr></tfoot></table></div>
+<div class="table-wrap"><table class="ledger-table"><thead><tr><th>Item / description</th><th>Quantity</th><th>Unit</th><th>Price mode</th><th>Unit price</th><th>Net</th><th>Tax</th><th>Gross</th></tr></thead><tbody>
+{% for line in r.lines %}<tr><td>{{ line.item_snapshot.item.label }}{% if line.description is not none %}<div>{{ line.description }}</div>{% endif %}</td><td>{{ line.quantity }}</td><td>{{ line.item_snapshot.unit.label if line.item_snapshot.unit else '—' }}</td><td>{{ 'Amount' if line.pricing_basis == 'amount' else 'Unit price' }}</td><td>{{ line.unit_price.amount if line.unit_price else '' }}</td><td>{{ line.net.amount }}</td><td>{{ line.tax.amount }}</td><td>{{ line.gross.amount }}</td></tr>{% endfor %}
+</tbody><tfoot><tr><th colspan="5">Total ({{ r.currency }})</th><th>{{ r.subtotal.amount }}</th><th>{{ r.tax.amount }}</th><th>{{ r.total.amount }}</th></tr></tfoot></table></div>
 {% if p.customer_message is not none %}<p>{{ p.customer_message }}</p>{% endif %}{% if r.memo is not none %}<p>Memo: {{ r.memo }}</p>{% endif %}
 {% if r.custom_fields %}<h3>Custom fields</h3><dl>{% for f in r.custom_fields %}<dt>{{ f.name }} · {{ f.kind }}</dt><dd>{{ f.choice_label if f.kind == 'choice' else ('true' if f.value is sameas true else 'false' if f.value is sameas false else f.value) }}</dd>{% endfor %}</dl>{% endif %}
 <details><summary>Captured rules and input origins</summary>
@@ -32,6 +32,7 @@
 {% for component in line.tax_components %}<p>{{ component.component_snapshot.tax_item.label }} · {{ component.rate_display }}% on {{ component.taxable.amount }} = {{ component.tax.amount }} {{ r.currency }} · {{ component.component_snapshot.agency.label }}</p>{% endfor %}
 <dl>{% for field, origin in line.item_snapshot.origins.items() %}<dt>{{ field.replace('_',' ') }}</dt><dd>{{ origin.kind }}{% if origin.source_id %} · source {{ origin.source_id }}{% endif %}</dd>{% endfor %}</dl>{% endfor %}
 </details>
+{% set billing_sources = r.billing_sources %}{% include "billing_sources.html" %}
 <nav class="actions" aria-label="Sales revisions">{% for label, href in sale.links %}<a href="{{ href }}">{{ label }}</a>{% endfor %}</nav>
 <p class="muted">Sending is not available yet.{% if sale.record.type == 'invoice' %} Paying an invoice requires the upcoming customer-payment operation.{% endif %}</p>
 </section>

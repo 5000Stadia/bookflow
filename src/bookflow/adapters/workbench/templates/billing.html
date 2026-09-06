@@ -1,0 +1,14 @@
+<section class="workspace-card sales-document" aria-label="Work billing">
+<h2>Work billing</h2>
+<p>Source revision {{ billing.source_version }} · <a href="{{ billing.source_url }}?revision_number={{ billing.source_version }}">View source revision</a></p>
+<p><strong>Current owner:</strong> <a href="{{ billing.owner_url }}">{{ billing.owner_kind.replace('_', ' ')|capitalize }}</a> · version {{ billing.owner_version }}</p>
+{% for warning in billing.warnings %}<p class="warn">{{ warning }}</p>{% endfor %}
+<h3>Existing bills</h3>
+<ul>{% for bill in billing.destinations %}<li><a href="/c/{{ company_id }}/{{ bill.type.replace('_', '-') }}/{{ bill.id }}">{{ bill.type.replace('_',' ')|capitalize }} {{ bill.number }}</a> · {{ bill.status }} · {{ bill.total.amount }} {{ bill.currency }}{% if bill.type == 'sales_receipt' %} · Paid sale{% else %} · Invoice total; settlement is not available yet{% endif %}</li>{% else %}<li>No existing bills.</li>{% endfor %}</ul>
+{% if billing.next_cursor %}<a rel="next" href="{{ billing.source_url }}/billing?limit={{ billing_limit|default(50)|urlencode }}&amp;cursor={{ billing.next_cursor|urlencode }}">Next existing bills</a>{% endif %}
+<h3>Ordered, completed, billed and remaining</h3><p>Whole-line billing. Completed quantities describe fulfillment; they do not prove billing or payment.</p>
+<div class="table-wrap"><table><thead><tr><th>Scope / state</th><th>Ordered</th><th>Completed</th><th>Billed</th><th>Remaining</th><th>Quoted net / tax</th><th>Billed net / tax</th><th>Remaining net / tax</th></tr></thead><tbody>
+{% for line in billing.lines %}<tr><td>{{ line.description or 'Source line ' ~ loop.index }} · {{ line.state.replace('_',' ') }}{% if line.destination_id %}<div><a href="/c/{{ company_id }}/{{ line.destination_type.replace('_','-') }}/{{ line.destination_id }}">Existing bill</a></div>{% endif %}</td><td>{{ line.quantity }}</td><td>{{ line.completed_quantity }}</td><td>{{ line.billed_quantity }}</td><td>{{ line.remaining_quantity }}</td><td>{{ line.net }} / {{ line.tax }}</td><td>{{ line.billed_net }} / {{ line.billed_tax }}</td><td>{{ line.remaining_net }} / {{ line.remaining_tax }}</td></tr>{% endfor %}
+</tbody></table></div><p><strong>Remaining net {{ billing.remaining_net }} · tax {{ billing.remaining_tax }} {{ billing.currency }}</strong></p>
+<nav class="actions"><a href="{{ billing.source_url }}/billing">Refresh billing</a>{% if billing_actions %}{% if billing.can_invoice %}<a href="{{ billing.owner_url }}/invoice">Create invoice</a>{% endif %}{% if billing.can_sales_receipt %}<a href="{{ billing.owner_url }}/sales-receipt">Create paid sales receipt</a>{% endif %}{% endif %}</nav>
+</section>

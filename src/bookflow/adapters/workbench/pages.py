@@ -22,6 +22,7 @@ from bookflow.adapters.workbench import workflows as W
 from bookflow.adapters.workbench import statements as S
 from bookflow.adapters.workbench import sales as Sales
 from bookflow.adapters.workbench import work as Work
+from bookflow.adapters.workbench import billing as Billing
 from bookflow.core import registry
 from bookflow.core.errors import BookflowError
 from bookflow.core.models import list_columns
@@ -358,6 +359,8 @@ def _success_target(cmd: registry.Command, company_id: str | None, noun: str, re
         return f"/c/{company_id}/rate/{output['id']}"
     if company_id and cmd.name in ("register post", "register update") and output.get("id"):
         return f"/c/{company_id}/journal/{output['id']}"
+    if Billing.is_conversion(noun, cmd.verb) and output.get('id'):
+        return f"/c/{company_id}/{output['type'].replace('_', '-')}/{output['id']}"
     if noun in Work.NOUNS and output.get('kind') and output.get('id'):
         return f"/c/{company_id}/{output['kind'].replace('_', '-')}/{output['id']}"
     if record_id is not None:
@@ -912,6 +915,13 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 "add_job": f"/c/{company_id}/customer/create?" + urlencode({"parent": out["id"]}) if create and out.get("active") and _role_allows(create, role_view, hub_admin=cred.hub_admin) else None,
                 "inheritance": [{"field": W.label(key.removesuffix("_source_id")), "id": value, "name": source_names[value]} for key, value in out.items() if key.endswith("_source_id") and value in source_names],
             }
+        billing = None
+        if noun in ('estimate', 'work-order'):
+            try:
+                billing = Billing.context(run(request, noun + ' billing', {noun.replace('-', '_'): record_id}, company_id), company_id)
+            except BookflowError as err:
+                return page_error(request, err)
+            verbs = [v for v in verbs if v.verb not in ('invoice', 'sales-receipt')]
         annotation_context = annotations(company_id, noun, record_id, out, role_view, cred)
         if noun in Work.NOUNS and request.query_params.get('annotation_line'):
             line_id = request.query_params['annotation_line']
@@ -920,6 +930,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             if annotation_context:
                 annotation_context['target'] = {'record_type': 'work_line', 'record_id': line_id}
         return render("record.html", request, company_id=company_id, noun=noun, record_id=record_id, record=visible_record, record_title=record_title, audit=audit, meta=meta, verbs=verbs,
+                      billing=billing, billing_actions=bool(billing and _role_allows(registry.get(noun + " invoice"), role_view, hub_admin=cred.hub_admin)),
                       work=Work.detail_context(out, company_id) if noun in Work.NOUNS else None,
                       sale=Sales.detail_context(out, company_id) if command_noun in ('invoice', 'sales-receipt') else None,
                       audit_undo=audit_undo, contact_copy=contact_copy, workspace=workspace,
@@ -1002,11 +1013,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         elif cmd.version_source and record_id is None:
             return page_error(request, BookflowError("E_USAGE", message="open this update from a record page"))
         originals = originals or {}
-        if noun in Work.NOUNS and verb in ('copy', 'estimate', 'work-order', 'complete'):
+        if noun in Work.NOUNS and verb in ('copy', 'estimate', 'work-order', 'complete', 'invoice', 'sales-receipt'):
             originals = {k: v for k, v in originals.items() if k in (noun.replace('-', '_'), 'expected_version')}
         if noun in Work.NOUNS and 'conversion_key' in cmd.input_model.model_fields and not attempted:
             attempted['f:conversion_key'] = secrets.token_urlsafe(32)
-        if noun in ('invoice', 'sales-receipt', *Work.NOUNS) and verb == 'history' and record_id is not None:
+        if noun in ('invoice', 'sales-receipt', *Work.NOUNS) and verb in ('history', 'billing') and record_id is not None:
             originals[noun.replace('-', '_')] = record_id
             if not attempted and result is None:
                 try:
@@ -1019,6 +1030,13 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     return page_error(request, BookflowError('E_VALIDATION', details={'fields': [{'field': 'limit', 'problem': 'must be an integer'}]}))
                 except BookflowError as err:
                     return page_error(request, err, restart_url=request.url.path)
+        billing = None
+        if noun in ('estimate', 'work-order') and record_id and (verb == 'billing' or Billing.is_conversion(noun, verb)):
+            try:
+                state = result if verb == 'billing' and result else run(request, noun + ' billing', {noun.replace('-', '_'): record_id}, company_id)
+                billing = Billing.context(state, company_id)
+            except BookflowError as err:
+                return page_error(request, err, restart_url=request.url.path)
         if cmd.name == "rate set" and record_id is not None:
             try:
                 shown = run(request, "rate show", {"rate_id": record_id}, company_id)
@@ -1099,6 +1117,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 workflow_note += (' This creates an alternative estimate in the same group.' if alternative else ' This creates a new independent scope.')
             elif verb in ('estimate', 'work-order'):
                 workflow_note += ' This permanently links the selected source revision to the new draft. Retrying returns the same destination.'
+        if Billing.is_conversion(noun, verb):
+            described = [leaf for leaf in described if leaf['path'] != 'line_ids']
+            workflow_note = 'Bill selected whole lines or all remaining chargeable work. Completion is separate. A sales receipt records a paid sale; it cannot settle an existing invoice.'
         if sales_form:
             described = [leaf for leaf in described if leaf['path'] != 'expected_facts_fingerprint']
         if cmd.name in S.COMMANDS:
@@ -1259,7 +1280,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                          "journal_entry" if noun in ("journal", "register") and verb in ("post", "update") else
                          definition.record_type if definition is not None and definition.runtime_field_provider == "custom-fields" else None)
         if noun in Work.NOUNS and 'custom_fields' in cmd.input_model.model_fields:
-            runtime_scope = 'estimate' if verb == 'estimate' else 'work_order' if verb == 'work-order' else noun.replace('-', '_')
+            runtime_scope = verb.replace('-', '_') if Billing.is_conversion(noun, verb) else 'estimate' if verb == 'estimate' else 'work_order' if verb == 'work-order' else noun.replace('-', '_')
         if company_id is not None and runtime_scope:
             try:
                 definitions = run(
@@ -1288,14 +1309,17 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       captured_foreign_lines=[line for line in (shown or {}).get("revision", {}).get("lines", []) if line.get("original_amount")],
                       annotations=annotations(company_id, noun, record_id, shown, authorized_company, cred),
                       ctx_fields=F.context_fields(cmd), result=result, error=error,
+                      billing=billing, billing_limit=attempted.get('f:limit') or request.query_params.get('limit', '50'),
+                      billing_conversion=Billing.is_conversion(noun, verb),
+                      billing_actions=bool(billing and _role_allows(registry.get(noun + " invoice"), authorized_company or {}, hub_admin=cred.hub_admin)),
                       work_form=noun in Work.NOUNS,
-                      work=Work.detail_context(result, company_id, preview=preview) if result and noun in Work.NOUNS and "revision" in result else None,
+                      work=Work.detail_context(result, company_id, preview=preview) if result and noun in Work.NOUNS and not Billing.is_conversion(noun, verb) and "revision" in result else None,
                       work_history=result if noun in Work.NOUNS and verb == "history" else None,
                       work_results=result if noun in Work.NOUNS and verb == "query" else None,
                       sales_form=sales_form, sales_scope=cred.token_id,
                       sales_fingerprint=(result.get('facts_fingerprint', '') if preview and result else
-                          '' if error and error.get('code') == 'E_PREVIEW_STALE' else attempted.get('f:expected_facts_fingerprint', '')),
-                      sale=Sales.detail_context(result, company_id, preview=preview) if result and noun in ('invoice', 'sales-receipt') and 'revision' in result else None,
+                          '' if error and error.get('code') in ('E_PREVIEW_STALE', 'E_VERSION_CONFLICT') else attempted.get('f:expected_facts_fingerprint', '')),
+                      sale=Sales.detail_context(result, company_id, preview=preview) if result and (noun in ('invoice', 'sales-receipt') or Billing.is_conversion(noun, verb)) and 'revision' in result else None,
                       sales_history=result if noun in ('invoice', 'sales-receipt') and verb == 'history' else None,
                       statement=S.view(result, report_input, company_id) if result and report_input is not None and cmd.name in S.COMMANDS else None,
                       source_report_watermark=source_report_watermark,
@@ -1380,6 +1404,34 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     def hub_record_form(noun: str, record_id: str, verb: str, request: Request):
         return form_page(request, None, noun.replace("-", " "), verb, record_id)
 
+    @app.get("/c/{company_id}/work-source/{record_id}/open")
+    def billing_source(request: Request, company_id: str, record_id: str):
+        for source_noun in ('estimate', 'work-order'):
+            try:
+                run(request, source_noun + ' show', {source_noun.replace('-', '_'): record_id}, company_id)
+            except BookflowError as err:
+                if err.code == 'E_RECORD_NOT_FOUND':
+                    continue
+                return page_error(request, err)
+            source_url = f'/c/{company_id}/{source_noun}/{record_id}'
+            revision_id = request.query_params.get('revision_id')
+            if revision_id:
+                raw = {source_noun.replace('-', '_'): record_id, 'limit': 200}
+                if request.query_params.get('cursor'):
+                    raw['cursor'] = request.query_params['cursor']
+                try:
+                    history = run(request, source_noun + ' history', raw, company_id)
+                except BookflowError as err:
+                    return page_error(request, err, restart_url=request.url.path + '?' + urlencode({'revision_id': revision_id}))
+                match = next((r for r in history['items'] if r['id'] == revision_id), None)
+                if match:
+                    return RedirectResponse(source_url + '?revision_number=' + str(match['revision_number']), status_code=303)
+                return render('billing_source_history.html', request, company_id=company_id,
+                    source_url=source_url, revision_id=revision_id, history=history)
+            suffix = '/history' if request.query_params.get('history') else ''
+            return RedirectResponse(source_url + suffix, status_code=303)
+        return page_error(request, BookflowError('E_RECORD_NOT_FOUND'))
+
     @app.get("/c/{company_id}/{noun}/{record_id}/{verb}", response_class=HTMLResponse)
     def company_record_form(company_id: str, noun: str, record_id: str, verb: str, request: Request):
         if verb == "copy-contact":
@@ -1396,9 +1448,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             unresolved = [key.removeprefix("ref-state:") for key, value in form.items() if key.startswith("ref-state:") and value == "pending"]
             if unresolved:
                 raise BookflowError("E_VALIDATION", details={"fields": [{"field": key, "problem": "Choose a matching record by name, or use Clear."} for key in unresolved]})
-            translated_form = Work.price_controls(form) if noun in Work.NOUNS else form
-            comparison = Work.price_originals(originals, form) if noun in Work.NOUNS else originals
+            translated_form = Work.price_controls(form) if noun in (*Work.NOUNS, 'invoice', 'sales-receipt') else form
+            comparison = Work.price_originals(originals, form) if noun in (*Work.NOUNS, 'invoice', 'sales-receipt') else originals
             raw, headers, preview = F.translate(cmd, translated_form, comparison if comparison else None)
+            if Billing.is_conversion(noun, verb):
+                raw = Billing.selection(raw, form)
             if (noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')) or (noun in Work.NOUNS and cmd.is_write):
                 if verb == 'update':
                     raw = Sales.preserve_line_origins(raw, comparison)
@@ -1421,7 +1475,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return form_page(request, company_id, noun, verb, record_id, error=e.to_dict(), attempted=form)
         if preview:
             return form_page(request, company_id, noun, verb, record_id, result=out, preview=True, attempted=form)
-        if noun in ('invoice', 'sales-receipt', *Work.NOUNS) and verb in ('history', 'query'):
+        if noun in ('invoice', 'sales-receipt', *Work.NOUNS) and verb in ('history', 'query', 'billing'):
             return form_page(request, company_id, noun, verb, record_id, result=out, attempted=form)
         if noun == "report" and not cmd.is_write:
             return form_page(request, company_id, noun, verb, record_id, result=out, attempted=form,

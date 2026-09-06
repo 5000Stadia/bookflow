@@ -7,7 +7,9 @@ from bookflow.adapters.workbench.sales import _id, preserve_line_origins
 
 NOUNS = ('proposal', 'estimate', 'work-order')
 FORM = SalesFormDefinition(tuple(r for r in FORM_DEFINITIONS['invoice'].references
-    if r.field != 'ar_account') + (ReferenceDefinition('assignees', 'employee'),))
+    if r.field != 'ar_account') + (ReferenceDefinition('assignees', 'employee'),
+        ReferenceDefinition('ar_account', 'account'), ReferenceDefinition('deposit_to', 'account'),
+        ReferenceDefinition('payment_method', 'payment-method')))
 
 
 def meta(noun, original):
@@ -121,6 +123,7 @@ def price_controls(form):
                 result.pop(f'c:{path}:{field}', None)
         if mode in ('markup', 'amount'):
             result.pop(f'c:{path}:price_level', None)
+            result.pop(f'c:{path}:price_basis_amount', None)
         if mode == 'catalog':
             result[f'collection:{path}:use_defaults'] = '1'
             result[f'c:{path}:use_defaults:999:value'] = 'unit_price'

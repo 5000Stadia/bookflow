@@ -38,12 +38,19 @@ def editable_values(record):
     for line in revision['lines']:
         facts = line['item_snapshot']
         row = {key: deepcopy(line[key]) for key in ('line_id', 'quantity', 'description')}
-        row.update(item=facts['item']['id'], unit_price=line['unit_price']['amount'])
+        row['item'] = facts['item']['id']
+        if line.get('pricing_basis') == 'amount':
+            row['net_amount'] = line['net']['amount']
+        else:
+            row['unit_price'] = line['unit_price']['amount']
         row.update({key: _id(facts.get(key)) for key in ('unit', 'class_id', 'tax_code')})
         row['price_level'] = _id(facts.get('price_rule'))
         if facts.get('price_basis_minor_units') is not None:
             from bookflow.core.money import Money
             row['price_basis_amount'] = Money(facts['price_basis_minor_units'], line['currency']).to_dict()['amount']
+        if line.get('pricing_basis') == 'amount':
+            row.pop('price_level', None)
+            row.pop('price_basis_amount', None)
         result['lines'].append(row)
     return result
 

@@ -1,0 +1,5 @@
+<fieldset class="workspace-card billing-selection"><legend>Source lines to bill</legend>
+<label>Selection<select name="billing-selection"><option value="remaining">All remaining chargeable lines</option><option value="selected"{% if attempted.get('billing-selection') == 'selected' %} selected{% endif %}>Selected whole lines</option></select></label>
+<p>Choose selected whole lines to use the checkboxes. No partial quantity or amount billing.</p>
+{% for line in billing.lines %}<label class="clear-control"><input type="checkbox" name="billing-line:{{ line.line_id }}" value="1"{% if attempted.get('billing-line:' ~ line.line_id) == '1' %} checked{% endif %}{% if (line.state not in ('unbilled', 'no_charge') or billing.source_id != billing.owner_id) and attempted.get('billing-line:' ~ line.line_id) != '1' %} disabled{% endif %}>{{ line.description or 'Source line ' ~ loop.index }} · {{ line.quantity }} ordered · net {{ line.net }} + tax {{ line.tax }} {{ billing.currency }} · {{ line.state.replace('_',' ') }}</label>{% endfor %}
+</fieldset>

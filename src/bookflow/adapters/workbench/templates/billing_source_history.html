@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% block body %}
+<section class="workspace-card sales-document"><h1>Find captured source revision</h1>
+<p>Captured revision {{ revision_id }} is outside this page of source history. The exact internal snapshot remains on the sale.</p>
+<a href="{{ source_url }}">Current source</a>
+<ul>{% for revision in history['items'] %}<li><a href="{{ source_url }}?revision_number={{ revision.revision_number }}">Revision {{ revision.revision_number }} · {{ revision.date }}</a></li>{% endfor %}</ul>
+{% if history.next_cursor %}<a rel="next" href="{{ request.url.path }}?revision_id={{ revision_id|urlencode }}&amp;cursor={{ history.next_cursor|urlencode }}">Continue finding captured revision</a>{% else %}<p>The captured revision was not found in this history.</p>{% endif %}
+</section>{% endblock %}

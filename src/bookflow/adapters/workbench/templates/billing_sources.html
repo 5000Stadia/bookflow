@@ -1,0 +1,9 @@
+{% if billing_sources %}<section aria-label="Linked work sources"><h3>Linked work sources · internal snapshots</h3>
+<p>Captured source facts belong to this sales revision. Original notes and files remain on the work document.</p>
+{% for source in billing_sources %}{% set snapshot = source.facts_snapshot %}<details><summary>{{ snapshot.source_number }} · {{ snapshot.title }} · {{ snapshot.line.description or 'Source line' }}</summary>
+<p><a href="/c/{{ company_id }}/work-source/{{ source.source_document_id }}/open?revision_id={{ source.source_revision_id }}">Open captured source revision</a> · <a href="/c/{{ company_id }}/work-source/{{ source.source_document_id }}/open">Open current source and original files</a> · <a href="/c/{{ company_id }}/work-source/{{ source.source_document_id }}/open?history=1">Source revision history</a></p>
+<p>Captured source revision: {{ source.source_revision_id }}</p>
+{% for key in ('scope','inclusions','exclusions','timing','commercial_terms','memo') %}{% if snapshot.document[key] %}<h4>{{ key.replace('_',' ')|capitalize }}</h4><p style="white-space:pre-wrap">{{ snapshot.document[key] }}</p>{% endif %}{% endfor %}
+<p>Pricing: {{ snapshot.line.pricing_basis }} · {{ snapshot.line.description or '' }}</p>
+<details><summary>All captured internal facts</summary><pre>{{ json.dumps(snapshot, indent=2) }}</pre></details>
+</details>{% endfor %}</section>{% endif %}
