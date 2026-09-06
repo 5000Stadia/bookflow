@@ -135,20 +135,40 @@ def correction_page(state, session, fields):
             '<button>Save note</button></form></main>')
 
 
+def note_html(note):
+    return bridge._note_html(note).replace('<span class="tag">folded in by ', '<span class="tag">Reviewed by ')
+
+
+def target_labels(project, status):
+    labels = {}
+    for group in ('completed', 'later', 'next'):
+        for info in status.get(group, []):
+            if 'row' in info:
+                labels[str(info['row'])] = info['title']
+    for key, info in status.get('rows', {}).items():
+        labels[str(key)] = info.get('title', 'Module ' + str(key))
+    for row in project.rows:
+        labels[row.number] = status.get('rows', {}).get(row.number, {}).get('title', 'Module ' + row.number)
+    labels['project'] = 'General project notes'
+    return labels
+
+
 def render(state, session):
     project, status = state.data()
     state.offer_targets(project, status, session)
     notes = project.comments()
+    labels = target_labels(project, status)
+    waiting = sorted((note for note in notes if not note.get('consumed')), key=lambda note: (str(note.get('at', '')), str(note['id'])))
     grouped = {}
     for note in notes:
         grouped.setdefault(str(note['row']), []).append(note)
     def discussion(target):
         return ('<details class="discussion"><summary>Notes (' + str(len(grouped.get(target, []))) + ')</summary>'
-                + '<div class="notes">' + ''.join(bridge._note_html(n) for n in grouped.get(target, []))
+                + '<div class="notes">' + ''.join(note_html(n) for n in grouped.get(target, []))
                 + '</div>' + form(target, session['csrf']) + '</details>')
     def card(title, summary, badge='', target=None, details=''):
         return ('<article class="card"><div class="head"><div class="body"><h3>' + esc(title) + '</h3>'
-                + ('<span class="badge flight">' + esc(badge) + '</span>' if badge else '')
+                + ('<span class="badge ' + ('complete' if badge == 'Completed' else 'flight') + '">' + esc(badge) + '</span>' if badge else '')
                 + '<p>' + esc(summary) + '</p>' + details + '</div></div>'
                 + (discussion(target) if target else '') + '</article>')
     out = ['<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -157,12 +177,18 @@ def render(state, session):
            '.discussion>summary,details>summary{padding:12px 18px;cursor:pointer;color:var(--accent)}'
            'nav{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 0}nav a{color:var(--accent);padding:7px 12px;'
            'text-decoration:none;border:1px solid var(--line);border-radius:30px}section{scroll-margin-top:16px}'
-           '.scope{font-size:14px}.updated{margin-top:12px;color:var(--muted);font-size:13px}'
+           '.badge.complete{background:#174d35;color:#c0f4d4}.queue-label{padding:14px 18px 0;margin:0}.unread-note>.note{padding:14px 18px}.scope{font-size:14px}.updated{margin-top:12px;color:var(--muted);font-size:13px}'
            '</style></head><body><header><div class="wrap"><h1>Bookflow · Roadmap</h1><p>', esc(status['summary']),
            '</p><div class="updated">Progress updated ', bridge._when(status['updated_at']),
            ' · <a href="/">Refresh</a></div><nav>',
-           ''.join('<a href="#' + key + '">' + title + '</a>' for key, title in [('now','Now'),('next','Next'),('later','Later'),('done','Reviewed'),('notes','Your notes')]),
-           '</nav></div></header><main><section id="now"><h2>In progress</h2>']
+           ''.join('<a href="#' + key + '">' + title + '</a>' for key, title in [('unread','Notes to read (' + str(len(waiting)) + ')'),('now','Now'),('next','Next'),('later','Later'),('done','Completed'),('notes','Your notes')]),
+           '''</nav></div></header><main><section id="unread"><h2>Notes to read (''' + str(len(waiting)) + ''')</h2><p>All new notes, including comments on completed work, are reviewed at the next checkpoint before starting another item. Opening this page does not mark them read.</p>''']
+    for note in waiting:
+        target = str(note['row'])
+        out.append('<article class="card unread-note" data-note-id="' + esc(str(note['id'])) + '"><h3 class="queue-label">' + esc(labels.get(target, 'Module ' + target)) + '</h3>' + note_html(note) + '<details class="discussion"><summary>Add a follow-up</summary>' + form(target, session['csrf']) + '</details></article>')
+    if not waiting:
+        out.append('<p>No notes waiting. New comments on any item will appear here.</p>')
+    out.append('</section><section id="now"><h2>In progress</h2>')
     rows = {row.number: row for row in project.rows}
     for key in ['22', '9', '24'] + [key for key in rows if key not in {'22','9','24'}]:
         if key not in rows:
@@ -172,10 +198,12 @@ def render(state, session):
         detail = '<details class="scope"><summary>Full scope and completion criteria</summary><p>' + bridge._inline(row.target) + '</p><p>' + bridge._inline(row.done) + '</p></details>'
         out.append(card(info.get('title', 'Module ' + key), info.get('summary', 'Progress update pending.'), info.get('status', 'Open'), key, detail))
     out.append('</section>')
-    for key, title in [('next','Next on the roadmap'),('later','Later · planned, not being built'),('completed','Reviewed increments')]:
+    for key, title in [('next','Next on the roadmap'),('later','Later · planned, not being built'),('completed','Completed increments and follow-ups')]:
         out.append('<section id="' + ('done' if key == 'completed' else key) + '"><h2>' + title + '</h2>')
         for info in status.get(key, []):
-            out.append(card(info['title'], info['summary'], target=str(info['row']) if 'row' in info else None))
+            target = str(info['row']) if 'row' in info else None
+            detail = '<p class="scope">Shared notes with ' + esc(labels[target]) + '.</p>' if key == 'completed' and target in rows else ''
+            out.append(card(info['title'], info['summary'], info.get('status', 'Completed') if key == 'completed' else '', target=target, details=detail))
         out.append('</section>')
     displayed = set(rows) | {str(info['row']) for info in status.get('completed', []) if 'row' in info}
     archived = set(grouped) - displayed - {'project'}
@@ -184,7 +212,7 @@ def render(state, session):
         for key in sorted(archived):
             out.append(card(status.get('rows', {}).get(key, {}).get('title', 'Module ' + key), 'Your notes remain available after the module leaves the active list.', target=key))
         out.append('</section>')
-    out.append('<section id="notes"><h2>Your notes and future ideas</h2><p>Leave ideas here at any time. I’ll read them at normal work boundaries and fold them into the relevant plan. Nothing is automatically executed.</p>'
+    out.append('<section id="notes"><h2>Your notes and future ideas</h2><p>Leave ideas here at any time. To update an older note, add a follow-up or correction; it enters Notes to read even on completed work. I’ll review the whole queue before starting another item. Nothing is automatically executed.</p>'
                + discussion('project') + '</section></main><footer>Progress summaries are dated checkpoints, not a live worker monitor. Opening or refreshing this page does not interrupt development.</footer></body></html>')
     return ''.join(out)
 

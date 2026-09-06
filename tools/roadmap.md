@@ -11,3 +11,11 @@ Entry creates an independent in-memory session and CSRF secret for at most24hour
 The primary development agent updates the dated private progress checkpoint after meaningful module changes and reads waiting comments at normal task boundaries. Notes are input to consider, not automatic commands. For a note's resolution, explain what was folded in or declined, then mark it consumed using the upstream CLI. Preserve completed module identities in the private status file and keep historical comments. Update the status file atomically so readers see a complete checkpoint. User-facing notes on Next/Later can be placed in the general notes area until an owning module is allocated.
 
 Validation uses disposable roadmap projects. It must include legitimate login/comment/readback, invalid login/CSRF, key rotation/session expiry/restart behavior, stale module forms, escaped text and desktop/phone rendering. Never use real company storage or post fake test comments to the user's live notes.
+
+## Completed tags and the notes checkpoint
+
+Completed checkpoint cards default to a visible Completed tag. A completed component may share its module’s row ID while the full module remains active; shared discussions use the live module title. A confirmed defect in original completion criteria changes the entry’s `status` to `Reopened` and explains it in `summary` until a reviewed fix. Additional scope requests are tracked separately. These are explicit dated status updates, never inferred from files disappearing.
+
+Notes to read is the global `consumed=false` queue, oldest timestamp then ID, including completed and archived targets. Page reads never consume notes. Before each new work item, scan this entire queue plus all existing target comments. Record a disposition and consume only reviewed exact IDs. Notes arriving during that review remain for the next checkpoint. Read/consumed means Reviewed by, not necessarily implemented. Historical notes stay in each discussion.
+
+To update an old note, add a follow-up/correction through its discussion or unread card. This creates a new unread entry even if the prior note was consumed or the work completed. There is no in-place history-edit API. Completion status never excludes a note from the checkpoint. This uses AgentBridge’s append-only comment/consume events unchanged.

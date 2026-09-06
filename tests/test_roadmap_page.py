@@ -141,3 +141,76 @@ def test_correction_form_offers_remain_valid_after_module_closes(site):
     token=re.search(r'name="csrf" value="([^"]+)"',response.text).group(1)
     assert submit(state,client,token,'Keep correction draft','25').status_code==303
     assert 'Keep correction draft' in client.get('/').text
+
+
+def test_completed_followups_reenter_global_queue_and_keep_history(site):
+    state,client,intention=site
+    path=state.root/'notes/roadmap-status.json'
+    status=json.loads(path.read_text())
+    status['rows']={'22':{'title':'Full payment module','status':'Building'}}
+    status['completed']=[{'row':'22','title':'Payment engine','summary':'Reviewed component'},
+                         {'row':'21','title':'History','summary':'Reviewed history'}]
+    path.write_text(json.dumps(status))
+    project=roadmap.bridge.Project(state.root,state.comments)
+    old=project.add_comment('21','K','Original history note','human')
+    project.consume(old['id'],'bookflowcodex')
+    for target in ('project','22','21','99'):
+        project.add_comment(target,'K','Unread for '+target,'human')
+    csrf=login(state,client)
+    page=client.get('/').text
+    queue=page.split('<section id="unread">')[1].split('</section>')[0]
+    assert 'Notes to read (4)' in queue
+    assert all('Unread for '+target in queue for target in ('project','22','21','99'))
+    assert 'Original history note' not in queue
+    assert 'Full payment module' in queue and 'Payment engine' not in queue
+    assert '<span class="badge complete">Completed</span>' in page
+    assert 'Shared notes with Full payment module.' in page
+    assert 'Original history note' in page and 'Reviewed by bookflowcodex' in page
+    assert len([n for n in project.comments() if not n['consumed']])==4
+    for note in project.comments():
+        if not note['consumed']:project.consume(note['id'],'bookflowcodex')
+    assert 'Notes to read (0)' in client.get('/').text
+    assert submit(state,client,csrf,'Correction after completion','21').status_code==303
+    queue=client.get('/').text.split('<section id="unread">')[1].split('</section>')[0]
+    assert 'Notes to read (1)' in queue and 'Correction after completion' in queue
+    assert 'History' in queue
+    status['completed'][1]['status']='Reopened'
+    status['completed'][1]['summary']='Confirmed original-scope defect; fix pending review.'
+    path.write_text(json.dumps(status))
+    page=client.get('/').text
+    assert '<span class="badge flight">Reopened</span>' in page
+    assert 'Correction after completion' in page and 'Original history note' in page
+
+
+@pytest.mark.parametrize('width',[1280,390])
+def test_browser_completed_note_checkpoint_and_followup(site,tmp_path,width):
+    from tests.test_row5_browser_acceptance import _Cdp, CHROME
+    if not CHROME.exists():pytest.skip('Chrome not installed')
+    state,_,_=site
+    path=state.root/'notes/roadmap-status.json'
+    status=json.loads(path.read_text())
+    status['completed']=[{'row':'21','title':'Financial history','summary':'Reviewed and complete.'}]
+    path.write_text(json.dumps(status))
+    browser=_Cdp(tmp_path/f'completed-chrome-{width}')
+    try:
+        browser.viewport(width,900)
+        browser.call('Page.navigate',{'url':state.origin+'/access/'+state.key_file.read_text()})
+        browser.wait_for('!!document.querySelector("#done .badge.complete")')
+        browser.evaluate('''(() => {const d=document.querySelector('#done .discussion');d.open=true;const f=d.querySelector('form');f.querySelector('[name=text]').value='Please revisit this completed work';f.requestSubmit()})()''')
+        browser.wait_for('!!document.querySelector("#unread .unread-note")')
+        assert browser.evaluate('document.querySelector("#unread").innerText.includes("Please revisit this completed work")')
+        project=roadmap.bridge.Project(state.root,state.comments)
+        note=project.comments()[0]
+        project.consume(note['id'],'bookflowcodex')
+        browser.call('Page.reload',{})
+        browser.wait_for('document.querySelector("#unread")?.innerText.includes("Notes to read (0)")')
+        browser.evaluate('''(() => {const d=document.querySelector('#done .discussion');d.open=true;const f=d.querySelector('form');f.querySelector('[name=text]').value='Another update after the last read';f.requestSubmit()})()''')
+        browser.wait_for('document.querySelector("#unread")?.innerText.includes("Another update after the last read")')
+        assert browser.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        assert len(project.comments())==2 and not project.comments()[1]['consumed']
+        import base64
+        screenshot=browser.call('Page.captureScreenshot',{'format':'png','captureBeyondViewport':True})
+        folder=Path('.cache/roadmap-notes');folder.mkdir(parents=True,exist_ok=True)
+        (folder/f'completed-notes-{width}.png').write_bytes(base64.b64decode(screenshot['data']))
+    finally:
+        browser.close()

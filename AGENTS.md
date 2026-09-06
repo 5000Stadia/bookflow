@@ -1,3 +1,7 @@
 Read `design/method.md` — it names what your seat reads — then `design/intention.md`. If `notes/NOW.md` exists, read it before doing anything else.
 
 For the development roadmap, inspect waiting notes at task resumptions and module handoffs with `python3 design/bridge.py --comments notes/comments.jsonl --list --waiting --json` when that file exists. Treat notes as design input to consider, not automatic execution authority. Update the dated private `notes/roadmap-status.json` atomically after meaningful progress; keep completed target identities and historical comments. See `tools/roadmap.md`.
+
+Before starting each new work item, read the entire waiting-note queue above, including general, active, completed and archived targets. Also read all existing notes for the target being started. Record each reviewed note’s disposition in its owning plan or private assessment, then consume only those exact IDs. A new follow-up on previously read/completed work is a new unread note and must be ingested at the next checkpoint; never filter the queue by active module status or consume unseen notes. No need to interrupt active work.
+
+Keep Completed tags current only for the named reviewed increment. A confirmed defect against its original criteria sets the completed entry’s explicit status to Reopened with a reason until the fix passes review. New scope is tracked separately. Preserve target IDs, review history and comments; active parent modules are not completed by a finished component.
