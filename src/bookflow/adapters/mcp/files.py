@@ -23,13 +23,23 @@ def _parts(value):
     return parts
 
 
+def _private_directory(fd):
+    info = os.fstat(fd)
+    if info.st_uid != os.getuid() or info.st_mode & 0o022:
+        raise BookflowError("E_PERMISSION", details={"reason": "unsafe_directory"})
+
+
 def _open_directory(parts, start=None):
     fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY) if start is None else os.dup(start)
     try:
+        if start is not None:
+            _private_directory(fd)
         for part in parts:
             nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
             os.close(fd)
             fd = nxt
+            if start is not None:
+                _private_directory(fd)
         return fd
     except BaseException:
         os.close(fd)
@@ -50,9 +60,11 @@ class Directories:
                 parts = _parts(value)
                 fd = _open_directory(parts)
                 info = os.fstat(fd)
-                if info.st_uid != os.getuid() or info.st_mode & 0o022:
+                try:
+                    _private_directory(fd)
+                except BaseException:
                     os.close(fd)
-                    raise BookflowError("E_PERMISSION", details={"reason": "unsafe_directory"})
+                    raise
                 self.roots.append((parts, fd, _identity(info)))
         except OSError as exc:
             self.close()
