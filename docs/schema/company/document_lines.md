@@ -16,7 +16,7 @@ Database: `company`.
 | `revision_id` | VARCHAR(26) | no | — | unique with revision_id + line_id, unique with revision_id + position, unique with transaction_id + revision_id + id | — | transaction_revisions.id | Immutable document revision containing this line. |
 | `line_id` | VARCHAR(26) | no | — | unique with revision_id + line_id | — | document_line_identities.id | Stable line identity carried across revisions. |
 | `position` | BIGINT | no | — | unique with revision_id + position | — | — | One-based entered line position within the revision. |
-| `kind` | VARCHAR(16) | no | — | — | — | — | Entered line kind: journal or sale. |
+| `kind` | VARCHAR(16) | no | — | — | — | — | Entered line kind: journal, sale or payment. |
 | `account_id` | VARCHAR(26) | yes | — | — | — | accounts.id | Posting account selected for a journal; null for a sale. |
 | `side` | VARCHAR(6) | yes | — | — | — | — | Journal side: debit or credit; null for a sale. |
 | `amount_minor_units` | BIGINT | yes | — | — | — | — | Positive journal amount; null for a sale. |

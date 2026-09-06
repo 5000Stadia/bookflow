@@ -146,7 +146,8 @@ def billing(s, ctx, inp, kind):
     destinations = [sales.summary(h, sales.journals.revision(s, h), sales.profile_row(s, sales.journals.revision(s, h))) for h in found]
     from bookflow.core.money import Money
     for dest in destinations:
-        due = dest['total_minor_units'] if dest['type'] == 'invoice' and dest['status'] == 'posted' else 0
+        from bookflow.company.payment_queries import invoice_current
+        due = invoice_current(s, dest['id'])['due_minor_units'] if dest['type'] == 'invoice' else 0
         dest.update(amount_due_minor_units=due, amount_due=Money(due, dest['currency']).to_dict())
     eligible = owner['active'] and (owner['status'] == 'accepted' if owner['kind'] == 'estimate' else owner['status'] != 'cancelled')
     can_bill = eligible and any(line['billable'] and line['remaining_net_minor_units'] > 0 for line in rendered)

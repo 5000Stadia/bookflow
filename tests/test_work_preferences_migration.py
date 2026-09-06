@@ -6,6 +6,12 @@ from bookflow.storage.migrate import HEADS, migrate_to_head
 from tests.test_progress_billing_schema import co11_template, prior
 
 
+@pytest.fixture(autouse=True)
+def historical_co13_target(monkeypatch):
+    """Keep the original append-only co12→co13 preservation contract."""
+    monkeypatch.setitem(HEADS, 'company', 'co0013')
+
+
 def test_populated_local_company_preservation(prior, monkeypatch):
     with open_database(prior, writable=True) as db:
         with monkeypatch.context() as historical:

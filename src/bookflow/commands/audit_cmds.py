@@ -178,6 +178,9 @@ def _apply_filters(q, events, s: Session, hub: bool, inp: AuditFilters, entries)
 
 
 def _event_out(s: Session, hub: bool, e: dict[str, Any], names: dict[str, str], with_entries: bool) -> AuditEventOut:
+    if not hub:
+        from bookflow.company.payment_authority import authorize_event
+        authorize_event(s, e['id'])
     db, events, entries, visible, _, texts = _scope(s, hub)
     entry_q = sa.select(entries).where(entries.c.event_id == e["id"])
     if visible is not None:
@@ -214,6 +217,11 @@ def _list(s: Session, hub: bool, inp: AuditListInput) -> AuditListOutput:
     if hub:
         q = q.where(hub_audit.visible_event_ids_filter(s))
     q = _apply_filters(q, events, s, hub, inp, entries)
+    if not hub:
+        from bookflow.company.payment_authority import denied_events
+        denied = denied_events(s)
+        if denied:
+            q = q.where(events.c.id.not_in(denied))
     if inp.before is not None:
         q = q.where(events.c.seq < inp.before)
     rows = [dict(r) for r in db.conn.execute(q).mappings().all()]
@@ -227,9 +235,15 @@ def _list(s: Session, hub: bool, inp: AuditListInput) -> AuditListOutput:
 
 def _tail(s: Session, hub: bool, inp: AuditTailInput) -> AuditTailOutput:
     db, events, entries, visible, resolver, _ = _scope(s, hub)
+    denied = []
+    if not hub:
+        from bookflow.company.payment_authority import denied_events
+        denied = denied_events(s)
     after = inp.after
     if after is None:
         newest = sa.select(sa.func.max(events.c.seq))
+        if denied:
+            newest = newest.where(events.c.id.not_in(denied))
         if hub and inp.scan_limit is not None:
             newest = newest.where(hub_audit.visible_event_ids_filter(s))
         after = db.conn.execute(newest).scalar() or 0
@@ -238,6 +252,8 @@ def _tail(s: Session, hub: bool, inp: AuditTailInput) -> AuditTailOutput:
     if inp.scan_limit is not None:
         cap = min(inp.scan_limit, inp.limit)
         candidates = sa.select(events.c.seq).where(events.c.seq > after).order_by(events.c.seq.asc()).limit(cap + 1)
+        if denied:
+            candidates = candidates.where(events.c.id.not_in(denied))
         if hub:
             candidates = candidates.where(hub_audit.visible_event_ids_filter(s))
         sequences = list(db.conn.execute(candidates).scalars())
@@ -250,6 +266,8 @@ def _tail(s: Session, hub: bool, inp: AuditTailInput) -> AuditTailOutput:
         if hub:
             q = q.where(hub_audit.visible_event_ids_filter(s))
     q = _apply_filters(q, events, s, hub, inp, entries)
+    if denied:
+        q = q.where(events.c.id.not_in(denied))
     rows = [dict(r) for r in db.conn.execute(q).mappings().all()]
     ids = {r["actor_id"] for r in rows if r["actor_id"]} | {r["on_behalf_of"] for r in rows if r.get("on_behalf_of")}
     names = resolver(ids)

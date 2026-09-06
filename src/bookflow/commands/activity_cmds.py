@@ -178,6 +178,10 @@ def plan_activity(inp: ActivityInput, ctx: Context, s) -> Plan:
                 entries.c.id.in_(_candidates(inp, key)), events.c.seq <= high_water)
     if since is not None:
         q = q.where(events.c.at >= since)
+    from bookflow.company.payment_authority import denied_events
+    denied = denied_events(s)
+    if denied:
+        q = q.where(events.c.id.not_in(denied))
     if until is not None:
         q = q.where(events.c.at < until)
     if previous:

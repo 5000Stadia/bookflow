@@ -141,6 +141,25 @@ def test_frozen_ddl_matches_declared_columns_keys_checks(old, tmp_path, monkeypa
         for name in CHANGED + NEW:
             actual = sa.Table(name, sa.MetaData(), autoload_with=db.conn)
             expected = schema.metadata.tables[name]
+            if name == 'transactions':
+                # co0014 widens only this type CHECK. This fixture owns co0009.
+                expected = expected.to_metadata(sa.MetaData())
+                current_check, = (constraint for constraint in expected.constraints if constraint.name == 'ck_transaction_type')
+                expected.constraints.remove(current_check)
+                expected.append_constraint(sa.CheckConstraint("type IN ('journal_entry', 'invoice', 'sales_receipt')", name='ck_transaction_type'))
+            if name == 'document_lines':
+                expected = expected.to_metadata(sa.MetaData())
+                current_check, = (constraint for constraint in expected.constraints if constraint.name == 'ck_document_line_kind_side')
+                expected.constraints.remove(current_check)
+                expected.append_constraint(sa.CheckConstraint(str(current_check.sqltext).replace("kind IN ('sale', 'payment')", "kind = 'sale'"), name=current_check.name))
+            if name == 'posting_line_sources':
+                expected = expected.to_metadata(sa.MetaData())
+                payment_fk, = (constraint for constraint in expected.foreign_key_constraints if constraint.name == 'fk_source_payment_component')
+                expected.constraints.remove(payment_fk)
+                for element in payment_fk.elements:
+                    expected.foreign_keys.remove(element)
+                    element.parent.foreign_keys.remove(element)
+                expected._columns.remove(expected.c.payment_component_id)
             if name == 'sales_line_profiles':
                 # co0011/12 introduced amount/allocated pricing; this owns co0009.
                 # Undo only those declared deltas, retaining every other assertion.
