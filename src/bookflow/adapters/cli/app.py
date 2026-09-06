@@ -47,6 +47,27 @@ def _flatten(model: type[BaseModel], prefix: str = "") -> list[tuple[str, str, A
     """Yield (input path with dots, flag name, annotation, help, required, default) per leaf field."""
     out = []
     for name, f in model.model_fields.items():
+        if isinstance(f.discriminator, str):
+            annotation = f.annotation
+            while get_origin(annotation) is Annotated:
+                annotation = get_args(annotation)[0]
+            combined = {}
+            for variant in get_args(annotation):
+                for leaf in _flatten(variant, prefix + name + "."):
+                    path, flag, ann, description, required, default = leaf
+                    previous = combined.get(path)
+                    if previous is None:
+                        combined[path] = leaf
+                    else:
+                        old_ann = previous[2]
+                        if get_origin(old_ann) is Literal and get_origin(ann) is Literal:
+                            ann = Literal[tuple(dict.fromkeys((*get_args(old_ann), *get_args(ann))))]
+                        else:
+                            ann = old_ann
+                        combined[path] = (path, flag, ann, description or previous[3],
+                                          required and previous[4], default)
+            out.extend(combined.values())
+            continue
         ann = f.annotation
         base = ann
         origin = get_origin(ann)
@@ -365,17 +386,23 @@ def _help_epilog(cmd: registry.Command) -> str:
     if cmd.protocol_stdout:
         return "Stdout carries only protocol messages. EOF closes the launcher without a final command document. Diagnostics use stderr."
     codes = ", ".join(cmd.error_codes) if cmd.error_codes else "none beyond the infrastructure codes"
+    related = [other.name for other in registry.all_commands(include_standalone=True) if other.name.startswith(cmd.name + ' ')]
+    suffix = "\n\nRelated command paths: " + ", ".join(related) + "." if related else ""
     return (f"Output fields: {fields}.\n\nErrors this command can return: {codes}. "
-            f"Every command can also return: {', '.join(INFRASTRUCTURE_CODES)}.")
+            f"Every command can also return: {', '.join(INFRASTRUCTURE_CODES)}." + suffix)
 
 
 def _target_noun(argv: list[str]) -> str | None:
     """The noun path the invocation names (words before the first option after the program name), or None for the root."""
     words = []
-    for tok in argv[1:]:
+    values = {'--data-root', '--company', '--reason', '--source-ref', '--directive', '--idempotency-key'}
+    tokens = iter(argv[1:])
+    for tok in tokens:
         if tok.startswith("-"):
             if words:
                 break
+            if tok in values:
+                next(tokens, None)
             continue
         words.append(tok)
     return " ".join(words) if words else None
@@ -419,6 +446,7 @@ def build_app(target: str | None = None, full: bool = False) -> typer.Typer:
     single = {"init": "Create the data root, the system user, and the first hub-admin user mapped from the OS login.", "upgrade": "Migrate the hub database and every company database the acting user may write to the current schema revision."}
     built = set()
     commands = registry.all_commands(include_standalone=True)
+    command_names = {cmd.name for cmd in commands}
     if target is not None and not full:
         # Concrete invocation/help only needs its own parser; positional values
         # may follow the registered command name. Noun and unknown targets keep
@@ -435,7 +463,7 @@ def build_app(target: str | None = None, full: bool = False) -> typer.Typer:
         group_for(cmd.noun).command(cmd.verb, help=cmd.description, epilog=fn.__epilog__)(fn)
         built.add(cmd.noun)
     for noun in registry.all_nouns():
-        if noun in built:
+        if noun in built or noun in command_names:
             continue
         if noun in single:
             app.command(noun, help=single[noun])(lambda: None)

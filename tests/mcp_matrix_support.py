@@ -74,6 +74,10 @@ class Matrix:
             args.extend(command.split())
             leaves = _flatten(cmd.input_model)
             leaves.sort(key=lambda leaf: cmd.positional.index(leaf[0]) if leaf[0] in cmd.positional else len(cmd.positional))
+            # A discriminated request can have a collection at a path in one
+            # branch and nested model controls at that path in another. Emit the
+            # chosen input's nested controls, not the inactive collection flag.
+            model_paths = {leaf[0] for leaf in leaves}
             for path, flag, annotation, _, _, _ in leaves:
                 value = raw
                 for part in path.split('.'):
@@ -81,6 +85,8 @@ class Matrix:
                         break
                     value = value[part]
                 else:
+                    if isinstance(value, dict) and any(other.startswith(path + '.') for other in model_paths):
+                        continue
                     metadata = cmd.input_model.model_fields.get(path)
                     if metadata and isinstance(metadata.json_schema_extra, dict):
                         flag = metadata.json_schema_extra.get('cli_flag', flag)

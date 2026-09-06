@@ -26,6 +26,9 @@ HUB = {
 
 
 def policy(cmd):
+    from bookflow.core.publication_payment import PAYMENT_COMMANDS
+    if cmd.plan is not None and cmd.plan.__module__ == 'bookflow.commands.payment_cmds' and cmd.name not in PAYMENT_COMMANDS:
+        raise RuntimeError('Registered payment command lacks a publication dependency inventory: ' + cmd.name)
     if cmd.local_only or cmd.standalone:
         return "local_only"
     if cmd.scope == "company":
@@ -38,12 +41,14 @@ def policy(cmd):
 def inventory():
     from bookflow.core import registry
     registry.load_all()
+    from bookflow.core.publication_payment import captures
     return [{"command": cmd.name, "policy": policy(cmd), "scope": cmd.scope,
              "credential": "original_secret_current_binding",
              "actor_and_memberships": "current_exact_authority",
              "required_role": cmd.required_role,
              "resources": cmd.resource_requirements,
              "conditional_authority": None if cmd.authorize_input is None else cmd.authorize_input.__module__ + "." + cmd.authorize_input.__name__,
+             "payment_authority": "owned_roots_current_shared_payment_requirements" if captures(cmd) else None,
              "transfer_authority": None if cmd.transfer is None else "registered_transfer_prepare",
              "additional": "original_event_role" if cmd.name == "undo" else "bound_principal" if cmd.name == "directive add" else None}
             for cmd in registry.all_commands(include_standalone=True)]

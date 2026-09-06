@@ -145,6 +145,16 @@ class PublicationPermit:
                 from bookflow.hub.audit import visible_record_ids
                 ids = visible_record_ids(s)
                 self.projection["audit_records"] = None if ids is None else frozenset(ids)
+        if succeeded and result is not None:
+            from bookflow.core import publication_payment
+            if publication_payment.captures(self.cmd):
+                if s.company is None:
+                    # Permanent recovery deliberately closes its read handle.
+                    # Capture dependencies through a fresh read-only open; never
+                    # rerun recovery or a write finalizer.
+                    open_company(s, self.ctx, False)
+                self.projection['payment_roots'] = publication_payment.capture(
+                    self.cmd, self.inp, s, result, dry_run=self.dry_run)
         if not succeeded or self.dry_run or not self.cmd.is_write:
             return
         self.committed = True
@@ -234,7 +244,7 @@ class PublicationPermit:
                     access.require_resource(s, capability, required)
                 # Role/resource predicates live in the hub. Open company data
                 # only for a predicate that actually reads protected targets.
-                if self.cmd.authorize_input is not None or self.cmd.name == "undo" or self.cmd.transfer is not None:
+                if self.cmd.authorize_input is not None or self.cmd.name == "undo" or self.cmd.transfer is not None or self.projection.get('payment_roots'):
                     open_company(s, self.ctx, False)
             elif self.cmd.required_role == "hub_admin" and not s.is_hub_admin:
                 if self.execution_succeeded:
@@ -267,6 +277,9 @@ class PublicationPermit:
                     _deny()
                 if self.cmd.transfer.direction == "output" and (prepared.info.sha256, prepared.info.size_bytes) != (digest, size):
                     _deny()
+            if self.projection.get('payment_roots'):
+                from bookflow.core import publication_payment
+                publication_payment.check(s, self.projection['payment_roots'])
             self._additional(s)
 
     def _additional(self, s):

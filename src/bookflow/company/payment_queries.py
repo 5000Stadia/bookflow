@@ -56,12 +56,8 @@ def payer_balances(s, customer_id):
     """CP02: actual payer/family net AR, authorized over the contributing graph."""
     from bookflow.company import customer_balances
     from bookflow.core.money import Money
-    family = [row[0] for row in s.company.raw.execute('''WITH RECURSIVE family(id) AS (
-        SELECT id FROM customers WHERE id=? UNION SELECT c.id FROM customers c JOIN family f ON c.parent_id=f.id)
-        SELECT id FROM family''', (customer_id,))]
-    transactions = s.company.conn.execute(sa.select(c.posting_lines.c.transaction_id).join(c.accounts,
-        c.accounts.c.id == c.posting_lines.c.account_id).where(c.accounts.c.type == 'accounts_receivable',
-        c.posting_lines.c.name_type == 'customer', c.posting_lines.c.name_id.in_(family)).distinct()).scalars().all()
+    from bookflow.company.payment_authority import payer_transactions
+    transactions = payer_transactions(s.company, customer_id)
     authorize(s, transactions)
     currency = s.company_info_row['home_currency']
     return dict(customer_id=customer_id, payer_balance=Money(customer_balances.own_balance(s.company, customer_id), currency).to_dict(),

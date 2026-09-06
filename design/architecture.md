@@ -815,7 +815,7 @@ redelivers only its error document; it never reopens the missing binary resource
 The Row9 test ledger tests/mcp_coverage.py explicitly classifies all251 registered
 commands by routed JSON, advisory, finite poll/local follow, binary direction,
 local lifecycle or standalone protocol. Four-interface execution scenarios cover
-176 commands;100 remain explicitly pending after the reviewed payment base added25 commands. The existing actual all-command form
+201 commands;75 remain explicitly pending after the reviewed payment base added25 commands. The existing actual all-command form
 check emits schema-path/control/variant/context mapping. This fetched-form map is
 separate from the still-incomplete browser interaction/output/success mapping.
 
@@ -825,6 +825,14 @@ branch fields carry alternatives of conjunctions, including nested payment previ
 intents. Browser visibility disables inactive controls and the shared form decoder
 also ignores inactive branch fields. Bookkeeping validation remains in the original
 input models; no payment permissions, defaults or financial effects are redefined.
-The payment merge is an implementation checkpoint: its complete conditional and
-composite publication dependency integration remains open under Row9, and the
-installed payment workflow witness is not blind-agent or full-row acceptance.
+Payment publication retains owned transaction, selection, operation, payer and
+composite audit identities through `core/publication_payment.py`. Fresh checks use
+the shared `company/payment_authority.py` predicates over complete owning graphs,
+including off-page operation effects and cleared selection history. Filtered
+payment aggregates retain the shared work-access projection as well as returned
+record identities. Plain invoice summaries retain their own authority boundary;
+sharing a receipt with another work-linked invoice does not expand that policy.
+Permanent recovery may close its company reader; dependency capture reopens
+read-only without re-running recovery, planning or write maintenance. Original
+rejections retain the shared error-publication path. Full Row9 acceptance remains
+open; installed SDK workflows are not blind-agent acceptance.

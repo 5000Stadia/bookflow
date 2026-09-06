@@ -41,3 +41,17 @@ def test_nested_preview_branch_preserves_both_discriminators():
     assert 'customer' not in raw['request']['input']
     assert raw['request']['input']['applications'] == {'mode': 'selection', 'selection': GHOST, 'expected_version': 2}
     PaymentPreviewItemsInput.model_validate(raw)
+
+
+def test_cli_exposes_all_preview_request_branches_without_duplicate_flags():
+    from bookflow.adapters.cli.app import _flatten, _leaf_type
+    registry.load_all()
+    leaves = _flatten(registry.get('payment preview items').input_model)
+    flags = [row[1] for row in leaves]
+    assert len(flags) == len(set(flags))
+    assert {'request-input-payment', 'request-input-expected-version', 'request-input-customer',
+            'request-input-invoice', 'request-input-applications-selection',
+            'request-input-applications-expected-version', 'request-input-applications'} <= set(flags)
+    tag = next(row for row in leaves if row[0] == 'request.command')
+    assert set(_leaf_type(tag[2])[1]) == {'payment receive', 'payment apply', 'payment unapply',
+                                       'payment void', 'payment update', 'invoice update'}

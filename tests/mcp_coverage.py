@@ -293,6 +293,8 @@ FINANCIAL = {n + ' ' + v for n in ('journal', 'invoice', 'sales-receipt') for v 
 
 def execution_map():
     from tests.test_mcp_registry_supporting import FAMILIES
+    from tests.test_mcp_registry_payment_preparation import FAMILIES as PAYMENT_FAMILIES
+    from tests.test_mcp_registry_payments import COMMANDS as PAYMENT_FINANCIAL
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -301,7 +303,9 @@ def execution_map():
     for cmd in commands:
         witness = ('tests/test_mcp_registry_lists.py::test_each_list_lifecycle_valid_rejected_and_preview_parity' if cmd.name in LISTS else
                    'tests/test_mcp_registry_financial.py::test_financial_lifecycle_full_documents_and_ledger_parity' if cmd.name in FINANCIAL else
-                   'tests/test_mcp_registry_supporting.py::test_supporting_family_full_documents_and_rejections' if any(cmd.name in names for names in FAMILIES.values()) else None)
+                   'tests/test_mcp_registry_supporting.py::test_supporting_family_full_documents_and_rejections' if any(cmd.name in names for names in FAMILIES.values()) else
+                   'tests/test_mcp_registry_payment_preparation.py::test_payment_preparation_four_surface_documents_context_and_rejections' if any(cmd.name in names for names in PAYMENT_FAMILIES.values()) else
+                   'tests/test_mcp_registry_payments.py::test_payment_financial_lifecycle_full_documents_and_exact_ledger' if cmd.name in PAYMENT_FINANCIAL else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else
                 'advisory' if cmd.kind == 'advisory' else 'finite_poll_with_local_follow' if cmd.streams else 'routed_json')

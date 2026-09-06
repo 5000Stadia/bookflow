@@ -146,3 +146,46 @@ def denied_events(s):
                 raise
             denied.append(event)
     return denied
+
+
+def payer_transactions(db, customer_id):
+    """Exact AR-contributing family graph shared with balance disclosure."""
+    family = [row[0] for row in db.raw.execute("""WITH RECURSIVE family(id) AS (
+        SELECT id FROM customers WHERE id=? UNION SELECT c.id FROM customers c JOIN family f ON c.parent_id=f.id)
+        SELECT id FROM family""", (customer_id,))]
+    return set(db.conn.execute(sa.select(c.posting_lines.c.transaction_id).join(c.accounts,
+        c.accounts.c.id == c.posting_lines.c.account_id).where(c.accounts.c.type == 'accounts_receivable',
+        c.posting_lines.c.name_type == 'customer', c.posting_lines.c.name_id.in_(family)).distinct()).scalars())
+
+
+def disclosure_transactions(db, kind, identifier):
+    """Current complete owning graph, independent of returned page bounds.
+
+    The result is fed to authorize/requirements; no new role policy or execution
+    path exists here. Operation snapshots and selection histories use the same
+    record traversal as annotations and composite audit evidence.
+    """
+    if kind == 'payer':
+        return payer_transactions(db, identifier)
+    if kind not in ('payment_history', 'invoice_settlement'):
+        return record_transactions(db, kind, identifier)
+    ids = record_transactions(db, 'transaction', identifier)
+    field = c.applications.c.paying_transaction_id if kind == 'payment_history' else c.applications.c.paid_transaction_id
+    rows = db.conn.execute(sa.select(c.applications.c.paying_transaction_id,
+        c.applications.c.paid_transaction_id).where(field == identifier))
+    for paying, paid in rows:
+        ids.update((paying, paid))
+    if kind == 'payment_history':
+        # The core history command discloses every operation whose complete
+        # resolved intent includes this receipt, even after applications vanish.
+        for row in db.conn.execute(sa.select(c.payment_operations.c.id, c.payment_operations.c.request_snapshot)).mappings():
+            try:
+                values = json.loads(row['request_snapshot'])['resolved_transaction_ids']
+                if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
+                    raise ValueError()
+            except (ValueError, KeyError, TypeError):
+                from bookflow.core.errors import BookflowError
+                raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'}) from None
+            if identifier in values:
+                ids.update(record_transactions(db, 'payment_operation', row['id']))
+    return ids
