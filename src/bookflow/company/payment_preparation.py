@@ -1,5 +1,6 @@
 """Complete invoice discovery and shared origin-aware receipt calculations."""
 import json
+from collections import namedtuple
 import sqlalchemy as sa
 from bookflow.company import schema as c, document_effects as effects, sales_defaults as defaults
 from bookflow.company import payment_selection as selection, payment_queries as query, payment_calculations as calc, sales
@@ -96,6 +97,8 @@ def _original_projection(statement):
         sa.and_(original.c.transaction_id == statement.selected_columns.invoice_id, original.c.revision_number == 1))
 
 
+_Candidate = namedtuple('_Candidate', 'invoice_id expected_version customer_id date currency revision_id gross_minor_units due_minor_units available_source_minor_units')
+
 def candidates(s, inp):
     context, statement, capacities = _candidate_query(s, inp)
     # Suggestions bind the complete candidate relation and exact current money.
@@ -105,9 +108,8 @@ def candidates(s, inp):
     baseline = statement.with_only_columns(cols.invoice_id, cols.expected_version,
         cols.customer_id, cols.date, cols.currency, cols.revision_id,
         cols.gross_minor_units, cols.due_minor_units)
-    result = [dict(row, applied_minor_units=row['gross_minor_units']-row['due_minor_units'],
-        available_source_minor_units=capacities[row['customer_id']] if context['payment_id'] else None)
-        for row in s.company.conn.execute(baseline).mappings()]
+    result = [_Candidate(*row, capacities[row[2]] if context['payment_id'] else None)
+        for row in s.company.conn.execute(baseline).all()]
     return context, result
 
 
@@ -117,7 +119,7 @@ def invoices(s, inp):
     # Bind every candidate identity/version and relevant lineage, but materialize
     # the monetary display projection only for the requested delivery page.
     baseline = [list(row) for row in s.company.conn.execute(statement.with_only_columns(
-        statement.selected_columns.invoice_id, statement.selected_columns.expected_version, statement.selected_columns.customer_id))]
+        statement.selected_columns.invoice_id, statement.selected_columns.expected_version, statement.selected_columns.customer_id)).all()]
     balances = query.payer_balances(s, context['customer_id'])
     lineage = lineage_facts(s, [context['customer_id'], *(row[2] for row in baseline)])
     out = query.page(s, 'payment invoices', inp, baseline, facts=[context, baseline, balances, lineage])
@@ -141,26 +143,26 @@ def suggest(s, inp):
     strategy = inp.strategy
     if strategy == 'company':
         strategy = 'exact_then_oldest' if defaults._info(s.company)['automatically_apply_payments'] else 'none'
-    exact = next((row for row in rows if row['due_minor_units'] == amount and
-        (row['available_source_minor_units'] is None or row['available_source_minor_units'] >= amount)), None)
+    exact = next((row for row in rows if row.due_minor_units == amount and
+        (row.available_source_minor_units is None or row.available_source_minor_units >= amount)), None)
     chosen = [exact] if exact else rows
     rendered, remaining, capacity = [], amount, {}
     if strategy != 'none':
         for row in chosen:
-            party = row['customer_id']
-            if row['available_source_minor_units'] is not None:
-                capacity.setdefault(party, row['available_source_minor_units'])
-            units = min(row['due_minor_units'], remaining, capacity.get(party, remaining))
+            party = row.customer_id
+            if row.available_source_minor_units is not None:
+                capacity.setdefault(party, row.available_source_minor_units)
+            units = min(row.due_minor_units, remaining, capacity.get(party, remaining))
             if units:
-                rendered.append(dict(invoice_id=row['invoice_id'], expected_version=row['expected_version'],
-                    ordinal=len(rendered) + 1, due_minor_units=row['due_minor_units'], amount_minor_units=units,
+                rendered.append(dict(invoice_id=row.invoice_id, expected_version=row.expected_version,
+                    ordinal=len(rendered) + 1, due_minor_units=row.due_minor_units, amount_minor_units=units,
                     amount_origin='calculated', currency=context['currency']))
                 remaining -= units
                 if party in capacity:
                     capacity[party] -= units
             if not remaining:
                 break
-    lineage = lineage_facts(s, [context['customer_id'], *(row['customer_id'] for row in rows)])
+    lineage = lineage_facts(s, [context['customer_id'], *(row.customer_id for row in rows)])
     return dict(query.page(s, 'payment suggest', inp, rendered, facts=[context, rows, strategy, rendered, lineage]),
         amount=Money(amount, context['currency']).to_dict(), amount_origin='entered', unapplied_minor_units=remaining, problems=[])
 
