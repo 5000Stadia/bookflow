@@ -302,6 +302,15 @@ def test_linked_receipt_corrections_confirm_changed_received_total_and_keep_hist
             client.run('sales-receipt update',edit,company=COMPANY)
         assert err.value.code == 'E_INTERNAL'
         assert snapshot(client) == before
+    def corrupt_prior(s, inp, document_type, old_header=None, old_revision=None, **kwargs):
+        old_revision['total_minor_units'] = 104
+        return prepare(s, inp, document_type, old_header, old_revision, **kwargs)
+    with monkeypatch.context() as patch:
+        patch.setattr(service, 'commercial', corrupt_prior)
+        with pytest.raises(BookflowError) as err:
+            client.run('sales-receipt update',edit,company=COMPANY)
+        assert err.value.code == 'E_INTERNAL'
+        assert snapshot(client) == before
     corrected = client.run('sales-receipt update',dict(edit,amount_received='1.04'),company=COMPANY)
     assert corrected['total_minor_units'] == 104
     assert corrected['revision']['lines'][0]['item_snapshot'] == original['item_snapshot']

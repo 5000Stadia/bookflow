@@ -125,7 +125,11 @@ def validate(plan, s, ctx):
         linked = s.company.conn.execute(c.work_billing_allocations.select().with_only_columns(
             c.work_billing_allocations.c.id).where(
                 c.work_billing_allocations.c.transaction_id == header['id']).limit(1)).first()
-        if linked and revision['total_minor_units'] != data['old_revision']['total_minor_units']:
+        prior_gross = s.company.conn.execute(c.transaction_revisions.select().with_only_columns(
+            c.transaction_revisions.c.total_minor_units).where(
+                c.transaction_revisions.c.id == current['current_revision_id'],
+                c.transaction_revisions.c.transaction_id == current['id'])).scalar_one()
+        if linked and revision['total_minor_units'] != prior_gross:
             require(received is not None, 'changed linked receipt lacks received total confirmation')
         if received is not None:
             require(money(received, currency, 'amount_received').minor_units == revision['total_minor_units'],

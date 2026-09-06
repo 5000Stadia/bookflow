@@ -83,6 +83,7 @@ def test_linked_billing_correction_void_and_stale(register_browser, width, tmp_p
     b.evaluate('document.querySelector("[data-collection-path=lines] [data-collection-remove]").click()')
     b.evaluate('document.querySelector("[data-collection-path=lines] > [data-collection-add]").click()')
     _choose(b, 'c:lines:0:item', 'Billing labor'); _fill(b, 'c:lines:0:net_amount', '5.01')
+    _fill(b, 'f:amount_received', '5.01')
     _preview(b); _click(b, 'submit'); assert _saved(b, 'sales-receipt') == receipt
     state = run('work-order.billing', dict(work_order=order['id']))
     assert state['remaining_net_minor_units'] == 3001
