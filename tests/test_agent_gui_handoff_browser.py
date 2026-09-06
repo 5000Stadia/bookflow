@@ -50,9 +50,13 @@ def test_agent_invoice_human_correction_agent_continuation(register_browser, wid
     prefix = f"/companies/{env.site.company_id}/commands/"
     with httpx.Client(base_url=env.site.base_url, trust_env=False, timeout=15,
                       headers={"Authorization": f"Bearer {issued['secret']}",
-                               "X-Bookflow-Client-Name": "handoff-agent",
-                               "X-Bookflow-Reason": "Continue the shared invoice"}) as api:
+                               "X-Bookflow-Client-Name": "handoff-agent"}) as api:
         def call(name, data, **kwargs):
+            if name.partition("?")[0] in {"invoice.post", "invoice.update"}:
+                kwargs["headers"] = {
+                    "X-Bookflow-Reason": "Continue the shared invoice",
+                    **kwargs.get("headers", {}),
+                }
             response = api.post(prefix + name, json=data, **kwargs)
             assert response.status_code == 200, response.text
             return response.json()
@@ -83,7 +87,8 @@ def test_agent_invoice_human_correction_agent_continuation(register_browser, wid
         assert corrected["version"] == 2 and corrected["total_minor_units"] == 1851
         assert corrected["revision"]["lines"][0]["line_id"] == posted["revision"]["lines"][0]["line_id"]
         rejected = api.post(prefix + "invoice.update", json=dict(
-            invoice=invoice, expected_version=1, memo="Stale agent draft"))
+            invoice=invoice, expected_version=1, memo="Stale agent draft"),
+            headers={"X-Bookflow-Reason": "Continue the shared invoice"})
         assert rejected.status_code == 409 and rejected.json()["code"] == "E_VERSION_CONFLICT"
         assert call("invoice.show", dict(invoice=invoice)) == corrected
         # A retry of creation must not recreate or overwrite the human's correction.
