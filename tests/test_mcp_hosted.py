@@ -98,6 +98,8 @@ def test_real_stdio_discovery_help_and_attributed_host_write(hosted, live, tmp_p
             async with ClientSession(read, write) as session:
                 await (session.initialize() if protocol == "legacy" else session.discover())
                 tools = await session.list_tools()
+                discovery = next(tool for tool in tools.tools if tool.name == "bookflow_list_commands")
+                assert "default 20" in discovery.description and "next_cursor" in discovery.description
                 help_tool = next(tool for tool in tools.tools if tool.name == "bookflow_help")
                 assert help_tool.input_schema["properties"]["view"]["enum"] == ["usage", "input_schema", "output_schema", "full"]
 
@@ -105,6 +107,13 @@ def test_real_stdio_discovery_help_and_attributed_host_write(hosted, live, tmp_p
                     result = await session.call_tool(name, args)
                     assert not result.is_error, result
                     return result.structured_content
+
+                from bookflow.adapters.mcp.catalog import command_help
+                for payment_command in ('payment receive', 'payment update'):
+                    payment_help = await call('bookflow_help', {'command': payment_command})
+                    assert payment_help == command_help(payment_command)
+                    assert 'same operation_key' in payment_help['documentation']
+                    assert 'Undeposited Funds holding account' in payment_help['documentation']
 
                 catalog = await call("bookflow_list_commands", {"prefix": "account"})
                 assert "account list" in {item["name"] for item in catalog["commands"]}

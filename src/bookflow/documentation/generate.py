@@ -134,8 +134,23 @@ def command_document(cmd: Any) -> str:
     return _command_page(cmd.noun, [cmd]).decode("utf-8")
 
 
+def _payment_usage(name: str) -> list[str]:
+    """Shared payment guidance rendered in both usage and the full reference."""
+    lines = []
+    if name in {"payment receive", "payment update"}:
+        lines.extend(["", "reference is the customer's check/reference number (for example 1042); number is Bookflow's internal receipt number. deposit_to accepts a bank account or the system Undeposited Funds holding account. Recording a receipt into Undeposited Funds does not record a completed bank deposit."])
+    if name == "payment receive":
+        lines.extend(["", "Parent/job example: receive 1000.00 from a parent customer, apply 100.00 to its HQ invoice, 600.00 to its Pine job invoice and 200.00 to its Oak job invoice. The remaining 100.00 is unapplied credit owned by the parent customer. Set customer to that parent and applications.mode to inline with each invoice, its current expected_version and amount in applications.items. Use payment invoices to discover compatible invoices and their current versions. Job invoice allocations remain owned by their respective jobs; parent credit is not silently moved to a job. Supply explicit applications when the directive specifies allocations; omitted applications can use the company's automatic-application policy."])
+    if name in {"payment receive", "payment apply", "payment unapply", "payment void", "payment update"}:
+        lines.extend(["", "Preview/save: choose input.operation_key once for this business operation. Call with top-level dry_run=true. Copy the returned preview result's facts_fingerprint into input.expected_facts_fingerprint, then save with dry_run=false using the same operation_key, the same business inputs and the same reason/directive. The fingerprint is returned by Bookflow; do not calculate it. A stale preview requires a fresh preview and review of the changed facts before saving.",
+            "After an uncertain transport result, recover the existing transport reference first. For an exact business retry, preserve the original operation_key, input and context; payment operation show retrieves the canonical saved request and historical effect. A new business operation needs a new operation_key. The permanent operation_key is distinct from the optional top-level idempotency_key and from the transport reference.",
+            "For a fresh read after saving, use payment show for the returned payment ID, invoice settlement for each affected invoice's current due, and payment history for immutable revisions and settlement events. A committed response describes the save; these commands read current state."])
+    return lines
+
+
 def _purpose(cmd: Any) -> list[str]:
     return [cmd.description,
+        *_payment_usage(cmd.name),
         *(["", "Posting an invoice records it in the books. It does not send or email the invoice to the customer."] if cmd.name == "invoice post" else []),
         *(["", "A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record."] if cmd.is_write else [])]
 

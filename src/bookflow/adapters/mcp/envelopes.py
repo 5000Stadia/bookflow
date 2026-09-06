@@ -105,7 +105,7 @@ class RecoveryArguments(Envelope):
 
 RUN = TypeAdapter(RunArguments | RecoveryArguments)
 TOOLS = {
-    "bookflow_list_commands": (ListArguments, "Discover registered Bookflow commands and their scope."),
+    "bookflow_list_commands": (ListArguments, "Discover registered Bookflow commands and their scope. Start with a command prefix such as payment or invoice and omit limit for the default 20. Continue with next_cursor as cursor and the same prefix. Broad pages up to the supported limit 200 can exceed client display space; prefer targeted discovery and paging. Prefixes match command names, not business synonyms."),
     "bookflow_help": (HelpArguments, "Read concise usage and complete input constraints by default. Select view=output_schema for complete output fields, input_schema for inputs, or full for both schemas and the entire command reference. All views include context and errors."),
     "bookflow_run": (RUN, "Run a discovered Bookflow command. Files use transport.input_file/output_file on the calling machine; the adapter handles all bytes. Recover an existing intent by its reference without resubmitting it."),
 }

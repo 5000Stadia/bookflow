@@ -6,6 +6,8 @@
 
 Prepare a shared nonposting payment draft with immutable header/row amount origins and complete invoice selection history.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -171,6 +173,8 @@ Example JSON output:
 ## `payment selection create`
 
 Prepare a shared nonposting payment draft with immutable header/row amount origins and complete invoice selection history.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
@@ -716,6 +720,8 @@ Example JSON output:
 ## `payment selection update`
 
 Prepare a shared nonposting payment draft with immutable header/row amount origins and complete invoice selection history.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|

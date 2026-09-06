@@ -76,7 +76,7 @@ def test_bad_help_views_reject_in_schema_and_runtime(view):
 
 def test_context_constraints_and_document_budget():
     from mcp import types
-    for name in ['invoice post', 'invoice update', 'invoice show']:
+    for name in ['invoice post', 'invoice update', 'invoice show', 'payment receive', 'payment update']:
         doc = command_help(name)
         document_bytes = len(json.dumps(doc, ensure_ascii=True, separators=(', ', ': ')).encode('utf-8'))
         reply = types.CallToolResult(content=[types.TextContent(text=json.dumps(doc, ensure_ascii=False, allow_nan=False))],
@@ -89,3 +89,24 @@ def test_context_constraints_and_document_budget():
             assert context['dry_run']['default'] is False
             assert context['dry_run']['type'] == 'boolean'
     assert 'does not send' in command_help('invoice post')['documentation']
+
+
+def test_payment_help_preserves_shared_guidance_and_discovery_paging():
+    from bookflow.adapters.mcp.envelopes import TOOLS
+    for name in ('payment receive', 'payment apply', 'payment unapply', 'payment void', 'payment update'):
+        usage = command_help(name)['documentation']
+        full = command_help(name, 'full')['documentation']
+        for text in ('input.operation_key', "preview result's facts_fingerprint", 'input.expected_facts_fingerprint',
+                     'same operation_key', 'payment operation show', 'invoice settlement'):
+            assert text in usage and text in full
+    for name in ('payment receive', 'payment update'):
+        for text in ('check/reference number', 'internal receipt number', 'Undeposited Funds holding account'):
+            assert text in command_help(name)['documentation']
+    assert 'remaining 100.00 is unapplied credit owned by the parent' in command_help('payment receive')['documentation']
+    description = TOOLS['bookflow_list_commands'][1]
+    assert all(text in description for text in ('prefix', 'default 20', 'next_cursor', '200'))
+    first = list_commands(prefix='payment', limit=20)
+    second = list_commands(prefix='payment', cursor=first['next_cursor'])
+    complete = list_commands(prefix='payment', limit=200)
+    assert first['commands'] + second['commands'] == complete['commands']
+    assert second['next_cursor'] is None
