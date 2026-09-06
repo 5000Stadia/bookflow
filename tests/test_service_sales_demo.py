@@ -160,12 +160,12 @@ def test_seed_known_balances_counts_and_readonly_preview(reference_client, compa
                     for name in ("transactions", "transaction_revisions", "posting_batches", "posting_lines",
                                  "sales_profiles", "sales_line_profiles", "sales_tax_components", "audit_events")}
     before = counts()
-    assert before["transactions"] == journals + 4
-    assert before["sales_profiles"] == 8
-    assert before["sales_line_profiles"] == 12
-    assert before["sales_tax_components"] == 8
+    assert before["transactions"] == journals + 10  # four sales demos plus six voided Row 17 billing demos
+    assert before["sales_profiles"] == 15
+    assert before["sales_line_profiles"] == 26
+    assert before["sales_tax_components"] == 22
     assert (before["transaction_revisions"], before["posting_batches"], before["posting_lines"]) == (
-        (22, 33, 99) if prefix == "DEMO" else (45, 53, 132))
+        (29, 47, 165) if prefix == "DEMO" else (52, 67, 198))
     for noun in ("invoice", "sales-receipt"):
         args = dict(date="2026-09-07", customer="Commercial Example Customer",
                     sales_tax_item="Commercial Example Tax 8%", customer_tax_code="Tax",

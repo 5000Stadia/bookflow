@@ -79,6 +79,24 @@ def source_effects():
                 batches.append(('reversal', [(account, credit, debit) for account, debit, credit in replacement]))
             for kind, legs in batches:
                 rows.extend((account, day, number, kind, debit, credit) for account, debit, credit in legs)
+    # Row 17 whole-line work billing demonstrations. Every sale is voided on its own
+    # date, so balances are unchanged while gross activity records each posting once.
+    # Legs are per line: control gross, income net, tax component. Zero lines post nothing.
+    labor = [('{control}', 21600, 0), ('Service Income', 0, 20000), ('Sales Tax Payable', 0, 1600)]
+    amount = [('{control}', 1081, 0), ('Service Income', 0, 1001), ('Sales Tax Payable', 0, 80)]
+    trip = [('{control}', 540, 0), ('Service Income', 0, 500), ('Sales Tax Payable', 0, 40)]
+    repair = [('{control}', 10800, 0), ('Service Income', 0, 10000), ('Sales Tax Payable', 0, 800)]
+    def billed(number, day, control, batches):
+        for kind, legs in batches:
+            legs = [(account.format(control=control), debit, credit) for account, debit, credit in legs]
+            rows.extend((account, day, number, kind, debit, credit) for account, debit, credit in legs)
+            rows.extend((account, day, number, 'reversal', credit, debit) for account, debit, credit in legs)
+    billed('REF-BILL-INV-1', '2026-09-16', 'Accounts Receivable', [('original', labor + amount)])
+    billed('REF-BILL-INV-2', '2026-09-17', 'Accounts Receivable', [('original', labor + amount), ('replacement', labor + trip)])
+    billed('REF-BILL-SR-1', '2026-09-19', 'Checking', [('original', labor + amount)])
+    billed('REF-BILL-INV-3', '2026-09-20', 'Accounts Receivable', [('original', labor)])
+    billed('REF-BILL-SR-2', '2026-09-15', 'Checking', [('original', repair)])
+    billed('REF-BILL-INV-AMT', '2026-09-21', 'Accounts Receivable', [('original', amount)])
     return rows
 
 

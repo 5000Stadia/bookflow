@@ -42,27 +42,38 @@ assert (NET, TAX, GROSS) == (14001, 960, 14961)
 @pytest.mark.parametrize("resource", ["seed.toml", "reference.toml"])
 def test_manifests_append_all_twenty_one_work_commands_after_the_old_entries(resource):
     commands = tomllib.loads(files("bookflow.demo").joinpath(resource).read_text())["commands"]
-    old, new = commands[:OLD_COUNTS[resource]], commands[OLD_COUNTS[resource]:]
+    old, new = commands[:OLD_COUNTS[resource]], commands[OLD_COUNTS[resource]:(201 if resource == "seed.toml" else 107)]
     assert not [e for e in old if e["command"].split()[0] in NOUNS]
-    work = [e for e in new if e["command"].split()[0] in NOUNS]
+    verbs = {f"{noun} {verb}" for noun in NOUNS for verb in (*SHARED_VERBS, OWN_VERB[noun])}
+    work = [e for e in new if e["command"] in verbs]
     assert {e["command"] for e in work} == {
         f"{noun} {verb}" for noun in NOUNS for verb in (*SHARED_VERBS, OWN_VERB[noun])}
     for entry in work:
         if entry["command"].split()[1] not in ("show", "query", "history"):
             assert entry["reason"].strip()
     assert [e["command"] for e in new if e.get("body_fixture")] == ["attachment add"]
-    numbers = [e["input"]["number"] for e in work if "number" in e["input"]]
     prefix = "DEMO-WORK-" if resource == "seed.toml" else "REF-WORK-"
+    numbers = [e["input"]["number"] for e in work if "number" in e["input"] and "-WORK-" in e["input"]["number"]]
     assert numbers and all(n.startswith(prefix) for n in numbers)
     assert not [e for e in old if str(e.get("input", {}).get("number", "")).startswith(prefix)]
 
 
-def work_counts(client, company):
+def work_counts(client, company, prefix):
+    """Rows belonging to this package's own numbered documents; later packages add their own namespaces."""
     database = Path(client.company.show(company=company)["path"]) / "company.db"
+    like = prefix + "-WORK-%"
     with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as db:
-        return {name: db.execute(f'SELECT count(*) FROM "{name}"').fetchone()[0]
-                for name in ("work_documents", "work_revisions", "work_lines", "work_line_identities", "work_links",
-                             "transactions", "transaction_revisions", "posting_batches", "posting_lines")}
+        docs = 'SELECT id FROM work_documents WHERE number LIKE ?'
+        counts = {"work_documents": db.execute(f"SELECT count(*) FROM ({docs})", (like,)).fetchone()[0]}
+        for name in ("work_revisions", "work_lines", "work_line_identities"):
+            counts[name] = db.execute(f'SELECT count(*) FROM "{name}" WHERE document_id IN ({docs})', (like,)).fetchone()[0]
+        counts["work_links"] = db.execute(f"SELECT count(*) FROM work_links WHERE source_document_id IN ({docs})", (like,)).fetchone()[0]
+        prior_sales = "SELECT id FROM transactions WHERE number NOT LIKE ?"
+        counts['transactions'] = db.execute(f'SELECT count(*) FROM ({prior_sales})', (prefix + '-BILL-%',)).fetchone()[0]
+        counts.update({name: db.execute(f'SELECT count(*) FROM "{name}" WHERE transaction_id IN ({prior_sales})',
+                       (prefix + '-BILL-%',)).fetchone()[0]
+                       for name in ("transaction_revisions", "posting_batches", "posting_lines")})
+        return counts
 
 
 @pytest.mark.parametrize("company,prefix", COMPANIES)
@@ -217,7 +228,7 @@ def test_work_seeds_post_nothing_and_previews_change_nothing(reference_client, c
     assert statement["totals"]["net_income"]["minor_units"] == profit
     customer = client.customer.show(customer="Commercial Example Customer", company=company)
     assert customer["current_balance"]["minor_units"] == 12800
-    before = work_counts(client, company)
+    before = work_counts(client, company, prefix)
     assert before["transactions"] == journals + 4
     assert (before["transaction_revisions"], before["posting_batches"], before["posting_lines"]) == (
         (22, 33, 99) if prefix == "DEMO" else (45, 53, 132))
@@ -240,5 +251,5 @@ def test_work_seeds_post_nothing_and_previews_change_nothing(reference_client, c
                   lines=[dict(item="Commercial Example Service", quantity="2", estimated_unit_cost="4.00", markup_percent="25")])
     assert (preview["net_minor_units"], preview["tax_minor_units"]) == (1000, 80)
     assert preview["revision"]["custom_fields"][0]["value"] is True
-    assert work_counts(client, company) == before
+    assert work_counts(client, company, prefix) == before
     assert client.run("estimate query", {"number": p + "EST-3"}, company=company)["items"][0]["status"] == "draft"

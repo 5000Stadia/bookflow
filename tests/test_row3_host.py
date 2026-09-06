@@ -1328,6 +1328,12 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
         url = _page_url(cmd, hosted.company_id)
         page = api.get(url)
         assert page.status_code == 200, (cmd.name, url, page.status_code, page.text[:300])
+        if cmd.noun in ("estimate", "work-order") and cmd.verb in ("invoice", "sales-receipt", "billing"):
+            # Billing cards first pick a real bounded source, then expose that source's inputs.
+            assert 'data-billing-source-picker' in page.text, cmd.name
+            source = hosted.ok(cmd.noun + ".query", {"limit": 1}, company=hosted.company_id)["items"][0]
+            page = api.get(f"/c/{hosted.company_id}/{cmd.noun}/{source['id']}/{cmd.verb}")
+            assert page.status_code == 200, (cmd.name, page.text[:300])
         definition = registry.noun_meta(cmd.noun).get("definition")
         for leaf in F.leaves(cmd.input_model):
             if leaf["path"] == "custom_fields" and (
