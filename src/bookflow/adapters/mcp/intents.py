@@ -126,7 +126,7 @@ class Intents:
                 intent.workers -= 1
                 cleanup = intent.abandoned and not intent.workers
             if cleanup:
-                self.finish(intent, reason="expired_before_submission")
+                self.finish(intent, reason=intent.reason or "expired_before_submission")
 
     def _preexecution(self, intent):
         if (self.active.get(intent.reference) is not intent or intent.abandoned
@@ -139,6 +139,7 @@ class Intents:
         frozen = deepcopy(frozen) if retain else None
         amount = (retained_size((intent.reference, intent.owner, frozen))
                   + sys.getsizeof(intent) + sys.getsizeof(intent.__dict__)) if retain else 0
+        rejected = False
         with self.lock:
             self._preexecution(intent)
             if intent.state not in {"preparing", "receiving"}:
@@ -147,11 +148,19 @@ class Intents:
                 total = sum(i.prepared_bytes for i in self.active.values())
                 own = sum(i.prepared_bytes for i in self.active.values() if i.owner[2] == intent.owner[2])
                 if total + amount > 64 * MIB or own + amount > 8 * MIB:
-                    raise busy()
+                    intent.abandoned = True
+                    intent.reason = "rejected_before_submission"
+                    rejected = True
             # Direct execution remains worker-owned, not parked in ready storage.
-            intent.frozen = frozen if retain else None
-            intent.prepared_bytes = amount
-            intent.state = "ready"
+            if not rejected:
+                intent.frozen = frozen if retain else None
+                intent.prepared_bytes = amount
+                intent.state = "ready"
+            pinned = bool(intent.workers)
+        if rejected:
+            if not pinned:
+                self.finish(intent, reason="rejected_before_submission")
+            raise busy()
 
     def queue(self, intent):
         """Only the first execute request wins admission to the execution worker."""

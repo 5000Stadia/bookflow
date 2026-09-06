@@ -6,6 +6,8 @@
 
 Create the data root, the system user, and the first hub-admin user mapped from the OS login.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | hub |

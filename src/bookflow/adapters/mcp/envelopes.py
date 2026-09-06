@@ -1,10 +1,13 @@
 """Public tool envelopes. Business inputs are validated only by the command core."""
 
 from typing import Any, Literal
+from copy import deepcopy
+import re
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, model_validator
 
 from bookflow.core.errors import BookflowError
+from bookflow.core.dispatch import CONTEXT_LIMITS
 
 
 class Envelope(BaseModel):
@@ -13,7 +16,7 @@ class Envelope(BaseModel):
 
 class ListArguments(Envelope):
     prefix: str | None = None
-    limit: int = Field(100, ge=1, le=200)
+    limit: int = Field(20, ge=1, le=200, description="Commands per page. Start with a noun prefix; follow next_cursor for the complete catalog.")
     cursor: str | None = None
 
 
@@ -34,6 +37,8 @@ class Files(Envelope):
             value = getattr(self, name)
             if value is None or not value:
                 raise ValueError("file arguments require nonempty paths")
+            if not value.startswith("/"):
+                raise ValueError("file arguments require absolute paths")
         return self
 
 
@@ -41,10 +46,10 @@ class RunArguments(Envelope):
     command: str = Field(min_length=1)
     input: dict[str, Any] | None = None
     company: str | None = None
-    reason: str | None = None
-    source_ref: str | None = None
+    reason: str | None = Field(None, max_length=CONTEXT_LIMITS["reason"], description="Short audit reason for a write; omit on reads. An agent write needs reason or directive.")
+    source_ref: str | None = Field(None, max_length=CONTEXT_LIMITS["source_ref"])
     directive: str | None = None
-    idempotency_key: str | None = None
+    idempotency_key: str | None = Field(None, max_length=CONTEXT_LIMITS["idempotency_key"])
     dry_run: bool = False
     transport: Files = Field(default_factory=Files)
 
@@ -52,7 +57,8 @@ class RunArguments(Envelope):
     def input_source(self):
         has_input = "input" in self.model_fields_set
         if has_input == bool(self.transport.input_json_file) or (has_input and self.input is None):
-            raise ValueError("supply exactly one input object or transport.input_json_file")
+            raise BookflowError("E_VALIDATION", message="Supply input: {} for a command without business arguments, or supply its input object; input_json_file replaces that object.",
+                details={"reason": "input_source", "fields": [{"field": "input", "problem": "supply exactly one non-null input object or transport.input_json_file"}]})
         return self
 
 
@@ -80,6 +86,11 @@ class RecoveryArguments(Envelope):
             allowed |= {"pointer", "limit", "cursor"}
         if self.model_fields_set - allowed:
             raise ValueError("arguments do not apply to this recovery action")
+        if not re.fullmatch(r"(?:/(?:[^~]|~[01])*)*", self.pointer):
+            raise ValueError("pointer requires JSON Pointer syntax")
+        for name in ("result_file", "output_file"):
+            if getattr(self, name) is not None and not getattr(self, name).startswith("/"):
+                raise ValueError("file arguments require absolute paths")
         return self
 
 
@@ -91,11 +102,55 @@ TOOLS = {
 }
 
 
+def tool_schema(name):
+    """Presence/action rules are part of discoverable JSON Schema, not hidden validators."""
+    if name != "bookflow_run":
+        return TOOLS[name][0].model_json_schema()
+    schema = RUN.json_schema()
+    definitions = schema["$defs"]
+    file_schema = {"type": "string", "minLength": 1, "pattern": "^/",
+                   "description": "Absolute calling-machine business-file path beneath an operator-configured directory; never a host path or URL."}
+    for field in ("input_file", "output_file", "input_json_file", "result_file"):
+        definitions["Files"]["properties"][field] = deepcopy(file_schema)
+    run = definitions["RunArguments"]
+    run["properties"]["input"] = {"type": "object", "additionalProperties": True}
+    run["allOf"] = [{"oneOf": [
+        {"required": ["input"], "not": {"required": ["transport"], "properties": {"transport": {"required": ["input_json_file"]}}}},
+        {"required": ["transport"], "properties": {"transport": {"required": ["input_json_file"]}}, "not": {"required": ["input"]}},
+    ]}]
+    recovery = definitions.pop("RecoveryArguments")
+    branches = [{"$ref": "#/$defs/RunArguments"}]
+    for action in ("execute", "status", "release", "inspect"):
+        branch = deepcopy(recovery)
+        allowed = {"operation_ref", "input_ref", "action"}
+        if action == "execute":
+            allowed |= {"result_file", "output_file"}
+        if action == "inspect":
+            allowed |= {"pointer", "limit", "cursor"}
+        branch["properties"] = {key: value for key, value in branch["properties"].items() if key in allowed}
+        branch["properties"]["action"] = {"const": action}
+        for field in ("operation_ref", "input_ref", "cursor"):
+            if field in allowed:
+                branch["properties"][field] = {"type": "string", "minLength": 1}
+        for field in ("result_file", "output_file"):
+            if field in allowed:
+                branch["properties"][field] = deepcopy(file_schema)
+        if "pointer" in allowed:
+            branch["properties"]["pointer"] = {"type": "string", "default": "", "pattern": r"^(?:/(?:[^~]|~[01])*)*$"}
+        branch["oneOf"] = [{"required": ["operation_ref"]}, {"required": ["input_ref"]}]
+        branches.append(branch)
+    return {"type": "object", "$defs": definitions, "oneOf": branches}
+
+
 def validate(name, arguments):
     entry = TOOLS.get(name)
     if entry is None:
         raise BookflowError("E_USAGE", message="Unknown MCP tool")
     try:
+        if name != "bookflow_run" and isinstance(arguments, dict):
+            unknown = set(arguments) - set(entry[0].model_fields)
+            if unknown:
+                raise BookflowError("E_USAGE", details={"arguments": sorted(unknown)})
         if name == "bookflow_run" and isinstance(arguments, dict):
             model = RunArguments if "command" in arguments else RecoveryArguments
             unknown = set(arguments) - set(model.model_fields)
@@ -108,5 +163,5 @@ def validate(name, arguments):
         # Never echo the original values or validator context (which may contain secrets).
         errors = exc.errors(include_input=False, include_context=False, include_url=False)
         raise BookflowError("E_VALIDATION", details={"reason": "malformed_transport", "fields": [
-            {"field": ".".join(map(str, item["loc"])), "problem": item["type"]} for item in errors
+            {"field": ".".join(map(str, item["loc"])), "problem": item["msg"]} for item in errors
         ]}) from None

@@ -6,6 +6,8 @@
 
 Set a user's password so they can log in to the workbench.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | hub |

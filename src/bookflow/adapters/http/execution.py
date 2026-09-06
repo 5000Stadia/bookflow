@@ -16,12 +16,28 @@ class PublishedDocument(dict):
     def check(self, *, original_response=True):
         self.permit.check(self.host, self.credential, original_response=original_response)
 
+    def __deepcopy__(self, memo):
+        # Copy business values, retaining the same live publication guard. Host
+        # locks/streams and credentials are not part of the JSON value graph.
+        from copy import deepcopy
+        result = type(self)({}, self.permit, self.host, self.credential)
+        memo[id(self)] = result
+        result.update((deepcopy(key, memo), deepcopy(value, memo)) for key, value in self.items())
+        return result
+
 
 def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run):
     normalize_options(cmd, company=selector if cmd.scope == "company" else None, reason=ctx.reason,
                       source_ref=ctx.source_ref, directive=ctx.directive_id,
                       idempotency_key=ctx.idempotency_key, dry_run=dry_run)
     permit = None
+
+    def finish(session, **values):
+        try:
+            permit.finish(session, **values)
+        except Exception:
+            raise BookflowError("E_IO", details={"stage": "publication", "outcome": "unknown",
+                                                  "reason": "receipt_certificate"}) from None
 
     def authenticated(session):
         nonlocal permit
@@ -30,9 +46,9 @@ def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run):
         try:
             result = execute(cmd, raw, ctx, session, company_selector=selector, company_source=source, dry_run=dry_run)
         except BookflowError:
-            permit.finish(session, succeeded=False)
+            finish(session, succeeded=False)
             raise
-        permit.finish(session, result=result)
+        finish(session, result=result)
         return result
 
     try:
@@ -49,9 +65,12 @@ def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run):
                     host.reader_done()
     except BookflowError as exc:
         if permit is not None:
-            permit.check(host, cred, original_response=True)
             from bookflow.adapters.http.publication import protect
             protect(PublishedDocument(exc.to_dict(), permit, host, cred))
+            try:
+                permit.check(host, cred, original_response=True)
+            except BookflowError as denied:
+                raise BookflowError(denied.code, details={"stage": "publication", "outcome": "unknown"}) from None
         raise
     document = PublishedDocument(result, permit, host, cred)
     from bookflow.adapters.http.publication import protect

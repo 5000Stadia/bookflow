@@ -10,7 +10,7 @@ from urllib.parse import urlsplit, quote
 from bookflow.core.errors import BookflowError
 from bookflow.core.ids import new_id
 
-from .envelopes import TOOLS, validate
+from .envelopes import TOOLS, validate, tool_schema
 
 
 def host_origin(value):
@@ -49,8 +49,7 @@ async def serve(inp, origin, secret):
         async def list_tools(_ctx, _params):
             tools = []
             for name, (model, description) in TOOLS.items():
-                schema = model.json_schema() if hasattr(model, "json_schema") else model.model_json_schema()
-                schema.setdefault("type", "object")
+                schema = tool_schema(name)
                 tools.append(types.Tool(name=name, description=description, input_schema=schema))
             return types.ListToolsResult(tools=tools)
 

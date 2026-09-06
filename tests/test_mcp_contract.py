@@ -50,6 +50,42 @@ def test_false_and_nested_presence_preserved():
     assert validate("bookflow_run", raw).model_dump(exclude_unset=True) == raw
 
 
+@pytest.mark.parametrize("raw, accepted", [
+    ({"command": "account list"}, False),
+    ({"command": "account list", "input": None}, False),
+    ({"command": "account list", "input": {}}, True),
+    ({"command": "account list", "transport": {"input_json_file": "/in/query.json"}}, True),
+    ({"command": "account list", "input": {}, "transport": {"input_json_file": "/in/query.json"}}, False),
+    ({"command": "account list", "input": {}, "transport": {"result_file": None}}, False),
+    ({"command": "account list", "input": {}, "transport": {"result_file": "relative"}}, False),
+    ({"operation_ref": "r", "input_ref": "r", "action": "execute"}, False),
+    ({"operation_ref": "r", "action": "status", "pointer": ""}, False),
+    ({"input_ref": "r", "action": "execute", "output_file": "/out/file"}, True),
+    ({"operation_ref": "r", "action": "inspect", "pointer": "/a~1b/~0c"}, True),
+    ({"operation_ref": "r", "action": "inspect", "pointer": "a"}, False),
+    ({"operation_ref": "r", "action": "inspect", "pointer": "/~2"}, False),
+])
+def test_advertised_envelope_schema_matches_presence_and_action_rules(raw, accepted):
+    from jsonschema import Draft202012Validator
+    from bookflow.adapters.mcp.envelopes import tool_schema
+    schema = tool_schema("bookflow_run")
+    Draft202012Validator.check_schema(schema)
+    assert Draft202012Validator(schema).is_valid(raw) is accepted
+    if accepted:
+        validate("bookflow_run", raw)
+    else:
+        with pytest.raises(BookflowError):
+            validate("bookflow_run", raw)
+
+
+@pytest.mark.parametrize("tool, arguments", [("bookflow_list_commands", {"unexpected": 1}),
+                                           ("bookflow_help", {"command": "account list", "unexpected": 1})])
+def test_discovery_unknown_arguments_are_usage_errors(tool, arguments):
+    with pytest.raises(BookflowError) as caught:
+        validate(tool, arguments)
+    assert caught.value.code == "E_USAGE"
+
+
 def test_company_fallback_is_calling_machine_read_only(tmp_path, monkeypatch):
     from bookflow.core.company_selection import company_selection
     monkeypatch.setenv("BOOKFLOW_DATA_ROOT", str(tmp_path))
@@ -64,6 +100,19 @@ def test_company_fallback_is_calling_machine_read_only(tmp_path, monkeypatch):
     assert sorted(path.name for path in tmp_path.iterdir()) == ["config.toml"]
 
 
+def test_malformed_fallback_is_config_error_only_when_selected(tmp_path, monkeypatch):
+    from bookflow.core.company_selection import company_selection
+    monkeypatch.setenv("BOOKFLOW_DATA_ROOT", str(tmp_path))
+    monkeypatch.delenv("BOOKFLOW_COMPANY", raising=False)
+    (tmp_path / "config.toml").write_text('[users.worker]\nuser_id="worker"\ndefault_company=123\n')
+    assert company_selection("company", "explicit", login="worker") == ("explicit", "option")
+    with pytest.raises(BookflowError) as caught:
+        company_selection("company", login="worker")
+    assert caught.value.code == "E_CONFIG_INVALID"
+    monkeypatch.setenv("BOOKFLOW_COMPANY", "environment")
+    assert company_selection("company", login="worker") == ("environment", "env")
+
+
 def test_shared_context_rejects_active_unsupported_but_accepts_null_false():
     from bookflow.core import registry
     from bookflow.core.context_options import normalize_options
@@ -73,7 +122,7 @@ def test_shared_context_rejects_active_unsupported_but_accepts_null_false():
     for option in ("reason", "directive", "source_ref", "idempotency_key"):
         with pytest.raises(BookflowError) as caught:
             normalize_options(cmd, **{option: ""})
-        assert caught.value.code == "E_USAGE"
+            assert caught.value.code == "E_USAGE"
 
 
 @pytest.mark.parametrize("value", ["http://example.com", "http://localhost:9", "https://user:secret@example.com", "https://example.com/?secret=x", "file:///etc/passwd", "https://example.com/path"])

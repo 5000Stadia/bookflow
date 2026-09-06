@@ -57,7 +57,7 @@ def _registry_digest(contract):
     return hashlib.sha256(json.dumps(schemas, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def list_commands(*, prefix=None, limit=100, cursor=None):
+def list_commands(*, prefix=None, limit=20, cursor=None):
     commands = _commands()
     rows = [descriptor(cmd) for cmd in commands]
     # Schemas are part of cursor identity: a field change invalidates old pages.

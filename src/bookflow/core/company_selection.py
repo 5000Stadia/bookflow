@@ -18,4 +18,6 @@ def company_selection(scope, explicit=None, *, selection_root=None, login=None):
         return value, "env"
     config = Config.load(resolve_data_root(selection_root) / "config.toml")
     default = (config.user_table(login or os_login()) or {}).get("default_company")
+    if default is not None and not isinstance(default, str):
+        raise BookflowError("E_CONFIG_INVALID", details={"field": "default_company"})
     return (default, "default") if default else (None, "none")

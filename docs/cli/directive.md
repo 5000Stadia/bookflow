@@ -6,6 +6,8 @@
 
 Record a standing instruction that later writes can cite by code instead of repeating a reason.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -154,6 +156,8 @@ Example JSON output:
 ## `directive deactivate`
 
 Deactivate a standing instruction so it can no longer be cited.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|

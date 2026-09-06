@@ -9,6 +9,17 @@ from bookflow.hub import schema as h
 from tests.test_row3_host import hosted
 
 
+def test_publication_inventory_covers_registry_and_refuses_unknown_hub_projection():
+    from types import SimpleNamespace
+    from bookflow.core.publication_inventory import inventory, policy
+    from bookflow.core import registry
+    rows = inventory()
+    assert {row["command"] for row in rows} == {cmd.name for cmd in registry.all_commands(include_standalone=True)}
+    assert next(row for row in rows if row["command"] == "invoice update")["conditional_authority"]
+    with pytest.raises(RuntimeError, match="lacks a publication dependency inventory"):
+        policy(SimpleNamespace(name="new hub projection", scope="hub", local_only=False, standalone=False))
+
+
 @pytest.mark.parametrize("write", [False, True])
 @pytest.mark.parametrize("loss", ["revoke", "downgrade"])
 def test_publication_rechecks_after_execution(hosted, monkeypatch, write, loss):
@@ -61,8 +72,38 @@ def test_own_detach_receipt_is_publishable_without_reexecution(hosted):
     assert all(item["company_id"] != hosted.company_id for item in hosted.ok("company.list")["items"])
 
 
-def test_self_revoke_receipt_once_then_authentication_fails(hosted):
-    result = hosted.call("token.revoke", {"token": hosted.token})
+@pytest.mark.parametrize("lowercase", [False, True])
+def test_self_revoke_receipt_once_then_authentication_fails(hosted, lowercase):
+    result = hosted.call("token.revoke", {"token": hosted.token.lower() if lowercase else hosted.token})
     assert result.status_code == 200, result.text
     assert result.json()["changed"] is True
     assert hosted.call("company.list").status_code == 401
+
+
+def test_company_list_cannot_publish_detached_registration_with_unchanged_org_membership(hosted, monkeypatch):
+    from tests.conftest import make_actor
+    organization = hosted.company_list["items"][0]["organization_id"]
+    user = make_actor(hosted.root, "publication-org-reader", org_role=(organization, "readonly"))
+    secret = hosted.ok("token.issue", {"user": user, "label": "projection witness"})["secret"]
+    reached, release = threading.Event(), threading.Event()
+    original = PublicationPermit.check
+
+    def delayed(self, host, credential, **kwargs):
+        if self.cmd.name == "company list" and self.actor[0] == user and not reached.is_set():
+            reached.set()
+            assert release.wait(10)
+        return original(self, host, credential, **kwargs)
+
+    monkeypatch.setattr(PublicationPermit, "check", delayed)
+    with concurrent.futures.ThreadPoolExecutor(1) as pool:
+        pending = pool.submit(hosted.call, "company.list", {}, headers={"Authorization": "Bearer " + secret})
+        try:
+            assert reached.wait(10)
+            assert hosted.call("company.detach", {"company": hosted.company_id}).status_code == 200
+        finally:
+            release.set()
+        result = pending.result(10)
+    assert result.status_code == 403
+    assert result.json()["details"]["outcome"] == "unknown"
+    assert hosted.company_id not in result.text
+    assert hosted.call("company.list", {}, headers={"Authorization": "Bearer " + secret}).json()["items"] == []

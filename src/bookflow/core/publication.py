@@ -27,6 +27,17 @@ def _deny():
     raise BookflowError("E_PERMISSION", details={"stage": "publication", "reason": "authority_changed"})
 
 
+def _snapshot(value):
+    try:
+        result = decode_snapshot(value)
+        if result is not None and not isinstance(result, dict):
+            raise ValueError
+        return result
+    except Exception:
+        raise BookflowError("E_IO", details={"stage": "publication", "outcome": "unknown",
+                                              "reason": "receipt_certificate"}) from None
+
+
 @contextmanager
 def publication_reader(host, cred):
     session = host.reader_session(cred.user_id, cred.login)
@@ -60,9 +71,12 @@ class PublicationPermit:
     own_entries: tuple = ()
     execution_succeeded: bool = False
     targets: dict = field(default_factory=dict)
+    projection: dict = field(default_factory=dict)
 
     @classmethod
     def capture(cls, cmd, raw, ctx, s, cred, selector, source, dry_run):
+        from bookflow.core.publication_inventory import policy
+        policy(cmd)
         inp = validate_input(cmd, raw)
         token = s.hub.conn.execute(sa.select(h.api_tokens).where(h.api_tokens.c.id == cred.token_id)).mappings().first()
         if token is None:
@@ -77,23 +91,40 @@ class PublicationPermit:
         self.execution_succeeded = succeeded
         if result is not None:
             self.targets = {key: result[key] for key in ("id", "user_id", "organization_id", "on_behalf_of", "authority_epoch") if key in result}
+            if self.cmd.name == "company list":
+                self.projection["companies"] = tuple((row["company_id"], row["organization_id"]) for row in result["items"])
+            elif self.cmd.name == "upgrade":
+                ids = set(result["companies_migrated"] + result["companies_skipped"] + result["companies_missing"])
+                ids.update(row["company_id"] for row in result["companies_failed"])
+                self.projection["companies"] = tuple((row["id"], row["organization_id"]) for row in s.hub.conn.execute(
+                    sa.select(h.companies).where(h.companies.c.id.in_(ids))).mappings())
+                if len(self.projection["companies"]) != len(ids):
+                    _deny()
+            elif self.cmd.name in {"organization list", "organization show"}:
+                rows = result["items"] if self.cmd.name.endswith(" list") else [result]
+                self.projection["organizations"] = tuple(row["organization_id"] for row in rows)
+            elif self.cmd.name in {"hub audit list", "hub audit show", "hub audit tail"}:
+                from bookflow.hub.audit import visible_record_ids
+                ids = visible_record_ids(s)
+                self.projection["audit_records"] = None if ids is None else frozenset(ids)
         if not succeeded or self.dry_run or not self.cmd.is_write:
             return
         self.committed = True
         if self.cmd.name not in MEMBERSHIP_EFFECTS | {"token revoke"}:
             return
-        event = s.hub.conn.execute(sa.select(h.audit_events.c.id).where(
+        events = tuple(s.hub.conn.execute(sa.select(h.audit_events.c.id).where(
             h.audit_events.c.request_id == self.ctx.request_id,
             h.audit_events.c.command == self.cmd.name,
             h.audit_events.c.actor_id == self.actor[0],
-        )).scalar_one_or_none()
-        if event is None:
+        ).order_by(h.audit_events.c.seq)).scalars())
+        if not events:
             return
-        self.own_event = event
-        self.own_entries = tuple(dict(row) for row in s.hub.conn.execute(sa.select(h.audit_entries).where(
-            h.audit_entries.c.event_id == event,
+        self.own_event = events[0]
+        self.own_entries = tuple(dict(row) for row in s.hub.conn.execute(sa.select(h.audit_entries).join(
+            h.audit_events, h.audit_entries.c.event_id == h.audit_events.c.id).where(
+            h.audit_entries.c.event_id.in_(events),
             h.audit_entries.c.record_type.in_(["membership", "company", "api_token"]),
-        )).mappings())
+        ).order_by(h.audit_events.c.seq, h.audit_entries.c.id)).mappings())
         if self.cmd.name == "company detach":
             removed = [entry["record_id"] for entry in self.own_entries if entry["record_type"] == "company" and entry["action"] == "delete"]
             if len(removed) == 1:
@@ -101,7 +132,7 @@ class PublicationPermit:
 
     def _self_revoke(self, s, cred):
         if not (self.committed and self.cmd.name == "token revoke" and self.own_event
-                and self.inp.token == cred.token_id):
+                and self.inp.token.upper() == cred.token_id):
             return False
         row = s.hub.conn.execute(sa.select(h.api_tokens).where(h.api_tokens.c.id == cred.token_id)).mappings().first()
         if row is None or self.token["revoked_at"] is not None:
@@ -109,7 +140,7 @@ class PublicationPermit:
         entries = [entry for entry in self.own_entries if entry["record_type"] == "api_token" and entry["record_id"] == cred.token_id]
         if len(entries) != 1:
             return False
-        after = decode_snapshot(entries[0]["after"])
+        after = _snapshot(entries[0]["after"])
         if not after or not after.get("revoked_at") or after["revoked_at"] != row["revoked_at"]:
             return False
         for key in ("id", "user_id", "kind", "token_hash", "on_behalf_of", "authority_epoch", "expires_at"):
@@ -132,7 +163,7 @@ class PublicationPermit:
                 for entry in self.own_entries:
                     if entry["record_type"] != "membership":
                         continue
-                    before, after = decode_snapshot(entry["before"]), decode_snapshot(entry["after"])
+                    before, after = _snapshot(entry["before"]), _snapshot(entry["after"])
                     if before and before.get("user_id") == self.actor[0]:
                         expected.discard(_membership(before))
                     if after and after.get("user_id") == self.actor[0] and after.get("revoked_at") is None:
@@ -151,12 +182,32 @@ class PublicationPermit:
                     _deny()
                 for capability, required in self.cmd.resource_requirements:
                     access.require_resource(s, capability, required)
-                open_company(s, self.ctx, False)
+                # Role/resource predicates live in the hub. Open company data
+                # only for a predicate that actually reads protected targets.
+                if self.cmd.authorize_input is not None or self.cmd.name == "undo" or self.cmd.transfer is not None:
+                    open_company(s, self.ctx, False)
             elif self.cmd.required_role == "hub_admin" and not s.is_hub_admin:
                 if self.execution_succeeded:
                     _deny()
             if not self.execution_succeeded:
                 return
+            for company_id, organization_id in self.projection.get("companies", ()):
+                row = resolve_company(s, company_id, "option")
+                if row["organization_id"] != organization_id:
+                    _deny()
+                if self.cmd.name == "upgrade":
+                    from bookflow.commands.hub_cmds import _may_write
+                    if not _may_write(s, row):
+                        _deny()
+            if "organizations" in self.projection:
+                from bookflow.core.dispatch import resolve_organization
+                for organization_id in self.projection["organizations"]:
+                    resolve_organization(s, organization_id)
+            if self.projection.get("audit_records") is not None:
+                from bookflow.hub.audit import visible_record_ids
+                current = visible_record_ids(s)
+                if current is not None and not self.projection["audit_records"] <= current:
+                    _deny()
             if self.cmd.authorize_input is not None:
                 self.cmd.authorize_input(self.inp, self.ctx, s)
             self._additional(s)

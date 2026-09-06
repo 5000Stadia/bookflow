@@ -115,6 +115,8 @@ Example JSON output:
 
 Create or version-update a manual exact-date rate into the company home currency; zero version creates only.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |

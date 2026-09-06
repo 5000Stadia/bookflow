@@ -26,10 +26,10 @@ def _parts(value):
 def _private_directory(fd):
     info = os.fstat(fd)
     if info.st_uid != os.getuid() or info.st_mode & 0o022:
-        raise BookflowError("E_PERMISSION", details={"reason": "unsafe_directory"})
+        raise BookflowError("E_PERMISSION", details={"stage": "local_file", "reason": "unsafe_file"})
 
 
-def _open_directory(parts, start=None):
+def _open_directory(parts, start=None, lineage=None):
     fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY) if start is None else os.dup(start)
     try:
         if start is not None:
@@ -38,6 +38,8 @@ def _open_directory(parts, start=None):
             nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
             os.close(fd)
             fd = nxt
+            if lineage is not None:
+                lineage.append(_identity(os.fstat(fd)))
             if start is not None:
                 _private_directory(fd)
         return fd
@@ -58,16 +60,19 @@ class Directories:
         try:
             for value in paths:
                 parts = _parts(value)
-                fd = _open_directory(parts)
+                lineage = []
+                fd = _open_directory(parts, lineage=lineage)
                 info = os.fstat(fd)
                 try:
                     _private_directory(fd)
                 except BaseException:
                     os.close(fd)
                     raise
-                self.roots.append((parts, fd, _identity(info)))
+                self.roots.append((parts, fd, _identity(info), lineage))
         except OSError as exc:
             self.close()
+            if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
+                raise BookflowError("E_PERMISSION", details={"stage": "local_file", "reason": "unsafe_file"}) from None
             raise BookflowError("E_IO", details={"operation": "file_configuration", "errno": exc.errno}) from None
         except BaseException:
             self.close()
@@ -80,31 +85,35 @@ class Directories:
     @contextmanager
     def parent(self, value):
         parts = _parts(value)
-        matches = [(root, fd, identity) for root, fd, identity in self.roots
+        matches = [(root, fd, identity, lineage) for root, fd, identity, lineage in self.roots
                    if len(parts) > len(root) and parts[:len(root)] == root]
         if not matches:
             raise BookflowError("E_PERMISSION", details={"stage": "local_file", "reason": "outside_allowed_directory"})
-        root, fd, identity = max(matches, key=lambda item: len(item[0]))
+        root, fd, identity, root_lineage = max(matches, key=lambda item: len(item[0]))
         parent = None
         try:
-            check = _open_directory(root)
+            observed_root = []
+            check = _open_directory(root, lineage=observed_root)
             try:
-                if _identity(os.fstat(check)) != identity:
+                if _identity(os.fstat(check)) != identity or observed_root != root_lineage:
                     raise OSError(errno.ESTALE, "Directory changed")
             finally:
                 os.close(check)
             relative = parts[len(root):-1]
-            parent = _open_directory(relative, fd)
+            parent_lineage = []
+            parent = _open_directory(relative, fd, lineage=parent_lineage)
             parent_identity = _identity(os.fstat(parent))
 
             def verify():
-                check_root = _open_directory(root)
+                observed_root = []
+                check_root = _open_directory(root, lineage=observed_root)
                 try:
-                    if _identity(os.fstat(check_root)) != identity:
+                    if _identity(os.fstat(check_root)) != identity or observed_root != root_lineage:
                         raise OSError(errno.ESTALE, "Directory changed")
-                    check_parent = _open_directory(relative, check_root)
+                    observed_parent = []
+                    check_parent = _open_directory(relative, check_root, lineage=observed_parent)
                     try:
-                        if _identity(os.fstat(check_parent)) != parent_identity:
+                        if _identity(os.fstat(check_parent)) != parent_identity or observed_parent != parent_lineage:
                             raise OSError(errno.ESTALE, "Directory changed")
                     finally:
                         os.close(check_parent)
@@ -113,6 +122,8 @@ class Directories:
 
             yield parent, parts[-1], verify
         except OSError as exc:
+            if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
+                raise BookflowError("E_PERMISSION", details={"stage": "local_file", "reason": "unsafe_file"}) from None
             raise BookflowError("E_IO", details={"operation": "local_file", "errno": exc.errno}) from None
         finally:
             if parent is not None:
@@ -149,7 +160,7 @@ class Directories:
             identity = _identity(os.fstat(fd))
             published = False
             try:
-                with os.fdopen(fd, "wb") as stream:
+                with os.fdopen(fd, "wb", closefd=False) as stream:
                     yield stream
                     stream.flush()
                     os.fsync(stream.fileno())
@@ -158,12 +169,15 @@ class Directories:
                     raise OSError(errno.ESTALE, "Output changed")
                 os.link(temporary, name, src_dir_fd=parent, dst_dir_fd=parent, follow_symlinks=False)
                 published = True
+                if _identity(os.stat(name, dir_fd=parent, follow_symlinks=False)) != _identity(os.fstat(fd)):
+                    raise OSError(errno.ESTALE, "Published output changed")
                 os.fsync(parent)
             except BaseException:
                 if published and _identity(os.stat(name, dir_fd=parent, follow_symlinks=False)) == identity:
                     os.unlink(name, dir_fd=parent)
                 raise
             finally:
+                os.close(fd)
                 try:
                     if _identity(os.stat(temporary, dir_fd=parent, follow_symlinks=False)) == identity:
                         os.unlink(temporary, dir_fd=parent)

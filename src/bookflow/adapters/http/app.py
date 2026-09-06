@@ -130,7 +130,7 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
     app.add_middleware(PublicationMiddleware)
 
     # ------------------------------------------------------------ credentials
-    def credential(request: Request, *, renew_cookie: bool = True) -> Credential:
+    def credential(request: Request, *, renew_cookie: bool = True, publication: bool = True) -> Credential:
         header = request.headers.get("authorization", "")
         secret = None
         via_cookie = False
@@ -157,7 +157,8 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
         result = Credential(row["user_id"], row["id"], row["kind"], row["label"], on_behalf_of=row.get("on_behalf_of"),
                             actor_kind=user["kind"], hub_admin=bool(user["hub_admin"]), secret=secret)
         from bookflow.adapters.http.publication import protect_credentials
-        protect_credentials(host, result)
+        if publication:
+            protect_credentials(host, result)
         return result
 
     def secret_of(request: Request) -> str:
@@ -300,12 +301,17 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
     def do_logout(request: Request) -> Response:
         is_cookie = not request.headers.get("authorization", "").lower().startswith("bearer ") and COOKIE in request.cookies
         try:
-            cred = credential(request, renew_cookie=False)
+            # Logout publishes only the constant logout acknowledgement and
+            # cookie deletion, never an authority-dependent business result.
+            cred = credential(request, renew_cookie=False, publication=False)
         except BookflowError as e:
             if not is_cookie or e.code != "E_UNAUTHENTICATED":
                 raise
         else:
-            host.run_write(cred.user_id, "", lambda s: _revoke(s, cred.token_id, "logout"))
+            def logout(s):
+                cred.revalidate(s.hub)
+                return _revoke(s, cred.token_id, "logout")
+            host.run_write(cred.user_id, "", logout)
         resp = JSONResponse({"ok": True})
         resp.delete_cookie(COOKIE, path="/")
         return resp

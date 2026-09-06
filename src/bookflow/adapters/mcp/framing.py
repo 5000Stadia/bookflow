@@ -28,10 +28,38 @@ def record(channel, payload):
 
 def json_chunks(document):
     """No full serialized-result copy and no business-document size ceiling."""
+    def string(value):
+        yield '"'
+        for offset in range(0, len(value), 4096):
+            yield json.dumps(value[offset:offset + 4096], ensure_ascii=False)[1:-1]
+        yield '"'
+
+    def tokens(value):
+        if isinstance(value, str):
+            yield from string(value)
+        elif isinstance(value, dict):
+            yield "{"
+            for number, (key, item) in enumerate(value.items()):
+                if not isinstance(key, str):
+                    raise invalid("invalid_json_key")
+                if number:
+                    yield ","
+                yield from string(key)
+                yield ":"
+                yield from tokens(item)
+            yield "}"
+        elif isinstance(value, (list, tuple)):
+            yield "["
+            for number, item in enumerate(value):
+                if number:
+                    yield ","
+                yield from tokens(item)
+            yield "]"
+        else:
+            yield json.dumps(value, allow_nan=False)
+
     pending = bytearray()
-    for text in json.JSONEncoder(ensure_ascii=False, allow_nan=False,
-                                 separators=(",", ":")).iterencode(document):
-        # iterencode can yield an entire large string; bound its UTF-8 byte copy.
+    for text in tokens(document):
         for offset in range(0, len(text), 4096):
             pending.extend(text[offset:offset + 4096].encode("utf-8"))
             if len(pending) >= CHUNK_BYTES:
@@ -41,7 +69,7 @@ def json_chunks(document):
         yield bytes(pending)
 
 
-def encode(document, *, check, operation_ref, is_error=False, binary=None):
+def encode(document, *, check, operation_ref, is_error=False, binary=None, recovery=None):
     """Check current publication authority before each record, including terminal."""
     if type(is_error) is not bool or not isinstance(operation_ref, str) or not 1 <= len(operation_ref) <= 128:
         raise invalid("invalid_completion")
@@ -59,7 +87,11 @@ def encode(document, *, check, operation_ref, is_error=False, binary=None):
                 check()
                 yield record(channel, chunk)
         totals[channel.decode()] = {"bytes": size, "sha256": digest.hexdigest()}
+    recovery = recovery or {"mode": "unavailable", "retained_until": None,
+                            "receipt_available": False, "inspection_available": False}
+    _recovery(recovery)
     terminal = {"version": 1, "operation_ref": operation_ref, "is_error": is_error,
+                "recovery": recovery,
                 "binary": binary is not None, "channels": totals}
     check()
     yield record(b"T", json.dumps(terminal, separators=(",", ":")).encode())
@@ -72,6 +104,71 @@ def _unique_object(pairs):
             raise ValueError("duplicate key")
         result[key] = value
     return result
+
+
+def _recovery(value):
+    if not isinstance(value, dict) or set(value) != {"mode", "retained_until", "receipt_available", "inspection_available"}:
+        raise invalid("invalid_recovery")
+    if value["mode"] not in {"retained", "unavailable"} or any(type(value[key]) is not bool for key in ("receipt_available", "inspection_available")):
+        raise invalid("invalid_recovery")
+    if value["mode"] == "unavailable":
+        if value["retained_until"] is not None or value["receipt_available"] or value["inspection_available"]:
+            raise invalid("invalid_recovery")
+    else:
+        from datetime import datetime
+        try:
+            deadline = value["retained_until"]
+            if not isinstance(deadline, str) or len(deadline) > 40 or not deadline.endswith("Z"):
+                raise ValueError
+            datetime.fromisoformat(deadline)
+        except ValueError:
+            raise invalid("invalid_recovery") from None
+
+
+class JsonDocumentValidator:
+    """Validate the complete JSON channel incrementally, without retaining its rows."""
+
+    def __init__(self):
+        import ijson
+        self.json_error = ijson.JSONError
+        self.started = self.complete = False
+        self.count = 0
+        self.error_fields = set()
+
+        def events():
+            while True:
+                prefix, event, value = yield
+                if not self.started:
+                    if prefix != "" or event != "start_map":
+                        raise ValueError("business document must be an object")
+                    self.started = True
+                if prefix == "" and event == "end_map":
+                    self.complete = True
+                if prefix == "" and event == "map_key":
+                    self.count += 1
+                if ((prefix == "code" and event == "string" and value.startswith("E_"))
+                    or (prefix == "message" and event == "string")
+                    or (prefix == "details" and event == "start_map")):
+                    self.error_fields.add(prefix)
+
+        target = events()
+        next(target)
+        self.parser = ijson.parse_coro(target, use_float=False)
+
+    def feed(self, chunk):
+        try:
+            self.parser.send(chunk)
+        except (ValueError, UnicodeError, self.json_error):
+            raise invalid("invalid_json") from None
+
+    def finish(self, is_error):
+        try:
+            self.parser.close()
+        except (ValueError, UnicodeError, self.json_error):
+            raise invalid("invalid_json") from None
+        error_document = self.count == 3 and self.error_fields == {"code", "message", "details"}
+        if not self.complete or error_document != is_error:
+            raise invalid("invalid_business_completion")
 
 
 class Decoder:
@@ -89,6 +186,7 @@ class Decoder:
         self.sizes = {key: 0 for key in self.sinks}
         self.terminal = None
         self.failed = False
+        self.document_validator = JsonDocumentValidator()
 
     def feed(self, data):
         if self.failed:
@@ -134,7 +232,7 @@ class Decoder:
         if channel == b"T":
             try:
                 terminal = json.loads(payload, object_pairs_hook=_unique_object)
-                if not isinstance(terminal, dict) or set(terminal) != {"version", "operation_ref", "is_error", "binary", "channels"}:
+                if not isinstance(terminal, dict) or set(terminal) != {"version", "operation_ref", "is_error", "binary", "channels", "recovery"}:
                     raise ValueError
                 if type(terminal["version"]) is not int or terminal["version"] != 1 or terminal["operation_ref"] != self.operation_ref:
                     raise ValueError
@@ -154,10 +252,14 @@ class Decoder:
                     raise ValueError
             except (ValueError, TypeError, KeyError, UnicodeError):
                 raise invalid("invalid_completion") from None
+            _recovery(terminal["recovery"])
+            self.document_validator.finish(terminal["is_error"])
             self.terminal = terminal
             return
         if channel == b"B":
             self.last_channel = channel
+        else:
+            self.document_validator.feed(payload)
         sink = self.sinks[channel]
         if sink is None:
             raise invalid("unexpected_binary")

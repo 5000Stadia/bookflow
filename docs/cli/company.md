@@ -6,6 +6,8 @@
 
 Register a company folder that already sits inside an organization's folder.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | hub |
@@ -112,6 +114,8 @@ Example JSON output:
 ## `company compact`
 
 Collect at most 200 unlinked attachment bodies and continue bounded orphan discovery.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
@@ -224,6 +228,8 @@ Example JSON output:
 ## `company detach`
 
 Remove a company from the registry, leaving its folder in place.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
@@ -431,6 +437,8 @@ Example JSON output:
 
 Create a company inside an organization: its folder, database, and company information.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | hub |
@@ -591,6 +599,8 @@ Example JSON output:
 ## `company rename`
 
 Rename the selected company, optionally moving its folder.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
@@ -843,6 +853,8 @@ Example JSON output:
 
 Update the selected company's information; versioned, blind, or merged per the concurrency rules.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -1020,6 +1032,8 @@ Example JSON output:
 ## `company use`
 
 Save a company as this login's default for later commands.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|

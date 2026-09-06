@@ -159,14 +159,20 @@ def test_prepared_memory_and_cache_bytes_include_metadata_graphs():
     assert retained_size(huge) > 8 * MIB
     with pytest.raises(BookflowError):
         store.ready(intent, huge)
+    assert intent.reference not in store.active
+    with pytest.raises(BookflowError):
+        store.ready(intent, huge, retain=False)
     # The valid direct worker does not park its working model in retained storage.
+    intent = store.admit(OWNER)
     store.ready(intent, huge, retain=False)
     assert intent.prepared_bytes == 0 and intent.frozen is None
     store.queue(intent)
     store.start(intent)
     store.finish(intent, receipt=b"x" * (MIB + 1), publication={"guard": "y" * (4 * MIB)})
     assert store.observe(intent.reference, OWNER) is None
-    assert not store.active and not store.completed
+    assert not store.active
+    assert len(store.completed) == 1
+    assert next(iter(store.completed.values())).reason == "rejected_before_submission"
 
 
 def test_receipt_bounds_and_absolute_expiry_despite_continuous_reads():

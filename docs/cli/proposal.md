@@ -6,6 +6,8 @@
 
 Copy captured work into an independent draft with new identities; estimate copies may be alternatives in the same group. Source notes and files remain linked.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -660,6 +662,8 @@ Example JSON output:
 ## `proposal create`
 
 Create a non-posting customer work document with captured scope, commercial defaults, exact prices and estimated costs. Preview resolved facts before saving.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
@@ -1363,6 +1367,8 @@ Example JSON output:
 ## `proposal estimate`
 
 Make an estimate from this proposal using a permanent conversion key. Preserve the selected source revision and return the original destination on retry.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
@@ -2921,6 +2927,8 @@ Example JSON output:
 ## `proposal update`
 
 Revise the whole work document using its expected version. Preserve immutable history; acceptance and completion changes follow explicit lifecycle constraints.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|

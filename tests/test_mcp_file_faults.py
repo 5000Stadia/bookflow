@@ -89,3 +89,62 @@ def test_fifo_input_is_rejected_without_waiting_for_a_writer(tmp_path):
         assert caught.value.code == "E_PERMISSION"
     finally:
         directories.close()
+
+
+def test_intermediate_replacement_with_original_final_parent_is_rejected(tmp_path):
+    a, old = tmp_path / "a", tmp_path / "old"
+    a.mkdir(mode=0o700)
+    b = a / "b"
+    b.mkdir(mode=0o700)
+    caps = Directories([str(tmp_path)])
+    try:
+        with pytest.raises(BookflowError):
+            with caps.output(str(b / "result")) as stream:
+                stream.write(b"verified")
+                a.rename(old)
+                a.mkdir(mode=0o700)
+                (old / "b").rename(b)
+        assert not list(b.iterdir())
+    finally:
+        caps.close()
+
+
+def test_temporary_replacement_at_link_cannot_be_reported_complete(tmp_path, monkeypatch):
+    caps = Directories([str(tmp_path)])
+    original_link = os.link
+
+    def replace_then_link(source, destination, **kwargs):
+        os.unlink(source, dir_fd=kwargs["src_dir_fd"])
+        fd = os.open(source, os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0o600,
+                     dir_fd=kwargs["src_dir_fd"])
+        try:
+            os.write(fd, b"replacement")
+        finally:
+            os.close(fd)
+        return original_link(source, destination, **kwargs)
+
+    monkeypatch.setattr(os, "link", replace_then_link)
+    try:
+        with pytest.raises(BookflowError) as caught:
+            with caps.output(str(tmp_path / "result")) as stream:
+                stream.write(b"verified")
+        assert caught.value.code == "E_IO"
+    finally:
+        caps.close()
+
+
+@pytest.mark.parametrize("ancestor", [False, True])
+def test_symlink_denial_has_public_permission_classification(tmp_path, ancestor):
+    source = tmp_path / "source"
+    source.write_bytes(b"x")
+    link = tmp_path / "link"
+    link.symlink_to(tmp_path if ancestor else source)
+    caps = Directories([str(tmp_path)])
+    try:
+        with pytest.raises(BookflowError) as caught:
+            with caps.input(str(link / "source" if ancestor else link)):
+                pytest.fail("symlink admitted")
+        assert caught.value.code == "E_PERMISSION"
+        assert caught.value.details == {"stage": "local_file", "reason": "unsafe_file"}
+    finally:
+        caps.close()

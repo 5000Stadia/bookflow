@@ -35,6 +35,47 @@ def test_full_large_result_and_binary_are_exact_without_collection_cap():
     assert terminal["binary"] is True and terminal["is_error"] is False
 
 
+def test_large_escaped_scalar_encoder_has_bounded_additional_heap():
+    import tracemalloc
+    from bookflow.adapters.mcp.framing import json_chunks
+    # The authoritative core value exists before measuring transport allocations.
+    document = {"memo": "\x00\n\"\\" * 3_000_000}
+    tracemalloc.start()
+    total = 0
+    try:
+        for chunk in json_chunks(document):
+            total += len(chunk)
+            assert len(chunk) <= CHUNK_BYTES
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert total > 30_000_000
+    assert peak < 2 * 1024 * 1024, peak
+
+
+@pytest.mark.parametrize("payload,is_error", [(b'{"unfinished":', False), (b'[]', False),
+    (b'{"ok":true}', True), (b'{"code":"E_IO","message":"failed","details":{}}', False)])
+def test_correctly_hashed_invalid_business_document_is_not_complete(payload, is_error):
+    import hashlib
+    terminal = {"version": 1, "operation_ref": "intent", "is_error": is_error, "binary": False,
+                "recovery": {"mode": "unavailable", "retained_until": None,
+                             "receipt_available": False, "inspection_available": False},
+                "channels": {"J": {"bytes": len(payload), "sha256": hashlib.sha256(payload).hexdigest()},
+                             "B": {"bytes": 0, "sha256": hashlib.sha256(b'').hexdigest()}}}
+    data = MAGIC + record(b'J', payload) + record(b'T', json.dumps(terminal).encode())
+    with pytest.raises(BookflowError) as caught:
+        decode(data)
+    assert caught.value.details["outcome"] == "unknown"
+
+
+def test_completion_carries_independent_receipt_and_inspection_availability():
+    recovery = {"mode": "retained", "retained_until": "2026-09-06T09:00:00Z",
+                "receipt_available": False, "inspection_available": True}
+    data = b''.join(encode({"large_result": True}, check=lambda: None,
+                         operation_ref="intent", recovery=recovery))
+    assert decode(data)[2]["recovery"] == recovery
+
+
 def test_every_truncation_is_unknown_not_a_complete_or_unsubmitted_result():
     data = wire(binary=[b"receipt"])
     for length in range(len(data)):

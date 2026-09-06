@@ -173,6 +173,8 @@ Example JSON output:
 
 Post two through 200 balanced journal lines, converting foreign amounts at exact-date stored or explicit manual rates and capturing original money and typed custom fields.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -959,6 +961,8 @@ Example JSON output:
 
 Append an immutable correction with an exact old-date reversal and a full new-date replacement.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -1311,6 +1315,8 @@ Example JSON output:
 ## `journal void`
 
 Void a journal with a required context reason and an exact reversal at its current accounting date.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
