@@ -129,7 +129,7 @@ def open_dates(s, dates):
             raise BookflowError('E_PERIOD_CLOSED', details={'date': date, 'closing_date': closing})
 
 
-def version_meta(s, h, expected):
+def version_meta(s, h, expected, *, history_decoder=None):
     writer = versioning.current_writer(s.company, 'transaction', h['id'], h)
     from bookflow.company.info import principal_names
     if writer:
@@ -137,10 +137,14 @@ def version_meta(s, h, expected):
         writer.updated_by_name = names.get(writer.updated_by)
         writer.on_behalf_of_name = names.get(writer.on_behalf_of)
     def history(v):
-        entries = versioning.history_from_entries(s.company, 'transaction', h['id'], v, audit.decode_snapshot)
+        entries = versioning.history_from_entries(s.company, 'transaction', h['id'], v,
+            history_decoder or audit.decode_snapshot)
         # Every version is the same indivisible financial aggregate.
+        # A caller's defensive decoder may mark evidence unusable; retain that
+        # unknown history so the strict gate rejects instead of inventing fields.
         for e in entries:
-            e.changed_columns = ['journal']
+            if history_decoder is None or e.changed_columns is not None:
+                e.changed_columns = ['journal']
         return entries
     return versioning.check_update(current_version=h['version'], current_updated_at=h['updated_at'],
         current_writer=writer, changes={'journal'}, expected_version=expected, history_since=history,

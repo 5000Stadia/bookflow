@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import zlib
 import sqlalchemy as sa
 
 from bookflow.company import schema as c, journals, document_effects as effects
@@ -14,7 +15,7 @@ from bookflow.company.sales_outputs import (
     SalesOutput, SalesSummaryOutput, SalesRevisionOutput, SalesRevisionSummaryOutput,
     SalesWriteOutput, SalesPageOutput, SalesHistoryOutput,
 )
-from bookflow.core import clock
+from bookflow.core import audit, clock
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import format_quantity_micro_units
 from bookflow.core.ids import new_id, is_ulid
@@ -202,21 +203,66 @@ def _changes(before, after, path=''):
     return [path] if before != after else []
 
 
+def _history_snapshot(blob):
+    """Unusable historical evidence means unknown fields, never a decoder failure."""
+    try:
+        value = audit.decode_snapshot(blob)
+    except (ValueError, TypeError, UnicodeError, zlib.error):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _historical_fields(s, header, expected):
+    entries = c.audit_entries
+    snapshots = s.company.conn.execute(sa.select(entries.c.after).where(
+        entries.c.record_type == 'transaction', entries.c.record_id == header['id'],
+        entries.c.version_after == expected, entries.c.action != 'migrate').limit(2)).all()
+    if len(snapshots) != 1:
+        return None
+    old = _history_snapshot(snapshots[0][0])
+    if (old is None or old.get('id') != header['id'] or type(old.get('version')) is not int
+            or old['version'] != expected or old.get('type') != header['type']
+            or old.get('status') not in ('posted', 'voided')
+            or not isinstance(old.get('current_revision_id'), str)):
+        return None
+    prior = effects.rows(s, c.transaction_revisions,
+        c.transaction_revisions.c.transaction_id == header['id'],
+        c.transaction_revisions.c.id == old['current_revision_id'])
+    if len(prior) != 1:
+        return None
+    fields = _changes(_saved_semantic(s, prior[0]), _saved_semantic(s, journals.revision(s, header)))
+    if old['status'] != header['status']:
+        fields.append('status')
+    return sorted(set(fields)) or ['version']
+
+
+def _sale_conflict_message(details, fields):
+    who = details.get('updated_by_name') or details.get('updated_by') or 'unknown'
+    behalf = details.get('updated_on_behalf_of_name') or details.get('updated_on_behalf_of')
+    if behalf:
+        who += f' on behalf of {behalf}'
+    ago = details.get('seconds_since_update')
+    when = f' ({ago} s ago)' if ago is not None else ''
+    what = ', '.join(fields) if fields else 'fields that cannot be determined'
+    version = details['current_version']
+    return (f'Changes since the expected version: {what}. Latest writer: {who}{when} '
+            f'(now version {version}); re-read and retry with expected_version {version}.')
+
+
 def _version(s, header, expected):
     try:
-        return journals.version_meta(s, header, expected)
+        return journals.version_meta(s, header, expected, history_decoder=_history_snapshot)
     except BookflowError as exc:
         if exc.code != 'E_VERSION_CONFLICT':
             raise
-        prior = effects.rows(s, c.transaction_revisions, c.transaction_revisions.c.transaction_id == header['id'],
-            c.transaction_revisions.c.revision_number == expected)
-        fields = _changes(_saved_semantic(s, prior[0]), _saved_semantic(s, journals.revision(s, header))) if prior else ['version']
-        if header['status'] == 'voided':
-            fields.append('status')
-        exc.details['changed_fields'] = fields
-        from bookflow.core.versioning import _conflict_message
-        exc.message = _conflict_message(exc.details, fields)
-        raise
+        fields = None
+        if 'unknown_versions' not in exc.details and expected < header['version']:
+            fields = _historical_fields(s, header, expected)
+            if fields is None:
+                exc.details['unknown_versions'] = [expected]
+        exc.details['changed_fields'] = fields or []
+        raise BookflowError(exc.code, message=_sale_conflict_message(exc.details, fields),
+            details=exc.details) from None
 
 
 def commercial(s, inp, document_type, old_header=None, old_revision=None, *, document_id, billing_source=None):

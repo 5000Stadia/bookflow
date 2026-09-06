@@ -264,6 +264,9 @@ def test_generated_sale_stale_facts_and_version_retain_draft(register_browser, w
     assert other['version'] == 2
     _click(b, 'submit')
     _error(b, 'E_VERSION_CONFLICT')
+    conflict_text = b.evaluate('document.querySelector(".error").innerText')
+    assert 'Changes since the expected version: memo.' in conflict_text
+    assert 'Latest writer:' in conflict_text
     assert _value(b, 'f:expected_version') == '1'
     assert _value(b, 'c:lines:0:quantity') == '4'
     assert _value(b, 'f:memo') == 'Keep my attempted correction'
