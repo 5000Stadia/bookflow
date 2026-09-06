@@ -1,6 +1,6 @@
 # Row 24 — captured sales-tax calculation policies
 
-Status: proposed revision3 after independent findings F1–F15; no runtime
+Status: proposed revision4 after independent findings F1–F16; no runtime
 implementation. Parent owns this plan. Customer
 payments owns the in-flight co14/sales changes. The pure arithmetic piece can be
 built in isolation after plan PASS; schema and integration start from the reviewed
@@ -260,15 +260,17 @@ gross. Same-gross tax redistribution adds no confirmation requirement. Do not
 silently alter a supplied cash confirmation. Test omitted confirmation for ordinary,
 metadata-only and same-gross edits, and changed-gross linked-history enforcement.
 
-Released-spans rebilling retains exact spans/net. Under a new combined policy,
+Released-spans rebilling retains exact spans/net. Under `invoice_combined_half_up`,
 identical grouping and rates preserve aggregate tax/gross; per-line/per-agency
 reproduction additionally requires the same destination tax-ordinal order. Reversed
 destination order can move tied cents between agencies; preview/print/inspection
 show the new attribution, while the old invoice and its allocations remain exact
 history. Legacy independent-component guarantees are unchanged. Hand-fixed witness:
 net5/net10, each with A10%/Z5%, produces total tax2. Net5 first attributes A2/Z0;
-net10 first attributes A1/Z1. Test release/rebill in both orders and explain this
-boundary in the shared public help, not only developer notes.
+net10 first attributes A1/Z1. Under `line_combined_half_up` the same two lines
+instead produce total tax3, with A2/Z1 in either destination order: each line is
+its own rounding bucket. Test release/rebill in both orders under both policies
+and explain the distinct boundaries in shared public help, not only developer notes.
 
 On an applied invoice correction, feed the revised exact net/tax component cents
 into Row22's complete-graph settlement restatement. Use its logical keys, version
@@ -407,3 +409,4 @@ goal. No federal rule is presented as universal state sales-tax authority.
 | F13 | Retain existing conditional receipt confirmation/omission predicates, including linked history after removal and same-gross edits. |
 | F14 | Mathematical all-remaining forecast is separate from executable selection; explicit eligibility and existing bounded recovery remain readable at both limits, including progress disabled. |
 | F15 | Rebill aggregate versus cell/agency reproduction distinguished; net5/net10 A10%/Z5% ordering oracle and public explanation required. |
+| F16 | The ordering-dependent2cent/A2Z0-versus-A1Z1 oracle is explicitly invoice_combined_half_up; line_combined_half_up is3cents/A2Z1 in either order. |
