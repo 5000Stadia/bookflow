@@ -1,8 +1,11 @@
 {% if result and result.source_effect %}
+{% set replay = result.idempotent_replay | default(false) %}
+{% set prospective = preview and not replay %}
 <section class="workspace-card" aria-label="Estimate availability after billing">
-{% if result.source_effect.automatically_closed %}<p>{{ 'This bill makes the estimate inactive.' if preview else 'This conversion made the estimate inactive.' }} Acceptance is retained; inactivity does not establish physical completion.</p>
-{% elif result.source_effect.source_kind == 'estimate' %}<p>This conversion retains active estimate availability.</p>{% endif %}
-<p>Source version {{ result.source_effect.version_before }} → {{ result.source_effect.version_after }} for this conversion.</p>
-{% if result.source_current %}<p>{{ 'Prospective' if preview else 'Current' }} source availability: {{ 'active' if result.source_current.active else 'inactive' }} · {{ result.source_current.status }} · version {{ result.source_current.version }}.</p>
+{% if replay %}<p>Replaying the original conversion. No new closure is performed.</p>{% endif %}
+{% if result.source_effect.automatically_closed %}<p>{{ 'This bill makes the estimate inactive.' if prospective else 'This conversion made the estimate inactive.' }} Acceptance is retained; inactivity does not establish physical completion.</p>
+{% elif result.source_effect.source_kind == 'estimate' %}<p>{{ 'This conversion retains active estimate availability.' if prospective else 'This conversion retained active estimate availability.' }}</p>{% endif %}
+<p>Source version {{ result.source_effect.version_before }} → {{ result.source_effect.version_after }} for {{ 'the original conversion' if replay else 'this conversion' }}.</p>
+{% if result.source_current %}<p>{{ 'Prospective' if prospective else 'Current' }} source availability: {{ 'active' if result.source_current.active else 'inactive' }} · {{ result.source_current.status }} · version {{ result.source_current.version }}.</p>
 {% if not preview %}<a href="/c/{{ company_id }}/work-source/{{ result.source_current.source_id }}/open">Source, accepted decision history and sale links</a>{% if not result.source_current.active and (billing_actions or billing_reactivate_allowed) %} · <a href="/c/{{ company_id }}/{{ result.source_effect.source_kind.replace('_','-') }}/{{ result.source_current.source_id }}/update">Explicitly reactivate source</a>{% endif %}{% endif %}{% endif %}
 </section>{% endif %}

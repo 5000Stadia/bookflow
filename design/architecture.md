@@ -611,6 +611,9 @@ Financial fingerprints include progress enablement and effective closure for dir
 estimates. Estimate enablement and dormant close settings are excluded. New estimate
 operations fingerprint estimate enablement alone. Permanent request hashes retain
 their original serialization and committed replay precedes new-work gates.
+Replay previews describe the original effect in the past tense, explicitly state
+that no new closure occurs, and label separately read availability as current.
+Only new conversion previews describe their effect and availability as prospective.
 
 Final positive billable net billing directly from an accepted active estimate makes
 it inactive only with progress disabled and automatic closure enabled. Billing's

@@ -1,5 +1,6 @@
 """Actual Chrome company policy and final-billing availability at desktop/phone widths."""
 import base64
+import json
 import pytest
 from tests.test_row5_browser_acceptance import CHROME, browser_site
 from tests.test_row8_register_browser import register_browser, _command, _key
@@ -72,3 +73,60 @@ def test_policy_forms_final_bill_and_retained_estimate(register_browser, width, 
     b.wait_for('!!document.querySelector(".sales-document")')
     assert 'History' in b.evaluate('document.body.innerText')
     assert not b.evaluate('Array.from(document.querySelectorAll("a")).some(a=>a.pathname.endsWith("/copy"))')
+
+
+@pytest.mark.parametrize('width', [1280,390])
+@pytest.mark.parametrize('original_closed', [True,False])
+def test_replay_preview_shows_historical_effect_and_current_source(register_browser, width, original_closed, tmp_path):
+    env, b = register_browser, register_browser.browser
+    command = lambda name, data: _command(b, env.site, name, data)
+    b.viewport(width,900)
+    income = command('account.create', dict(name='Replay income',type='income'))['id']
+    command('account.create', dict(name='Replay AR',type='accounts_receivable'))
+    customer = command('customer.create', dict(name='Replay customer'))['id']
+    code = next(r['id'] for r in command('sales-tax-code.list',{})['items'] if not r['taxable'])
+    item = command('item.create', dict(name='Replay labor',description='Service',type='service',
+        sales_enabled=True,income_account_id=income,price='1',sales_tax_code_id=code))['id']
+    source = command('estimate.create', dict(date='2026-01-12',customer=customer,title='Replay scope',lines=[dict(item=item,quantity='1')]))
+    source = command('estimate.update', dict(estimate=source['id'],expected_version=1,status='accepted',decision_note='Agreed'))
+    command('company.update', dict(progress_billing_enabled=False,close_estimates_after_billing=original_closed))
+    url = f'{env.site.base_url}/c/{env.site.company_id}/estimate/{source["id"]}/invoice'
+    visit(b,url); _fill(b,'f:date','2026-01-13'); _choose(b,'f:ar_account','Replay AR')
+    _preview(b)
+    card = 'document.querySelector(\'[aria-label="Estimate availability after billing"]\')'
+    text = b.evaluate(card+'.innerText')
+    assert 'Prospective source availability: '+('inactive' if original_closed else 'active') in text
+    assert ('This bill makes the estimate inactive.' in text) is original_closed
+    original = b.evaluate('Array.from(new FormData(document.querySelector("[data-sales-form]")).entries())')
+    _click(b,'submit'); _saved(b,'invoice')
+    invoice_id = b.evaluate('location.pathname.split("/").pop()')
+    invoice = command('invoice.show',dict(invoice=invoice_id))
+    source = command('estimate.show',dict(estimate=source['id']))
+    assert source['active'] is not original_closed and source['version']==3
+    # Deliberately make current availability differ from the original conversion.
+    # The closure branch reactivates; the retained-active branch now becomes inactive.
+    command('estimate.update',dict(estimate=source['id'],expected_version=source['version'],active=original_closed))
+    current = command('estimate.show',dict(estimate=source['id']))
+    assert current['version']==4 and current['active'] is original_closed
+    visit(b,url)
+    b.evaluate('''for (const [name,value] of '''+json.dumps(original)+''') {
+        const e=document.getElementsByName(name)[0];
+        if(e){if(e.type==='checkbox')e.checked=value==='1';else e.value=value;}
+    }''')
+    _click(b,'preview')
+    b.wait_for('!!document.querySelector(".sales-document") && !document.querySelector(".htmx-request")')
+    assert not b.evaluate('document.querySelector(".error")?.textContent'),b.evaluate('document.body.innerText')
+    text = b.evaluate(card+'.innerText')
+    assert 'Replaying the original conversion. No new closure is performed.' in text
+    assert 'This bill makes the estimate inactive.' not in text and 'Prospective' not in text
+    assert ('This conversion made the estimate inactive.' if original_closed else 'This conversion retained active estimate availability.') in text
+    assert 'Source version 2 → 3 for the original conversion.' in text
+    assert 'Current source availability: '+('active' if original_closed else 'inactive')+' · accepted · version 4.' in text
+    assert command('estimate.show',dict(estimate=source['id']))==current
+    assert command('invoice.show',dict(invoice=invoice_id))==invoice
+    assert len(command('invoice.query',dict(customer=customer))['items'])==1
+    _contained(b,width)
+    b.evaluate(card+'.scrollIntoView({block:"center"})')
+    (tmp_path/f'replay-{original_closed}-{width}.png').write_bytes(base64.b64decode(b.call('Page.captureScreenshot',dict(format='png'))['data']))
+    (tmp_path/'replay-receipt.json').write_text(json.dumps(dict(original_closed=original_closed,width=width,
+        source_unchanged=True,invoice_unchanged=True,source_version=current['version'],source_active=current['active'],text=text),indent=2))

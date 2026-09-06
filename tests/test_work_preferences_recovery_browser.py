@@ -56,9 +56,9 @@ def fragmented_root(tmp_path_factory):
         income = call('account create', dict(name='Recovery income', type='income'))['id']
         ar = call('account create', dict(name='Recovery AR', type='accounts_receivable'))['id']
         code = next(r['id'] for r in call('sales-tax-code list', {})['items'] if not r['taxable'])
-        item = call('item create', dict(name='Recovery labor', type='service', sales_enabled=True,
+        item = call('item create', dict(name='Recovery labor', description='Recovery service labor', type='service', sales_enabled=True,
             income_account_id=income, price='0.01', sales_tax_code_id=code))['id']
-        source = call('estimate create', dict(date='2026-01-12', customer=customer,
+        source = call('estimate create', dict(date='2026-01-12', customer=customer, title='Recovery scope',
             lines=[dict(item=item, quantity='404', net_amount='4.04')]))
         source = call('estimate update', dict(estimate=source['id'], expected_version=1, status='accepted', decision_note='Agreed'))
         line = source['revision']['lines'][0]['line_id']
