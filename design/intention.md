@@ -10,6 +10,7 @@ Picture the plumber at 9pm asking their agent to post today's receipts, then ope
 
 - An agent that has never seen Bookflow can read the docs and post a correct transaction on its first attempt, with no source reading and no guessing at syntax.
 - Every command works identically from the CLI, the MCP adapter, the HTTP host, and the browser workbench, with the same inputs, outputs, and errors.
+- Agent and human workflows cooperate: each can inspect and continue the other's work through shared business identities and state. Agents discover typed commands, preview changes and retry safely without reading source or automating browser clicks; users see the resulting records and attributed activity in the GUI. Representative cross-interface workflows are part of completion, with conventional command names and actionable structured errors.
 - Every write records who did it, through which interface, on whose behalf, and why. The owner can list what their agent did this week from any surface.
 - Two writers never silently destroy each other's changes. A rejected write says who changed the record, how long ago, and which fields.
 - The books always balance. No command can post an unbalanced entry or post into a closed period.
