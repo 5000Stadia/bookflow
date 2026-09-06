@@ -307,7 +307,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.markup_percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.billable` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile` | object | yes | no | — | — |
-| `revision.lines[].facts.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
+| `revision.lines[].facts.profile.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].facts.profile.item` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
@@ -353,8 +353,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.origins` | object[string, object] | no | no | {} | — |
-| `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
+| `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].facts.profile.net_amount_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.allocation_proof` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.allocation_proof.source_document_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.source_revision_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.source_line_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.root_document_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.root_line_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.source_basis_hash` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.quoted_quantity_microunits` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.quoted_base_quantity_microunits` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.quoted_net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.denominator` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.spans` | array[object] | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.spans[].start` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -996,7 +1010,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.markup_percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.billable` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile` | object | yes | no | — | — |
-| `revision.lines[].facts.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
+| `revision.lines[].facts.profile.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].facts.profile.item` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
@@ -1042,8 +1056,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.origins` | object[string, object] | no | no | {} | — |
-| `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
+| `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].facts.profile.net_amount_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.allocation_proof` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.allocation_proof.source_document_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.source_revision_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.source_line_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.root_document_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.root_line_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.source_basis_hash` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.quoted_quantity_microunits` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.quoted_base_quantity_microunits` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.quoted_net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.denominator` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.spans` | array[object] | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.spans[].start` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -1638,7 +1666,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.markup_percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.billable` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile` | object | yes | no | — | — |
-| `revision.lines[].facts.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
+| `revision.lines[].facts.profile.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].facts.profile.item` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
@@ -1684,8 +1712,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.origins` | object[string, object] | no | no | {} | — |
-| `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
+| `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].facts.profile.net_amount_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.allocation_proof` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.allocation_proof.source_document_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.source_revision_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.source_line_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.root_document_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.root_line_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.source_basis_hash` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.quoted_quantity_microunits` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.quoted_base_quantity_microunits` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.quoted_net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.denominator` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.spans` | array[object] | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.spans[].start` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -2548,7 +2590,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.markup_percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.billable` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile` | object | yes | no | — | — |
-| `revision.lines[].facts.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
+| `revision.lines[].facts.profile.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].facts.profile.item` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
@@ -2594,8 +2636,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.origins` | object[string, object] | no | no | {} | — |
-| `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
+| `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].facts.profile.net_amount_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.allocation_proof` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.allocation_proof.source_document_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.source_revision_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.source_line_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.root_document_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.root_line_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.source_basis_hash` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.quoted_quantity_microunits` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.quoted_base_quantity_microunits` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.quoted_net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.denominator` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.spans` | array[object] | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.spans[].start` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -3221,7 +3277,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.markup_percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.billable` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile` | object | yes | no | — | — |
-| `revision.lines[].facts.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
+| `revision.lines[].facts.profile.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].facts.profile.item` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
@@ -3267,8 +3323,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.origins` | object[string, object] | no | no | {} | — |
-| `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
+| `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].facts.profile.net_amount_minor_units` | integer \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.allocation_proof` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.allocation_proof.source_document_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.source_revision_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.source_line_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.root_document_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.root_line_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.source_basis_hash` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.quoted_quantity_microunits` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.quoted_base_quantity_microunits` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.quoted_net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.denominator` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.spans` | array[object] | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.spans[].start` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.allocation_proof.spans[].end` | string | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |

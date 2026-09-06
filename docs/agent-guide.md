@@ -345,7 +345,62 @@ Inspect the returned current destination instead of creating a second document.
 `estimate copy` normally means another alternative; independent new scope must be
 selected explicitly. No create/copy/complete operation sends anything.
 
-Existing `invoice post` creates an independent service invoice. Linked work-to-sale
-conversion and progress billing are the following implementation increment. Delivery
-is also staged: never report that an invoice or scope letter was sent when only its
-record was created, and never improvise an external send from a create-only request.
+`invoice post` creates an independent service invoice. `estimate invoice` and
+`work-order invoice` bill the linked source; their `sales-receipt` counterparts
+record genuinely received payment for a new sale. Payment of an existing invoice
+and delivery remain staged. Never report a document sent when only its record was
+created, or improvise an external send from a create-only request.
+
+## Bill work in installments
+
+Read `estimate billing` or `work-order billing` first. It identifies the current
+billing owner, stable source-line IDs, previous invoices/receipts and remaining
+scope. Bill the work order when the estimate has one. Use the current source
+version, financial date and a new permanent `conversion_key` for each intended bill.
+Keep that same key and original input when retrying the same bill.
+
+The following are alternative additions to the ordinary conversion input. Replace
+`LINE_ID` with a stable `lines[].line_id` from the billing read. Percentages mean
+additional percentages of the original scope, never percentages of what remains.
+
+| Request | Input addition |
+|---|---|
+| Invoice all remaining work | Omit `line_ids`, `selections` and `percent` |
+| Invoice the remainder of selected lines | `"line_ids":["LINE_ID"]` |
+| Invoice25% of the original scope | `"percent":"25"` |
+| Invoice a selected quantity | `"selections":[{"line_id":"LINE_ID","quantity":"0.25"}]` |
+| Invoice an exact net amount before tax | `"selections":[{"line_id":"LINE_ID","net_amount":"40.00"}]` |
+| Invoice a line-specific percentage | `"selections":[{"line_id":"LINE_ID","percent":"25"}]` |
+| Rebill one exact released installment | `"selections":[{"line_id":"LINE_ID","rebill_allocation_id":"ALLOCATION_ID"}]` |
+
+`ALLOCATION_ID` is `revision.billing_sources[].id` from the earlier bill's detailed
+revision. It must match the current source basis and be entirely released. A fresh
+quantity/amount request chooses earliest free scope; an exact rebill selects the
+referenced installment. Replaying a voided bill's original key returns that voided
+bill and does not create a rebill.
+
+Preview with `--dry-run`, inspect the exact gross and use its
+`expected_facts_fingerprint` when posting. For a paid receipt also supply
+`deposit_to`, a resolved `payment_method`, and `amount_received` equal to gross.
+Changed consumption returns `E_PREVIEW_STALE` with the latest attributed billing
+changes, even when the work source's version did not change.
+
+Tax is calculated on each bill's allocated net at the captured component rates.
+The total of installment taxes can differ from the quote by rounding. Remaining
+tax is a forecast for billing the remaining net together, not quoted tax minus
+actual billed tax. Billing does not establish operational completion.
+
+Allocated quantities may be exact fractions: a one-microunit quote billed40c of
+its100c net has quantity `"1/2500000"`, `quantity_microunits:null`, and
+`quantity_fraction:{"numerator":"1","denominator":"2500000"}`. Read the quoted
+quantity/rate separately. Never round such a fraction into an ordinary editable
+quantity. Positive scope that rounds to zero net can accompany other charged lines;
+uncharged physical scope can remain after all chargeable work has been billed.
+
+To correct an invoice, retain an allocated line using only its sale `line_id` and
+matching `item`. Remove the entire line to release its allocation. Add ordinary
+independent lines for extra charges; they consume no quoted scope. The browser's
+"Add an unlinked line" action opens this separate, previewed correcting write.
+Source conversion cannot exceed100% of a quoted line. If fragmentation produces
+`E_VALUE_RANGE`, use its `recommended_net_amount` on that source line and continue
+with remaining work; never silently drop spans to make a request fit.

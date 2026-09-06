@@ -235,8 +235,8 @@ for _noun, _selector in (("estimate", "estimate"), ("work-order", "work_order"))
     EXAMPLES[_noun + " billing"] = Example(
         f'bookflow {_noun} billing {ID} --company "Demo Plumbing Co" --limit 50 --json', {_selector: ID, 'limit': 50})
     EXAMPLES[_noun + " invoice"] = Example(
-        f'bookflow {_noun} invoice {ID} --expected-version 2 --conversion-key "bill-work-2026-09" --date 2026-09-04 --company "Demo Plumbing Co" --reason "Invoice agreed work" --json',
-        {_selector: ID, 'expected_version': 2, 'conversion_key': 'bill-work-2026-09', 'date': '2026-09-04'})
+        f'bookflow {_noun} invoice {ID} --expected-version 2 --conversion-key "bill-work-2026-09" --date 2026-09-04 --percent 25 --company "Demo Plumbing Co" --reason "Invoice one quarter of agreed scope" --json',
+        {_selector: ID, 'expected_version': 2, 'conversion_key': 'bill-work-2026-09', 'date': '2026-09-04', 'percent': '25'})
     EXAMPLES[_noun + " sales-receipt"] = Example(
         f'bookflow {_noun} sales-receipt {ID} --expected-version 2 --conversion-key "paid-work-2026-09" --date 2026-09-04 --deposit-to Checking --payment-method Cash --amount-received "10.81" --company "Demo Plumbing Co" --reason "Record paid work" --json',
         {_selector: ID, 'expected_version': 2, 'conversion_key': 'paid-work-2026-09', 'date': '2026-09-04', 'deposit_to': 'Checking', 'payment_method': 'Cash', 'amount_received': '10.81'})

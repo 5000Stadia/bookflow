@@ -15,12 +15,12 @@ Database: `company`.
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Company principal that wrote this commercial history. |
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface that wrote this commercial history. |
 | `item_id` | VARCHAR(26) | no | — | — | — | items.id | Captured sold item. |
-| `quantity_microunits` | BIGINT | no | — | — | — | — | Positive entered quantity in millionths of the selected unit. |
+| `quantity_microunits` | BIGINT | yes | — | — | — | — | Exact selected-unit quantity in millionths; null only for an allocated fraction. |
 | `unit_id` | VARCHAR(26) | yes | — | — | — | unit_conversions.id | Captured selected unit conversion; null without a unit. |
 | `unit_factor_nanounits` | BIGINT | no | — | — | — | — | Positive captured base units per selected unit in billionths. |
-| `base_quantity_microunits` | BIGINT | no | — | — | — | — | Positive rounded base quantity in millionths. |
+| `base_quantity_microunits` | BIGINT | yes | — | — | — | — | Exact base quantity in millionths; null only for an allocated fraction. |
 | `unit_price_minor_units` | BIGINT | yes | — | — | — | — | Home-currency price per selected unit; null for amount pricing. |
-| `pricing_basis` | VARCHAR(16) | no | — | — | — | — | Authoritative unit or amount pricing mode. |
+| `pricing_basis` | VARCHAR(16) | no | — | — | — | — | Authoritative unit, amount or allocated pricing mode. |
 | `net_minor_units` | BIGINT | no | — | — | — | — | Rounded home-currency extended line price before tax. |
 | `tax_minor_units` | BIGINT | no | — | — | — | — | Home-currency sum of this line tax components. |
 | `gross_minor_units` | BIGINT | no | — | — | — | — | Home-currency line net plus tax. |

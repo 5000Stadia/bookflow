@@ -2,7 +2,7 @@
 
 # `company.work_billing_allocations`
 
-Immutable full-line consumption; active only on a posted sale current revision.
+Immutable full-root or exact interval consumption; active only on a posted sale current revision.
 
 Database: `company`.
 
@@ -17,7 +17,7 @@ Database: `company`.
 | `source_line_id` | VARCHAR(26) | no | — | — | — | work_lines.id | Captured revision-local work line. |
 | `root_document_id` | VARCHAR(26) | no | — | unique with revision_id + root_document_id + root_line_id | ix_work_billing_allocation_root | work_line_identities.document_id | Document owning the shared billing root. |
 | `root_line_id` | VARCHAR(26) | no | — | unique with revision_id + root_document_id + root_line_id | ix_work_billing_allocation_root | work_line_identities.id | Stable shared billing root identity. |
-| `quantity_microunits` | BIGINT | no | — | — | — | — | Full source quantity denominator in millionths. |
+| `quantity_microunits` | BIGINT | yes | — | — | — | — | Exact allocated quantity in millionths; null for an unrepresentable version 2 fraction. |
 | `net_minor_units` | BIGINT | no | — | — | — | — | Exact captured source net amount. |
 | `tax_minor_units` | BIGINT | no | — | — | — | — | Exact captured source tax amount. |
 | `gross_minor_units` | BIGINT | no | — | — | — | — | Exact captured source gross amount. |
@@ -25,3 +25,7 @@ Database: `company`.
 | `created_at` | VARCHAR(32) | no | — | — | — | — | UTC creation timestamp. |
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Principal creating this billing history. |
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface creating this billing history. |
+| `allocation_version` | INTEGER | no | — | — | — | — | 1 occupies the full root; 2 carries exact interval proof. |
+| `source_basis_hash` | VARCHAR(64) | yes | — | — | — | — | Version 2 captured economic basis SHA256 in lowercase hex. |
+| `denominator_hex` | VARCHAR(40) | yes | — | — | — | — | Version 2 positive unsigned 160-bit denominator in fixed-width lowercase hex. |
+| `spans_json` | TEXT | yes | — | — | — | — | Version 2 canonical array of 1–200 fixed-width hex endpoint pairs. |
