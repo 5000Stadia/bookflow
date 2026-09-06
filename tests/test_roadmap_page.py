@@ -103,3 +103,30 @@ def test_real_browser_form_saves_with_origin_and_fits_viewport(site,tmp_path,wid
         assert len(notes)==1 and notes[0]['text']=='A browser note'
     finally:
         browser.close()
+
+@pytest.mark.parametrize('group',['next','later'])
+def test_future_rendered_target_survives_manifest_removal(site,group):
+    state,client,_=site
+    path=state.root/'notes/roadmap-status.json'
+    status=json.loads(path.read_text())
+    status[group]=[{'row':'25','title':'Future module','summary':'Planned'}]
+    path.write_text(json.dumps(status))
+    csrf=login(state,client)
+    assert 'name="row" value="25"' in client.get('/').text
+    status[group]=[];path.write_text(json.dumps(status))
+    assert submit(state,client,csrf,'Future note','25').status_code==303
+    page=client.get('/').text
+    assert 'Archived module notes' in page and 'Future note' in page
+
+def test_unknown_target_can_be_corrected_without_retyping(site):
+    state,client,_=site
+    csrf=login(state,client)
+    response=submit(state,client,csrf,'Keep <this> exactly','999')
+    assert response.status_code==409
+    assert '<select name="row" required>' in response.text
+    assert '<code>999</code>' in response.text and 'value="K"' in response.text
+    assert '<textarea name="text" required>Keep &lt;this&gt; exactly</textarea>' in response.text
+    token=re.search(r'name="csrf" value="([^"]+)"',response.text).group(1)
+    assert submit(state,client,token,'Keep <this> exactly','22').status_code==303
+    notes=roadmap.bridge.Project(state.root,state.comments).comments()
+    assert len(notes)==1 and notes[0]['row']=='22' and notes[0]['text']=='Keep <this> exactly'

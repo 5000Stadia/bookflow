@@ -81,7 +81,7 @@ class State:
 
     def targets(self, project, status):
         return {'project'} | {row.number for row in project.rows} | set(status.get('rows', {})) | {
-            str(row['row']) for row in status.get('completed', []) if 'row' in row
+            str(row['row']) for group in ('next', 'later', 'completed') for row in status.get(group, []) if 'row' in row
         } | {str(note['row']) for note in project.comments()}
 
     def append(self, session, fields):
@@ -108,6 +108,25 @@ def draft_page(message, fields=None):
             '<title>Bookflow roadmap</title><style>' + bridge.CSS + '</style><main><h1>Bookflow roadmap</h1><p>'
             + esc(message) + '</p>' + ('<p>Your unsaved note is preserved below. Copy it before reopening your bookmark.</p>'
             '<textarea aria-label="Unsaved note" style="width:100%;min-height:220px">' + esc(draft) + '</textarea>' if draft else '') + '</main>')
+
+
+
+def correction_page(state, session, fields):
+    project, status = state.data()
+    targets = state.targets(project, status) | session['targets']
+    labels = {row.number: status.get('rows', {}).get(row.number, {}).get('title', 'Module ' + row.number) for row in project.rows}
+    labels['project'] = 'General project notes'
+    options = '<option value="" disabled selected>Choose a module</option>' + ''.join(
+        '<option value="' + esc(target) + '">' + esc(labels.get(target, 'Module ' + target)) + '</option>' for target in sorted(targets))
+    return ('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">'
+            '<title>Keep your roadmap note</title><style>' + bridge.CSS + '</style><main><h1>Choose a module for your note</h1>'
+            '<p>The original target <code>' + esc(fields.get('row', '')) + '</code> is not recognized. Your note has not been saved yet.</p>'
+            '<form class="add" method="post" action="/note">'
+            '<input type="hidden" name="csrf" value="' + esc(session['csrf']) + '">'
+            '<label>Module <select name="row" required>' + options + '</select></label>'
+            '<textarea name="text" required>' + esc(fields.get('text', '')) + '</textarea>'
+            '<input name="author" aria-label="Your name" value="' + esc(fields.get('author', '')) + '">'
+            '<button>Save note</button></form></main>')
 
 
 def render(state, session):
@@ -225,7 +244,7 @@ def handler(state):
             except PermissionError:
                 return self.send_page(401, draft_page('Your login expired. Keep your draft before reopening the bookmark.', fields))
             if not accepted:
-                return self.send_page(409, draft_page('This module is no longer a recognized target. Keep the note and choose a current module.', fields))
+                return self.send_page(409, correction_page(state, session, fields))
             self.send_page(303, '', {'Location':'/#notes'})
     return Handler
 
