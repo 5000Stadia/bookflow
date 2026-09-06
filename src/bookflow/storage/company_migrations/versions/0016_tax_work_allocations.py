@@ -332,6 +332,13 @@ def _plan(connection):
     columns = connection.exec_driver_sql(f'PRAGMA table_xinfo({quote(TABLE)})').all()
     if any(row[1].lower() in ('rowid', '_rowid_', 'oid') for row in columns) or 'WITHOUT' in suffix.upper():
         raise RuntimeError('co0016 cannot preserve custom row identity')
+    # Existing rows cannot prove that a retained local CHECK admits allocation3.
+    # Reject unsupported table AND column constraints before any DDL mutation.
+    # A conservative lexical match may reject a harmless local expression; it
+    # never removes or rewrites that guard to guess its intended version domain.
+    for part in parts:
+        if part.strip() not in REPLACEMENTS and re.search(r'(?i)\bCHECK\s*\(', part) and re.search(r'(?i)\ballocation_version\b', part):
+            raise RuntimeError('co0016 unknown competing allocation discriminator CHECK')
     for old, new in REPLACEMENTS.items():
         found = [i for i, part in enumerate(parts) if part.strip() == old]
         if len(found) != 1:

@@ -83,3 +83,45 @@ def test_rebuild_failure_is_atomic(co15_root,tmp_path,monkeypatch,failure):
         assert raw.execute('SELECT type,name,sql FROM sqlite_schema ORDER BY type,name').fetchall()==ddl
         assert raw.execute('SELECT version_num FROM alembic_version').fetchone()==('co0015',)
         assert raw.execute('PRAGMA foreign_keys').fetchone()==(1,)
+
+
+@pytest.mark.parametrize('definition', [
+    'CONSTRAINT local_allocation_versions CHECK (allocation_version IN (1,2))',
+    'local_version_limit INTEGER CHECK (allocation_version IN (1,2))',
+])
+def test_local_discriminator_check_preflight_before_rebuild(co15_root,tmp_path,definition):
+    """Source-derived table/column shapes reject before even returning a DDL plan."""
+    path=tmp_path/'company.db';shutil.copyfile(next(co15_root.glob('organizations/*/Demo Plumbing Co/company.db')),path)
+    with open_database(path,writable=True) as db:
+        sql=db.raw.execute("SELECT sql FROM sqlite_schema WHERE name='work_billing_allocations'").fetchone()[0]
+        preserving=importlib.import_module('bookflow.storage.company_migrations.versions.0012_progress_billing')
+        _,parts,suffix=preserving._definitions(sql,M.TABLE)
+        local_sql='CREATE TABLE work_billing_allocations ('+','.join(parts+[definition])+suffix
+        class SourceShape:
+            def exec_driver_sql(self,statement,*args):
+                if statement.startswith('SELECT sql FROM sqlite_schema'):
+                    class SourceSQL:
+                        def scalar_one(self):return local_sql
+                    return SourceSQL()
+                return db.conn.exec_driver_sql(statement,*args)
+        before=snapshots(db.raw)
+        with pytest.raises(RuntimeError,match='competing allocation discriminator CHECK'):
+            M._plan(SourceShape())
+        assert snapshots(db.raw)==before
+
+
+def test_local_column_discriminator_check_upgrade_rolls_back(co15_root,tmp_path):
+    """Ordinary local CHECK addition in the existing preserving-DDL fixture."""
+    path=tmp_path/'company.db';shutil.copyfile(next(co15_root.glob('organizations/*/Demo Plumbing Co/company.db')),path)
+    with open_database(path,writable=True) as db:
+        raw=db.raw;local(raw)
+        raw.execute('ALTER TABLE work_billing_allocations ADD COLUMN local_version_limit INTEGER CHECK (allocation_version IN (1,2))')
+        before=snapshots(raw);ddl=raw.execute('SELECT type,name,sql FROM sqlite_schema ORDER BY type,name').fetchall()
+        with pytest.raises(BookflowError) as exc:migrate_to_head(db,'company',None)
+        assert exc.value.code=='E_MIGRATION_FAILED'
+        assert snapshots(raw)==before
+        assert raw.execute('SELECT type,name,sql FROM sqlite_schema ORDER BY type,name').fetchall()==ddl
+        assert raw.execute('SELECT version_num FROM alembic_version').fetchone()==('co0015',)
+        assert raw.execute('PRAGMA foreign_keys').fetchone()==(1,)
+        assert raw.execute('PRAGMA integrity_check').fetchall()==[('ok',)]
+        assert raw.execute('PRAGMA foreign_key_check').fetchall()==[]
