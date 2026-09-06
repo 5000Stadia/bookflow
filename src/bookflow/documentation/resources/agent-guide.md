@@ -4,6 +4,17 @@ This is the shortest end-to-end path from a fresh demo to a versioned, audited w
 
 The bootstrap bearer belongs to the human who issued it. The current command registry has no public commands for creating agent identities or assigning principals, so do not describe this token as an independent agent identity.
 
+Browser and programmatic clients operate on the same records. After another writer
+corrects an invoice, read `invoice show` again and use its current `version` for the
+next update. Retain existing line IDs, preview the intended correction and submit
+its returned facts fingerprint. A stale `expected_version` returns
+`E_VERSION_CONFLICT`; do not replace it blindly or recreate the invoice. Retry a
+previous request with its original idempotency key and identical input, then read
+the current record separately: a replay result describes the original operation.
+The workbench records `interface=http` and `client_name=bookflow-workbench`; an HTTP
+automation identifies its own client name. Audit actor and on-behalf-of fields
+identify the authenticated writer and bound principal, independently of that name.
+
 ## Operator bootstrap
 
 Install the `bookflow-core` distribution first, or run from a source-checkout root containing `pyproject.toml` and the committed `uv.lock`. The block automatically uses an installed `bookflow` command when one is on `PATH`. Otherwise it creates and synchronizes a dedicated environment inside the disposable trial directory, then uses `uv run --frozen --no-sync`; the checkout's lockfile and shared environment remain unchanged. Every later command uses the selected array, so the rest of the instructions are identical in both environments.
