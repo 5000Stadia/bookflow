@@ -43,18 +43,15 @@ def _candidate_query(s, inp):
     funding = query.payment_facts(s, context['payment_id']) if context['payment_id'] else None
     t, r, p, a = c.transactions, c.transaction_revisions, c.sales_profiles, c.applications
     inverse = a.alias('candidate_inverse')
-    original = r.alias('candidate_original')
-    applied = sa.select(a.c.paid_transaction_id, sa.func.sum(a.c.amount_minor_units).label('amount')).where(
-        a.c.kind == 'apply', ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_application_id == a.c.id))
-    ).group_by(a.c.paid_transaction_id).subquery()
-    used = sa.func.coalesce(applied.c.amount, 0)
+    used = sa.func.coalesce(sa.select(sa.func.sum(a.c.amount_minor_units)).where(
+        a.c.paid_transaction_id == t.c.id, a.c.kind == 'apply',
+        ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_application_id == a.c.id))
+    ).correlate(t).scalar_subquery(), 0)
     statement = sa.select(t.c.id.label('invoice_id'), t.c.version.label('expected_version'), t.c.number,
         p.c.customer_id, r.c.date, p.c.due_date, r.c.currency, r.c.total_minor_units.label('gross_minor_units'),
-        r.c.id.label('revision_id'), original.c.id.label('original_revision_id'),
-        original.c.total_minor_units.label('original_gross_minor_units'),
+        r.c.id.label('revision_id'),
         used.label('applied_minor_units'), (r.c.total_minor_units-used).label('due_minor_units')).select_from(t).join(
-        r, r.c.id == t.c.current_revision_id).join(original, sa.and_(original.c.transaction_id == t.c.id, original.c.revision_number == 1)).join(p, p.c.revision_id == r.c.id).outerjoin(
-        applied, applied.c.paid_transaction_id == t.c.id).where(t.c.type == 'invoice', t.c.status == 'posted',
+        r, r.c.id == t.c.current_revision_id).join(p, p.c.revision_id == r.c.id).where(t.c.type == 'invoice', t.c.status == 'posted',
         r.c.date <= context['date'], r.c.currency == context['currency'], p.c.control_account_id == context['ar_account_id'],
         r.c.total_minor_units > used, readable_predicate(s, t.c.id))
     capacities = {}
@@ -76,10 +73,17 @@ def _candidate_query(s, inp):
     return context, statement.order_by(r.c.date, t.c.id), capacities
 
 
+def _original_projection(statement):
+    original = c.transaction_revisions.alias('candidate_original')
+    return statement.add_columns(original.c.id.label('original_revision_id'),
+        original.c.total_minor_units.label('original_gross_minor_units')).join(original,
+        sa.and_(original.c.transaction_id == c.transactions.c.id, original.c.revision_number == 1))
+
+
 def candidates(s, inp):
     context, statement, capacities = _candidate_query(s, inp)
     result = [dict(row, available_source_minor_units=capacities[row['customer_id']] if context['payment_id'] else None)
-        for row in s.company.conn.execute(statement).mappings()]
+        for row in s.company.conn.execute(_original_projection(statement)).mappings()]
     return context, result
 
 
@@ -92,10 +96,12 @@ def invoices(s, inp):
         c.transactions.c.id, c.transactions.c.version, c.sales_profiles.c.customer_id))]
     balances = query.payer_balances(s, context['customer_id'])
     lineage = lineage_facts(s, [context['customer_id'], *(row[2] for row in baseline)])
-    out = query.sql_page(s, 'payment invoices', inp, statement,
-        facts=[context, baseline, balances, lineage], known_count=len(baseline))
-    for row in out['items']:
-        row['available_source_minor_units'] = capacities[row['customer_id']] if context['payment_id'] else None
+    out = query.page(s, 'payment invoices', inp, baseline, facts=[context, baseline, balances, lineage])
+    # The pinned baseline already determines delivery identities. Restrict the
+    # monetary projection to those IDs rather than rescanning/sorting the family.
+    ids = [row[0] for row in out['items']]
+    out['items'] = [dict(row, available_source_minor_units=capacities[row['customer_id']] if context['payment_id'] else None)
+        for row in s.company.conn.execute(_original_projection(statement).where(c.transactions.c.id.in_(ids))).mappings()] if ids else []
     return dict(out, **balances)
 
 

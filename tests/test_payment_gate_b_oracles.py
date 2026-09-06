@@ -163,6 +163,10 @@ def test_invoice_correction_preview_is_bounded_on_all_lists(client,sale):
 
 @pytest.mark.timeout(600)
 def test_one_receipt_corrected_across_complete_403_invoice_graph(client,sale):
+    # Active Row22 demo receipts already have immutable unapply history. This
+    # correction must preserve every such row and create none of its own.
+    with sqlite3.connect(database_path(client)) as db:
+        prior_unapplies = db.execute("SELECT * FROM applications WHERE kind='unapply' ORDER BY id").fetchall()
     invoices=[posted(client,sale['customer'],sale['item'],'0.03',f'CRITIC-403-{n}') for n in range(403)]
     selection=run(client,'payment selection create',dict(mode='new_receipt',customer=sale['customer'],date='2026-06-02',amount='12.09'))
     for offset in range(0,403,137):
@@ -193,7 +197,8 @@ def test_one_receipt_corrected_across_complete_403_invoice_graph(client,sale):
     assert result['current']['received_minor_units']==1210 and result['current']['applied_minor_units']==1209 and result['current']['available_minor_units']==1
     with sqlite3.connect(database_path(client)) as db:
         assert db.execute('SELECT count(*) FROM applications WHERE paying_transaction_id=?',(paid['id'],)).fetchone()==(403,)
-        assert db.execute("SELECT count(*) FROM applications WHERE kind='unapply'").fetchone()==(0,)
+        assert db.execute("SELECT * FROM applications WHERE kind='unapply' ORDER BY id").fetchall()==prior_unapplies
+        assert db.execute("SELECT count(*) FROM applications WHERE kind='unapply' AND paying_transaction_id=?",(paid['id'],)).fetchone()==(0,)
         versions=db.execute("SELECT version,count(*) FROM transactions WHERE type='invoice' AND number LIKE 'CRITIC-403-%' GROUP BY version").fetchall()
         assert versions==[(3,403)],versions
         live=db.execute("SELECT application_id,amount_minor_units FROM application_allocations a WHERE source_transaction_id=? AND kind='allocation' AND NOT EXISTS (SELECT 1 FROM application_allocations r WHERE r.reverses_allocation_id=a.id)",(paid['id'],)).fetchall()
