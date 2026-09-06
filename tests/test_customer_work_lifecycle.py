@@ -326,9 +326,15 @@ def test_competing_conversion_requests_cannot_duplicate_work(client, sale):
                 conversion_key=key, date='2026-01-13')
         except BookflowError as exc:
             return exc.code
+    keys = ['dispatcher one', 'dispatcher two']
     with ThreadPoolExecutor(max_workers=2) as workers:
-        results = list(workers.map(attempt, ['dispatcher one', 'dispatcher two']))
+        results = list(workers.map(attempt, keys))
     assert sum(isinstance(value, dict) for value in results) == 1
+    # A bounded lock wait may finish before the winner commits. Once both
+    # attempts finish, the same losing request must observe the changed version.
+    for index, value in enumerate(results):
+        if value == 'E_DB_BUSY':
+            results[index] = attempt(keys[index])
     assert [value for value in results if isinstance(value, str)] == ['E_VERSION_CONFLICT']
     assert len(run(client, 'work-order', 'query', customer=sale['customer'])['items']) == 1
 
