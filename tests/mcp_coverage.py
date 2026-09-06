@@ -292,6 +292,8 @@ FINANCIAL = {n + ' ' + v for n in ('journal', 'invoice', 'sales-receipt') for v 
 
 
 def execution_map():
+    from tests.test_mcp_registry_audit_reads import COMMANDS as AUDIT_COMMANDS
+    from tests.test_mcp_registry_attachments import COMMANDS as ATTACHMENT_COMMANDS
     from tests.test_mcp_registry_register import COMMANDS as REGISTER_COMMANDS
     from tests.test_mcp_registry_credentials import COMMANDS as CREDENTIAL_COMMANDS
     from tests.test_mcp_registry_presence import COMMANDS as PRESENCE_COMMANDS
@@ -317,7 +319,9 @@ def execution_map():
                    'tests/test_mcp_registry_work_billing.py::test_work_billing_full_documents_retries_and_exact_batches' if any(cmd.name in names for names in BILLING_FAMILIES.values()) else
                    'tests/test_mcp_registry_register.py::test_register_calculate_post_correct_query_and_rejection_parity' if cmd.name in REGISTER_COMMANDS else
                    'tests/test_mcp_registry_credentials.py::test_credentials_full_documents_owned_hashes_and_rejected_state' if cmd.name in CREDENTIAL_COMMANDS else
-                   'tests/test_mcp_registry_presence.py::test_advisory_presence_exact_documents_and_no_business_mutation' if cmd.name in PRESENCE_COMMANDS else None)
+                   'tests/test_mcp_registry_presence.py::test_advisory_presence_exact_documents_and_no_business_mutation' if cmd.name in PRESENCE_COMMANDS else
+                   'tests/test_mcp_registry_audit_reads.py::test_audit_activity_full_documents_historical_attribution_and_rejections' if cmd.name in AUDIT_COMMANDS else
+                   'tests/test_mcp_registry_attachments.py::test_registered_binary_and_link_lifecycle_complete_parity' if cmd.name in ATTACHMENT_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else
                 'advisory' if cmd.kind == 'advisory' else 'finite_poll_with_local_follow' if cmd.streams else 'routed_json')
