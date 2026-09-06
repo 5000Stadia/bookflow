@@ -1,6 +1,6 @@
-# 9 — MCP adapter implementation proposal, revision 3
+# 9 — MCP adapter implementation proposal, revision 3 with compact help
 
-Status: independent revision3 plan review passed; implementation is in progress. The compact-help amendment below awaits independent plan review before its implementation. Other approved work continues. Artifact verification and closure remain pending.
+Status: independent revision3 plan review passed; implementation is in progress. The compact-help amendment independently passed at d92eaf7. Artifact verification and closure remain pending.
 Authority: main design/intention.md Row9 and first-class agent/GUI cooperation; blueprint §§4.2–4.4, 5, 15.3, 16, 17, 20. This revision supersedes the previous draft completely. Parent owns the numbered plan, goal, integration and closure. The parent owns this implementation plan and its integration state.
 
 Pass2 findings F9 and F17–F21 are accepted and resolved by this proposed replacement design, subject to independent review. Earlier dispositions remain; F13 remains a tracked Row7 dependency. The architectural expansion is material: shared execution/publication authorization plus owned binary and complete-result transport are necessary; a stdio wrapper with exclusions cannot meet parity. Payments remains primary. No payment schema, bookkeeping command, provider, NLP/chatbot, email, helper or publication work is added.
@@ -65,7 +65,7 @@ client_name is the configured launcher label, client_version its installed packa
 
 list_commands: optional prefix, limit integer1..200 default20, cursor. Returns deterministic command descriptors, next_cursor, registry_digest and bridge_version. help: required canonical command; exposes the single-command generated documentation, full input/output schemas with local $defs, field descriptions, examples, command+infrastructure errors and accepted context/lifecycle/transfer metadata through the views below. Live host registry/renderer supplies both, not a local cache or scraped docs. Extract a pure single-command renderer from _command_page and share descriptors with docs/OpenAPI where fields coincide.
 
-### Compact help amendment — proposed after the first blind business trial
+### Compact help amendment — independently reviewed
 
 The actual fresh-agent invoice trial encountered unnecessarily large help responses:
 invoice post was 97,791 JSON bytes and invoice update was 98,149 bytes, measured
