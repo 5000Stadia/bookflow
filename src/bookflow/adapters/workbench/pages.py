@@ -918,7 +918,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         billing = None
         if noun in ('estimate', 'work-order'):
             try:
-                billing = Billing.context(run(request, noun + ' billing', {noun.replace('-', '_'): record_id}, company_id), company_id)
+                billing = Billing.context(run(request, noun + ' billing', {noun.replace('-', '_'): record_id}, company_id), company_id, source=out)
             except BookflowError as err:
                 return page_error(request, err)
             verbs = [v for v in verbs if v.verb not in ('invoice', 'sales-receipt')]
@@ -1047,7 +1047,19 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         if noun in ('estimate', 'work-order') and record_id and (verb == 'billing' or Billing.is_conversion(noun, verb)):
             try:
                 state = result if verb == 'billing' and result else run(request, noun + ' billing', {noun.replace('-', '_'): record_id}, company_id)
-                billing = Billing.context(state, company_id)
+                source = shown or run(request, noun + ' show', {noun.replace('-', '_'): record_id}, company_id)
+                billing = Billing.context(state, company_id, source=source)
+                rebill_id = attempted.get('billing-rebill-bill') or request.query_params.get('rebill_bill')
+                rebill_kind = attempted.get('billing-rebill-kind') or request.query_params.get('rebill_kind')
+                rebill_revision = attempted.get('billing-rebill-revision') or request.query_params.get('rebill_revision')
+                if rebill_id and rebill_kind in ('invoice', 'sales-receipt'):
+                    bill = run(request, rebill_kind + ' show', {rebill_kind.replace('-', '_'): rebill_id,
+                        **({'revision_number': int(rebill_revision)} if rebill_revision and str(rebill_revision).isdigit() else {})}, company_id)
+                    billing['rebill_bill'] = bill
+                    billing['rebill_kind'] = rebill_kind
+                    for line in billing['lines']:
+                        line['rebill_options'] = [source for source in bill['revision']['billing_sources']
+                            if (source['root_document_id'], source['root_line_id']) == (line['root_document_id'], line['root_line_id'])]
             except BookflowError as err:
                 return page_error(request, err, restart_url=request.url.path)
         if cmd.name == "rate set" and record_id is not None:
@@ -1131,8 +1143,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             elif verb in ('estimate', 'work-order'):
                 workflow_note += ' This permanently links the selected source revision to the new draft. Retrying returns the same destination.'
         if Billing.is_conversion(noun, verb):
-            described = [leaf for leaf in described if leaf['path'] != 'line_ids']
-            workflow_note = 'Bill selected whole lines or all remaining chargeable work. Completion is separate. A sales receipt records a paid sale; it cannot settle an existing invoice.'
+            described = [leaf for leaf in described if leaf['path'] not in ('line_ids', 'selections', 'percent')]
+            workflow_note = 'Bill remaining work, original-scope percentages, or per-line quantities and net amounts. Completion is separate. A sales receipt records a paid sale; it cannot settle an existing invoice.'
         if sales_form:
             described = [leaf for leaf in described if leaf['path'] != 'expected_facts_fingerprint']
         if cmd.name in S.COMMANDS:
@@ -1324,6 +1336,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       ctx_fields=F.context_fields(cmd), result=result, error=error,
                       billing=billing, billing_limit=attempted.get('f:limit') or request.query_params.get('limit', '50'),
                       billing_conversion=Billing.is_conversion(noun, verb),
+                      allocated_lines={line['line_id']: line for line in (shown or {}).get('revision', {}).get('lines', []) if line.get('pricing_basis') == 'allocated'},
                       billing_actions=bool(billing and _role_allows(registry.get(noun + " invoice"), authorized_company or {}, hub_admin=cred.hub_admin)),
                       work_form=noun in Work.NOUNS,
                       work=Work.detail_context(result, company_id, preview=preview) if result and noun in Work.NOUNS and not Billing.is_conversion(noun, verb) and "revision" in result else None,
@@ -1441,6 +1454,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     return RedirectResponse(source_url + '?revision_number=' + str(match['revision_number']), status_code=303)
                 return render('billing_source_history.html', request, company_id=company_id,
                     source_url=source_url, revision_id=revision_id, history=history)
+            if request.query_params.get('rebill_bill'):
+                state = run(request, source_noun + ' billing', {source_noun.replace('-', '_'): record_id}, company_id)
+                owner = Billing.context(state, company_id)['owner_url']
+                target = 'sales-receipt' if request.query_params.get('rebill_target') == 'sales-receipt' else 'invoice'
+                return RedirectResponse(owner + '/' + target + '?' + urlencode({k: request.query_params[k]
+                    for k in ('rebill_bill', 'rebill_kind', 'rebill_revision') if k in request.query_params}), status_code=303)
             suffix = '/history' if request.query_params.get('history') else ''
             return RedirectResponse(source_url + suffix, status_code=303)
         return page_error(request, BookflowError('E_RECORD_NOT_FOUND'))

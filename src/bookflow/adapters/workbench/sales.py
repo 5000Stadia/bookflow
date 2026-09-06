@@ -37,6 +37,9 @@ def editable_values(record):
     result['lines'] = []
     for line in revision['lines']:
         facts = line['item_snapshot']
+        if line.get('pricing_basis') == 'allocated':
+            result['lines'].append({'line_id': line['line_id'], 'item': facts['item']['id']})
+            continue
         row = {key: deepcopy(line[key]) for key in ('line_id', 'quantity', 'description')}
         row['item'] = facts['item']['id']
         if line.get('pricing_basis') == 'amount':
@@ -94,6 +97,8 @@ def detail_context(record, company_id, *, preview=False):
         if revision['id'] != record['current_revision_id']:
             links += [('Next revision', url + '?revision_number=' + str(number + 1)), ('Current revision', url)]
         links.append(('History', url + '/history'))
+        if revision.get('billing_sources') and record['status'] != 'voided':
+            links.append(('Add an unlinked line', url + '/update#ordinary-lines'))
     for line in revision['lines']:
         for component in line.get('tax_components', []):
             component['rate_display'] = format(Decimal(component['rate_percent_millionths']) / Decimal(1_000_000), 'f')

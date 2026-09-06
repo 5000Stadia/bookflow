@@ -9,3 +9,9 @@
 .billing-selection input[type="checkbox"] { width: auto; }
 .billing-table th { white-space: nowrap; }
 .billing-table td:first-child { min-width: 12rem; }
+
+.billing-selection, .billing-line, .billing-inputs, .billing-inputs label { min-width: 0; max-width: 100%; }
+.billing-selection { overflow-wrap: anywhere; }
+.billing-selection select, .billing-selection input:not([type="checkbox"]) { box-sizing: border-box; width: 100%; min-width: 0; }
+.billing-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: .75rem; }
+.billing-line { margin: .8rem 0; }

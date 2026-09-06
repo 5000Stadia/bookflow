@@ -1,6 +1,7 @@
 {% extends "base.html" %}{% block title %}{{ noun }} {{ verb }}{% endblock %}{% block body %}
 {% set base = ("/c/" ~ company_id ~ "/" ~ noun) if company_id else ("/hub/" ~ noun.replace(" ", "-")) %}
 {% set action = ((base ~ "/" ~ record_id) if record_id else base) ~ (("/" ~ verb) if verb else "") %}
+{% if billing and request.url.query %}{% set action = action ~ "?" ~ request.url.query %}{% endif %}
 <nav class="crumbs"><a href="{{ base }}">{{ noun }}</a> / {{ verb or "run" }}</nav>
 <h1>{{ noun }} {{ verb }}</h1><p class="muted">{{ cmd.description }}</p>
 {% if noun == 'journal' and verb in ('post', 'update') %}<p class="workflow-note">Enter a currency with an amount, such as <code>2345 JPY</code>. Rates mean home-currency units per one foreign unit. Leave Rate empty to use saved conversions or the exact-date rate. Changing a saved entry's date or memo preserves unchanged conversions; choose Refresh rates to reprice them.</p>{% endif %}
@@ -48,6 +49,13 @@
 {% macro collection_item(item, path, value, depth) %}
 <fieldset class="collection-item" data-collection-item>
 <legend>Entry</legend>
+{% set allocated = allocated_lines.get(value.get('line_id')) if allocated_lines and value is mapping else none %}
+{% if allocated %}
+<input type="hidden" name="c:{{ path }}:line_id" value="{{ allocated.line_id }}">
+<input type="hidden" name="c:{{ path }}:item" value="{{ allocated.item_id }}">
+<p data-allocated-line><strong>Captured quoted line · read-only economics</strong><br>{{ allocated.item_snapshot.item.label }} · {{ allocated.description or '' }}<br>Exact quantity {{ allocated.quantity }} · original quoted quantity {{ allocated.quoted_quantity }} · Quoted rate {{ allocated.unit_price.amount if allocated.unit_price else 'Amount priced' }}<br>Net {{ allocated.net.amount }} · Tax {{ allocated.tax.amount }} · Gross {{ allocated.gross.amount }} {{ allocated.currency }}</p>
+<p>Remove this whole line to release its scope. Add an independent ordinary line for an extra charge.</p>
+{% else %}
 {% if sales_form and path.startswith('lines:') and path.count(':') == 1 %}<label>Selling price mode<select name="price-mode:{{ path }}"><option value="">Keep saved mode / entered inputs</option>{% for mode, label in [('catalog','Catalog / default'),('manual','Manual unit price'),('markup','Cost markup'),('amount','Whole-line amount')] %}{% if work_form or mode != 'markup' %}<option value="{{ mode }}" {% if attempted.get('price-mode:' ~ path) == mode %}selected{% endif %}>{{ label }}</option>{% endif %}{% endfor %}</select></label>{% endif %}
 {% if item.kind == "collection" %}
 {{ collection_control(item.collection, path, value or [], depth + 1, "values") }}
@@ -64,6 +72,7 @@
 {% else %}
 {% set child_name = "c:" ~ path ~ ":value" %}
 {% set child_id = child_name.replace(':', '-').replace('.', '-') %}<div class="collection-field"><label for="{{ child_id }}">value *</label>{{ collection_scalar(item, child_name, value, child_id) }}</div>
+{% endif %}
 {% endif %}
 <div class="collection-item-actions"><button type="button" data-collection-up aria-label="Move entry up">↑ Up</button><button type="button" data-collection-down aria-label="Move entry down">↓ Down</button><button type="button" data-collection-remove>Remove</button></div>
 </fieldset>
@@ -123,6 +132,7 @@
 
 <form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" data-generated-form{% if sales_form %} data-sales-form data-sales-scope="{{ sales_scope }}"{% endif %}>
 {% if billing_conversion %}{% include "billing_selection.html" %}{% endif %}
+{% if sales_form and noun in ('invoice', 'sales-receipt') and verb == 'update' %}<p id="ordinary-lines">Additional entries are independent ordinary sale lines. Preview and save this correction separately; for a paid receipt, enter the exact new amount received including tax.</p>{% endif %}
 {% if sales_form %}<input type="hidden" name="f:expected_facts_fingerprint" value="{{ sales_fingerprint }}"><p data-sales-preview-status aria-live="polite">{{ 'Preview checked. Save these values.' if sales_fingerprint else 'Preview your values before saving.' }}</p>{% endif %}
 <input type="hidden" name="originals" value='{{ json.dumps(originals, default=str) | e }}'>
 {% if noun == 'report' and source_report_watermark is not none %}<input type="hidden" name="_source_report_watermark" value="{{ source_report_watermark }}">{% endif %}
