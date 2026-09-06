@@ -189,7 +189,27 @@ failure between those writes leaves none committed. Idempotent replay creates no
 second batch, number, movement, or settlement. Amount and source attribution
 totals reconcile independently; operational quantities are counted once.
 
-For largest-remainder ties, split one cent over two equal one-cent components:
-the lower stable line/component id receives one, the other zero; the final cent
-receives the opposite allocation from the remaining balances. Repeated partial
-settlements sum to the original two cents on every interface.
+For settlement largest-remainder ties, order by durable settlement-line ordinal,
+then net before tax, then binary tax-item id. Physical revision/component ids and
+later display reordering do not change this order. First-settlement ordinals follow
+binary stable-line-id order; later new occurrences follow submitted order above
+the historical maximum. Retired ordinals are never reused.
+
+Independent tie witnesses, with all amounts in integer cents:
+
+- A retained line has ordinal 1 and stable id Z; a later line has ordinal 2 and
+  stable id A. Both have remaining net 1. A payment of 1 allocates 1 to Z and 0 to
+  A, despite A sorting first as an id. The final payment of 1 allocates 0 to Z and
+  1 to A. Reordering their display or replacing physical revision rows changes
+  neither result.
+- One line has remaining net 1 and tax 1. A payment of 1 allocates net 1, tax 0;
+  the final payment allocates net 0, tax 1.
+- One line has net 100 and tax components A=8, Z=8. A payment of 8 has denominator
+  116: quotients 6, 0, 0 and remainders 104, 64, 64. The two residual cents go to
+  net then tax A, giving net 7, tax A 1, tax Z 0. Reversing physical tax-component
+  id ordering does not change the result. Final settlement consumes net 93,
+  tax A 7, tax Z 8, totaling 108.
+
+Preview, commit, corrections and every interface use these same logical keys.
+Repeated partial settlements consume exactly the original component amounts.
+Fixtures 2 and 3 retain their numerical oracles.
