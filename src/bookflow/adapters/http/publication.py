@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from bookflow.core.errors import BookflowError
+from bookflow.adapters.mcp.catalog import BRIDGE_VERSION
 
 _guards = ContextVar("bookflow_publication_guards", default=None)
 
@@ -73,7 +74,7 @@ class PublicationMiddleware:
                     document = (exc.to_dict() if getattr(exc, "publication_auth_only", False) else
                                 BookflowError(exc.code, details={"stage": "publication", "outcome": "unknown"}).to_dict())
                     response = JSONResponse(document, status_code=401 if exc.code == "E_UNAUTHENTICATED" else 403,
-                        headers={"Cache-Control": "no-store", **({"X-Bookflow-MCP-Version": "1"} if scope["path"].startswith("/adapters/mcp") else {})})
+                        headers={"Cache-Control": "no-store", **({"X-Bookflow-MCP-Version": str(BRIDGE_VERSION)} if scope["path"].startswith("/adapters/mcp") else {})})
                     await response(scope, receive, send)
                     return
             await send(message)

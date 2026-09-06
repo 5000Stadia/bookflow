@@ -8,7 +8,8 @@ import pytest
 from tests.test_row3_host import hosted, live
 
 
-def test_real_stdio_discovery_help_and_attributed_host_write(hosted, live, tmp_path):
+@pytest.mark.parametrize("protocol", ["legacy", "modern"])
+def test_real_stdio_discovery_help_and_attributed_host_write(hosted, live, tmp_path, protocol):
     from mcp import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
 
@@ -20,7 +21,10 @@ def test_real_stdio_discovery_help_and_attributed_host_write(hosted, live, tmp_p
                  "BOOKFLOW_DATA_ROOT": str(tmp_path / "never-created")}, cwd=str(tmp_path))
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
-                await session.initialize()
+                await (session.initialize() if protocol == "legacy" else session.discover())
+                tools = await session.list_tools()
+                help_tool = next(tool for tool in tools.tools if tool.name == "bookflow_help")
+                assert help_tool.input_schema["properties"]["view"]["enum"] == ["usage", "input_schema", "output_schema", "full"]
 
                 async def call(name, args):
                     result = await session.call_tool(name, args)
@@ -32,6 +36,10 @@ def test_real_stdio_discovery_help_and_attributed_host_write(hosted, live, tmp_p
                 help_ = await call("bookflow_help", {"command": "account list"})
                 assert help_["input_schema"]["type"] == "object"
                 assert "account list" in help_["documentation"]
+                assert help_["view"] == "usage" and "output_schema" not in help_
+                full = await call("bookflow_help", {"command": "account list", "view": "full"})
+                assert full["output_schema"]["type"] == "object"
+                assert full["input_schema"] == help_["input_schema"]
                 accounts = await call("bookflow_run", {"command": "account list", "input": {}, "dry_run": False})
                 assert accounts["count"] == len(accounts["items"]) > 0
                 changed = await call("bookflow_run", {"command": "company update", "input": {"fax": "MCP-witness"}, "reason": "Test installed MCP handoff"})
@@ -44,6 +52,29 @@ def test_real_stdio_discovery_help_and_attributed_host_write(hosted, live, tmp_p
     event = next(item for item in events if item["client_name"] == "mcp-installed-witness")
     assert event["interface"] == "mcp"
     assert event["session_id"] != hosted.token
+
+
+@pytest.mark.parametrize("host_bridge", [1, 3])
+def test_installed_launcher_rejects_mixed_bridge_before_business_submission(hosted, live, tmp_path, monkeypatch, host_bridge):
+    from mcp import ClientSession
+    from mcp.client.stdio import StdioServerParameters, stdio_client
+    from bookflow.adapters.mcp import bridge
+    monkeypatch.setattr(bridge, "BRIDGE_VERSION", host_bridge)
+    before = hosted.info()["version"]
+
+    async def witness():
+        params = StdioServerParameters(command=os.environ.get("BOOKFLOW_MCP_TEST_BINARY", str(Path(sys.executable).with_name("bookflow"))),
+            args=["mcp", "--url", live], env={"BOOKFLOW_TOKEN": hosted.secret,
+            "BOOKFLOW_COMPANY": hosted.company_id, "BOOKFLOW_DATA_ROOT": str(tmp_path / "absent")}, cwd=str(tmp_path))
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                reply = await session.call_tool("bookflow_run", {"command": "company update", "input": {"fax": "must not write"}})
+                assert reply.is_error
+                assert reply.structured_content["code"] == "E_VERSION_MISMATCH"
+                assert reply.structured_content["details"]["outcome"] == "not_submitted"
+    anyio.run(witness)
+    assert hosted.info()["version"] == before
 
 
 @pytest.mark.timeout(120)

@@ -134,6 +134,37 @@ def command_document(cmd: Any) -> str:
     return _command_page(cmd.noun, [cmd]).decode("utf-8")
 
 
+def _purpose(cmd: Any) -> list[str]:
+    return [cmd.description,
+        *(["", "Posting an invoice records it in the books. It does not send or email the invoice to the customer."] if cmd.name == "invoice post" else []),
+        *(["", "A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record."] if cmd.is_write else [])]
+
+
+def command_usage(cmd: Any) -> str:
+    """Concise registry reference, alongside the complete machine input schema.
+
+    Render directly from the same metadata as the complete command page. Output
+    examples/tables and transport-specific repetitions belong to that full page.
+    """
+    lines = [f"# `{cmd.name}`", "", *_purpose(cmd), "",
+             "Supply `input: {}` when the command has no business input fields.",
+             "The input_schema contains the complete input constraints and local definitions.", "",
+             "Existing CLI invocation example:", f"`{EXAMPLES[cmd.name].invocation}`"]
+    if cmd.accepts_idempotency_key:
+        lines.extend(["", "Use the same idempotency_key when deliberately retrying the same business create. Recover an existing transport intent by its reference without submitting new work."])
+    if cmd.clearable:
+        lines.extend(["", "Set a clearable nullable input field to null to clear it; omission leaves it unchanged."])
+    if cmd.transfer:
+        lines.extend(["", f"This command has a registered external {cmd.transfer.direction} binary body, separate from its JSON metadata.",
+            "Use transport.input_file or transport.output_file with a path in the launcher's permitted directories. The adapter reads, hashes, streams and verifies the bytes; do not encode bytes in business input.",
+            "Output destinations must not exist; successful verification publishes the complete file atomically. A dry run does not save an input attachment."])
+    if cmd.local_only or cmd.standalone:
+        lines.extend(["", "This command is local-only and cannot execute through the hosted MCP adapter."])
+    if cmd.streams:
+        lines.extend(["", "MCP runs a finite poll. Use the returned cursor for continuation; an indefinite follow stream is not a tool result."])
+    return "\n".join(lines) + "\n"
+
+
 def _command_page(noun: str, commands: list[Any]) -> bytes:
     lines = [NOTICE.rstrip(), "", f"# `{noun}` commands", ""]
     for cmd in commands:
@@ -141,9 +172,7 @@ def _command_page(noun: str, commands: list[Any]) -> bytes:
         lines.extend([
             f"## `{cmd.name}`",
             "",
-            cmd.description,
-            *(["", "Posting an invoice records it in the books. It does not send or email the invoice to the customer."] if cmd.name == "invoice post" else []),
-            *(["", "A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record."] if cmd.is_write else []),
+            *_purpose(cmd),
             "",
             "| Contract | Value |",
             "|---|---|",

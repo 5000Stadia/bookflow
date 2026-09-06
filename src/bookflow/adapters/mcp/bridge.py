@@ -52,7 +52,7 @@ def mount_mcp(app, host, credential, make_context, executor):
                 await run_in_threadpool(authenticate, request)
                 return response(result)
             if isinstance(arguments, HelpArguments):
-                result = await run_in_threadpool(command_help, arguments.command)
+                result = await run_in_threadpool(command_help, arguments.command, arguments.view)
                 await run_in_threadpool(authenticate, request)
                 return response(result)
             if isinstance(arguments, RunArguments):

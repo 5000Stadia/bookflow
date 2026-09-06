@@ -8,7 +8,8 @@ from functools import lru_cache
 from bookflow.core import registry
 from bookflow.core.errors import BookflowError, INFRASTRUCTURE_CODES
 
-BRIDGE_VERSION = 1
+BRIDGE_VERSION = 2
+HELP_VIEWS = ["usage", "input_schema", "output_schema", "full"]
 
 
 def descriptor(cmd):
@@ -36,19 +37,32 @@ def _commands():
     return registry.all_commands(include_standalone=True)
 
 
-def command_help(name):
+def command_help(name, view="usage"):
     _commands()
     cmd = registry.get(name)
     if cmd is None:
         raise BookflowError("E_USAGE", details={"command": name})
-    from bookflow.documentation.generate import command_document
-    return {
-        **descriptor(cmd), "documentation": command_document(cmd),
-        "input_schema": cmd.input_model.model_json_schema(),
-        "output_schema": cmd.output_model.model_json_schema(),
+    if view not in HELP_VIEWS:
+        raise BookflowError("E_VALIDATION", details={"field": "view", "allowed": HELP_VIEWS})
+    from bookflow.documentation.generate import command_document, command_usage
+    from .envelopes import RunArguments
+    row = descriptor(cmd)
+    context_fields = RunArguments.model_json_schema()["properties"]
+    result = {
+        **row,
+        "context_schema": {"type": "object", "additionalProperties": False,
+            "properties": {key: context_fields[key] for key in row["context"]}},
+        "context_usage": "Omit optional context or use null; dry_run omitted/false is inactive and null is invalid. Active context applies only where listed. Use a short audit reason naming the trigger (at most 140 characters), not a narrative. Agent writes require reason or an active directive. Company selection: explicit non-null company, then calling-machine environment, then calling-machine configuration; null behaves as omitted.",
         "error_codes": sorted(set(cmd.error_codes) | set(INFRASTRUCTURE_CODES)),
-        "bridge_version": BRIDGE_VERSION,
+        "bridge_version": BRIDGE_VERSION, "view": view, "available_views": list(HELP_VIEWS),
     }
+    if view in {"usage", "input_schema", "full"}:
+        result["input_schema"] = cmd.input_model.model_json_schema()
+    if view in {"output_schema", "full"}:
+        result["output_schema"] = cmd.output_model.model_json_schema()
+    if view in {"usage", "full"}:
+        result["documentation"] = command_usage(cmd) if view == "usage" else command_document(cmd)
+    return result
 
 
 @lru_cache(maxsize=8)

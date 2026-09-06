@@ -22,6 +22,7 @@ class ListArguments(Envelope):
 
 class HelpArguments(Envelope):
     command: str = Field(min_length=1)
+    view: Literal["usage", "input_schema", "output_schema", "full"] = "usage"
 
 
 class Files(Envelope):
@@ -97,7 +98,7 @@ class RecoveryArguments(Envelope):
 RUN = TypeAdapter(RunArguments | RecoveryArguments)
 TOOLS = {
     "bookflow_list_commands": (ListArguments, "Discover registered Bookflow commands and their scope."),
-    "bookflow_help": (HelpArguments, "Read a command's documentation, typed inputs, outputs and errors."),
+    "bookflow_help": (HelpArguments, "Read concise usage and complete input constraints by default. Select view=output_schema for complete output fields, input_schema for inputs, or full for both schemas and the entire command reference. All views include context and errors."),
     "bookflow_run": (RUN, "Run a discovered Bookflow command. Files use transport.input_file/output_file on the calling machine; the adapter handles all bytes. Recover an existing intent by its reference without resubmitting it."),
 }
 

@@ -443,13 +443,14 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
         return {"ok": True}
 
     from bookflow.adapters.mcp.bridge import mount_mcp
+    from bookflow.adapters.mcp.catalog import BRIDGE_VERSION
 
     async def mcp_execute(request, cmd, arguments, ctx, cred, selection):
         if cmd is None or any(arguments.transport.model_dump().values()):
             raise BookflowError("E_USAGE", message="This transport operation is not ready in this implementation checkpoint.")
         result = await run_in_threadpool(run_command, cmd, arguments.input, ctx, cred,
                                         selection["value"], selection["source"], arguments.dry_run)
-        return JSONResponse(result, headers={"X-Bookflow-MCP-Version": "1", "Cache-Control": "no-store"})
+        return JSONResponse(result, headers={"X-Bookflow-MCP-Version": str(BRIDGE_VERSION), "Cache-Control": "no-store"})
 
     mount_mcp(app, host, credential, make_context, mcp_execute)
     from bookflow.adapters.workbench.pages import mount_workbench

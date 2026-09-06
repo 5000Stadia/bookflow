@@ -11,6 +11,7 @@ from bookflow.core.errors import BookflowError
 from bookflow.core.ids import new_id
 
 from .envelopes import TOOLS, validate, tool_schema
+from .catalog import BRIDGE_VERSION
 
 
 def host_origin(value):
@@ -58,8 +59,8 @@ async def serve(inp, origin, secret):
             try:
                 arguments = validate(params.name, params.arguments or {})
                 preflight = await client.get("/adapters/mcp")
-                if preflight.status_code == 404 or preflight.headers.get("x-bookflow-mcp-version") != "1":
-                    raise BookflowError("E_VERSION_MISMATCH", details={"supported_bridge_versions": [1], "received_bridge_version": None, "stage": "preflight", "outcome": "not_submitted"})
+                if preflight.status_code == 404 or preflight.headers.get("x-bookflow-mcp-version") != str(BRIDGE_VERSION):
+                    raise BookflowError("E_VERSION_MISMATCH", details={"supported_bridge_versions": [BRIDGE_VERSION], "received_bridge_version": preflight.headers.get("x-bookflow-mcp-version"), "stage": "preflight", "outcome": "not_submitted"})
                 if preflight.status_code >= 400:
                     raise BookflowError("E_UNAUTHENTICATED")
                 payload = {"arguments": arguments.model_dump(exclude_unset=True)}
@@ -75,7 +76,7 @@ async def serve(inp, origin, secret):
                 submitted = params.name == "bookflow_run"
                 response = await client.post("/adapters/mcp/" + params.name,
                                              json=payload)
-                if response.headers.get("x-bookflow-mcp-version") != "1":
+                if response.headers.get("x-bookflow-mcp-version") != str(BRIDGE_VERSION):
                     raise BookflowError("E_IO", details={"operation": "mcp_result", "reason": "incompatible_bridge", "stage": "post_submission", "outcome": "unknown"})
                 try:
                     document = response.json()
