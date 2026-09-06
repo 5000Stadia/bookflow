@@ -739,3 +739,15 @@ unresolved requests are canceled. Ordinary input/change events invalidate sales
 previews. Register Record/Recalculate normalize before constructing payloads;
 retained retry bytes are not reevaluated. Posted money and command schemas retain
 their existing contracts.
+
+## Existing-master browsing projections
+
+`company/query_models.py` defines strict custom criteria, selected-row descriptors and bounded metadata inputs. `query_catalog.py` expands the authoritative list declarations into public show-field/alias catalogs, derives filter controls and supplies paged discovery. Each master has `query options`; custom choices use its `kind=choices` and stable definition selector. Dynamic definition and choice metadata never embeds an unbounded option collection. Company dispatch and the existing audit-watermark/permission cursor remain authoritative.
+
+`query_projection.py` adds only selected SQL expressions and typed custom predicates to the existing providers. Decimal custom values compare through an exact signed-64-bit nano-unit function, never SQLite REAL. Choice matching uses the active normalized choice identity within its definition; a retired option cannot match a later option reusing its label. Missing current values remain null. Definition deactivation preserves searchable/filterable values. Text equality is literal and case-sensitive; containment follows the existing normalized Unicode search.
+
+Explicit `columns` returns stable id/version/label/active plus a `values` mapping, ordered typed `columns` descriptors and `matching_total`. Legacy omitted-column responses retain their exact four top-level fields and page-size `count`; reference projections cannot select columns. Query fingerprints omit absent new inputs for continuation compatibility, and include any supplied projection/filter criteria. New projections use effective customer inheritance and existing protected-field disclosure rules.
+
+Owned collection columns return a count and shared `query children` coordinates. That read returns at most 200 ordered public child rows, an exact total and a snapshot continuation. Existing full `show`/`list` contracts remain unchanged. Workbench detail tables page through these collection reads. `adapters/workbench/browsing.py` translates URL controls and formats the shared results; `browsing.js` provides named, keyboard/touch column and filter controls. Decimal values remain strings. Browser state is URL-only and does not write settings or accounting state. Legacy filter URLs remain accepted.
+
+Selected custom-filter queries materialize matching IDs once per statement for both the exact total and bounded page. A process-local 128-entry LRU caches compiled SQLite statement structures across equivalent engine instances; it stores no rows, authorization decisions, sessions or connections, and every execution binds current parameters. Money filter controls translate exact human amounts into the existing minor-unit filter contract using BigInt, without rounding.

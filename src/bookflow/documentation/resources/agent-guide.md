@@ -430,3 +430,19 @@ source consumption.
 Source conversion cannot exceed100% of a quoted line. If fragmentation produces
 `E_VALUE_RANGE`, use its `recommended_net_amount` on that source line and continue
 with remaining work; never silently drop spans to make a request fit.
+
+## Choose master-list columns and filters
+
+Use `<noun> query options` with `kind` of `columns`, `filters` or `sorts`. Discovery returns a bounded page, complete `default_columns`, and `next_cursor`; follow every needed page. To find a custom choice, use the same command with `kind: "choices"` and its stable `definition` ID. Choice results use stable option IDs as keys, with current labels and activity. `query` searches labels; `keys` retrieves an explicitly selected bounded set. Inactive definitions and choices remain discoverable by default. Metadata reads use current company authority and never change records.
+
+For example, `bookflow customer query --columns '["full_name","email"]' --company "Demo Plumbing Co" --json` returns stable row identity plus `values`, ordered `columns` descriptors, page-size `count`, and a separate `matching_total`. Omitting `columns` retains the previous summary/reference output shape. Reference projections do not accept selected columns. Public catalogs expand declared aliases and stored fields; they do not expose arbitrary database columns. Monetary values contain exact decimal strings and currency; do not convert them through floating point.
+
+Pass typed custom criteria through `custom_filters`, for example `[{"definition":"<definition-id>","kind":"bool","operator":"eq","value":false}]`. Text supports `eq`, `ne`, `contains`; number/date also support `lt`, `lte`, `gt`, `gte`; bool/choice support `eq`, `ne`. Numbers are canonical decimal strings with at most nine fractional digits and signed-64-bit nano-unit range. Dates are canonical ISO dates. Choice values are stable choice IDs belonging to the definition, not labels. Text equality is literal and case-sensitive; containment uses normalized Unicode search. A retired choice never acquires matches from a later option reusing its label. Existing in-use choice rename/retirement rules remain unchanged.
+
+For absence, use `{"definition":"<definition-id>","kind":"presence","operator":"is_missing"}` or `is_present`, with no value. Every criterion combines by AND with ordinary filters. `ne` excludes missing values. Empty text, false and zero are present values. Cleared values are absent; values of inactive definitions remain readable, searchable, selectable and filterable without being reactivated.
+
+A collection-valued selected column returns an exact count and `query children` coordinates (`record`, `column`). Use that command's continuation to read all public child rows, at most 200 per page; never interpret a count as a complete embedded collection. Full legacy `show` and `list` retain their existing contracts. The browser presents readable collection tables and continuation links.
+
+Keep page `count` distinct from `matching_total`. A cursor is bound to the current company, authority, criteria and selected column order. On `E_QUERY_STALE`, discard accumulated pages, remove the cursor and repeat the same controls. A changed query/projection cannot reuse a continuation. Browser sorting/filtering/column controls persist in the URL and do not write preferences or financial data. Named balance filters accept amounts in the displayed currency; existing `field=value` balance filters retain their integer-minor-unit wire meaning.
+
+Python callers may use `client.run("customer query options", {"kind":"columns"}, company=...)` and `client.run("customer query", {"columns":["full_name","email"]}, company=...)`; HTTP and MCP use the same registered command names and JSON input. Registry discovery is not itself evidence of a completed actual-MCP usability trial.

@@ -777,6 +777,11 @@ Query a bounded page of accounts.
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 | `projection` | `--projection` | literal["summary", "reference"] | no | no | "summary" | — |
+| `columns` | `--columns` | array[string] \| null | no | yes | null | Ordered public column keys from this noun's query options. Omit for the legacy response; reference projections reject this option. |
+| `custom_filters[].definition` | inside `--custom-filters` JSON array | string | yes | no | — | — |
+| `custom_filters[].kind` | inside `--custom-filters` JSON array | literal["text"] \| literal["number"] \| literal["date"] \| literal["bool"] \| literal["choice"] \| literal["presence"] | yes | no | — | — |
+| `custom_filters[].operator` | inside `--custom-filters` JSON array | literal["eq", "ne", "contains"] \| literal["eq", "ne", "lt", "lte", "gt", "gte"] \| literal["eq", "ne"] \| literal["is_missing", "is_present"] | yes | no | — | — |
+| `custom_filters[].value` | inside `--custom-filters` JSON array | string \| boolean | no | no | — | Present in TextCriterion, NumberCriterion, DateCriterion, BoolCriterion, ChoiceCriterion. |
 
 ### Command and context options
 
@@ -807,7 +812,24 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `projection` | literal["summary", "reference"] | yes | no | — | — |
 | `count` | integer | yes | no | — | Number of items returned on this page (not total matches). |
 | `next_cursor` | string \| null | yes | yes | — | — |
-| `items` | array[object \| object] | yes | no | — | — |
+| `columns` | array[object] \| null | no | yes | null | — |
+| `columns[].key` | string | yes | no | — | — |
+| `columns[].label` | string | yes | no | — | — |
+| `columns[].kind` | literal["text", "number", "integer", "date", "bool", "choice", "money", "reference", "object", "collection", "scalar"] | yes | no | — | — |
+| `columns[].nullable` | boolean | no | no | false | — |
+| `columns[].read_only` | boolean | no | no | true | — |
+| `columns[].reference_noun` | string \| null | no | yes | null | — |
+| `columns[].operators` | array[string] | no | no | [] | — |
+| `columns[].sortable` | boolean | no | no | false | — |
+| `columns[].sort_key` | string \| null | no | yes | null | — |
+| `columns[].definition` | string \| null | no | yes | null | — |
+| `columns[].active` | boolean | no | no | true | — |
+| `columns[].owner_target` | string \| null | no | yes | null | — |
+| `columns[].choices` | array[string] | no | no | [] | Finite built-in enum values; custom choices use paged discovery. |
+| `columns[].currency` | string \| null | no | yes | null | Currency for a monetary filter value. |
+| `columns[].scale` | integer \| null | no | yes | null | Decimal places for monetary filter input; legacy filter strings use integer minor units. |
+| `matching_total` | integer \| null | no | yes | null | Total matching records, supplied only for explicitly selected columns. |
+| `items` | array[object \| object \| object] | yes | no | — | — |
 | `items[].id` | string | yes | no | — | — |
 | `items[].version` | integer | yes | no | — | — |
 | `items[].label` | string | yes | no | — | — |
@@ -820,6 +842,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].balance.currency` | string | no | no | — | Present in AccountSummary. |
 | `items[].balance.minor_units` | integer | no | no | — | Present in AccountSummary. |
 | `items[].currency` | string | no | no | — | Present in AccountSummary. |
+| `items[].values` | object[string, JsonValue] | no | no | — | Present in SelectedItem. |
 
 Example JSON output:
 

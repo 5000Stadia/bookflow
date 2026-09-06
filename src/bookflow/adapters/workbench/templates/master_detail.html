@@ -1,0 +1,6 @@
+{% from 'browse_value.html' import value %}
+<link rel="stylesheet" href="{{ static_urls['browsing.css'] }}">
+<div class="master-sections">{% for group in master_detail.groups %}<section aria-label="{{ group.title }}"><h2>{{ group.title }}</h2>{% for label, item in group.fields %}<div class="field"><b>{{ label }}</b><div>{{ value(item, company_id, noun, record_id) }}</div></div>{% endfor %}</section>{% endfor %}</div>
+{% for collection in master_detail.collections %}<section class="collection-details" id="{{ collection.key }}"><h2>{{ collection.label }}</h2><p>{{ collection.page.matching_total }} entries; {{ collection.page.count }} on this page.</p>
+{% if collection.page['items'] %}<div class="table-wrap"><table><thead><tr>{% for key in collection.fields %}<th>{{ key.replace('_',' ').capitalize() }}</th>{% endfor %}<th>Identity</th></tr></thead><tbody>{% for row in collection.page['items'] %}<tr>{% for key in collection.fields %}<td>{{ value(row.get(key), company_id, noun, record_id) }}</td>{% endfor %}<td><details><summary>Record ID</summary>{{ row.id }}</details></td></tr>{% endfor %}</tbody></table></div>{% else %}<p>No entries.</p>{% endif %}
+{% if collection.next_url %}<a href="{{ collection.next_url }}">More {{ collection.label | lower }}</a>{% endif %}</section>{% endfor %}
