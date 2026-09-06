@@ -109,6 +109,7 @@
 {% set cur = form_value(l, originals, attempted) %}
 {% set form_name = l.form_key or ("f:" ~ l.path) %}
 <div class="row form-field{% if l.runtime %} runtime-field{% endif %}" id="field-{{ index }}"
+ {% if l.visibility_cases is defined %}data-visibility-cases='{{ json.dumps(l.visibility_cases) | e }}'{% if not l.visible %} hidden{% endif %}{% endif %}
  {% if l.visible_when %}data-when-field="{{ l.visible_when.field }}" data-when-values='{{ json.dumps(l.visible_when["values"]) | e }}'{% if not l.visible %} hidden{% endif %}{% endif %}>
 <label for="control-{{ index }}">{{ l.label or l.path }}{% if l.required %} *{% endif %}
 <small>{{ l.description }}{% if l.choices and not l.runtime %} One of: {{ l.choices | join(", ") }}.{% endif %}{% if l.kind == "json" %} Enter a JSON {{ l.json_shape }}.{% endif %}{% if l.default is not none %} Default: {{ l.default }}.{% endif %}</small></label>

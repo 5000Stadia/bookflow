@@ -153,6 +153,37 @@ def leaves(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
     """Describe each form leaf from the command model alone."""
     out = []
     for name, f in model.model_fields.items():
+        if isinstance(f.discriminator, str):
+            annotation = f.annotation
+            while get_origin(annotation) is Annotated:
+                annotation = get_args(annotation)[0]
+            variants = get_args(annotation)
+            combined = {}
+            for variant in variants:
+                if not (inspect.isclass(variant) and issubclass(variant, BaseModel)):
+                    raise TypeError("Discriminated form branch must be an input model")
+                tag = variant.model_fields[f.discriminator]
+                values = list(get_args(tag.annotation))
+                condition = {"field": prefix + name + "." + f.discriminator, "values": values}
+                for leaf in leaves(variant, prefix + name + "."):
+                    leaf = dict(leaf)
+                    # The discriminator itself must stay visible before a branch
+                    # is selected. Nested discriminators retain outer conditions.
+                    own = [] if leaf['path'] == condition['field'] else [condition]
+                    cases = [own + case for case in leaf.get('visibility_cases', [[]])]
+                    leaf['visibility_cases'] = cases
+                    previous = combined.get(leaf['path'])
+                    if previous is None:
+                        combined[leaf['path']] = leaf
+                    else:
+                        if previous['kind'] != leaf['kind']:
+                            raise TypeError("Incompatible form controls for " + leaf['path'])
+                        previous['visibility_cases'].extend(cases)
+                        if previous.get('choices') is not None:
+                            previous['choices'] = list(dict.fromkeys(previous['choices'] + leaf['choices']))
+                        previous['required'] = previous['required'] and leaf['required']
+            out.extend(combined.values())
+            continue
         base, nullable = _base(f.annotation)
         if getattr(base, "__pydantic_root_model__", False):
             base, nullable = _base(base.model_fields["root"].annotation)
@@ -285,6 +316,9 @@ def describe_fields(
             leaf["collection"]["values"] = collection_form_value(
                 leaf["annotation"], leaf["path"], originals, attempted
             )
+        if leaf.get('visibility_cases') is not None:
+            leaf['visible'] = any(all(selected_value(condition['field'], originals, attempted) in condition['values']
+                                     for condition in case) for case in leaf['visibility_cases'])
         rule = rules.get(leaf["path"])
         if rule is not None:
             discriminator, values = rule
@@ -550,6 +584,10 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
     headers: dict[str, str] = {}
     for leaf in leaves(cmd.input_model):
         path = leaf["path"]
+        if leaf.get('visibility_cases') is not None and not any(
+            all(form.get('f:' + condition['field'], get_path(originals, condition['field']) if originals else None)
+                in condition['values'] for condition in case) for case in leaf['visibility_cases']):
+            continue
         clear = form.get(f"clear:{path}") == "1"
         value = form.get(f"f:{path}")
         original = get_path(originals, path) if originals is not None else None

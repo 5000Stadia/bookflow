@@ -124,6 +124,12 @@
       }
       previous.replaceWith(control);
     });
+    form.querySelectorAll('[data-visibility-cases]').forEach(row => {
+      const shown = JSON.parse(row.dataset.visibilityCases).some(conditions =>
+        conditions.every(condition => condition.values.includes(named(form, 'f:' + condition.field)?.value)));
+      row.hidden = !shown;
+      row.querySelectorAll('input,select,textarea').forEach(input => { input.disabled = !shown; });
+    });
     form.querySelectorAll('[data-when-field]').forEach(row => {
       const control = named(form, 'f:' + row.dataset.whenField);
       const shown = control && JSON.parse(row.dataset.whenValues).includes(control.value);

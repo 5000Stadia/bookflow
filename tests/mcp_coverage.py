@@ -7,7 +7,35 @@ from bookflow.documentation.examples import _SUPPORTING_CREATE_INPUTS
 from bookflow.documentation.introspection import model_fields
 from bookflow.adapters.workbench import forms
 
-FROZEN_COMMANDS = frozenset("""account activate
+# Reviewed payment base 15cb601 adds these command identities. They remain
+# pending execution scenarios until actual cross-interface witnesses exist.
+PAYMENT_COMMANDS = frozenset("""application history
+application show
+invoice settlement
+payment apply
+payment calculate
+payment history
+payment invoices
+payment operation items
+payment operation show
+payment preview items
+payment query
+payment receive
+payment selection clear
+payment selection create
+payment selection items
+payment selection query
+payment selection show
+payment selection update
+payment settlement
+payment settlement changes
+payment show
+payment suggest
+payment unapply
+payment update
+payment void""".splitlines())
+
+FROZEN_COMMANDS = PAYMENT_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -332,6 +360,11 @@ def workbench_row(cmd, url, page_text):
     typed_witness = 'tests/test_mcp_workbench_typed_default_browser.py::test_generated_boolean_default_is_a_boolean_on_preview_and_save'
     for field in model_fields(cmd.input_model, leaves_only=True):
         leaf = next((row for row in described if field.path == row['path'] or field.path.startswith(row['path'] + '[]')), None)
+        children = [row for row in described if row['path'].startswith(field.path + '.')]
+        if leaf is None and children:
+            # Introspection reports a model union as one schema leaf; the
+            # renderer supplies each discriminated branch as real controls.
+            leaf = {'kind': 'discriminated_model', 'path': field.path}
         assert leaf is not None, (cmd.name, field.path)
         control = leaf['kind']
         actual = controls.get('f:' + field.path, [])
@@ -349,6 +382,8 @@ def workbench_row(cmd, url, page_text):
         paths.append({'path': field.path, 'control_family': control, 'schema_type': field.type,
             'required': field.required, 'nullable': field.nullable,
             'visible_when': leaf.get('visible_when'), 'choices': leaf.get('choices'),
+            'rendered_children': [{'path': row['path'], 'visibility_cases': row.get('visibility_cases'),
+                                   'kind': row['kind'], 'choices': row.get('choices')} for row in children],
             'actual_tags': [{'tag': node['tag'], 'type': node.get('type')} for node in actual],
             'browser_witness': witness,
             'browser_acceptance': 'representative_typed_default_case' if witness else 'pending_complete_family_mapping'})
