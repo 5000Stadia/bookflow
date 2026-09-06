@@ -19,3 +19,17 @@ def test_local_workbench_rows_link_actual_lifecycles_without_claiming_browser_ro
     assert {row['command'] for row in rows} == set(LOCAL_VALID_WITNESSES)
     assert all(row['url'] is None and row['local_execution_witnesses'] and row['hosted_rejection_witness'] for row in rows)
     assert all(row['local_lifecycle_coverage'] == 'local_lifecycle_scenario' for row in rows)
+
+
+def test_workbench_family_references_resolve_to_real_tests():
+    import ast
+    from pathlib import Path
+    from tests.mcp_coverage import workbench_family_policies
+    policies = workbench_family_policies()
+    assert len(policies) == 14
+    for family, (witness, limits) in policies.items():
+        assert witness and limits, family
+        filename, name = witness.split('::')
+        module = ast.parse(Path(filename).read_text())
+        assert any(isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
+                   for node in module.body), (family, witness)

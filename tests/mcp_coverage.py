@@ -403,7 +403,7 @@ def workbench_row(cmd, url, page_text):
     described = forms.describe_fields(cmd.noun, cmd.verb, cmd.input_model, None, None)
     controls = Controls(page_text).named
     paths = []
-    typed_witness = 'tests/test_mcp_workbench_typed_default_browser.py::test_generated_boolean_default_is_a_boolean_on_preview_and_save'
+    policies = workbench_family_policies()
     for field in model_fields(cmd.input_model, leaves_only=True):
         leaf = next((row for row in described if field.path == row['path'] or field.path.startswith(row['path'] + '[]')), None)
         children = [row for row in described if row['path'].startswith(field.path + '.')]
@@ -424,7 +424,7 @@ def workbench_row(cmd, url, page_text):
             control = 'statement_continuation'
         elif leaf.get('definition_default'):
             control = 'typed_definition_default'
-        witness = typed_witness if cmd.name in {'custom-field create', 'custom-field update'} and field.path in {'default', 'scopes', 'name'} else None
+        witness, limits = policies[control]
         paths.append({'path': field.path, 'control_family': control, 'schema_type': field.type,
             'required': field.required, 'nullable': field.nullable,
             'visible_when': leaf.get('visible_when'), 'choices': leaf.get('choices'),
@@ -432,7 +432,8 @@ def workbench_row(cmd, url, page_text):
                                    'kind': row['kind'], 'choices': row.get('choices')} for row in children],
             'actual_tags': [{'tag': node['tag'], 'type': node.get('type')} for node in actual],
             'browser_witness': witness,
-            'browser_acceptance': 'representative_typed_default_case' if witness else 'pending_complete_family_mapping'})
+            'browser_acceptance': 'representative_family_mapped_not_individual_path_acceptance',
+            'representative_limits': limits})
     return {'command': cmd.name, 'url': url, 'input_paths': paths,
             'schema_variants': schema_variants(cmd.input_model.model_json_schema()),
             'form_witness': 'tests/test_row3_host.py::test_every_routed_command_has_a_form_with_one_control_per_input_leaf',
@@ -441,7 +442,12 @@ def workbench_row(cmd, url, page_text):
             'output_policy_source': 'src/bookflow/adapters/workbench/templates/form.html',
             'error_policy_source': 'src/bookflow/adapters/workbench/pages.py:submit and error.html',
             'success_policy_source': 'src/bookflow/adapters/workbench/pages.py:_success_target',
-            'output_and_success_interaction': 'pending_complete_family_mapping',
+            'output_and_success_interaction': {
+                'scope': 'representative shared renderer behavior; not every command success target',
+                'preview_save_error': 'tests/test_mcp_workbench_control_browser.py::test_generated_boolean_false_omission_and_null_encoding',
+                'secret_output': 'tests/test_mcp_workbench_control_browser.py::test_generated_password_error_preview_and_save_never_echo_secret',
+                'sale_detail_history': 'tests/test_service_sales_browser.py::test_generated_sale_preview_correct_history_and_void',
+                'file_handoff': 'tests/test_mcp_file_gui_browser.py::test_installed_mcp_file_browser_and_agent_continuation'},
             'specialized_annotation_witness': 'tests/test_row6_workbench.py::test_real_browser_notes_files_conflicts_drafts_and_narrow_keyboard' if cmd.noun in {'note', 'attachment', 'activity'} else None}
 
 
@@ -457,31 +463,36 @@ def local_workbench_boundaries():
             for cmd in registry.all_commands(include_standalone=True) if cmd.local_only or cmd.standalone]
 
 
-def workbench_family_map(rows):
-    """Group every rendered path, retaining explicit representative-test limits.
-
-    A linked test is a witness location, not a claim that every path or every
-    variant has been exercised in a browser. Run evidence is recorded separately.
-    """
+def workbench_family_policies():
+    """Representative witnesses, with the semantics each actually exercises."""
     typed = 'tests/test_mcp_workbench_typed_default_browser.py::test_generated_boolean_default_is_a_boolean_on_preview_and_save'
     payment = 'tests/test_mcp_payment_form_browser.py::test_saved_selection_control_previews_real_receipt'
     sale = 'tests/test_service_sales_browser.py::test_generated_sale_preview_correct_history_and_void'
-    policies = {
+    return {
         'text': (typed, 'custom-field name; ordinary Unicode and error preservation remain per-command checks'),
         'number': (payment, 'saved-selection expected_version; integer and decimal models keep their own constraints'),
         'choice': (typed, 'definition kind and scopes choices'),
         'reference_combobox': (sale, 'customer, account and sale-line item lookup stores exact IDs'),
-        'bool': (None, 'explicit generated boolean/nullable/omitted browser witness still required'),
+        'bool': ('tests/test_mcp_workbench_control_browser.py::test_generated_boolean_false_omission_and_null_encoding', 'actual false, omitted value, rejected nonnullable clear, nullable fax clear; URL encoding, preview and persistence'),
         'collection': (typed, 'primitive scopes collection; structured sale lines have separate sale witness'),
         'typed_definition_default': (typed, 'false/true definition default preview and save'),
         'runtime_custom_fields': ('tests/test_row8_custom_field_browser.py::test_generated_preview_error_retains_attempts_after_inventory_changes', 'generated custom-field values and rejected stale inventory retain attempted values'),
         'billing_selection': ('tests/test_work_billing_browser.py::test_generic_billing_card_selects_source_before_preview', 'source selection and billing preview; selection variants remain separately covered'),
         'discriminated_model': (payment, 'saved-selection branch; all inactive and nested branches require their individual witnesses'),
-        'json': (None, 'payment custom-field object editor requires actual browser encoding witness'),
+        'json': ('tests/test_mcp_payment_form_browser.py::test_generated_payment_json_object_error_preview_and_saved_false', 'generated payment object textarea: malformed JSON retained, false encoded and saved with fingerprint; dedicated payment workspace requires integrated retest'),
         'statement_continuation': ('tests/test_financial_statements_browser.py::test_statements_from_navigation_paging_and_current_ledger', 'statement paging and current-books drill-down'),
-        'secret': (None, 'owned password form requires actual browser secret-output policy witness'),
+        'secret': ('tests/test_mcp_workbench_control_browser.py::test_generated_password_error_preview_and_save_never_echo_secret', 'owned password form error and preview never echo secret, save changes verified hash; other secret commands retain core permissions'),
         'local_invocation': ('tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute', 'no workbench route; execution_map links actual per-command local lifecycle witnesses separately from installed MCP/HTTP rejection'),
     }
+
+
+def workbench_family_map(rows):
+    """Map every rendered path to a representative, not individual-path acceptance.
+
+    Actual run evidence is separate. Payment workspace integration and fresh
+    blind-agent acceptance are not implied by this shared-control inventory.
+    """
+    policies = workbench_family_policies()
     grouped = {name: {'family': name, 'paths': [], 'representative_witness': witness,
                       'limits': limits, 'status': 'representative_test_mapped' if witness else 'pending_browser_or_local_witness'}
                for name, (witness, limits) in policies.items()}

@@ -88,6 +88,19 @@ def test_real_browser_notes_files_conflicts_drafts_and_narrow_keyboard(browser_s
         for i in range(21):
             _api(browser, site, 'note.add', {**target, 'body': f'Prior note {i}'})
         url = f"{site.base_url}/c/{site.company_id}/customer/{customer['id']}/update"
+        # Notes and activity are independent requests. Hold only the first real
+        # activity response to make the old notes-only readiness race observable.
+        browser.call('Page.addScriptToEvaluateOnNewDocument', {'source': """
+            (() => {const original = window.fetch; let first = true;
+              window.fetch = async function(url, ...args) {
+                const response = await original.call(this, url, ...args);
+                if (first && String(url).endsWith('/commands/activity')) {
+                  first = false;
+                  await new Promise(resolve => {window.releaseInitialActivity = resolve;});
+                }
+                return response;
+              };
+            })();"""})
         browser.navigate(url)
         browser.wait_for("document.querySelector('[data-section=notes] [data-more]')?.hidden === false")
         for width in (280, 390, 1280):
@@ -102,6 +115,13 @@ def test_real_browser_notes_files_conflicts_drafts_and_narrow_keyboard(browser_s
         browser.viewport(390, 850)
         browser.evaluate("document.querySelector('[data-section=notes] [data-more]').click()")
         browser.wait_for("document.querySelectorAll('[data-note-id]').length >= 21 && document.querySelector('[data-section=notes] [data-more]').hidden")
+        browser.wait_for("typeof window.releaseInitialActivity === 'function'")
+        assert browser.evaluate("document.querySelector('[data-section=activity] [data-more]').disabled")
+        browser.evaluate("document.querySelector('[data-section=activity] [data-more]').click()")
+        assert browser.evaluate("document.querySelectorAll('[data-section=activity] li').length") == 0
+        browser.evaluate("window.releaseInitialActivity()")
+        browser.wait_for("!document.querySelector('[data-section=activity] [data-more]').disabled && !document.querySelector('[data-section=activity] [data-more]').hidden")
+        assert browser.evaluate("document.querySelectorAll('[data-section=activity] li').length") == 20
         browser.evaluate("document.querySelector('[data-section=activity] [data-more]').click()")
         browser.wait_for("document.querySelectorAll('[data-section=activity] li').length >= 21")
         dates = browser.evaluate("[...document.querySelectorAll('[data-section=activity] time')].map(e => e.dateTime)")
