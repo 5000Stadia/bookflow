@@ -25,6 +25,8 @@ class QueryInput(BaseModel):
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=2048)
     projection: Literal["summary", "reference"] = "summary"
+    ids: list[str] | None = Field(default=None, min_length=1, max_length=64,
+        description='Restrict matches to these stable record IDs, ANDed with all other criteria. Omit for ordinary browsing; useful for bounded reference-label resolution.')
     columns: list[str] | None = Field(default=None, min_length=1, max_length=64,
         description='Ordered public column keys from this noun\'s query options. Omit for the legacy response; reference projections reject this option.')
     custom_filters: list[CustomCriterion] = Field(default_factory=list, max_length=32,
@@ -58,6 +60,8 @@ def _invalid_cursor() -> BookflowError:
 
 def fingerprint(inp: QueryInput) -> str:
     contract = inp.model_dump(exclude={"cursor"})
+    if contract.get('ids') is None:
+        contract.pop('ids', None)
     # Keep existing omitted-input continuations compatible across this additive contract.
     if contract.get("columns") is None:
         contract.pop("columns", None)

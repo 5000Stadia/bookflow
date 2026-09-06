@@ -751,3 +751,10 @@ Explicit `columns` returns stable id/version/label/active plus a `values` mappin
 Owned collection columns return a count and shared `query children` coordinates. That read returns at most 200 ordered public child rows, an exact total and a snapshot continuation. Existing full `show`/`list` contracts remain unchanged. Workbench detail tables page through these collection reads. `adapters/workbench/browsing.py` translates URL controls and formats the shared results; `browsing.js` provides named, keyboard/touch column and filter controls. Decimal values remain strings. Browser state is URL-only and does not write settings or accounting state. Legacy filter URLs remain accepted.
 
 Selected custom-filter queries materialize matching IDs once per statement for both the exact total and bounded page. A process-local 128-entry LRU caches compiled SQLite statement structures across equivalent engine instances; it stores no rows, authorization decisions, sessions or connections, and every execution binds current parameters. Money filter controls translate exact human amounts into the existing minor-unit filter contract using BigInt, without rounding.
+
+Master query `ids` optionally restricts matches to at most 64 stable IDs, intersecting
+all other criteria under the same current authority and snapshot. Omission preserves
+legacy response/fingerprint behavior. Workbench retained reference filters resolve
+labels and inactive state through these bounded reference queries, grouped by target
+noun; they do not fetch full records or change the ID-valued predicate. Selected
+creation/update timestamps use the shared viewer/company timezone formatter.

@@ -19,7 +19,8 @@ def page(request, company_id, noun, definition, verbs, meta, run, render):
     except (ValueError, TypeError) as exc:
         raise BookflowError('E_LIST_FILTER', message='A saved list control is invalid. Clear that control and try again.') from exc
     raw['custom_filters'] = custom
-    raw['filter'] = [value for value in query.getlist('filter') if value.strip()]
+    # Match QueryInput's string normalization before reconstructing saved controls.
+    raw['filter'] = [value.strip() for value in query.getlist('filter') if value.strip()]
     active_only = query.get('metadata_active_only') == '1'
     metadata = run(f'{noun} query options', {'include_inactive': not active_only}, company_id)
     filters = run(f'{noun} query options', {'kind': 'filters', 'include_inactive': not active_only}, company_id)
@@ -38,12 +39,28 @@ def page(request, company_id, noun, definition, verbs, meta, run, render):
     for offset in range(0, len(keys), 64):
         matching = run(f'{noun} query options', {'kind': 'filters', 'keys': keys[offset:offset + 64], 'limit': 200}, company_id)
         descriptions.update({item['key']: item for item in matching['items']})
+    reference_ids = {}
+    for value in raw['filter']:
+        key, stored = value.split('=', 1)
+        descriptor = descriptions.get(filter_key(value))
+        if descriptor and descriptor['kind'] == 'reference' and descriptor['reference_noun']:
+            reference_ids.setdefault(descriptor['reference_noun'], set()).add(stored)
+    references = {}
+    for target, ids in reference_ids.items():
+        ordered = sorted(ids)
+        for offset in range(0, len(ordered), 64):
+            page = run(target + ' query', {'ids': ordered[offset:offset + 64],
+                'projection': 'reference', 'include_inactive': True, 'limit': 64}, company_id)
+            references.update({(target, item['id']): item for item in page['items']})
     for value in raw['filter']:
         key, stored = value.split('=', 1)
         descriptor = descriptions.get(filter_key(value))
         if descriptor is None:
             raise BookflowError('E_LIST_FILTER', message='This saved filter is not available in the list controls.', details={'field': key})
         display = stored
+        if descriptor['kind'] == 'reference' and descriptor['reference_noun']:
+            reference = references.get((descriptor['reference_noun'], stored))
+            display = (reference['label'] + (' (inactive)' if not reference['active'] else '')) if reference else 'Unavailable reference'
         if descriptor['kind'] == 'money':
             from bookflow.core.money import Money
             display = Money(int(stored), descriptor['currency']).to_dict()['amount'] + ' ' + descriptor['currency']

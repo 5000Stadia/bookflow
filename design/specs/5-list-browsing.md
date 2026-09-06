@@ -33,6 +33,10 @@ columns reject E_LIST_FILTER with allowed metadata discovery instructions. Maxim
 64 selected columns; nonempty if supplied. A reference projection retains its exact
 id/version/label/active shape; combining reference projection with custom columns
 rejects explicitly. Existing ordinary filters and query parameters retain behavior.
+Optional `ids` restricts the shared query to 1–64 stable record IDs, intersecting
+all other criteria under ordinary current authority. Omission retains the original
+response and fingerprint. Retained reference filters use these bounded reference
+reads for current labels/activity instead of full shows; predicates keep their IDs.
 
 Concrete built-in column identifiers follow declared show-output names and existing
 aliases. Resolve declaration tokens such as $stored, $custom and grouped accounts

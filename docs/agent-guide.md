@@ -446,3 +446,9 @@ A collection-valued selected column returns an exact count and `query children` 
 Keep page `count` distinct from `matching_total`. A cursor is bound to the current company, authority, criteria and selected column order. On `E_QUERY_STALE`, discard accumulated pages, remove the cursor and repeat the same controls. A changed query/projection cannot reuse a continuation. Browser sorting/filtering/column controls persist in the URL and do not write preferences or financial data. Named balance filters accept amounts in the displayed currency; existing `field=value` balance filters retain their integer-minor-unit wire meaning.
 
 Python callers may use `client.run("customer query options", {"kind":"columns"}, company=...)` and `client.run("customer query", {"columns":["full_name","email"]}, company=...)`; HTTP and MCP use the same registered command names and JSON input. Registry discovery is not itself evidence of a completed actual-MCP usability trial.
+
+For bounded current reference resolution, master `query` accepts optional `ids` (1–64
+stable record IDs). Combine it with `projection: "reference"` and
+`include_inactive: true` to retrieve current labels and activity, without full record
+collections. It intersects every other criterion and remains subject to ordinary
+company authority and cursor checks. Omitted `ids` preserves ordinary browsing.

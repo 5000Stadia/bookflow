@@ -1804,6 +1804,7 @@ Query a bounded page of customers and jobs.
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 | `projection` | `--projection` | literal["summary", "reference"] | no | no | "summary" | — |
+| `ids` | `--ids` | array[string] \| null | no | yes | null | Restrict matches to these stable record IDs, ANDed with all other criteria. Omit for ordinary browsing; useful for bounded reference-label resolution. |
 | `columns` | `--columns` | array[string] \| null | no | yes | null | Ordered public column keys from this noun's query options. Omit for the legacy response; reference projections reject this option. |
 | `custom_filters[].definition` | inside `--custom-filters` JSON array | string | yes | no | — | — |
 | `custom_filters[].kind` | inside `--custom-filters` JSON array | literal["text"] \| literal["number"] \| literal["date"] \| literal["bool"] \| literal["choice"] \| literal["presence"] | yes | no | — | — |

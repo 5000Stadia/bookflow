@@ -405,6 +405,9 @@ def query_page(noun: str, inp: QueryInput, session, *, principal_id: str | None 
     if inp.query and inp.query.strip():
         session.company.raw.create_function("bookflow_query_contains", -1, contains_any, deterministic=True)
     p = _provider(noun, inp, session)
+    if inp.ids is not None:
+        predicate = p.table.c.id.in_(inp.ids)
+        p.visible = predicate if p.visible is None else sa.and_(p.visible, predicate)
     if inp.custom_filters:
         predicate = custom_predicates(noun, inp.custom_filters, session, p.table)
         p.visible = predicate if p.visible is None else sa.and_(p.visible, predicate)

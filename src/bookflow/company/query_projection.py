@@ -122,7 +122,9 @@ def configure(noun, descriptors, p, session):
             if identifier is None and name.startswith('linked_'):
                 link = schema.customer_vendor_links
                 own, other = ('customer_id', 'vendor_id') if noun == 'customer' else ('vendor_id', 'customer_id')
-                identifier = sa.select(link.c[other]).where(link.c[own] == table.c.id, link.c.active.is_(True)).scalar_subquery()
+                identifier = sa.select(link.c[other]).where(
+                    link.c[own] == table.c.id, link.c.active.is_(True)
+                ).correlate(table).scalar_subquery()
             if identifier is not None:
                 p.columns[name] = _reference(descriptor.reference_noun, identifier, session)
                 decoders[name] = lambda value, row: reference_value(value)
@@ -131,6 +133,9 @@ def configure(noun, descriptors, p, session):
             continue
         if name in table.c:
             p.columns[name] = table.c[name]
+            if name in ('created_at', 'updated_at'):
+                from bookflow.core.session import localize
+                decoders[name] = lambda value, row: localize(session, value)
             if noun == 'customer' and name == 'preferred_delivery_method':
                 p.columns[name] = party._customer_effective(name)
             if name == 'tax_id_last4' and not party._can_reveal_tax(session):
