@@ -6,13 +6,15 @@ import json
 import sqlalchemy as sa
 
 from bookflow.company import schema as c
-from bookflow.company.billing_facts import AllocationProof, ExactFraction
-from bookflow.company.work_facts import WorkLineFacts
+from bookflow.company.billing_facts import AllocationProof, TaxAllocationProof, ExactFraction
+from bookflow.company.work_tax_facts import read_line, read_facts, basis_hash
+from bookflow.company import tax_policy
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import format_quantity_micro_units
 
 
-def basis(line, root):
+def basis(line, root, policy=None):
+    if line.schema_version==2:return basis_hash(line,policy)
     values = dict(basis_version=1, root_document_id=root[0], root_line_id=root[1],
         line=line.model_dump(mode='json', exclude={'completed_quantity_microunits', 'billable'}))
     encoded = json.dumps(values, sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False)
@@ -21,14 +23,26 @@ def basis(line, root):
 
 def captured_line(row):
     snapshot = json.loads(row['facts_snapshot'])
-    return WorkLineFacts.model_validate(snapshot['line'])
+    return read_line(snapshot['line'])
+
+
+def captured_policy(row):
+    return tax_policy.effective(read_facts(json.loads(row['facts_snapshot'])['document']).profile)
+
+def source_policy(s,line):
+    from bookflow.company import work
+    rev=work.rows(s,c.work_revisions,c.work_revisions.c.id==line['revision_id'])[0]
+    return tax_policy.effective(work.facts(rev).profile)
 
 
 def make_proof(source, revision, line, root, facts, spans):
     from bookflow.company import billing_math as math
-    return AllocationProof(source_document_id=source['id'], source_revision_id=revision['id'],
+    model=TaxAllocationProof if facts.schema_version==2 else AllocationProof
+    extra={'basis_version':2} if facts.schema_version==2 else {}
+    policy=tax_policy.effective(read_facts(revision['facts_snapshot']).profile)
+    return model(**extra,source_document_id=source['id'], source_revision_id=revision['id'],
         source_line_id=line['id'], root_document_id=root[0], root_line_id=root[1],
-        source_basis_hash=basis(facts, root), quoted_quantity_microunits=facts.quantity_microunits,
+        source_basis_hash=basis(facts, root, policy), quoted_quantity_microunits=facts.quantity_microunits,
         quoted_base_quantity_microunits=facts.base_quantity_microunits,
         quoted_net_minor_units=facts.net_minor_units,
         denominator=str(math.denominator(facts.quantity_microunits, facts.net_minor_units)),
@@ -39,7 +53,7 @@ def stored_proof(proof):
     from bookflow.company import billing_math as math
     if proof is None:
         return dict(allocation_version=1, source_basis_hash=None, denominator_hex=None, spans_json=None)
-    return dict(allocation_version=2, source_basis_hash=proof.source_basis_hash,
+    return dict(allocation_version=3 if isinstance(proof,TaxAllocationProof) else 2, source_basis_hash=proof.source_basis_hash,
         denominator_hex=math.coordinate_hex(int(proof.denominator)),
         spans_json=json.dumps([[math.coordinate_hex(a), math.coordinate_hex(b)] for a,b in proof.intervals()],
                              separators=(',', ':')))
@@ -50,7 +64,11 @@ def read_proof(row):
         return None
     from bookflow.company import billing_math as math
     facts = captured_line(row)
-    return AllocationProof(**{k: row[k] for k in ('source_document_id', 'source_revision_id', 'source_line_id',
+    model=TaxAllocationProof if row['allocation_version']==3 else AllocationProof
+    if row['allocation_version'] not in (2,3) or (facts.schema_version==2)!=(row['allocation_version']==3):
+        raise BookflowError('E_INTERNAL',message='Stored allocation version and work basis disagree')
+    extra={'basis_version':2} if row['allocation_version']==3 else {}
+    return model(**extra,**{k: row[k] for k in ('source_document_id', 'source_revision_id', 'source_line_id',
         'root_document_id', 'root_line_id', 'source_basis_hash')},
         quoted_quantity_microunits=facts.quantity_microunits,
         quoted_base_quantity_microunits=facts.base_quantity_microunits,
@@ -106,11 +124,11 @@ def has_active_for_document(s, document_id):
     return s.company.conn.execute(query).first() is not None
 
 
-def occupied_spans(s, root, facts, *, excluding=None):
+def occupied_spans(s, root, facts, *, excluding=None, policy=None):
     """SQLite orders canonical hex coordinates; Python retains one row at a time."""
     from bookflow.company import billing_math as math
     denominator = math.denominator(facts.quantity_microunits, facts.net_minor_units)
-    expected_basis = basis(facts, root)
+    expected_basis = basis(facts, root, policy)
     query = sa.text('''
         SELECT a.allocation_version, a.source_basis_hash, a.denominator_hex,
                CASE WHEN a.allocation_version=1 THEN :zero ELSE json_extract(span.value,'$[0]') END AS start,
@@ -126,24 +144,24 @@ def occupied_spans(s, root, facts, *, excluding=None):
         document=root[0], line=root[1], excluded=excluding)
     with s.company.conn.execute(query, params) as result:
         for row in result.mappings():
-            if row['allocation_version'] == 2 and (row['source_basis_hash'] != expected_basis
+            if row['allocation_version'] in (2,3) and (row['source_basis_hash'] != expected_basis
                     or row['denominator_hex'] != params['full']):
                 raise BookflowError('E_WORK_DEPENDENCY', details=dict(problem='active billing uses a different source basis',
                     root_document_id=root[0], root_line_id=root[1]))
             yield math.coordinate_int(row['start']), math.coordinate_int(row['end'])
 
 
-def free_spans(s, root, facts, *, excluding=None):
+def free_spans(s, root, facts, *, excluding=None, policy=None):
     from bookflow.company import billing_math as math
-    return math.free_spans(occupied_spans(s, root, facts, excluding=excluding),
+    return math.free_spans(occupied_spans(s, root, facts, excluding=excluding, policy=policy),
                           math.denominator(facts.quantity_microunits, facts.net_minor_units))
 
 
-def remaining(s, root, facts):
+def remaining(s, root, facts, *, policy=None):
     from bookflow.company import billing_math as math
     d = math.denominator(facts.quantity_microunits, facts.net_minor_units)
     length = net = 0
-    for a,b in free_spans(s, root, facts):
+    for a,b in free_spans(s, root, facts, policy=policy):
         length += b-a
         net += math.portion(facts.net_minor_units, a, b, d)
     return length, net

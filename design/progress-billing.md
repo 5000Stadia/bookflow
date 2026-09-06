@@ -50,13 +50,13 @@ consumption remains100%. Formal change-order approval remains separate future wo
 
 The paid-receipt amount_received equals the preview's gross including calculated
 tax. Changed preview facts reject before asking for a new received total. Payment
-of an existing invoice remains a distinct future operation.
+of an existing invoice uses the separate customer-payment operation.
 
 ## Exact entitlement and allocation
 
-Each active source root has one captured economic basis: its quantity Q in integer
-microunits, full net N in integer minor units, each original tax-component total,
-item/unit/classification and captured economic facts. The basis projection is
+Each active source root has one captured, versioned economic basis. Quantity Q in
+integer microunits, full net N in integer minor units and all actual quoted economic
+facts stay protected. For legacy WorkLineFacts1 the basis projection remains
 exactly {basis_version:1, root_document_id, root_line_id, line:<WorkLineFacts>},
 where line is its typed JSON-mode dump excluding completed_quantity_microunits
 and billable. Keep every other declared WorkLineFacts member, including its
@@ -75,6 +75,29 @@ allocations are released, an otherwise editable source can have a new basis.
 Historic allocations continue to prove their amounts against their own source
 revision and basis, never the new quote.
 
+Current WorkLineFacts2 uses exactly
+{basis_version:2, sales_tax_calculation:mode, economics:E, tax_rules:R}.
+E is its validated JSON-mode model dump excluding exactly schema_version,
+completed_quantity_microunits, billable, tax_minor_units, gross_minor_units and taxes.
+R is the ordered list of complete captured rule objects from its taxes (empty when
+none apply). Every other declared field stays, including net, quantity, unit,
+description, cost, classification and nested profile/origins. Reject extra fields
+before projection. Tax ordinals and document attribution wrappers live outside the
+line and do not enter this hash. Root/source/revision identities remain separately
+validated proof fields; they are not inserted into the basis2 payload. Apply the
+same canonical UTF-8 JSON and SHA256 encoding above. Conversion preserves this
+projection exactly even when destination composition redistributes derived cents.
+Do not upgrade a consumed legacy lineage to obtain this behavior.
+
+Allocation_version1 retains its original whole-root representation and null proof
+columns. Allocation_version2 retains its exact legacy interval/hash proof and
+basis1 interpretation. Allocation_version3 explicitly carries basis_version2 and
+WorkLineFacts2; interval arithmetic is unchanged. Dispatch from the stored exact
+integer discriminators, never current company defaults. Old rows/JSON/rowids and
+proof bytes are not rewritten or reinterpreted; the co16 preserving exception only
+widens the approved allocation discriminator constraints. Unknown competing local
+guards must reject the upgrade atomically, not be discarded.
+
 Let D=lcm(Q,max(N,1),100000000). The entitlement is the integer interval[0,D).
 An entered quantity q requests q*D/Q coordinate units. A percentage p, expressed
 as millionths of one percent, requests p*D/100000000 units. These are integers.
@@ -84,9 +107,12 @@ All intermediate calculations use integers; money never uses floating point.
 For captured net N, an interval[a,b) owns
 half_even(N*b/D)-half_even(N*a/D) minor units. Add interval results to obtain the
 destination line's exact net. Full coverage telescopes to the quoted net.
-Each destination line's tax component is half_even(net*captured_rate/100000000),
-the ordinary sale rule. Calculate once per component on the combined line net,
-never separately per span. Zero net produces zero tax. Quoted tax is informational:
+For the captured line_component_half_even policy, each destination component
+remains half_even(net*captured_rate/100000000). For line_combined_half_up and
+invoice_combined_half_up, resolve all destination nets first, then use Row24's
+exact line/document bucket rounding and immutable tax-ordinal allocation. Never
+calculate tax separately per entitlement span. Zero net produces zero tax.
+Quoted tax is informational:
 independently rounded installment taxes may differ from the estimate's tax, and
 no final installment silently absorbs a tax adjustment. Net uses the entitlement
 basis; tax, gross and accounting legs retain ordinary sale arithmetic.
@@ -126,8 +152,10 @@ partially reclaim it. Legacy full-root allocations can be rebilled this way when
 the entire root is free. This mode reproduces the referenced spans, quantity and
 net. Ordinary quantity/net/percent requests always make fresh earliest-free
 allocations; they do not promise to reconstruct an earlier installment.
-Identical grouping and
-captured rates preserve tax. Regrouping released portions can change rounded tax.
+Identical destination composition, captured policy/rules and stable tax ordering
+preserve tax. Exact rebill promises spans, quantity and net; regrouping released
+portions or adding independent lines may change document-derived tax. Retained
+legacy proofs still use their legacy calculation and original basis.
 Neither a release nor
 a later installment changes another issued invoice's amount, tax or allocation.
 Two concurrent conversions cannot consume overlapping spans or incompatible bases.
@@ -139,8 +167,11 @@ billed quantity is one whole microunit. Amount-derived quantities can be smaller
 than six decimal places or nonterminating rationals. Preserve the original quoted
 quantity and rate separately from the allocated quantity.
 
-Introduce version3 allocated SalesLineProfile facts. Only linked conversion and
-its guarded corrections can create this basis; ordinary SalesLineInput cannot
+SalesLineProfile pricing versions remain version1 unit, version2 amount and
+version3 allocated. Tax alone does not introduce another pricing version. A new
+revision-owned TaxAttribution v1 carries policy, origin, buckets, tax ordinals and
+cells outside those pricing facts; allocation3 separately identifies basis2. Only
+linked conversion and its guarded corrections can create this basis; ordinary SalesLineInput cannot
 supply a proof, source identity, arbitrary tax or allocated pricing mode. Existing
 version1 unit-price and version2 amount-price snapshots retain their serialization
 and ordinary arithmetic. A full original interval may retain its existing whole-
@@ -172,7 +203,8 @@ changes retain the existing guarded contract. A no-op creates no new history.
 
 ## Storage and independent validation
 
-Add preserving company co0012. Widen only the known price-basis and quantity
+The original progress storage change is preserving company co0012; retain that
+historical migration. Its changes widen only the known price-basis and quantity
 constraints/nullability in sales_line_profiles to support allocated facts. Widen
 quantity_microunits in work_billing_allocations only for new allocated records.
 Existing monetary/quantity values, snapshots, local columns, generated columns,
@@ -182,7 +214,9 @@ Keep historical migration witnesses pinned to their own artifact heads.
 Allocation rows gain allocation_version(default1), source_basis_hash,
 denominator_hex and spans_json. Version1 rows keep all three new proof fields null
 and retain their original full-root meaning, including existing whole-line retry
-keys and immutable history. Version2 rows require the complete proof. Denominator
+keys and immutable history. Version2 rows require the complete legacy proof;
+Row24 version3 requires the explicit basis2 proof under the same interval bounds.
+Denominator
 and endpoints use fixed-width40-character lowercase hexadecimal encoding of the
 unsigned integer; lexical binary order is integer order. Public proof output uses
 canonical decimal strings, not database encoding. spans_json is a bounded array
@@ -285,7 +319,8 @@ Quoted numbers remain nonnegative signed64 integers (quantities positive).
 denominator is a canonical positive decimal string; spans is a list of
 {start:"0",end:"40000000"} decimal-string endpoints. These are output/internal
 facts, never ordinary editable sale input. The same proof fields are exposed on
-BillingSourceOutput for allocation_version2; version1 leaves them null. Retain
+BillingSourceOutput for allocation_version2 (legacy basis1) and allocation_version3
+(explicit basis_version2); version1 leaves them null. Retain
 the complete immutable source snapshot separately as in the inherited contract.
 
 Example selection additions to the existing versioned, dated conversion input:
@@ -334,7 +369,8 @@ end voided. Independent arithmetic witnesses cover small/tied net and component
 amounts, one-microunit sources, nonterminating quantities, mixed selection modes,
 fragmented gaps, late void/rebill in different orders, and full net telescoping sums.
 Tax witnesses cover half-cent ties, different installment groupings and quote/actual
-rounding differences, with ordinary per-line/component tax and no tax-only spans.
+rounding differences under all three captured policies, exact compatible buckets
+and cell attribution, with no tax-only spans.
 Tests include legacy keys after cache expiry/upgrades, two concurrent partial writes,
 retained-proof correction/no-op, source edits before/after consumption, readonly/
 cross-company replay denial, required custom fields and original source bytes,
@@ -342,3 +378,32 @@ closed periods, wrong-account/tax/proof/quantity fault injection, rollback and
 populated/local-extension migration. Exercise complete CLI/library/HTTP and actual
 1280/390 browser journeys. Independent accounting/schema review precedes a
 preserving live-demo refresh.
+
+
+## Captured-policy forecast and correction amendment (Row24)
+
+All-remaining tax forecasts calculate every remaining billable net together under
+the captured source policy/rules, in current displayed order with the prospective
+destination's tax ordinals. Map cells back to source line IDs. Return
+forecast_basis=all_remaining_together, can_bill_together and bounded eligibility
+reasons. The forecast remains mathematically complete above 200 spans per line or
+2000 per conversion; it is not an executable descriptor. Do not truncate scope,
+relax limits or silently split posting. Above the caps label it hypothetical,
+show recommended_net_amount or fewer-line recovery, and explain that separate
+installments may round differently. With progress disabled retain the exact
+recommended-net exception for a fragmented root and complete-line subset recovery.
+Within both limits an unchanged complete-remaining conversion reproduces every
+forecast cell and aggregate. Reordering, scope or eligibility changes require a
+fresh preview. Previous/cumulative tax always comes from actual posted revisions;
+current company settings and forecasts never replace historical values. Inspection
+retains valid current knowledge even when a future conversion is ineligible.
+
+Otherwise permitted composition changes may redistribute derived tax cents on a
+retained combined-policy linked line. Captured policy/rules, proof, net, quantity
+and other quoted economics remain fixed. Recalculate the whole destination and
+persist revised attribution, including allocation tax facts; never reinterpret a
+policy/rate/price change as redistribution. Linked receipt corrections retain the
+exact amount_received predicates above, including after removal of the last linked
+line. Applied invoice corrections preserve cash and restate existing settlements
+under their ordinary date/version/composite-authority guards; they are not banned
+merely because the invoice is paid. Reversal uses stored amounts and provenance.

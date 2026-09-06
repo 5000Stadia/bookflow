@@ -2,7 +2,7 @@
 
 # `company.sales_tax_components`
 
-Immutable independently rounded tax components, including zero-rate and rounding-to-zero facts.
+Immutable policy-attributed tax components, including legacy, zero-rate and rounding-to-zero facts.
 
 Database: `company`.
 
@@ -20,5 +20,5 @@ Database: `company`.
 | `liability_account_id` | VARCHAR(26) | no | — | — | — | accounts.id | Captured sales tax payable posting account. |
 | `rate_percent_millionths` | BIGINT | no | — | — | — | — | Nonnegative tax percentage in millionths of one percent. |
 | `taxable_minor_units` | BIGINT | no | — | — | — | — | Home-currency amount subject to this component. |
-| `tax_minor_units` | BIGINT | no | — | — | — | — | Independently rounded home-currency component tax; zero is retained. |
+| `tax_minor_units` | BIGINT | no | — | — | — | — | Captured policy-attributed home-currency component tax; zero is retained. |
 | `component_snapshot` | TEXT | no | — | — | — | — | Versioned typed JSON object of captured tax item, agency and liability labels. |

@@ -1,0 +1,9 @@
+{% if tax_details %}
+<details data-tax-print class="tax-details"><summary>Tax calculation · {{ tax_labels[tax_details.policy] }}</summary>
+<p>{{ tax_explanations[tax_details.policy] }}</p>
+<p>Policy source: {{ 'Legacy implicit policy' if tax_details.origin.kind == 'legacy_implicit' else 'Captured company default' if tax_details.origin.kind == 'default' else 'Explicit document choice' }}.</p>
+{% if tax_details.legacy_interpretation %}<p>Historical calculation: saved amounts remain as recorded. No new attribution has been assigned to this revision.</p>
+{% elif tax_details.policy != 'line_component_half_even' %}<p>Remainder ties use the stable tax order, then the tax rule’s stable ID. Reordering displayed lines preserves that order.</p>{% endif %}
+{% if tax_details.attribution %}<p>Captured calculation includes {{ tax_details.attribution.calculation.buckets|length }} tax bucket(s). Lines share a bucket only when their tax rule IDs, rates, agencies and liability accounts match.</p>{% endif %}
+</details>
+{% endif %}

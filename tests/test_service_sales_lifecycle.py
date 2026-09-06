@@ -108,7 +108,7 @@ def test_tax_components_round_each_line_and_preserve_captured_policy(client, sal
         db.conn.commit()
     tax_item = client.run('item create', dict(name='Sale witness five percent', type='sales_tax_item', tax_percent='5',
         tax_agency_vendor_id=agency, liability_account_id=liability), company=COMPANY)['id']
-    data = dict(date='2026-01-12', customer=sale['customer'], sales_tax_item=tax_item,
+    data = dict(date='2026-01-12', customer=sale['customer'], sales_tax_item=tax_item, sales_tax_calculation='line_component_half_even',
         lines=[dict(item=sale['item'], unit_price=value, tax_code=taxable) for value in ('0.10', '0.30')])
     first = client.run('invoice post', data, company=COMPANY)
     # 0.5 minor unit rounds to even0; 1.5 rounds to even2, independently.

@@ -494,6 +494,7 @@ Create a company inside an organization: its folder, database, and company infor
 | `prompt_for_class` | `--prompt-for-class` | boolean | no | no | false | Require or warn for a class on later forms |
 | `enable_price_levels` | `--enable-price-levels` | boolean | no | no | false | Enable price-level controls on later sales forms |
 | `units_of_measure_mode` | `--units-of-measure-mode` | literal["disabled", "single_unit_per_item", "multiple_related_units"] | no | no | "disabled" | — |
+| `sales_tax_calculation` | `--sales-tax-calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | "invoice_combined_half_up" | — |
 | `sales_tax_enabled` | `--sales-tax-enabled` | boolean | no | no | false | Enable sales-tax controls on later forms |
 | `sales_tax_liability_basis` | `--sales-tax-liability-basis` | literal["invoice_date", "payment_receipt"] | no | no | "invoice_date" | — |
 | `sales_tax_remittance_frequency` | `--sales-tax-remittance-frequency` | literal["monthly", "quarterly", "annually"] | no | no | "quarterly" | — |
@@ -908,6 +909,7 @@ Update the selected company's information; versioned, blind, or merged per the c
 | `prompt_for_class` | `--prompt-for-class` | boolean \| null | no | yes | null | Require or warn for a class on later forms |
 | `enable_price_levels` | `--enable-price-levels` | boolean \| null | no | yes | null | Enable price-level controls on later sales forms |
 | `units_of_measure_mode` | `--units-of-measure-mode` | literal["disabled", "single_unit_per_item", "multiple_related_units"] \| null | no | yes | null | — |
+| `sales_tax_calculation` | `--sales-tax-calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Default captured tax calculation; omission preserves, null rejects |
 | `sales_tax_enabled` | `--sales-tax-enabled` | boolean \| null | no | yes | null | Enable sales-tax controls on later forms |
 | `default_sales_tax_item_id` | `--default-sales-tax-item-id` | string \| null | no | yes | null | Active sales-tax item or group default |
 | `sales_tax_liability_basis` | `--sales-tax-liability-basis` | literal["invoice_date", "payment_receipt"] \| null | no | yes | null | — |

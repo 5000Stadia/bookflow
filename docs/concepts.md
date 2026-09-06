@@ -237,7 +237,22 @@ outside the machine.
 Funds account, with a payment method. Both support service, non-inventory part
 and fixed other-charge items in home currency. Quantities have six decimal
 places; prices and totals are exact money. Tax groups retain separate component
-rates and round each component on each line to nearest, ties to even.
+rates. The captured sales_tax_calculation selects separate component taxes per
+line with legacy ties-to-even rounding, combined tax per line with half-cent-up
+rounding, or combined tax on compatible taxable totals with half-cent-up rounding.
+The last policy is the new-company default; upgraded companies retain legacy.
+Company policy changes apply to newly defaulted documents. Corrections retain
+captured policy unless explicitly changed or returned to defaults. Tax details
+show policy and its explicit, default or legacy_implicit origin. Combined tax is
+allocated by exact fractional remainder, then permanent tax-line order and binary
+tax-item ID; it never independently rounds each agency. Tax ordinals and payment
+settlement ordinals are separate. A line reorder cannot move captured tax cents.
+
+The active demo invoices `DEMO-TAX-LEGACY`, `DEMO-TAX-LINE` and
+`DEMO-TAX-TOTAL` each contain two five-cent lines at 10%. Their total tax is
+respectively zero, two and one cents. The reference company has matching
+`REF-TAX-` examples. Open Tax calculation on the document to read the captured
+policy and source; the tax details on each line show the actual assigned cents.
 
 Use `--dry-run` to inspect captured customer, address, item, price, unit, term and
 tax facts. Copy its `facts_fingerprint` into `expected_facts_fingerprint` when
@@ -331,7 +346,7 @@ line accepts `net_amount` and shows a blank unit price. Changing quantity preser
 an amount override; rate-based lines extend the new quantity. Explicitly supplying
 one mode clears the previous price mode. `use_defaults=["unit_price"]` returns to
 catalog pricing; `use_defaults=["estimated_unit_cost"]` restores catalog cost.
-Prices, quoted taxes and costs use exact minor-unit half-even arithmetic.
+Prices and costs use exact minor-unit half-even arithmetic. Quoted tax uses the document’s captured sales tax calculation policy. Copies retain that policy; a changed company default does not reinterpret earlier work.
 
 Updates require the current `expected_version`. Dry-run writes resolve defaults
 and return a `facts_fingerprint`; pass it as `expected_facts_fingerprint` to reject
@@ -366,3 +381,10 @@ Financial conversion and progress billing, invoice payments, formal change order
 reusable templates, rendering and delivery are staged separately. Stock sales orders
 and pick/pack/ship are a separate inventory workflow. An invoice that has been paid
 will be settled by a customer payment, not replaced with a second sales receipt.
+
+The active `DEMO-TAX-PROP-LEGACY`, `DEMO-TAX-PROP-LINE` and
+`DEMO-TAX-PROP-TOTAL` proposals show the three policies on two five-cent services.
+The total-rounding proposal continues through `DEMO-TAX-EST` to `DEMO-TAX-WO`.
+`DEMO-TAX-WORK-INV` bills one service for six cents; five cents of net work remain,
+with one cent forecast tax if billed together. Physical completion leaves that
+remaining billing scope intact. Reference Plumbing Co has matching `REF-` examples.

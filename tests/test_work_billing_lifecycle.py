@@ -39,7 +39,7 @@ def test_amount_invoice_correction_and_source_freeze(client, sale):
     source = accepted(client, sale, lines=[dict(item=sale['item'], quantity='2', net_amount='10.01')])
     first = bill(client, source)
     line = first['revision']['lines'][0]
-    assert line['unit_price'] is None and line['pricing_basis'] == 'amount'
+    assert line['unit_price'] is None and line['pricing_basis'] == 'allocated'
     assert line['net_minor_units'] == 1001
     corrected = client.run('invoice update', dict(invoice=first['id'], expected_version=1, memo='Invoice note'), company=COMPANY)
     assert corrected['version'] == 2 and corrected['revision']['billing_sources']
@@ -388,11 +388,19 @@ def test_independent_billing_check_rejects_consistently_wrong_sales_resolver(cli
     source = accepted(client, sale, lines=[dict(item=sale['item'], net_amount='10.01')])
     before = snapshot(client)
     original = billing.resolved_line
-    def wrong(lf):
-        value = original(lf)
+    def wrong(lf, proof=None):
+        value = original(lf, proof)
         value['net_minor_units'] += 100
         value['gross_minor_units'] += 100
-        value['profile'].net_amount_minor_units += 100
+        if proof:
+            from math import lcm
+            altered=proof.model_dump()
+            altered['quoted_net_minor_units']+=100
+            altered['denominator']=str(lcm(proof.quoted_quantity_microunits,altered['quoted_net_minor_units'],100_000_000))
+            altered['spans']=[dict(start='0',end=altered['denominator'])]
+            value['profile'].allocation_proof=type(proof).model_validate(altered)
+        else:
+            value['profile'].net_amount_minor_units += 100
         return value
     monkeypatch.setattr(billing, 'resolved_line', wrong)
     with pytest.raises(BookflowError) as err:
@@ -491,8 +499,8 @@ def test_independent_billing_classification_matches_source(client, sale, monkeyp
     if change == 'income_account':
         other = client.account.create(name='Substituted income', type='income', company=COMPANY)
         original = billing.resolved_line
-        def wrong(lf):
-            result = original(lf)
+        def wrong(lf, proof=None):
+            result = original(lf, proof)
             result['profile'].income_account = result['profile'].income_account.model_copy(update={'id': other['id'], 'label': other['name']})
             return result
         monkeypatch.setattr(billing, 'resolved_line', wrong)

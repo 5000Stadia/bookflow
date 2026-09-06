@@ -78,11 +78,11 @@ def require_estimates(s):
         raise disabled(s, 'estimates', ['estimates_enabled'])
 
 
-def recovery(s, root, facts, currency):
+def recovery(s, root, facts, currency, policy=None):
     from bookflow.company import billing_allocations as alloc, billing_math as math
     from bookflow.core.money import Money
-    needed = facts.billable and sum(1 for _ in alloc.free_spans(s, root, facts)) > 200
-    net = math.recommended_net(alloc.free_spans(s, root, facts), denominator=math.denominator(
+    needed = facts.billable and sum(1 for _ in alloc.free_spans(s, root, facts, policy=policy)) > 200
+    net = math.recommended_net(alloc.free_spans(s, root, facts, policy=policy), denominator=math.denominator(
         facts.quantity_microunits, facts.net_minor_units), source_net=facts.net_minor_units) if needed else 0
     return bool(needed), Money(net, currency).to_dict() if net > 0 else None
 
@@ -105,7 +105,7 @@ def check_selection(s, inp, source, rev, lines, identities):
         if line:
             identity = identities[entry.line_id]
             needed, recommendation = recovery(s, (identity['root_document_id'], identity['root_line_id']),
-                                               work.line_facts(line), rev['currency'])
+                                               work.line_facts(line), rev['currency'], work.facts(rev).profile.sales_tax_calculation)
         if not (needed and recommendation and money(entry.net_amount, rev['currency']).minor_units == recommendation['minor_units']):
             details = dict(line_id=entry.line_id, recommended_net_amount=recommendation,
                 problem='Disabled progress billing permits only net-only recovery of the exact current recommendation on a root with more than200 free spans.')
@@ -126,5 +126,5 @@ def closes(s, source, rev, selected_net):
         facts = work.line_facts(line)
         if facts.billable:
             identity = identities[line['line_id']]
-            remaining += alloc.remaining(s, (identity['root_document_id'], identity['root_line_id']), facts)[1]
+            remaining += alloc.remaining(s, (identity['root_document_id'], identity['root_line_id']), facts,policy=alloc.source_policy(s,line))[1]
     return remaining > 0 and selected_net == remaining

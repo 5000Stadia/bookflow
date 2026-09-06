@@ -103,20 +103,22 @@ def billing(s, ctx, inp, kind):
     roots = [(identities[line['line_id']]['root_document_id'], identities[line['line_id']]['root_line_id']) for line in lines]
     from bookflow.company import billing_allocations as alloc, billing_math as math, sales_calculations as calc
     from bookflow.company.billing_facts import ExactFraction
+    from bookflow.company import tax_forecasts
+    forecast,forecast_values=tax_forecasts.remaining(s,owner,rev)
     rendered = []
     for line, root in zip(lines, roots):
         lf = work.line_facts(line)
         used = alloc.active_totals(s, root)
         d = math.denominator(lf.quantity_microunits, lf.net_minor_units)
-        free_length, free_net = alloc.remaining(s, root, lf)
+        free_length, free_net = forecast_values[line['line_id']]['length'],forecast_values[line['line_id']]['net']
         billed_quantity = Fraction(lf.quantity_microunits*(d-free_length),d*1_000_000)
         remaining_quantity = Fraction(lf.quantity_microunits*free_length,d*1_000_000)
         percent = Fraction(100*(d-free_length),d)
         state = ('billed' if not free_length else 'partially_billed' if used['count'] else
                  'nonbillable' if not lf.billable else 'no_charge' if free_net == 0 else 'unbilled')
         remaining_net = free_net if lf.billable else 0
-        remaining_tax = sum(calc.tax(remaining_net,t.rule.rate_percent_millionths) for t in lf.taxes)
-        recovery, recommendation = policy.recovery(s, root, lf, rev['currency'])
+        remaining_tax = forecast_values[line['line_id']]['tax']
+        recovery, recommendation = policy.recovery(s, root, lf, rev['currency'],alloc.source_policy(s,line))
         rendered.append(dict(line_id=line['line_id'], source_line_id=line['id'], root_document_id=root[0],
             requires_bounded_recovery=recovery, recommended_net_amount=recommendation,
             root_line_id=root[1], item_id=lf.item_id, description=lf.description, billable=lf.billable, state=state,
@@ -163,7 +165,7 @@ def billing(s, ctx, inp, kind):
         warnings.append('Unallocated physical scope remains without a charge. Billing does not establish physical completion.')
     if any(line['state'] == 'no_charge' for line in rendered) and not any(line['remaining_net_minor_units'] > 0 for line in rendered):
         warnings.append('No charge remains; zero-price lines were not invoiced.')
-    return BillingOutput(source_id=source['id'], source_kind=kind, source_version=source['version'],
+    return BillingOutput(**forecast.model_dump(),source_id=source['id'], source_kind=kind, source_version=source['version'],
         preferences=policy.preferences(s), closes_on_remaining_bill=bool(can_bill and source['id'] == owner['id']
             and kind == 'estimate' and policy.preferences(s).auto_close_effective),
         source_revision_id=source['current_revision_id'], owner_id=owner['id'], owner_kind=owner['kind'],

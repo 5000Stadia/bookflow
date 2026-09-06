@@ -1,8 +1,10 @@
 """Independent source ownership and allocation checks before billing persistence."""
 import json
+from pydantic import ValidationError
 from fractions import Fraction
 from bookflow.company import schema as c, work, sales, billing_queries as query
-from bookflow.company.work_facts import WorkFacts, WorkLineFacts
+from bookflow.company.work_tax_facts import read_line, read_facts
+from bookflow.company import work_tax, tax_attribution
 from bookflow.company import billing_allocations as alloc, billing_math as math, billing_checks as checks
 from bookflow.company.sales_facts import SalesLineProfile, SalesProfile
 from bookflow.core.errors import BookflowError
@@ -26,7 +28,8 @@ def validate_sale_allocations(plan, s):
             for row in prior:
                 line = current.get(old_lines[row['document_line_id']]['line_id'])
                 if line:
-                    expected.append(dict(row, document_line_id=line['id'], revision_id=line['revision_id']))
+                    projected=next(r for r in data['pending']['sales_line_profiles'] if r['document_line_id']==line['id'])
+                    expected.append(dict(row, document_line_id=line['id'], revision_id=line['revision_id'],tax_minor_units=projected['tax_minor_units'],gross_minor_units=projected['gross_minor_units']))
     actual = data.get('billing_allocations', [])
     strip = lambda row: {k: v for k, v in row.items() if k not in ('id', 'created_at', 'created_by', 'created_via')}
     require(sorted((strip(x) for x in actual), key=str) == sorted((strip(x) for x in expected), key=str), 'correction changed or lost source allocations')
@@ -39,13 +42,20 @@ def validate_sale_allocations(plan, s):
         proof = alloc.read_proof(row)
         d = math.denominator(facts.quantity_microunits, facts.net_minor_units)
         spans = proof.intervals() if proof else ((0,d),)
-        require(math.spans_available(spans, alloc.free_spans(s, root, facts, excluding=data['header']['id']), d),
+        require(math.spans_available(spans, alloc.free_spans(s, root, facts, excluding=data['header']['id'],policy=alloc.captured_policy(row)), d),
                 'allocation overlaps another sale')
         require(row['created_by'] == data['header']['updated_by'] and row['created_via'] == data['header']['updated_via']
             and row['created_at'] == data['header']['updated_at'], 'allocation provenance')
 
 
 def validate(plan, s, ctx):
+    try:
+        return _validate(plan, s, ctx)
+    except (ValidationError, json.JSONDecodeError) as exc:
+        raise BookflowError('E_INTERNAL', message='Invalid billing aggregate: malformed captured facts') from exc
+
+
+def _validate(plan, s, ctx):
     if not plan.data['changed']:
         return
     from bookflow.company import billing
@@ -76,11 +86,14 @@ def validate(plan, s, ctx):
     require(newrev['revision_number'] == rev['revision_number'] + 1 and newrev['supersedes_revision_id'] == rev['id'], 'source revision ancestry')
     require(newrev['audit_event_id'] == data['event'], 'source event')
     require(set(wp) == {name for name, _ in work.TABLE_KINDS}, 'unexpected source persistence table')
-    for row in wp['work_revisions'] + wp['work_lines']:
+    for row in wp['work_revisions'] + wp['work_lines'] + wp['work_tax_line_keys'] + wp['work_tax_attributions'] + wp['work_tax_attribution_lines']:
         require(row['created_at'] == header['updated_at'] and row['created_by'] == s.actor.id
             and row['created_via'] == ctx.interface.value, 'source history provenance')
-    unchanged = set(rev) - {'active', 'id', 'revision_number', 'supersedes_revision_id', 'audit_event_id', 'created_at', 'created_by', 'created_via'}
+    unchanged = set(rev) - {'facts_snapshot', 'active', 'id', 'revision_number', 'supersedes_revision_id', 'audit_event_id', 'created_at', 'created_by', 'created_via'}
     require(all(newrev[k] == rev[k] for k in unchanged), 'billing rewrote source facts')
+    require(work_tax.normalized(work._semantic(rev,[]))['facts']==work_tax.normalized(work._semantic(newrev,[]))['facts'],'billing rewrote source agreement')
+    require(all(row['revision_id']==newrev['id'] for name in ('work_tax_attributions','work_tax_attribution_lines') for row in wp[name]),'orphan source tax fact')
+    work_tax.validate(s,newrev,wp['work_lines'],wp,require)
     old_lines = work.saved_lines(s, rev)
     stripline = lambda row: {k: v for k, v in row.items() if k not in ('id', 'revision_id', 'created_at', 'created_by', 'created_via')}
     require([stripline(x) for x in wp['work_lines']] == [stripline(x) for x in old_lines], 'billing rewrote source lines')
@@ -98,7 +111,7 @@ def validate(plan, s, ctx):
     # Reconstruct required closure from all current roots and pending amounts.
     # The resolver's closure flag and output are not evidence for this check.
     remaining = sum(alloc.remaining(s, (identities[line['line_id']]['root_document_id'],
-        identities[line['line_id']]['root_line_id']), work.line_facts(line))[1]
+        identities[line['line_id']]['root_line_id']), work.line_facts(line),policy=alloc.source_policy(s,line))[1]
         for line in source_lines if work.line_facts(line).billable)
     selected_net = sum(row['net_minor_units'] for row in allocs)
     settings = s.company.conn.execute(c.company_info.select()).mappings().one()
@@ -113,23 +126,27 @@ def validate(plan, s, ctx):
     captured_header = work.facts(rev)
     posted_header = SalesProfile.model_validate_json(data['pending']['sales_profiles'][0]['profile_snapshot'])
     for field in type(captured_header.profile).model_fields:
-        if field == 'origins' or (field == 'terms' and (dest == 'sales_receipt' or 'terms' in inp.model_fields_set)):
+        if field in ('origins', 'schema_version', 'sales_tax_calculation', 'tax_policy_origin') or (field == 'terms' and (dest == 'sales_receipt' or 'terms' in inp.model_fields_set)):
             continue
         require(getattr(posted_header, field) == getattr(captured_header.profile, field),
             'captured commercial header differs: ' + field)
+    from bookflow.company import tax_policy
+    require(tax_policy.effective(posted_header) == tax_policy.effective(captured_header.profile)
+        and tax_policy.origin(posted_header) == tax_policy.origin(captured_header.profile), 'captured tax policy differs')
     if dest == 'sales_receipt':
         require(posted_header.terms is None, 'paid receipt cannot carry invoice credit terms')
     require(json.loads(created['issuer_snapshot']) == captured_header.issuer_snapshot, 'captured issuer differs')
+    exact_cells=tax_attribution.validate_sales(s,header,created,posted_header,data['pending'],require)
     roots = set()
     for actual, envelope, (line, root, lf) in zip(allocs, envelopes, selected):
         require(root not in roots, 'duplicate root in conversion')
         roots.add(root)
         d = math.denominator(lf.quantity_microunits,lf.net_minor_units)
         spans = checks.selected_spans(s,inp,line,root,lf,rev['currency'])
-        proof = None if spans == ((0,d),) else alloc.make_proof(source,rev,line,root,lf,spans)
+        proof = None if spans == ((0,d),) and lf.schema_version==1 else alloc.make_proof(source,rev,line,root,lf,spans)
         width = sum(b-a for a,b in spans)
         net = sum(round(Fraction(lf.net_minor_units*b,d))-round(Fraction(lf.net_minor_units*a,d)) for a,b in spans)
-        tax = sum(round(Fraction(net*t.rule.rate_percent_millionths,100_000_000)) for t in lf.taxes)
+        tax = sum(exact_cells[envelope['id'],t.rule.id] for t in lf.taxes)
         q, bq = Fraction(lf.quantity_microunits*width,d), Fraction(lf.base_quantity_microunits*width,d)
         quantity = q.numerator if q.denominator == 1 else None
         base_quantity = bq.numerator if bq.denominator == 1 else None
@@ -142,7 +159,7 @@ def validate(plan, s, ctx):
             created_at=header['updated_at'], created_by=s.actor.id, created_via=ctx.interface.value)
         require({k:v for k,v in actual.items() if k != 'id'} == expected, 'wrong captured allocation')
         snapshot = json.loads(actual['facts_snapshot'])
-        require(WorkLineFacts.model_validate(snapshot['line']) == lf and WorkFacts.model_validate(snapshot['document']) == work.facts(rev), 'snapshot types')
+        require(read_line(snapshot['line']) == lf and read_facts(snapshot['document']) == work.facts(rev), 'snapshot types')
         projected = profiles[envelope['id']]
         require(all(projected[k] == getattr(lf,k) for k in ('item_id','unit_id','unit_factor_nanounits','unit_price_minor_units')),
                 'captured line units/item/rate differ')
@@ -172,4 +189,4 @@ def validate(plan, s, ctx):
                 and captured_tax['agency'] == rule.agency.model_dump(mode='json')
                 and captured_tax['liability_account'] == rule.liability_account.model_dump(mode='json')
                 and posted_tax['taxable_minor_units'] == net
-                and posted_tax['tax_minor_units'] == round(Fraction(net*rule.rate_percent_millionths,100_000_000)), 'captured tax classification differs')
+                and posted_tax['tax_minor_units'] == exact_cells[envelope['id'],rule.id], 'captured tax classification differs')

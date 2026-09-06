@@ -126,7 +126,7 @@ def _transfer_section(cmd: Any) -> list[str]:
     ]
 
 
-def _command_page(noun: str, commands: list[Any]) -> bytes:
+def _command_page(noun: str, commands: list[Any], *, constraint_cache: dict[int, str]) -> bytes:
     lines = [NOTICE.rstrip(), "", f"# `{noun}` commands", ""]
     for cmd in commands:
         capability = "none" if not getattr(cmd, "permissioned", True) else cmd.capability
@@ -155,7 +155,7 @@ def _command_page(noun: str, commands: list[Any]) -> bytes:
             "| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |",
             "|---|---|---|---|---|---|---|",
         ])
-        fields = model_fields(cmd.input_model, leaves_only=True)
+        fields = model_fields(cmd.input_model, leaves_only=True, _constraint_cache=constraint_cache)
         if fields:
             for field in fields:
                 details = "; ".join(item for item in (field.description, field.constraints) if item) or "—"
@@ -206,7 +206,7 @@ def _command_page(noun: str, commands: list[Any]) -> bytes:
             "| JSON field | Type | Required | Nullable | Default | Description |",
             "|---|---|---|---|---|---|",
         ])
-        for field in model_fields(cmd.output_model):
+        for field in model_fields(cmd.output_model, _constraint_cache=constraint_cache):
             lines.append(
                 f"| `{field.path}` | {_text(field.type)} | {'yes' if field.required else 'no'} | "
                 f"{'yes' if field.nullable else 'no'} | {_text(field.default)} | {_text(field.description)} |"
@@ -282,9 +282,10 @@ def render_tree() -> dict[str, bytes]:
     nouns: dict[str, list[Any]] = {}
     for command in commands:
         nouns.setdefault(command.noun, []).append(command)
+    constraint_cache: dict[int, str] = {}
     for noun in sorted(nouns):
         slug = noun.replace(" ", "-")
-        tree[f"cli/{slug}.md"] = _command_page(noun, sorted(nouns[noun], key=lambda item: item.name))
+        tree[f"cli/{slug}.md"] = _command_page(noun, sorted(nouns[noun], key=lambda item: item.name), constraint_cache=constraint_cache)
 
     for database, metadata in (("hub", hub_schema.metadata), ("company", company_schema.metadata)):
         for table in metadata.sorted_tables:

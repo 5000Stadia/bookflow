@@ -1,8 +1,10 @@
 """Independent checks of commercial intent, attribution and exact reversals."""
 from collections import Counter
 import json
+from pydantic import ValidationError
 
 from bookflow.company import schema as c, document_effects as effects
+from bookflow.company import tax_attribution as tax_facts
 from bookflow.company import journal_custom_fields as custom, sales_calculations as calc
 from bookflow.company.sales_facts import SalesProfile, SalesLineProfile, SalesTaxComponent
 from bookflow.core.errors import BookflowError
@@ -20,6 +22,13 @@ def amount(value, *, positive=False):
 
 
 def validate(plan, s, ctx):
+    try:
+        return _validate(plan, s, ctx)
+    except (ValidationError, json.JSONDecodeError) as exc:
+        raise BookflowError('E_INTERNAL', message='Invalid sales aggregate: malformed captured facts') from exc
+
+
+def _validate(plan, s, ctx):
     from bookflow.company import sales
     data = plan.data
     if not data['changed']:
@@ -110,7 +119,8 @@ def validate(plan, s, ctx):
     validate_sale_allocations(plan, s)
     if operation == 'void':
         require(all(not pending[name] for name in ('transaction_revisions', 'document_line_identities', 'document_lines',
-            'sales_profiles', 'sales_line_profiles', 'sales_tax_components')), 'void created commercial history')
+            'sales_profiles', 'sales_line_profiles', 'sales_tax_components', 'sales_tax_line_keys',
+            'sales_tax_attributions', 'sales_tax_attribution_lines')), 'void created commercial history')
         require(header['status'] == 'voided' and header['current_revision_id'] == old['current_revision_id']
                 and header['void_posting_batch_id'] == inverses[0]['id'], 'wrong void header')
         require(bool(ctx.reason and ctx.reason.strip()) and header['void_reason'] == ctx.reason.strip()
@@ -156,6 +166,7 @@ def validate(plan, s, ctx):
     require(sorted(line['position'] for line in envelopes) == list(range(1, len(envelopes)+1)), 'line ordering')
     require(all(component['document_line_id'] in indexed['document_lines'] for component in components), 'unowned tax component')
     line_profiles = indexed['sales_line_profiles']
+    expected_cells = tax_facts.validate_sales(s, header, revision, profile, pending, require)
     expected_legs = []
     semantic_lines = []
     new_ids = set(indexed['document_line_identities'])
@@ -209,7 +220,7 @@ def validate(plan, s, ctx):
                     and component['liability_account_id'] == rule.liability_account.id
                     and component['rate_percent_millionths'] == rule.rate_percent_millionths, 'component references/rate')
             require(component['taxable_minor_units'] == line['net_minor_units']
-                    and component['tax_minor_units'] == calc.tax(line['net_minor_units'], rule.rate_percent_millionths), 'tax arithmetic')
+                    and component['tax_minor_units'] == (expected_cells[envelope['id'], rule.id] if expected_cells is not None else calc.tax(line['net_minor_units'], rule.rate_percent_millionths)), 'tax arithmetic')
         require(line['tax_minor_units'] == calc.total(comp['tax_minor_units'] for comp in own_taxes)
                 and line['gross_minor_units'] == calc.total((line['net_minor_units'], line['tax_minor_units'])), 'gross arithmetic')
         attribution = tuple([(envelope['id'], None, line['net_minor_units'])] if line['net_minor_units'] else []) + tuple(
@@ -243,7 +254,7 @@ def validate(plan, s, ctx):
             and custom_plan.refresh == data['input'].refresh_defaults, 'custom intent mismatch')
     custom.validate(s.company, custom_plan, header['id'], json.loads(revision['custom_fields_snapshot']), record_type=document_type)
     actual = dict(date=revision['date'], number=revision['number'], memo=revision['memo'], issuer=json.loads(revision['issuer_snapshot']),
-        profile=profile.model_dump(), lines=semantic_lines, custom_fields=sales._custom_semantic(json.loads(revision['custom_fields_snapshot'])))
+        profile=tax_facts.semantic_profile(profile), lines=semantic_lines, custom_fields=sales._custom_semantic(json.loads(revision['custom_fields_snapshot'])))
     expected = sales.commercial(s, data['input'], document_type, old, data['old_revision'], document_id=header['id'], billing_source=data.get('billing_source'))
     sales._posting_accounts_active(s, expected)
     require(data['sequence'] == expected['sequence'], 'wrong number allocation')

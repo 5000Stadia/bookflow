@@ -228,8 +228,397 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `execution.directive_id` | string \| null | yes | yes | — | — |
 | `execution.directive_code` | string \| null | yes | yes | — | — |
 | `request` | object \| object \| object \| object \| object \| object | yes | no | — | — |
+| `request.command` | literal["payment receive"] \| literal["payment apply"] \| literal["payment unapply"] \| literal["payment void"] \| literal["payment update"] \| literal["invoice update"] | yes | no | — | — |
+| `request.input` | object | yes | no | — | — |
+| `request.input.customer` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `request.input.date` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, ApplyPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `request.input.amount` | string \| object \| string \| object \| null | no | no | — | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `request.input.operation_key` | string \| string \| null | no | no | — | — |
+| `request.input.applications` | object \| object \| array[object] | no | no | {"items": [], "mode": "inline"} | Present in ReceivePreviewRequest, ApplyPreviewRequest, UnapplyPreviewRequest. |
+| `request.input.applications.mode` | literal["inline"] \| literal["selection"] | no | no | "inline" | Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `request.input.applications.items` | array[object] | no | no | [] | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `request.input.applications.items[].invoice` | string | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `request.input.applications.items[].expected_version` | integer | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `request.input.applications.items[].amount` | string \| object | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `request.input.deposit_to` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `request.input.number` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `request.input.reference` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `request.input.memo` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `request.input.custom_fields` | object[string, any \| null] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `request.input.expected_custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `request.input.expected_facts_fingerprint` | string \| null | no | yes | null | — |
+| `request.context` | object | no | no | {"directive_id": null, "reason": null} | — |
+| `request.context.reason` | string \| null | no | yes | null | — |
+| `request.context.directive_id` | string \| null | no | yes | null | — |
+| `request.input.payment` | string | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest. |
+| `request.input.expected_version` | integer \| integer \| null | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `request.input.applications[].application_id` | string | no | no | — | Present in UnapplyPreviewRequest. |
+| `request.input.applications[].invoice_expected_version` | integer | no | no | — | Present in UnapplyPreviewRequest. |
+| `request.input.invoice_versions` | array[object] | no | no | [] | Present in UpdatePreviewRequest. |
+| `request.input.invoice_versions[].invoice` | string | no | no | — | Present in UpdatePreviewRequest. |
+| `request.input.invoice_versions[].expected_version` | integer | no | no | — | Present in UpdatePreviewRequest. |
+| `request.input.settlement_guard` | string \| null | no | yes | null | Present in UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `request.input.terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.due_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
+| `request.input.customer_message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.customer_message_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.customer_purchase_order` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.billing_address` | object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.billing_address.line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.billing_address.line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.billing_address.city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.billing_address.state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.billing_address.postal_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.billing_address.country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.shipping_address` | object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.shipping_address.line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.shipping_address.line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.shipping_address.city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.shipping_address.state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.shipping_address.postal_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.shipping_address.country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.shipping_address_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.ship_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.ship_method` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.sales_rep` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.class_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.customer_tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.sales_tax_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.use_defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines` | array[object] \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].line_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].item` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].quantity` | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].unit` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].unit_price` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].net_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].description` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].class_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].price_basis_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.settlement_versions` | array[object] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.settlement_versions[].payment` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.settlement_versions[].expected_version` | integer | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `original` | object \| object | yes | no | — | — |
+| `original.dry_run` | boolean | no | no | false | Present in PaymentWriteOutput. |
+| `original.warnings` | array[string] | no | no | [] | Present in PaymentWriteOutput. |
+| `original.changed` | boolean | no | no | true | — |
+| `original.new_effect` | boolean | no | no | true | — |
+| `original.id` | string \| null | no | yes | — | Present in PaymentWriteOutput. |
+| `original.version` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.operation_key` | string | yes | no | — | — |
+| `original.facts_fingerprint` | string | yes | no | — | — |
+| `original.idempotent_replay` | boolean | no | no | false | — |
+| `original.effect` | object \| object \| object \| object \| object \| object | yes | no | — | — |
+| `original.effect.kind` | literal["receive"] \| literal["apply"] \| literal["unapply"] \| literal["update"] \| literal["void"] \| literal["invoice_update"] | no | no | — | — |
+| `original.effect.financial_changed` | boolean | no | no | — | Present in PaymentWriteOutput. |
+| `original.effect.audit_event_id` | string \| null | no | yes | null | — |
+| `original.effect.before_header` | object \| null | no | yes | null | — |
+| `original.effect.before_header.id` | string \| null | yes | yes | — | — |
+| `original.effect.before_header.version` | integer | yes | no | — | — |
+| `original.effect.before_header.revision_id` | string \| null | yes | yes | — | — |
+| `original.effect.before_header.revision_number` | integer | yes | no | — | — |
+| `original.effect.before_header.number` | string | yes | no | — | — |
+| `original.effect.before_header.date` | string | yes | no | — | — |
+| `original.effect.before_header.amount` | object | yes | no | — | — |
+| `original.effect.before_header.amount.amount` | string | yes | no | — | — |
+| `original.effect.before_header.amount.currency` | string | yes | no | — | — |
+| `original.effect.before_header.amount.minor_units` | integer | yes | no | — | — |
+| `original.effect.before_header.status` | literal["posted", "voided"] | yes | no | — | — |
+| `original.effect.after_header` | object \| null | no | yes | null | — |
+| `original.effect.after_header.id` | string \| null | yes | yes | — | — |
+| `original.effect.after_header.version` | integer | yes | no | — | — |
+| `original.effect.after_header.revision_id` | string \| null | yes | yes | — | — |
+| `original.effect.after_header.revision_number` | integer | yes | no | — | — |
+| `original.effect.after_header.number` | string | yes | no | — | — |
+| `original.effect.after_header.date` | string | yes | no | — | — |
+| `original.effect.after_header.amount` | object | yes | no | — | — |
+| `original.effect.after_header.amount.amount` | string | yes | no | — | — |
+| `original.effect.after_header.amount.currency` | string | yes | no | — | — |
+| `original.effect.after_header.amount.minor_units` | integer | yes | no | — | — |
+| `original.effect.after_header.status` | literal["posted", "voided"] | yes | no | — | — |
+| `original.effect.preferences` | object \| null | no | yes | null | Present in PaymentWriteOutput. |
+| `original.effect.preferences.automatically_apply_payments` | boolean | no | no | — | Present in PaymentWriteOutput. |
+| `original.effect.preferences.automatically_calculate_payments` | boolean | no | no | — | Present in PaymentWriteOutput. |
+| `original.effect.preferences.use_undeposited_funds_for_payments` | boolean | no | no | — | Present in PaymentWriteOutput. |
+| `original.effect.operation_id` | string \| null | yes | yes | — | — |
+| `original.effect.payment_id` | string \| null | no | yes | — | Present in PaymentWriteOutput. |
+| `original.effect.source_components` | array[object] | no | no | — | — |
+| `original.effect.source_components[].component_key_id` | string \| null | yes | yes | — | — |
+| `original.effect.source_components[].component_id` | string \| null | yes | yes | — | — |
+| `original.effect.source_components[].party_id` | string | yes | no | — | — |
+| `original.effect.source_components[].party_name` | string | yes | no | — | — |
+| `original.effect.source_components[].ar_account_id` | string | yes | no | — | — |
+| `original.effect.source_components[].currency` | string | yes | no | — | — |
+| `original.effect.source_components[].received_minor_units` | integer | yes | no | — | — |
+| `original.effect.source_components[].applied_minor_units` | integer | yes | no | — | — |
+| `original.effect.source_components[].available_minor_units` | integer | yes | no | — | — |
+| `original.effect.applications` | array[object] | no | no | — | — |
+| `original.effect.applications[].kind` | literal["apply", "unapply"] | no | no | "apply" | — |
+| `original.effect.applications[].reverses_application_id` | string \| null | no | yes | null | — |
+| `original.effect.applications[].application_id` | string \| null | yes | yes | — | — |
+| `original.effect.applications[].invoice_id` | string | yes | no | — | — |
+| `original.effect.applications[].invoice_version` | integer | yes | no | — | — |
+| `original.effect.applications[].source_component_key_id` | string \| null | yes | yes | — | — |
+| `original.effect.applications[].party_id` | string | yes | no | — | — |
+| `original.effect.applications[].amount` | object | yes | no | — | — |
+| `original.effect.applications[].amount.amount` | string | yes | no | — | — |
+| `original.effect.applications[].amount.currency` | string | yes | no | — | — |
+| `original.effect.applications[].amount.minor_units` | integer | yes | no | — | — |
+| `original.effect.applications[].effective_date` | string | yes | no | — | — |
+| `original.effect.allocations` | array[object] | yes | no | — | — |
+| `original.effect.allocations[].kind` | literal["allocation", "reversal"] | no | no | "allocation" | — |
+| `original.effect.allocations[].reverses_allocation_id` | string \| null | no | yes | null | — |
+| `original.effect.allocations[].allocation_id` | string \| null | yes | yes | — | — |
+| `original.effect.allocations[].application_id` | string \| null | yes | yes | — | — |
+| `original.effect.allocations[].invoice_id` | string | yes | no | — | — |
+| `original.effect.allocations[].target_ordinal` | integer | yes | no | — | — |
+| `original.effect.allocations[].logical_kind` | literal["net", "tax"] | yes | no | — | — |
+| `original.effect.allocations[].tax_item_id` | string \| null | yes | yes | — | — |
+| `original.effect.allocations[].amount` | object | yes | no | — | — |
+| `original.effect.allocations[].amount.amount` | string | yes | no | — | — |
+| `original.effect.allocations[].amount.currency` | string | yes | no | — | — |
+| `original.effect.allocations[].amount.minor_units` | integer | yes | no | — | — |
+| `original.effect.document_changes` | array[object] \| array[object \| object] | yes | no | — | — |
+| `original.effect.document_changes[].invoice_id` | string | no | no | — | — |
+| `original.effect.document_changes[].version` | integer | yes | no | — | — |
+| `original.effect.document_changes[].revision_id` | string \| null | yes | yes | — | — |
+| `original.effect.document_changes[].gross_minor_units` | integer | no | no | — | — |
+| `original.effect.document_changes[].applied_minor_units` | integer | yes | no | — | — |
+| `original.effect.document_changes[].due_minor_units` | integer | no | no | — | — |
+| `original.effect.document_changes[].currency` | string | yes | no | — | — |
+| `original.effect.document_changes[].status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] \| literal["unpaid", "partial", "paid", "voided", "not_effective"] \| literal["posted", "voided"] | yes | no | — | — |
+| `original.effect.document_changes[].settlement_guard` | string \| null | no | yes | null | — |
+| `original.effect.document_changes[].as_of` | string \| null | no | yes | null | — |
+| `original.effect.document_changes[].audit_watermark` | integer \| null | no | yes | null | — |
+| `original.effect.document_changes[].all_committed_current` | object \| null | no | yes | null | — |
+| `original.effect.document_changes[].all_committed_current.invoice_id` | string | no | no | — | — |
+| `original.effect.document_changes[].all_committed_current.version` | integer | no | no | — | — |
+| `original.effect.document_changes[].all_committed_current.revision_id` | string \| null | no | yes | — | — |
+| `original.effect.document_changes[].all_committed_current.gross_minor_units` | integer | no | no | — | — |
+| `original.effect.document_changes[].all_committed_current.applied_minor_units` | integer | no | no | — | — |
+| `original.effect.document_changes[].all_committed_current.due_minor_units` | integer | no | no | — | — |
+| `original.effect.document_changes[].all_committed_current.currency` | string | no | no | — | — |
+| `original.effect.document_changes[].all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | no | no | — | — |
+| `original.current` | object | yes | no | — | — |
+| `original.current.payment_id` | string \| null | no | yes | — | Present in PaymentWriteOutput. |
+| `original.current.version` | integer | yes | no | — | — |
+| `original.current.revision_id` | string \| null | yes | yes | — | — |
+| `original.current.status` | literal["posted", "voided"] \| literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
+| `original.current.received_minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.current.effective_received_minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.current.applied_minor_units` | integer | yes | no | — | — |
+| `original.current.available_minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.current.currency` | string | yes | no | — | — |
+| `original.current.components` | array[object] | no | no | — | Present in PaymentWriteOutput. |
+| `original.current.components[].component_key_id` | string \| null | no | yes | — | Present in PaymentWriteOutput. |
+| `original.current.components[].component_id` | string \| null | no | yes | — | Present in PaymentWriteOutput. |
+| `original.current.components[].party_id` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.current.components[].party_name` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.current.components[].ar_account_id` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.current.components[].currency` | string | no | no | — | Present in PaymentWriteOutput. |
+| `original.current.components[].received_minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.current.components[].applied_minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.current.components[].available_minor_units` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.current.component_count` | integer | no | no | — | Present in PaymentWriteOutput. |
+| `original.effect_counts` | object | yes | no | — | — |
+| `original.effect_counts.source_components` | integer | yes | no | — | — |
+| `original.effect_counts.applications` | integer | yes | no | — | — |
+| `original.effect_counts.allocations` | integer | yes | no | — | — |
+| `original.effect_counts.document_changes` | integer | yes | no | — | — |
+| `original.prospective_pages` | array[object] | no | no | [] | — |
+| `original.prospective_pages[].command` | literal["payment preview items"] | no | no | "payment preview items" | — |
+| `original.prospective_pages[].request` | object \| object \| object \| object \| object \| object | yes | no | — | — |
+| `original.prospective_pages[].request.command` | literal["payment receive"] \| literal["payment apply"] \| literal["payment unapply"] \| literal["payment void"] \| literal["payment update"] \| literal["invoice update"] | yes | no | — | — |
+| `original.prospective_pages[].request.input` | object | yes | no | — | — |
+| `original.prospective_pages[].request.input.customer` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.date` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, ApplyPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.amount` | string \| object \| string \| object \| null | no | no | — | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.operation_key` | string \| string \| null | no | no | — | — |
+| `original.prospective_pages[].request.input.applications` | object \| object \| array[object] | no | no | {"items": [], "mode": "inline"} | Present in ReceivePreviewRequest, ApplyPreviewRequest, UnapplyPreviewRequest. |
+| `original.prospective_pages[].request.input.applications.mode` | literal["inline"] \| literal["selection"] | no | no | "inline" | Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `original.prospective_pages[].request.input.applications.items` | array[object] | no | no | [] | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `original.prospective_pages[].request.input.applications.items[].invoice` | string | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `original.prospective_pages[].request.input.applications.items[].expected_version` | integer | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `original.prospective_pages[].request.input.applications.items[].amount` | string \| object | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `original.prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `original.prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `original.prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.number` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.reference` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.memo` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.custom_fields` | object[string, any \| null] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.expected_custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.expected_facts_fingerprint` | string \| null | no | yes | null | — |
+| `original.prospective_pages[].request.context` | object | no | no | {"directive_id": null, "reason": null} | — |
+| `original.prospective_pages[].request.context.reason` | string \| null | no | yes | null | — |
+| `original.prospective_pages[].request.context.directive_id` | string \| null | no | yes | null | — |
+| `original.prospective_pages[].request.input.payment` | string | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.expected_version` | integer \| integer \| null | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.applications[].application_id` | string | no | no | — | Present in UnapplyPreviewRequest. |
+| `original.prospective_pages[].request.input.applications[].invoice_expected_version` | integer | no | no | — | Present in UnapplyPreviewRequest. |
+| `original.prospective_pages[].request.input.invoice_versions` | array[object] | no | no | [] | Present in UpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.invoice_versions[].invoice` | string | no | no | — | Present in UpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.invoice_versions[].expected_version` | integer | no | no | — | Present in UpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.settlement_guard` | string \| null | no | yes | null | Present in UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.due_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.customer_message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.customer_message_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.customer_purchase_order` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.billing_address` | object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.billing_address.line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.billing_address.line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.billing_address.city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.billing_address.state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.billing_address.postal_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.billing_address.country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.shipping_address` | object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.shipping_address.line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.shipping_address.line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.shipping_address.city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.shipping_address.state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.shipping_address.postal_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.shipping_address.country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.shipping_address_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.ship_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.ship_method` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.sales_rep` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.class_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.customer_tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.sales_tax_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.use_defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.lines` | array[object] \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.lines[].line_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.lines[].item` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.lines[].quantity` | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.lines[].unit` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.lines[].unit_price` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.lines[].net_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.lines[].description` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.lines[].class_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.lines[].tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.lines[].price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.lines[].price_basis_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.settlement_versions[].payment` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].request.input.settlement_versions[].expected_version` | integer | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `original.prospective_pages[].facts_fingerprint` | string | yes | no | — | — |
+| `original.prospective_pages[].kind` | literal["source_components", "applications", "allocations", "document_changes"] | yes | no | — | — |
+| `original.prospective_pages[].total_count` | integer | yes | no | — | — |
+| `original.prospective_pages[].limit` | integer | no | no | 50 | — |
+| `original.prospective_pages[].next_cursor` | string \| null | yes | yes | — | — |
+| `original.prospective_pages[].projection` | literal["prospective"] | no | no | "prospective" | — |
+| `original.prospective_pages[].committed` | literal[false] | no | no | false | — |
+| `original.effect.invoice_id` | string | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.document_changes[].payment_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
+| `original.effect.document_changes[].received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
+| `original.effect.document_changes[].effective_received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
+| `original.effect.document_changes[].available_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
+| `original.effect.document_changes[].components` | array[object] | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
+| `original.effect.document_changes[].components[].component_key_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
+| `original.effect.document_changes[].components[].component_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
+| `original.effect.document_changes[].components[].party_id` | string | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
+| `original.effect.document_changes[].components[].party_name` | string | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
+| `original.effect.document_changes[].components[].ar_account_id` | string | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
+| `original.effect.document_changes[].components[].currency` | string | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
+| `original.effect.document_changes[].components[].received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
+| `original.effect.document_changes[].components[].applied_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
+| `original.effect.document_changes[].components[].available_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
+| `original.effect.document_changes[].component_count` | integer | no | no | — | Present in PaymentCurrentOutput. Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes` | array[object] | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].payment_id` | string \| null | no | yes | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].version` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].revision_id` | string \| null | no | yes | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].status` | literal["posted", "voided"] | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].received_minor_units` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].effective_received_minor_units` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].applied_minor_units` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].available_minor_units` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].currency` | string | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].components` | array[object] | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].components[].component_key_id` | string \| null | no | yes | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].components[].component_id` | string \| null | no | yes | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].components[].party_id` | string | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].components[].party_name` | string | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].components[].ar_account_id` | string | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].components[].currency` | string | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].components[].received_minor_units` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].components[].applied_minor_units` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].components[].available_minor_units` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.effect.payment_changes[].component_count` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.current.invoice_id` | string | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.current.gross_minor_units` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.current.due_minor_units` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.current.settlement_guard` | string \| null | no | yes | null | Present in InvoiceCorrectionOutput. |
+| `original.current.as_of` | string \| null | no | yes | null | Present in InvoiceCorrectionOutput. |
+| `original.current.audit_watermark` | integer \| null | no | yes | null | Present in InvoiceCorrectionOutput. |
+| `original.current.all_committed_current` | object \| null | no | yes | null | Present in InvoiceCorrectionOutput. |
+| `original.current.all_committed_current.invoice_id` | string | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.current.all_committed_current.version` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.current.all_committed_current.revision_id` | string \| null | no | yes | — | Present in InvoiceCorrectionOutput. |
+| `original.current.all_committed_current.gross_minor_units` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.current.all_committed_current.applied_minor_units` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.current.all_committed_current.due_minor_units` | integer | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.current.all_committed_current.currency` | string | no | no | — | Present in InvoiceCorrectionOutput. |
+| `original.current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | no | no | — | Present in InvoiceCorrectionOutput. |
 | `current` | object \| object | yes | no | — | — |
+| `current.payment_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. |
+| `current.version` | integer | yes | no | — | — |
+| `current.revision_id` | string \| null | yes | yes | — | — |
+| `current.status` | literal["posted", "voided"] \| literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
+| `current.received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `current.effective_received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `current.applied_minor_units` | integer | yes | no | — | — |
+| `current.available_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `current.currency` | string | yes | no | — | — |
+| `current.components` | array[object] | no | no | — | Present in PaymentCurrentOutput. |
+| `current.components[].component_key_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. |
+| `current.components[].component_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. |
+| `current.components[].party_id` | string | no | no | — | Present in PaymentCurrentOutput. |
+| `current.components[].party_name` | string | no | no | — | Present in PaymentCurrentOutput. |
+| `current.components[].ar_account_id` | string | no | no | — | Present in PaymentCurrentOutput. |
+| `current.components[].currency` | string | no | no | — | Present in PaymentCurrentOutput. |
+| `current.components[].received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `current.components[].applied_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `current.components[].available_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `current.component_count` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `current.invoice_id` | string | no | no | — | Present in InvoiceSettlementOutput. |
+| `current.gross_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
+| `current.due_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
+| `current.settlement_guard` | string \| null | no | yes | null | Present in InvoiceSettlementOutput. |
+| `current.as_of` | string \| null | no | yes | null | Present in InvoiceSettlementOutput. |
+| `current.audit_watermark` | integer \| null | no | yes | null | Present in InvoiceSettlementOutput. |
+| `current.all_committed_current` | object \| null | no | yes | null | Present in InvoiceSettlementOutput. |
+| `current.all_committed_current.invoice_id` | string | no | no | — | Present in InvoiceSettlementOutput. |
+| `current.all_committed_current.version` | integer | no | no | — | Present in InvoiceSettlementOutput. |
+| `current.all_committed_current.revision_id` | string \| null | no | yes | — | Present in InvoiceSettlementOutput. |
+| `current.all_committed_current.gross_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
+| `current.all_committed_current.applied_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
+| `current.all_committed_current.due_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
+| `current.all_committed_current.currency` | string | no | no | — | Present in InvoiceSettlementOutput. |
+| `current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | no | no | — | Present in InvoiceSettlementOutput. |
 
 Example JSON output:
 

@@ -29,23 +29,25 @@ def range_error(line, facts, length, net, denominator, **extra):
         problem='requested work exceeds available scope; bill extra charges as an unlinked sale line', **extra))
 
 
-def rebill_spans(s, reference, root, facts):
+def rebill_spans(s, reference, root, facts, policy=None):
     from bookflow.company.billing import dependency
     rows = work.rows(s, c.work_billing_allocations, c.work_billing_allocations.c.id == reference)
     if not rows:
         dependency('released allocation is not available in this company', allocation_id=reference)
     row = rows[0]
-    if (row['root_document_id'], row['root_line_id']) != root or alloc.basis(alloc.captured_line(row), root) != alloc.basis(facts, root):
+    if (row['root_document_id'], row['root_line_id']) != root or alloc.basis(alloc.captured_line(row), root, alloc.captured_policy(row)) != alloc.basis(facts, root, policy):
         dependency('released allocation does not match this source root and economic basis', allocation_id=reference)
     saved = alloc.read_proof(row)
     d = math.denominator(facts.quantity_microunits, facts.net_minor_units)
     spans = saved.intervals() if saved else ((0, d),)
-    if not math.spans_available(spans, alloc.free_spans(s, root, facts), d):
+    if not math.spans_available(spans, alloc.free_spans(s, root, facts, policy=policy), d):
         dependency('the exact released allocation is not entirely free', allocation_id=reference)
     return spans
 
 
 def select(s, inp, source, revision, lines, identities):
+    from bookflow.company import tax_policy
+    policy=tax_policy.effective(work.facts(revision).profile)
     from bookflow.company.billing import dependency
     requested = set(inp.line_ids) if inp.line_ids is not None else None
     entered = {value.line_id: (i, value) for i, value in enumerate(inp.selections or [])}
@@ -69,7 +71,7 @@ def select(s, inp, source, revision, lines, identities):
                 dependency('selected source line is not billable', source_line_id=key)
             continue
         d = math.denominator(facts.quantity_microunits, facts.net_minor_units)
-        length, net = alloc.remaining(s, root, facts)
+        length, net = alloc.remaining(s, root, facts, policy=policy)
         entry = entered.get(key)
         if length == 0 and not entry:
             if requested is not None:
@@ -77,7 +79,7 @@ def select(s, inp, source, revision, lines, identities):
             continue
         request = entry[1] if entry else None
         if request and request.rebill_allocation_id:
-            spans = rebill_spans(s, request.rebill_allocation_id, root, facts)
+            spans = rebill_spans(s, request.rebill_allocation_id, root, facts, policy)
         else:
             requested_net = None
             requested_length = length
@@ -97,10 +99,10 @@ def select(s, inp, source, revision, lines, identities):
                     requested_length is not None and (requested_length <= 0 or requested_length > length)):
                 raise range_error(line, facts, length, net, d)
             try:
-                spans = math.allocate(alloc.free_spans(s, root, facts), denominator=d,
+                spans = math.allocate(alloc.free_spans(s, root, facts, policy=policy), denominator=d,
                     source_net=facts.net_minor_units, length=requested_length, net_amount=requested_net)
             except math.FragmentationError:
-                recommendation = math.recommended_net(alloc.free_spans(s, root, facts), denominator=d,
+                recommendation = math.recommended_net(alloc.free_spans(s, root, facts, policy=policy), denominator=d,
                     source_net=facts.net_minor_units)
                 raise range_error(line, facts, length, net, d, recommended_net_amount=money(
                     {'minor_units': recommendation, 'currency': revision['currency']}, revision['currency']).to_dict(),
@@ -109,7 +111,7 @@ def select(s, inp, source, revision, lines, identities):
         if span_count > 2000:
             raise BookflowError('E_VALUE_RANGE', details=dict(line_id=key,
                 problem='conversion exceeds2000 allocation spans', recovery='select fewer source lines'))
-        proof = None if spans == ((0,d),) else alloc.make_proof(source, revision, line, root, facts, spans)
+        proof = None if spans == ((0,d),) and facts.schema_version==1 else alloc.make_proof(source, revision, line, root, facts, spans)
         selected.append(SelectedLine(line, root, facts, spans, proof))
     if not selected or sum(item.proof.net() if item.proof else item.facts.net_minor_units for item in selected) <= 0:
         dependency('No charge remains; zero-price lines were not invoiced', source_id=source['id'])

@@ -21,6 +21,13 @@ class WorkProfile(CommercialProfile):
 
 
 class WorkFacts(StrictModel):
+    @model_validator(mode='before')
+    @classmethod
+    def exact_schema_version(cls, value):
+        if isinstance(value, dict) and 'schema_version' in value and type(value['schema_version']) is not int:
+            raise ValueError('schema_version must be an integer discriminator')
+        return value
+
     schema_version: Literal[1] = 1
     profile: WorkProfile
     issuer_snapshot: dict[str, str | None]
@@ -41,6 +48,8 @@ class WorkFacts(StrictModel):
 
     @model_validator(mode='after')
     def operational_consistency(self):
+        if self.profile.schema_version != self.schema_version:
+            raise ValueError('work root and profile versions must agree')
         if len({value.id for value in self.assignees}) != len(self.assignees):
             raise ValueError('assignees must be distinct employees')
         for prefix in ('scheduled', 'actual'):
@@ -63,6 +72,13 @@ class WorkTaxComponent(StrictModel):
 
 
 class WorkLineFacts(StrictModel):
+    @model_validator(mode='before')
+    @classmethod
+    def exact_schema_version(cls, value):
+        if isinstance(value, dict) and 'schema_version' in value and type(value['schema_version']) is not int:
+            raise ValueError('schema_version must be an integer discriminator')
+        return value
+
     schema_version: Literal[1] = 1
     item_id: str
     description: Text | None

@@ -44,7 +44,7 @@ def test_sub_microunit_amount_partial_and_remaining(client,sale,noun,verb):
     assert line['quantity'] == '1/2500000' and line['quoted_quantity'] == '0.000001'
     assert line['quantity_fraction'] == dict(numerator='1',denominator='2500000')
     assert line['pricing_basis'] == 'allocated' and line['unit_price'] is None
-    assert first['revision']['billing_sources'][0]['allocation_version'] == 2
+    assert first['revision']['billing_sources'][0]['allocation_version'] == 3
     state = run(client,noun,'billing',**{noun.replace('-','_'):source['id']})
     assert state['remaining_net_minor_units'] == 60 and state['lines'][0]['state'] == 'partially_billed'
     assert state['lines'][0]['billed_scope_percent'] == '40'
@@ -160,7 +160,7 @@ def test_wrong_free_spans_are_not_accepted_merely_because_amounts_match(client,s
             item.spans = ((d//2,3*d//4),)
             fields = item.proof.model_dump()
             fields['spans'] = [dict(start=str(d//2),end=str(3*d//4))]
-            item.proof = AllocationProof.model_validate(fields)
+            item.proof = type(item.proof).model_validate(fields)
         return selected
     monkeypatch.setattr(billing_selection,'select',corrupt)
     with pytest.raises(BookflowError) as err:
@@ -182,7 +182,7 @@ def taxed_quote(client,sale,net='0.10'):
         db.conn.commit()
     tax = client.run('item create',dict(name='Progress ten percent',type='sales_tax_item',tax_percent='10',
         tax_agency_vendor_id=agency,liability_account_id=liability),company=COMPANY)['id']
-    return accepted(client,sale,sales_tax_item=tax,
+    return accepted(client,sale,sales_tax_item=tax,sales_tax_calculation="line_component_half_even",
         lines=[dict(item=sale['item'],quantity='1',net_amount=net,tax_code=taxable)])
 
 

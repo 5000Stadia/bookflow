@@ -200,8 +200,11 @@ and cost_complete separately. Estimated profit is net minus total estimated cost
 only when every line cost is known; otherwise null. Prices, extensions, each tax
 component and totals stay exact bounded int64; intermediates are unbounded integers.
 
-Tax is computed per line/component from its authoritative net and the captured
-rate with existing half-even arithmetic. Exempt/disabled tax remains explicit.
+Tax uses the captured sales_tax_calculation and origin under Row24. Legacy
+line_component_half_even preserves per-line/component half-even from authoritative
+net and captured rate. line_combined_half_up rounds each line's combined tax half
+up; invoice_combined_half_up rounds compatible document buckets half up, allocating
+exact cents by immutable tax ordinal and stable rule ID. Exempt/disabled tax remains explicit.
 Zero taxes can be captured; there are no zero posting legs because there are no
 posting legs at all. Examples: qty2, cost4.00, markup25 => rate5.00/net10.00;
 qty2, explicit net10.01 => blank rate/net10.01; at8%tax =>0.80, gross10.81.
@@ -389,3 +392,27 @@ Reopening complete work clears its old end before validating a new start, and
 invalid timestamp combinations use structured validation errors. Live upgrades
 require a byte-verified closed backup and preservation rehearsal; the demo is
 not reset by an extension.
+
+
+## Versioned work tax and protected source economics (Row24)
+
+Legacy WorkFacts1 requires WorkProfile version1 (the legacy commercial profile)
+and retains implicit legacy policy; current WorkFacts2 requires WorkProfile
+version2 with captured policy/origin. Exact
+integer discriminators precede normalization. New combined calculations require
+WorkLineFacts2; a current header may retain WorkLineFacts1 for a legacy-policy
+lineage. Stored old facts, proofs and audit bytes stay unchanged. Company defaults
+are captured on creation/default reset, explicit selections retain explicit origin,
+and source-derived copy/accept/estimate/order/billing paths carry the agreement.
+Changing the live company default never reprices a saved or accepted source.
+
+Progress-billing's exact basis1/basis2 and allocation1/2/3 matrix governs consumed
+roots. Basis1 keeps original derived cells; basis2 excludes only its enumerated
+operational/version/derived members and retains ordered complete rules and policy.
+Permitted independent work-order additions can redistribute derived quoted tax
+without changing consumed roots' protected economics. Economics or captured
+policy/rules cannot change while allocations remain active. Release all active
+allocations before an otherwise permitted economic edit; historical allocations
+continue to validate their original source revision. Line identities and immutable
+tax ordinals are distinct from payment settlement ordinals. A reordered display
+alone does not reassign existing document tax ties.

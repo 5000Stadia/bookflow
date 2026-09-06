@@ -4,7 +4,7 @@ from itertools import zip_longest
 import json
 
 from bookflow.company import schema as c, work, billing_allocations as alloc, billing_math as math
-from bookflow.company.work_facts import WorkLineFacts
+from bookflow.company.work_tax_facts import read_line
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import parse_percentage_millionths, parse_quantity_micro_units
 from bookflow.company.sales_models import money
@@ -25,8 +25,9 @@ def source_facts(s, proof):
     require(len(identities) == 1, 'source identity does not exist')
     root = identities[0]['root_document_id'], identities[0]['root_line_id']
     require(root == (proof.root_document_id,proof.root_line_id), 'source root differs')
-    facts = WorkLineFacts.model_validate_json(row['facts_snapshot'])
-    require(proof.source_basis_hash == alloc.basis(facts, root), 'basis hash differs from stored source')
+    facts = read_line(row['facts_snapshot'])
+    require(proof.source_basis_hash == alloc.basis(facts, root, alloc.source_policy(s,row)), 'basis hash differs from stored source')
+    require(getattr(proof,'basis_version',1)==facts.schema_version,'proof basis version differs from source facts')
     require((proof.quoted_quantity_microunits, proof.quoted_base_quantity_microunits, proof.quoted_net_minor_units) ==
             (facts.quantity_microunits, facts.base_quantity_microunits, facts.net_minor_units), 'quoted numeric basis differs')
     return facts
@@ -58,7 +59,7 @@ def selected_identities(s, inp, lines, identities):
             continue
         facts = work.line_facts(line)
         root = identities[key]['root_document_id'],identities[key]['root_line_id']
-        length, _ = alloc.remaining(s,root,facts)
+        length, _ = alloc.remaining(s,root,facts,policy=alloc.source_policy(s,line))
         if explicit is not None:
             require(facts.billable and length > 0, 'explicit line is ineligible or consumed')
             selected.add(key)
@@ -77,10 +78,10 @@ def selected_spans(s, inp, line, root, facts, currency):
         require(len(prior) == 1, 'rebill allocation missing')
         row = prior[0]
         require((row['root_document_id'],row['root_line_id']) == root, 'rebill belongs to another root')
-        require(alloc.basis(alloc.captured_line(row),root) == alloc.basis(facts,root), 'rebill basis differs')
+        require(alloc.basis(alloc.captured_line(row),root,alloc.captured_policy(row)) == alloc.basis(facts,root,alloc.source_policy(s,line)), 'rebill basis differs')
         old_proof = alloc.read_proof(row)
         spans = old_proof.intervals() if old_proof else ((0,d),)
-        require(math.spans_available(spans,alloc.free_spans(s,root,facts),d), 'rebill spans are occupied')
+        require(math.spans_available(spans,alloc.free_spans(s,root,facts,policy=alloc.source_policy(s,line)),d), 'rebill spans are occupied')
         return spans
     net = None
     if entered and entered.net_amount is not None:
@@ -93,6 +94,6 @@ def selected_spans(s, inp, line, root, facts, currency):
         length = parse_percentage_millionths(entered.percent if entered else inp.percent)*d//100_000_000
     else:
         # Bounded selection rejects before returning an oversized financial result.
-        return math.canonical_spans(alloc.free_spans(s,root,facts),d)
-    return math.allocate(alloc.free_spans(s,root,facts),denominator=d,
+        return math.canonical_spans(alloc.free_spans(s,root,facts,policy=alloc.source_policy(s,line)),d)
+    return math.allocate(alloc.free_spans(s,root,facts,policy=alloc.source_policy(s,line)),denominator=d,
                          source_net=facts.net_minor_units,length=length,net_amount=net)

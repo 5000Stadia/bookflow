@@ -16,7 +16,7 @@ from bookflow.core.durability import sync_directory, sync_file
 from bookflow.storage.engine import Database, io_error, sqlite_uri
 
 # Head revisions as constants: checked before Alembic is imported on the read path.
-HEADS = {"hub": "hub0011", "company": "co0014"}
+HEADS = {"hub": "hub0011", "company": "co0016"}
 _PKG = Path(__file__).parent
 
 
@@ -227,7 +227,11 @@ def migrate_company(s, ctx, db: Database, folder: Path, row: dict | None) -> tup
         upsert_principal(db, user_id=s.actor.id, username=s.actor.username, display_name=s.actor.display_name, kind=s.actor.kind)
     actor_id = s.actor.id if s.actor else None
     mctx = ctx.model_copy(update={"on_behalf_of": actor_id})
-    touched = [Touched("company_info", row["id"] if row else "unknown", "migrate", None, None, {"schema_revision": after, "from": before}, db="company")]
+    migration_snapshot = {"schema_revision": after, "from": before}
+    if before is not None and before < "co0015" <= after:
+        from bookflow.company.info import read_info
+        migration_snapshot['sales_tax_calculation'] = read_info(db)['sales_tax_calculation']
+    touched = [Touched("company_info", row["id"] if row else "unknown", "migrate", None, None, migration_snapshot, db="company")]
     if before is not None and before < "co0002" <= after:
         from bookflow.company.info import read_info
         info = read_info(db)

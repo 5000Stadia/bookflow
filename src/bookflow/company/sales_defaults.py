@@ -376,6 +376,9 @@ def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
                 raise
             out['sales_tax_item'], out['tax_rules'] = None, None
     out['origins'] = fields.origins
+    from bookflow.company import tax_policy
+    policy, policy_origin = tax_policy.resolve(inp, previous, info)
+    out.update(schema_version=2, sales_tax_calculation=policy, tax_policy_origin=policy_origin)
     return (CommercialProfile(**out) if nonposting else SalesProfile(**out)), warnings
 
 
@@ -484,7 +487,7 @@ def _derived_price(profile):
 def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict | None = None,
                  previous_header: SalesProfile | None = None, refresh: bool = False,
                  nonposting: bool = False, price_override: Callable | None = None,
-                 net_override: int | None = None) -> tuple[dict, list[str]]:
+                 net_override: int | None = None, defer_tax: bool = False) -> tuple[dict, list[str]]:
     """Resolve one commercial line using preserved rules for ordinary edits."""
     if not nonposting and (price_override is not None or net_override is not None):
         raise _invalid('unit_price', 'price hooks require non-posting resolution')
@@ -680,7 +683,7 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
             raise _invalid('sales_tax_item', 'taxable treatment requires a valid captured tax item; select one or use_defaults')
         if not nonposting and header.preferences.sales_tax_liability_basis != 'invoice_date':
             raise _invalid('sales_tax_item', 'taxable sales require invoice_date liability policy')
-        taxes = [dict(rule=rule, taxable_minor_units=net, tax_minor_units=tax(net, rule.rate_percent_millionths))
+        taxes = [dict(rule=rule, taxable_minor_units=net, tax_minor_units=0 if defer_tax else tax(net, rule.rate_percent_millionths))
                  for rule in header.tax_rules]
     tax_amount = total((component['tax_minor_units'] for component in taxes), 'line.tax')
     gross = total((net, tax_amount), 'line.gross')

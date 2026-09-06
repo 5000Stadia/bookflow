@@ -14,7 +14,7 @@ def test_exact_prior_prefix(resource, count):
     old_commands = tomllib.loads(old.decode())['commands']
     commands = tomllib.loads(current.decode())['commands']
     assert len(old_commands) == count and commands[:count] == old_commands
-    assert len(commands) == count + 12
+    assert len(commands[count:count + 12]) == 12  # later rows append their own examples
 
 
 @pytest.mark.parametrize('company,prefix', [('Demo Plumbing Co','DEMO'), ('Reference Plumbing Co','REF')])

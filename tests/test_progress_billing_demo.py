@@ -102,7 +102,7 @@ def test_progress_chain_exact_installments_rebill_correction_and_lineage(referen
     [line] = one["revision"]["lines"]
     assert (line["pricing_basis"], line["quantity"], line["quoted_quantity"], line["unit_price"]["minor_units"]) == ("allocated", "1", "4", 10000)
     [proof] = one["revision"]["billing_sources"]
-    assert proof["allocation_version"] == 2 and proof["root_line_id"] == roots[0]
+    assert proof["allocation_version"] == 3 and proof["root_line_id"] == roots[0]
     assert proof["allocation_proof"]["spans"] == [{"start": "0", "end": str(D0 // 4)}] and proof["allocation_proof"]["denominator"] == str(D0)
     forty = sources(p + "INV-2")
     [line] = forty["revision"]["lines"]
@@ -181,11 +181,11 @@ def test_progress_chain_exact_installments_rebill_correction_and_lineage(referen
 @pytest.mark.parametrize("company,prefix", COMPANIES)
 def test_voided_progress_demos_leave_every_old_balance_and_zero_net_effect(reference_client, company, prefix):
     client, _ = reference_client
-    checking, trial, journals, profit, equity = ((624895, 690195, 10, 133095, 633095) if prefix == "DEMO"
-                                                 else (7267800, 8030600, 36, 6439000, 7439000))
+    checking, trial, journals, profit, equity = ((624895, 690234, 10, 133130, 633130) if prefix == "DEMO"
+                                                 else (7267800, 8030639, 36, 6439035, 7439035))
     assert client.account.show(account="Checking", company=company)["balance"]["minor_units"] == checking
-    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == 12800
-    assert client.account.show(account="Sales Tax Payable", company=company)["balance"]["minor_units"] == 1600
+    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == 12839
+    assert client.account.show(account="Sales Tax Payable", company=company)["balance"]["minor_units"] == 1604
     totals = client.report.trial_balance(company=company, date_to="2026-12-31", limit=200)["totals"]
     assert totals["debit"]["minor_units"] == totals["credit"]["minor_units"] == trial
     statement = client.report.profit_and_loss(company=company, date_from="2026-01-01", date_to="2026-12-31")

@@ -64,6 +64,61 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].created_at` | string | yes | no | — | — |
 | `items[].created_by` | string | yes | no | — | — |
 | `items[].created_via` | string | yes | no | — | — |
+| `items[].tax_calculation_details` | object \| null | no | yes | null | — |
+| `items[].tax_calculation_details.policy` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `items[].tax_calculation_details.origin` | object | yes | no | — | — |
+| `items[].tax_calculation_details.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `items[].tax_calculation_details.origin.source_id` | string \| null | no | yes | null | — |
+| `items[].tax_calculation_details.legacy_interpretation` | boolean | yes | no | — | — |
+| `items[].tax_calculation_details.attribution` | object \| null | no | yes | null | — |
+| `items[].tax_calculation_details.attribution.schema_version` | literal[1] | no | no | 1 | — |
+| `items[].tax_calculation_details.attribution.origin` | object | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.origin.source_id` | string \| null | no | yes | null | — |
+| `items[].tax_calculation_details.attribution.calculation` | object | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.policy` | enum["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.currency` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets` | array[object] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].tax_ordinals` | array[integer] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].net_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].exact_numerator` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].tax_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].gross_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells` | array[object] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].tax_ordinal` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule` | object | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.id` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.label` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.version` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.rate_percent_millionths` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency` | object | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.id` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.label` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.version` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account` | object | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.id` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.name` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.full_name` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.number` | string \| null | yes | yes | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.type` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].exact_numerator` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].tax_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.lines` | array[object] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.lines[].tax_ordinal` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.lines[].net_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.lines[].tax_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.liabilities` | array[object] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.liabilities[].agency_id` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.liabilities[].liability_account_id` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.liabilities[].tax_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.accounts` | array[object] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.accounts[].liability_account_id` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.accounts[].tax_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.net_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.tax_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.gross_minor_units` | integer | yes | no | — | — |
 | `items[].transaction_id` | string | yes | no | — | — |
 | `items[].revision_number` | integer | yes | no | — | — |
 | `items[].supersedes_revision_id` | string \| null | yes | yes | — | — |
@@ -174,7 +229,7 @@ Example JSON output:
 
 ## `invoice post`
 
-Post a home-currency service sale with captured commercial facts and typed custom fields; dry-run previews defaults, which resolve atomically at execution unless expected_facts_fingerprint is supplied. Use payment receive or payment apply to settle an existing invoice.
+Post a home-currency service sale with captured commercial facts and typed custom fields; dry-run previews defaults, which resolve atomically at execution unless expected_facts_fingerprint is supplied. Use payment receive or payment apply to settle an existing invoice. sales_tax_calculation captures legacy separate-component, combined-line or combined-invoice rounding. Omission retains policy on corrections; use_defaults reselects the company policy. Combined rounding attributes cents by stable tax ordinals separately from payment settlement keys.
 
 | Contract | Value |
 |---|---|
@@ -197,6 +252,7 @@ Post a home-currency service sale with captured commercial facts and typed custo
 | `ar_account` | `--ar-account` | string \| null | no | yes | null | — |
 | `terms` | `--terms` | string \| null | no | yes | null | — |
 | `due_date` | `--due-date` | string \| null | no | yes | null | — |
+| `sales_tax_calculation` | `--sales-tax-calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `customer_message` | `--customer-message` | string \| null | no | yes | null | — |
@@ -223,7 +279,7 @@ Post a home-currency service sale with captured commercial facts and typed custo
 | `sales_tax_item` | `--sales-tax-item` | string \| null | no | yes | null | — |
 | `price_level` | `--price-level` | string \| null | no | yes | null | — |
 | `refresh_defaults` | `--refresh-defaults` | boolean | no | no | false | — |
-| `use_defaults` | `--use-defaults` | array[literal["billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | — |
+| `use_defaults` | `--use-defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | — |
 | `expected_facts_fingerprint` | `--expected-facts-fingerprint` | string \| null | no | yes | null | — |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
@@ -344,6 +400,61 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.created_at` | string | yes | no | — | — |
 | `revision.created_by` | string | yes | no | — | — |
 | `revision.created_via` | string | yes | no | — | — |
+| `revision.tax_calculation_details` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.policy` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.legacy_interpretation` | boolean | yes | no | — | — |
+| `revision.tax_calculation_details.attribution` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.tax_calculation_details.attribution.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.calculation` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.policy` | enum["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.currency` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_ordinals` | array[integer] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.rate_percent_millionths` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.full_name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.number` | string \| null | yes | yes | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.type` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].agency_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.gross_minor_units` | integer | yes | no | — | — |
 | `revision.transaction_id` | string | yes | no | — | — |
 | `revision.revision_number` | integer | yes | no | — | — |
 | `revision.supersedes_revision_id` | string \| null | yes | yes | — | — |
@@ -419,8 +530,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.billing_sources[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.billing_sources[].gross_minor_units` | integer | yes | no | — | — |
 | `revision.billing_sources[].facts_snapshot` | dict | yes | no | — | — |
-| `revision.billing_sources[].allocation_version` | literal[1, 2] | no | no | 1 | — |
-| `revision.billing_sources[].allocation_proof` | object \| null | no | yes | null | — |
+| `revision.billing_sources[].allocation_version` | literal[1, 2, 3] | no | no | 1 | — |
+| `revision.billing_sources[].allocation_proof` | object \| object \| null | no | yes | null | — |
 | `revision.billing_sources[].allocation_proof.source_document_id` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.source_revision_id` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.source_line_id` | string | yes | no | — | — |
@@ -434,6 +545,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.billing_sources[].allocation_proof.spans` | array[object] | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.spans[].end` | string | yes | no | — | — |
+| `revision.billing_sources[].allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -448,7 +560,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.custom_fields[].choice_id` | string \| null | no | yes | null | — |
 | `revision.custom_fields[].choice_label` | string \| null | no | yes | null | — |
 | `revision.profile` | object | yes | no | — | — |
-| `revision.profile.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
+| `revision.profile.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] \| null | no | yes | null | — |
+| `revision.profile.tax_policy_origin` | object \| null | no | yes | null | — |
+| `revision.profile.tax_policy_origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.profile.tax_policy_origin.source_id` | string \| null | no | yes | null | — |
 | `revision.profile.customer` | object | yes | no | — | — |
 | `revision.profile.customer.id` | string | yes | no | — | — |
 | `revision.profile.customer.label` | string | yes | no | — | — |
@@ -563,6 +679,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_at` | string | yes | no | — | — |
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
+| `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
 | `revision.lines[].transaction_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -654,7 +771,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].item_snapshot.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].item_snapshot.net_amount_minor_units` | integer \| null | no | yes | null | — |
-| `revision.lines[].item_snapshot.allocation_proof` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.allocation_proof` | object \| object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_document_id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_revision_id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_line_id` | string | yes | no | — | — |
@@ -668,6 +785,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.allocation_proof.spans` | array[object] | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].end` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -865,6 +983,89 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages` | array[object] | no | no | [] | — |
 | `settlement.prospective_pages[].command` | literal["payment preview items"] | no | no | "payment preview items" | — |
 | `settlement.prospective_pages[].request` | object \| object \| object \| object \| object \| object | yes | no | — | — |
+| `settlement.prospective_pages[].request.command` | literal["payment receive"] \| literal["payment apply"] \| literal["payment unapply"] \| literal["payment void"] \| literal["payment update"] \| literal["invoice update"] | yes | no | — | — |
+| `settlement.prospective_pages[].request.input` | object | yes | no | — | — |
+| `settlement.prospective_pages[].request.input.customer` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.date` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, ApplyPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.amount` | string \| object \| string \| object \| null | no | no | — | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.operation_key` | string \| string \| null | no | no | — | — |
+| `settlement.prospective_pages[].request.input.applications` | object \| object \| array[object] | no | no | {"items": [], "mode": "inline"} | Present in ReceivePreviewRequest, ApplyPreviewRequest, UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.mode` | literal["inline"] \| literal["selection"] | no | no | "inline" | Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items` | array[object] | no | no | [] | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].invoice` | string | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].expected_version` | integer | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].amount` | string \| object | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.number` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.reference` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.memo` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.custom_fields` | object[string, any \| null] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_facts_fingerprint` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.context` | object | no | no | {"directive_id": null, "reason": null} | — |
+| `settlement.prospective_pages[].request.context.reason` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.context.directive_id` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.input.payment` | string | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_version` | integer \| integer \| null | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications[].application_id` | string | no | no | — | Present in UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications[].invoice_expected_version` | integer | no | no | — | Present in UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions` | array[object] | no | no | [] | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions[].invoice` | string | no | no | — | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions[].expected_version` | integer | no | no | — | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_guard` | string \| null | no | yes | null | Present in UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.due_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_message_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_purchase_order` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address` | object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.postal_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address` | object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.postal_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ship_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ship_method` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_rep` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.class_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_tax_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.use_defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines` | array[object] \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].line_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].item` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].quantity` | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].unit` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].unit_price` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].net_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].description` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].class_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].price_basis_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions[].payment` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions[].expected_version` | integer | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].facts_fingerprint` | string | yes | no | — | — |
 | `settlement.prospective_pages[].kind` | literal["source_components", "applications", "allocations", "document_changes"] | yes | no | — | — |
 | `settlement.prospective_pages[].total_count` | integer | yes | no | — | — |
@@ -885,6 +1086,64 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `source_current.version` | integer | yes | no | — | — |
 | `source_current.active` | boolean | yes | no | — | — |
 | `source_current.status` | string | yes | no | — | — |
+| `billing_forecast` | object \| null | no | yes | null | — |
+| `billing_forecast.forecast_basis` | literal["all_remaining_together"] | no | no | "all_remaining_together" | — |
+| `billing_forecast.can_bill_together` | boolean | yes | no | — | — |
+| `billing_forecast.forecast_eligibility_reasons` | array[object] | no | no | [] | — |
+| `billing_forecast.forecast_eligibility_reasons[].code` | literal["line_span_limit", "conversion_span_limit", "source_ineligible", "posting_ineligible", "no_charge"] | yes | no | — | — |
+| `billing_forecast.forecast_eligibility_reasons[].line_id` | string \| null | no | yes | null | — |
+| `billing_forecast.forecast_eligibility_reasons[].recovery` | string | yes | no | — | — |
+| `billing_forecast.forecast_line_ordinals` | object[string, integer] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.schema_version` | literal[1] | no | no | 1 | — |
+| `billing_forecast.forecast_tax_attribution.origin` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.origin.source_id` | string \| null | no | yes | null | — |
+| `billing_forecast.forecast_tax_attribution.calculation` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.policy` | enum["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.currency` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].tax_ordinals` | array[integer] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].exact_numerator` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].tax_ordinal` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.label` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.version` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.rate_percent_millionths` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.label` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.version` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.name` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.full_name` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.number` | string \| null | yes | yes | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.type` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].exact_numerator` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].tax_ordinal` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].agency_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].liability_account_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts[].liability_account_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_fingerprint` | string | yes | no | — | — |
 | `billing_progress` | array[object] | no | no | [] | — |
 | `billing_progress[].line_id` | string | yes | no | — | — |
 | `billing_progress[].root_document_id` | string | yes | no | — | — |
@@ -1565,6 +1824,61 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.created_at` | string | yes | no | — | — |
 | `revision.created_by` | string | yes | no | — | — |
 | `revision.created_via` | string | yes | no | — | — |
+| `revision.tax_calculation_details` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.policy` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.legacy_interpretation` | boolean | yes | no | — | — |
+| `revision.tax_calculation_details.attribution` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.tax_calculation_details.attribution.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.calculation` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.policy` | enum["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.currency` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_ordinals` | array[integer] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.rate_percent_millionths` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.full_name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.number` | string \| null | yes | yes | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.type` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].agency_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.gross_minor_units` | integer | yes | no | — | — |
 | `revision.transaction_id` | string | yes | no | — | — |
 | `revision.revision_number` | integer | yes | no | — | — |
 | `revision.supersedes_revision_id` | string \| null | yes | yes | — | — |
@@ -1640,8 +1954,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.billing_sources[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.billing_sources[].gross_minor_units` | integer | yes | no | — | — |
 | `revision.billing_sources[].facts_snapshot` | dict | yes | no | — | — |
-| `revision.billing_sources[].allocation_version` | literal[1, 2] | no | no | 1 | — |
-| `revision.billing_sources[].allocation_proof` | object \| null | no | yes | null | — |
+| `revision.billing_sources[].allocation_version` | literal[1, 2, 3] | no | no | 1 | — |
+| `revision.billing_sources[].allocation_proof` | object \| object \| null | no | yes | null | — |
 | `revision.billing_sources[].allocation_proof.source_document_id` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.source_revision_id` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.source_line_id` | string | yes | no | — | — |
@@ -1655,6 +1969,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.billing_sources[].allocation_proof.spans` | array[object] | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.spans[].end` | string | yes | no | — | — |
+| `revision.billing_sources[].allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -1669,7 +1984,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.custom_fields[].choice_id` | string \| null | no | yes | null | — |
 | `revision.custom_fields[].choice_label` | string \| null | no | yes | null | — |
 | `revision.profile` | object | yes | no | — | — |
-| `revision.profile.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
+| `revision.profile.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] \| null | no | yes | null | — |
+| `revision.profile.tax_policy_origin` | object \| null | no | yes | null | — |
+| `revision.profile.tax_policy_origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.profile.tax_policy_origin.source_id` | string \| null | no | yes | null | — |
 | `revision.profile.customer` | object | yes | no | — | — |
 | `revision.profile.customer.id` | string | yes | no | — | — |
 | `revision.profile.customer.label` | string | yes | no | — | — |
@@ -1784,6 +2103,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_at` | string | yes | no | — | — |
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
+| `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
 | `revision.lines[].transaction_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -1875,7 +2195,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].item_snapshot.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].item_snapshot.net_amount_minor_units` | integer \| null | no | yes | null | — |
-| `revision.lines[].item_snapshot.allocation_proof` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.allocation_proof` | object \| object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_document_id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_revision_id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_line_id` | string | yes | no | — | — |
@@ -1889,6 +2209,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.allocation_proof.spans` | array[object] | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].end` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -2102,7 +2423,7 @@ Example JSON output:
 
 ## `invoice update`
 
-Append an immutable sale correction with an exact old-date reversal and a full new-date replacement; dry-run previews resolved facts for optional expected_facts_fingerprint verification.
+Append an immutable sale correction with an exact old-date reversal and a full new-date replacement; dry-run previews resolved facts for optional expected_facts_fingerprint verification. sales_tax_calculation captures legacy separate-component, combined-line or combined-invoice rounding. Omission retains policy on corrections; use_defaults reselects the company policy. Combined rounding attributes cents by stable tax ordinals separately from payment settlement keys.
 
 | Contract | Value |
 |---|---|
@@ -2125,6 +2446,7 @@ Append an immutable sale correction with an exact old-date reversal and a full n
 | `ar_account` | `--ar-account` | string \| null | no | yes | null | — |
 | `terms` | `--terms` | string \| null | no | yes | null | — |
 | `due_date` | `--due-date` | string \| null | no | yes | null | — |
+| `sales_tax_calculation` | `--sales-tax-calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `customer_message` | `--customer-message` | string \| null | no | yes | null | — |
@@ -2151,7 +2473,7 @@ Append an immutable sale correction with an exact old-date reversal and a full n
 | `sales_tax_item` | `--sales-tax-item` | string \| null | no | yes | null | — |
 | `price_level` | `--price-level` | string \| null | no | yes | null | — |
 | `refresh_defaults` | `--refresh-defaults` | boolean | no | no | false | — |
-| `use_defaults` | `--use-defaults` | array[literal["billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | — |
+| `use_defaults` | `--use-defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | — |
 | `expected_facts_fingerprint` | `--expected-facts-fingerprint` | string \| null | no | yes | null | — |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
@@ -2279,6 +2601,61 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.created_at` | string | yes | no | — | — |
 | `revision.created_by` | string | yes | no | — | — |
 | `revision.created_via` | string | yes | no | — | — |
+| `revision.tax_calculation_details` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.policy` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.legacy_interpretation` | boolean | yes | no | — | — |
+| `revision.tax_calculation_details.attribution` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.tax_calculation_details.attribution.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.calculation` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.policy` | enum["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.currency` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_ordinals` | array[integer] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.rate_percent_millionths` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.full_name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.number` | string \| null | yes | yes | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.type` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].agency_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.gross_minor_units` | integer | yes | no | — | — |
 | `revision.transaction_id` | string | yes | no | — | — |
 | `revision.revision_number` | integer | yes | no | — | — |
 | `revision.supersedes_revision_id` | string \| null | yes | yes | — | — |
@@ -2354,8 +2731,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.billing_sources[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.billing_sources[].gross_minor_units` | integer | yes | no | — | — |
 | `revision.billing_sources[].facts_snapshot` | dict | yes | no | — | — |
-| `revision.billing_sources[].allocation_version` | literal[1, 2] | no | no | 1 | — |
-| `revision.billing_sources[].allocation_proof` | object \| null | no | yes | null | — |
+| `revision.billing_sources[].allocation_version` | literal[1, 2, 3] | no | no | 1 | — |
+| `revision.billing_sources[].allocation_proof` | object \| object \| null | no | yes | null | — |
 | `revision.billing_sources[].allocation_proof.source_document_id` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.source_revision_id` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.source_line_id` | string | yes | no | — | — |
@@ -2369,6 +2746,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.billing_sources[].allocation_proof.spans` | array[object] | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.spans[].end` | string | yes | no | — | — |
+| `revision.billing_sources[].allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -2383,7 +2761,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.custom_fields[].choice_id` | string \| null | no | yes | null | — |
 | `revision.custom_fields[].choice_label` | string \| null | no | yes | null | — |
 | `revision.profile` | object | yes | no | — | — |
-| `revision.profile.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
+| `revision.profile.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] \| null | no | yes | null | — |
+| `revision.profile.tax_policy_origin` | object \| null | no | yes | null | — |
+| `revision.profile.tax_policy_origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.profile.tax_policy_origin.source_id` | string \| null | no | yes | null | — |
 | `revision.profile.customer` | object | yes | no | — | — |
 | `revision.profile.customer.id` | string | yes | no | — | — |
 | `revision.profile.customer.label` | string | yes | no | — | — |
@@ -2498,6 +2880,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_at` | string | yes | no | — | — |
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
+| `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
 | `revision.lines[].transaction_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -2589,7 +2972,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].item_snapshot.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].item_snapshot.net_amount_minor_units` | integer \| null | no | yes | null | — |
-| `revision.lines[].item_snapshot.allocation_proof` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.allocation_proof` | object \| object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_document_id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_revision_id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_line_id` | string | yes | no | — | — |
@@ -2603,6 +2986,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.allocation_proof.spans` | array[object] | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].end` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -2800,6 +3184,89 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages` | array[object] | no | no | [] | — |
 | `settlement.prospective_pages[].command` | literal["payment preview items"] | no | no | "payment preview items" | — |
 | `settlement.prospective_pages[].request` | object \| object \| object \| object \| object \| object | yes | no | — | — |
+| `settlement.prospective_pages[].request.command` | literal["payment receive"] \| literal["payment apply"] \| literal["payment unapply"] \| literal["payment void"] \| literal["payment update"] \| literal["invoice update"] | yes | no | — | — |
+| `settlement.prospective_pages[].request.input` | object | yes | no | — | — |
+| `settlement.prospective_pages[].request.input.customer` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.date` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, ApplyPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.amount` | string \| object \| string \| object \| null | no | no | — | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.operation_key` | string \| string \| null | no | no | — | — |
+| `settlement.prospective_pages[].request.input.applications` | object \| object \| array[object] | no | no | {"items": [], "mode": "inline"} | Present in ReceivePreviewRequest, ApplyPreviewRequest, UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.mode` | literal["inline"] \| literal["selection"] | no | no | "inline" | Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items` | array[object] | no | no | [] | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].invoice` | string | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].expected_version` | integer | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].amount` | string \| object | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.number` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.reference` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.memo` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.custom_fields` | object[string, any \| null] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_facts_fingerprint` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.context` | object | no | no | {"directive_id": null, "reason": null} | — |
+| `settlement.prospective_pages[].request.context.reason` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.context.directive_id` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.input.payment` | string | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_version` | integer \| integer \| null | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications[].application_id` | string | no | no | — | Present in UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications[].invoice_expected_version` | integer | no | no | — | Present in UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions` | array[object] | no | no | [] | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions[].invoice` | string | no | no | — | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions[].expected_version` | integer | no | no | — | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_guard` | string \| null | no | yes | null | Present in UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.due_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_message_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_purchase_order` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address` | object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.postal_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address` | object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.postal_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ship_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ship_method` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_rep` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.class_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_tax_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.use_defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines` | array[object] \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].line_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].item` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].quantity` | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].unit` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].unit_price` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].net_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].description` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].class_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].price_basis_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions[].payment` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions[].expected_version` | integer | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].facts_fingerprint` | string | yes | no | — | — |
 | `settlement.prospective_pages[].kind` | literal["source_components", "applications", "allocations", "document_changes"] | yes | no | — | — |
 | `settlement.prospective_pages[].total_count` | integer | yes | no | — | — |
@@ -2820,6 +3287,64 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `source_current.version` | integer | yes | no | — | — |
 | `source_current.active` | boolean | yes | no | — | — |
 | `source_current.status` | string | yes | no | — | — |
+| `billing_forecast` | object \| null | no | yes | null | — |
+| `billing_forecast.forecast_basis` | literal["all_remaining_together"] | no | no | "all_remaining_together" | — |
+| `billing_forecast.can_bill_together` | boolean | yes | no | — | — |
+| `billing_forecast.forecast_eligibility_reasons` | array[object] | no | no | [] | — |
+| `billing_forecast.forecast_eligibility_reasons[].code` | literal["line_span_limit", "conversion_span_limit", "source_ineligible", "posting_ineligible", "no_charge"] | yes | no | — | — |
+| `billing_forecast.forecast_eligibility_reasons[].line_id` | string \| null | no | yes | null | — |
+| `billing_forecast.forecast_eligibility_reasons[].recovery` | string | yes | no | — | — |
+| `billing_forecast.forecast_line_ordinals` | object[string, integer] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.schema_version` | literal[1] | no | no | 1 | — |
+| `billing_forecast.forecast_tax_attribution.origin` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.origin.source_id` | string \| null | no | yes | null | — |
+| `billing_forecast.forecast_tax_attribution.calculation` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.policy` | enum["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.currency` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].tax_ordinals` | array[integer] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].exact_numerator` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].tax_ordinal` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.label` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.version` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.rate_percent_millionths` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.label` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.version` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.name` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.full_name` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.number` | string \| null | yes | yes | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.type` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].exact_numerator` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].tax_ordinal` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].agency_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].liability_account_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts[].liability_account_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_fingerprint` | string | yes | no | — | — |
 | `billing_progress` | array[object] | no | no | [] | — |
 | `billing_progress[].line_id` | string | yes | no | — | — |
 | `billing_progress[].root_document_id` | string | yes | no | — | — |
@@ -3198,6 +3723,61 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.created_at` | string | yes | no | — | — |
 | `revision.created_by` | string | yes | no | — | — |
 | `revision.created_via` | string | yes | no | — | — |
+| `revision.tax_calculation_details` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.policy` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.legacy_interpretation` | boolean | yes | no | — | — |
+| `revision.tax_calculation_details.attribution` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.tax_calculation_details.attribution.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.calculation` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.policy` | enum["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.currency` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_ordinals` | array[integer] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.rate_percent_millionths` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.full_name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.number` | string \| null | yes | yes | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.type` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].agency_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.gross_minor_units` | integer | yes | no | — | — |
 | `revision.transaction_id` | string | yes | no | — | — |
 | `revision.revision_number` | integer | yes | no | — | — |
 | `revision.supersedes_revision_id` | string \| null | yes | yes | — | — |
@@ -3273,8 +3853,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.billing_sources[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.billing_sources[].gross_minor_units` | integer | yes | no | — | — |
 | `revision.billing_sources[].facts_snapshot` | dict | yes | no | — | — |
-| `revision.billing_sources[].allocation_version` | literal[1, 2] | no | no | 1 | — |
-| `revision.billing_sources[].allocation_proof` | object \| null | no | yes | null | — |
+| `revision.billing_sources[].allocation_version` | literal[1, 2, 3] | no | no | 1 | — |
+| `revision.billing_sources[].allocation_proof` | object \| object \| null | no | yes | null | — |
 | `revision.billing_sources[].allocation_proof.source_document_id` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.source_revision_id` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.source_line_id` | string | yes | no | — | — |
@@ -3288,6 +3868,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.billing_sources[].allocation_proof.spans` | array[object] | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.spans[].end` | string | yes | no | — | — |
+| `revision.billing_sources[].allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -3302,7 +3883,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.custom_fields[].choice_id` | string \| null | no | yes | null | — |
 | `revision.custom_fields[].choice_label` | string \| null | no | yes | null | — |
 | `revision.profile` | object | yes | no | — | — |
-| `revision.profile.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
+| `revision.profile.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] \| null | no | yes | null | — |
+| `revision.profile.tax_policy_origin` | object \| null | no | yes | null | — |
+| `revision.profile.tax_policy_origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.profile.tax_policy_origin.source_id` | string \| null | no | yes | null | — |
 | `revision.profile.customer` | object | yes | no | — | — |
 | `revision.profile.customer.id` | string | yes | no | — | — |
 | `revision.profile.customer.label` | string | yes | no | — | — |
@@ -3417,6 +4002,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].created_at` | string | yes | no | — | — |
 | `revision.lines[].created_by` | string | yes | no | — | — |
 | `revision.lines[].created_via` | string | yes | no | — | — |
+| `revision.lines[].tax_ordinal` | integer \| null | no | yes | null | — |
 | `revision.lines[].transaction_id` | string | yes | no | — | — |
 | `revision.lines[].revision_id` | string | yes | no | — | — |
 | `revision.lines[].line_id` | string | yes | no | — | — |
@@ -3508,7 +4094,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].item_snapshot.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].item_snapshot.net_amount_minor_units` | integer \| null | no | yes | null | — |
-| `revision.lines[].item_snapshot.allocation_proof` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.allocation_proof` | object \| object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_document_id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_revision_id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_line_id` | string | yes | no | — | — |
@@ -3522,6 +4108,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.allocation_proof.spans` | array[object] | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].end` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -3719,6 +4306,89 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages` | array[object] | no | no | [] | — |
 | `settlement.prospective_pages[].command` | literal["payment preview items"] | no | no | "payment preview items" | — |
 | `settlement.prospective_pages[].request` | object \| object \| object \| object \| object \| object | yes | no | — | — |
+| `settlement.prospective_pages[].request.command` | literal["payment receive"] \| literal["payment apply"] \| literal["payment unapply"] \| literal["payment void"] \| literal["payment update"] \| literal["invoice update"] | yes | no | — | — |
+| `settlement.prospective_pages[].request.input` | object | yes | no | — | — |
+| `settlement.prospective_pages[].request.input.customer` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.date` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, ApplyPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.amount` | string \| object \| string \| object \| null | no | no | — | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.operation_key` | string \| string \| null | no | no | — | — |
+| `settlement.prospective_pages[].request.input.applications` | object \| object \| array[object] | no | no | {"items": [], "mode": "inline"} | Present in ReceivePreviewRequest, ApplyPreviewRequest, UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.mode` | literal["inline"] \| literal["selection"] | no | no | "inline" | Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items` | array[object] | no | no | [] | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].invoice` | string | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].expected_version` | integer | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].amount` | string \| object | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.number` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.reference` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.memo` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.custom_fields` | object[string, any \| null] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_facts_fingerprint` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.context` | object | no | no | {"directive_id": null, "reason": null} | — |
+| `settlement.prospective_pages[].request.context.reason` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.context.directive_id` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.input.payment` | string | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_version` | integer \| integer \| null | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications[].application_id` | string | no | no | — | Present in UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications[].invoice_expected_version` | integer | no | no | — | Present in UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions` | array[object] | no | no | [] | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions[].invoice` | string | no | no | — | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions[].expected_version` | integer | no | no | — | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_guard` | string \| null | no | yes | null | Present in UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.due_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_message_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_purchase_order` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address` | object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.postal_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address` | object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.postal_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ship_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ship_method` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_rep` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.class_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_tax_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.use_defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines` | array[object] \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].line_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].item` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].quantity` | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].unit` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].unit_price` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].net_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].description` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].class_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].price_basis_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions[].payment` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions[].expected_version` | integer | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].facts_fingerprint` | string | yes | no | — | — |
 | `settlement.prospective_pages[].kind` | literal["source_components", "applications", "allocations", "document_changes"] | yes | no | — | — |
 | `settlement.prospective_pages[].total_count` | integer | yes | no | — | — |
@@ -3739,6 +4409,64 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `source_current.version` | integer | yes | no | — | — |
 | `source_current.active` | boolean | yes | no | — | — |
 | `source_current.status` | string | yes | no | — | — |
+| `billing_forecast` | object \| null | no | yes | null | — |
+| `billing_forecast.forecast_basis` | literal["all_remaining_together"] | no | no | "all_remaining_together" | — |
+| `billing_forecast.can_bill_together` | boolean | yes | no | — | — |
+| `billing_forecast.forecast_eligibility_reasons` | array[object] | no | no | [] | — |
+| `billing_forecast.forecast_eligibility_reasons[].code` | literal["line_span_limit", "conversion_span_limit", "source_ineligible", "posting_ineligible", "no_charge"] | yes | no | — | — |
+| `billing_forecast.forecast_eligibility_reasons[].line_id` | string \| null | no | yes | null | — |
+| `billing_forecast.forecast_eligibility_reasons[].recovery` | string | yes | no | — | — |
+| `billing_forecast.forecast_line_ordinals` | object[string, integer] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.schema_version` | literal[1] | no | no | 1 | — |
+| `billing_forecast.forecast_tax_attribution.origin` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.origin.source_id` | string \| null | no | yes | null | — |
+| `billing_forecast.forecast_tax_attribution.calculation` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.policy` | enum["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.currency` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].tax_ordinals` | array[integer] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].exact_numerator` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].tax_ordinal` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.label` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.version` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.rate_percent_millionths` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.label` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.version` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.name` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.full_name` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.number` | string \| null | yes | yes | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.type` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].exact_numerator` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].tax_ordinal` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].agency_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].liability_account_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts[].liability_account_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_fingerprint` | string | yes | no | — | — |
 | `billing_progress` | array[object] | no | no | [] | — |
 | `billing_progress[].line_id` | string | yes | no | — | — |
 | `billing_progress[].root_document_id` | string | yes | no | — | — |

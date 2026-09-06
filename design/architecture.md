@@ -447,10 +447,66 @@ remainder, stable tax ordinal and binary tax-item identity. Zero cells remain
 visible. Intermediate integers are unbounded; persisted monetary totals are
 checked against signed64 bounds at every aggregation level.
 
-This pure module does not yet change any sales or work command. Policy capture,
-storage, history, posting and payment integration remain specified by Row24.
-Its result models are structural projections, not persisted-effect validators;
-integration must independently recompute and compare all attributed cells.
+Sales posting and correction now resolve nets/rules before a complete tax pass.
+`tax_policy.py` owns the three policy values and field-specific explicit/default/
+legacy_implicit origins. `tax_attribution.py` assigns prospective immutable tax
+ordinals independently of settlement keys and recomputes each bucket/cell from
+captured commercial nets and rules during effect validation. The calculator's
+result models remain structural projections, never persisted-effect validators.
+
+Company co0015 appends the policy default and six immutable tax tables without
+rebuilding existing tables. Existing companies retain line_component_half_even;
+rollout explicitly selects invoice_combined_half_up. SalesProfile v1 bytes remain
+readable unchanged; v2 requires captured policy/origin. SalesLineProfile pricing
+versions stay 1/2/3. Revision-owned attribution snapshots and composite line
+mappings contain exact cells and stable tax ordinals outside pricing facts. New
+live revision outputs expose tax_calculation_details; old stored retries omit
+that projection when it was absent. Semantically unchanged legacy corrections
+write no commercial revision or tax keys. Ordinary changed legacy revisions
+capture legacy_implicit until explicit policy/default selection.
+
+Sales updates retain captured policy; use_defaults reselects the company policy,
+and refresh_defaults only refreshes default origin. Reversals use stored cents.
+The existing payment correction hook consumes revised component cents and retains
+its own immutable settlement keys, cash, version guards and permanent recovery.
+Work writers capture policy and origin in WorkFacts2/profile2, with WorkLineFacts2
+for document-allocated cells. Exact integer discriminators and matching root/profile
+versions are checked before normalization. WorkFacts1/profile1 and legacy line
+arithmetic remain distinct. Changed legacy agreements may capture their implicit
+policy without rewriting old rows; linked legacy lines retain their original
+version1 basis including ordered component cents.
+
+Basis2 contains captured economic agreement and complete ordered tax rules, excluding
+only the specified operational fields and derived tax/gross. Allocation3 explicitly
+identifies this basis; allocation1/2 retain their legacy meaning. Co0016 performs the
+reviewed narrow preserving rebuild of work_billing_allocations, widening three CHECKs
+and the exact allocation-shape discriminator. Frozen DDL, known guards, rowid/storage
+class/quote/bytes comparisons, restored local DDL, integrity and FK checks bound the
+migration. The existing migration runner restores FK enforcement after success or
+rollback. Co0015 and earlier migrations remain unchanged.
+
+Work conversion, progress, released-span rebilling and linked sale corrections use
+the captured source policy and destination tax ordinals. Economic source protections
+remain; compatible independent scope can redistribute derived cells on retained
+lines. Existing receipt confirmation predicates and complete payment restatement
+apply to the new exact gross/components. Historical postings and basis facts remain
+immutable. Copy and relocation preserve captured knowledge and permanent recovery.
+
+Remaining forecasts stream complete free intervals without constructing an oversized
+posting selection. They calculate all remaining billable nets together in current
+source order, return prospective destination ordinals, exact attribution, fingerprint
+and bounded eligibility reasons. The 200-span line/2000-span conversion caps still
+apply to execution. Prior and cumulative figures are actual postings. Bounded net
+recovery and fewer-complete-line recovery remain explicit, including progress-disabled
+companies; forecasts reserve no entitlement.
+
+Shared descriptions and browser details expose policy/source, stable tax order,
+captured rules, bases and allocated cents. Print opens marked accounting disclosures
+for printing and restores their prior state afterward. Active invoice examples add
+AR33/income30/tax3 cents, and the active work chain adds AR6/income5/tax1 cents per
+seed company. Exact preexisting manifest bytes remain a prefix. Independent review
+and parent-owned combined-candidate acceptance are required; this implementation
+description does not close Row24.
 
 ## Manual rates and foreign journal conversion
 

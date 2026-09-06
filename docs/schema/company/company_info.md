@@ -63,6 +63,7 @@ Database: `company`.
 | `prompt_for_class` | BOOLEAN | no | false | — | — | — | Whether later forms require or warn for a class when classes are enabled. |
 | `enable_price_levels` | BOOLEAN | no | false | — | — | — | Whether price-level selectors are enabled for later sales forms. |
 | `units_of_measure_mode` | VARCHAR(24) | no | "disabled" | — | — | — | Unit mode: disabled, single_unit_per_item, or multiple_related_units. |
+| `sales_tax_calculation` | VARCHAR(32) | no | — | — | — | — | Captured sales-tax algorithm default; upgraded companies retain legacy rounding. |
 | `sales_tax_enabled` | BOOLEAN | no | false | — | — | — | Whether sales-tax controls are enabled for later forms. |
 | `default_sales_tax_item_id` | VARCHAR(26) | yes | — | — | ix_company_info_default_sales_tax_item_id | items.id | Default active sales-tax item or group id; null when unset. |
 | `sales_tax_liability_basis` | VARCHAR(20) | no | "invoice_date" | — | — | — | Sales-tax liability basis: invoice_date or payment_receipt. |

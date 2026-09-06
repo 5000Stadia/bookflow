@@ -1,9 +1,9 @@
 """Typed, immutable allocation evidence; ordinary sale inputs cannot supply it."""
 from fractions import Fraction
 from math import gcd, lcm
-from typing import Annotated
+from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
+from pydantic import field_validator, Field, model_validator
 
 from bookflow.company.sales_models import StrictModel, Fingerprint
 from bookflow.company.work_models import CanonicalId
@@ -71,3 +71,15 @@ class AllocationProof(StrictModel):
         n, d = self.quoted_net_minor_units, int(self.denominator)
         return sum(round_ratio_half_even(n*b, d) - round_ratio_half_even(n*a, d)
                    for a, b in self.intervals())
+
+
+class TaxAllocationProof(AllocationProof):
+    """Allocation3 explicitly selects the version2 work economic basis."""
+    @field_validator('basis_version', mode='before')
+    @classmethod
+    def exact_basis_version(cls, value):
+        if type(value) is not int:
+            raise ValueError('basis_version must be an integer discriminator')
+        return value
+
+    basis_version: Literal[2]

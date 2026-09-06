@@ -1,5 +1,6 @@
 <section class="workspace-card sales-document" aria-label="Proposed billing progress">
 <h2>Progress after this proposed bill</h2>
+{% set forecast = result.billing_forecast %}{% include 'tax_forecast.html' %}
 <p>Exact work allocations in {{ result.currency }}. Previous is posted work; current is this proposed bill; cumulative includes both. Remaining shows physical scope and net after this bill, with forecast tax and gross for billing that remaining net together. Independent sale charges are excluded. Preview reserves no work.</p>
 {% set show_quantity = request.query_params.get('billing_qty', '1') != '0' %}
 {% set show_percent = request.query_params.get('billing_percent', '1') != '0' %}

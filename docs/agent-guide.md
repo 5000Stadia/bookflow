@@ -430,3 +430,28 @@ source consumption.
 Source conversion cannot exceed100% of a quoted line. If fragmentation produces
 `E_VALUE_RANGE`, use its `recommended_net_amount` on that source line and continue
 with remaining work; never silently drop spans to make a request fit.
+
+### Captured work tax and complete remaining forecasts
+
+Proposal, estimate and work-order create/update accept `sales_tax_calculation`.
+Use `line_component_half_even`, `line_combined_half_up`, or
+`invoice_combined_half_up`; omitted updates preserve the captured policy and origin.
+`use_defaults=["sales_tax_calculation"]` explicitly selects the current company
+setting. Copy/conversion carries the source policy. Details expose the captured
+origin, rules and exact cells; tax ordinals are separate from payment ordinals.
+
+Billing inspection and progress expose `forecast_basis=all_remaining_together`,
+`can_bill_together`, eligibility reasons, prospective line ordinals and exact tax
+attribution. A false eligibility value labels a hypothetical total: it does not
+promise an executable bill. Above 200 spans per line, use the exact recommended
+net amount; above 2000 spans per conversion, select fewer complete lines. Inspect
+a fresh forecast after each installment. Actual installments round independently.
+
+Rebilling preserves exact released scope and net. Invoice rounding preserves total
+tax for the same scope and rates, but reversing destination order can move cents
+between lines or agencies. For net5/net10 with A10%/Z5%, invoice rounding charges
+2 cents: A2/Z0 with net5 first, A1/Z1 with net10 first. Line rounding charges3 cents,
+A2/Z1 in either order. Preview the new attribution; old bills remain exact history.
+A linked-work receipt correction needs `amount_received` when gross changes, even
+after its last linked line was removed. Metadata and same-gross edits may omit it;
+any supplied confirmation must equal the complete newly calculated gross.

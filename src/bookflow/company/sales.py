@@ -9,6 +9,7 @@ import sqlalchemy as sa
 from bookflow.company import schema as c, journals, document_effects as effects
 from bookflow.company import journal_custom_fields as custom, list_service
 from bookflow.company import sales_calculations as calc
+from bookflow.company import tax_attribution as tax_facts
 from bookflow.company.sales_facts import SalesProfile, SalesLineProfile, SalesTaxComponent
 from bookflow.company.sales_models import SalesLineInput, _invalid
 from bookflow.company.sales_outputs import (
@@ -30,6 +31,9 @@ TABLE_KINDS = (
     ('sales_profiles', 'sales_profile', 'revision_id'),
     ('sales_line_profiles', 'sales_line_profile', 'document_line_id'),
     ('sales_tax_components', 'sales_tax_component', 'id'),
+    ('sales_tax_line_keys', 'sales_tax_line_key', 'line_id'),
+    ('sales_tax_attributions', 'sales_tax_attribution', 'revision_id'),
+    ('sales_tax_attribution_lines', 'sales_tax_attribution_line', 'document_line_id'),
     ('posting_batches', 'posting_batch', 'id'),
     ('posting_lines', 'posting_line', 'id'),
     ('posting_line_sources', 'posting_line_source', 'id'),
@@ -102,9 +106,18 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
         total=Money(revision['total_minor_units'], currency).to_dict(), line_count=line_count if summary_only else len(lines), batches=summaries)
     from bookflow.company.billing_queries import sale_source_output, sale_source_links
     values['billing_links'] = sale_source_links(s, revision['id'])
+    tax_rows = [r for r in pending.get('sales_tax_attributions', []) if r['revision_id'] == revision['id']]
+    if not tax_rows:
+        tax_rows = effects.rows(s, c.sales_tax_attributions, c.sales_tax_attributions.c.revision_id == revision['id'])
+    values['tax_calculation_details'] = tax_facts.details(SalesProfile.model_validate_json(profile['profile_snapshot']),
+        tax_rows[0]['facts_snapshot'] if tax_rows else None)
     if summary_only:
         return SalesRevisionSummaryOutput(**values)
     values['billing_sources'] = sale_source_output(s, revision['id'])
+    tax_mapping = [r for r in pending.get('sales_tax_attribution_lines', []) if r['revision_id'] == revision['id']]
+    if not tax_mapping:
+        tax_mapping = effects.rows(s, c.sales_tax_attribution_lines, c.sales_tax_attribution_lines.c.revision_id == revision['id'])
+    tax_ordinals = {r['document_line_id']: r['tax_ordinal'] for r in tax_mapping}
     rendered = []
     for line in lines:
         taxes = []
@@ -114,7 +127,7 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
                 tax=Money(component['tax_minor_units'], currency).to_dict(),
                 taxable=Money(component['taxable_minor_units'], currency).to_dict()))
         from bookflow.company.billing_allocations import quantity_output
-        rendered.append(dict(line, item_snapshot=json.loads(line['item_snapshot']), **quantity_output(line),
+        rendered.append(dict(line, tax_ordinal=tax_ordinals.get(line['id']), item_snapshot=json.loads(line['item_snapshot']), **quantity_output(line),
             unit_price=Money(line['unit_price_minor_units'], currency).to_dict() if line['unit_price_minor_units'] is not None else None,
             pricing_basis=line.get('pricing_basis', 'unit'), net=Money(line['net_minor_units'], currency).to_dict(),
             tax=Money(line['tax_minor_units'], currency).to_dict(), gross=Money(line['gross_minor_units'], currency).to_dict(), tax_components=taxes))
@@ -194,7 +207,7 @@ def _saved_semantic(s, revision):
     for line in saved_lines(s, revision):
         lines.append(_line_semantic(dict(line, profile=SalesLineProfile.model_validate_json(line['item_snapshot']))))
     return dict(date=revision['date'], number=revision['number'], memo=revision['memo'],
-        issuer=json.loads(revision['issuer_snapshot']), profile=json.loads(profile['profile_snapshot']),
+        issuer=json.loads(revision['issuer_snapshot']), profile=tax_facts.semantic_profile(SalesProfile.model_validate_json(profile['profile_snapshot'])),
         lines=lines, custom_fields=_custom_semantic(json.loads(revision['custom_fields_snapshot'])))
 
 
@@ -311,20 +324,23 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
         if key:
             seen.add(key)
         resolved, line_warnings = sales_defaults.resolve_line(s, line, profile, previous=prior.get(key),
-            previous_header=old_profile, refresh=inp.refresh_defaults)
+            previous_header=old_profile, refresh=inp.refresh_defaults, defer_tax=True)
         resolved['line_id'] = key
         lines.append(resolved)
         warnings.extend(line_warnings)
+    tax_ordinals, tax_keys = tax_facts.prospective(s.company, document_id, [line['line_id'] for line in lines])
+    attribution = tax_facts.calculate(lines, profile, info['home_currency'], tax_ordinals)
+    tax_facts.apply(lines, attribution, tax_ordinals)
     from bookflow.company.billing_edits import protect_sale
     protect_sale(s, inp, old_header, old_revision, dict(profile=profile, lines=lines))
     custom.validate_kinds(s.company, inp.custom_fields, inp.custom_field_kinds, record_type=document_type)
     custom_plan = custom.prepare(s.company, document_id, inp.custom_fields,
         json.loads(old_revision['custom_fields_snapshot']) if old_revision else {}, creating=old_header is None,
         refresh=inp.refresh_defaults, record_type=document_type)
-    semantic = dict(date=date, number=number, memo=memo, issuer=issuer, profile=profile.model_dump(),
+    semantic = dict(date=date, number=number, memo=memo, issuer=issuer, profile=tax_facts.semantic_profile(profile),
         lines=[_line_semantic(line) for line in lines], custom_fields=_custom_semantic(custom_plan.snapshot))
     fingerprint = hashlib.sha256(json_text(dict(company_id=info['id'], type=document_type,
-        version=old_header['version'] if old_header else 0, content=semantic)).encode()).hexdigest()
+        version=old_header['version'] if old_header else 0, content=semantic, tax_attribution=attribution.model_dump(mode='json'))).encode()).hexdigest()
     if (inp.expected_facts_fingerprint is not None and inp.expected_facts_fingerprint != fingerprint
             and not (document_type == 'invoice' and getattr(inp, 'operation_key', None))):
         raise BookflowError('E_PREVIEW_STALE', details={'facts_fingerprint': fingerprint})
@@ -351,7 +367,7 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
             warnings.append(warning)
     return dict(profile=profile, date=date, number=number, sequence=sequence, memo=memo, issuer=issuer,
         lines=lines, custom_plan=custom_plan, warnings=warnings, semantic=semantic, fingerprint=fingerprint,
-        subtotal=subtotal, tax=tax, total=total, currency=info['home_currency'])
+        subtotal=subtotal, tax=tax, total=total, currency=info['home_currency'], tax_attribution=attribution, tax_keys=tax_keys)
 
 
 def _posting_accounts_active(s, resolved):
@@ -421,6 +437,11 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         pending['sales_profiles'].append(dict(transaction_id=header['id'], revision_id=revision['id'], **provenance, type=document_type,
             customer_id=profile.customer.id, control_account_id=profile.control_account.id, due_date=profile.due_date,
             subtotal_minor_units=resolved['subtotal'], tax_minor_units=resolved['tax'], profile_snapshot=json_text(profile.model_dump())))
+        if 'tax_attribution' in resolved:
+            pending['sales_tax_attributions'].append(dict(transaction_id=header['id'], revision_id=revision['id'],
+                **provenance, facts_snapshot=json_text(resolved['tax_attribution'].model_dump(mode='json'))))
+            pending['sales_tax_line_keys'].extend(dict(transaction_id=header['id'], line_id=key,
+                tax_ordinal=ordinal, **provenance) for key, ordinal in resolved['tax_keys'].items())
         for position, line in enumerate(resolved['lines'], 1):
             identity = line['line_id']
             if identity is None:
@@ -434,6 +455,12 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
                 class_id=facts.class_id.id if facts.class_id else None, class_name=facts.class_id.label if facts.class_id else None,
                 description=line['description'], **dict.fromkeys(journals.FACTS))
             pending['document_lines'].append(envelope)
+            if 'tax_attribution' in resolved:
+                if line['line_id'] is None:
+                    pending['sales_tax_line_keys'].append(dict(transaction_id=header['id'], line_id=identity,
+                        tax_ordinal=line['tax_ordinal'], **provenance))
+                pending['sales_tax_attribution_lines'].append(dict(transaction_id=header['id'], revision_id=revision['id'],
+                    document_line_id=envelope['id'], line_id=identity, tax_ordinal=line['tax_ordinal'], **provenance))
             pending['sales_line_profiles'].append(dict(document_line_id=envelope['id'], transaction_id=header['id'],
                 revision_id=revision['id'], **provenance, **{k: line[k] for k in ('item_id', 'quantity_microunits', 'unit_id',
                     'unit_factor_nanounits', 'base_quantity_microunits', *MONEY_COLUMNS)}, item_snapshot=json_text(facts.model_dump()), pricing_basis=facts.pricing_basis))

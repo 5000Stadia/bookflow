@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from bookflow.company.tax_policy import Policy
+
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import model_serializer, BaseModel, ConfigDict, Field
 
 from bookflow.commands.common import CompanySummary, Empty, WriteOutput, common_out, company_summary
 from bookflow.core.context import Context
@@ -164,6 +166,13 @@ class UpdateOutput(_WriteOutput):
 
 
 class CompanyUpdateInput(BaseModel):
+    @model_serializer(mode='wrap')
+    def legacy_tax_request(self, handler):
+        values = handler(self)
+        if 'sales_tax_calculation' not in self.model_fields_set:
+            values.pop('sales_tax_calculation', None)
+        return values
+
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     expected_version: int | None = Field(None, ge=1, description="The info_version you read; omit for a blind write")
     attachment_max_bytes: int | None = Field(None, strict=True, ge=1, le=100000000, description="Maximum actual upload bytes per file; default 25,000,000.")
@@ -194,6 +203,7 @@ class CompanyUpdateInput(BaseModel):
     prompt_for_class: bool | None = Field(None, description="Require or warn for a class on later forms")
     enable_price_levels: bool | None = Field(None, description="Enable price-level controls on later sales forms")
     units_of_measure_mode: Literal["disabled", "single_unit_per_item", "multiple_related_units"] | None = None
+    sales_tax_calculation: Policy = Field(None, description="Default captured tax calculation; omission preserves, null rejects")
     sales_tax_enabled: bool | None = Field(None, description="Enable sales-tax controls on later forms")
     default_sales_tax_item_id: str | None = Field(None, description="Active sales-tax item or group default")
     sales_tax_liability_basis: Literal["invoice_date", "payment_receipt"] | None = None

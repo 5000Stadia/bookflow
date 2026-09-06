@@ -1551,3 +1551,101 @@ input = { estimate = "${pref_estimate.id}", expected_version = "${pref_accepted.
 command = "company update"
 reason = "Restore the compatibility defaults"
 input = { estimates_enabled = true, progress_billing_enabled = true, close_estimates_after_billing = false }
+
+
+# Row24 active rounding examples: two five-cent lines at ten percent.
+# Exact additional ledger: AR +33 cents; service income +30; tax payable +3.
+[[commands]]
+command = "customer create"
+capture = "rounding_customer"
+input = { name = "Tax Rounding Example Customer" }
+
+[[commands]]
+command = "item create"
+capture = "rounding_tax"
+input = { name = "Tax Rounding Example 10%", type = "sales_tax_item", tax_percent = "10", tax_agency_vendor_id = "${sale_agency.id}", liability_account_id = "${sale_liability.id}" }
+
+[[commands]]
+command = "invoice post"
+reason = "Keep an active example of the captured tax rounding boundary"
+input = { date = "2026-11-10", number = "DEMO-TAX-LEGACY", customer = "${rounding_customer.id}", sales_tax_calculation = "line_component_half_even", sales_tax_item = "${rounding_tax.id}", customer_tax_code = "${sale_taxable.id}", lines = [{ item = "${sale_service.id}", net_amount = "0.05" }, { item = "${sale_service.id}", net_amount = "0.05" }] }
+
+[[commands]]
+command = "invoice post"
+reason = "Keep an active example of the captured tax rounding boundary"
+input = { date = "2026-11-10", number = "DEMO-TAX-LINE", customer = "${rounding_customer.id}", sales_tax_calculation = "line_combined_half_up", sales_tax_item = "${rounding_tax.id}", customer_tax_code = "${sale_taxable.id}", lines = [{ item = "${sale_service.id}", net_amount = "0.05" }, { item = "${sale_service.id}", net_amount = "0.05" }] }
+
+[[commands]]
+command = "invoice post"
+reason = "Keep an active example of the captured tax rounding boundary"
+input = { date = "2026-11-10", number = "DEMO-TAX-TOTAL", customer = "${rounding_customer.id}", sales_tax_calculation = "invoice_combined_half_up", sales_tax_item = "${rounding_tax.id}", customer_tax_code = "${sale_taxable.id}", lines = [{ item = "${sale_service.id}", net_amount = "0.05" }, { item = "${sale_service.id}", net_amount = "0.05" }] }
+
+# Row24 work chain: active invoice net5/tax1/gross6; remaining net5/forecast tax1.
+
+[[commands]]
+command = "customer create"
+capture = "tax_work_customer"
+reason = "Inspect captured tax through the complete work and partial billing chain"
+input = { "name" = "Tax Work Example Customer" }
+
+[[commands]]
+command = "proposal create"
+capture = "tax_work_legacy"
+reason = "Inspect captured tax through the complete work and partial billing chain"
+input = { "customer" = "${tax_work_customer.id}", "date" = "2026-11-11", "number" = "DEMO-TAX-PROP-LEGACY", "title" = "Two five-cent services \u00b7 LEGACY", "sales_tax_calculation" = "line_component_half_even", "sales_tax_item" = "${rounding_tax.id}", "customer_tax_code" = "${sale_taxable.id}", "lines" = [{ "item" = "${sale_service.id}", "net_amount" = "0.05" }, { "item" = "${sale_service.id}", "net_amount" = "0.05" }] }
+
+[[commands]]
+command = "proposal create"
+capture = "tax_work_line"
+reason = "Inspect captured tax through the complete work and partial billing chain"
+input = { "customer" = "${tax_work_customer.id}", "date" = "2026-11-11", "number" = "DEMO-TAX-PROP-LINE", "title" = "Two five-cent services \u00b7 LINE", "sales_tax_calculation" = "line_combined_half_up", "sales_tax_item" = "${rounding_tax.id}", "customer_tax_code" = "${sale_taxable.id}", "lines" = [{ "item" = "${sale_service.id}", "net_amount" = "0.05" }, { "item" = "${sale_service.id}", "net_amount" = "0.05" }] }
+
+[[commands]]
+command = "proposal create"
+capture = "tax_work_total"
+reason = "Inspect captured tax through the complete work and partial billing chain"
+input = { "customer" = "${tax_work_customer.id}", "date" = "2026-11-11", "number" = "DEMO-TAX-PROP-TOTAL", "title" = "Two five-cent services \u00b7 TOTAL", "sales_tax_calculation" = "invoice_combined_half_up", "sales_tax_item" = "${rounding_tax.id}", "customer_tax_code" = "${sale_taxable.id}", "lines" = [{ "item" = "${sale_service.id}", "net_amount" = "0.05" }, { "item" = "${sale_service.id}", "net_amount" = "0.05" }] }
+
+[[commands]]
+command = "proposal copy"
+capture = "tax_work_copy"
+reason = "Inspect captured tax through the complete work and partial billing chain"
+input = { "proposal" = "${tax_work_total.id}", "expected_version" = 1, "date" = "2026-11-11", "number" = "DEMO-TAX-PROP-COPY" }
+
+[[commands]]
+command = "proposal estimate"
+capture = "tax_work_estimate"
+reason = "Inspect captured tax through the complete work and partial billing chain"
+input = { "proposal" = "${tax_work_total.id}", "expected_version" = 1, "date" = "2026-11-11", "number" = "DEMO-TAX-EST", "conversion_key" = "DEMO tax proposal estimate" }
+
+[[commands]]
+command = "estimate update"
+capture = "tax_work_accepted"
+reason = "Inspect captured tax through the complete work and partial billing chain"
+input = { "estimate" = "${tax_work_estimate.id}", "expected_version" = 1, "status" = "accepted", "decision_note" = "Accept the captured total-rounding quote" }
+
+[[commands]]
+command = "estimate invoice"
+capture = "tax_work_invoice"
+reason = "Inspect captured tax through the complete work and partial billing chain"
+input = { "estimate" = "${tax_work_estimate.id}", "expected_version" = "${tax_work_accepted.version}", "date" = "2026-11-12", "number" = "DEMO-TAX-WORK-INV", "conversion_key" = "DEMO tax first service", "line_ids" = ["${tax_work_estimate.revision.lines.0.line_id}"] }
+
+[[commands]]
+command = "estimate show"
+capture = "tax_work_after_bill"
+input = { "estimate" = "${tax_work_estimate.id}" }
+
+[[commands]]
+command = "estimate work-order"
+capture = "tax_work_order"
+reason = "Inspect captured tax through the complete work and partial billing chain"
+input = { "estimate" = "${tax_work_estimate.id}", "expected_version" = "${tax_work_after_bill.version}", "date" = "2026-11-13", "number" = "DEMO-TAX-WO", "conversion_key" = "DEMO tax physical work" }
+
+[[commands]]
+command = "work-order complete"
+reason = "Inspect captured tax through the complete work and partial billing chain"
+input = { "work_order" = "${tax_work_order.id}", "expected_version" = 1, "actual_start" = "2026-11-13T10:00:00Z", "actual_end" = "2026-11-13T11:00:00Z" }
+
+[[commands]]
+command = "work-order billing"
+input = { "work_order" = "${tax_work_order.id}" }

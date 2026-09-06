@@ -126,7 +126,8 @@ def test_progress_correction_and_exact_rebill(register_browser, width, tmp_path)
 
 
 @pytest.mark.parametrize('width', [1280, 390])
-def test_progress_paid_receipt_and_zero_charge_scope(register_browser, width, tmp_path):
+@pytest.mark.parametrize('policy,tax_cents,gross_cents', [('line_component_half_even',0,5), (None,1,6)], ids=['explicit-legacy','current-default'])
+def test_progress_paid_receipt_and_zero_charge_scope(register_browser, width, tmp_path, policy, tax_cents, gross_cents):
     env, b = register_browser, register_browser.browser
     run = lambda name, data: _command(b, env.site, name, data)
     b.viewport(width, 900)
@@ -143,30 +144,31 @@ def test_progress_paid_receipt_and_zero_charge_scope(register_browser, width, tm
         tax_agency_vendor_id=agency, liability_account_id=liability))['id']
     taxable = next(r['id'] for r in run('sales-tax-code.list', {})['items'] if r['taxable'])
     source = run('work-order.create', dict(date='2026-01-12', title='Paid progress', customer=customer,
+        **({'sales_tax_calculation':policy} if policy else {}),
         sales_tax_item=tax, customer_tax_code=taxable,
         lines=[dict(item=item, quantity='3', net_amount='0.10', tax_code=taxable, description='Charged scope'),
                dict(item=item, quantity='1', net_amount='0', description='Free inspection')]))
     base = f'{env.site.base_url}/c/{env.site.company_id}/work-order/{source["id"]}'
     visit(b, base + '/sales-receipt')
     _fill(b, 'f:date', '2026-01-13'); _choose(b, 'f:deposit_to', 'CDP bank')
-    _choose(b, 'f:payment_method', 'Progress cash'); _fill(b, 'f:amount_received', '0.05')
+    _choose(b, 'f:payment_method', 'Progress cash'); _fill(b, 'f:amount_received', f'0.{gross_cents:02d}')
     _fill(b, 'billing-selection', 'partial')
     for line in source['revision']['lines']:
         check_line(b, line['line_id']); _fill(b, 'billing-mode:' + line['line_id'], 'percent')
         _fill(b, 'billing-value:' + line['line_id'], '50')
     _preview(b)
     charged = source['revision']['lines'][0]['line_id']
-    assert 'Actual tax 0.00' in progress_stage(b, charged, 'current')
-    assert 'Gross 0.05' in progress_stage(b, charged, 'cumulative')
-    assert 'Forecast tax 0.00' in progress_stage(b, charged, 'remaining')
-    assert 'Forecast gross 0.05' in progress_stage(b, charged, 'remaining')
+    assert f'Actual tax 0.{tax_cents:02d}' in progress_stage(b, charged, 'current')
+    assert f'Gross 0.{gross_cents:02d}' in progress_stage(b, charged, 'cumulative')
+    assert f'Forecast tax 0.{tax_cents:02d}' in progress_stage(b, charged, 'remaining')
+    assert f'Forecast gross 0.{gross_cents:02d}' in progress_stage(b, charged, 'remaining')
     capture(b, tmp_path, 'progress-projection-tax', width)
     capture(b, tmp_path, 'paid-progress', width)
     _click(b, 'submit'); identity = _saved(b, 'sales-receipt')
-    assert run('sales-receipt.show', dict(sales_receipt=identity))['total_minor_units'] == 5
+    assert run('sales-receipt.show', dict(sales_receipt=identity))['total_minor_units'] == gross_cents
     state = run('work-order.billing', dict(work_order=source['id']))
     assert state['lines'][0]['tax_minor_units'] == 1
-    assert state['lines'][0]['billed_tax_minor_units'] == state['lines'][0]['remaining_tax_minor_units'] == 0
+    assert state['lines'][0]['billed_tax_minor_units'] == state['lines'][0]['remaining_tax_minor_units'] == tax_cents
     visit(b, base + '/billing')
     assert 'Uncharged physical scope remains' in b.evaluate('document.body.innerText')
     assert 'Amount due 0.00 USD' in b.evaluate('document.body.innerText')

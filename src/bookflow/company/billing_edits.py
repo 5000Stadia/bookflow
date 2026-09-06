@@ -16,13 +16,17 @@ def protect_work(s, header, before, after):
     if not has_active_for_document(s,header['id']):
         return
     from bookflow.company.billing import dependency
+    from bookflow.company import work_tax
+    from copy import deepcopy
+    before,after=deepcopy(before),deepcopy(after)
+    for value in (before,after):value['facts']['profile']=work_tax.normalized(value)['facts']['profile']
     if before['title'] != after['title'] or any(before['facts'][key] != after['facts'][key] for key in work.AGREED_FIELDS):
         dependency('billed work agreement cannot be changed while a sale consumes its roots', source_id=header['id'])
     if header['kind'] == 'estimate' and after['status'] != 'accepted':
         dependency('billed estimate acceptance cannot be revoked', source_id=header['id'])
     old = {entry['line_id']: entry['facts'] for entry in before['lines']}
     new = {entry['line_id']: entry['facts'] for entry in after['lines']}
-    economic = lambda facts: {key: value for key, value in facts.items() if key not in ('completed_quantity_microunits', 'billable')}
+    economic = work_tax.economics
     for key, facts in old.items():
         ident = identities[key]
         if (ident['root_document_id'], ident['root_line_id']) in occupied:
@@ -65,15 +69,25 @@ def protect_sale(s, inp, old, old_revision, resolved):
     retained = [line for line in resolved['lines'] if line['line_id'] in prior]
     if not retained:
         return
-    profile = json.loads(sales.profile_row(s, old_revision)['profile_snapshot'])
-    replacement = resolved['profile'].model_dump()
+    from bookflow.company.sales_facts import SalesProfile
+    from bookflow.company.tax_attribution import semantic_profile
+    profile = semantic_profile(SalesProfile.model_validate_json(sales.profile_row(s, old_revision)['profile_snapshot']))
+    replacement = semantic_profile(resolved['profile'])
     financial = {'control_account', 'due_date', 'discount_date', 'discount_available', 'payment_method', 'payment_reference', 'origins'}
     if any(profile.get(key) != replacement.get(key) for key in set(profile) | set(replacement) if key not in financial):
         dependency('retained linked sale lines freeze captured commercial header', source_id=old['id'])
     for line in retained:
         old_line = prior[line['line_id']]
         old_semantic = sales._line_semantic(dict(old_line, profile=SalesLineProfile.model_validate_json(old_line['item_snapshot'])))
-        if sales._line_semantic(line) != old_semantic:
+        new_semantic=sales._line_semantic(line)
+        # Only cell cents and derived tax/gross may move on retained economics.
+        def economics(value):
+            from copy import deepcopy
+            value=deepcopy(value)
+            value.pop('tax_minor_units',None);value.pop('gross_minor_units',None)
+            for cell in value.get('taxes',[]):cell.pop('tax_minor_units',None)
+            return value
+        if economics(new_semantic) != economics(old_semantic):
             dependency('remove the whole linked line to release it; its quoted facts cannot be rewritten',
                 source_line_id=line['line_id'])
 
@@ -96,6 +110,8 @@ def carry_allocations(plan, s):
     for allocation in allocations:
         line = incoming.get(old_lines[allocation['document_line_id']]['line_id'])
         if line:
+            profile=next(row for row in data['pending']['sales_line_profiles'] if row['document_line_id']==line['id'])
             data['billing_allocations'].append(dict(allocation, id=new_id(), revision_id=line['revision_id'],
+                tax_minor_units=profile['tax_minor_units'],gross_minor_units=profile['gross_minor_units'],
                 document_line_id=line['id'], created_at=header['updated_at'], created_by=header['updated_by'],
                 created_via=header['updated_via']))

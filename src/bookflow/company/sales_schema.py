@@ -94,7 +94,7 @@ def define_tables(metadata, column, table):
         identifier('liability_account_id', 'Captured sales tax payable posting account.', 'accounts.id'),
         integer('rate_percent_millionths', 'Nonnegative tax percentage in millionths of one percent.'),
         integer('taxable_minor_units', 'Home-currency amount subject to this component.'),
-        integer('tax_minor_units', 'Independently rounded home-currency component tax; zero is retained.'),
+        integer('tax_minor_units', 'Captured policy-attributed home-currency component tax; zero is retained.'),
         snapshot('component_snapshot', 'Versioned typed JSON object of captured tax item, agency and liability labels.'),
         sa.UniqueConstraint('transaction_id', 'revision_id', 'document_line_id', 'id', name='uq_sales_tax_component_owner'),
         sa.ForeignKeyConstraint(['transaction_id', 'revision_id', 'document_line_id'],
@@ -102,6 +102,6 @@ def define_tables(metadata, column, table):
             name='fk_sales_tax_component_line'),
         nonnegative('rate_percent_millionths'), nonnegative('taxable_minor_units'), nonnegative('tax_minor_units'),
         object_check('component_snapshot'),
-        description='Immutable independently rounded tax components, including zero-rate and rounding-to-zero facts.')
+        description='Immutable policy-attributed tax components, including legacy, zero-rate and rounding-to-zero facts.')
 
     return {name: value for name, value in locals().items() if isinstance(value, sa.Table)}

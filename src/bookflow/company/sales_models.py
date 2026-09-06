@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_serializer, model_validator
 
+from bookflow.company.tax_policy import Policy
 from bookflow.company.custom_fields import CustomFieldKindExpectations, CustomFieldValuePatch
 from bookflow.company.journal_models import _Date, _Number, _Version
 from bookflow.core.errors import BookflowError
@@ -24,7 +25,7 @@ Selector = Annotated[str, Field(min_length=1, max_length=1004), BeforeValidator(
 Text = Annotated[str, Field(max_length=2000)]
 Fingerprint = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 HeaderDefault = Literal[
-    "billing_address", "shipping_address", "terms", "due_date", "ship_method",
+    "sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method",
     "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method",
 ]
 LineDefault = Literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]
@@ -138,6 +139,14 @@ Lines = Annotated[list[SalesLineInput], Field(min_length=1, max_length=200)]
 
 
 class SalesFields(StrictModel):
+    @model_serializer(mode='wrap')
+    def legacy_tax_request(self, handler):
+        values = handler(self)
+        if 'sales_tax_calculation' not in self.model_fields_set:
+            values.pop('sales_tax_calculation', None)
+        return values
+
+    sales_tax_calculation: Policy = Field(None, description="Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects")
     number: _Number | None = None
     memo: Text | None = None
     customer_message: Text | None = None
@@ -154,7 +163,7 @@ class SalesFields(StrictModel):
     sales_tax_item: Selector | None = None
     price_level: Selector | None = None
     refresh_defaults: bool = False
-    use_defaults: list[HeaderDefault] = Field(default_factory=list, max_length=12)
+    use_defaults: list[HeaderDefault] = Field(default_factory=list, max_length=13)
     expected_facts_fingerprint: Fingerprint | None = None
     custom_fields: CustomFieldValuePatch = Field(default_factory=lambda: CustomFieldValuePatch({}))
     custom_field_kinds: CustomFieldKindExpectations = Field(default_factory=lambda: CustomFieldKindExpectations({}))
@@ -235,7 +244,7 @@ class InvoiceUpdateInput(SalesUpdateInput, InvoiceFields):
     @model_serializer(mode='wrap')
     def compatible_settlement(self, handler):
         values = handler(self)
-        for key in ('operation_key', 'settlement_versions', 'settlement_guard'):
+        for key in ('operation_key', 'settlement_versions', 'settlement_guard', 'sales_tax_calculation'):
             if key not in self.model_fields_set:
                 values.pop(key, None)
         return values
@@ -249,8 +258,9 @@ class SalesReceiptUpdateInput(SalesUpdateInput, ReceiptFields):
     @model_serializer(mode='wrap')
     def legacy_request(self, handler):
         values = handler(self)
-        if 'amount_received' not in self.model_fields_set:
-            values.pop('amount_received', None)
+        for key in ('amount_received', 'sales_tax_calculation'):
+            if key not in self.model_fields_set:
+                values.pop(key, None)
         return values
 
     @model_validator(mode='after')

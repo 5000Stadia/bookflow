@@ -235,3 +235,16 @@
     if (event.detail.elt?.closest('form[action="/logout"]')) clearRegisterIntent();
   });
 })();
+
+// Printed accounting evidence must not depend on disclosure state.
+(() => {
+  let closed = [];
+  window.addEventListener('beforeprint', () => {
+    closed = [...document.querySelectorAll('details[data-tax-print]:not([open])')];
+    closed.forEach(panel => { panel.open = true; });
+  });
+  window.addEventListener('afterprint', () => {
+    closed.forEach(panel => { panel.open = false; });
+    closed = [];
+  });
+})();

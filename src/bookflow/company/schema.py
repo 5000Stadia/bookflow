@@ -192,6 +192,7 @@ company_info = _table(
     _column("prompt_for_class", sa.Boolean, "Whether later forms require or warn for a class when classes are enabled.", nullable=False, default=False),
     _column("enable_price_levels", sa.Boolean, "Whether price-level selectors are enabled for later sales forms.", nullable=False, default=False),
     _column("units_of_measure_mode", sa.String(24), "Unit mode: disabled, single_unit_per_item, or multiple_related_units.", nullable=False, default="disabled"),
+    _column("sales_tax_calculation", sa.String(32), "Captured sales-tax algorithm default; upgraded companies retain legacy rounding.", sa.CheckConstraint("sales_tax_calculation IN ('line_component_half_even','line_combined_half_up','invoice_combined_half_up')", name="ck_company_tax_calculation"), nullable=False, server_default="line_component_half_even"),
     _column("sales_tax_enabled", sa.Boolean, "Whether sales-tax controls are enabled for later forms.", nullable=False, default=False),
     _column("default_sales_tax_item_id", sa.String(26), "Default active sales-tax item or group id; null when unset.", sa.ForeignKey("items.id", ondelete="RESTRICT"), nullable=True),
     _column("sales_tax_liability_basis", sa.String(20), "Sales-tax liability basis: invoice_date or payment_receipt.", nullable=False, default="invoice_date"),
@@ -1073,3 +1074,6 @@ globals().update(_define_billing_tables(metadata, _column, _table))
 from bookflow.company.payment_schema import define_tables as _define_payment_tables
 
 globals().update(_define_payment_tables(metadata, _column, _table, _common))
+
+from bookflow.company.tax_schema import define_tables as _define_tax_tables
+globals().update(_define_tax_tables(metadata, _column, _table))

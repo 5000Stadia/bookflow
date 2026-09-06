@@ -12,9 +12,9 @@ revision-owned allocations retain lineage across multiple financial destinations
 
 Ordinary invoice and sales-receipt lines also accept exact amount pricing, retaining
 a positive descriptive quantity and null unit price. Unit-price snapshots keep
-their original representation. Customer payment application, deposits, delivery,
-print editors, foreign sales, inventory fulfillment and formal change-order approval
-remain separate future operations.
+their original representation. Customer payment application uses the separate
+customer-payment contract. Deposits, delivery, print editors, foreign sales,
+inventory fulfillment and formal change-order approval remain future operations.
 
 ## Commands and inputs
 
@@ -130,8 +130,10 @@ destination-owned value ids and explicit omission warnings.
 SalesLineInput accepts optional net_amount. Exactly one of unit_price or net_amount
 may be explicitly supplied, and neither accepts null. A supplied net_amount selects
 amount pricing, retains a positive descriptive quantity, and stores a null unit
-price. Tax components are each half-even(net × captured rate), exactly as for an
-ordinary whole sale. Unit-price lines keep half-even(quantity × unit_price).
+price. Captured line_component_half_even retains half-even(net × captured rate)
+for each component. The two combined policies use Row24 document-level validation
+and exact bucket/cell allocation after all destination nets are resolved.
+Unit-price lines keep half-even(quantity × unit_price).
 Cost and markup are not new ordinary sales inputs in this increment.
 
 Quantity-only edits preserve an amount-priced line's exact net. A supplied unit_price
@@ -162,8 +164,8 @@ ownership at the transaction's final current-revision boundary. Unrelated invoic
 and their allocations never change as a side effect.
 
 Ordinary invoice/sales-receipt update preserves existing linked lines by line_id.
-Changing their item/unit/quantity/description/class/price/tax facts rejects with
-E_WORK_DEPENDENCY and the source identity. Removing an entire linked line is an
+Changing their item/unit/quantity/description/class/price or captured policy/rule
+facts rejects with E_WORK_DEPENDENCY and the source identity. Removing an entire linked line is an
 explicit correction which releases that root; the remaining sale must still be
 positive. Adding ordinary independent lines is allowed and consumes no work root.
 Changing the customer or captured commercial header of a sale with retained linked
@@ -267,3 +269,32 @@ covers registry/documentation discovery and core attribution with interface=mcp,
 including rejection and durable replay, without calling that an MCP transport test.
 Row9's acceptance must exercise actual MCP discovery, execution, errors and replay
 for this registered billing contract before claiming cross-adapter completion.
+
+
+## Versioned tax attribution amendment (Row24)
+
+Use the exact legacy/current fact, basis and allocation matrix in progress-billing.md.
+Legacy allocation1 whole-root and allocation2 interval/hash rows retain original
+source snapshots and basis1 semantics. New allocation3 identifies basis2 and
+WorkLineFacts2; never store it as physical version2 or reinterpret old proofs.
+Copied/converted sources retain captured policy/origin and ordered complete rules.
+Mixed incompatible captured policies/headers reject under the existing dependency
+contract. Current company defaults cannot reprice the accepted source agreement.
+
+For combined-invoice policy, an otherwise valid composition change may redistribute
+only derived tax cents on retained linked lines. This includes adding/removing an
+independent line, changing that independent line's quantity/net/rate/taxability,
+or removing a whole linked line while retaining another. Captured policy/rules,
+source proof, net and all quoted economics stay fixed. Reordering alone cannot
+change attribution. Persist the recalculated destination-wide attribution and
+revised billing tax facts, while previous/cumulative progress uses actual posted
+amounts. These derived cents are the narrow exception to linked-line equality;
+source policy/rate/price edits still reject. Paid invoice corrections retain all
+ordinary cash, restatement, closed-date, version and authority constraints.
+
+Exact release/rebill reproduces the old spans/quantity/net, not a promise that
+regrouped composition has the old rounded tax. Legacy rebill preserves its old
+basis/rule. Remaining forecasts use the complete mathematical all-remaining
+calculation even when execution exceeds 200/2000 spans; expose hypothetical status,
+can_bill_together and bounded recovery as progress-billing.md requires. Forecasts
+reserve nothing and never replace historical installment tax.

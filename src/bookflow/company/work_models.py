@@ -5,7 +5,7 @@ import re
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 
-from pydantic import BeforeValidator, Field, model_validator
+from pydantic import BeforeValidator, Field, model_validator, model_serializer
 
 from bookflow.company.custom_fields import CustomFieldKindExpectations, CustomFieldValuePatch
 from bookflow.company.journal_models import _Date, _Number, _Version
@@ -27,7 +27,9 @@ Priority = Literal['low', 'normal', 'high', 'urgent']
 CanonicalId = Annotated[str, Field(pattern=r'^[0-7][0-9A-HJKMNP-TV-Z]{25}$')]
 Title = Annotated[str, Field(min_length=1, max_length=200)]
 ScopeText = Annotated[str, Field(max_length=10000)]
-WorkHeaderDefault = Literal['billing_address', 'shipping_address', 'terms', 'ship_method',
+from bookflow.company.tax_policy import Policy
+
+WorkHeaderDefault = Literal['sales_tax_calculation', 'billing_address', 'shipping_address', 'terms', 'ship_method',
     'sales_rep', 'class_id', 'customer_tax_code', 'sales_tax_item', 'price_level']
 WorkLineDefault = Literal['description', 'unit', 'unit_price', 'class_id', 'tax_code',
                           'price_level', 'estimated_unit_cost']
@@ -96,6 +98,14 @@ EstimateLines = Annotated[list[WorkLineInput], Field(min_length=1, max_length=20
 
 
 class WorkFields(StrictModel):
+    sales_tax_calculation: Policy = Field(None, description='Captured document tax policy; omission retains or selects the creation default; null rejects')
+
+    @model_serializer(mode='wrap')
+    def legacy_policy_request(self, handler):
+        result=handler(self)
+        if 'sales_tax_calculation' not in self.model_fields_set:result.pop('sales_tax_calculation',None)
+        return result
+
     number: _Number | None = None
     memo: Text | None = None
     scope: ScopeText | None = None
@@ -118,7 +128,7 @@ class WorkFields(StrictModel):
     sales_tax_item: Selector | None = None
     price_level: Selector | None = None
     refresh_defaults: bool = False
-    use_defaults: list[WorkHeaderDefault] = Field(default_factory=list, max_length=9)
+    use_defaults: list[WorkHeaderDefault] = Field(default_factory=list, max_length=10)
     expected_facts_fingerprint: Fingerprint | None = None
     custom_fields: CustomFieldValuePatch = Field(default_factory=lambda: CustomFieldValuePatch({}))
     custom_field_kinds: CustomFieldKindExpectations = Field(default_factory=lambda: CustomFieldKindExpectations({}))
