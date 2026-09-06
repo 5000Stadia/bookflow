@@ -291,7 +291,22 @@ LISTS = {n + ' ' + v for n in _SUPPORTING_CREATE_INPUTS for v in ('create', 'sho
 FINANCIAL = {n + ' ' + v for n in ('journal', 'invoice', 'sales-receipt') for v in ('post', 'show', 'history', 'query', 'update', 'void')}
 
 
+LOCAL_VALID_WITNESSES = {
+    'init': ['tests/test_mcp_local_bootstrap.py::test_installed_cli_bootstrap_preview_create_reopen_and_conflict',
+             'tests/test_row1_flow.py::test_init_edges'],
+    'company use': ['tests/test_row1_flow.py::test_company_selection',
+                    'tests/test_row3_host.py::test_a_forwarded_company_use_writes_the_callers_login_table'],
+    'docs generate': ['tests/test_docs_command.py::test_docs_generate_cli_needs_no_initialized_data_root'],
+    'mcp': ['tests/test_mcp_hosted.py::test_real_stdio_discovery_help_and_attributed_host_write',
+            'tests/test_mcp_installed_guide.py::test_literal_installed_mcp_guide'],
+    'serve': ['tests/test_row3_host.py::test_the_host_migrates_and_records_the_descriptor',
+              'tests/test_row3_host.py::test_sigint_wakes_a_live_stream_and_cleans_the_host'],
+}
+
+
 def execution_map():
+    from tests.test_mcp_registry_demo_upgrade import COMMANDS as DEMO_UPGRADE_COMMANDS
+    from tests.test_mcp_local_boundary import COMMANDS as LOCAL_COMMANDS
     from tests.test_mcp_registry_undo import COMMANDS as UNDO_COMMANDS
     from tests.test_mcp_registry_rollout import COMMANDS as ROLLOUT_COMMANDS
     from tests.test_mcp_registry_company_maintenance import COMMANDS as MAINTENANCE_COMMANDS
@@ -329,14 +344,17 @@ def execution_map():
                    'tests/test_mcp_registry_compact.py::test_compaction_preview_collection_replay_and_rejection_parity' if cmd.name in COMPACT_COMMANDS else
                    'tests/test_mcp_registry_company_maintenance.py::test_company_maintenance_valid_preview_rejections_and_owned_move' if cmd.name in MAINTENANCE_COMMANDS else
                    'tests/test_mcp_registry_rollout.py::test_rollout_chart_profile_detach_reattach_full_documents' if cmd.name in ROLLOUT_COMMANDS else
-                   'tests/test_mcp_registry_undo.py::test_undo_preview_compensation_replay_and_rejected_state' if cmd.name in UNDO_COMMANDS else None)
+                   'tests/test_mcp_registry_undo.py::test_undo_preview_compensation_replay_and_rejected_state' if cmd.name in UNDO_COMMANDS else
+                   'tests/test_mcp_registry_demo_upgrade.py::test_owned_demo_replacement_and_current_schema_upgrade' if cmd.name in DEMO_UPGRADE_COMMANDS else
+                   'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute' if cmd.name in LOCAL_COMMANDS else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else
                 'advisory' if cmd.kind == 'advisory' else 'finite_poll_with_local_follow' if cmd.streams else 'routed_json')
         result.append({'command': cmd.name, 'mode': mode, 'scope': cmd.scope, 'kind': cmd.kind,
             'preview': cmd.is_write, 'idempotency_key': cmd.accepts_idempotency_key,
             'clearable': cmd.clearable, 'execution_witness': witness,
-            'coverage': 'four_surface_scenario' if witness else 'pending_four_surface_or_local_lifecycle',
+            'coverage': 'local_lifecycle_scenario' if cmd.name in LOCAL_COMMANDS else 'four_surface_scenario' if witness else 'pending_four_surface_or_local_lifecycle',
+            'local_valid_witnesses': LOCAL_VALID_WITNESSES.get(cmd.name, []),
             'publication': permissions[cmd.name]})
     return result
 
