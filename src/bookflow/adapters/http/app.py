@@ -106,10 +106,20 @@ def error_response(err: BookflowError) -> JSONResponse:
 
 class Credential:
     def __init__(self, user_id: str, token_id: str, kind: str, label: str | None, login: str = "",
-                 on_behalf_of: str | None = None, actor_kind: str = "human", hub_admin: bool = False):
+                 on_behalf_of: str | None = None, actor_kind: str = "human", hub_admin: bool = False,
+                 *, secret: str):
         self.user_id, self.token_id, self.kind, self.label = user_id, token_id, kind, label
         self.login, self.on_behalf_of = login, on_behalf_of
         self.actor_kind, self.hub_admin = actor_kind, hub_admin
+        self._secret = secret
+
+    def revalidate(self, db) -> None:
+        """Check the admitted credential in the session that will execute it."""
+        row = auth.resolve_token(db, self._secret)
+        if (row["id"], row["user_id"], row["kind"], row.get("on_behalf_of")) != (
+            self.token_id, self.user_id, self.kind, self.on_behalf_of,
+        ):
+            raise BookflowError("E_UNAUTHENTICATED", details={"reason": "credential changed"})
 
 
 def create_app(host, *, secure_cookies: bool) -> FastAPI:
@@ -143,7 +153,7 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
                 if queued and via_cookie and renew_cookie:
                     request.state.renew_session_cookie = secret
         return Credential(row["user_id"], row["id"], row["kind"], row["label"], on_behalf_of=row.get("on_behalf_of"),
-                          actor_kind=user["kind"], hub_admin=bool(user["hub_admin"]))
+                          actor_kind=user["kind"], hub_admin=bool(user["hub_admin"]), secret=secret)
 
     def secret_of(request: Request) -> str:
         header = request.headers.get("authorization", "")
@@ -171,11 +181,16 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
         bad = [k for k in raw if k in Context.model_fields]
         if bad:
             raise BookflowError("E_CONTEXT_IN_INPUT", message="Context values go in headers, not the body: " + ", ".join(f"{k} -> {CONTEXT_HEADERS.get(k, 'not accepted')}" for k in bad), details={"fields": bad})
+
+        def execute_authenticated(s):
+            cred.revalidate(s.hub)
+            return execute(cmd, raw, ctx, s, company_selector=selector, company_source=source, dry_run=dry_run)
+
         if cmd.is_write and not dry_run or cmd.kind == "advisory":
-            return host.run_write(cred.user_id, cred.login, lambda s: execute(cmd, raw, ctx, s, company_selector=selector, company_source=source, dry_run=dry_run))
+            return host.run_write(cred.user_id, cred.login, execute_authenticated)
         s = host.reader_session(cred.user_id, cred.login)
         try:
-            return execute(cmd, raw, ctx, s, company_selector=selector, company_source=source, dry_run=dry_run)
+            return execute_authenticated(s)
         finally:
             try:
                 guard(lambda: _close(s), cred.hub_admin)
