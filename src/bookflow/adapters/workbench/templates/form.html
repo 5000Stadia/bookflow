@@ -18,6 +18,7 @@
 </section>{% endif %}{% endfor %}
 {% if sales_history.next_cursor %}<a href="{{ base }}/{{ sales_history.id }}/history?limit={{ (attempted.get('f:limit') or request.query_params.get('limit', '50'))|urlencode }}&amp;cursor={{ sales_history.next_cursor|urlencode }}" rel="next">Next revisions</a>{% endif %}</section>
 {% elif statement %}{% include "statement.html" %}{% elif result and not billing %}<div class="{{ 'warn' if preview else 'field' }}"><b>{{ "Preview (nothing written)" if preview else "Result" }}</b><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></div>{% endif %}
+{% if billing_progress %}{% include "billing_progress.html" %}{% endif %}
 {% if billing %}{% include "billing.html" %}{% endif %}
 {% if workflow_note %}<div class="workflow-note">{{ workflow_note }}</div>{% endif %}
 
@@ -132,7 +133,12 @@
 
 <form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" data-generated-form{% if sales_form %} data-sales-form data-sales-scope="{{ sales_scope }}"{% endif %}>
 {% if billing_conversion %}{% include "billing_selection.html" %}{% endif %}
-{% if sales_form and noun in ('invoice', 'sales-receipt') and verb == 'update' %}<p id="ordinary-lines">Additional entries are independent ordinary sale lines. Preview and save this correction separately; for a paid receipt, enter the exact new amount received including tax.</p>{% endif %}
+{% if sales_form and noun in ('invoice', 'sales-receipt') and verb == 'update' %}<p id="ordinary-lines">Additional entries are independent ordinary sale lines. Preview and save this correction separately; for a paid receipt, review the received-total requirement below.</p>{% endif %}
+{% if noun == 'sales-receipt' and verb == 'update' %}<section class="workspace-card" aria-label="Receipt correction payment">
+<label for="receipt-update-received">Actual total amount received, including tax</label>
+<input id="receipt-update-received" name="f:amount_received" type="text" inputmode="decimal" aria-describedby="receipt-update-received-help" value="{{ attempted.get('f:amount_received', '') }}">
+<p id="receipt-update-received-help">If this receipt has ever billed linked work, a correction that changes its gross requires the exact new total received, including tax, even after linked lines are removed. Enter the whole receipt total, not just the additional charge. Leave blank for a same-total or metadata-only correction, or an ordinary receipt with no linked-work history. Any amount you enter must match the new receipt total.</p>
+</section>{% endif %}
 {% if sales_form %}<input type="hidden" name="f:expected_facts_fingerprint" value="{{ sales_fingerprint }}"><p data-sales-preview-status aria-live="polite">{{ 'Preview checked. Save these values.' if sales_fingerprint else 'Preview your values before saving.' }}</p>{% endif %}
 <input type="hidden" name="originals" value='{{ json.dumps(originals, default=str) | e }}'>
 {% if noun == 'report' and source_report_watermark is not none %}<input type="hidden" name="_source_report_watermark" value="{{ source_report_watermark }}">{% endif %}

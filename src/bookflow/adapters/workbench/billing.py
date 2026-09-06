@@ -46,3 +46,17 @@ def selection(raw, form):
     elif mode != 'remaining':
         raise BookflowError('E_VALIDATION', message='Choose a billing selection mode.')
     return result
+
+
+def progress_context(result, billing):
+    """Display the core's proposed work progress; never derive financial totals."""
+    rows = deepcopy((result or {}).get('billing_progress', []))
+    source_lines = {line['line_id']: line for line in (billing or {}).get('lines', [])}
+    for row in rows:
+        source = source_lines.get(row['line_id'], {})
+        row['description'] = source.get('description')
+        row['quoted_quantity'] = source.get('quantity')
+        for stage in ('previous', 'current', 'cumulative', 'remaining'):
+            for kind in ('net', 'tax', 'gross'):
+                row[stage][kind] = Money(row[stage][kind + '_minor_units'], result['currency']).to_dict()['amount']
+    return rows

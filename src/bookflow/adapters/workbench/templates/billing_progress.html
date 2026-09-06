@@ -1,0 +1,16 @@
+<section class="workspace-card sales-document" aria-label="Proposed billing progress">
+<h2>Progress after this proposed bill</h2>
+<p>Exact work allocations in {{ result.currency }}. Previous is posted work; current is this proposed bill; cumulative includes both. Remaining shows physical scope and net after this bill, with forecast tax and gross for billing that remaining net together. Independent sale charges are excluded. Preview reserves no work.</p>
+{% set show_quantity = request.query_params.get('billing_qty', '1') != '0' %}
+{% set show_percent = request.query_params.get('billing_percent', '1') != '0' %}
+<p>Scope percentages use original quoted scope. Current and cumulative tax use actual installment calculations; remaining tax is a forecast, not a tax debt.</p>
+<div class="table-wrap"><table class="billing-table billing-progress-table"><thead><tr><th>Quoted scope</th><th>Previously posted</th><th>Current proposed bill</th><th>Cumulative after bill</th><th>Remaining after bill</th></tr></thead><tbody>
+{% for row in billing_progress %}<tr data-progress-line="{{ row.line_id }}"><td>{{ row.description or 'Source line ' ~ loop.index }}{% if show_quantity %}<div>Quoted quantity {{ row.quoted_quantity }}</div>{% endif %}</td>
+{% for stage in ('previous', 'current', 'cumulative', 'remaining') %}{% set values = row[stage] %}<td data-progress-stage="{{ stage }}">
+{% if show_quantity %}<div data-progress-quantity>Quantity {{ values.quantity }}</div>{% endif %}
+{% if show_percent %}<div data-progress-percent>{{ values.scope_percent }}% of original scope</div>{% endif %}
+<div>Net {{ values.net }}</div><div>{{ 'Forecast tax' if stage == 'remaining' else 'Actual tax' }} {{ values.tax }}</div><div>{{ 'Forecast gross' if stage == 'remaining' else 'Gross' }} {{ values.gross }}</div>
+{% if stage == 'remaining' and values.net_minor_units == 0 and values.quantity != '0' %}<p>Uncharged physical scope remains · no unpaid debt</p>{% endif %}
+</td>{% endfor %}</tr>{% endfor %}
+</tbody></table></div>
+</section>

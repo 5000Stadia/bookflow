@@ -1147,6 +1147,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             workflow_note = 'Bill remaining work, original-scope percentages, or per-line quantities and net amounts. Completion is separate. A sales receipt records a paid sale; it cannot settle an existing invoice.'
         if sales_form:
             described = [leaf for leaf in described if leaf['path'] != 'expected_facts_fingerprint']
+        if noun == 'sales-receipt' and verb == 'update':
+            # The dedicated decimal control uses the shared typed form translator.
+            described = [leaf for leaf in described if leaf['path'] != 'amount_received']
         if cmd.name in S.COMMANDS:
             # The visible filter form always starts fresh; continuation has its
             # own immutable filter fields and signed cursor in a separate form.
@@ -1336,6 +1339,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       ctx_fields=F.context_fields(cmd), result=result, error=error,
                       billing=billing, billing_limit=attempted.get('f:limit') or request.query_params.get('limit', '50'),
                       billing_conversion=Billing.is_conversion(noun, verb),
+                      billing_progress=Billing.progress_context(result, billing) if preview else [],
                       allocated_lines={line['line_id']: line for line in (shown or {}).get('revision', {}).get('lines', []) if line.get('pricing_basis') == 'allocated'},
                       billing_actions=bool(billing and _role_allows(registry.get(noun + " invoice"), authorized_company or {}, hub_admin=cred.hub_admin)),
                       work_form=noun in Work.NOUNS,
