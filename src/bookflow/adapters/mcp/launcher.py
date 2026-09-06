@@ -60,8 +60,31 @@ async def serve(inp, origin, secret, inputs, outputs):
             submitted = False
             delivery = None
             reference = None
+            stage = "preflight"
+
+            def error_document(exc):
+                # A failed observation cannot establish that an earlier intent
+                # never executed. Keep that identity through every local failure.
+                known = reference or (delivery or {}).get("operation_ref")
+                exc.details.setdefault("stage", stage)
+                if known is not None:
+                    from .responses import annotate
+                    exc.details["outcome"] = "unknown"
+                    annotate(exc, known, submitted=True)
+                return exc.to_dict()
+
             try:
-                arguments = validate(params.name, params.arguments or {})
+                raw_arguments = params.arguments or {}
+                if params.name == "bookflow_run" and isinstance(raw_arguments, dict):
+                    from .envelopes import intent_reference
+                    supplied = {raw_arguments[key] for key in ("operation_ref", "input_ref")
+                                if isinstance(raw_arguments.get(key), str)}
+                    if len(supplied) == 1:
+                        try:
+                            reference = intent_reference(next(iter(supplied)))
+                        except BookflowError:
+                            pass  # Never echo an invalid reference-shaped value.
+                arguments = validate(params.name, raw_arguments)
                 from .envelopes import RecoveryArguments
                 if isinstance(arguments, RecoveryArguments):
                     reference = arguments.operation_ref or arguments.input_ref
@@ -84,6 +107,7 @@ async def serve(inp, origin, secret, inputs, outputs):
                     payload["company_selection"] = {"value": company, "source": source}
                     selection = payload["company_selection"]
                 submitted = params.name == "bookflow_run"
+                stage = "post_submission"
                 if submitted:
                     document, is_error, delivery = await transport.run(arguments, metadata=metadata, selection=selection)
                 else:
@@ -99,14 +123,11 @@ async def serve(inp, origin, secret, inputs, outputs):
                         raise BookflowError("E_IO", details={"operation": "mcp_result", "reason": "invalid_json", "stage": "post_submission", "outcome": "unknown"}) from None
                     is_error = response.status_code >= 400
             except BookflowError as exc:
-                if reference is not None:
-                    from .responses import annotate
-                    annotate(exc, reference, submitted=True)
-                document, is_error = exc.to_dict(), True
+                document, is_error = error_document(exc), True
             except httpx2.HTTPError:
-                document, is_error = BookflowError("E_IO", details={"operation": "mcp_result", "reason": "connection", "stage": "post_submission", "outcome": "unknown"}).to_dict(), True
+                document, is_error = error_document(BookflowError("E_IO", details={"operation": "mcp_result", "reason": "connection", "outcome": "unknown" if submitted else "not_submitted"})), True
             except Exception:
-                document, is_error = BookflowError("E_IO", details={"operation": "mcp_result", "reason": "invalid_response", "outcome": "unknown" if submitted else "not_submitted"}).to_dict(), True
+                document, is_error = error_document(BookflowError("E_IO", details={"operation": "mcp_result", "reason": "invalid_response", "outcome": "unknown" if submitted else "not_submitted"})), True
             try:
                 rendered = json.dumps(document, ensure_ascii=False, allow_nan=False)
                 content = [types.TextContent(text=rendered)]
@@ -115,8 +136,7 @@ async def serve(inp, origin, secret, inputs, outputs):
                 return types.CallToolResult(content=content, structured_content=document, is_error=is_error,
                                             meta={"bookflow_transport": delivery} if delivery else None)
             except Exception:
-                document = BookflowError("E_IO", details={"operation": "mcp_result", "reason": "serialization", "outcome": "unknown" if submitted else "not_submitted",
-                    **({"operation_ref": delivery["operation_ref"]} if delivery else {})}).to_dict()
+                document = error_document(BookflowError("E_IO", details={"operation": "mcp_result", "reason": "serialization", "outcome": "unknown" if submitted else "not_submitted"}))
                 return types.CallToolResult(content=[types.TextContent(text=json.dumps(document))], structured_content=document, is_error=True)
 
         server = Server("bookflow", version="0.0.1", on_list_tools=list_tools, on_call_tool=call_tool)

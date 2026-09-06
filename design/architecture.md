@@ -812,12 +812,16 @@ error without queuing a business execution. Its rejection delivery owns cleanup
 and can retain the same guarded error receipt. Recovery of a failed download
 redelivers only its error document; it never reopens the missing binary resource.
 
-The Row9 test ledger tests/mcp_coverage.py explicitly classifies all251 registered
+The Row9 test ledger tests/mcp_coverage.py explicitly classifies all276 registered
 commands by routed JSON, advisory, finite poll/local follow, binary direction,
 local lifecycle or standalone protocol. Four-interface execution scenarios cover
-201 commands;75 remain explicitly pending after the reviewed payment base added25 commands. The existing actual all-command form
-check emits schema-path/control/variant/context mapping. This fetched-form map is
-separate from the still-incomplete browser interaction/output/success mapping.
+271 hosted commands. Five local lifecycle commands map actual local execution
+witnesses and explicit installed-MCP/HTTP rejection boundaries; they are not
+counted as hosted execution parity. The ledger gate rejects unclassified or
+pending execution rows. This is execution coverage, not full Row9 acceptance.
+The actual all-command form check emits schema-path/control/variant/context
+mapping, separate from the still-incomplete browser interaction/output/success
+mapping and parent-owned fresh blind acceptance.
 
 Generated workbench forms preserve every model branch declared by a Pydantic
 string discriminator. A single discriminator control exposes the combined choices;

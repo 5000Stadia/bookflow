@@ -193,8 +193,9 @@ def test_weekly_agent_principal_filters_pagination_and_dst_on_all_surfaces(hoste
             for(const [name,value] of Object.entries(values)) document.querySelector(`[name="${{name}}"]`).value=value;
             document.querySelector('main form').requestSubmit();}})()''')
         browser.wait_for('new URL(location.href).searchParams.get("limit") === "2"')
-        premature = browser.evaluate('({ready:document.readyState, rows:document.querySelectorAll(".table-wrap table tr td:first-child a").length})')
         try:
+            assert body_waiting.wait(5), "The controlled partial-body send did not reach its barrier"
+            premature = browser.evaluate('({ready:document.readyState, rows:document.querySelectorAll(".table-wrap table tr td:first-child a").length})')
             assert body_waiting.is_set() and premature['ready'] != 'complete', premature
             assert premature['rows'] == 0, premature
             print('URL-only weekly completion accepted unfinished document:', premature)

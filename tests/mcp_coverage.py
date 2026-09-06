@@ -451,7 +451,9 @@ def local_workbench_boundaries():
                               'browser_acceptance': 'not_applicable_local_only'}
                              for field in model_fields(cmd.input_model, leaves_only=True)],
              'schema_variants': schema_variants(cmd.input_model.model_json_schema()),
-             'local_lifecycle_coverage': 'pending_complete_matrix'}
+             'local_lifecycle_coverage': 'local_lifecycle_scenario',
+             'local_execution_witnesses': LOCAL_VALID_WITNESSES[cmd.name],
+             'hosted_rejection_witness': 'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute'}
             for cmd in registry.all_commands(include_standalone=True) if cmd.local_only or cmd.standalone]
 
 
@@ -478,7 +480,7 @@ def workbench_family_map(rows):
         'json': (None, 'payment custom-field object editor requires actual browser encoding witness'),
         'statement_continuation': ('tests/test_financial_statements_browser.py::test_statements_from_navigation_paging_and_current_ledger', 'statement paging and current-books drill-down'),
         'secret': (None, 'owned password form requires actual browser secret-output policy witness'),
-        'local_invocation': (None, 'no workbench route; local lifecycle and MCP rejection are distinct contracts'),
+        'local_invocation': ('tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute', 'no workbench route; execution_map links actual per-command local lifecycle witnesses separately from installed MCP/HTTP rejection'),
     }
     grouped = {name: {'family': name, 'paths': [], 'representative_witness': witness,
                       'limits': limits, 'status': 'representative_test_mapped' if witness else 'pending_browser_or_local_witness'}

@@ -278,3 +278,38 @@ def test_installed_agent_invoice_and_directive_journal_workflow(hosted, live, tm
     observed = hosted.ok("journal.show", {"journal": journal}, company=hosted.company_id)
     assert observed["total_minor_units"] == 1234
     assert not (tmp_path / "absent-launcher-root").exists()
+
+
+def test_installed_retained_write_preflight_mismatch_keeps_identity_and_unknown(hosted, live, tmp_path, monkeypatch):
+    from mcp import ClientSession
+    from mcp.client.stdio import StdioServerParameters, stdio_client
+    from bookflow.adapters.mcp import bridge
+    async def witness():
+        params = StdioServerParameters(command=os.environ.get('BOOKFLOW_MCP_TEST_BINARY',str(Path(sys.executable).with_name('bookflow'))),
+            args=['mcp','--url',live],cwd=str(tmp_path),env={'BOOKFLOW_TOKEN':hosted.secret,
+                'BOOKFLOW_COMPANY':hosted.company_id,'BOOKFLOW_DATA_ROOT':str(tmp_path/'absent')})
+        async with stdio_client(params) as (read,write):
+            async with ClientSession(read,write) as session:
+                await session.discover()
+                saved = await session.call_tool('bookflow_run',{'command':'account create',
+                    'input':{'name':'Retained preflight account','type':'expense'},'reason':'Retained preflight witness'})
+                assert not saved.is_error,saved
+                reference = saved.meta['bookflow_transport']['operation_ref']
+                monkeypatch.setattr(bridge,'BRIDGE_VERSION',1)
+                try:
+                    for alias in ('operation_ref','input_ref'):
+                        for action in ('status','execute'):
+                            error = await session.call_tool('bookflow_run',{alias:reference,'action':action})
+                            assert error.is_error and error.structured_content['code'] == 'E_VERSION_MISMATCH'
+                            details = error.structured_content['details']
+                            assert details['operation_ref'] == reference and details['outcome'] == 'unknown'
+                            assert details['stage'] == 'preflight'
+                finally:
+                    monkeypatch.setattr(bridge,'BRIDGE_VERSION',2)
+                recovered = await session.call_tool('bookflow_run',{'operation_ref':reference,'action':'execute'})
+                assert not recovered.is_error and recovered.structured_content == saved.structured_content
+                return saved.structured_content['id']
+    account = anyio.run(witness)
+    assert hosted.ok('account.show',{'account':account},company=hosted.company_id)['name'] == 'Retained preflight account'
+    events = hosted.ok('audit.list',{'command':'account create','limit':200},company=hosted.company_id)['items']
+    assert len([event for event in events if event['reason'] == 'Retained preflight witness']) == 1

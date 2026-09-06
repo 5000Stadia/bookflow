@@ -11,3 +11,11 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     assert all(row['local_valid_witnesses'] for row in rows if row['coverage'] == 'local_lifecycle_scenario')
     assert {row['mode'] for row in rows} == {'routed_json', 'advisory', 'binary_input', 'binary_output', 'local_lifecycle', 'standalone_local', 'standalone_protocol', 'finite_poll_with_local_follow'}
     (tmp_path / 'execution-coverage.json').write_text(json.dumps(rows, indent=2))
+
+
+def test_local_workbench_rows_link_actual_lifecycles_without_claiming_browser_routes():
+    from tests.mcp_coverage import local_workbench_boundaries, LOCAL_VALID_WITNESSES
+    rows = local_workbench_boundaries()
+    assert {row['command'] for row in rows} == set(LOCAL_VALID_WITNESSES)
+    assert all(row['url'] is None and row['local_execution_witnesses'] and row['hosted_rejection_witness'] for row in rows)
+    assert all(row['local_lifecycle_coverage'] == 'local_lifecycle_scenario' for row in rows)
