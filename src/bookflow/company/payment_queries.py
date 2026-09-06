@@ -162,7 +162,7 @@ applied before this function, on EVERY page, including all graph members.
     return dict(items=selected, total_count=len(items), next_cursor=next_cursor, facts_fingerprint=fp)
 
 
-def sql_page(s, noun, inp, statement, *, facts=None, known_count=None):
+def sql_page(s, noun, inp, statement, *, facts=None, known_count=None, count_with_page=False):
     """SQL delivery; ordinary queries pin audit, preparation pins relevant facts."""
     if facts is None:
         facts = s.company.conn.execute(sa.select(sa.func.coalesce(sa.func.max(c.audit_events.c.seq), 0))).scalar_one()
@@ -184,8 +184,19 @@ def sql_page(s, noun, inp, statement, *, facts=None, known_count=None):
             offset = value['offset']
         except (ValueError, TypeError, KeyError):
             raise BookflowError('E_VALIDATION', details={'field': 'cursor'}) from None
-    count = known_count if known_count is not None else s.company.conn.execute(sa.select(sa.func.count()).select_from(statement.order_by(None).subquery())).scalar_one()
-    rows = [dict(row) for row in s.company.conn.execute(statement.offset(offset).limit(inp.limit)).mappings()]
+    count_statement = sa.select(sa.func.count()).select_from(statement.order_by(None).subquery())
+    if count_with_page and known_count is None:
+        # Expensive text/capacity predicates are evaluated once, before paging.
+        # Keep the ordinary two-query path for cheap/indexed queries, where a
+        # window would unnecessarily materialize the complete selected relation.
+        projection = statement.add_columns(sa.func.count().over().label('__page_total'))
+        rows = [dict(row) for row in s.company.conn.execute(projection.offset(offset).limit(inp.limit)).mappings()]
+        count = rows[0]['__page_total'] if rows else (0 if offset == 0 else s.company.conn.execute(count_statement).scalar_one())
+        for row in rows:
+            del row['__page_total']
+    else:
+        count = known_count if known_count is not None else s.company.conn.execute(count_statement).scalar_one()
+        rows = [dict(row) for row in s.company.conn.execute(statement.offset(offset).limit(inp.limit)).mappings()]
     cursor = None
     if offset + len(rows) < count:
         raw = canonical(dict(v=1, fp=fp, offset=offset + len(rows))).encode()

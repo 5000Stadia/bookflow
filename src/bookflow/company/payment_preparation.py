@@ -237,7 +237,8 @@ def payment_page(s, inp):
         statement = statement.where(sa.func.payment_casefold(text).contains(inp.q.casefold(), autoescape=True))
     order = {'date': r.c.date, 'number': t.c.number, 'received': r.c.total_minor_units, 'unapplied': available}[inp.sort]
     statement = statement.order_by(order.desc() if inp.direction == 'desc' else order.asc(), t.c.id.desc() if inp.direction == 'desc' else t.c.id.asc())
-    out = query.sql_page(s, 'payment query', inp, statement)
+    out = query.sql_page(s, 'payment query', inp, statement,
+        count_with_page=bool(inp.q) or inp.has_available_credit is not None)
     # Project settlement only after SQL has selected this page. Computing every
     # receipt's display fields before date sorting defeats bounded delivery.
     ids = [row['id'] for row in out['items']]
