@@ -56,7 +56,7 @@
 
 {% macro collection_scalar(control, name, cur, id) %}
 {% if control.reference %}{{ reference_control(control.reference, name, cur, id, reference_values.get(name), not control.required) }}
-{% elif control.kind == "choice" %}<select id="{{ id }}" name="{{ name }}"><option value="">(choose)</option>{% for choice in control.choices %}<option value="{{ choice }}"{% if cur == choice %} selected{% endif %}>{{ choice }}</option>{% endfor %}</select>
+{% elif control.kind == "choice" %}<select id="{{ id }}" name="{{ name }}"><option value="">(choose)</option>{% for choice in control.choices %}<option value="{{ choice }}"{% if cur == choice %} selected{% endif %}>{{ control.choice_labels.get(choice, choice) if control.choice_labels else choice }}</option>{% endfor %}</select>
 {% elif control.kind == "bool" %}<select id="{{ id }}" name="{{ name }}"><option value="unset">(unset)</option><option value="true"{% if cur == true or cur == "true" %} selected{% endif %}>true</option><option value="false"{% if cur == false or cur == "false" %} selected{% endif %}>false</option></select>
 {% else %}<input id="{{ id }}" name="{{ name }}" value="{{ cur if cur is not none else '' }}"{{ math_attrs(control, name) }}{% if control.math %} inputmode="decimal"{% elif control.kind == "number" %} inputmode="numeric"{% endif %}>{% endif %}
 {% if sales_form and control.name in ('description', 'unit', 'class_id', 'tax_code', 'price_level', 'estimated_unit_cost') %}<label class="clear-control"><input type="checkbox" name="clear:{{ name }}" value="1"{% if attempted.get('clear:' ~ name) == '1' %} checked{% endif %}> Clear {{ control.name.replace('_', ' ') }}</label>{% endif %}
@@ -119,7 +119,7 @@
 {% elif l.reference %}
 {{ reference_control(l.reference, form_name, cur, "control-" ~ index, l.reference.current, l.nullable or not l.required) }}
 {% elif l.kind == "choice" %}
-<select id="control-{{ index }}" name="{{ form_name }}"><option value="">{{ "(choose)" if l.required and not record_id else "(unchanged)" }}</option>{% for c in l.choices %}<option value="{{ c }}" {% if cur == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+<select id="control-{{ index }}" name="{{ form_name }}"><option value="">{{ "(choose)" if l.required and not record_id else "(unchanged)" }}</option>{% for c in l.choices %}<option value="{{ c }}" {% if cur == c %}selected{% endif %}>{{ l.choice_labels.get(c, c) if l.choice_labels else c }}</option>{% endfor %}</select>
 {% elif l.kind == "bool" %}
 <select id="control-{{ index }}" name="{{ form_name }}"><option value="unset">(unset)</option><option value="true" {% if cur == true or cur == "true" %}selected{% endif %}>true</option><option value="false" {% if cur == false or cur == "false" %}selected{% endif %}>false</option></select>
 {% elif l.kind == "secret" %}<input id="control-{{ index }}" type="password" name="{{ form_name }}">
@@ -134,7 +134,7 @@
 <select id="control-{{ index }}" name="{{ form_name }}" style="min-width:0;max-width:100%">
 {% if l.wire_kind == 'choice' %}
 {% if l.selected not in l.choices %}<option value="{{ cur if cur is not none else '' }}" selected>{{ (cur ~ ' — unavailable choice') if cur is not none else '(choose)' }}</option>{% endif %}
-{% for c in l.choices %}<option value="{{ cur if c == l.selected and cur is not none else c }}"{% if c == l.selected %} selected{% endif %}>{{ c }}</option>{% endfor %}
+{% for c in l.choices %}<option value="{{ cur if c == l.selected and cur is not none else c }}"{% if c == l.selected %} selected{% endif %}>{{ l.choice_labels.get(c, c) if l.choice_labels else c }}</option>{% endfor %}
 {% else %}
 {% if cur not in (true, false, 'true', 'false') %}<option value="{{ cur if cur is not none else 'unset' }}" selected>{{ cur if cur is not none else '(choose)' }}</option>{% endif %}
 <option value="true"{% if cur is sameas true or cur == 'true' %} selected{% endif %}>true</option><option value="false"{% if cur is sameas false or cur == 'false' %} selected{% endif %}>false</option>

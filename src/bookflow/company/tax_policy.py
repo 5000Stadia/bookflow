@@ -1,8 +1,19 @@
 """Captured tax policy and field-specific origin; pricing versions stay separate."""
-from typing import Literal
-from pydantic import BaseModel, ConfigDict
+from typing import Annotated, Literal
+from pydantic import BaseModel, ConfigDict, Field
 
-Policy = Literal['line_component_half_even', 'line_combined_half_up', 'invoice_combined_half_up']
+POLICY_LABELS = {
+    'line_component_half_even': 'Separate taxes per line — legacy rounding',
+    'line_combined_half_up': 'Combined tax per line — half-cent up',
+    'invoice_combined_half_up': 'Combined tax on taxable total — half-cent up',
+}
+POLICY_EXPLANATIONS = {
+    'line_component_half_even': 'Each tax component rounds separately on each line; exact halves round to the nearest even minor unit.',
+    'line_combined_half_up': 'Each line rounds its combined tax once; exact halves round up. Components receive the rounded total by their exact remainders.',
+    'invoice_combined_half_up': 'Lines with the same tax rules share one rounded combined tax total; exact halves round up. Components receive that total by their exact remainders.',
+}
+Policy = Annotated[Literal['line_component_half_even', 'line_combined_half_up', 'invoice_combined_half_up'],
+    Field(title='Sales tax calculation', json_schema_extra={'choice_labels': POLICY_LABELS})]
 LEGACY = 'line_component_half_even'
 DEFAULT = 'invoice_combined_half_up'
 

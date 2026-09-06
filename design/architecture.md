@@ -482,6 +482,18 @@ in47.16s. Frozen co14 fixtures exercise posted/voided/corrected/amount/progress 
 paid history; raw old columns, rowids and local DDL are preserved. Independent
 artifact review, full combined-work tests and actual-MCP acceptance remain open.
 
+The separate presentation follow-up supplies typed policy choice labels, sales edit
+baselines that omit unchanged policy, and readable captured-tax details in sales
+and legacy work views. Historical work retry outputs still omit absent live
+projections. Active DEMO/REF-TAX examples distinguish zero/two/one tax cents on
+otherwise identical five-cent lines; their additional ledger is AR33/income30/
+tax-liability3 cents. Prior seed manifest bytes remain an exact prefix.
+`work_tax_facts.py` prepares distinct WorkFacts2/WorkLineFacts2 and the reviewed
+basis2 economic hash, preserving the original local legacy types. These new types
+are not yet connected to work writers or allocation storage. The allocation3
+CHECK/additive-only design conflict remains with the parent; no old guard changes
+or version reinterpretation were selected here.
+
 ## Manual rates and foreign journal conversion
 
 Company migration co0008 adds the declared versioned exchange_rates table.

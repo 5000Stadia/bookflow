@@ -70,6 +70,7 @@ def _scalar_descriptor(
         "name": name,
         "kind": kind,
         "choices": choices,
+        "choice_labels": extra.get("choice_labels", {}) if isinstance(extra, dict) else {},
         "description": description,
         "required": required,
         "nullable": nullable,
@@ -182,8 +183,8 @@ def leaves(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
             kind = "secret"
         default = None if f.is_required() or f.default_factory is not None else f.default
         path = prefix + name
-        out.append({"path": path, "path_parts": tuple(path.split(".")), "kind": kind,
-                    "json_shape": json_shape, "choices": choices,
+        out.append({"label": f.title, "path": path, "path_parts": tuple(path.split(".")), "kind": kind,
+                    "json_shape": json_shape, "choices": choices, "choice_labels": extra.get("choice_labels", {}),
                     "description": f.description or "", "default": default,
                     "required": f.is_required(), "nullable": nullable,
                     "annotation": f.annotation, "math": numeric_metadata(name, base, extra)})

@@ -1,12 +1,13 @@
 """Typed non-posting work documents and inspectable operational history."""
 from typing import Literal
-from pydantic import Field
+from pydantic import Field, model_serializer
 from bookflow.commands.common import CommonOut
 from bookflow.company.journal_outputs import CreatedOutput, JournalMoneyOutput as MoneyOutput
 from bookflow.company.journal_custom_fields import SnapshotField
 from bookflow.company.sales_models import StrictModel
 from bookflow.company.work_facts import WorkFacts, WorkLineFacts
 from bookflow.core.models import WriteOutput
+from bookflow.company.tax_attribution import TaxDetails
 
 
 class WorkLineOutput(CreatedOutput):
@@ -29,6 +30,15 @@ class WorkLineOutput(CreatedOutput):
 
 
 class WorkRevisionSummary(CreatedOutput):
+    tax_calculation_details: TaxDetails | None = None
+
+    @model_serializer(mode='wrap')
+    def historical_tax_projection(self, handler):
+        result = handler(self)
+        if self.tax_calculation_details is None:
+            result.pop('tax_calculation_details', None)
+        return result
+
     document_id: str
     revision_number: int
     supersedes_revision_id: str | None

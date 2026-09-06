@@ -8,6 +8,8 @@ from copy import deepcopy
 from decimal import Decimal
 from urllib.parse import quote
 
+from bookflow.company.tax_policy import POLICY_LABELS, POLICY_EXPLANATIONS
+
 
 def _id(value):
     return value['id'] if isinstance(value, dict) and 'id' in value else value
@@ -31,6 +33,8 @@ def editable_values(record):
         result.pop('shipping_address')
     if profile.get('customer_message_item'):
         result.pop('customer_message')
+    if revision.get('tax_calculation_details'):
+        result['sales_tax_calculation'] = revision['tax_calculation_details']['policy']
     result['customer'] = profile['customer']['id']
     result['ar_account' if record['type'] == 'invoice' else 'deposit_to'] = profile['control_account']['id']
     result['custom_fields'] = {f['definition_id']: deepcopy(f['value']) for f in revision.get('custom_fields', [])}
@@ -104,6 +108,7 @@ def detail_context(record, company_id, *, preview=False):
             component['rate_display'] = format(Decimal(component['rate_percent_millionths']) / Decimal(1_000_000), 'f')
     issuer = revision.get('issuer_snapshot', {})
     return dict(record=record, revision=revision, profile=revision['profile'], preview=preview,
+                tax_labels=POLICY_LABELS, tax_explanations=POLICY_EXPLANATIONS,
                 title='Invoice' if noun == 'invoice' else 'Sales receipt', links=links,
                 issuer=issuer, billing=address_lines(revision['profile'].get('billing_address')),
                 shipping=address_lines(revision['profile'].get('shipping_address')),

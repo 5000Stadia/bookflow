@@ -353,6 +353,61 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.created_at` | string | yes | no | — | — |
 | `revision.created_by` | string | yes | no | — | — |
 | `revision.created_via` | string | yes | no | — | — |
+| `revision.tax_calculation_details` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.policy` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.legacy_interpretation` | boolean | yes | no | — | — |
+| `revision.tax_calculation_details.attribution` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.tax_calculation_details.attribution.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.calculation` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.policy` | enum["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.currency` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_ordinals` | array[integer] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.rate_percent_millionths` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.full_name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.number` | string \| null | yes | yes | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.type` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].agency_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.gross_minor_units` | integer | yes | no | — | — |
 | `revision.document_id` | string | yes | no | — | — |
 | `revision.revision_number` | integer | yes | no | — | — |
 | `revision.supersedes_revision_id` | string \| null | yes | yes | — | — |
@@ -1061,6 +1116,61 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.created_at` | string | yes | no | — | — |
 | `revision.created_by` | string | yes | no | — | — |
 | `revision.created_via` | string | yes | no | — | — |
+| `revision.tax_calculation_details` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.policy` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.legacy_interpretation` | boolean | yes | no | — | — |
+| `revision.tax_calculation_details.attribution` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.tax_calculation_details.attribution.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.calculation` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.policy` | enum["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.currency` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_ordinals` | array[integer] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.rate_percent_millionths` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.full_name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.number` | string \| null | yes | yes | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.type` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].agency_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.gross_minor_units` | integer | yes | no | — | — |
 | `revision.document_id` | string | yes | no | — | — |
 | `revision.revision_number` | integer | yes | no | — | — |
 | `revision.supersedes_revision_id` | string \| null | yes | yes | — | — |
@@ -1673,6 +1783,61 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].created_at` | string | yes | no | — | — |
 | `items[].created_by` | string | yes | no | — | — |
 | `items[].created_via` | string | yes | no | — | — |
+| `items[].tax_calculation_details` | object \| null | no | yes | null | — |
+| `items[].tax_calculation_details.policy` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `items[].tax_calculation_details.origin` | object | yes | no | — | — |
+| `items[].tax_calculation_details.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `items[].tax_calculation_details.origin.source_id` | string \| null | no | yes | null | — |
+| `items[].tax_calculation_details.legacy_interpretation` | boolean | yes | no | — | — |
+| `items[].tax_calculation_details.attribution` | object \| null | no | yes | null | — |
+| `items[].tax_calculation_details.attribution.schema_version` | literal[1] | no | no | 1 | — |
+| `items[].tax_calculation_details.attribution.origin` | object | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.origin.source_id` | string \| null | no | yes | null | — |
+| `items[].tax_calculation_details.attribution.calculation` | object | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.policy` | enum["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.currency` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets` | array[object] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].tax_ordinals` | array[integer] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].net_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].exact_numerator` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].tax_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].gross_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells` | array[object] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].tax_ordinal` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule` | object | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.id` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.label` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.version` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.rate_percent_millionths` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency` | object | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.id` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.label` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.version` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account` | object | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.id` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.name` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.full_name` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.number` | string \| null | yes | yes | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.type` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].exact_numerator` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.buckets[].cells[].tax_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.lines` | array[object] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.lines[].tax_ordinal` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.lines[].net_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.lines[].tax_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.liabilities` | array[object] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.liabilities[].agency_id` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.liabilities[].liability_account_id` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.liabilities[].tax_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.accounts` | array[object] | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.accounts[].liability_account_id` | string | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.accounts[].tax_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.net_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.tax_minor_units` | integer | yes | no | — | — |
+| `items[].tax_calculation_details.attribution.calculation.gross_minor_units` | integer | yes | no | — | — |
 | `items[].document_id` | string | yes | no | — | — |
 | `items[].revision_number` | integer | yes | no | — | — |
 | `items[].supersedes_revision_id` | string \| null | yes | yes | — | — |
@@ -3980,6 +4145,61 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.created_at` | string | yes | no | — | — |
 | `revision.created_by` | string | yes | no | — | — |
 | `revision.created_via` | string | yes | no | — | — |
+| `revision.tax_calculation_details` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.policy` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.legacy_interpretation` | boolean | yes | no | — | — |
+| `revision.tax_calculation_details.attribution` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.tax_calculation_details.attribution.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.calculation` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.policy` | enum["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.currency` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_ordinals` | array[integer] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.rate_percent_millionths` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.full_name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.number` | string \| null | yes | yes | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.type` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].agency_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.gross_minor_units` | integer | yes | no | — | — |
 | `revision.document_id` | string | yes | no | — | — |
 | `revision.revision_number` | integer | yes | no | — | — |
 | `revision.supersedes_revision_id` | string \| null | yes | yes | — | — |
@@ -4673,6 +4893,61 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.created_at` | string | yes | no | — | — |
 | `revision.created_by` | string | yes | no | — | — |
 | `revision.created_via` | string | yes | no | — | — |
+| `revision.tax_calculation_details` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.policy` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.legacy_interpretation` | boolean | yes | no | — | — |
+| `revision.tax_calculation_details.attribution` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.tax_calculation_details.attribution.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.calculation` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.policy` | enum["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.currency` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_ordinals` | array[integer] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.rate_percent_millionths` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.full_name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.number` | string \| null | yes | yes | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.type` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].agency_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.gross_minor_units` | integer | yes | no | — | — |
 | `revision.document_id` | string | yes | no | — | — |
 | `revision.revision_number` | integer | yes | no | — | — |
 | `revision.supersedes_revision_id` | string \| null | yes | yes | — | — |
@@ -5335,6 +5610,61 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.created_at` | string | yes | no | — | — |
 | `revision.created_by` | string | yes | no | — | — |
 | `revision.created_via` | string | yes | no | — | — |
+| `revision.tax_calculation_details` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.policy` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.legacy_interpretation` | boolean | yes | no | — | — |
+| `revision.tax_calculation_details.attribution` | object \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.tax_calculation_details.attribution.origin` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.origin.source_id` | string \| null | no | yes | null | — |
+| `revision.tax_calculation_details.attribution.calculation` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.policy` | enum["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.currency` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_ordinals` | array[integer] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.rate_percent_millionths` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.label` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.agency.version` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account` | object | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.full_name` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.number` | string \| null | yes | yes | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.type` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].exact_numerator` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.buckets[].cells[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_ordinal` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].agency_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.liabilities[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts` | array[object] | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].liability_account_id` | string | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.accounts[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.net_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.tax_minor_units` | integer | yes | no | — | — |
+| `revision.tax_calculation_details.attribution.calculation.gross_minor_units` | integer | yes | no | — | — |
 | `revision.document_id` | string | yes | no | — | — |
 | `revision.revision_number` | integer | yes | no | — | — |
 | `revision.supersedes_revision_id` | string \| null | yes | yes | — | — |

@@ -1,6 +1,7 @@
 """Customer-work browser projections. Commands remain the sole business authority."""
 from copy import deepcopy
 from decimal import Decimal
+from bookflow.company.tax_policy import POLICY_LABELS, POLICY_EXPLANATIONS
 from bookflow.company.sales_contract import FORM_DEFINITIONS, SalesFormDefinition
 from bookflow.company.lists import ReferenceDefinition
 from bookflow.adapters.workbench.sales import _id, preserve_line_origins
@@ -78,6 +79,7 @@ def detail_context(record, company_id, *, preview=False):
             status=link[side + '_status'], relation=link['relation'].replace('_', ' ')))
     return dict(record=record, revision=r, facts=r['facts'], profile=r['facts']['profile'],
         preview=preview, base=base, related=related,
+        tax_labels=POLICY_LABELS, tax_explanations=POLICY_EXPLANATIONS,
         title=record['kind'].replace('_', ' ').capitalize())
 
 

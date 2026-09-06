@@ -104,6 +104,11 @@ def revision_output(s, rev, pending=None, *, summary_only=False):
         lines = [row for row in supplied if row['revision_id'] == rev['id']]
         count = len(lines)
     values = {key: value for key, value in rev.items() if key not in ('facts_snapshot', 'custom_fields_snapshot')}
+    from bookflow.company import tax_attribution
+    tax_rows = [row for row in pending.get('work_tax_attributions', []) if row['revision_id'] == rev['id']]
+    if not tax_rows:
+        tax_rows = rows(s, c.work_tax_attributions, c.work_tax_attributions.c.revision_id == rev['id'])
+    values['tax_calculation_details'] = tax_attribution.details(facts(rev).profile, tax_rows[0]['facts_snapshot'] if tax_rows else None)
     if summary_only:
         return WorkRevisionSummary(**values, **_amounts(rev), line_count=count)
     identities = {row['id']: row for row in pending.get('work_line_identities', [])}

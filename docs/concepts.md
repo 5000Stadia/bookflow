@@ -248,6 +248,12 @@ allocated by exact fractional remainder, then permanent tax-line order and binar
 tax-item ID; it never independently rounds each agency. Tax ordinals and payment
 settlement ordinals are separate. A line reorder cannot move captured tax cents.
 
+The active demo invoices `DEMO-TAX-LEGACY`, `DEMO-TAX-LINE` and
+`DEMO-TAX-TOTAL` each contain two five-cent lines at 10%. Their total tax is
+respectively zero, two and one cents. The reference company has matching
+`REF-TAX-` examples. Open Tax calculation on the document to read the captured
+policy and source; the tax details on each line show the actual assigned cents.
+
 Use `--dry-run` to inspect captured customer, address, item, price, unit, term and
 tax facts. Copy its `facts_fingerprint` into `expected_facts_fingerprint` when
 posting the same input to require the previewed facts. `E_PREVIEW_STALE` means
