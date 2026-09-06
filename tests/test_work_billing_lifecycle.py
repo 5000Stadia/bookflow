@@ -460,3 +460,23 @@ def test_billing_rejects_current_ineligible_captured_posting_reference(client, s
     assert err.value.code == 'E_INACTIVE_REFERENCE'
     assert run(client, 'estimate', 'show', estimate=source['id'])['version'] == source['version']
     assert run(client, 'estimate', 'billing', estimate=source['id'])['remaining_net_minor_units'] == 2468
+
+
+
+def test_receipt_preview_stales_before_requiring_new_received_total(client, sale):
+    source = accepted(client, sale, lines=[dict(item=sale['item']), dict(item=sale['item'])])
+    first = bill(client, source, line_ids=[source['revision']['lines'][0]['line_id']])
+    current = run(client, 'estimate', 'show', estimate=source['id'])
+    bank = client.account.create(name='Receipt preview bank', type='bank', company=COMPANY)['id']
+    method = client.run('payment-method create', dict(name='Receipt preview cash', kind='cash'), company=COMPANY)['id']
+    data = dict(estimate=current['id'], expected_version=current['version'], conversion_key='receipt remainder',
+        date='2026-01-13', deposit_to=bank, payment_method=method, amount_received='12.34')
+    preview = client.run('estimate sales-receipt', data, company=COMPANY, dry_run=True)
+    client.run('invoice void', dict(invoice=first['id'], expected_version=1), company=COMPANY, reason='Release earlier root')
+    with pytest.raises(BookflowError) as err:
+        client.run('estimate sales-receipt', dict(data, expected_facts_fingerprint=preview['facts_fingerprint']), company=COMPANY)
+    assert err.value.code == 'E_PREVIEW_STALE'
+    with pytest.raises(BookflowError) as err:
+        client.run('estimate sales-receipt', data, company=COMPANY, dry_run=True)
+    assert err.value.code == 'E_VALIDATION'
+    assert client.run('estimate sales-receipt', dict(data, amount_received='24.68'), company=COMPANY)['total_minor_units'] == 2468

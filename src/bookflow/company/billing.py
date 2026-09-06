@@ -162,8 +162,6 @@ def resolve_commercial(s, inp, document_type, *, document_id, kind):
     subtotal = calc.total(line['net_minor_units'] for line in lines)
     tax = calc.total(line['tax_minor_units'] for line in lines)
     total = calc.total((subtotal, tax))
-    if document_type == 'sales_receipt' and money(inp.amount_received, rev['currency'], 'amount_received').minor_units != total:
-        raise _invalid('amount_received', 'must equal the exact gross amount of the selected work')
     issuer = work.facts(rev).issuer_snapshot
     semantic = dict(date=inp.date, number=number, memo=inp.memo, issuer=issuer,
         profile=profile.model_dump(), lines=[sales._line_semantic(line) for line in lines],
@@ -173,6 +171,8 @@ def resolve_commercial(s, inp, document_type, *, document_id, kind):
         roots=[root for _, root, _ in selected], content=semantic, warnings=warnings)).encode()).hexdigest()
     if inp.expected_facts_fingerprint and inp.expected_facts_fingerprint != fingerprint:
         raise BookflowError('E_PREVIEW_STALE', details={'facts_fingerprint': fingerprint})
+    if document_type == 'sales_receipt' and money(inp.amount_received, rev['currency'], 'amount_received').minor_units != total:
+        raise _invalid('amount_received', 'must equal the exact gross amount of the selected work')
     if document_type == 'invoice':
         from bookflow.company.customer_balances import credit_warning
         warning = credit_warning(s.company, profile.customer.id, total)
