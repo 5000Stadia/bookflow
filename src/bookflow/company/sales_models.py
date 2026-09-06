@@ -1,4 +1,4 @@
-"""Typed commercial sales input, exact quantities and nonnegative unit prices."""
+"""Typed commercial sales input, exact quantities and nonnegative prices and amounts."""
 from __future__ import annotations
 
 import re
@@ -111,6 +111,7 @@ class SalesLineInput(StrictModel):
     quantity: Quantity = "1"
     unit: Selector | None = None
     unit_price: str | SalesMoneyInput | None = None
+    net_amount: str | SalesMoneyInput | None = None
     description: Text | None = None
     class_id: Selector | None = None
     tax_code: Selector | None = None
@@ -122,9 +123,14 @@ class SalesLineInput(StrictModel):
     @model_validator(mode="after")
     def defaults(self):
         _default_conflicts(self)
-        for field in ("unit_price", "price_basis_amount"):
+        for field in ("unit_price", "price_basis_amount", "net_amount"):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null; use use_defaults for a default price")
+        if "net_amount" in self.model_fields_set:
+            if self.model_fields_set & {"unit_price", "price_level", "price_basis_amount"}:
+                raise ValueError("net_amount conflicts with unit_price, price_level or price_basis_amount")
+            if "unit_price" in self.use_defaults:
+                raise ValueError("net_amount conflicts with use_defaults unit_price")
         return self
 
 

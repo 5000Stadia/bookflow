@@ -498,6 +498,14 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
         snapshot = previous['item_snapshot']
         old = SalesLineProfile.model_validate_json(snapshot) if isinstance(snapshot, str) else SalesLineProfile.model_validate(snapshot)
     fields = _Fields(inp, old, refresh, warnings)
+    # Work owns its existing amount/markup hooks and captured representation.
+    amount_mode = price_override is None and (
+        'net_amount' in fields.supplied or
+        (old is not None and old.pricing_basis == 'amount'
+         and not fields.supplied & {'unit_price', 'price_level'}
+         and 'unit_price' not in fields.defaults))
+    if amount_mode and 'price_basis_amount' in fields.supplied:
+        raise _invalid('price_basis_amount', 'amount pricing has no unit-price basis; select unit pricing first')
     item_changed = old is None or not _same(db, 'item', inp.item, old.item)
     item = _row(db, 'item', inp.item, active=item_changed or refresh)
     if item_changed or refresh:
@@ -538,7 +546,7 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
             profile.unit = saved_unit
         else:
             profile.unit = _unit(db, item, selector, info['units_of_measure_mode'])
-        if saved_unit != profile.unit and old and not fields.defaulted('unit_price'):
+        if saved_unit != profile.unit and old and not amount_mode and not fields.defaulted('unit_price'):
             warnings.append('unit_price: explicit price retained per selected unit')
     factor = profile.unit.factor_nanounits if profile.unit else 1_000_000_000
     base_qty = base_quantity(quantity, factor)
@@ -575,63 +583,84 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
     if info['use_classes'] and info['prompt_for_class'] and profile.class_id is None:
         warnings.append(f'class_id: line {inp.line_id or profile.item.label} has no effective class')
 
-    old_rule = old.price_rule if old else None
-    old_level = Reference(**{k: getattr(old_rule, k) for k in Reference.model_fields}) if old_rule else None
-    header_price_changed = ((customer_changed or (previous_header is not None and header.price_level != previous_header.price_level))
-                            and fields.defaulted('price_level'))
-    level_default = lambda: (header.price_level.id if header.price_level else None, header.customer.id)
-    level_selector = fields.value('price_level', level_default, dependency=header_price_changed,
-                                  saved=old_level.id if old_level else None)
-    if not info['enable_price_levels'] and 'price_level' in fields.supplied and level_selector is not None:
-        raise _invalid('price_level', 'price levels are disabled')
-    level_changed = not _same(db, 'price_level', level_selector, old_level)
-    unit_changed = old is not None and old.unit != profile.unit
-    price_needs = fields.needs('unit_price', item_changed or unit_changed or level_changed or header_price_changed)
-    price_explicit = (price_override is not None or 'unit_price' in fields.supplied or
-                      (old is not None and not fields.defaulted('unit_price') and 'unit_price' not in fields.defaults))
-    if (level_changed or item_changed or refresh or 'price_level' in fields.defaults) and info['enable_price_levels'] and level_selector:
-        # An explicit price makes a missing/inactive inherited level unused.
-        # Explicitly selecting or refreshing the level still validates it.
-        try:
-            captured = None
-            if not refresh and 'price_level' not in fields.supplied:
-                if fields.defaulted('price_level') and header.price_level and header.price_level.id == level_selector:
-                    captured = header.price_level
-                elif not level_changed:
-                    captured = old_level
-            profile.price_rule = _price_rule(db, level_selector, item['id'], currency, captured=captured)
-        except BookflowError as exc:
-            if not (price_explicit and fields.defaulted('price_level') and not refresh
-                    and exc.code == 'E_INACTIVE_REFERENCE'):
-                raise
-            profile.price_rule = None
-    elif level_selector is None or (not info['enable_price_levels'] and price_needs and not price_explicit):
+    if amount_mode:
+        price = None
+        profile.schema_version = 2
+        profile.pricing_basis = 'amount'
+        profile.net_amount_minor_units = (
+            money(inp.net_amount, currency, 'net_amount').minor_units
+            if 'net_amount' in fields.supplied else old.net_amount_minor_units)
         profile.price_rule = None
-    if 'price_basis_amount' in fields.supplied:
-        profile.price_basis_minor_units = money(inp.price_basis_amount, currency, 'price_basis_amount').minor_units
-        fields.origins['price_basis_amount'] = Origin(kind='explicit')
-        price_needs = price_needs or fields.defaulted('unit_price')
-    elif old:
-        profile.price_basis_minor_units = old.price_basis_minor_units
-    if price_override is not None:
-        profile.origins = fields.origins
-        price = price_override(profile, factor)
-    elif 'unit_price' in fields.supplied:
-        price = money(inp.unit_price, currency).minor_units
-        fields.origins['unit_price'] = Origin(kind='explicit')
-    elif price_needs and not price_explicit:
-        base_price = _derived_price(profile)
-        price = selected_price(base_price, factor)
-        fields.origins['unit_price'] = Origin(kind='default', source_id=profile.price_rule.id if profile.price_rule else item['id'])
-        if base_price and not price:
-            warnings.append(f'unit_price: nonzero base price {base_price} rounded to zero at factor {factor}')
+        profile.price_basis_minor_units = None
+        for field in ('unit_price', 'price_level', 'price_basis_amount'):
+            fields.origins.pop(field, None)
+        fields.origins['net_amount'] = Origin(kind='explicit')
+        if old and (item_changed or old.unit != profile.unit):
+            warnings.append('net_amount: explicit amount retained after item or unit change')
     else:
-        price = previous['unit_price_minor_units']
-    if not info['enable_price_levels'] and price_needs:
-        warnings.append('price_level: price levels disabled; standard/manual price is in use')
+        profile.schema_version = 1
+        profile.pricing_basis = 'unit'
+        profile.net_amount_minor_units = None
+        fields.origins.pop('net_amount', None)
+        old_rule = old.price_rule if old else None
+        old_level = Reference(**{k: getattr(old_rule, k) for k in Reference.model_fields}) if old_rule else None
+        header_price_changed = ((customer_changed or (previous_header is not None and header.price_level != previous_header.price_level))
+                                and fields.defaulted('price_level'))
+        level_default = lambda: (header.price_level.id if header.price_level else None, header.customer.id)
+        level_selector = fields.value('price_level', level_default, dependency=header_price_changed,
+                                      saved=old_level.id if old_level else None)
+        if not info['enable_price_levels'] and 'price_level' in fields.supplied and level_selector is not None:
+            raise _invalid('price_level', 'price levels are disabled')
+        level_changed = not _same(db, 'price_level', level_selector, old_level)
+        unit_changed = old is not None and old.unit != profile.unit
+        leaving_amount = old is not None and old.pricing_basis == 'amount'
+        price_needs = leaving_amount or fields.needs('unit_price', item_changed or unit_changed or level_changed or header_price_changed)
+        price_explicit = (price_override is not None or 'unit_price' in fields.supplied or
+                          (old is not None and not leaving_amount and not fields.defaulted('unit_price') and 'unit_price' not in fields.defaults))
+        if (level_changed or item_changed or refresh or 'price_level' in fields.defaults) and info['enable_price_levels'] and level_selector:
+            # An explicit price makes a missing/inactive inherited level unused.
+            # Explicitly selecting or refreshing the level still validates it.
+            try:
+                captured = None
+                if not refresh and 'price_level' not in fields.supplied:
+                    if fields.defaulted('price_level') and header.price_level and header.price_level.id == level_selector:
+                        captured = header.price_level
+                    elif not level_changed:
+                        captured = old_level
+                profile.price_rule = _price_rule(db, level_selector, item['id'], currency, captured=captured)
+            except BookflowError as exc:
+                if not (price_explicit and fields.defaulted('price_level') and not refresh
+                        and exc.code == 'E_INACTIVE_REFERENCE'):
+                    raise
+                profile.price_rule = None
+        elif level_selector is None or (not info['enable_price_levels'] and price_needs and not price_explicit):
+            profile.price_rule = None
+        if 'price_basis_amount' in fields.supplied:
+            profile.price_basis_minor_units = money(inp.price_basis_amount, currency, 'price_basis_amount').minor_units
+            fields.origins['price_basis_amount'] = Origin(kind='explicit')
+            price_needs = price_needs or fields.defaulted('unit_price')
+        elif old:
+            profile.price_basis_minor_units = old.price_basis_minor_units
+        if price_override is not None:
+            profile.origins = fields.origins
+            price = price_override(profile, factor)
+        elif 'unit_price' in fields.supplied:
+            price = money(inp.unit_price, currency).minor_units
+            fields.origins['unit_price'] = Origin(kind='explicit')
+        elif price_needs and not price_explicit:
+            base_price = _derived_price(profile)
+            price = selected_price(base_price, factor)
+            fields.origins['unit_price'] = Origin(kind='default', source_id=profile.price_rule.id if profile.price_rule else item['id'])
+            if base_price and not price:
+                warnings.append(f'unit_price: nonzero base price {base_price} rounded to zero at factor {factor}')
+        else:
+            price = previous['unit_price_minor_units']
+        if not info['enable_price_levels'] and price_needs:
+            warnings.append('price_level: price levels disabled; standard/manual price is in use')
 
     profile.origins = fields.origins
-    net = nonnegative(net_override, 'line.net') if net_override is not None else extension(quantity, price)
+    net = (profile.net_amount_minor_units if amount_mode else
+           nonnegative(net_override, 'line.net') if net_override is not None else extension(quantity, price))
     exempt = header.customer_tax_code is not None and not header.customer_tax_code.taxable
     taxable = profile.tax_code is not None and profile.tax_code.taxable and not exempt
     if not header.preferences.sales_tax_enabled:
