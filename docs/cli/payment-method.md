@@ -6,6 +6,8 @@
 
 Activate a payment method.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -138,6 +140,8 @@ Example JSON output:
 
 Create a payment method.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -268,6 +272,8 @@ Example JSON output:
 ## `payment-method deactivate`
 
 Deactivate a payment method.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
@@ -725,6 +731,8 @@ Example JSON output:
 ## `payment-method update`
 
 Update a payment method.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|

@@ -33,6 +33,7 @@ def test_human_policy_correction(register_browser, width, tmp_path):
     assert _value(b, 'f:sales_tax_calculation') == 'invoice_combined_half_up'
     assert 'Combined tax on taxable total' in b.evaluate('document.querySelector("[name=\\"f:sales_tax_calculation\\"]").selectedOptions[0].textContent')
     _fill(b, 'f:sales_tax_calculation', 'line_component_half_even')
+    _fill(b, 'ctx:reason', 'Compare captured tax rounding policies')
     _preview(b)
     _contained(b, width)
     assert run('invoice.show', dict(invoice=original['id']))['tax_minor_units'] == 2

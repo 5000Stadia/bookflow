@@ -106,6 +106,30 @@
     }
   }
   function refresh(form) {
+    form.querySelectorAll('[data-definition-default]').forEach(wrapper => {
+      const previous = wrapper.firstElementChild;
+      const boolean = named(form, 'f:kind')?.value === 'bool';
+      if ((previous.tagName === 'SELECT') === boolean) return;
+      const control = document.createElement(boolean ? 'select' : 'input');
+      control.name = previous.name; control.id = previous.id;
+      if (boolean) {
+        for (const [value, label] of [['', '(no default)'], ['true', 'true'], ['false', 'false']]) {
+          control.add(new Option(label, value));
+        }
+        control.value = ['true', 'false'].includes(previous.value) ? previous.value : '';
+      } else {
+        control.value = previous.value;
+        control.dataset.mathScale = '9';
+        control.dataset.mathActive = JSON.stringify([{name:'f:kind', values:['number']}]);
+      }
+      previous.replaceWith(control);
+    });
+    form.querySelectorAll('[data-visibility-cases]').forEach(row => {
+      const shown = JSON.parse(row.dataset.visibilityCases).some(conditions =>
+        conditions.every(condition => condition.values.includes(named(form, 'f:' + condition.field)?.value)));
+      row.hidden = !shown;
+      row.querySelectorAll('input,select,textarea').forEach(input => { input.disabled = !shown; });
+    });
     form.querySelectorAll('[data-when-field]').forEach(row => {
       const control = named(form, 'f:' + row.dataset.whenField);
       const shown = control && JSON.parse(row.dataset.whenValues).includes(control.value);

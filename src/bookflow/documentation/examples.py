@@ -15,6 +15,7 @@ class Example:
 ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
 EXAMPLES: dict[str, Example] = {
+    "mcp": Example("bookflow mcp --url http://127.0.0.1:8765 --token-env BOOKFLOW_TOKEN", {"url": "http://127.0.0.1:8765"}),
     "activity": Example(f'bookflow activity customer {ID} --company "Demo Plumbing Co" --kinds \'["note","attachment"]\' --limit 25 --json', {"record_type": "customer", "record_id": ID, "kinds": ["note", "attachment"], "limit": 25}),
     "attachment add": Example(f'bookflow attachment add customer {ID} receipt.pdf --company "Demo Plumbing Co" --caption "Service receipt" --reason "File service receipt" --json', {"record_type": "customer", "record_id": ID, "original_filename": "receipt.pdf", "media_type": "application/pdf", "caption": "Service receipt"}),
     "attachment link": Example(f'bookflow attachment link {ID} customer {ID} --company "Demo Plumbing Co" --caption "Related receipt" --reason "Link receipt" --json', {"attachment": ID, "record_type": "customer", "record_id": ID, "caption": "Related receipt"}),

@@ -76,6 +76,7 @@ class Host:
         self._refresh_lock = threading.Lock()
         self._readers_attached = 0
         self._transfers: set[TransferLease] = set()
+        self._owned_resources: list[Any] = []
         self._readers_lock = threading.Condition()
         self._stopping = False
         self._jobs_closed = False
@@ -453,14 +454,30 @@ class Host:
                 # generator's finally block removes the subscription.
                 pass
 
+    def own_resource(self, resource) -> None:
+        """Register a transport lifetime that must close before the host releases its root."""
+        with self._readers_lock:
+            if self._stopping:
+                raise BookflowError("E_DB_BUSY", message="The host is stopping.")
+            self._owned_resources.append(resource)
+
     def begin_shutdown(self) -> None:
         """Make shutdown observable immediately and wake every idle event stream."""
         with self._readers_lock:
             self._stopping = True
             leases = tuple(self._transfers)
+            resources = tuple(self._owned_resources)
+        failures = []
+        for resource in resources:
+            try:
+                resource.close()
+            except Exception as exc:
+                failures.append(exc)
         for lease in leases:
             lease.cancel()
         self._wake_subscribers()
+        if failures:
+            raise BookflowError("E_DB_BUSY", message="Owned transport resources are still closing; retry shutdown.") from None
 
     # ---------------------------------------------------------------- credential liveness
     def enqueue_token_refresh(self, token_id: str, kind: str) -> bool:

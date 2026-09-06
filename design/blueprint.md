@@ -1366,7 +1366,7 @@ Workbench requests are recorded with interface `http` and client name `bookflow-
 
 ### 15.3 MCP server
 
-`bookflow mcp --token <secret>`. Three tools, so that the agent's context never carries every command's schema at once: `bookflow_list_commands` returns every command name with its one-sentence description and scope; `bookflow_help` returns a command's documentation page, including its input schema, output fields, and error codes; `bookflow_run` takes `command`, `input`, and the context arguments `company`, `reason`, `directive`, `source_ref`, and `idempotency_key`, and returns the output or the error document. The three are generated from the registry like every other adapter.
+`bookflow mcp --url http://127.0.0.1:8765 --token-env BOOKFLOW_TOKEN` reads its bearer from the named environment variable, never from a token argument. Three registry-generated tools expose the shared command contract: `bookflow_list_commands` pages command names, descriptions, scope and routing metadata (default20, maximum200), with optional command-name prefix and next_cursor continuation. `bookflow_help` defaults to concise usage with the complete input schema, context and errors; input_schema, output_schema and full views expose the remaining complete metadata without loading every command into agent context. `bookflow_run` takes command and input, with applicable execution fields company, dry_run, reason, directive, source_ref and idempotency_key at the top level. File arguments belong to transport and permitted launcher directories, not business input. Results preserve the shared success/error document; retained intent references support recovery without reexecuting committed work.
 
 ## 16. Documentation contract
 

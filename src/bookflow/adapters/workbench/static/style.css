@@ -62,3 +62,9 @@ nav.crumbs{margin:.5rem 0;color:#666}
 
 .numeric-calculation { display: block; font-size: .9rem; overflow-wrap: anywhere; max-width: 100%; margin-block: .25rem; }
 .numeric-calculation[hidden] { display: none; }
+
+.record-heading{overflow-wrap:anywhere}
+.object-clear-control{white-space:normal;overflow-wrap:anywhere}
+.owned-collection,.collection-item{min-width:0}
+.structured-input-help{min-width:0;max-width:100%;grid-column:1/-1}
+.structured-input-help pre{box-sizing:border-box;max-width:100%}

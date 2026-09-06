@@ -10,6 +10,7 @@
 {% if noun == 'journal' and verb in ('post', 'update') %}<p class="workflow-note">Enter a currency with an amount, such as <code>2345 JPY</code>. Rates mean home-currency units per one foreign unit. Leave Rate empty to use saved conversions or the exact-date rate. Changing a saved entry's date or memo preserves unchanged conversions; choose Refresh rates to reprice them.</p>{% endif %}
 {% if captured_foreign_lines %}<details><summary>Saved currency conversions</summary><div class="table-wrap"><table><thead><tr><th>Line</th><th>Original</th><th>Home amount</th><th>Rate</th><th>Source</th></tr></thead><tbody>{% for line in captured_foreign_lines %}<tr><td>{{ line.position }}</td><td>{{ line.original_amount.amount }} {{ line.original_currency }}</td><td>{{ line.amount.amount }} {{ line.currency }}</td><td>{{ line.rate_used }}</td><td>{{ line.rate_source }}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}
 {% if error %}<div class="error"><b>{{ error.code }}</b> {% if invoice_correction_reason and error.code == 'E_REASON_REQUIRED' %}Enter a reason for this invoice correction.{% else %}{{ error.message }}{% endif %}{% if error.details.fields %}<ul>{% for f in error.details.fields %}<li>{{ f.field }}: {{ f.problem }}</li>{% endfor %}</ul>{% endif %}{% if error.details.suggestions %}<p>Did you mean: {{ error.details.suggestions | join(", ") }}</p>{% endif %}</div>{% endif %}
+{% if error %}<details class="error-details"><summary>Error details</summary><pre>{{ json.dumps(error, indent=1, default=str) }}</pre></details>{% endif %}
 {% if error and error.code == 'E_VERSION_CONFLICT' %}<div class="workflow-note" role="alert">Someone changed this record while you were editing. Your entered values and attempted version are preserved below. Changed fields: {{ error.details.changed_fields | join(', ') }}. <a href="{{ base }}/{{ record_id }}" target="_blank" rel="noopener">Review the saved record in another tab</a> before starting a new edit; submitting this stale version again does not overwrite their changes.</div>{% endif %}
 {% if noun == 'report' and source_report_watermark is not none %}<p class="workflow-note" id="report-source-state">This drill-down opens the current books. Source statement audit watermark: {{ source_report_watermark }}.{% if result and result.metadata and result.metadata.audit_watermark|string != source_report_watermark %} <strong>The books changed since the source statement. Rerun that statement before comparing amounts.</strong>{% endif %}</p>{% endif %}
 {% if work %}{% include "work_detail.html" %}{% elif work_history or work_results %}{% include "work_results.html" %}{% elif sale %}{% include "sales_detail.html" %}{% elif sales_history %}
@@ -48,6 +49,7 @@
 
 {% macro math_attrs(control, name) %}
 {% set math = control.math or {} %}
+{% if control.structured_schema %} data-math-structured="object"{% endif %}
 {% if math %}
 {% if math.scale is defined %} data-math-scale="{{ math.scale }}"{% endif %}
 {% if math.currency %} data-math-currency="{{ math.currency }}"{% if noun == 'price-level' %} data-math-currency-field="f:currency"{% endif %}{% endif %}
@@ -57,11 +59,17 @@
 {% endif %}
 {% endmacro %}
 
+{% macro structured_help(control) %}
+{% if control.structured_schema %}<details class="structured-input-help"><summary>JSON object alternative</summary><p>This field also accepts a JSON object{% if control.nullable %}, or null to clear it{% endif %}. Enter it in the same field; its integer values are preserved exactly.</p><pre>{{ json.dumps(control.structured_schema, indent=1) }}</pre></details>{% endif %}
+{% endmacro %}
+
 {% macro collection_scalar(control, name, cur, id) %}
 {% if control.reference %}{{ reference_control(control.reference, name, cur, id, reference_values.get(name), not control.required) }}
+{% elif control.kind == "json" %}<textarea id="{{ id }}" name="{{ name }}" rows="3" style="min-width:0;max-width:100%">{{ json.dumps(cur, indent=1, default=str) if cur is mapping or (cur is sequence and cur is not string) else cur if cur is not none else '' }}</textarea><small>JSON {{ control.json_shape }}{% if control.nullable %}; null clears this optional value{% endif %}.</small>
 {% elif control.kind == "choice" %}<select id="{{ id }}" name="{{ name }}"><option value="">(choose)</option>{% for choice in control.choices %}<option value="{{ choice }}"{% if cur == choice %} selected{% endif %}>{{ control.choice_labels.get(choice, choice) if control.choice_labels else choice }}</option>{% endfor %}</select>
 {% elif control.kind == "bool" %}<select id="{{ id }}" name="{{ name }}"><option value="unset">(unset)</option><option value="true"{% if cur == true or cur == "true" %} selected{% endif %}>true</option><option value="false"{% if cur == false or cur == "false" %} selected{% endif %}>false</option></select>
 {% else %}<input id="{{ id }}" name="{{ name }}" value="{{ cur if cur is not none else '' }}"{{ math_attrs(control, name) }}{% if control.math %} inputmode="decimal"{% elif control.kind == "number" %} inputmode="numeric"{% endif %}>{% endif %}
+{{ structured_help(control) }}
 {% if sales_form and control.name in ('description', 'unit', 'class_id', 'tax_code', 'price_level', 'estimated_unit_cost') %}<label class="clear-control"><input type="checkbox" name="clear:{{ name }}" value="1"{% if attempted.get('clear:' ~ name) == '1' %} checked{% endif %}> Clear {{ control.name.replace('_', ' ') }}</label>{% endif %}
 {% endmacro %}
 
@@ -112,6 +120,7 @@
 {% set cur = form_value(l, originals, attempted) %}
 {% set form_name = l.form_key or ("f:" ~ l.path) %}
 <div class="row form-field{% if l.runtime %} runtime-field{% endif %}" id="field-{{ index }}"
+ {% if l.visibility_cases is defined %}data-visibility-cases='{{ json.dumps(l.visibility_cases) | e }}'{% if not l.visible %} hidden{% endif %}{% endif %}
  {% if l.visible_when %}data-when-field="{{ l.visible_when.field }}" data-when-values='{{ json.dumps(l.visible_when["values"]) | e }}'{% if not l.visible %} hidden{% endif %}{% endif %}>
 <label for="control-{{ index }}">{{ l.label or l.path }}{% if l.required %} *{% endif %}
 <small>{{ l.description }}{% if l.choices and not l.runtime %} One of: {{ l.choices | join(", ") }}.{% endif %}{% if l.kind == "json" %} Enter a JSON {{ l.json_shape }}.{% endif %}{% if l.default is not none %} Default: {{ l.default }}.{% endif %}</small></label>
@@ -123,6 +132,9 @@
 {{ reference_control(l.reference, form_name, cur, "control-" ~ index, l.reference.current, l.nullable or not l.required) }}
 {% elif l.kind == "choice" %}
 <select id="control-{{ index }}" name="{{ form_name }}"><option value="">{{ "(choose)" if l.required and not record_id else "(unchanged)" }}</option>{% for c in l.choices %}<option value="{{ c }}" {% if cur == c %}selected{% endif %}>{{ l.choice_labels.get(c, c) if l.choice_labels else c }}</option>{% endfor %}</select>
+{% elif l.definition_default %}<span data-definition-default>
+{% if l.default_kind == 'bool' %}<select id="control-{{ index }}" name="{{ form_name }}"><option value="">(no default)</option><option value="true"{% if cur is sameas true or cur == 'true' %} selected{% endif %}>true</option><option value="false"{% if cur is sameas false or cur == 'false' %} selected{% endif %}>false</option></select>
+{% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"{{ math_attrs(l, form_name) }}>{% endif %}</span>
 {% elif l.kind == "bool" %}
 <select id="control-{{ index }}" name="{{ form_name }}"><option value="unset">(unset)</option><option value="true" {% if cur == true or cur == "true" %}selected{% endif %}>true</option><option value="false" {% if cur == false or cur == "false" %}selected{% endif %}>false</option></select>
 {% elif l.kind == "secret" %}<input id="control-{{ index }}" type="password" name="{{ form_name }}">
@@ -144,8 +156,9 @@
 {% endif %}</select>
 {% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"{% if l.date_input %} type="date"{% elif l.wire_kind == 'number' %} inputmode="decimal" data-math-scale="9" data-math-active='{{ [{"name": "cf-state:" ~ l.definition_id, "values": ["set"]}] | tojson }}' data-math-clear="clear:custom_fields.{{ l.definition_id }}"{% endif %}>{% endif %}
 {% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"{{ math_attrs(l, form_name) }} {% if l.math %}inputmode="decimal"{% elif l.kind == "number" %}inputmode="numeric"{% endif %}>{% endif %}
+{{ structured_help(l) }}
 </div>
-<span>{% if cmd.clearable and not l.runtime and l.nullable and l.kind != "json" and not (noun == 'journal' and l.path == 'rate') %}<label class="clear-control"><input type="checkbox" name="clear:{{ l.path }}" value="1" {% if attempted.get("clear:" ~ l.path) == "1" %}checked{% endif %}> clear</label>{% endif %}</span>
+<span>{% for parent in l.object_controls or [] %}<label class="clear-control object-clear-control"><input type="checkbox" name="clear:{{ parent }}" value="1" {% if attempted.get("clear:" ~ parent) == "1" %}checked{% endif %}> clear entire {{ parent }} (overrides child fields)</label>{% endfor %}{% if cmd.clearable and not l.runtime and l.nullable and l.kind != "json" and not (noun == 'journal' and l.path == 'rate') %}<label class="clear-control"><input type="checkbox" name="clear:{{ l.path }}" value="1" {% if attempted.get("clear:" ~ l.path) == "1" %}checked{% endif %}> clear</label>{% endif %}</span>
 </div>
 {% endmacro %}
 

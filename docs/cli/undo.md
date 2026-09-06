@@ -6,6 +6,8 @@
 
 Compensate an eligible Row 5 list audit event without deleting history.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |

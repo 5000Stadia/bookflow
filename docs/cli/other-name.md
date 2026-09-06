@@ -6,6 +6,8 @@
 
 Activate a other name.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -187,6 +189,8 @@ Example JSON output:
 
 Convert an active other name into a new customer, vendor, or employee.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -309,6 +313,8 @@ Example JSON output:
 ## `other-name create`
 
 Create a other name.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
@@ -506,6 +512,8 @@ Example JSON output:
 ## `other-name deactivate`
 
 Deactivate a other name.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
@@ -1092,6 +1100,8 @@ Example JSON output:
 ## `other-name update`
 
 Update a other name.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|

@@ -47,6 +47,27 @@ def _flatten(model: type[BaseModel], prefix: str = "") -> list[tuple[str, str, A
     """Yield (input path with dots, flag name, annotation, help, required, default) per leaf field."""
     out = []
     for name, f in model.model_fields.items():
+        if isinstance(f.discriminator, str):
+            annotation = f.annotation
+            while get_origin(annotation) is Annotated:
+                annotation = get_args(annotation)[0]
+            combined = {}
+            for variant in get_args(annotation):
+                for leaf in _flatten(variant, prefix + name + "."):
+                    path, flag, ann, description, required, default = leaf
+                    previous = combined.get(path)
+                    if previous is None:
+                        combined[path] = leaf
+                    else:
+                        old_ann = previous[2]
+                        if get_origin(old_ann) is Literal and get_origin(ann) is Literal:
+                            ann = Literal[tuple(dict.fromkeys((*get_args(old_ann), *get_args(ann))))]
+                        else:
+                            ann = old_ann
+                        combined[path] = (path, flag, ann, description or previous[3],
+                                          required and previous[4], default)
+            out.extend(combined.values())
+            continue
         ann = f.annotation
         base = ann
         origin = get_origin(ann)
@@ -114,11 +135,11 @@ def _input_value(annotation: Any, value: Any, path: str) -> Any:
             if len(branches) != 1:
                 break
             base = branches[0]
-    if isinstance(value, str) and get_origin(base) in (list, dict):
+    if isinstance(value, str) and get_origin(base) in (list, tuple, set, frozenset, dict):
         import json
         try:
             parsed = json.loads(value)
-            if not isinstance(parsed, get_origin(base)):
+            if not isinstance(parsed, dict if get_origin(base) is dict else list):
                 raise ValueError
             return parsed
         except ValueError:
@@ -151,8 +172,17 @@ def _build_command(cmd: registry.Command):
         py_t, choices = _leaf_type(ann)
         is_positional = path in cmd.positional
         text = _help_text(help_, py_t, choices, required, dflt)
+        if cmd.name in {"custom-field create", "custom-field update"} and path == "default":
+            text += " With --kind bool, use true or false; supply --kind when changing a boolean default."
         pname = "f__" + path.replace(".", "__")
-        if is_positional:
+        metadata = cmd.input_model.model_fields.get(path)
+        if metadata is not None and isinstance(metadata.json_schema_extra, dict):
+            flag = metadata.json_schema_extra.get("cli_flag", flag)
+        repeated = metadata is not None and isinstance(metadata.json_schema_extra, dict) and metadata.json_schema_extra.get("cli_repeatable")
+        if repeated:
+            default = typer.Option(None, f"--{flag}", help=text, metavar="PATH")
+            annotation = list[str] | None
+        elif is_positional:
             default = typer.Argument(None, help=text, metavar=path.upper())
             annotation = str | None
         elif py_t is bool:
@@ -170,7 +200,8 @@ def _build_command(cmd: registry.Command):
             default = typer.Option(..., "--out", help="Local output file; published atomically after verified completion. Must not already exist.", metavar="PATH")
             pname = "transfer_out"
         params.append(inspect.Parameter(pname, inspect.Parameter.KEYWORD_ONLY, default=default, annotation=str))
-    params.append(inspect.Parameter("json_", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--json", help="Print the output as one JSON object"), annotation=bool))
+    if not cmd.protocol_stdout:
+        params.append(inspect.Parameter("json_", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--json", help="Print the output as one JSON object"), annotation=bool))
     if not cmd.standalone:
         params.append(inspect.Parameter("data_root", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--data-root", help="Data root; else BOOKFLOW_DATA_ROOT, else ~/.bookflow", metavar="TEXT"), annotation=str | None))
     if cmd.is_write:
@@ -192,6 +223,8 @@ def _build_command(cmd: registry.Command):
     def run(**kw: Any) -> None:
         ctx_obj = click_globals.get_current_context().obj or {}
         as_json = kw.pop("json_", False) or ctx_obj.get("json", False)
+        if cmd.protocol_stdout and as_json:
+            raise BookflowError("E_USAGE", message=f"--json does not apply to `{cmd.name}`; stdout carries its protocol")
         local_root = kw.pop("data_root", None)
         from bookflow.core import performance
         if performance.enabled():
@@ -208,8 +241,6 @@ def _build_command(cmd: registry.Command):
 
         def merged(name: str, local: Any, applicable: bool) -> Any:
             root_v = ctx_obj.get(name)
-            if root_v not in (None, False) and not applicable:
-                raise BookflowError("E_USAGE", message=f"--{name.replace('_', '-')} does not apply to `{cmd.name}`")
             if root_v not in (None, False) and local not in (None, False) and root_v != local:
                 raise BookflowError("E_USAGE", message=f"--{name.replace('_', '-')} was given twice with different values")
             return local if local not in (None, False) else root_v
@@ -223,11 +254,16 @@ def _build_command(cmd: registry.Command):
         clears = kw.pop("clear", None) or []
         follow = kw.pop("follow", False)
         company = merged("company", kw.pop("company", None), cmd.scope == "company")
+        from bookflow.core.context_options import normalize_options
+        normalize_options(cmd, company=company, dry_run=dry_run, reason=reason,
+                          source_ref=source_ref, directive=directive, idempotency_key=idempotency_key)
         raw: dict[str, Any] = {}
         for path, flag, ann, help_, required, dflt in leaves:
             v = kw.get("f__" + path.replace(".", "__"))
             if v is not None:
                 _set_path(raw, path, _input_value(ann, v, path))
+        from bookflow.adapters.typed_defaults import decode_definition_default
+        decode_definition_default(cmd, raw)
         if clears:
             from bookflow.core.clearing import apply_clears
             apply_clears(cmd, raw, list(clears))
@@ -266,18 +302,8 @@ def _build_command(cmd: registry.Command):
                     v = click_termui.prompt(label, default="", show_default=False, err=True, type=str)
                 if v != "":
                     _set_path(raw, path, _input_value(ann, v, path))
-        source = "option"
-        if cmd.scope == "company" and company is None:
-            env = os.environ.get("BOOKFLOW_COMPANY")
-            if env:
-                company, source = env, "env"
-            else:
-                from bookflow.core.config import Config, os_login
-                from bookflow.storage.paths import resolve_data_root
-                cfg = Config.load(resolve_data_root(data_root) / "config.toml")
-                table = cfg.user_table(os_login()) or {}
-                if table.get("default_company"):
-                    company, source = table["default_company"], "default"
+        from bookflow.core.company_selection import company_selection
+        company, source = company_selection(cmd.scope, company, selection_root=data_root)
         from bookflow.core.dispatch import run as dispatch_run
         ctx = Context.new(Interface.cli, "bookflow-cli", session_id=ctx_obj.get("session_id") or new_id(), reason=reason, source_ref=source_ref, directive_id=directive, idempotency_key=idempotency_key)
         if follow:
@@ -324,6 +350,8 @@ def _build_command(cmd: registry.Command):
                 return result
 
             out = guard(transfer_run)
+        if cmd.protocol_stdout:
+            return
         for w_ in (out.get("warnings") or []) if isinstance(out, dict) else []:
             typer.echo(f"warning: {w_}", err=True)
         with span("cli.render"):
@@ -355,18 +383,26 @@ def _output_fields(model: type[BaseModel], prefix: str = "", depth: int = 0) -> 
 def _help_epilog(cmd: registry.Command) -> str:
     from bookflow.core.errors import INFRASTRUCTURE_CODES
     fields = ", ".join(_output_fields(cmd.output_model))
+    if cmd.protocol_stdout:
+        return "Stdout carries only protocol messages. EOF closes the launcher without a final command document. Diagnostics use stderr."
     codes = ", ".join(cmd.error_codes) if cmd.error_codes else "none beyond the infrastructure codes"
+    related = [other.name for other in registry.all_commands(include_standalone=True) if other.name.startswith(cmd.name + ' ')]
+    suffix = "\n\nRelated command paths: " + ", ".join(related) + "." if related else ""
     return (f"Output fields: {fields}.\n\nErrors this command can return: {codes}. "
-            f"Every command can also return: {', '.join(INFRASTRUCTURE_CODES)}.")
+            f"Every command can also return: {', '.join(INFRASTRUCTURE_CODES)}." + suffix)
 
 
 def _target_noun(argv: list[str]) -> str | None:
     """The noun path the invocation names (words before the first option after the program name), or None for the root."""
     words = []
-    for tok in argv[1:]:
+    values = {'--data-root', '--company', '--reason', '--source-ref', '--directive', '--idempotency-key'}
+    tokens = iter(argv[1:])
+    for tok in tokens:
         if tok.startswith("-"):
             if words:
                 break
+            if tok in values:
+                next(tokens, None)
             continue
         words.append(tok)
     return " ".join(words) if words else None
@@ -410,6 +446,7 @@ def build_app(target: str | None = None, full: bool = False) -> typer.Typer:
     single = {"init": "Create the data root, the system user, and the first hub-admin user mapped from the OS login.", "upgrade": "Migrate the hub database and every company database the acting user may write to the current schema revision."}
     built = set()
     commands = registry.all_commands(include_standalone=True)
+    command_names = {cmd.name for cmd in commands}
     if target is not None and not full:
         # Concrete invocation/help only needs its own parser; positional values
         # may follow the registered command name. Noun and unknown targets keep
@@ -426,7 +463,7 @@ def build_app(target: str | None = None, full: bool = False) -> typer.Typer:
         group_for(cmd.noun).command(cmd.verb, help=cmd.description, epilog=fn.__epilog__)(fn)
         built.add(cmd.noun)
     for noun in registry.all_nouns():
-        if noun in built:
+        if noun in built or noun in command_names:
             continue
         if noun in single:
             app.command(noun, help=single[noun])(lambda: None)

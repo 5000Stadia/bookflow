@@ -4,6 +4,9 @@
   const named = (form, name) => name && form?.querySelector(`[name="${CSS.escape(name)}"]`);
   function active(input) {
     if (!input.isConnected || input.matches(':disabled') || input.readOnly || input.type === 'hidden') return false;
+    // Structured alternatives are validated by the owning typed input model.
+    // Do not parse their integer fields through JavaScript Number or arithmetic.
+    if (input.dataset.mathStructured && (input.value.trimStart().startsWith('{') || input.value.trim() === 'null')) return false;
     const form = input.form || input.closest('form');
     if (named(form, input.dataset.mathClear)?.checked) return false;
     for (let collection = input.closest('[data-collection]'); collection; collection = collection.parentElement?.closest('[data-collection]')) {

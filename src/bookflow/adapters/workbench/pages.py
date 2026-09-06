@@ -67,6 +67,11 @@ class _FlashStore:
             if owner != session_token:
                 return None
             self._items.pop(key, None)
+            from bookflow.adapters.http.publication import protect
+            result = payload.get("result")
+            if hasattr(result, "check"):
+                result.check(original_response=False)
+                protect(result, original_response=False)
             return payload
 
 
@@ -176,6 +181,8 @@ def _noun_meta(noun):
 
 def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
     """Project the authoritative editable object from a show result."""
+    if noun == "custom-field":
+        return {**shown, "scopes": [scope["record_type"] for scope in shown["scopes"]]}
     if noun in Work.NOUNS:
         return Work.editable_values(shown)
     if noun in ('invoice', 'sales-receipt'):
@@ -1593,7 +1600,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 headers={"Cache-Control": "no-store"},
             )
         target = _success_target(cmd, company_id, noun, record_id, out)
-        flash_id = flashes.put(session_token, {"command": cmd.name, "result": out})
+        flash_id = flashes.put(session_token, {"command": cmd.name, "is_write": cmd.is_write, "result": out})
         location = f"{target}?flash={flash_id}"
         if request.headers.get("hx-request", "").lower() == "true":
             # A 303 is followed inside the XHR and leaves the address bar on
@@ -1655,4 +1662,5 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             out = run(request, name, filters, company_id)
         except BookflowError as e:
             return page_error(request, e)
-        return render("audit.html", request, company_id=company_id, items=out["items"], next_before=out.get("next_before"), filters=filters, cmd=registry.get(name), leaves=F.leaves(registry.get(name).input_model))
+        older_url = (request.url.path + "?" + urlencode({**filters, "before": out["next_before"]})) if out.get("next_before") else None
+        return render("audit.html", request, company_id=company_id, items=out["items"], next_before=out.get("next_before"), older_url=older_url, filters=filters, cmd=registry.get(name), leaves=F.leaves(registry.get(name).input_model))

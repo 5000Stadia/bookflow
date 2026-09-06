@@ -6,6 +6,8 @@
 
 Activate a unit of measure set.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -196,6 +198,8 @@ Example JSON output:
 ## `unit-of-measure create`
 
 Create a unit of measure set.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
@@ -394,6 +398,8 @@ Example JSON output:
 ## `unit-of-measure deactivate`
 
 Deactivate a unit of measure set.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
@@ -1044,6 +1050,8 @@ Example JSON output:
 ## `unit-of-measure update`
 
 Update a unit of measure set.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|

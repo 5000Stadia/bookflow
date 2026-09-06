@@ -6,6 +6,8 @@
 
 Activate a class.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -144,6 +146,8 @@ Example JSON output:
 
 Create a class.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -280,6 +284,8 @@ Example JSON output:
 ## `class deactivate`
 
 Deactivate a class.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
@@ -753,6 +759,8 @@ Example JSON output:
 ## `class update`
 
 Update a class.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|

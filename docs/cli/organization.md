@@ -109,6 +109,8 @@ Example JSON output:
 
 Create an organization, the business entity that holds one or more companies.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | hub |
@@ -235,6 +237,8 @@ Example JSON output:
 ## `organization rename`
 
 Rename an organization, optionally moving its folder.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|

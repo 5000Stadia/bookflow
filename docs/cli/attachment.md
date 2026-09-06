@@ -6,6 +6,8 @@
 
 Upload verified bytes and link them to a company record.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -361,6 +363,8 @@ Example JSON output:
 
 Link an available attachment to another record.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -698,6 +702,8 @@ Example JSON output:
 ## `attachment unlink`
 
 Unlink an occurrence with its expected version, retaining history and bytes.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|

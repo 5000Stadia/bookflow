@@ -91,9 +91,21 @@ def resolve_token(db, secret: str) -> dict[str, Any]:
         raise BookflowError("E_UNAUTHENTICATED", details={"reason": "credential kind"})
     if row["revoked_at"]:
         raise BookflowError("E_UNAUTHENTICATED", details={"reason": "revoked"})
+    validate_binding(db, row)
+    return row
+
+
+def validate_binding(db, row) -> None:
+    """Shared kind, expiry and principal checks; callers separately check revocation.
+
+    Publication of an exact, already committed self-revocation receipt can use
+    these remaining checks after proving that operation's revocation effect.
+    This is not an authentication entry point.
+    """
+    if row["kind"] not in ("bearer", "session"):
+        raise BookflowError("E_UNAUTHENTICATED", details={"reason": "credential kind"})
     if row["expires_at"] and clock.parse_iso(row["expires_at"]) <= clock.now():
         raise BookflowError("E_UNAUTHENTICATED", details={"reason": "expired"})
     eligible, epoch = _binding(db, row["user_id"], row["on_behalf_of"])
     if not eligible or type(row["authority_epoch"]) is not type(epoch) or row["authority_epoch"] != epoch:
         raise BookflowError("E_UNAUTHENTICATED", details={"reason": "credential authority"})
-    return row

@@ -25,6 +25,7 @@ bookflow = "bookflow.bootstrap:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-timeout>=2.3", "httpx>=0.27"]
+mcp = ["mcp==2.1.1", "httpx2>=2.5.0", "ijson==3.5.1"]
 
 [build-system]
 requires = ["hatchling"]

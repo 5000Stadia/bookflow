@@ -725,7 +725,7 @@ billing_links. Both operational and financial conversions share permanent compan
 key identity across their durable stores, including replay after generic cache
 expiry and after void. Composite resource requirements and conditional source
 reads are checked before cached responses or preview; granular grants/denies remain
-Row7 and actual MCP transport remains Row9.
+Row7. The MCP adapter uses these same registered predicates.
 
 Amount-priced sales retain net_amount and positive descriptive quantity with a
 null unit price. Version2 amount profiles have an explicit pricing basis; version1
@@ -846,3 +846,104 @@ unresolved requests are canceled. Ordinary input/change events invalidate sales
 previews. Register Record/Recalculate normalize before constructing payloads;
 retained retry bytes are not reevaluated. Posted money and command schemas retain
 their existing contracts.
+
+
+## MCP transport and publication
+
+`commands/mcp_cmds.py` supplies the rootless `bookflow mcp` stdio launcher.
+The optional official SDK owns protocol framing and the three tools; catalog,
+help and input/output schemas come from the command registry. Help bridge v2
+uses usage/input_schema/output_schema/full, with complete input constraints in
+usage and a catalog page default of20. Mixed bridge versions reject explicitly.
+`core/context_options.py` normalizes inactive/unsupported context across adapters;
+`core/company_selection.py` applies caller-owned explicit/environment/configuration
+precedence. Process sessions and client labels are provenance, not authority.
+
+`adapters/mcp/runtime.py` connects host-owned intents to the shared executor and
+registered transfers. Each intent has one execution identity under both reference
+aliases. Preparation, accepted callbacks, delivery slots, bounded retained receipts
+and original absolute deadlines have separate owners; recovery does not dispatch
+committed work. `intents.py` accounts retained value graphs, while host-owned cleanup
+keeps queued/active work pinned until its actual owner exits. `client.py` handles
+permitted input/output paths, hashing, binary streaming and atomic verified files.
+`files.py` verifies directory and descriptor lineage; these file capabilities are
+POSIX-only, with Linux tested and no macOS/WSL execution claim. `inspection.py`
+provides authorized bounded navigation of mapped, verified result files.
+
+`framing.py` authenticates complete JSON/binary delivery using ordered bounded
+records and terminal sizes/digests. `json_validation.py` validates syntax without
+assembling scalars, keys, numeric lexemes or object paths. Validation holds one
+decoded record, eight token-prefix characters, three error-field markers and a
+stack proportional to JSON nesting depth. Inline result assembly and an explicitly
+requested inspection item remain separate from this syntax-validation memory.
+`BOOKFLOW_MCP_JSON_SECONDS` configures JSON delivery between30 and86400seconds;
+preparation, retained-result and binary lease deadlines remain independently owned.
+
+`core/publication.py` retains a value-only authority certificate and rechecks the
+original credential, actor, memberships, selected/returned registrations and shared
+conditional predicates before result publication. Pure dependency-resolution
+failures become E_PERMISSION, authentication loss remains E_UNAUTHENTICATED,
+and operational/certificate failures keep their operational category. This does
+not rewrite a valid original command error. Exact original token-self-revocation
+and audited own-detach effects have narrow postcondition rules. Middleware checks
+headers/body publication and delayed workbench receipts; committed writes are
+never reexecuted or compensated to recover a response.
+
+CLI collection flags decode JSON arrays for list/tuple/set/frozenset annotations.
+`adapters/typed_defaults.py` converts true/false text controls for an explicitly
+selected boolean custom-field definition kind, leaving core validation unchanged.
+The CLI supplies --kind with a boolean default; generated browser forms use the
+selected or retained kind and a boolean selector; definition scope objects from
+show are projected to the scope names accepted by update. Text false stays text, omission
+stays omission, and explicit clear remains null.
+
+MCP response classification is explicit. A pre-intent rejection of the shared
+context/selection/authorization check carries the private command_rejection
+response marker. Its AdmissionRejection guard reruns only that pure check under
+current credentials and requires the identical rejection before publication.
+Only this admission response is preserved as an unframed original command error.
+All later command output/error documents use verified J/T framing. Other HTTP
+errors are adapter/protocol/publication errors and retain the known operation
+reference, stage and uncertainty. Recovery status/release/upload observations
+have separately validated schemas and are never business completion. Control
+JSON is limited to one64KiB record; full business/error documents are streamed
+without that limit. Verified destinations and classification are exposed under
+_meta.bookflow_transport.
+
+PublicationPermit represents invalid business input with input_error and no
+validated input model. Such a permit cannot finish as a successful execution or
+rehydrate as one. It guards the original rejection with current credential,
+actor/membership and selected-company authority. MCP preparation can deliver this
+rejection, shared conditional/transfer-preparation errors and an upload body-limit
+error without queuing a business execution. Its rejection delivery owns cleanup
+and can retain the same guarded error receipt. Recovery of a failed download
+redelivers only its error document; it never reopens the missing binary resource.
+
+The Row9 test ledger tests/mcp_coverage.py explicitly classifies all276 registered
+commands by routed JSON, advisory, finite poll/local follow, binary direction,
+local lifecycle or standalone protocol. Four-interface execution scenarios cover
+271 hosted commands. Five local lifecycle commands map actual local execution
+witnesses and explicit installed-MCP/HTTP rejection boundaries; they are not
+counted as hosted execution parity. The ledger gate rejects unclassified or
+pending execution rows. This is execution coverage, not full Row9 acceptance.
+The actual all-command form check emits schema-path/control/variant/context
+mapping, separate from the still-incomplete browser interaction/output/success
+mapping and parent-owned fresh blind acceptance.
+
+Generated workbench forms preserve every model branch declared by a Pydantic
+string discriminator. A single discriminator control exposes the combined choices;
+branch fields carry alternatives of conjunctions, including nested payment preview
+intents. Browser visibility disables inactive controls and the shared form decoder
+also ignores inactive branch fields. Bookkeeping validation remains in the original
+input models; no payment permissions, defaults or financial effects are redefined.
+Payment publication retains owned transaction, selection, operation, payer and
+composite audit identities through `core/publication_payment.py`. Fresh checks use
+the shared `company/payment_authority.py` predicates over complete owning graphs,
+including off-page operation effects and cleared selection history. Filtered
+payment aggregates retain the shared work-access projection as well as returned
+record identities. Plain invoice summaries retain their own authority boundary;
+sharing a receipt with another work-linked invoice does not expand that policy.
+Permanent recovery may close its company reader; dependency capture reopens
+read-only without re-running recovery, planning or write maintenance. Original
+rejections retain the shared error-publication path. Full Row9 acceptance remains
+open; installed SDK workflows are not blind-agent acceptance.

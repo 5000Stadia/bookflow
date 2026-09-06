@@ -1,0 +1,332 @@
+import os
+import sys
+from pathlib import Path
+
+import anyio
+import pytest
+
+from tests.test_row3_host import hosted, live
+
+
+@pytest.mark.timeout(120)
+def test_real_mcp_receipt_files_preview_upload_download_and_json_artifact(hosted, live, tmp_path):
+    import hashlib
+    import json
+    from mcp import ClientSession
+    from mcp.client.stdio import StdioServerParameters, stdio_client
+    from tests.test_attachment_http import BODY, target
+    record = target(hosted)
+    inbox, outbox = tmp_path / 'inbox', tmp_path / 'outbox'
+    inbox.mkdir(mode=0o700)
+    outbox.mkdir(mode=0o700)
+    receipt = inbox / 'Receipt é.pdf'
+    receipt.write_bytes(BODY)
+    binary = os.environ.get('BOOKFLOW_MCP_TEST_BINARY', str(Path(sys.executable).with_name('bookflow')))
+
+    async def witness():
+        params = StdioServerParameters(command=binary, args=['mcp', '--url', live,
+            '--input-dir', str(inbox), '--output-dir', str(outbox), '--client-name', 'mcp-file-witness'],
+            env={'BOOKFLOW_TOKEN': hosted.secret, 'BOOKFLOW_COMPANY': hosted.company_id,
+                 'BOOKFLOW_DATA_ROOT': str(tmp_path / 'absent')}, cwd=str(tmp_path))
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.discover()
+                async def run(command, data, **options):
+                    reply = await session.call_tool('bookflow_run', {'command': command, 'input': data, **options})
+                    assert not reply.is_error, reply
+                    print('MCP FILE', command, options.get('dry_run', False), 'OK')
+                    return reply
+                data = {'record_type': 'customer', 'record_id': record,
+                        'original_filename': receipt.name, 'media_type': 'application/pdf', 'caption': 'Paid plumbing receipt'}
+                preview = await run('attachment add', data, dry_run=True, reason='Preview receipt',
+                                    transport={'input_file': str(receipt)})
+                assert preview.structured_content['attachment']['sha256'] == hashlib.sha256(BODY).hexdigest()
+                listed = await run('attachment list', {'record_type': 'customer', 'record_id': record})
+                assert listed.structured_content['count'] == 0
+                added = await run('attachment add', data, reason='Save receipt', transport={'input_file': str(receipt)})
+                attachment = added.structured_content['attachment']
+                assert attachment['original_filename'] == receipt.name
+                assert attachment['sha256'] == hashlib.sha256(BODY).hexdigest()
+                destination = outbox / 'retrieved.pdf'
+                downloaded = await run('attachment get', {'attachment': attachment['id']},
+                    transport={'output_file': str(destination)})
+                assert destination.read_bytes() == BODY
+                assert downloaded.structured_content['sha256'] == hashlib.sha256(BODY).hexdigest()
+                assert downloaded.meta['bookflow_transport']['output_file'] == str(destination)
+                again_path = outbox / 'recovered.pdf'
+                recovered = await session.call_tool('bookflow_run', {
+                    'input_ref': downloaded.meta['bookflow_transport']['operation_ref'],
+                    'action': 'execute', 'output_file': str(again_path)})
+                assert not recovered.is_error, recovered
+                assert recovered.structured_content == downloaded.structured_content
+                assert again_path.read_bytes() == BODY
+                artifact = outbox / 'attachments.json'
+                delivered = await run('attachment list', {'record_type': 'customer', 'record_id': record},
+                                      transport={'result_file': str(artifact)})
+                assert delivered.structured_content['delivery'] == 'complete_json_file'
+                content = artifact.read_bytes()
+                assert hashlib.sha256(content).hexdigest() == delivered.structured_content['sha256']
+                assert json.loads(content)['count'] == 1
+                inspected = await session.call_tool('bookflow_run', {'operation_ref': delivered.structured_content['operation_ref'],
+                    'action': 'inspect', 'pointer': '/count'})
+                assert not inspected.is_error, inspected
+                assert inspected.structured_content['value'] == 1
+                recovered_json = outbox / 'recovered.json'
+                saved_again = await session.call_tool('bookflow_run', {
+                    'operation_ref': delivered.structured_content['operation_ref'], 'action': 'execute',
+                    'result_file': str(recovered_json)})
+                assert not saved_again.is_error, saved_again
+                assert recovered_json.read_bytes() == content
+                assert not list(outbox.glob('.bookflow-mcp-*'))
+    anyio.run(witness)
+    assert not hosted.handle.host._transfers
+    assert not hosted.handle.host._mcp_runtime.intents.active
+
+
+@pytest.mark.parametrize("protocol", ["legacy", "modern"])
+def test_real_stdio_discovery_help_and_attributed_host_write(hosted, live, tmp_path, protocol):
+    from mcp import ClientSession
+    from mcp.client.stdio import StdioServerParameters, stdio_client
+
+    async def witness():
+        binary = os.environ.get("BOOKFLOW_MCP_TEST_BINARY", str(Path(sys.executable).with_name("bookflow")))
+        params = StdioServerParameters(command=binary,
+            args=["mcp", "--url", live, "--client-name", "mcp-installed-witness"],
+            env={"BOOKFLOW_TOKEN": hosted.secret, "BOOKFLOW_COMPANY": hosted.company_id,
+                 "BOOKFLOW_DATA_ROOT": str(tmp_path / "never-created")}, cwd=str(tmp_path))
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await (session.initialize() if protocol == "legacy" else session.discover())
+                tools = await session.list_tools()
+                discovery = next(tool for tool in tools.tools if tool.name == "bookflow_list_commands")
+                assert "default 20" in discovery.description and "next_cursor" in discovery.description
+                help_tool = next(tool for tool in tools.tools if tool.name == "bookflow_help")
+                assert help_tool.input_schema["properties"]["view"]["enum"] == ["usage", "input_schema", "output_schema", "full"]
+
+                async def call(name, args):
+                    result = await session.call_tool(name, args)
+                    assert not result.is_error, result
+                    return result.structured_content
+
+                from bookflow.adapters.mcp.catalog import command_help
+                for payment_command in ('payment receive', 'payment update'):
+                    payment_help = await call('bookflow_help', {'command': payment_command})
+                    assert payment_help == command_help(payment_command)
+                    assert 'same operation_key' in payment_help['documentation']
+                    assert 'Undeposited Funds holding account' in payment_help['documentation']
+
+                catalog = await call("bookflow_list_commands", {"prefix": "account"})
+                assert "account list" in {item["name"] for item in catalog["commands"]}
+                help_ = await call("bookflow_help", {"command": "account list"})
+                assert help_["input_schema"]["type"] == "object"
+                assert "account list" in help_["documentation"]
+                assert help_["view"] == "usage" and "output_schema" not in help_
+                # Follow the discovered complete tool arguments, without inventing
+                # a nested context envelope from the context_schema fragment.
+                import json, re
+                query_help = await call("bookflow_help", {"command": "invoice query"})
+                arguments = json.loads(re.search(r"```json\n(.*?)\n```", query_help['documentation'], re.S)[1])
+                arguments['company'] = hosted.company_id
+                queried = await call('bookflow_run', arguments)
+                assert queried['count'] == len(queried['items'])
+                full = await call("bookflow_help", {"command": "account list", "view": "full"})
+                assert full["output_schema"]["type"] == "object"
+                assert full["input_schema"] == help_["input_schema"]
+                prepared = await call('bookflow_run', {'command': 'company update', 'input': {'fax': 'frozen intent'},
+                                                      'transport': {'prepare_only': True}})
+                ref = prepared['operation_ref']
+                first = await call('bookflow_run', {'input_ref': ref, 'action': 'execute'})
+                again = await call('bookflow_run', {'operation_ref': ref, 'action': 'execute'})
+                assert again == first
+                accounts = await call("bookflow_run", {"command": "account list", "input": {}, "dry_run": False})
+                assert accounts["count"] == len(accounts["items"]) > 0
+                changed = await call("bookflow_run", {"command": "company update", "input": {"fax": "MCP-witness"}, "reason": "Test installed MCP handoff"})
+                assert changed["version"] > 1
+        assert not (tmp_path / "never-created").exists()
+
+    anyio.run(witness)
+    assert hosted.info()["info"]["fax"] == "MCP-witness"
+    events = hosted.ok("audit.list", {"command": "company update"}, company=hosted.company_id)["items"]
+    event = next(item for item in events if item["client_name"] == "mcp-installed-witness")
+    assert event["interface"] == "mcp"
+    assert event["session_id"] != hosted.token
+
+
+@pytest.mark.parametrize("host_bridge", [1, 3])
+def test_installed_launcher_rejects_mixed_bridge_before_business_submission(hosted, live, tmp_path, monkeypatch, host_bridge):
+    from mcp import ClientSession
+    from mcp.client.stdio import StdioServerParameters, stdio_client
+    from bookflow.adapters.mcp import bridge
+    monkeypatch.setattr(bridge, "BRIDGE_VERSION", host_bridge)
+    before = hosted.info()["version"]
+
+    async def witness():
+        params = StdioServerParameters(command=os.environ.get("BOOKFLOW_MCP_TEST_BINARY", str(Path(sys.executable).with_name("bookflow"))),
+            args=["mcp", "--url", live], env={"BOOKFLOW_TOKEN": hosted.secret,
+            "BOOKFLOW_COMPANY": hosted.company_id, "BOOKFLOW_DATA_ROOT": str(tmp_path / "absent")}, cwd=str(tmp_path))
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                reply = await session.call_tool("bookflow_run", {"command": "company update", "input": {"fax": "must not write"}})
+                assert reply.is_error
+                assert reply.structured_content["code"] == "E_VERSION_MISMATCH"
+                assert reply.structured_content["details"]["outcome"] == "not_submitted"
+    anyio.run(witness)
+    assert hosted.info()["version"] == before
+
+
+@pytest.mark.timeout(120)
+def agent_invoice_and_directive_journal_workflow(hosted, live, tmp_path):
+    """Real MCP business calls; deterministic integration witness, not blind J8."""
+    from mcp import ClientSession
+    from mcp.client.stdio import StdioServerParameters, stdio_client
+    from bookflow.core import clock
+    from bookflow.core.config import Config
+    from bookflow.hub import schema as h
+    from tests.conftest import make_actor
+    from tests.test_row7_credentials import writer
+
+    principal = Config.load(hosted.root / "config.toml").user_table(hosted.login)["user_id"]
+    agent = make_actor(hosted.root, "mcp-business-agent", kind="agent", owner_user_id=principal,
+                       company_role=(hosted.company_id, "owner"))
+    with writer(hosted.root) as db:
+        db.conn.execute(h.agent_authority.insert().values(agent_user_id=agent, epoch=1))
+        db.conn.execute(h.agent_principals.insert().values(agent_user_id=agent,
+            principal_user_id=principal, assigned_by=principal, assigned_at=clock.now_iso()))
+    issued = hosted.ok("token.issue", {"user": agent, "principal": principal, "label": "MCP business witness"})
+
+    async def witness():
+        binary = os.environ.get("BOOKFLOW_MCP_TEST_BINARY", str(Path(sys.executable).with_name("bookflow")))
+        params = StdioServerParameters(command=binary,
+            args=["mcp", "--url", live, "--client-name", "mcp-business-witness"],
+            env={"BOOKFLOW_TOKEN": issued["secret"], "BOOKFLOW_COMPANY": hosted.company_id,
+                 "BOOKFLOW_DATA_ROOT": str(tmp_path / "absent-launcher-root")}, cwd=str(tmp_path))
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+
+                async def tool(name, arguments, error=None):
+                    reply = await session.call_tool(name, arguments)
+                    result = reply.structured_content
+                    assert bool(reply.is_error) == bool(error), result
+                    if error:
+                        assert result["code"] == error, result
+                    print("MCP", name, arguments.get("command", ""), error or "OK")
+                    return result
+
+                async def run(command, data, error=None, **context):
+                    verb = command.split(" ")[-1]
+                    defaults = {} if verb in {"list", "show", "history", "query"} else {"reason": "Record today's plumbing work"}
+                    return await tool("bookflow_run", {"command": command, "input": data,
+                        **defaults, **context}, error=error)
+
+                discovered = await tool("bookflow_list_commands", {"prefix": "invoice"})
+                assert "invoice post" in {x["name"] for x in discovered["commands"]}
+                for command in ("invoice post", "invoice update", "journal post", "directive add"):
+                    help_ = await tool("bookflow_help", {"command": command})
+                    assert help_["input_schema"]["type"] == "object"
+                income = await run("account create", {"name": "MCP labor income", "type": "income"})
+                bank = await run("account create", {"name": "MCP operating bank", "type": "bank"})
+                customer = await run("customer create", {"name": "MCP plumbing customer"})
+                codes = await run("sales-tax-code list", {})
+                exempt = next(x["id"] for x in codes["items"] if not x["taxable"])
+                item = await run("item create", {"name": "MCP plumbing labor", "type": "service",
+                    "description": "Plumbing labor",
+                    "sales_enabled": True, "income_account_id": income["id"], "price": "12.34",
+                    "sales_tax_code_id": exempt})
+                payload = {"date": "2026-01-12", "customer": customer["id"], "memo": "Agent invoice",
+                           "lines": [{"item": item["id"], "quantity": ".5"}]}
+                preview = await run("invoice post", payload, dry_run=True)
+                assert preview["total_minor_units"] == 617
+                assert (await run("customer show", {"customer": customer["id"]}))["current_balance"]["minor_units"] == 0
+                payload["expected_facts_fingerprint"] = preview["facts_fingerprint"]
+                invoice = await run("invoice post", payload, idempotency_key="mcp-invoice-witness")
+                assert invoice["version"] == 1 and invoice["total_minor_units"] == 617
+                assert (await run("invoice post", payload, idempotency_key="mcp-invoice-witness"))["id"] == invoice["id"]
+                change = {"invoice": invoice["id"], "expected_version": 1, "memo": "Agent continued"}
+                change["expected_facts_fingerprint"] = (await run("invoice update", change, dry_run=True))["facts_fingerprint"]
+                updated = await run("invoice update", change)
+                assert updated["version"] == 2
+                await run("invoice update", {"invoice": invoice["id"], "expected_version": 1,
+                    "memo": "stale"}, error="E_VERSION_CONFLICT")
+                current = await run("invoice show", {"invoice": invoice["id"]})
+                assert current["version"] == 2 and current["revision"]["memo"] == "Agent continued"
+
+                directive = await run("directive add", {"text": "Record today's plumbing receipts and balanced bank entry."})
+                code = directive["directive"]["code"]
+                journal_input = {"date": "2026-01-12", "lines": [
+                    {"account": bank["id"], "side": "debit", "amount": "12.34"},
+                    {"account": income["id"], "side": "credit", "amount": "12.34"}]}
+                journal_context = dict(directive=code, reason=None, idempotency_key="mcp-journal-witness")
+                audit_filter = {"command": "journal post", "limit": 200}
+                before_journals = await run("audit list", audit_filter)
+                journal_preview = await run("journal post", journal_input, dry_run=True, **journal_context)
+                assert journal_preview["dry_run"] and journal_preview["total_minor_units"] == 1234
+                assert await run("audit list", audit_filter) == before_journals
+                journal = await run("journal post", journal_input, **journal_context)
+                assert journal["idempotent_replay"] is False
+                replay = await run("journal post", journal_input, **journal_context)
+                assert replay == {**journal, "idempotent_replay": True}
+                after_journals = await run("audit list", audit_filter)
+                assert after_journals["count"] == before_journals["count"] + 1
+                assert journal["total_minor_units"] == 1234
+                assert (await run("journal show", {"journal": journal["id"]}))["version"] == 1
+                bad = {**journal_input, "lines": [journal_input["lines"][0],
+                    {**journal_input["lines"][1], "amount": "10.00"}]}
+                await run("journal post", bad, directive=code, reason=None, error="E_UNBALANCED_ENTRY")
+                events = await run("audit list", {"record_type": "transaction", "record_id": journal["id"]})
+                assert len(events["items"]) == 1
+                event = events["items"][0]
+                assert event["interface"] == "mcp" and event["actor_id"] == agent
+                assert event["on_behalf_of"] == principal and event["directive_code"] == code
+                assert event["client_name"] == "mcp-business-witness"
+                print("VERIFIED invoice", invoice["id"], "version", current["version"], "total", current["total_minor_units"])
+                print("VERIFIED journal", journal["id"], "total", journal["total_minor_units"], "directive", code)
+                assert event["actor_kind"] == "agent" and event["session_id"]
+                return dict(journal=journal["id"], bank=bank["id"], event=event)
+
+    result = anyio.run(witness)
+    observed = hosted.ok("journal.show", {"journal": result["journal"]}, company=hosted.company_id)
+    assert observed["total_minor_units"] == 1234
+    assert len(observed["revision"]["batches"]) == 1
+    assert not (tmp_path / "absent-launcher-root").exists()
+    return result
+
+
+def test_installed_agent_invoice_and_directive_journal_workflow(hosted, live, tmp_path):
+    agent_invoice_and_directive_journal_workflow(hosted, live, tmp_path)
+
+
+def test_installed_retained_write_preflight_mismatch_keeps_identity_and_unknown(hosted, live, tmp_path, monkeypatch):
+    from mcp import ClientSession
+    from mcp.client.stdio import StdioServerParameters, stdio_client
+    from bookflow.adapters.mcp import bridge
+    async def witness():
+        params = StdioServerParameters(command=os.environ.get('BOOKFLOW_MCP_TEST_BINARY',str(Path(sys.executable).with_name('bookflow'))),
+            args=['mcp','--url',live],cwd=str(tmp_path),env={'BOOKFLOW_TOKEN':hosted.secret,
+                'BOOKFLOW_COMPANY':hosted.company_id,'BOOKFLOW_DATA_ROOT':str(tmp_path/'absent')})
+        async with stdio_client(params) as (read,write):
+            async with ClientSession(read,write) as session:
+                await session.discover()
+                saved = await session.call_tool('bookflow_run',{'command':'account create',
+                    'input':{'name':'Retained preflight account','type':'expense'},'reason':'Retained preflight witness'})
+                assert not saved.is_error,saved
+                reference = saved.meta['bookflow_transport']['operation_ref']
+                monkeypatch.setattr(bridge,'BRIDGE_VERSION',1)
+                try:
+                    for alias in ('operation_ref','input_ref'):
+                        for action in ('status','execute'):
+                            error = await session.call_tool('bookflow_run',{alias:reference,'action':action})
+                            assert error.is_error and error.structured_content['code'] == 'E_VERSION_MISMATCH'
+                            details = error.structured_content['details']
+                            assert details['operation_ref'] == reference and details['outcome'] == 'unknown'
+                            assert details['stage'] == 'preflight'
+                finally:
+                    monkeypatch.setattr(bridge,'BRIDGE_VERSION',2)
+                recovered = await session.call_tool('bookflow_run',{'operation_ref':reference,'action':'execute'})
+                assert not recovered.is_error and recovered.structured_content == saved.structured_content
+                return saved.structured_content['id']
+    account = anyio.run(witness)
+    assert hosted.ok('account.show',{'account':account},company=hosted.company_id)['name'] == 'Retained preflight account'
+    events = hosted.ok('audit.list',{'command':'account create','limit':200},company=hosted.company_id)['items']
+    assert len([event for event in events if event['reason'] == 'Retained preflight witness']) == 1

@@ -516,8 +516,7 @@ user_set_password = command("user set-password", scope="hub",
                             authorization="human self-service; a human hub administrator may reset another human")
 
 
-@user_set_password
-def plan_set_password(inp: SetPasswordInput, ctx: Context, s: Session) -> Plan:
+def authorize_set_password(inp: SetPasswordInput, ctx: Context, s: Session):
     if s.actor.kind != "human":
         raise BookflowError("E_PERMISSION", details={"capability": "user", "required_role": "human"})
     if not s.is_hub_admin and not _is_self(s, inp.username):
@@ -527,6 +526,12 @@ def plan_set_password(inp: SetPasswordInput, ctx: Context, s: Session) -> Plan:
         raise BookflowError("E_USER_NOT_FOUND", details={"username": inp.username})
     if row["kind"] != "human":
         raise BookflowError("E_VALIDATION", details={"fields": [{"field": "username", "problem": "only human users have passwords"}]})
+    return row
+
+
+@user_set_password
+def plan_set_password(inp: SetPasswordInput, ctx: Context, s: Session) -> Plan:
+    row = authorize_set_password(inp, ctx, s)
     if not inp.password:
         raise BookflowError("E_VALIDATION", details={"fields": [{"field": "password", "problem": "required"}]})
     return Plan(preview=SetPasswordOutput(user_id=row["id"], username=row["username"], changed=True),
@@ -637,8 +642,7 @@ token_issue = command("token issue", scope="hub",
                       authorization="human self-service; a human hub administrator may issue for another user")
 
 
-@token_issue
-def plan_token_issue(inp: TokenIssueInput, ctx: Context, s: Session) -> Plan:
+def authorize_token_issue(inp: TokenIssueInput, ctx: Context, s: Session):
     from bookflow.hub import credentials
     if s.actor.kind != "human":
         raise BookflowError("E_PERMISSION", details={"capability": "token", "required_role": "human"})
@@ -656,6 +660,12 @@ def plan_token_issue(inp: TokenIssueInput, ctx: Context, s: Session) -> Plan:
             raise BookflowError("E_VALIDATION", details={"fields": [{"field": "principal", "problem": "the principal must be a human user"}]})
         obo = principal["id"]
     epoch = credentials.issuance_epoch(s.hub, user_id=target["id"], on_behalf_of=obo)
+    return target, obo, epoch
+
+
+@token_issue
+def plan_token_issue(inp: TokenIssueInput, ctx: Context, s: Session) -> Plan:
+    target, obo, epoch = authorize_token_issue(inp, ctx, s)
     preview = TokenIssueOutput(on_behalf_of=obo, authority_epoch=epoch, token_id="", user_id=target["id"], username=target["username"], label=inp.label,
                                expires_at=None, secret="", message="A dry run issues nothing.")
     return Plan(preview=preview, data={"target": target, "label": inp.label, "days": inp.days, "on_behalf_of": obo})
@@ -709,8 +719,7 @@ token_revoke = command("token revoke", scope="hub", description="Revoke a bearer
                        authorization="own tokens; a hub administrator may revoke another user's token")
 
 
-@token_revoke
-def plan_token_revoke(inp: TokenSelector, ctx: Context, s: Session) -> Plan:
+def authorize_token_revoke(inp: TokenSelector, ctx: Context, s: Session):
     row = None
     if is_ulid(inp.token):
         found = s.hub.conn.execute(sa.select(h.api_tokens).where(h.api_tokens.c.id == normalize_ulid(inp.token))).mappings().first()
@@ -719,6 +728,12 @@ def plan_token_revoke(inp: TokenSelector, ctx: Context, s: Session) -> Plan:
         raise BookflowError("E_TOKEN_NOT_FOUND", details={"token": inp.token})
     if row["user_id"] != s.actor.id and not s.is_hub_admin:
         raise BookflowError("E_TOKEN_NOT_FOUND", details={"token": inp.token})  # the same answer as for no such token: nothing to enumerate
+    return row
+
+
+@token_revoke
+def plan_token_revoke(inp: TokenSelector, ctx: Context, s: Session) -> Plan:
+    row = authorize_token_revoke(inp, ctx, s)
     names = users.user_names(s, {row["user_id"]})
     preview = TokenRevokeOutput(token_id=row["id"], user_id=row["user_id"], username=names.get(row["user_id"]), label=row["label"],
                                 revoked_at=localize(s, row["revoked_at"]) or now_iso(), changed=row["revoked_at"] is None)

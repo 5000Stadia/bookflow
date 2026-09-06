@@ -28,6 +28,25 @@ def _base(ann):
     return ann, False
 
 
+def _model_alternative(annotation):
+    """Return a declared structured alternative to a scalar, without a name list."""
+    while get_origin(annotation) is Annotated:
+        annotation = get_args(annotation)[0]
+    if get_origin(annotation) not in (Union, types.UnionType):
+        return None
+    alternatives = get_args(annotation)
+    if str not in alternatives:
+        return None
+    models = [value for value in alternatives
+              if inspect.isclass(value) and issubclass(value, BaseModel)]
+    return models[0] if len(models) == 1 else None
+
+
+def _structured_schema(annotation):
+    model = _model_alternative(annotation)
+    return model.model_json_schema() if model is not None else None
+
+
 _COLLECTION_ORIGINS = (list, tuple, set, frozenset)
 
 
@@ -66,9 +85,13 @@ def _scalar_descriptor(
         kind = "bool"
     elif base in (int, float):
         kind = "number"
+    elif inspect.isclass(base) and issubclass(base, BaseModel):
+        kind = "json"
     return {
         "name": name,
         "kind": kind,
+        "json_shape": "object" if kind == "json" else None,
+        "structured_schema": _structured_schema(annotation),
         "choices": choices,
         "choice_labels": extra.get("choice_labels", {}) if isinstance(extra, dict) else {},
         "description": description,
@@ -154,11 +177,48 @@ def leaves(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
     """Describe each form leaf from the command model alone."""
     out = []
     for name, f in model.model_fields.items():
+        if isinstance(f.discriminator, str):
+            annotation = f.annotation
+            while get_origin(annotation) is Annotated:
+                annotation = get_args(annotation)[0]
+            variants = get_args(annotation)
+            combined = {}
+            for variant in variants:
+                if not (inspect.isclass(variant) and issubclass(variant, BaseModel)):
+                    raise TypeError("Discriminated form branch must be an input model")
+                tag = variant.model_fields[f.discriminator]
+                values = list(get_args(tag.annotation))
+                condition = {"field": prefix + name + "." + f.discriminator, "values": values}
+                for leaf in leaves(variant, prefix + name + "."):
+                    leaf = dict(leaf)
+                    # The discriminator itself must stay visible before a branch
+                    # is selected. Nested discriminators retain outer conditions.
+                    own = [] if leaf['path'] == condition['field'] else [condition]
+                    cases = [own + case for case in leaf.get('visibility_cases', [[]])]
+                    leaf['visibility_cases'] = cases
+                    previous = combined.get(leaf['path'])
+                    if previous is None:
+                        combined[leaf['path']] = leaf
+                    else:
+                        if previous['kind'] != leaf['kind']:
+                            raise TypeError("Incompatible form controls for " + leaf['path'])
+                        previous['visibility_cases'].extend(cases)
+                        if previous.get('choices') is not None:
+                            previous['choices'] = list(dict.fromkeys(previous['choices'] + leaf['choices']))
+                        previous['required'] = previous['required'] and leaf['required']
+            out.extend(combined.values())
+            continue
         base, nullable = _base(f.annotation)
         if getattr(base, "__pydantic_root_model__", False):
             base, nullable = _base(base.model_fields["root"].annotation)
         if inspect.isclass(base) and issubclass(base, BaseModel):
-            out += leaves(base, prefix + name + ".")
+            children = leaves(base, prefix + name + ".")
+            if nullable and children:
+                parent = prefix + name
+                for child in children:
+                    child["nullable_parents"] = [parent, *child.get("nullable_parents", [])]
+                children[0]["object_controls"] = [parent, *children[0].get("object_controls", [])]
+            out += children
             continue
         kind, choices = "text", None
         json_shape = None
@@ -185,6 +245,7 @@ def leaves(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
         path = prefix + name
         out.append({"label": f.title, "path": path, "path_parts": tuple(path.split(".")), "kind": kind,
                     "json_shape": json_shape, "choices": choices, "choice_labels": extra.get("choice_labels", {}),
+                    "structured_schema": _structured_schema(f.annotation),
                     "description": f.description or "", "default": default,
                     "required": f.is_required(), "nullable": nullable,
                     "annotation": f.annotation, "math": numeric_metadata(name, base, extra)})
@@ -276,6 +337,8 @@ def describe_fields(
     }
     for leaf in described:
         if noun == 'custom-field' and leaf['path'] == 'default':
+            leaf['definition_default'] = True
+            leaf['default_kind'] = selected_value('kind', originals, attempted)
             leaf['math'] = {'scale': 9, 'active': [{'name': 'f:kind', 'values': ['number']}]}
         if leaf["kind"] == "collection":
             schema = collection_schema(leaf["annotation"])
@@ -284,6 +347,9 @@ def describe_fields(
             leaf["collection"]["values"] = collection_form_value(
                 leaf["annotation"], leaf["path"], originals, attempted
             )
+        if leaf.get('visibility_cases') is not None:
+            leaf['visible'] = any(all(selected_value(condition['field'], originals, attempted) in condition['values']
+                                     for condition in case) for case in leaf['visibility_cases'])
         rule = rules.get(leaf["path"])
         if rule is not None:
             discriminator, values = rule
@@ -399,7 +465,15 @@ def _collection_prefix(path: tuple[str, ...]) -> str:
 
 
 def _coerce_scalar(annotation: Any, value: str) -> Any:
-    base, _ = _base(annotation)
+    base, nullable = _base(annotation)
+    structured = _model_alternative(annotation) is not None and (
+        value.lstrip().startswith("{") or nullable and value.strip() == "null")
+    if structured or inspect.isclass(base) and issubclass(base, BaseModel):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            # Preserve the attempt for the shared input model's typed rejection.
+            return value
     if base is bool:
         if value == "unset":
             return None
@@ -549,6 +623,15 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
     headers: dict[str, str] = {}
     for leaf in leaves(cmd.input_model):
         path = leaf["path"]
+        if leaf.get('visibility_cases') is not None and not any(
+            all(form.get('f:' + condition['field'], get_path(originals, condition['field']) if originals else None)
+                in condition['values'] for condition in case) for case in leaf['visibility_cases']):
+            continue
+        cleared_parent = next((parent for parent in leaf.get("nullable_parents", [])
+                               if form.get("clear:" + parent) == "1"), None)
+        if cleared_parent is not None:
+            set_path(raw, cleared_parent, None)
+            continue
         clear = form.get(f"clear:{path}") == "1"
         value = form.get(f"f:{path}")
         original = get_path(originals, path) if originals is not None else None
@@ -620,7 +703,7 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
             except ValueError:
                 v = value
         else:
-            v = value
+            v = _coerce_scalar(leaf["annotation"], value)
         if (
             originals is not None
             and not replacement
@@ -631,6 +714,8 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
         ):
             continue
         set_path(raw, path, v)
+    from bookflow.adapters.typed_defaults import decode_definition_default
+    decode_definition_default(cmd, raw, originals)
     custom_patch: dict[str, Any | None] = {}
     original_custom = get_path(originals, "custom_fields") if originals is not None else None
     original_custom = original_custom if isinstance(original_custom, dict) else {}

@@ -6,6 +6,8 @@
 
 Issue a bearer token; the secret is shown once. Agents require an active assigned human principal and unsuspended authority. One agent identity per principal is recommended.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | hub |
@@ -227,6 +229,8 @@ Example JSON output:
 ## `token revoke`
 
 Revoke a bearer token so it stops working immediately.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|

@@ -57,6 +57,9 @@ class Client:
         cmd = registry.get(name)
         if cmd is None:
             raise BookflowError("E_USAGE", message=f"unknown command {name!r}")
+        from bookflow.core.context_options import normalize_options
+        normalize_options(cmd, company=company, dry_run=dry_run, reason=reason,
+                          source_ref=source_ref, directive=directive, idempotency_key=idempotency_key)
         input = dict(input or {})
         if clear:
             if not cmd.clearable:
@@ -67,18 +70,8 @@ class Client:
         selector, source = company, "option"
         if selector is None and self._company is not None and cmd.scope == "company":
             selector, source = self._company, "option"
-        if selector is None and cmd.scope == "company":
-            import os
-            env = os.environ.get("BOOKFLOW_COMPANY")
-            if env:
-                selector, source = env, "env"
-            else:
-                from bookflow.core.config import Config, os_login
-                from bookflow.storage.paths import resolve_data_root
-                cfg = Config.load(resolve_data_root(self.data_root) / "config.toml")
-                table = cfg.user_table(self._login or os_login()) or {}
-                if table.get("default_company"):
-                    selector, source = table["default_company"], "default"
+        from bookflow.core.company_selection import company_selection
+        selector, source = company_selection(cmd.scope, selector, selection_root=self.data_root, login=self._login)
         return dispatch_run(cmd, input or {}, ctx, data_root=self.data_root, company_selector=selector, company_source=source, dry_run=dry_run, _login=self._login, input_stream=input_stream, output_stream=output_stream)
 
     def __getattr__(self, noun: str):

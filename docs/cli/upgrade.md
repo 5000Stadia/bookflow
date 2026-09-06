@@ -6,6 +6,8 @@
 
 Migrate the hub database and every company database the acting user may write to the current schema revision.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | hub |

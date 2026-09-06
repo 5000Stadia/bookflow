@@ -6,6 +6,8 @@
 
 Activate a customer or job.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -429,6 +431,8 @@ Example JSON output:
 ## `customer create`
 
 Create a customer or job.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
@@ -929,6 +933,8 @@ Example JSON output:
 
 Deactivate a customer or job.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -1354,6 +1360,8 @@ Example JSON output:
 ## `customer link-vendor`
 
 Link one active customer or job to one active vendor.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
@@ -2301,6 +2309,8 @@ Example JSON output:
 
 Unlink a customer or job from its current vendor.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -2421,6 +2431,8 @@ Example JSON output:
 ## `customer update`
 
 Update a customer or job.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|

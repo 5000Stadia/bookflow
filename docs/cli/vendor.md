@@ -6,6 +6,8 @@
 
 Activate a vendor.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -301,6 +303,8 @@ Example JSON output:
 ## `vendor create`
 
 Create a vendor.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
@@ -652,6 +656,8 @@ Example JSON output:
 ## `vendor deactivate`
 
 Deactivate a vendor.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
@@ -1558,6 +1564,8 @@ Example JSON output:
 ## `vendor update`
 
 Update a vendor.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|

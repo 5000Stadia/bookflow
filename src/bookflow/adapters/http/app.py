@@ -126,9 +126,11 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
     registry.load_all()
     app = FastAPI(title="Bookflow", version=host.version, docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(CookieRenewalMiddleware, secure_cookies=secure_cookies)
+    from bookflow.adapters.http.publication import PublicationMiddleware
+    app.add_middleware(PublicationMiddleware)
 
     # ------------------------------------------------------------ credentials
-    def credential(request: Request, *, renew_cookie: bool = True) -> Credential:
+    def credential(request: Request, *, renew_cookie: bool = True, publication: bool = True) -> Credential:
         header = request.headers.get("authorization", "")
         secret = None
         via_cookie = False
@@ -152,8 +154,12 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
                 queued = host.enqueue_token_refresh(row["id"], row["kind"])
                 if queued and via_cookie and renew_cookie:
                     request.state.renew_session_cookie = secret
-        return Credential(row["user_id"], row["id"], row["kind"], row["label"], on_behalf_of=row.get("on_behalf_of"),
-                          actor_kind=user["kind"], hub_admin=bool(user["hub_admin"]), secret=secret)
+        result = Credential(row["user_id"], row["id"], row["kind"], row["label"], on_behalf_of=row.get("on_behalf_of"),
+                            actor_kind=user["kind"], hub_admin=bool(user["hub_admin"]), secret=secret)
+        from bookflow.adapters.http.publication import protect_credentials
+        if publication:
+            protect_credentials(host, result)
+        return result
 
     def secret_of(request: Request) -> str:
         header = request.headers.get("authorization", "")
@@ -177,25 +183,12 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
             return run_command_body(cmd, raw, ctx, cred, selector, source, dry_run)
 
     def run_command_body(cmd, raw: dict[str, Any], ctx: Context, cred: Credential, selector: str | None, source: str, dry_run: bool) -> dict[str, Any]:
-        from bookflow.core.dispatch import _close, execute, guard
+        from bookflow.adapters.http.execution import run_hosted
         bad = [k for k in raw if k in Context.model_fields]
         if bad:
             raise BookflowError("E_CONTEXT_IN_INPUT", message="Context values go in headers, not the body: " + ", ".join(f"{k} -> {CONTEXT_HEADERS.get(k, 'not accepted')}" for k in bad), details={"fields": bad})
 
-        def execute_authenticated(s):
-            cred.revalidate(s.hub)
-            return execute(cmd, raw, ctx, s, company_selector=selector, company_source=source, dry_run=dry_run)
-
-        if cmd.is_write and not dry_run or cmd.kind == "advisory":
-            return host.run_write(cred.user_id, cred.login, execute_authenticated)
-        s = host.reader_session(cred.user_id, cred.login)
-        try:
-            return execute_authenticated(s)
-        finally:
-            try:
-                guard(lambda: _close(s), cred.hub_admin)
-            finally:
-                host.reader_done()
+        return run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run)
 
     def lookup(route: str):
         name = command_name(route)
@@ -220,7 +213,11 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
 
     @app.exception_handler(BookflowError)
     async def _handle(request: Request, err: BookflowError):
-        return error_response(err)
+        result = error_response(err)
+        if request.url.path.startswith("/adapters/mcp"):
+            from bookflow.adapters.mcp.catalog import BRIDGE_VERSION
+            result.headers["X-Bookflow-MCP-Version"] = str(BRIDGE_VERSION)
+        return result
 
     @app.exception_handler(Exception)
     async def _handle_any(request: Request, exc: Exception):
@@ -308,12 +305,17 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
     def do_logout(request: Request) -> Response:
         is_cookie = not request.headers.get("authorization", "").lower().startswith("bearer ") and COOKIE in request.cookies
         try:
-            cred = credential(request, renew_cookie=False)
+            # Logout publishes only the constant logout acknowledgement and
+            # cookie deletion, never an authority-dependent business result.
+            cred = credential(request, renew_cookie=False, publication=False)
         except BookflowError as e:
             if not is_cookie or e.code != "E_UNAUTHENTICATED":
                 raise
         else:
-            host.run_write(cred.user_id, "", lambda s: _revoke(s, cred.token_id, "logout"))
+            def logout(s):
+                cred.revalidate(s.hub)
+                return _revoke(s, cred.token_id, "logout")
+            host.run_write(cred.user_id, "", logout)
         resp = JSONResponse({"ok": True})
         resp.delete_cookie(COOKIE, path="/")
         return resp
@@ -444,6 +446,8 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
     async def health():
         return {"ok": True}
 
+    from bookflow.adapters.mcp.bridge import mount_mcp
+    mount_mcp(app, host, credential, make_context)
     from bookflow.adapters.workbench.pages import mount_workbench
     mount_workbench(app, host, credential, make_context, run_command, secure_cookies)
     return app

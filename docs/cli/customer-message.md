@@ -6,6 +6,8 @@
 
 Activate a customer message.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -140,6 +142,8 @@ Example JSON output:
 
 Create a customer message.
 
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
 | Contract | Value |
 |---|---|
 | Scope | company |
@@ -273,6 +277,8 @@ Example JSON output:
 ## `customer-message deactivate`
 
 Deactivate a customer message.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
@@ -736,6 +742,8 @@ Example JSON output:
 ## `customer-message update`
 
 Update a customer message.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
 | Contract | Value |
 |---|---|
