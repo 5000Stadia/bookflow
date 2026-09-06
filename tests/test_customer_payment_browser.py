@@ -133,7 +133,20 @@ def test_correct_receipt_and_applied_invoice_with_customs(register_browser,width
     # Existing invoice editor uses the complete authenticated settlement baseline.
     b.navigate(base+'/invoice/'+invoice['id']+'/update')
     b.wait_for("!!document.querySelector('form[data-sales-form]')")
-    _fill(b,'f:memo','Revised service description');_fill(b,'ctx:reason','Correct service description')
+    _fill(b,'f:memo','Revised service description')
+    assert b.evaluate("document.querySelector('[name=\"ctx:reason\"]').required")
+    assert 'Reason for invoice correction (required)' in b.evaluate('document.body.innerText')
+    assert not b.evaluate("document.querySelector('[name=\"ctx:reason\"]').checkValidity()")
+    # A direct form request bypassing HTML validation must still reject, retain
+    # the draft and explain the human correction without calling them an agent.
+    rejected=b.evaluate("""(async()=>{const form=document.querySelector('form[data-sales-form]');
+      const data=new URLSearchParams(new FormData(form));data.set('action','preview');
+      const response=await fetch(form.getAttribute('action'),{method:'POST',headers:{'X-Bookflow-Workbench':'1'},body:data});
+      const doc=new DOMParser().parseFromString(await response.text(),'text/html');
+      return {error:doc.querySelector('.error')?.textContent,memo:doc.querySelector('[name="f:memo"]')?.value};})()""",await_promise=True)
+    assert 'E_REASON_REQUIRED' in rejected['error'] and 'Enter a reason for this invoice correction.' in rejected['error']
+    assert 'agent' not in rejected['error'].lower() and rejected['memo']=='Revised service description'
+    _fill(b,'ctx:reason','Correct service description')
     _preview(b)
     b.wait_for("document.querySelector('#invoice-settlement-preview')?.dataset.complete==='true'")
     assert 'Every proposed settlement change' in b.evaluate("document.querySelector('#invoice-settlement-preview').innerText")
