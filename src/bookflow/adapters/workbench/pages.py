@@ -986,6 +986,19 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return page_error(request, BookflowError("E_PERMISSION", details={
                 "capability": cmd.capability, "required_role": cmd.required_role,
             }))
+        if noun in ('estimate', 'work-order') and verb in ('invoice', 'sales-receipt', 'billing') and record_id in (None, 'self'):
+            source_title = request.query_params.get('title', '')
+            query = {'limit': 25}
+            if source_title:
+                query['title'] = source_title
+            if request.query_params.get('cursor'):
+                query['cursor'] = request.query_params['cursor']
+            try:
+                sources = run(request, noun + ' query', query, company_id)
+            except BookflowError as err:
+                return page_error(request, err, restart_url=request.url.path + '?' + urlencode({'title': source_title}))
+            return render('billing_pick_source.html', request, company_id=company_id,
+                noun=noun, verb=verb, sources=sources, source_title=source_title)
         attempted = attempted or {}
         source_report_watermark = attempted.get("_source_report_watermark", request.query_params.get("source_report_watermark"))
         if source_report_watermark is not None and (not source_report_watermark.isascii() or not source_report_watermark.isdigit() or len(source_report_watermark) > 20):

@@ -54,6 +54,7 @@ def test_linked_billing_correction_void_and_stale(register_browser, width, tmp_p
     b.wait_for('!!document.querySelector("[aria-label=\\"Work billing\\"]")')
     assert b.evaluate(f'!!document.querySelector("a[href=\\"/c/{env.site.company_id}/work-order/{order["id"]}/invoice\\"]")')
     assert 'continue billing from that work order' in b.evaluate('document.body.innerText')
+    assert 'Total 10.01 USD · Amount due 10.01 USD' in b.evaluate("document.querySelector('[aria-label=\"Work billing\"]').innerText")
     visit(b, base + '/work-order/' + order['id'] + '/sales-receipt')
     _fill(b, 'f:date', '2026-01-14'); _choose(b, 'f:deposit_to', 'CDP bank')
     _choose(b, 'f:payment_method', 'Billing cash'); _fill(b, 'f:payment_reference', 'Paid at kitchen')
@@ -70,6 +71,10 @@ def test_linked_billing_correction_void_and_stale(register_browser, width, tmp_p
     assert not _value(b, 'f:expected_facts_fingerprint')
     assert b.evaluate(f'document.getElementsByName("billing-line:{second_line}")[0].checked')
     _preview(b); _contained(b, width); _click(b, 'submit'); receipt = _saved(b, 'sales-receipt')
+    b.navigate(base + '/work-order/' + order['id'])
+    b.wait_for('!!document.querySelector(".work-document")')
+    receipt_row = b.evaluate(f"""document.querySelector('a[href="/c/{env.site.company_id}/sales-receipt/{receipt}"]').closest('li').innerText""")
+    assert 'Total 20.00 USD · Amount due 0.00 USD' in receipt_row
     visit(b, base + '/invoice/' + invoice + '/void')
     _fill(b, 'ctx:reason', 'Cancel first bill'); _click(b, 'submit'); _saved(b, 'invoice')
     assert 'Voided' in b.evaluate('document.querySelector(".sales-document").innerText')
@@ -84,11 +89,22 @@ def test_linked_billing_correction_void_and_stale(register_browser, width, tmp_p
     b.navigate(base + '/sales-receipt/' + receipt + '/history')
     b.wait_for('!!document.querySelector("[aria-label=\\"Sales history\\"]")')
     assert 'Sources for revision 1' in b.evaluate('document.body.innerText')
+    history_link = b.evaluate('Array.from(document.querySelectorAll("a")).find(a=>a.textContent.startsWith("Open captured source revision")).href')
+    b.call('Page.navigate', {'url': history_link})
+    b.wait_for('!!document.querySelector(".work-document")')
+    assert 'revision_number=1' in b.evaluate('location.search')
+    b.navigate(base + '/sales-receipt/' + receipt + '/history')
+    b.wait_for('!!document.querySelector(".sales-document")')
+    snapshots_link = b.evaluate('Array.from(document.querySelectorAll("a")).find(a=>a.textContent === "Read internal snapshots for sales revision 1").href')
+    b.navigate(snapshots_link)
+    b.wait_for('!!document.querySelector(".sales-document")')
+    assert 'Original internal scope' in b.evaluate("""document.querySelector('[aria-label="Linked work sources"]').textContent""")
     _contained(b, width)
     # Both read commands render bounded billing pages.
     for noun, identity in [('estimate', source['id']), ('work-order', order['id'])]:
         visit(b, base + '/' + noun + '/' + identity + '/billing?limit=1')
         assert 'Existing bills' in b.evaluate('document.body.innerText')
+        assert 'Total 10.01 USD · Amount due 0.00 USD' in b.evaluate('document.body.innerText')
         assert b.evaluate('!!document.querySelector("a[rel=next]")')
         _contained(b, width)
     # The other two financial command forms also preview real destinations.
@@ -147,3 +163,51 @@ def test_ordinary_amount_sale_modes_and_conflict(register_browser, width, noun):
     assert changed['total_minor_units'] == 1500
     assert changed['revision']['lines'][0]['unit_price']['amount'] == '5.00'
     _contained(b, width)
+
+
+@pytest.mark.parametrize('width', [1280, 390])
+@pytest.mark.parametrize('noun', ['estimate', 'work-order'])
+def test_generic_billing_card_selects_source_before_preview(register_browser, width, noun):
+    env, b = register_browser, register_browser.browser
+    run = lambda name, data: _command(b, env.site, name, data)
+    b.viewport(width, 900)
+    income = run('account.create', dict(name='Picker income', type='income'))['id']
+    run('account.create', dict(name='Picker receivables', type='accounts_receivable'))
+    run('payment-method.create', dict(name='Picker cash', kind='cash'))
+    customer = run('customer.create', dict(name='Picker customer'))['id']
+    code = next(r['id'] for r in run('sales-tax-code.list', {})['items'] if not r['taxable'])
+    item = run('item.create', dict(name='Picker labor', type='service', sales_enabled=True,
+        income_account_id=income, price='10.01', description='Picker line', sales_tax_code_id=code))['id']
+    source = run(noun + '.create', dict(date='2026-01-12', title='Card selected work',
+        customer=customer, lines=[dict(item=item)]))
+    if noun == 'estimate':
+        source = run('estimate.update', dict(estimate=source['id'], expected_version=1,
+            status='accepted', decision_note='Customer agreed'))
+    base = f'{env.site.base_url}/c/{env.site.company_id}/{noun}'
+    for verb in ('invoice', 'sales-receipt', 'billing'):
+        url = base + ('/billing' if verb == 'billing' else '/self/' + verb)
+        b.navigate(url)
+        b.wait_for('!!document.querySelector("[data-billing-source-picker]")')
+        assert not b.evaluate('!!document.querySelector(".error")')
+        assert not b.evaluate('!!document.querySelector("[name^=billing-line]")')
+        _fill(b, 'title', 'Card selected work')
+        b.evaluate('document.querySelector("[data-billing-source-picker] button").click()')
+        b.wait_for('location.search.includes("title=Card") && !!document.querySelector("[data-billing-source]")')
+        link = b.evaluate('document.querySelector("[data-billing-source]").href')
+        assert link == base + '/' + source['id'] + '/' + verb
+        _contained(b, width)
+        visit(b, link)
+        assert 'Existing bills' in b.evaluate('document.body.innerText')
+        if verb != 'billing':
+            assert _value(b, 'f:expected_version') == str(source['version'])
+            assert len(_value(b, 'f:conversion_key')) >= 32
+            assert b.evaluate('document.querySelectorAll("[name^=billing-line]").length') == 1
+            _fill(b, 'f:date', '2026-01-13')
+            if verb == 'invoice':
+                _choose(b, 'f:ar_account', 'Picker receivables')
+            else:
+                _choose(b, 'f:deposit_to', 'CDP bank')
+                _choose(b, 'f:payment_method', 'Picker cash')
+                _fill(b, 'f:amount_received', '10.01')
+            _preview(b)
+        _contained(b, width)
