@@ -69,16 +69,6 @@ def test_command_visibility_families_exclude_old_controls_and_save_to_exact_reco
         assert preview[discriminator]==new
         if noun=='price-level':assert raw['items']==[] and preview['items']==[]
         _contained(b,width)
-        if noun=='price-level':
-            b.evaluate('document.getElementsByName("clear:items")[0].click()')
-            stage(b)
-            assert captures[-1][1]['items'] is None
-            assert 'E_VALIDATION' in b.evaluate('document.querySelector(".error").textContent')
-            assert b.evaluate('document.getElementsByName("empty:items")[0].checked')
-            b.evaluate('document.getElementsByName("clear:items")[0].click()')
-            stage(b)
-            assert not b.evaluate('document.querySelector(".error")?.textContent')
-            assert captures[-1][1]['items']==[]
         _click(b,'submit')
         b.wait_for('document.readyState === "complete" && !location.pathname.endsWith("/create")')
         shown=_command(b,env.site,noun+'.show',{noun.replace('-','_'):name})
@@ -93,6 +83,18 @@ def test_command_visibility_families_exclude_old_controls_and_save_to_exact_reco
             form(b,url+'/'+shown['id']+'/update')
             assert b.evaluate(f'document.getElementsByName({json.dumps("f:"+discriminator)})[0].type')=='hidden'
             assert b.evaluate(f'document.getElementsByName({json.dumps("f:"+discriminator)})[0].value')==new
+            # Clear is an update operation; create exposes explicit empty only.
+            if noun=='price-level':
+                b.evaluate('document.getElementsByName("empty:items")[0].click()')
+                b.evaluate('document.getElementsByName("clear:items")[0].click()')
+                stage(b)
+                assert captures[-1][1]['items'] is None
+                assert 'E_VALIDATION' in b.evaluate('document.querySelector(".error").textContent')
+                assert b.evaluate('document.getElementsByName("empty:items")[0].checked')
+                b.evaluate('document.getElementsByName("clear:items")[0].click()')
+                stage(b)
+                assert not b.evaluate('document.querySelector(".error")?.textContent')
+                assert captures[-1][1]['items']==[]
             _fill(b,'f:name',name+' renamed')
             stage(b)
             assert not b.evaluate('document.querySelector(".error")?.textContent')

@@ -36,7 +36,14 @@ def test_hub_organization_and_company_new_attach_destinations_with_complete_rece
         return out
     def saved(target):
         _click(b,'submit')
-        b.wait_for('document.readyState === "complete" && !!document.querySelector(".save-feedback summary")')
+        try:
+            b.wait_for('document.readyState === "complete" && !!document.querySelector(".save-feedback summary")')
+        except AssertionError:
+            (tmp_path/'save-timeout.json').write_text(json.dumps({
+                'page': b.evaluate('({url:location.href,text:document.body.innerText})'),
+                'files': state(root),
+            }, default=str, indent=2))
+            raise
         assert not b.evaluate('document.querySelector(".error")?.textContent'),b.evaluate('document.body.innerText')
         b.evaluate('document.querySelector(".save-feedback summary").click()')
         out=json.loads(b.evaluate('document.querySelector(".save-feedback pre").textContent'))
