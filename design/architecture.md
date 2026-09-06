@@ -638,3 +638,19 @@ settings return to defaults. Reference gross debits and credits each increase100
 AR and Service Income from October2 onward, including annual and second-half totals.
 All reference net values remain unchanged. The reference source-effect oracle derives
 these four legs independently; Row18's manifest witness remains scoped to its41commands.
+
+## Numeric browser entry
+
+The [numeric entry contract](numeric-entry.md) owns calculator behavior and the
+separate proposed fractional-cent rate option. Workbench numeric_metadata.py adds
+explicit scale/currency metadata to generated fields, repeated controls and custom
+numbers. numeric-context.js resolves current currency, billing mode, Clear/Keep,
+default and enabled-state semantics. numeric-entry.js evaluates bounded BigInt
+fractions and automatically rounds to field precision without executing input text.
+Currency suffixes retain their code; zero-decimal currencies round while integer
+controls require whole results. Numeric Enter never submits, including plain or
+already resolved values. Capture handlers normalize before HTMX collection; late
+unresolved requests are canceled. Ordinary input/change events invalidate sales
+previews. Register Record/Recalculate normalize before constructing payloads;
+retained retry bytes are not reevaluated. Posted money and command schemas retain
+their existing contracts.

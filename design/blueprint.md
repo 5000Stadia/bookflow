@@ -417,6 +417,11 @@ The audit log is the event stream. `audit tail --after <cursor> --limit <n>` ret
 
 An amount is `(minor_units: integer, currency: ISO 4217 code)`. Stored as two columns wherever an amount lives. In JSON output an amount is `{"amount": "12.50", "currency": "USD", "minor_units": 1250}`: the decimal string for reading, the integer for arithmetic, never a JSON number with a fraction. Currency codes are the upper-case three-letter codes in the package's currency table; anything else is `E_VALIDATION`. Displayed using the currency's decimal places. Arithmetic is integer arithmetic. Allocation across lines uses largest-remainder rounding so totals always reconcile.
 
+Browser calculator entry and the proposed optional fractional-cent unit-price/cost
+precision are specified in [Numeric entry and precision](numeric-entry.md). The
+calculator does not change the posted-money contract.
+
+
 ### 8.2 Home currency
 
 The company has one home currency, chosen at rollout and immutable afterwards. Every ledger line is in home currency.
@@ -709,6 +714,12 @@ Cash-basis reporting uses these stored allocations and declared recognition rule
 `<type> void <id>` requires a reason and the ordinary version check. It marks the document `voided`, preserves every revision and amount, and appends an exact reversing posting batch for its current unreversed business batch at that batch's date. It records `void_posting_batch_id`; the internal reversal has no new business-document number and cannot be paid, sent, or counted as another sale. Earlier edit/reversal pairs remain untouched. A second void is a no-op with no second reversal. A non-posting document follows its own cancellation contract and creates no accounting reversal.
 
 Voiding a document with applications is rejected with `E_HAS_APPLICATIONS` until they are explicitly unapplied, or the paying type's void command explicitly includes that unapplication atomically (10.4). Inventory, fulfillment, and reconciliation dependencies are also validated by the owning type; a void cannot erase later dependent movements. Zeroing the original amounts or excluding its original batches from reports is forbidden. Open-period checks apply to the reversal and every associated unapplication; a closed-period transaction cannot be voided by choosing a later reversal date through this command.
+
+User-facing deletion is a separate planned transaction action in addition to void
+(10.5), including invoices, checks and other applicable business transactions.
+Its owning contract is [Transaction deletion](transaction-deletion.md). The current
+implemented posting types still expose update/void only; deletion requires its own
+permission, lifecycle, migration and dependency implementation before exposure.
 
 ### 10.6 Closing date
 
