@@ -292,6 +292,7 @@ FINANCIAL = {n + ' ' + v for n in ('journal', 'invoice', 'sales-receipt') for v 
 
 
 def execution_map():
+    from tests.test_mcp_registry_hub_reads import FAMILIES as HUB_FAMILIES
     from tests.test_mcp_registry_supporting import FAMILIES
     from tests.test_mcp_registry_payment_preparation import FAMILIES as PAYMENT_FAMILIES
     from tests.test_mcp_registry_payments import COMMANDS as PAYMENT_FINANCIAL
@@ -305,7 +306,8 @@ def execution_map():
                    'tests/test_mcp_registry_financial.py::test_financial_lifecycle_full_documents_and_ledger_parity' if cmd.name in FINANCIAL else
                    'tests/test_mcp_registry_supporting.py::test_supporting_family_full_documents_and_rejections' if any(cmd.name in names for names in FAMILIES.values()) else
                    'tests/test_mcp_registry_payment_preparation.py::test_payment_preparation_four_surface_documents_context_and_rejections' if any(cmd.name in names for names in PAYMENT_FAMILIES.values()) else
-                   'tests/test_mcp_registry_payments.py::test_payment_financial_lifecycle_full_documents_and_exact_ledger' if cmd.name in PAYMENT_FINANCIAL else None)
+                   'tests/test_mcp_registry_payments.py::test_payment_financial_lifecycle_full_documents_and_exact_ledger' if cmd.name in PAYMENT_FINANCIAL else
+                   'tests/test_mcp_registry_hub_reads.py::test_hub_read_full_documents_and_scope_boundaries' if any(cmd.name in names for names in HUB_FAMILIES.values()) else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else
                 'advisory' if cmd.kind == 'advisory' else 'finite_poll_with_local_follow' if cmd.streams else 'routed_json')
@@ -411,3 +413,39 @@ def local_workbench_boundaries():
              'schema_variants': schema_variants(cmd.input_model.model_json_schema()),
              'local_lifecycle_coverage': 'pending_complete_matrix'}
             for cmd in registry.all_commands(include_standalone=True) if cmd.local_only or cmd.standalone]
+
+
+def workbench_family_map(rows):
+    """Group every rendered path, retaining explicit representative-test limits.
+
+    A linked test is a witness location, not a claim that every path or every
+    variant has been exercised in a browser. Run evidence is recorded separately.
+    """
+    typed = 'tests/test_mcp_workbench_typed_default_browser.py::test_generated_boolean_default_is_a_boolean_on_preview_and_save'
+    payment = 'tests/test_mcp_payment_form_browser.py::test_saved_selection_control_previews_real_receipt'
+    sale = 'tests/test_service_sales_browser.py::test_generated_sale_preview_correct_history_and_void'
+    policies = {
+        'text': (typed, 'custom-field name; ordinary Unicode and error preservation remain per-command checks'),
+        'number': (payment, 'saved-selection expected_version; integer and decimal models keep their own constraints'),
+        'choice': (typed, 'definition kind and scopes choices'),
+        'reference_combobox': (sale, 'customer, account and sale-line item lookup stores exact IDs'),
+        'bool': (None, 'explicit generated boolean/nullable/omitted browser witness still required'),
+        'collection': (typed, 'primitive scopes collection; structured sale lines have separate sale witness'),
+        'typed_definition_default': (typed, 'false/true definition default preview and save'),
+        'runtime_custom_fields': ('tests/test_row8_custom_field_browser.py::test_generated_preview_error_retains_attempts_after_inventory_changes', 'generated custom-field values and rejected stale inventory retain attempted values'),
+        'billing_selection': ('tests/test_work_billing_browser.py::test_generic_billing_card_selects_source_before_preview', 'source selection and billing preview; selection variants remain separately covered'),
+        'discriminated_model': (payment, 'saved-selection branch; all inactive and nested branches require their individual witnesses'),
+        'json': (None, 'payment custom-field object editor requires actual browser encoding witness'),
+        'statement_continuation': ('tests/test_financial_statements_browser.py::test_statements_from_navigation_paging_and_current_ledger', 'statement paging and current-books drill-down'),
+        'secret': (None, 'owned password form requires actual browser secret-output policy witness'),
+        'local_invocation': (None, 'no workbench route; local lifecycle and MCP rejection are distinct contracts'),
+    }
+    grouped = {name: {'family': name, 'paths': [], 'representative_witness': witness,
+                      'limits': limits, 'status': 'representative_test_mapped' if witness else 'pending_browser_or_local_witness'}
+               for name, (witness, limits) in policies.items()}
+    for row in rows:
+        for field in row['input_paths']:
+            family = field['control_family']
+            assert family in grouped, (row['command'], field['path'], family)
+            grouped[family]['paths'].append({'command': row['command'], 'path': field['path']})
+    return list(grouped.values())

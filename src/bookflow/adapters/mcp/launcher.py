@@ -80,7 +80,7 @@ async def serve(inp, origin, secret, inputs, outputs):
                     if help_response.status_code >= 400:
                         raise BookflowError(metadata["code"], message=metadata["message"], details=metadata["details"])
                     from .selection import company_selection
-                    company, source = company_selection(metadata["scope"], arguments.company, selection_root=inp.selection_root)
+                    company, source = company_selection(metadata["scope"], arguments.company, selection_root=inp.selection_root, command_name=arguments.command)
                     payload["company_selection"] = {"value": company, "source": source}
                     selection = payload["company_selection"]
                 submitted = params.name == "bookflow_run"

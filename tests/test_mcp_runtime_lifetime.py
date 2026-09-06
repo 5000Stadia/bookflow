@@ -81,3 +81,53 @@ def test_real_committed_receipt_absolute_expiry_never_executes_again(hosted, mon
     assert hosted.info()['info']['fax'] == 'Committed once'
     events = hosted.ok('audit.list', {'command': 'company update'}, company=hosted.company_id)['items']
     assert len([e for e in events if e['client_name'] == 'lifetime-receipt']) == 1
+
+
+def test_real_writer_queue_expiry_rejects_before_planner_and_reclaims_owner(hosted, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    cred = credential(hosted, monkeypatch)
+    host = hosted.handle.host
+    runtime = Runtime.for_host(host)
+    clock = Clock()
+    runtime.intents.clock = clock
+    command = registry.get('company update')
+    intent = runtime.admit(command, Context.new(Interface.mcp, 'queued-expiry', reason='Must not execute'),
+                           cred, hosted.company_id, 'option', False)
+    runtime.prepare_json(intent, {'fax': 'Expired queued intent'}, cred)
+    before = hosted.info()
+    entered, release, queued = threading.Event(), threading.Event(), threading.Event()
+    actual_queue = runtime.intents.queue
+    def observe_queue(value):
+        result = actual_queue(value)
+        queued.set()
+        return result
+    monkeypatch.setattr(runtime.intents, 'queue', observe_queue)
+    def hold(session):
+        entered.set()
+        assert release.wait(10), 'test did not release the real writer'
+    def forbidden(*args, **kwargs):
+        pytest.fail('Expired queued command entered the planner')
+    monkeypatch.setattr(command, 'plan', forbidden)
+    with ThreadPoolExecutor(2) as pool:
+        holding = pool.submit(host.run_write, cred.user_id, cred.login, hold)
+        try:
+            assert entered.wait(5)
+            pending = pool.submit(runtime.execute_json, intent, cred)
+            assert queued.wait(5)
+            clock.now = 31
+            # The queue owns the slot until its actual callback returns.
+            assert intent.reference in runtime.intents.active
+        finally:
+            release.set()
+        holding.result(timeout=5)
+        with pytest.raises(BookflowError) as caught:
+            pending.result(timeout=5)
+    assert caught.value.details['outcome'] == 'not_submitted'
+    assert intent.execution_returned
+    runtime.intents.finish(intent, reason='expired_before_submission')
+    assert not runtime.intents.active and intent.frozen is None
+    assert runtime.execute_json(runtime.lookup(intent.reference, cred), cred) is None
+    after = hosted.info()
+    assert (after['version'], after['info']['fax']) == (before['version'], before['info']['fax'])
+    events = hosted.ok('audit.list', {'command': 'company update'}, company=hosted.company_id)['items']
+    assert not [event for event in events if event['client_name'] == 'queued-expiry']

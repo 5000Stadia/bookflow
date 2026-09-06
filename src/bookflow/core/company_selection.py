@@ -7,10 +7,10 @@ from bookflow.core.errors import BookflowError
 from bookflow.storage.paths import resolve_data_root
 
 
-def company_selection(scope, explicit=None, *, selection_root=None, login=None):
+def company_selection(scope, explicit=None, *, selection_root=None, login=None, command_name=None):
     if scope != "company":
         if explicit is not None:
-            raise BookflowError("E_USAGE", details={"argument": "company"})
+            raise BookflowError("E_USAGE", details={"argument": "company", **({"command": command_name} if command_name is not None else {})})
         return None, "none"
     if explicit is not None:
         return explicit, "option"
