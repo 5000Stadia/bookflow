@@ -7,3 +7,5 @@
 
 .billing-selection .clear-control { display: block; white-space: normal; margin: .6rem 0; }
 .billing-selection input[type="checkbox"] { width: auto; }
+.billing-table th { white-space: nowrap; }
+.billing-table td:first-child { min-width: 12rem; }
