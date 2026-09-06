@@ -392,7 +392,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css", "payments.js", "payments.css", "invoice-settlement.js")
+        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css", "payments.js", "payments.css", "invoice-settlement.js", "exact-json.js")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -709,6 +709,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         return HTMLResponse("".join(options), headers={"Cache-Control": "no-store"})
 
     def noun_page(request: Request, company_id: str | None, noun: str):
+        if company_id and noun == 'payment selection':
+            return RedirectResponse('/c/' + company_id + '/payment-drafts', status_code=303)
         if noun in ("audit", "hub audit"):
             return audit_common(request, company_id if noun == "audit" else None)
         role_view = None

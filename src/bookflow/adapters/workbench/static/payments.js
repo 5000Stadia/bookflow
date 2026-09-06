@@ -3,15 +3,14 @@
   const root = document.querySelector('#payment-workspace');
   if (!root || root.dataset.ready) return;
   root.dataset.ready = 'true';
-  const config = JSON.parse(document.querySelector('#payment-config').textContent);
+  const exact = window.BookflowExactJSON;
+  const config = exact.parse(document.querySelector('#payment-config').textContent);
   const $ = id => document.getElementById('payment-' + id);
   const el = (tag, text) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; return n; };
   const money = value => value?.amount !== undefined ? value.amount + ' ' + value.currency : '';
   // Formatting only. Integer amounts and allocation decisions come from commands.
   const units = (n, currency=config.currency) => {
-    const scale = JSON.parse(document.querySelector('#math-currencies').textContent)[currency] ?? 2;
-    const sign = n < 0 ? '-' : ''; const digits = String(Math.abs(n)).padStart(scale + 1, '0');
-    return sign + (scale ? digits.slice(0, -scale) + '.' + digits.slice(-scale) : digits);
+    return exact.minor(n,currency);
   };
   const asMoney = (n, currency=config.currency) => ({minor_units:n, currency});
   const link = (text, href) => { const n = el('a', text); n.href = href; return n; };
@@ -20,6 +19,13 @@
   let customer = null, nextCursor = null, preview = null, submitted = null, busy = false, customDefinitions = [], applicationRows = [];
   let selectedApplications = new Set();
   let key = 'WB-' + crypto.randomUUID();
+  let customerPending = false, reviewedPayment = null;
+  function resetDraftView() {
+    draft=null;selected.clear();candidates=[];nextCursor=null;
+    $('invoices').replaceChildren();$('more').hidden=true;$('balances').hidden=true;
+    for(const id of ['totals','selection-status','amount-origin']) $(id).replaceChildren();
+    const url=new URL(location.href);url.searchParams.delete('selection');history.replaceState(null,'',url);
+  }
   function note(text) { $('message').textContent = text; }
   function button(text, fn) { const n=el('button',text); n.type='button'; n.addEventListener('click',()=>perform(fn)); return n; }
   function invalidate() { preview=null; $('save').disabled=true; $('save-new').disabled=true; $('preview-result').hidden=true; }
@@ -29,18 +35,58 @@
       else if(control.dataset.beforePending!==undefined) {control.disabled=control.dataset.beforePending==='true';delete control.dataset.beforePending;}
     }
   }
-  function error(err) {
-    $('error').hidden=false; $('error').querySelector('p').textContent=[err.code,err.message].filter(Boolean).join(' — ');
+  async function error(err) {
+    const message=err.code==='E_REASON_REQUIRED'&&['update','unapply','void'].includes(mode)?
+      'Enter a reason for this payment correction, unapply or void.':err.message;
+    $('error').hidden=false; $('error').querySelector('p').textContent=[err.code,message].filter(Boolean).join(' — ');
     const area=$('error').querySelector('[data-comparisons]'); area.replaceChildren();
     for (const row of err.details?.changes || err.details?.settlement_changes || []) {
       area.append(el('p', `${row.actor_id || 'Unknown actor'} at ${row.at || 'unknown time'}: ${(row.fields || []).concat(row.settlement_fields || []).join(', ') || 'Fields unknown'}. Latest writer: ${row.latest_writer_id || 'unknown'}.`));
     }
     if (err.details?.fields) for (const field of err.details.fields) area.append(el('p', `${field.field}: ${field.problem}`));
-    $('retry').hidden=!submitted; $('review').hidden=!!submitted;
+    $('retry').hidden=!submitted; $('review').hidden=!!submitted; $('review').disabled=false;
+    if (!submitted && (['E_VERSION_CONFLICT','E_PREVIEW_STALE'].includes(err.code) || err.details?.review?.command==='payment settlement changes')) {
+      $('review').disabled=true;
+      try {
+        if(payment) {
+          const current=await command('payment show',{payment:payment.id});
+          reviewedPayment=current;
+          area.append(el('p',`Saved receipt: ${money(payment.revision.total)}; current receipt: ${money(current.revision.total)}; your entered cash: ${$('amount').value} ${config.currency}.`));
+          for(const [label,saved,value] of [
+            ['Date',payment.revision.date,current.revision.date],['Memo',payment.revision.memo,current.revision.memo],
+            ['Reference',payment.revision.reference,current.revision.reference],
+            ['Method',payment.revision.profile.payment_method.label,current.revision.profile.payment_method.label],
+            ['Destination',payment.revision.profile.deposit_account.full_name,current.revision.profile.deposit_account.full_name]])
+            if(saved!==value) area.append(el('p',`${label}: saved ${saved??'blank'}; current ${value??'blank'}. Your form entry remains unchanged.`));
+          const savedCustom=payment.revision.custom_fields_snapshot||{}, currentCustom=current.revision.custom_fields_snapshot||{};
+          for(const id of new Set([...Object.keys(savedCustom),...Object.keys(currentCustom)])) {
+            const before=savedCustom[id], after=currentCustom[id];
+            if(exact.stringify(before)!==exact.stringify(after)) area.append(el('p',`${after?.name||before?.name||'Custom field '+id}: saved ${before===undefined?'omitted':exact.stringify(before.value)}; current ${after===undefined?'omitted':exact.stringify(after.value)}. Your form entry remains unchanged.`));
+          }
+          for(const [label,field] of [['Applied','applied_minor_units'],['Available credit','available_minor_units']])
+            area.append(el('p',`${label}: saved ${units(payment.current[field])}; current ${units(current.current[field])}.`));
+        }
+        for(const row of selected.values()) {
+          const current=await command('invoice settlement',{invoice:row.invoice_id});
+          const comparison=el('p');comparison.append(link('Invoice '+row.invoice_id,`/c/${config.company}/invoice/${row.invoice_id}`),
+            `: saved due ${units(row.due_minor_units)}; current due ${units(current.due_minor_units)}; retained payment ${row.amount_minor_units===null?'unresolved':units(row.amount_minor_units)} (${row.amount_origin}). Saved version ${row.expected_version}; current ${current.version}.`);
+          area.append(comparison);
+        }
+        const guard=err.details?.review?.input?.guard || payment?.settlement_guard;
+        if(guard) {
+          const diagnostics=await pages('payment settlement changes',{guard});
+          const group=el('details');group.open=true;group.append(el('summary',`${diagnostics.total_count} complete recorded changes since the saved baseline`));
+          for(const row of diagnostics.items) group.append(el('p',`${row.record_id}: change event ${row.event_id || 'unknown'} by ${row.actor_id || 'unknown actor'} at ${row.at || 'unknown time'}; fields ${(row.fields||[]).concat(row.settlement_fields||[]).join(', ') || 'unknown'}. Latest writer: ${row.latest_writer_id || 'unknown'}; version ${row.baseline_version??'unknown'} → ${row.current_version??'unknown'}; ${row.age_seconds} seconds ago${row.on_behalf_of?' on behalf of '+row.on_behalf_of:''}.`));
+          if(diagnostics.unknown_history) group.append(el('p','Some recorded history is unknown; review current facts before continuing.'));
+          area.append(group);
+        }
+        $('review').disabled=false;
+      } catch(readError) {area.append(el('p',`Current comparison could not be completed: ${readError.message || readError.code}. Keep the draft and review again.`));}
+    }
   }
   async function perform(fn) {
     if (busy) return; busy=true; root.setAttribute('aria-busy','true');
-    try { await fn(); } catch(err) { error(err); } finally {busy=false;root.removeAttribute('aria-busy');}
+    try { await fn(); } catch(err) { await error(err); } finally {busy=false;root.removeAttribute('aria-busy');}
   }
   async function command(name,input={},options={}) {
     const headers={'Content-Type':'application/json','X-Bookflow-Workbench':'1','X-Bookflow-Client-Name':'bookflow-workbench',
@@ -48,10 +94,10 @@
     if (options.reason !== undefined) headers['X-Bookflow-Reason']=encodeURIComponent(options.reason);
     let response;
     try { response=await fetch('/companies/'+encodeURIComponent(config.company)+'/commands/'+name.replaceAll(' ','.')+(options.preview?'?dry_run=true':''),
-      {method:'POST',credentials:'same-origin',headers,body:JSON.stringify(input)}); }
+      {method:'POST',credentials:'same-origin',headers,body:exact.stringify(input)}); }
     catch (_) { throw {message:'Connection interrupted. Keep this draft and recover the exact submitted request before recording again.',ambiguous:true}; }
     let out;
-    try {out=await response.json();} catch (_) {throw {message:'The server response could not be read. Recover the exact submitted request.',ambiguous:true};}
+    try {out=exact.parse(await response.text());} catch (_) {throw {message:'The server response could not be read. Recover the exact submitted request.',ambiguous:true};}
     if (!response.ok || out.code?.startsWith('E_')) throw out;
     if (response.status!==200) throw {message:'The operation has not confirmed completion. Recover the exact submitted request.',ambiguous:true};
     return out;
@@ -63,7 +109,7 @@
   }
   function context() {
     if (mode==='apply') return {mode:'existing_credit',payment:payment.id,date:$('date').value};
-    if (!customer) throw {message:'Choose a customer or job first.'};
+    if (!customer || customerPending) throw {message:'Choose a matching customer or job before preparing this payment.'};
     return {mode:'new_receipt',customer:customer.id,date:$('date').value,...($('ar').value?{ar_account:$('ar').value}:{})};
   }
   function selectionRef() {return {mode:'selection',selection:draft.id,expected_version:draft.version};}
@@ -113,8 +159,8 @@
           ...(input.value?{amount:input.value,amount_origin:'entered'}:{amount_origin:'unresolved'})}]});
       }));
       const entry=el('span');entry.append(input,el('small',chosen?' '+chosen.amount_origin:' Not selected'));
-      const cells=[check,el('span',row.date),description,el('span',units(row.gross_minor_units)),el('span',units(row.applied_minor_units)),el('span',units(row.due_minor_units)),entry];
-      const labels=['Select','Date','Job / invoice','Original','Applied','Due','Payment'];
+      const cells=[check,el('span',row.date),description,el('span',units(row.original_gross_minor_units)),el('span',units(row.gross_minor_units)),el('span',units(row.applied_minor_units)),el('span',units(row.due_minor_units)),entry];
+      const labels=['Select','Date','Job / invoice','Original','Current','Applied','Due','Payment'];
       cells.forEach((node,index)=>{const td=el('td');td.dataset.label=labels[index];td.append(node);tr.append(td);});body.append(tr);
     }
   }
@@ -156,6 +202,8 @@
       const input=$('custom').querySelector(`[data-definition="${definition.id}"]`);
       const action=$('custom').querySelector(`[data-custom-action="${definition.id}"]`);
       if (!input || !action || action.value==='keep') continue;
+      if(action.value==='set'&&definition.kind==='bool'&&!['true','false'].includes(input.value))
+        throw {message:'Choose Yes or No for '+definition.name+' before setting its value.'};
       if(action.value!=='clear') kinds[definition.id]=definition.kind;
       values[definition.id]=action.value==='clear'?null:definition.kind==='bool'?input.value==='true':input.value;
     }
@@ -225,7 +273,7 @@
   async function save(newAfter=false,retry=false) {
     if(!retry) {
       if(!preview) throw {message:'Preview these values before saving.'};
-      submitted=preview.request;sessionStorage.setItem(storageKey,JSON.stringify(submitted));
+      submitted=preview.request;sessionStorage.setItem(storageKey,exact.stringify(submitted));
     }
     if(!submitted) throw {message:'No submitted request to recover.'};
     lockSubmitted(true);
@@ -234,7 +282,7 @@
       submitted=null;sessionStorage.removeItem(storageKey);lockSubmitted(false);invalidate();$('error').hidden=true;
       payment=await command('payment show',{payment:out.id});
       if(newAfter) {
-        key='WB-'+crypto.randomUUID();draft=null;selected.clear();candidates=[];mode='receive';
+        key='WB-'+crypto.randomUUID();resetDraftView();mode='receive';
         $('amount').value='';$('memo').value='';$('reference').value='';$('number').value='';
         const url=new URL(location.href);url.search='';history.replaceState(null,'',url);await drawCustom();await loadInvoices();
         note('Payment '+payment.number+' saved. New blank payment started; customer/date/method/destination retained.');
@@ -265,14 +313,26 @@
     }
   }
   async function chooseCustomer(id) {
+    invalidate();
+    if((customer&&customer.id!==id)||(draft&&draft.context.customer_id!==id)) resetDraftView();
     customer=await command('customer show',{customer:id});$('customer').value=customer.full_name||customer.name;
+    customerPending=false;
     $('customer-results').replaceChildren();
     const preferred=customer.payment_method?.id;
     if(preferred&&!$('method').value) $('method').value=preferred;
   }
   async function reviewCurrent() {
-    invalidate();$('error').hidden=true;
-    if(payment) payment=await command('payment show',{payment:payment.id});
+    invalidate();
+    let reviewed=document.getElementById('payment-reviewed-comparisons');
+    if(!reviewed) {reviewed=el('section');reviewed.id='payment-reviewed-comparisons';$('error').after(reviewed);}
+    reviewed.replaceChildren(el('h3','Reviewed comparison — your entries are retained'), ...Array.from($('error').querySelector('[data-comparisons]').childNodes));
+    $('error').hidden=true;
+    if(payment) {
+      const current=await command('payment show',{payment:payment.id});
+      if(reviewedPayment && current.version!==reviewedPayment.version)
+        throw {code:'E_VERSION_CONFLICT',message:'The receipt changed again while you were reviewing. Review the new comparison before adopting it.'};
+      payment=current;reviewedPayment=null;
+    }
     if(draft) {
       // Review is explicit: retain amounts/origins, adopt only current versions.
       draft=await command('payment selection show',{selection:draft.id});
@@ -336,7 +396,7 @@
       `Current invoice ${current.status}; applied ${units(current.applied_minor_units)}; due ${units(current.due_minor_units)} ${current.currency}.`));
     area.append(el('p',`Recorded by ${result.execution.actor_id} via ${result.execution.interface}${result.execution.on_behalf_of?' on behalf of '+result.execution.on_behalf_of:''}.`),
       el('p',result.execution.reason?'Recorded reason: '+result.execution.reason:result.execution.directive_id?'Recorded under directive '+(result.execution.directive_code||result.execution.directive_id)+'.':'No explicit reason was supplied.'));
-    const submittedFields=el('details');submittedFields.append(el('summary','Original submitted fields and context'),el('pre',JSON.stringify(result.request,null,2)));area.append(submittedFields);
+    const submittedFields=el('details');submittedFields.append(el('summary','Original submitted fields and context'),el('pre',exact.stringify(result.request)));area.append(submittedFields);
     for(const [kind,label] of [['source_components','source ownership'],['effect_applications','applications'],['allocations','allocation history'],['document_changes','document changes']]) {
       area.append(button('View original '+label,async()=>{
         const out=await pages('payment operation items',{operation_key:operationKey,kind});
@@ -360,7 +420,7 @@
     $('title').textContent={receive:'Receive customer payment',apply:'Apply existing payment credit',update:'Correct receipt',unapply:'Unapply recorded applications',void:'Void unapplied receipt'}[mode];
     const edit=['receive','update'].includes(mode);
     $('header').hidden=['unapply','void'].includes(mode);$('selection').hidden=['update','void'].includes(mode);
-    $('reason-label').hidden=['receive','apply'].includes(mode);$('save-new').hidden=mode!=='receive';
+    $('reason-label').hidden=['receive','apply'].includes(mode);$('reason').required=!$('reason-label').hidden;$('save-new').hidden=mode!=='receive';
     for(const id of ['number','method','destination','memo','reference']) $(id).disabled=!edit;
     $('customer').disabled=mode!=='receive';$('find-customer').hidden=mode!=='receive';$('ar').disabled=mode!=='receive';
     $('date').value=payment?.revision.date||new Date().toISOString().slice(0,10);
@@ -403,7 +463,7 @@
     }
     if(!config.allowed.includes(mode) && mode!=='show') { $('form').hidden=true;note('Read-only access: payment changes require ledger posting permission.'); }
     const saved=sessionStorage.getItem(storageKey);
-    if(saved) {submitted=JSON.parse(saved);key=submitted.input.operation_key;lockSubmitted(true);error({message:'An earlier submitted payment has no confirmed result in this tab. Recover that exact request before recording another payment.'});}
+    if(saved) {submitted=exact.parse(saved);key=submitted.input.operation_key;lockSubmitted(true);error({message:'An earlier submitted payment has no confirmed result in this tab. Recover that exact request before recording another payment.'});}
     if(config.operation) await recoverOperation(config.operation);
     root.dataset.loaded='true';
   }
@@ -416,6 +476,10 @@
   $('load').addEventListener('click',()=>perform(async()=>{invalidate();await makeDraft();await loadInvoices();if(!selected.size && draft.amount?.minor_units>0 && config.preferences.automatically_apply_payments) await autoApply();}));
   $('amount').addEventListener('change',()=>perform(async()=>{invalidate();if(draft) {await changeDraft({amount:$('amount').value||null});
     if(!selected.size && draft.amount?.minor_units>0 && config.preferences.automatically_apply_payments) await autoApply();}}));
+  for(const event of ['input','change']) $('customer').addEventListener(event,()=>{
+    customerPending=true;invalidate();$('balances').hidden=true;$('invoices').replaceChildren();
+    note('Choose a matching customer. The previous preview cannot be saved; any prior shared selection remains in Saved selections.');
+  });
   for(const id of ['number','method','destination','memo','reference','reason','date','ar']) $(id).addEventListener('change',invalidate);
   $('more').addEventListener('click',()=>perform(async()=>loadInvoices(nextCursor)));
   $('auto').addEventListener('click',()=>perform(autoApply));$('calculate').addEventListener('click',()=>perform(calculate));

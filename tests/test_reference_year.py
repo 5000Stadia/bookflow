@@ -318,6 +318,9 @@ def test_readonly_and_sibling_permissions(reference_client):
         reader.report.trial_balance(company=DEMO,date_to='2026-12-31')
 
 
+# Both expanded demo seeds are reset and replayed here; measured at 76.16s.
+# This fixture deadline is separate from the unchanged 100ms interactive budget.
+@pytest.mark.timeout(180)
 def test_partial_seed_failure_reports_committed_effects_and_rerun_recovers(reference_client, monkeypatch):
     from bookflow.commands import hub_cmds
     c, root = reference_client

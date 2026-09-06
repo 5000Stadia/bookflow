@@ -660,6 +660,37 @@ def _read_calls(hosted):
         "report trial-balance": ({"date_to": "2026-12-31"}, cid),
         "report general-ledger": ({"date_from": "2026-01-01", "date_to": "2026-12-31"}, cid),
     })
+    paid = hosted.ok("payment.query", {"status": "posted", "limit": 1}, company=cid)["items"][0]
+    payment = hosted.ok("payment.show", {"payment": paid["id"]}, company=cid)
+    with sqlite3.connect(company_db) as conn:
+        application = conn.execute("SELECT id FROM applications ORDER BY id LIMIT 1").fetchone()[0]
+        operation = conn.execute("SELECT operation_key FROM payment_operations ORDER BY id LIMIT 1").fetchone()[0]
+    context = dict(mode="new_receipt", customer=payment["revision"]["profile"]["payer"]["id"], date="2026-12-31")
+    draft = hosted.ok("payment.selection.create", dict(context, amount="1.00"), company=cid)
+    request = dict(command="payment receive", input=dict(customer=context["customer"], date=context["date"],
+        amount="1.00", payment_method=payment["revision"]["profile"]["payment_method"]["id"],
+        deposit_to=payment["revision"]["profile"]["deposit_account"]["id"], operation_key="HTTP-PARITY-PREVIEW"))
+    preview = hosted.ok("payment.receive?dry_run=true", request["input"], company=cid)
+    calls.update({
+        "payment query": ({"limit": 2}, cid),
+        "payment show": ({"payment": paid["id"]}, cid),
+        "payment history": ({"payment": paid["id"], "limit": 2}, cid),
+        "payment settlement": ({"payment": paid["id"], "limit": 2}, cid),
+        "invoice settlement": (calls["invoice show"][0], cid),
+        "application show": ({"application": application}, cid),
+        "application history": ({"application": application, "limit": 2}, cid),
+        "payment invoices": (dict(context, limit=2), cid),
+        "payment suggest": (dict(context, amount="1.00", limit=2), cid),
+        "payment calculate": (dict(context, amount="1.00", amount_mode="entered", limit=2), cid),
+        "payment selection query": ({"limit": 2}, cid),
+        "payment selection show": ({"selection": draft["id"]}, cid),
+        "payment selection items": ({"selection": draft["id"], "revision": draft["version"], "limit": 2}, cid),
+        "payment operation show": ({"operation_key": operation}, cid),
+        "payment operation items": ({"operation_key": operation, "kind": "source_components", "limit": 2}, cid),
+        "payment settlement changes": ({"guard": payment["settlement_guard"], "limit": 2}, cid),
+        "payment preview items": ({"request": request, "kind": "source_components",
+            "facts_fingerprint": preview["facts_fingerprint"], "limit": 2}, cid),
+    })
     return calls
 
 
@@ -676,6 +707,7 @@ def test_every_routed_read_returns_the_same_document_over_http_as_in_the_library
 
     # Preference ages must describe the same instant on the sequential surfaces.
     monkeypatch.setattr("bookflow.company.work_preferences.datetime", ComparisonDateTime)
+    monkeypatch.setattr("bookflow.core.clock.now_iso", lambda: comparison_time.isoformat(timespec="milliseconds").replace("+00:00", "Z"))
     from bookflow.core import registry
     from tests.test_row1_flow import normalize
     registry.load_all()

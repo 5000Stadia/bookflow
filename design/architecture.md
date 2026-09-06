@@ -69,7 +69,22 @@ the complete invoice-correction recipe; the ordinary editor retains its commerci
 draft while explicitly reviewing current settlement versions. Captured receipt
 facts, internal printing and current availability remain distinct. Company forms
 expose all three payment preferences independently. Numeric-entry metadata uses
-the existing exact calculator, including calculator-only Enter.
+the existing exact calculator, including calculator-only Enter. `exact-json.js`
+preserves accepted integer minor units as BigInt across JSON reads, shared-draft
+writes and formatting, including values above JavaScript's safe-integer range.
+The candidate grid exposes original/current revision identities and gross amounts
+separately. Payer edits invalidate executable previews and draft-derived displays;
+Save & New clears those displays while retaining the documented defaults.
+Stale review renders saved/current money and retained entries, retrieves every
+bounded diagnostic page, and distinguishes change-event actors from latest writers.
+Invoice correction pages render proposed received/applied/available or gross/applied/due
+balances for each identifiable affected document before Save becomes available.
+
+Preparation candidates and saved-draft query pages batch their SQL projections;
+history filters operation ownership before decoding recorded effects. Composite
+audit disclosure batches owned-row reads within one decision and database snapshot,
+retaining unresolved-evidence rejection and historical work-link checks. These are
+read-only changes; the separate complete 10,000-record calibration remains required.
 
 The active payment examples append exactly33 commands to each frozen295/201 demo
 prefix. `payment-expected.json` enumerates independent gross/net/storage oracles;

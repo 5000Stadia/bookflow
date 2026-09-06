@@ -2,6 +2,7 @@
 {% block title %}Customer payments{% endblock %}
 {% block body %}
 <link rel="stylesheet" href="{{ static_urls['payments.css'] }}">
+<script src="{{ static_urls['exact-json.js'] }}" defer></script>
 <script src="{{ static_urls['payments.js'] }}" defer></script>
 <script type="application/json" id="payment-config">{{ payment_workspace | tojson }}</script>
 <div id="payment-workspace">
@@ -30,11 +31,11 @@
 <section id="payment-balances" aria-label="Current customer balances" hidden><h2>Current net accounts receivable</h2><p><strong id="payment-payer-balance"></strong> — selected customer/job only</p><p><strong id="payment-family-balance"></strong> — selected customer/job and descendants</p><p class="muted">Posting-derived balances include unapplied credit; they are separate from the selected invoice totals below.</p></section>
 <section id="payment-selection"><h2 id="payment-selection-title">Invoices to settle</h2><p id="payment-selection-status"></p>
 <div class="payment-actions"><button type="button" id="payment-auto">Auto Apply</button><button type="button" id="payment-calculate">Calculate selected amounts</button><button type="button" id="payment-clear">Clear draft selections</button><button type="button" id="payment-refresh-draft">Reload shared selection</button></div>
-<div class="payment-table-wrap"><table class="payment-invoices"><thead><tr><th>Select</th><th>Date</th><th>Job / invoice</th><th>Original</th><th>Applied</th><th>Due</th><th>Payment</th></tr></thead><tbody id="payment-invoices"></tbody></table></div>
+<div class="payment-table-wrap"><table class="payment-invoices"><thead><tr><th>Select</th><th>Date</th><th>Job / invoice</th><th>Original</th><th>Current</th><th>Applied</th><th>Due</th><th>Payment</th></tr></thead><tbody id="payment-invoices"></tbody></table></div>
 <button type="button" id="payment-more" hidden>Next invoice page</button>
 <div id="payment-totals" aria-live="polite"></div>
 </section>
-<label id="payment-reason-label">Reason for correction / unapply / void<input id="payment-reason" maxlength="140"></label>
+<label id="payment-reason-label">Reason for correction / unapply / void (required)<input id="payment-reason" maxlength="140"></label>
 <div class="payment-actions"><button type="button" id="payment-preview">Preview payment</button><button type="button" id="payment-save" disabled>Save &amp; Close</button><button type="button" id="payment-save-new" disabled>Save &amp; New</button></div>
 </form>
 <section id="payment-preview-result" hidden aria-label="Payment preview"></section>
