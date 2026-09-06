@@ -480,3 +480,46 @@ def test_receipt_preview_stales_before_requiring_new_received_total(client, sale
         client.run('estimate sales-receipt', data, company=COMPANY, dry_run=True)
     assert err.value.code == 'E_VALIDATION'
     assert client.run('estimate sales-receipt', dict(data, amount_received='24.68'), company=COMPANY)['total_minor_units'] == 2468
+
+
+
+@pytest.mark.parametrize('change', ['income_account', 'customer'])
+def test_independent_billing_classification_matches_source(client, sale, monkeypatch, change):
+    from bookflow.company import billing
+    from tests.test_service_sales_lifecycle import snapshot
+    source = accepted(client, sale)
+    if change == 'income_account':
+        other = client.account.create(name='Substituted income', type='income', company=COMPANY)
+        original = billing.resolved_line
+        def wrong(lf):
+            result = original(lf)
+            result['profile'].income_account = result['profile'].income_account.model_copy(update={'id': other['id'], 'label': other['name']})
+            return result
+        monkeypatch.setattr(billing, 'resolved_line', wrong)
+    else:
+        other = client.customer.create(name='Substituted customer', company=COMPANY)
+        original = billing.financial_profile
+        def wrong(*args, **kwargs):
+            result, warnings = original(*args, **kwargs)
+            result.customer = result.customer.model_copy(update={'id': other['id'], 'label': other['name']})
+            return result, warnings
+        monkeypatch.setattr(billing, 'financial_profile', wrong)
+    before = snapshot(client)
+    with pytest.raises(BookflowError) as err:
+        bill(client, source)
+    assert err.value.code == 'E_INTERNAL'
+    assert snapshot(client) == before
+
+
+def test_explicit_line_preview_includes_other_consumed_source_lines(client, sale):
+    source = accepted(client, sale, lines=[dict(item=sale['item']), dict(item=sale['item'])])
+    a, b = [line['line_id'] for line in source['revision']['lines']]
+    first = bill(client, source, line_ids=[a])
+    current = run(client, 'estimate', 'show', estimate=source['id'])
+    data = dict(estimate=current['id'], expected_version=current['version'], conversion_key='selected second', date='2026-01-13', line_ids=[b])
+    preview = client.run('estimate invoice', data, company=COMPANY, dry_run=True)
+    client.run('invoice void', dict(invoice=first['id'], expected_version=1), company=COMPANY, reason='Release first root')
+    with pytest.raises(BookflowError) as err:
+        client.run('estimate invoice', dict(data, expected_facts_fingerprint=preview['facts_fingerprint']), company=COMPANY)
+    assert err.value.code == 'E_PREVIEW_STALE'
+    assert client.run('estimate invoice', data, company=COMPANY)['total_minor_units'] == 1234

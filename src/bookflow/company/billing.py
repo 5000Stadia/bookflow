@@ -166,9 +166,14 @@ def resolve_commercial(s, inp, document_type, *, document_id, kind):
     semantic = dict(date=inp.date, number=number, memo=inp.memo, issuer=issuer,
         profile=profile.model_dump(), lines=[sales._line_semantic(line) for line in lines],
         custom_fields=sales._custom_semantic(planned.snapshot))
+    identities = query.root_identities(s, header)
+    source_roots = [(identities[line['line_id']]['root_document_id'], identities[line['line_id']]['root_line_id'])
+        for line in work.saved_lines(s, rev)]
+    consumption = sorted((a['root_document_id'], a['root_line_id'], a['transaction_id'], a['revision_id'],
+        a['document_line_id']) for a in query.active_allocations(s, source_roots))
     fingerprint = hashlib.sha256(sales.json_text(dict(company=s.company_row['id'], type=document_type,
         source_revision=rev['id'], source_version=header['version'],
-        roots=[root for _, root, _ in selected], content=semantic, warnings=warnings)).encode()).hexdigest()
+        roots=[root for _, root, _ in selected], consumption=consumption, content=semantic, warnings=warnings)).encode()).hexdigest()
     if inp.expected_facts_fingerprint and inp.expected_facts_fingerprint != fingerprint:
         raise BookflowError('E_PREVIEW_STALE', details={'facts_fingerprint': fingerprint})
     if document_type == 'sales_receipt' and money(inp.amount_received, rev['currency'], 'amount_received').minor_units != total:

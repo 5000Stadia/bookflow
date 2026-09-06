@@ -2,6 +2,7 @@
 import json
 from bookflow.company import schema as c, work, sales, billing_queries as query
 from bookflow.company.work_facts import WorkFacts, WorkLineFacts
+from bookflow.company.sales_facts import SalesLineProfile, SalesProfile
 from bookflow.core.errors import BookflowError
 
 
@@ -78,6 +79,14 @@ def validate(plan, s, ctx):
     allocs, envelopes = data['billing_allocations'], data['pending']['document_lines']
     require(len(allocs) == len(selected) == len(envelopes), 'missing selected allocation')
     profiles = {row['document_line_id']: row for row in data['pending']['sales_line_profiles']}
+    captured_header = work.facts(rev)
+    posted_header = SalesProfile.model_validate_json(data['pending']['sales_profiles'][0]['profile_snapshot'])
+    for field in type(captured_header.profile).model_fields:
+        if field == 'origins' or (field == 'terms' and 'terms' in inp.model_fields_set):
+            continue
+        require(getattr(posted_header, field) == getattr(captured_header.profile, field),
+            'captured commercial header differs: ' + field)
+    require(json.loads(created['issuer_snapshot']) == captured_header.issuer_snapshot, 'captured issuer differs')
     roots = set()
     for actual, envelope, (line, root, lf) in zip(allocs, envelopes, selected):
         require(root not in roots and not query.active_allocations(s, [root]), 'duplicate active consumption')
@@ -96,3 +105,25 @@ def validate(plan, s, ctx):
         require(all(projected[k] == getattr(lf, k) for k in ('item_id', 'quantity_microunits', 'unit_id', 'unit_factor_nanounits',
             'base_quantity_microunits', *sales.MONEY_COLUMNS)), 'financial line differs from source')
         require(envelope['description'] == lf.description, 'source description')
+        posted_line = SalesLineProfile.model_validate_json(projected['item_snapshot'])
+        changed_representation = {'schema_version', 'pricing_basis', 'net_amount_minor_units', 'origins'}
+        if lf.pricing_basis == 'amount':
+            changed_representation |= {'price_rule', 'price_basis_minor_units'}
+        for field in type(lf.profile).model_fields:
+            if field not in changed_representation:
+                require(getattr(posted_line, field) == getattr(lf.profile, field),
+                    'captured line classification differs: ' + field)
+        require(posted_line.pricing_basis == ('amount' if lf.pricing_basis == 'amount' else 'unit'), 'line price basis')
+        taxes = [row for row in data['pending']['sales_tax_components'] if row['document_line_id'] == envelope['id']]
+        require(len(taxes) == len(lf.taxes), 'captured tax components missing')
+        for posted_tax, source_tax in zip(taxes, lf.taxes):
+            rule = source_tax.rule
+            captured_tax = json.loads(posted_tax['component_snapshot'])
+            require(posted_tax['tax_item_id'] == rule.id and posted_tax['agency_id'] == rule.agency.id
+                and posted_tax['liability_account_id'] == rule.liability_account.id
+                and posted_tax['rate_percent_millionths'] == rule.rate_percent_millionths
+                and captured_tax['tax_item'] == rule.model_dump(mode='json', include={'id', 'label', 'version'})
+                and captured_tax['agency'] == rule.agency.model_dump(mode='json')
+                and captured_tax['liability_account'] == rule.liability_account.model_dump(mode='json')
+                and posted_tax['taxable_minor_units'] == source_tax.taxable_minor_units
+                and posted_tax['tax_minor_units'] == source_tax.tax_minor_units, 'captured tax classification differs')
