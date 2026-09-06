@@ -129,3 +129,53 @@ def test_installed_upload_limit_rejection_delivers_error_file_and_cleans_stage(h
     assert hosted.ok('attachment.list', {'record_type': 'customer', 'record_id': record_id}, company=hosted.company_id)['count'] == 0
     assert not hosted.handle.host._transfers and not hosted.handle.host._mcp_runtime.intents.active
     assert [p.name for p in outbox.iterdir()] == ['error.json']
+
+
+def test_installed_hub_target_rejections_are_command_error_files_without_planners(hosted, live, tmp_path, monkeypatch):
+    from mcp import ClientSession
+    from mcp.client.stdio import StdioServerParameters, stdio_client
+    from bookflow.core import registry
+    from tests.test_mcp_registry_credentials import hub_snapshot
+    from tests.test_mcp_registry_work import company_snapshot
+    ghost = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    cases = [
+        ('token revoke', {'token':ghost}, 'E_TOKEN_NOT_FOUND'),
+        ('token issue', {'user':ghost,'label':'Missing target'}, 'E_USER_NOT_FOUND'),
+        ('token list', {'user':ghost}, 'E_USER_NOT_FOUND'),
+        ('user set-password', {'username':'absent-input-target','password':'Owned fixture password'}, 'E_USER_NOT_FOUND'),
+        ('company new', {'organization':ghost,'legal_name':'Absent parent','home_currency':'USD'}, 'E_ORGANIZATION_NOT_FOUND'),
+        ('company detach', {'company':ghost}, 'E_COMPANY_NOT_FOUND'),
+    ]
+    originals = []
+    for name,raw,code in cases:
+        response = hosted.call(name.replace(' ','.'),raw)
+        assert response.status_code >= 400 and response.json()['code'] == code
+        originals.append(response.json())
+    before_hub, before_company = hub_snapshot(hosted.root), company_snapshot(hosted.root)
+    def forbidden(*args,**kwargs):
+        raise AssertionError('A pure hub target rejection entered the business planner')
+    for name,_,_ in cases:
+        monkeypatch.setattr(registry.get(name),'plan',forbidden)
+    outbox = tmp_path/'outbox'
+    outbox.mkdir(mode=0o700)
+    async def witness():
+        binary = os.environ.get('BOOKFLOW_MCP_TEST_BINARY', str(Path(sys.executable).with_name('bookflow')))
+        params = StdioServerParameters(command=binary,args=['mcp','--url',live,'--output-dir',str(outbox)],
+            env={'BOOKFLOW_TOKEN':hosted.secret,'BOOKFLOW_DATA_ROOT':str(tmp_path/'absent')},cwd=str(tmp_path))
+        async with stdio_client(params) as (read,write):
+            async with ClientSession(read,write) as session:
+                await session.discover()
+                for index,(name,raw,_) in enumerate(cases):
+                    destination = outbox/(str(index)+'.json')
+                    reply = await session.call_tool('bookflow_run',{'command':name,'input':raw,
+                        'transport':{'result_file':str(destination)}})
+                    assert reply.is_error
+                    assert reply.meta['bookflow_transport']['response_kind'] == 'verified_command_completion'
+                    assert reply.structured_content['delivery'] == 'complete_json_file'
+                    assert json.loads(destination.read_bytes()) == originals[index]
+                    again = await session.call_tool('bookflow_run',{'input_ref':reply.structured_content['operation_ref'],'action':'execute'})
+                    assert again.is_error and again.structured_content == originals[index]
+    anyio.run(witness)
+    assert hub_snapshot(hosted.root) == before_hub
+    assert company_snapshot(hosted.root) == before_company
+    assert not hosted.handle.host._mcp_runtime.intents.active

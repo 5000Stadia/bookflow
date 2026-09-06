@@ -282,7 +282,8 @@ class PublicationPermit:
                 publication_payment.check(s, self.projection['payment_roots'])
             self._additional(s)
 
-    def _additional(self, s):
+    def authorize_hub_input(self, s):
+        """Shared pure target predicates, also used before declaring input ready."""
         from bookflow.commands import host_cmds, hub_cmds
         name = self.cmd.name
         if name == "company detach":
@@ -307,7 +308,11 @@ class PublicationPermit:
             host_cmds._target_user(s, self.inp.user)
         elif name == "token revoke":
             host_cmds.authorize_token_revoke(self.inp, self.ctx, s)
-        elif name == "directive add" and s.actor.kind != "human" and not self.ctx.on_behalf_of:
+
+    def _additional(self, s):
+        self.authorize_hub_input(s)
+        name = self.cmd.name
+        if name == "directive add" and s.actor.kind != "human" and not self.ctx.on_behalf_of:
             _deny()
         elif name == "undo":
             from bookflow.company import undo, schema as c

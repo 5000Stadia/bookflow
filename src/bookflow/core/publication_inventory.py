@@ -27,7 +27,8 @@ HUB = {
 
 def policy(cmd):
     from bookflow.core.publication_payment import PAYMENT_COMMANDS
-    if cmd.plan is not None and cmd.plan.__module__ == 'bookflow.commands.payment_cmds' and cmd.name not in PAYMENT_COMMANDS:
+    planner = getattr(cmd, 'plan', None)
+    if getattr(planner, '__module__', None) == 'bookflow.commands.payment_cmds' and cmd.name not in PAYMENT_COMMANDS:
         raise RuntimeError('Registered payment command lacks a publication dependency inventory: ' + cmd.name)
     if cmd.local_only or cmd.standalone:
         return "local_only"
