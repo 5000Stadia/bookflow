@@ -1322,7 +1322,7 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
     from bookflow.adapters.workbench import forms as F
     from bookflow.core import registry
     registry.load_all()
-    from tests.mcp_coverage import workbench_row, local_workbench_boundaries, workbench_family_map
+    from tests.mcp_coverage import workbench_row, local_workbench_boundaries, workbench_family_map, workbench_variant_map
     coverage = []
     commercial_fields = {}
     for noun in ("invoice", "sales-receipt", "proposal", "estimate", "work-order"):
@@ -1359,6 +1359,8 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
                     assert len(rendered_ids) == len(set(rendered_ids)), (cmd.name, control)
         definition = registry.noun_meta(cmd.noun).get("definition")
         for leaf in F.leaves(cmd.input_model):
+            for parent in leaf.get("object_controls", []):
+                assert page.text.count(f'name="clear:{parent}"') == 1, (cmd.name, parent)
             if leaf["path"] == "custom_fields" and (
                 getattr(definition, "runtime_field_provider", None) == "custom-fields"
                 or (cmd.noun in ("journal", "register", "invoice", "sales-receipt")
@@ -1404,6 +1406,7 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
     assert {row['command'] for row in coverage} == {cmd.name for cmd in registry.all_commands(include_standalone=True)}
     (tmp_path / 'workbench-coverage.json').write_text(json.dumps(coverage, indent=2))
     (tmp_path / 'workbench-control-families.json').write_text(json.dumps(workbench_family_map(coverage), indent=2))
+    (tmp_path / 'workbench-material-variants.json').write_text(json.dumps(workbench_variant_map(coverage), indent=2))
 
 
 def test_an_update_form_carries_expected_version_and_the_originals(hosted):

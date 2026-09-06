@@ -33,3 +33,25 @@ def test_workbench_family_references_resolve_to_real_tests():
         module = ast.parse(Path(filename).read_text())
         assert any(isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
                    for node in module.body), (family, witness)
+
+
+def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
+    from bookflow.core import registry
+    from tests.mcp_coverage import schema_variants, workbench_variant_map, variant_policies
+    registry.load_all()
+    rows=[{'command':cmd.name,'url':'inventory-only','schema_variants':schema_variants(cmd.input_model.model_json_schema())}
+          for cmd in registry.routed_commands()]
+    mapped=workbench_variant_map(rows)
+    assert len(mapped)==len(variant_policies())==15
+    assert sum(len(group['paths']) for group in mapped)==1813
+    assert all(group['browser_witnesses'] for group in mapped)
+    # The full GUI gate is still OPEN; don't silently relabel schema nodes as
+    # accepted journeys. This test guards the accounting, not their acceptance.
+    assert any(group['remaining_material_cases'] for group in mapped)
+    import ast
+    from pathlib import Path
+    for group in mapped:
+        for witness in group['browser_witnesses']:
+            filename,name=witness.split('::')
+            assert any(isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and node.name==name
+                       for node in ast.parse(Path(filename).read_text()).body),witness

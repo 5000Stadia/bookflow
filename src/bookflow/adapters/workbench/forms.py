@@ -66,9 +66,12 @@ def _scalar_descriptor(
         kind = "bool"
     elif base in (int, float):
         kind = "number"
+    elif inspect.isclass(base) and issubclass(base, BaseModel):
+        kind = "json"
     return {
         "name": name,
         "kind": kind,
+        "json_shape": "object" if kind == "json" else None,
         "choices": choices,
         "description": description,
         "required": required,
@@ -188,7 +191,13 @@ def leaves(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
         if getattr(base, "__pydantic_root_model__", False):
             base, nullable = _base(base.model_fields["root"].annotation)
         if inspect.isclass(base) and issubclass(base, BaseModel):
-            out += leaves(base, prefix + name + ".")
+            children = leaves(base, prefix + name + ".")
+            if nullable and children:
+                parent = prefix + name
+                for child in children:
+                    child["nullable_parents"] = [parent, *child.get("nullable_parents", [])]
+                children[0]["object_controls"] = [parent, *children[0].get("object_controls", [])]
+            out += children
             continue
         kind, choices = "text", None
         json_shape = None
@@ -435,6 +444,12 @@ def _collection_prefix(path: tuple[str, ...]) -> str:
 
 def _coerce_scalar(annotation: Any, value: str) -> Any:
     base, _ = _base(annotation)
+    if inspect.isclass(base) and issubclass(base, BaseModel):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            # Preserve the attempt for the shared input model's typed rejection.
+            return value
     if base is bool:
         if value == "unset":
             return None
@@ -587,6 +602,11 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
         if leaf.get('visibility_cases') is not None and not any(
             all(form.get('f:' + condition['field'], get_path(originals, condition['field']) if originals else None)
                 in condition['values'] for condition in case) for case in leaf['visibility_cases']):
+            continue
+        cleared_parent = next((parent for parent in leaf.get("nullable_parents", [])
+                               if form.get("clear:" + parent) == "1"), None)
+        if cleared_parent is not None:
+            set_path(raw, cleared_parent, None)
             continue
         clear = form.get(f"clear:{path}") == "1"
         value = form.get(f"f:{path}")

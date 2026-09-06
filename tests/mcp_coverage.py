@@ -371,6 +371,63 @@ class Controls(HTMLParser):
             self.named.setdefault(attributes['name'], []).append({'tag': tag, **attributes})
 
 
+def variant_policies():
+    """Finite structural cases, with outstanding behavior separate from node count.
+
+    These references locate executable evidence. They are not stored test results
+    and never turn an unexecuted or uncovered branch into browser acceptance.
+    """
+    nested = 'tests/test_mcp_nested_gui_browser.py::test_nested_collection_model_object_null_and_full_error'
+    parent = 'tests/test_mcp_nested_gui_browser.py::test_nullable_parent_object_clear_is_distinct_from_omission_and_child_patch'
+    boolean = 'tests/test_mcp_workbench_control_browser.py::test_generated_boolean_false_omission_and_null_encoding'
+    number = 'tests/test_mcp_rate_gui_browser.py::test_rate_exact_integer_decimal_conflict_destination_noop_and_replay'
+    custom = 'tests/test_row8_custom_field_browser.py::test_keyboard_all_kinds_48_fields_splits_restore_clear'
+    money = 'tests/test_numeric_entry_browser.py::test_generated_sales_math_preview_and_save'
+    payment = 'tests/test_mcp_payment_form_browser.py::test_saved_selection_control_previews_real_receipt'
+    return {
+        ('anyOf', ('Address', 'null')): ([parent], ['creation/default-origin override coverage']),
+        ('anyOf', ('AddressInput', 'null')): ([parent], ['party-address defaults use a distinct owner model; browser witness required']),
+        ('anyOf', ('RegisterParty', 'null')): ([nested, parent], ['top-level payee default/prefill witness']),
+        ('anyOf', ('MoneyInput', 'string')): ([money], ['structured integer-money object branch']),
+        ('anyOf', ('SalesMoneyInput', 'null', 'string')): ([money], ['structured money object and nullable line-origin overrides']),
+        ('anyOf', ('SalesMoneyInput', 'string')): ([money], ['structured integer-money object branch']),
+        ('anyOf', ('any', 'null')): ([custom], ['definition-default kind overrides beyond boolean']),
+        ('anyOf', ('array', 'null')): ([custom, 'tests/test_mcp_nested_gui_browser.py::test_optional_nested_collection_order_empty_null_and_omission'], []),
+        ('anyOf', ('boolean', 'null')): ([boolean], []),
+        ('anyOf', ('integer', 'null')): ([number, 'tests/test_mcp_nested_gui_browser.py::test_optional_nested_collection_order_empty_null_and_omission'], []),
+        ('anyOf', ('null', 'object')): ([custom, 'tests/test_mcp_payment_form_browser.py::test_generated_payment_json_object_error_preview_and_saved_false'], []),
+        ('anyOf', ('null', 'string')): ([boolean], []),
+        ('oneOf', ('InlineApplications', 'SelectionReference')): ([payment, 'tests/test_mcp_payment_form_browser.py::test_generated_payment_json_object_error_preview_and_saved_false'], ['nested preview-request inactive branches']),
+        ('oneOf', ('InlineCalculation', 'SelectionReference')): ([payment], ['calculation-specific inline amounts/origins and selection branch']),
+        ('oneOf', ('ApplyPreviewRequest', 'InvoiceUpdatePreviewRequest', 'ReceivePreviewRequest', 'UnapplyPreviewRequest', 'UpdatePreviewRequest', 'VoidPreviewRequest')): ([payment], ['all six nested request alternatives and inactive controls']),
+    }
+
+
+def variant_key(variant):
+    return (variant['combination'], tuple(sorted(
+        branch.get('$ref', branch.get('type', 'any')).split('/')[-1]
+        for branch in variant['branches'])))
+
+
+def workbench_variant_map(rows):
+    policies = variant_policies()
+    grouped = {}
+    for row in rows:
+        if row['url'] is None:
+            continue
+        for variant in row['schema_variants']:
+            key = variant_key(variant)
+            assert key in policies, (row['command'], variant['path'], key)
+            witnesses, remaining = policies[key]
+            group = grouped.setdefault(key, {'combination': key[0], 'branches': key[1],
+                'browser_witnesses': witnesses, 'remaining_material_cases': remaining,
+                'status': 'material_cases_open' if remaining else 'shared_representation_witnesses_linked',
+                'paths': []})
+            group['paths'].append({'command': row['command'], 'path': variant['path'],
+                                  'nested_alternative': '/oneOf/' in variant['path']})
+    return list(grouped.values())
+
+
 def schema_variants(schema):
     found = []
     def visit(value, path, references=()):
@@ -387,7 +444,7 @@ def schema_variants(schema):
         for branch in ('oneOf', 'anyOf'):
             if branch in value:
                 found.append({'path': path, 'combination': branch, 'discriminator': value.get('discriminator'),
-                              'branches': value[branch], 'browser_acceptance': 'pending'})
+                              'branches': value[branch], 'browser_acceptance': 'see_material_variant_map_and_override_requirements'})
                 for index, child in enumerate(value[branch]):
                     visit(child, path + '/' + branch + '/' + str(index), references)
         for name, child in value.get('properties', {}).items():
@@ -447,7 +504,10 @@ def workbench_row(cmd, url, page_text):
                 'preview_save_error': 'tests/test_mcp_workbench_control_browser.py::test_generated_boolean_false_omission_and_null_encoding',
                 'secret_output': 'tests/test_mcp_workbench_control_browser.py::test_generated_password_error_preview_and_save_never_echo_secret',
                 'sale_detail_history': 'tests/test_service_sales_browser.py::test_generated_sale_preview_correct_history_and_void',
-                'file_handoff': 'tests/test_mcp_file_gui_browser.py::test_installed_mcp_file_browser_and_agent_continuation'},
+                'file_handoff': 'tests/test_mcp_file_gui_browser.py::test_installed_mcp_file_browser_and_agent_continuation',
+                'nested_object_and_company_fallback_receipt': 'tests/test_mcp_nested_gui_browser.py::test_nested_collection_model_object_null_and_full_error',
+                'own_detach_redirect_receipt': 'tests/test_mcp_detach_gui_browser.py::test_generated_own_detach_preview_redirect_and_full_receipt' if cmd.name == 'company detach' else None,
+                'rate_destination_and_flags': 'tests/test_mcp_rate_gui_browser.py::test_rate_exact_integer_decimal_conflict_destination_noop_and_replay' if cmd.name == 'rate set' else None},
             'specialized_annotation_witness': 'tests/test_row6_workbench.py::test_real_browser_notes_files_conflicts_drafts_and_narrow_keyboard' if cmd.noun in {'note', 'attachment', 'activity'} else None}
 
 
