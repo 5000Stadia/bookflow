@@ -37,7 +37,7 @@ def lineage_facts(s, parties):
     return result
 
 
-def _candidate_query(s, inp):
+def _candidate_query(s, inp, *, page_ids=None):
     from bookflow.company.payment_authority import readable_predicate
     context = selection.context(s, inp)
     funding = query.payment_facts(s, context['payment_id']) if context['payment_id'] else None
@@ -45,8 +45,16 @@ def _candidate_query(s, inp):
         'current_revision_id', 'type', 'status', 'id', 'version', 'number')
     r = query.indexed_source(c.transaction_revisions, 'ix_co17_revisions_read',
         'id', 'date', 'currency', 'total_minor_units', 'memo')
-    p = query.indexed_source(c.sales_profiles, 'ix_co17_sales_party',
-        'customer_id', 'control_account_id', 'revision_id', 'due_date')
+    if page_ids is not None:
+        t = c.transactions
+    p = query.indexed_source(c.sales_profiles,
+        'ix_co17_sales_party' if page_ids is None else 'ix_co17_sales_revision',
+        'customer_id', 'control_account_id', 'revision_id')
+    display = query.indexed_source(c.sales_profiles, 'ix_co17_sales_revision',
+        'revision_id', 'due_date').alias('candidate_display')
+    due_date = sa.select(display.c.due_date).where(display.c.revision_id == r.c.id).correlate(r).scalar_subquery()
+    source = (query.cross_join(query.cross_join(p, r, r.c.id == p.c.revision_id), t, t.c.current_revision_id == r.c.id)
+        if page_ids is None else query.cross_join(query.cross_join(t, r, r.c.id == t.c.current_revision_id), p, p.c.revision_id == r.c.id))
     a = query.indexed_source(c.applications, 'ix_co17_applications_invoice',
         'paid_transaction_id', 'kind', 'amount_minor_units', 'id')
     inverse = c.applications.alias('candidate_inverse')
@@ -55,12 +63,13 @@ def _candidate_query(s, inp):
         ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_application_id == a.c.id))
     ).correlate(t).scalar_subquery(), 0)
     statement = sa.select(t.c.id.label('invoice_id'), t.c.version.label('expected_version'), t.c.number,
-        p.c.customer_id, r.c.date, p.c.due_date, r.c.currency, r.c.total_minor_units.label('gross_minor_units'),
+        p.c.customer_id, r.c.date, due_date.label('due_date'), r.c.currency, r.c.total_minor_units.label('gross_minor_units'),
         r.c.id.label('revision_id'),
-        used.label('applied_minor_units'), (r.c.total_minor_units-used).label('due_minor_units')).select_from(query.cross_join(query.cross_join(p,
-        r, r.c.id == p.c.revision_id), t, t.c.current_revision_id == r.c.id)).where(t.c.type == 'invoice', t.c.status == 'posted',
+        used.label('applied_minor_units'), (r.c.total_minor_units-used).label('due_minor_units')).select_from(source).where(t.c.type == 'invoice', t.c.status == 'posted',
         r.c.date <= context['date'], r.c.currency == context['currency'], p.c.control_account_id == context['ar_account_id'],
         r.c.total_minor_units > used, readable_predicate(s, t.c.id))
+    if page_ids is not None:
+        statement = statement.where(t.c.id.in_(page_ids))
     capacities = {}
     if funding:
         for key in funding['keys'].values():
@@ -89,8 +98,16 @@ def _original_projection(statement):
 
 def candidates(s, inp):
     context, statement, capacities = _candidate_query(s, inp)
-    result = [dict(row, available_source_minor_units=capacities[row['customer_id']] if context['payment_id'] else None)
-        for row in s.company.conn.execute(_original_projection(statement)).mappings()]
+    # Suggestions bind the complete candidate relation and exact current money.
+    # Original display fields are projected only by invoice delivery; immutable
+    # revision identity/header version bind commercial history on this baseline.
+    cols = statement.selected_columns
+    baseline = statement.with_only_columns(cols.invoice_id, cols.expected_version,
+        cols.customer_id, cols.date, cols.currency, cols.revision_id,
+        cols.gross_minor_units, cols.due_minor_units)
+    result = [dict(row, applied_minor_units=row['gross_minor_units']-row['due_minor_units'],
+        available_source_minor_units=capacities[row['customer_id']] if context['payment_id'] else None)
+        for row in s.company.conn.execute(baseline).mappings()]
     return context, result
 
 
@@ -107,8 +124,12 @@ def invoices(s, inp):
     # The pinned baseline already determines delivery identities. Restrict the
     # monetary projection to those IDs rather than rescanning/sorting the family.
     ids = [row[0] for row in out['items']]
-    out['items'] = [dict(row, available_source_minor_units=capacities[row['customer_id']] if context['payment_id'] else None)
-        for row in s.company.conn.execute(_original_projection(statement).where(statement.selected_columns.invoice_id.in_(ids))).mappings()] if ids else []
+    if ids:
+        _, delivery, _ = _candidate_query(s, inp, page_ids=ids)
+        out['items'] = [dict(row, available_source_minor_units=capacities[row['customer_id']] if context['payment_id'] else None)
+            for row in s.company.conn.execute(_original_projection(delivery)).mappings()]
+    else:
+        out['items'] = []
     return dict(out, **balances)
 
 

@@ -49,7 +49,8 @@ def test_secondary_payments_no_effect_and_historical_renderer(client, sale):
         assert client.run('payment update',noop_args,reason='Confirm receipt',company=COMPANY)['idempotent_replay']
         assert snapshots(client)==before and history(client,p['id'])==rows
         edited=client.run('payment update',dict(payment=p['id'],expected_version=current['version'],
-            memo='Corrected memo',operation_key='index-history-edit-'+p['id']),reason='Correct memo',company=COMPANY)
+            memo='Corrected memo',operation_key='index-history-edit-'+p['id'],
+            invoice_versions=[dict(invoice=invoice['id'],expected_version=client.run('invoice show',dict(invoice=invoice['id']),company=COMPANY)['version'])]),reason='Correct memo',company=COMPANY)
         rows=history(client,p['id'])
         for row in (r for r in rows if r['kind']=='receipt_revision'):
             assert row['revision']==client.run('payment show',dict(payment=p['id'],revision=row['revision']['revision_number']),company=COMPANY)['revision']
