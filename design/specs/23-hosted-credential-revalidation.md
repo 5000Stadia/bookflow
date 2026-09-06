@@ -35,8 +35,15 @@ Cover session-cookie revocation, expiry and agent-authority invalidation between
 admission and execution; ordinary authorized write/read/preview and self-revocation
 remain successful. Confirm a reader-side rejection releases reader ownership and
 does not call the command plan. Run affected host/credential and agent/GUI handoff
-regressions. An independent artifact critic must remove the execution check and
-observe the race regression fail, then restore and verify the frozen artifact.
+regressions. Independently establish regression sensitivity using identical tests
+on the frozen candidate and the unchanged pre-fix implementation, whose command
+path lacks this execution check. Cover the focused failure classes and report
+each baseline outcome separately; a baseline case that already passes is not
+evidence for the added check. Verify the prior application source against its
+commit and the copied test against the candidate. This historical comparison
+does not alter authentication code or constitute mutation testing. Independent
+code inspection and candidate regressions remain required; no full security or
+broader publication-fence claim follows from this bounded evidence.
 
 Implementation belongs in an isolated checkout; parent integrates after independent
 review. Expected initial implementation and focused checks: 20 minutes, followed
