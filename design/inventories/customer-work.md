@@ -12,8 +12,8 @@ proposal/statement-of-work, estimate, work-order and billing workflow. **Contrac
 identifies existing project integrity requirements. These labels do not make
 observed behavior an approved calculation rule. Detailed acceptance states,
 partial-billing arithmetic, tax allocation, rounding residues, source correction
-limits and overrun treatment belong to the future customer-work/conversion plan
-and its owning sales calculation plan before implementation.
+limits and overrun treatment are defined by the [progress billing contract](../specs/18-progress-billing.md),
+not inferred from these reference-control families.
 
 Related keys H, L, F, D and W refer to the existing
 [service-sales inventory](service-sales.md); their complete controls are reused,
@@ -55,7 +55,7 @@ customer-work conversion exists.
 | CW22 | Selected lines and per-line progress; observed family | Select items independently and enter supported quantities, amounts or differing percentages. Explicitly address fractional material quantities, unit constraints and unselected work; a single project percentage is insufficient. | L1–L3, L7, W2 |
 | CW23 | Estimated, prior, current and cumulative columns; observed family | Inspect estimated quantity/rate/amount; prior billed quantity/amount/percentage; current quantity/rate/amount/percentage; cumulative percentage and remaining work; tax and total. Distinguish read-only source/prior facts from editable current inputs and show recalculation in preview. | F3, W2 |
 | CW24 | Progress column visibility and zero-current lines; observed family | Quantity/rate and percentage visibility controls preserve entered facts. Keep unbilled source context inspectable and allow zero-amount print suppression. The plan must specify non-posting display rows versus positive sale lines; never synthesize zero financial legs. | L1–L3, D1–D2 |
-| CW25 | Exact partial amounts and tax; contract, rules pending | The owning conversion/sales plan must settle quantity/amount/percentage precedence, net and component-tax allocations, residue, limits and final remainder with exact reconciliation examples. Existing ordinary sale arithmetic and settlement-allocation rules do not automatically specify progress billing. | L2–L3, L11–L12, W2; blueprint 10.3–10.4 |
+| CW25 | Exact partial amounts and tax; contract | The progress billing contract defines mutually exclusive selections, original-scope percentages, integer span allocations, exact quantities/net and ordinary per-installment tax. Full net reconciles to quoted net; installment taxes may differ from informational quoted tax. Settlement component allocation remains a distinct contract. | L2–L3, L11–L12, W2; blueprint 10.3–10.4 |
 | CW26 | Source changes, overruns and change orders; observed family + contract | Show original scope, requested/accepted changes and cost/price impact. Specify authority, revision links and handling of billed lines before implementation; changing the source must not rewrite issued bills or silently permit overbilling. Formal change-order approval remains a staged design dependency. | F9, W2 |
 | CW27 | Correcting or voiding linked bills; approved extension + contract | Preserve issued revisions and exact effects; define atomic allocation replacement/release, eligibility to rebill and source-edit limits in the conversion plan. A void/retry must not duplicate a sale or change unrelated issued installments to redistribute residue. | F9, W2; blueprint 10.2–10.4 |
 | CW28 | Concurrent conversion and repeat requests; contract | Preview and execute against checked source/destination versions and current consumption. Atomically create the destination, lineage, allocations and audit, or reject without partial billing. Distinguish a retry from a deliberately new installment. | F4, F9, W2 |
