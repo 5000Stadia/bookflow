@@ -525,7 +525,7 @@ These operational extensions add no ledger effects.
 
 ## Linked work billing
 
-[Whole-line work billing](specs/17-work-billing.md) defines six commands under
+[Whole-line work billing](work-billing.md) defines six commands under
 estimate and work-order: invoice, sales-receipt and billing. company/billing.py
 resolves captured source facts and financial choices, then appends the sale,
 source revision/version, allocations, permanent conversion and audit in one company

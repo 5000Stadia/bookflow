@@ -1,25 +1,23 @@
-# 17 — Work to invoices and sales receipts
+# Linked work billing
 
-## Boundary
+## Implemented scope
 
-Connect the implemented proposal/estimate/work-order chain to the existing sales
-ledger through the shared command contract. This increment bills selected whole
-source lines or all remaining eligible whole lines. Partial quantities, entered
-installment amounts and percentages follow in the progress-billing increment;
-they remain required by [customer work and billing](../customer-work-and-billing.md)
-and controls CW21–CW25. Do not present whole-line selection as completed progress
-billing. Source links and consumption introduced here must support that extension
-without a single destination pointer or destructive replacement of history.
+Accepted estimates and work orders become invoices or paid sales receipts through
+six shared commands. Conversion bills selected whole source lines or all remaining
+eligible whole lines. Partial quantities, entered installment amounts and percentages
+remain the [progress-billing increment](specs/18-progress-billing.md), required by
+[customer work and billing](customer-work-and-billing.md). Source roots and immutable
+revision-owned allocations retain lineage across multiple financial destinations.
 
-Also support exact amount-priced ordinary invoice and sales-receipt lines, so a
-quoted amount can become a financial line without inventing a rounded unit rate.
-Existing unit-price sale snapshots, postings and ordinary input behavior retain
-their representation. No payment application, customer deposit, email, renderer,
-foreign sale, inventory fulfillment or formal change-order approval is added here.
+Ordinary invoice and sales-receipt lines also accept exact amount pricing, retaining
+a positive descriptive quantity and null unit price. Unit-price snapshots keep
+their original representation. Customer payment application, deposits, delivery,
+print editors, foreign sales, inventory fulfillment and formal change-order approval
+remain separate future operations.
 
 ## Commands and inputs
 
-Add six commands: `estimate invoice`, `estimate sales-receipt`, `estimate billing`,
+The six commands are: `estimate invoice`, `estimate sales-receipt`, `estimate billing`,
 `work-order invoice`, `work-order sales-receipt`, `work-order billing`.
 Financial conversions are company-scoped, standard-role writes with ledger.post,
 company audit and generic idempotency; the two billing reads require membership
@@ -128,7 +126,7 @@ destination-owned value ids and explicit omission warnings.
 
 ## Exact amount-priced sales
 
-Add optional net_amount to SalesLineInput. Exactly one of unit_price or net_amount
+SalesLineInput accepts optional net_amount. Exactly one of unit_price or net_amount
 may be explicitly supplied, and neither accepts null. A supplied net_amount selects
 amount pricing, retains a positive descriptive quantity, and stores a null unit
 price. Tax components are each half-even(net × captured rate), exactly as for an
@@ -211,27 +209,27 @@ cache input matching precede replay. Cached financial conversion receipts refres
 through the durable link, and cannot recreate missing/mismatched destinations.
 
 Dry-run reserves nothing, including sequences, ids, roots or keys. Fingerprints
-cover source revision/version, selected line roots/facts, current consumption,
+cover source revision/version, selected line roots/facts, current consumption of every source root (including unselected lines),
 destination financial/custom defaults and relevant posting eligibility. Execution
 replans under writer exclusion; a changed source returns E_VERSION_CONFLICT and a
 changed resolved preview returns E_PREVIEW_STALE. Source changes caused by explicit
 sale correction/void are visible in the consumption portion even when the source
 document itself was not edited. A replay never increments any version.
 
-## Storage, browser and completion witnesses
+## Storage, browser and verification
 
-Add preserving co0011, independent of future application metadata. Widen only the
-existing sales_line_profiles unit-price nullability/check and add a price-basis
-discriminator with a backward-compatible rate default. Preserve every existing
-column, constraint, row, index, view and trigger, including local additions, or fail
-atomically. Old amount/price/tax values and posting history are unchanged.
+Company migration co0011 is independent of future application metadata. It widens the
+existing sales_line_profiles unit-price nullability/check and adds a price-basis
+discriminator with a backward-compatible rate default. Every other existing
+column, constraint, row, index, view and trigger, including local additions, survives
+unchanged or the migration fails atomically. Old amount/price/tax values and posting history are unchanged.
 
-Add immutable work_billing_conversions and work_billing_allocations with enforced
+Immutable work_billing_conversions and work_billing_allocations enforce
 source work-document/revision/line/root ownership and destination transaction/
 revision/line ownership. Conversion rows own the durable key and original request
 hash, both birth revisions and source version. Allocation rows capture the full
-source quantity/net/tax and typed work facts. Their denominator and source revision
-are explicit so later progress billing can represent existing rows as full spans.
+source quantity/net/tax and typed work facts from an explicit source revision.
+Every allocation consumes a full root; partial-span proof storage remains future work.
 No cross-company reference and no mutable global invoice pointer is introduced.
 
 Billing reads show source revision/current owner, each line's estimated, billed and
@@ -247,22 +245,23 @@ it accurately stages invoice settlement and sending.
 
 Both seed manifests append demonstrations covering all six commands, amount sales,
 selection, source-to-sale links, retry, correction, void and deliberate rebill.
-The existing seed prefixes and reference-year oracles remain intact. Added financial
+The existing seed prefixes and net/reference balances remain intact. Gross debit
+and credit oracles include the new original/replacement/reversal activity. Added financial
 demonstrations are voided after their history witnesses so existing demonstration
 balances remain unchanged. Tests separately exercise active invoices and receipts.
 
-Required evidence: library/CLI/HTTP/browser parity; complete work→invoice and paid
+Verification covers: library/CLI/HTTP/browser parity; complete work→invoice and paid
 receipt chains; read-only/cross-company denial including cached replay; exact amount
 arithmetic; two concurrent whole-root conversions; billing before/after work-order
 creation; nonbillable/zero/retired lines; current posting eligibility and stale
 previews; required custom fields and original source files; correction/void/rebill
 without touching other sales; injected audit/source/allocation/posting failures;
 fresh/populated/local-extension migration and rollback; preserved demo histories,
-balances and original attachment bytes. An independent accounting/schema review
-precedes the preserving live-demo refresh. Progress billing remains next on deck.
+balances and original attachment bytes. Accounting/schema review and preservation checks cover the live-demo refresh.
+Progress billing remains the next increment.
 
-The MCP adapter remains the explicit unimplemented Row9 target. This increment
-verifies registry/documentation discovery and core attribution with interface=mcp,
+The MCP adapter remains the explicit unimplemented Row9 target. Current verification
+covers registry/documentation discovery and core attribution with interface=mcp,
 including rejection and durable replay, without calling that an MCP transport test.
 Row9's acceptance must exercise actual MCP discovery, execution, errors and replay
 for this registered billing contract before claiming cross-adapter completion.

@@ -1186,7 +1186,7 @@ links, with internal content separated from customer-facing scope.
 
 Permanent conversion links support multiple destinations across the broader chain;
 financial conversion adds per-source-line allocation records, never a single invoice
-pointer. The [work-billing plan](specs/17-work-billing.md) covers whole-line invoice or
+pointer. The [linked work-billing contract](work-billing.md) covers whole-line invoice or
 genuinely paid sales-receipt conversion, preserving common billing roots and all
 sources. Partial quantity, amount and percentage billing remain the following
 increment.

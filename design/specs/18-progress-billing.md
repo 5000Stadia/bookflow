@@ -14,7 +14,7 @@ Conversion accepts one selection family:
 - Existing omitted selection bills every remaining eligible portion. Existing
   line_ids bills the remaining portions of those selected current source lines.
 - selections contains 1–200 distinct current line identities, each with exactly
-  one positive quantity, net_amount or percent. Quantity uses the existing maximum
+  one positive quantity, net_amount or percent, or rebill_allocation_id. Quantity uses the existing maximum
   six decimal places. Net amount is exact home-currency money, excluding tax.
   Percent permits at most six decimal places and is at most100.
 - percent applies the same positive percentage to every eligible source line.
@@ -26,7 +26,11 @@ silent clipping or automatic overrun. Explicitly selected nonbillable, retired,
 foreign or fully consumed lines reject. Existing automatic nonbillable exclusions
 remain visible. A zero-price line can accompany positive billing; the destination
 still requires positive gross. A positive entered net amount requires positive
-source net. Zero-amount requests omit the line instead of consuming hidden scope.
+source net. Explicit zero numeric inputs reject; the caller omits an unrequested
+line. A positive quantity/percentage can round to zero net and still consumes its
+selected spans when another selected line makes the destination gross positive.
+The same rule covers a zero-price source line. Preview explicitly shows this
+physical scope with zero net/tax. A solely zero-gross selection cannot post.
 
 Extra charges use ordinary independent sale lines, never extra source entitlement.
 A request beyond remaining scope returns E_VALUE_RANGE with remaining quantity/net
@@ -49,8 +53,19 @@ of an existing invoice remains a distinct future operation.
 
 Each active source root has one captured economic basis: its quantity Q in integer
 microunits, full net N in integer minor units, each original tax-component total,
-item/unit/classification and remaining captured economic facts. Ignore only work
-completion and billable flags when identifying that line basis. All active
+item/unit/classification and captured economic facts. The basis projection is
+exactly {basis_version:1, root_document_id, root_line_id, line:<WorkLineFacts>},
+where line is its typed JSON-mode dump excluding completed_quantity_microunits
+and billable. Keep every other declared WorkLineFacts member, including its
+schema version, description, pricing/cost/markup, complete profile/origins and
+ordered tax components. No revision/line-row identity, timestamp, work-document
+header, operational schedule, document title or custom fields enter this hash.
+Header agreement protections remain independently enforced by the inherited
+source-edit contract. Serialize UTF-8 JSON with sorted keys, separators(',',':'),
+ensure_ascii=False and no nonfinite values; SHA256 lowercase hexadecimal is
+source_basis_hash. Independent validation reconstructs this projection from the
+stored typed source, never from a supplied projection/hash. Same-facts revisions,
+completion/billable changes and estimate-to-order lineage retain the basis. All active
 allocations on the root share it. Source economic changes remain forbidden while
 any allocation is active; new scope uses new line identities/roots. Once all active
 allocations are released, an otherwise editable source can have a new basis.
@@ -76,7 +91,9 @@ basis; tax, gross and accounting legs retain ordinary sale arithmetic.
 Select earliest free intervals in ascending coordinate order. Quantity and percent
 requests consume their requested coordinate length, crossing occupied gaps without
 consuming them. For a positive net request n on a free interval[a,b), let its net
-capacity be half_even(N*b/D)-half_even(N*a/D). If capacity<=n, consume that whole
+capacity be half_even(N*b/D)-half_even(N*a/D). Skip zero-capacity free intervals
+for net_amount requests: they are uncharged physical scope, not a prerequisite
+for reaching chargeable work. If positive capacity<=n, consume that whole
 interval and reduce n by capacity. Otherwise end at
 (half_even(N*a/D)+n)*(D/N). This endpoint is inside that interval and gives exactly
 n net minor units. Zero-net portions carry no tax but still represent physical scope.
@@ -84,14 +101,29 @@ Reject if the total requested net is unavailable.
 
 Canonical spans are positive-width, sorted, nonoverlapping, coalesced when adjacent,
 and bounded byD. At most200 spans belong to one destination line and2000 to a
-conversion. If a request would exceed either bound, return E_VALUE_RANGE with a
-request to bill a smaller amount or fewer lines; never truncate financial work.
+conversion. If a request would exceed either bound, return E_VALUE_RANGE with
+the source-line identity and recommended_net_amount equal to the sum of net
+capacities of its earliest at-most200 positive-capacity free intervals. A net
+request for that amount is always reachable within the line bound. For the total
+conversion bound, recommend fewer selected lines. Never truncate financial work.
+Repeated recommended net requests strictly decrease positive remaining net and
+provide a finite completion path for every finite history. Remaining zero-capacity
+intervals are explicitly uncharged physical scope; chargeable billing can finish
+without allocating them, just as an uninvoiced zero-price line can remain no_charge.
 No cap is imposed on a root's historical destination count. Read active intervals
 incrementally and coalesce them; avoid loading an unbounded history into Python.
 History still uses bounded, authority- and watermark-scoped pages.
 
 Voiding or removing a linked line releases exactly its original spans. Rebilling
-those spans with a new permanent key preserves their net; identical grouping and
+those spans uses selections[{line_id,rebill_allocation_id}] and a new permanent
+key. The referenced immutable allocation must belong to that root in this company,
+match its current economic basis, and have every span currently free. Otherwise
+reject E_WORK_DEPENDENCY; never replace it with an earliest-free substitute or
+partially reclaim it. Legacy full-root allocations can be rebilled this way when
+the entire root is free. This mode reproduces the referenced spans, quantity and
+net. Ordinary quantity/net/percent requests always make fresh earliest-free
+allocations; they do not promise to reconstruct an earlier installment.
+Identical grouping and
 captured rates preserve tax. Regrouping released portions can change rounded tax.
 Neither a release nor
 a later installment changes another issued invoice's amount, tax or allocation.
@@ -167,7 +199,12 @@ requested selection and exact net/component tax/quantity fractions, and compares
 all pending sales, allocation proof and source/audit rows. It must not accept the
 resolver's own totals or classifications as independent evidence. Corrections
 compare retained proof with the exact prior immutable allocation. Check current
-posting eligibility and source/commercial authority before any preview or replay.
+source/commercial authority before any preview or replay. Current posting
+eligibility applies only to a new financial effect. A matching committed retry
+returns current destination history even when an item/account has since been
+deactivated, the source is no longer eligible, or the original period is closed.
+It creates no effects and does not revalidate old posting eligibility. Current
+authorization and request identity still apply before both cache/durable replay.
 
 All first conversions atomically write the financial aggregate, allocation proofs,
 permanent conversion row, same-facts source revision/version bump and audit event
@@ -182,8 +219,77 @@ voided state, before stale source-version rejection and without reserving spans.
 Fingerprints include every current source root's consumption, not only selected
 lines, plus selected spans/basis, captured facts, current financial eligibility and
 custom/payment choices. Source edits yield E_VERSION_CONFLICT; changed resolved
-preview yields E_PREVIEW_STALE. Dry-run reserves no key, identifier, sequence or
+preview yields E_PREVIEW_STALE. Its details include facts_fingerprint and bounded
+consumption_changes (at most200, one latest attributed allocation-changing event
+per source root): root_document_id, root_line_id, transaction_id, audit_event_id,
+updated_by, updated_via, seconds_since_update and changed_fields. The field list
+names billing_consumption and the changed allocation/revision or status. Derive
+these from source-linked immutable allocation history and the associated sale
+correction/void events, including releases with no remaining active allocation.
+Label them latest billing changes, not an exhaustive diff since an unknown preview
+time. Never infer the writer from the work source's unchanged timestamp. All event
+details retain company/source authorization. Dry-run reserves no key, identifier, sequence or
 span and has no accounting/operational/audit effects.
+
+## Public shapes
+
+New conversion members are selections, percent. They are mutually exclusive with
+line_ids. Omitted members select existing remaining behavior; explicitly null
+selection families or selection values reject E_VALIDATION. selections is a
+nonempty list of up to200 unique line_id values. Each object has line_id and
+exactly one of quantity, net_amount, percent, rebill_allocation_id; extra members
+reject. line_id is the current stable work-line identity from BillingLineOutput,
+not its source_line_id revision row. rebill_allocation_id is the canonical ID from
+revision.billing_sources[].id, including older/voided revision history.
+Quantity and percentage are plain positive decimal strings, no exponent or sign,
+at most six fractional places; percent is <=100. JSON numeric values reject.
+net_amount uses existing SalesMoneyInput or decimal money-string syntax and must
+be positive home-currency money. Malformed/foreign/duplicate identity or shape
+errors use E_VALIDATION with the indexed field path. Valid numeric requests beyond
+remaining scope/net or fragmentation bounds use E_VALUE_RANGE with line_id and
+available quantity/net; unavailable or incompatible rebill proofs use E_WORK_DEPENDENCY.
+
+Rational objects are {numerator:"2",denominator:"5"}: reduced, nonnegative numerator
+and positive denominator, canonical decimal integer strings; zero is0/1. Ordinary
+sales outputs retain quantity/base_quantity display strings and integer microunits.
+Allocated SalesLineOutput adds quantity_fraction and base_quantity_fraction and
+uses those for its quantity/base_quantity strings; nullable raw microunits are
+set only when exact. The fraction fields are null for ordinary lines. Allocated
+unit_price displays the quoted rate (null for a quoted amount); pricing_basis is
+allocated and quoted_quantity gives the full original quantity as a display string.
+The browser labels the rate Quoted rate. Work BillingLineOutput retains its quoted
+and completed quantity strings and adds billed_quantity_fraction,
+remaining_quantity_fraction, billed_scope_percent_fraction and billed_scope_percent.
+The latter is100*active_span_length/D, not net billed percent. All fractions use
+the exact-display convention above. state gains partially_billed; no-charge and
+uncharged remaining physical scope are labelled separately from billed money.
+
+SalesLineProfile schema_version3 has pricing_basis=allocated and allocation_proof
+with source_document_id, source_revision_id, source_line_id (revision-row ID),
+root_document_id, root_line_id, source_basis_hash, quoted_quantity_microunits,
+quoted_base_quantity_microunits, quoted_net_minor_units, denominator and spans.
+Quoted numbers remain nonnegative signed64 integers (quantities positive).
+denominator is a canonical positive decimal string; spans is a list of
+{start:"0",end:"40000000"} decimal-string endpoints. These are output/internal
+facts, never ordinary editable sale input. The same proof fields are exposed on
+BillingSourceOutput for allocation_version2; version1 leaves them null. Retain
+the complete immutable source snapshot separately as in the inherited contract.
+
+Example selection additions to the existing versioned, dated conversion input:
+{"selections":[{"line_id":"<current line ID>","quantity":"0.25"}]},
+{"selections":[{"line_id":"<current line ID>","net_amount":"40.00"}]},
+{"percent":"25"}, and
+{"selections":[{"line_id":"<current line ID>","rebill_allocation_id":"<released allocation ID>"}]}.
+IDs in angle brackets are placeholders for canonical IDs returned by billing reads.
+For a one-microunit source with net100c, a40c allocation outputs quantity="1/2500000",
+quantity_fraction={numerator:"1",denominator:"2500000"}, quantity_microunits=null,
+quoted_quantity="0.000001", net_minor_units=40 and pricing_basis="allocated".
+
+Estimate/progress feature preferences and automatic closure controls (CW09) are
+owned by the following work-preferences increment, Row19. Until it lands, current
+work availability is unchanged; Row18 introduces no hidden feature switches or
+automatic acceptance/closure. Numbering retains the existing shared sequence and
+duplicate rejection. Row18 completion does not claim full preference/anchor parity.
 
 ## Browser, documentation and completion evidence
 
