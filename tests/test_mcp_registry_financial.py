@@ -80,3 +80,38 @@ def test_financial_lifecycle_full_documents_and_ledger_parity(root, tmp_path, no
         finally:
             await matrix.close()
     anyio.run(witness)
+
+
+@pytest.mark.timeout(180)
+def test_journal_unbalanced_and_closed_period_rejections_are_identical_and_write_nothing(root,tmp_path):
+    from tests.test_mcp_registry_work import company_snapshot
+    registry.load_all()
+    async def witness():
+        matrix=Matrix()
+        try:
+            await matrix.open(root,tmp_path)
+            rejected={}
+            for surface,here in matrix.roots.items():
+                raw=deepcopy(EXAMPLES['journal post'].input)
+                raw['date']='2026-01-12'
+                bad=deepcopy(raw)
+                bad['lines'][1]['amount']='0.01'
+                before=company_snapshot(here)
+                errors=[]
+                for dry_run in (False,True):
+                    error=await matrix.call(surface,'journal post',bad,rejected=True,dry_run=dry_run)
+                    assert error['code']=='E_UNBALANCED_ENTRY'
+                    assert company_snapshot(here)==before
+                    errors.append(error)
+                await matrix.call(surface,'company update',{'closing_date':'2026-01-31'})
+                closed=company_snapshot(here)
+                for dry_run in (False,True):
+                    error=await matrix.call(surface,'journal post',raw,rejected=True,dry_run=dry_run)
+                    assert error['code']=='E_PERIOD_CLOSED'
+                    assert company_snapshot(here)==closed
+                    errors.append(error)
+                rejected[surface]=errors
+            assert all(errors==rejected['python'] for errors in rejected.values())
+        finally:
+            await matrix.close()
+    anyio.run(witness)

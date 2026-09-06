@@ -176,7 +176,7 @@ def test_installed_launcher_rejects_mixed_bridge_before_business_submission(host
 
 
 @pytest.mark.timeout(120)
-def test_installed_agent_invoice_and_directive_journal_workflow(hosted, live, tmp_path):
+def agent_invoice_and_directive_journal_workflow(hosted, live, tmp_path):
     """Real MCP business calls; deterministic integration witness, not blind J8."""
     from mcp import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
@@ -257,8 +257,18 @@ def test_installed_agent_invoice_and_directive_journal_workflow(hosted, live, tm
                 journal_input = {"date": "2026-01-12", "lines": [
                     {"account": bank["id"], "side": "debit", "amount": "12.34"},
                     {"account": income["id"], "side": "credit", "amount": "12.34"}]}
-                journal = await run("journal post", journal_input, directive=code, reason=None,
-                                    idempotency_key="mcp-journal-witness")
+                journal_context = dict(directive=code, reason=None, idempotency_key="mcp-journal-witness")
+                audit_filter = {"command": "journal post", "limit": 200}
+                before_journals = await run("audit list", audit_filter)
+                journal_preview = await run("journal post", journal_input, dry_run=True, **journal_context)
+                assert journal_preview["dry_run"] and journal_preview["total_minor_units"] == 1234
+                assert await run("audit list", audit_filter) == before_journals
+                journal = await run("journal post", journal_input, **journal_context)
+                assert journal["idempotent_replay"] is False
+                replay = await run("journal post", journal_input, **journal_context)
+                assert replay == {**journal, "idempotent_replay": True}
+                after_journals = await run("audit list", audit_filter)
+                assert after_journals["count"] == before_journals["count"] + 1
                 assert journal["total_minor_units"] == 1234
                 assert (await run("journal show", {"journal": journal["id"]}))["version"] == 1
                 bad = {**journal_input, "lines": [journal_input["lines"][0],
@@ -272,12 +282,19 @@ def test_installed_agent_invoice_and_directive_journal_workflow(hosted, live, tm
                 assert event["client_name"] == "mcp-business-witness"
                 print("VERIFIED invoice", invoice["id"], "version", current["version"], "total", current["total_minor_units"])
                 print("VERIFIED journal", journal["id"], "total", journal["total_minor_units"], "directive", code)
-                return journal["id"]
+                assert event["actor_kind"] == "agent" and event["session_id"]
+                return dict(journal=journal["id"], bank=bank["id"], event=event)
 
-    journal = anyio.run(witness)
-    observed = hosted.ok("journal.show", {"journal": journal}, company=hosted.company_id)
+    result = anyio.run(witness)
+    observed = hosted.ok("journal.show", {"journal": result["journal"]}, company=hosted.company_id)
     assert observed["total_minor_units"] == 1234
+    assert len(observed["revision"]["batches"]) == 1
     assert not (tmp_path / "absent-launcher-root").exists()
+    return result
+
+
+def test_installed_agent_invoice_and_directive_journal_workflow(hosted, live, tmp_path):
+    agent_invoice_and_directive_journal_workflow(hosted, live, tmp_path)
 
 
 def test_installed_retained_write_preflight_mismatch_keeps_identity_and_unknown(hosted, live, tmp_path, monkeypatch):

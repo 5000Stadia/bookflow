@@ -15,6 +15,7 @@ from bookflow.core import clock
 from bookflow.core.config import Config
 from bookflow.hub import schema as h
 from tests.conftest import make_actor
+from tests.test_mcp_registry_work import company_snapshot
 from tests.test_row5_browser_acceptance import CHROME, browser_site  # noqa: F401
 from tests.test_row7_credentials import writer
 from tests.test_row8_register_browser import _command, register_browser  # noqa: F401
@@ -86,6 +87,15 @@ def test_mcp_invoice_human_correction_mcp_continuation(register_browser, width, 
         key = str(uuid4())
         posted = call("invoice.post", payload, headers={"Idempotency-Key": key})
         invoice = posted["id"]
+        # Posting consumed the captured automatic number. A fresh intent with
+        # that old fingerprint must not silently recompute facts or post again.
+        before_stale = company_snapshot(root)
+        stale_facts = portal.call(session.call_tool, "bookflow_run", {
+            "command": "invoice post", "input": payload,
+            "reason": "Continue the shared invoice"})
+        assert stale_facts.is_error and stale_facts.structured_content["code"] == "E_PREVIEW_STALE"
+        assert payload["expected_facts_fingerprint"] == preview["facts_fingerprint"]
+        assert company_snapshot(root) == before_stale
         base = f"{env.site.base_url}/c/{env.site.company_id}/invoice/{invoice}"
         b.navigate(base)
         b.wait_for('!!document.querySelector(".sales-document")')
