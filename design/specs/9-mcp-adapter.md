@@ -63,7 +63,7 @@ client_name is the configured launcher label, client_version its installed packa
 
 ## 5. Exact three-tool and context contract
 
-list_commands: optional prefix, limit integer1..200 default100, cursor. Returns deterministic command descriptors, next_cursor, registry_digest and bridge_version. help: required canonical command; exposes the single-command generated documentation, full input/output schemas with local $defs, field descriptions, examples, command+infrastructure errors and accepted context/lifecycle/transfer metadata through the views below. Live host registry/renderer supplies both, not a local cache or scraped docs. Extract a pure single-command renderer from _command_page and share descriptors with docs/OpenAPI where fields coincide.
+list_commands: optional prefix, limit integer1..200 default20, cursor. Returns deterministic command descriptors, next_cursor, registry_digest and bridge_version. help: required canonical command; exposes the single-command generated documentation, full input/output schemas with local $defs, field descriptions, examples, command+infrastructure errors and accepted context/lifecycle/transfer metadata through the views below. Live host registry/renderer supplies both, not a local cache or scraped docs. Extract a pure single-command renderer from _command_page and share descriptors with docs/OpenAPI where fields coincide.
 
 ### Compact help amendment — proposed after the first blind business trial
 
@@ -72,6 +72,9 @@ invoice post was 97,791 JSON bytes, including 53,534 bytes of documentation,
 7,207 bytes of input schema and 32,906 bytes of output schema. The documentation
 repeats output structure as a field table and example, alongside the separate
 schema. Preserve complete discovery while making ordinary first-use help practical.
+Catalog discovery defaults to20 complete descriptors per page, with the existing
+explicit1..200 range and continuation. The smaller default is part of this
+reviewed amendment; callers' explicit limits are never silently reduced.
 
 `bookflow_help` accepts `command` and optional `view`, a strict enum:
 `usage` (default), `input_schema`, `output_schema`, or `full`. Explicit null,
