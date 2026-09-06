@@ -1,8 +1,8 @@
-# 18 — Partial and progress work billing
+# Partial and progress work billing
 
 ## Boundary and requests
 
-Extend the six linked-billing commands with exact partial quantities, entered net
+The six linked-billing commands support exact partial quantities, entered net
 amounts and percentages. Source ownership, acceptance, operational completion,
 current posting eligibility, composite authorization, permanent retries, closed
 periods and immutable corrections retain the whole-line contract. No invoice
@@ -298,10 +298,10 @@ quantity_fraction={numerator:"1",denominator:"2500000"}, quantity_microunits=nul
 quoted_quantity="0.000001", net_minor_units=40 and pricing_basis="allocated".
 
 Estimate/progress feature preferences and automatic closure controls (CW09) are
-owned by the following work-preferences increment, Row19. Until it lands, current
-work availability is unchanged; Row18 introduces no hidden feature switches or
-automatic acceptance/closure. Numbering retains the existing shared sequence and
-duplicate rejection. Row18 completion does not claim full preference/anchor parity.
+staged in the [customer-work preferences plan](specs/19-customer-work-preferences.md).
+Current billing preserves work availability and accepted status. Numbering retains
+the existing shared sequence and duplicate rejection. This allocation contract
+does not establish full preference or printable-layout parity.
 
 ## Browser, documentation and completion evidence
 

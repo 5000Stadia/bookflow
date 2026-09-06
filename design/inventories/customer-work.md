@@ -12,7 +12,7 @@ proposal/statement-of-work, estimate, work-order and billing workflow. **Contrac
 identifies existing project integrity requirements. These labels do not make
 observed behavior an approved calculation rule. Detailed acceptance states,
 partial-billing arithmetic, tax allocation, rounding residues, source correction
-limits and overrun treatment are defined by the [progress billing contract](../specs/18-progress-billing.md),
+limits and overrun treatment are defined by the [progress billing contract](../progress-billing.md),
 not inferred from these reference-control families.
 
 Related keys H, L, F, D and W refer to the existing

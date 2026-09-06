@@ -2,7 +2,7 @@
 
 This workflow extends blueprint sections 10.3, 13.1 and 13.4. Proposals, estimates
 and work orders have shared commands and browser forms. [Linked work billing](work-billing.md)
-connects source lines to invoices and receipts. The [progress allocation contract](specs/18-progress-billing.md)
+connects source lines to invoices and receipts. The [progress allocation contract](progress-billing.md)
 supports quantity, net amount, original-scope percentage and exact rebilling.
 Settlement and delivery remain subsequent increments.
 

@@ -3,10 +3,11 @@
 ## Implemented scope
 
 Accepted estimates and work orders become invoices or paid sales receipts through
-six shared commands. Conversion bills selected whole source lines or all remaining
-eligible whole lines. Partial quantities, entered installment amounts and percentages
-remain the [progress-billing increment](specs/18-progress-billing.md), required by
-[customer work and billing](customer-work-and-billing.md). Source roots and immutable
+six shared commands. Default conversion bills all remaining eligible scope; selected
+lines bill their remaining portions. Exact partial quantities, entered installment
+amounts, percentages and source proofs follow the [progress-billing contract](progress-billing.md).
+The workflow is described in [customer work and billing](customer-work-and-billing.md).
+Source roots and immutable
 revision-owned allocations retain lineage across multiple financial destinations.
 
 Ordinary invoice and sales-receipt lines also accept exact amount pricing, retaining
@@ -229,7 +230,8 @@ source work-document/revision/line/root ownership and destination transaction/
 revision/line ownership. Conversion rows own the durable key and original request
 hash, both birth revisions and source version. Allocation rows capture the full
 source quantity/net/tax and typed work facts from an explicit source revision.
-Every allocation consumes a full root; partial-span proof storage remains future work.
+Version1 allocations consume a full root. Version2 allocations carry exact partial-span
+proofs under the [progress-billing contract](progress-billing.md).
 No cross-company reference and no mutable global invoice pointer is introduced.
 
 Billing reads show source revision/current owner, each line's estimated, billed and

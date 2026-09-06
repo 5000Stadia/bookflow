@@ -558,7 +558,7 @@ Unknown table definitions reject before alteration. Immutable conversion and
 allocation tables use composite ownership keys, permanent-key collision guards and
 active-root guards on allocation insertion and transaction revision activation.
 
-The [progress billing contract](specs/18-progress-billing.md) extends these commands
+The [progress billing contract](progress-billing.md) extends these commands
 with quantity, net amount, original-scope percentage and exact released-allocation
 selection. billing_math.py allocates integer entitlement spans and computes exact
 net endpoint differences; billing_facts.py defines immutable proofs and rational
