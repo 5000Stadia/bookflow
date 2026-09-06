@@ -350,15 +350,16 @@ and never call a financial or delivery command as a side effect of Save/Complete
 
 CW01–08,10,12–18,28,31,44–45 are covered to the exact boundary above. CW05 includes
 cost/markup/catalog/amount pricing; CW08 includes alternative selection and separate
-availability. CW19 is lineage foundation only. CW20–27,29–30 and32–41 require the
-next financial/payment/cost/report plans; CW11 and42–43 require templates/rendering/
-delivery; CW46–48 require inventory, special sales lines and source capture. No
-staged control is reported as implemented by this module.
+availability. Financial behavior within CW19–27 is defined by [linked work billing](work-billing.md)
+and [progress billing](progress-billing.md); print suppression and formal change-order
+approval remain staged. CW29–30 and32–41 retain their payment/cost/report dependencies;
+CW11 and42–43 require templates/rendering/delivery, and CW46–48 require inventory,
+special sales lines and source capture.
 
-CW09 is partial: the implementation always exposes work documents and enforces unique
-numbers; it never automatically closes estimates after operational conversion.
-Estimate/progress feature visibility and close-after-financial-conversion preferences
-remain staged with financial/progress settings, including preservation when disabled. Duplicate
+CW09 company controls are defined by [customer-work preferences](customer-work-preferences.md):
+new-estimate entry, progress modes and optional inactivation after final financial
+billing. Disabling a feature preserves existing records and history. Operational
+conversion does not automatically close an estimate. Duplicate
 number warnings cannot relax the existing uniqueness contract. Zero-line print
 suppression belongs to output templates. Default item markup percent/account belongs
 to item-creation pricing, and default billable time/expenses and reimbursed-expense

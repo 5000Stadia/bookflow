@@ -195,7 +195,7 @@ does not require an invented human gate for these existing engineering rules.
 ## Transaction, replay and preview
 
 First financial conversion atomically writes the destination sale, balanced effects,
-source-line allocations, permanent conversion relation, a same-facts source revision
+source-line allocations, permanent conversion relation, a source revision preserving commercial facts
 and source version increment, and one attributed company audit event. Financial
 and work validators independently rederive the pending aggregate from typed input
 and stored source facts. Caller-provided pending totals, roots or source snapshots

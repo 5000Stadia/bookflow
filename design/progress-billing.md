@@ -210,7 +210,7 @@ It creates no effects and does not revalidate old posting eligibility. Current
 authorization and request identity still apply before both cache/durable replay.
 
 All first conversions atomically write the financial aggregate, allocation proofs,
-permanent conversion row, same-facts source revision/version bump and audit event
+permanent conversion row, source revision/version bump preserving commercial facts and audit event
 under the existing company writer exclusion. Injected failures roll back all of
 these. Financial and operational permanent keys still share a company namespace.
 When adding optional selection inputs, omit absent new fields from the legacy
@@ -297,9 +297,9 @@ For a one-microunit source with net100c, a40c allocation outputs quantity="1/250
 quantity_fraction={numerator:"1",denominator:"2500000"}, quantity_microunits=null,
 quoted_quantity="0.000001", net_minor_units=40 and pricing_basis="allocated".
 
-Estimate/progress feature preferences and automatic closure controls (CW09) are
-staged in the [customer-work preferences plan](specs/19-customer-work-preferences.md).
-Current billing preserves work availability and accepted status. Numbering retains
+The [customer-work preferences contract](customer-work-preferences.md) defines
+estimate creation and progress controls, bounded recovery while progress is disabled,
+and optional final-estimate inactivation. Acceptance is retained. Numbering retains
 the existing shared sequence and duplicate rejection. This allocation contract
 does not establish full preference or printable-layout parity.
 

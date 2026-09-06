@@ -54,6 +54,5 @@ Irreversible acts registry: pushing to `main` (standing, at tested milestones), 
 | 9 | MCP adapter. An MCP server exposes the registered command contract through three tools: `bookflow_list_commands` for discovery, `bookflow_help` for a command's documentation and schemas, and `bookflow_run` for execution. Command schemas and documentation come from the same registry as the other adapters. | An MCP client lists accounts and posts a journal entry citing a directive, and the audit page shows interface `mcp` with the directive text. |
 
 
-| 19 | Customer-work preferences. Separate company estimate and progress-billing feature controls, documented visibility/default scope, and explicit automatic-closure behavior. Reconcile CW09 against the existing numbering and work lifecycle; keep master/source defaults in their owning list, time and expense increments. See [owning plan](specs/19-customer-work-preferences.md). | Disabling a feature preserves every document, source link and allocation and cannot bypass billing or authorization guards. Browser and shared commands apply the same documented setting semantics; closure, acceptance, operational completion and payment remain distinct. |
 
 **Next ID:** 20

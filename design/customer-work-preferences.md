@@ -1,8 +1,8 @@
-# 19 — Customer-work preferences
+# Customer-work preferences
 
 ## Boundary
 
-Complete the estimate/progress preference portion of CW09 with company settings,
+This contract covers the estimate/progress preference portion of CW09: company settings,
 shared command behavior and browser controls. Preserve all work/sales documents,
 source links, exact allocations, permanent conversion receipts and authority.
 No job-status label editor, default item markup, billable time/expense preferences,
@@ -17,15 +17,15 @@ explicit behavior is defined below, not inferred from the reference.
 
 ## Company settings and compatibility
 
-Add strict, non-null boolean company_info fields:
+Company_info has these strict, non-null boolean fields:
 
 - estimates_enabled defaults true.
 - progress_billing_enabled defaults true.
 - close_estimates_after_billing defaults false.
 
-Expose all three as creation-time inputs on company new/rollout and its browser
-form, and on company show and company update, retaining the current admin
-requirement, info_version concurrency, audit provenance and merge/blind-write rules.
+Company new/rollout and its browser form accept all three. Company show returns
+them; company update changes them under the existing admin requirement,
+info_version concurrency, audit provenance and merge/blind-write rules.
 No separate command family or source of truth is added. Explicit null rejects;
 omission preserves a saved setting. String/number booleans reject in typed JSON.
 Company co0013 appends these fields with defaults on populated and fresh paths;
@@ -227,7 +227,7 @@ after disable; source/proof preservation; required and forbidden automatic closu
 atomic injected failures; source-version and preference-preview conflicts; closed dates;
 void then explicit reactivation and rebill; actual CLI/HTTP and1280/390 browser flows.
 Independent review covers schema, closure atomicity, accounting/source validation and
-authority. No production implementation precedes review of this plan.
+authority.
 
 
 ## Comparison and transport boundary
@@ -243,5 +243,5 @@ authority. No production implementation precedes review of this plan.
 
 Actual MCP transport remains Row9. That acceptance must cover these settings, gates,
 preview attribution, closure and replay; registered schemas and interface attribution
-checks do not prove MCP transport parity. Row19's completion claim is limited to this
-CW09 sub-boundary and its deliberate compatibility/integrity extensions.
+checks do not prove MCP transport parity. The supported scope is this CW09 subset
+and the compatibility and integrity rules defined above.

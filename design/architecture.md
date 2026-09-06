@@ -584,6 +584,9 @@ retain whole-root meaning and existing conversion keys retain their request byte
 
 ## Customer work preferences
 
+The [customer-work preferences contract](customer-work-preferences.md) defines the
+controls, historical effects and current availability shown by each command.
+
 Company co0013 appends estimates_enabled=true, progress_billing_enabled=true and
 close_estimates_after_billing=false without rebuilding company_info. Creation and
 versioned company updates expose strict booleans; explicit null rejects.
