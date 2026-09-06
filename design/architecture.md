@@ -856,3 +856,17 @@ expression uses the fixed `$.payer.label` path and empty-string default. Indexes
 are maintained by SQLite on ordinary writes; they store no derived balances.
 Historical co13→co14 tests use their frozen co14 schema and public command source;
 co16→co17 preservation and fresh-chain checks live in `test_payment_read_indexes.py`.
+
+Payment discovery uses explicit owned covering sources and a cohort-first SQLite
+join order. Invoice delivery starts from its selected identities, retains the
+original revision-one amounts, and leaves the complete candidate/version/lineage
+and funding baseline in the cursor fingerprint. Suggestion baselines contain the
+complete authorized identity/version/current monetary relation as transient tuples;
+no balances or results survive a read snapshot. Payment searches use the captured
+payer-label expression and existing window-count/filter/cursor contract. Sales
+query pages fetch headers and revision/profile summaries only for selected IDs.
+Payment history retains complete resolved-participant operation membership, batches
+at most 200 audit identities per lookup, and renders stored commercial revisions
+without constructing discarded current settlement. Missing profiles or audit
+identities fail instead of returning empty history. The full 34-case 10k performance
+gate is not yet satisfied; retained builder measurements include every miss.

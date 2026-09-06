@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.dialects import sqlite
+from sqlalchemy.schema import CreateIndex
 
 from bookflow.company import schema as company_schema
 from bookflow.hub import schema as hub_schema
@@ -38,7 +39,7 @@ def _metadata_shape(metadata: sa.MetaData) -> dict:
                 if isinstance(constraint, sa.UniqueConstraint)
             ),
             "indexes": sorted(
-                (bool(index.unique), tuple(column.name for column in index.columns))
+                str(CreateIndex(index).compile(dialect=SQLITE_DIALECT))
                 for index in table.indexes
             ),
             "foreign_keys": sorted(
@@ -53,7 +54,7 @@ def _metadata_shape(metadata: sa.MetaData) -> dict:
     return shape
 
 
-def _database_shape(inspector: sa.Inspector) -> dict:
+def _database_shape(inspector: sa.Inspector, connection) -> dict:
     shape = {}
     for table_name in inspector.get_table_names():
         if table_name == "alembic_version":
@@ -72,10 +73,12 @@ def _database_shape(inspector: sa.Inspector) -> dict:
                 tuple(constraint["column_names"])
                 for constraint in inspector.get_unique_constraints(table_name)
             ),
-            "indexes": sorted(
-                (bool(index["unique"]), tuple(index["column_names"]))
-                for index in inspector.get_indexes(table_name)
-            ),
+            # SQLAlchemy SQLite reflection omits expression indexes. Compare
+            # every physical explicit index's complete DDL instead, including
+            # its name, expression, order, uniqueness and partial predicate.
+            "indexes": sorted(connection.exec_driver_sql(
+                "SELECT sql FROM sqlite_schema WHERE type='index' AND tbl_name=? AND sql IS NOT NULL",
+                (table_name,)).scalars()),
             "foreign_keys": sorted(
                 (
                     tuple(constraint["constrained_columns"]),
@@ -107,5 +110,5 @@ def test_documented_metadata_matches_fresh_migrated_database(tmp_path: Path, sco
     path = tmp_path / f"{scope}.db"
     with open_database(path, writable=True, create=True) as db:
         migrate_to_head(db, scope, None)
-        database_shape = _database_shape(sa.inspect(db.engine))
+        database_shape = _database_shape(sa.inspect(db.engine), db.conn)
     assert _metadata_shape(metadata) == database_shape

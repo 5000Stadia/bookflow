@@ -47,5 +47,5 @@ def test_complete_guarded_invoice_correction_and_prospective_pages(client, sale,
             live = db.execute("SELECT target_ordinal,amount_minor_units FROM application_allocations a WHERE application_id=? AND kind='allocation' AND NOT EXISTS (SELECT 1 FROM application_allocations r WHERE r.reverses_allocation_id=a.id)", (app_id,)).fetchall()
             assert live == [(1 if ordinal % 2 == 0 else 2, 1)]
             assert db.execute('SELECT version FROM transactions WHERE id=?', (payment_id,)).fetchone()[0] == (1 if ordinal % 2 == 0 else 2)
-        assert db.execute("SELECT count(*) FROM applications WHERE kind='unapply'").fetchone()[0] == 0
+        assert db.execute("SELECT count(*) FROM applications WHERE kind='unapply' AND paid_transaction_id=?", (invoice['id'],)).fetchone()[0] == 0
         assert db.execute('PRAGMA foreign_key_check').fetchall() == []

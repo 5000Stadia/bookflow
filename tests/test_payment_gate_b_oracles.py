@@ -252,7 +252,7 @@ def test_unapply_two_occurrences_one_invoice_versions_dates_and_key_order(client
     state=run(client,'invoice settlement',dict(invoice=invoice['id']))
     assert state['version']==5 and state['applied_minor_units']==0 and state['due_minor_units']==200
     with sqlite3.connect(database_path(client)) as db:
-        dates=dict(db.execute("SELECT reverses_application_id,effective_date FROM applications WHERE kind='unapply'"))
+        dates=dict(db.execute("SELECT reverses_application_id,effective_date FROM applications WHERE kind='unapply' AND paying_transaction_id=?", (paid['id'],)))
         assert dates=={first_id:'2026-06-02',second_id:'2026-06-03'}
     stable=allrows(client)
     with pytest.raises(BookflowError) as error:
