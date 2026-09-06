@@ -112,9 +112,8 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
             taxes.append(dict(component, component_snapshot=json.loads(component['component_snapshot']),
                 tax=Money(component['tax_minor_units'], currency).to_dict(),
                 taxable=Money(component['taxable_minor_units'], currency).to_dict()))
-        rendered.append(dict(line, item_snapshot=json.loads(line['item_snapshot']),
-            quantity=format_quantity_micro_units(line['quantity_microunits']),
-            base_quantity=format_quantity_micro_units(line['base_quantity_microunits']),
+        from bookflow.company.billing_allocations import quantity_output
+        rendered.append(dict(line, item_snapshot=json.loads(line['item_snapshot']), **quantity_output(line),
             unit_price=Money(line['unit_price_minor_units'], currency).to_dict() if line['unit_price_minor_units'] is not None else None,
             pricing_basis=line.get('pricing_basis', 'unit'), net=Money(line['net_minor_units'], currency).to_dict(),
             tax=Money(line['tax_minor_units'], currency).to_dict(), gross=Money(line['gross_minor_units'], currency).to_dict(), tax_components=taxes))

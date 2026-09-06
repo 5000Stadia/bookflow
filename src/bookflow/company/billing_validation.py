@@ -1,7 +1,9 @@
 """Independent source ownership and allocation checks before billing persistence."""
 import json
+from fractions import Fraction
 from bookflow.company import schema as c, work, sales, billing_queries as query
 from bookflow.company.work_facts import WorkFacts, WorkLineFacts
+from bookflow.company import billing_allocations as alloc, billing_math as math, billing_checks as checks
 from bookflow.company.sales_facts import SalesLineProfile, SalesProfile
 from bookflow.core.errors import BookflowError
 
@@ -33,7 +35,12 @@ def validate_sale_allocations(plan, s):
         root = row['root_document_id'], row['root_line_id']
         require(root not in seen, 'same root repeated in a sale')
         seen.add(root)
-        require(not query.active_allocations(s, [root], excluding=data['header']['id']), 'root already consumed by another sale')
+        facts = alloc.captured_line(row)
+        proof = alloc.read_proof(row)
+        d = math.denominator(facts.quantity_microunits, facts.net_minor_units)
+        spans = proof.intervals() if proof else ((0,d),)
+        require(math.spans_available(spans, alloc.free_spans(s, root, facts, excluding=data['header']['id']), d),
+                'allocation overlaps another sale')
         require(row['created_by'] == data['header']['updated_by'] and row['created_via'] == data['header']['updated_via']
             and row['created_at'] == data['header']['updated_at'], 'allocation provenance')
 
@@ -46,7 +53,16 @@ def validate(plan, s, ctx):
     validate_sale(plan, s, ctx)
     data = plan.data
     inp, kind, dest = data['input'], data['kind'], data['destination']
-    source, rev, selected = billing.source_selection(s, inp, kind)
+    source = work.resolve(s, getattr(inp,kind), kind)
+    require(source['version'] == inp.expected_version and source['active'], 'stale or inactive source')
+    require(query.current_owner(s,source)['id'] == source['id'], 'ancestor is not current billing owner')
+    require(source['status'] == 'accepted' if kind == 'estimate' else source['status'] != 'cancelled', 'ineligible source')
+    rev = work.revision(s,source)
+    identities = query.root_identities(s,source)
+    source_lines = work.saved_lines(s,rev)
+    selected_ids = checks.selected_identities(s,inp,source_lines,identities)
+    selected = [(line,(identities[line['line_id']]['root_document_id'],identities[line['line_id']]['root_line_id']),
+                 work.line_facts(line)) for line in source_lines if line['line_id'] in selected_ids]
     header, created = data['header'], data['pending']['transaction_revisions'][0]
     wh, wb, wp = data['work_header'], data['work_before'], data['work_pending']
     require(wb == source and wh['id'] == source['id'] and wh['version'] == source['version'] + 1, 'wrong source/version')
@@ -91,12 +107,21 @@ def validate(plan, s, ctx):
     require(json.loads(created['issuer_snapshot']) == captured_header.issuer_snapshot, 'captured issuer differs')
     roots = set()
     for actual, envelope, (line, root, lf) in zip(allocs, envelopes, selected):
-        require(root not in roots and not query.active_allocations(s, [root]), 'duplicate active consumption')
+        require(root not in roots, 'duplicate root in conversion')
         roots.add(root)
+        d = math.denominator(lf.quantity_microunits,lf.net_minor_units)
+        spans = checks.selected_spans(s,inp,line,root,lf,rev['currency'])
+        proof = None if spans == ((0,d),) else alloc.make_proof(source,rev,line,root,lf,spans)
+        width = sum(b-a for a,b in spans)
+        net = sum(round(Fraction(lf.net_minor_units*b,d))-round(Fraction(lf.net_minor_units*a,d)) for a,b in spans)
+        tax = sum(round(Fraction(net*t.rule.rate_percent_millionths,100_000_000)) for t in lf.taxes)
+        q, bq = Fraction(lf.quantity_microunits*width,d), Fraction(lf.base_quantity_microunits*width,d)
+        quantity = q.numerator if q.denominator == 1 else None
+        base_quantity = bq.numerator if bq.denominator == 1 else None
         expected = dict(transaction_id=header['id'], revision_id=created['id'], document_line_id=envelope['id'],
             source_document_id=source['id'], source_revision_id=rev['id'], source_line_id=line['id'],
-            root_document_id=root[0], root_line_id=root[1], quantity_microunits=lf.quantity_microunits,
-            net_minor_units=lf.net_minor_units, tax_minor_units=lf.tax_minor_units, gross_minor_units=lf.gross_minor_units,
+            root_document_id=root[0], root_line_id=root[1], quantity_microunits=quantity,
+            net_minor_units=net, tax_minor_units=tax, gross_minor_units=net+tax, **alloc.stored_proof(proof),
             facts_snapshot=sales.json_text(dict(line=lf.model_dump(mode='json'), document=work.facts(rev).model_dump(mode='json'),
                 title=rev['title'], source_number=rev['number'])),
             created_at=header['updated_at'], created_by=s.actor.id, created_via=ctx.interface.value)
@@ -104,18 +129,22 @@ def validate(plan, s, ctx):
         snapshot = json.loads(actual['facts_snapshot'])
         require(WorkLineFacts.model_validate(snapshot['line']) == lf and WorkFacts.model_validate(snapshot['document']) == work.facts(rev), 'snapshot types')
         projected = profiles[envelope['id']]
-        require(all(projected[k] == getattr(lf, k) for k in ('item_id', 'quantity_microunits', 'unit_id', 'unit_factor_nanounits',
-            'base_quantity_microunits', *sales.MONEY_COLUMNS)), 'financial line differs from source')
+        require(all(projected[k] == getattr(lf,k) for k in ('item_id','unit_id','unit_factor_nanounits','unit_price_minor_units')),
+                'captured line units/item/rate differ')
+        require(projected['quantity_microunits'] == quantity and projected['base_quantity_microunits'] == base_quantity
+                and projected['net_minor_units'] == net and projected['tax_minor_units'] == tax
+                and projected['gross_minor_units'] == net+tax, 'allocated financial amounts differ')
         require(envelope['description'] == lf.description, 'source description')
         posted_line = SalesLineProfile.model_validate_json(projected['item_snapshot'])
-        changed_representation = {'schema_version', 'pricing_basis', 'net_amount_minor_units', 'origins'}
+        changed_representation = {'schema_version', 'pricing_basis', 'net_amount_minor_units', 'allocation_proof', 'origins'}
         if lf.pricing_basis == 'amount':
             changed_representation |= {'price_rule', 'price_basis_minor_units'}
         for field in type(lf.profile).model_fields:
             if field not in changed_representation:
                 require(getattr(posted_line, field) == getattr(lf.profile, field),
                     'captured line classification differs: ' + field)
-        require(posted_line.pricing_basis == ('amount' if lf.pricing_basis == 'amount' else 'unit'), 'line price basis')
+        require(posted_line.pricing_basis == ('allocated' if proof else 'amount' if lf.pricing_basis == 'amount' else 'unit'), 'line price basis')
+        require(posted_line.allocation_proof == proof, 'sale and source allocation proofs differ')
         taxes = [row for row in data['pending']['sales_tax_components'] if row['document_line_id'] == envelope['id']]
         require(len(taxes) == len(lf.taxes), 'captured tax components missing')
         for posted_tax, source_tax in zip(taxes, lf.taxes):
@@ -127,5 +156,5 @@ def validate(plan, s, ctx):
                 and captured_tax['tax_item'] == rule.model_dump(mode='json', include={'id', 'label', 'version'})
                 and captured_tax['agency'] == rule.agency.model_dump(mode='json')
                 and captured_tax['liability_account'] == rule.liability_account.model_dump(mode='json')
-                and posted_tax['taxable_minor_units'] == source_tax.taxable_minor_units
-                and posted_tax['tax_minor_units'] == source_tax.tax_minor_units, 'captured tax classification differs')
+                and posted_tax['taxable_minor_units'] == net
+                and posted_tax['tax_minor_units'] == round(Fraction(net*rule.rate_percent_millionths,100_000_000)), 'captured tax classification differs')

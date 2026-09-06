@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import Field
 from bookflow.company.sales_models import StrictModel
 from bookflow.company.sales_outputs import SalesSummaryOutput, MoneyOutput
+from bookflow.company.billing_facts import ExactFraction
 
 
 class BillingLineOutput(StrictModel):
@@ -13,11 +14,15 @@ class BillingLineOutput(StrictModel):
     item_id: str
     description: str | None
     billable: bool
-    state: Literal['unbilled', 'billed', 'nonbillable', 'no_charge']
+    state: Literal['unbilled', 'partially_billed', 'billed', 'nonbillable', 'no_charge']
     quantity: str
     completed_quantity: str
     billed_quantity: str
     remaining_quantity: str
+    billed_quantity_fraction: ExactFraction | None = None
+    remaining_quantity_fraction: ExactFraction | None = None
+    billed_scope_percent_fraction: ExactFraction | None = None
+    billed_scope_percent: str = '0'
     net_minor_units: int
     tax_minor_units: int
     gross_minor_units: int

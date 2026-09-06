@@ -160,15 +160,23 @@ def validate(plan, s, ctx):
                 and envelope['class_name'] == (facts.class_id.label if facts.class_id else None), 'line class facts')
         require(line['item_id'] == facts.item.id and facts.income_account.type in ('income', 'other_income'), 'item/account facts')
         for name in ('quantity_microunits', 'base_quantity_microunits', 'unit_factor_nanounits'):
-            amount(line[name], positive=True)
+            if line[name] is not None or facts.pricing_basis != 'allocated' or name == 'unit_factor_nanounits':
+                amount(line[name], positive=True)
         for name in sales.MONEY_COLUMNS:
-            if name != 'unit_price_minor_units' or facts.pricing_basis == 'unit':
+            if name != 'unit_price_minor_units' or line[name] is not None or facts.pricing_basis == 'unit':
                 amount(line[name])
         require(line['unit_id'] == (facts.unit.id if facts.unit else None)
                 and line['unit_factor_nanounits'] == (facts.unit.factor_nanounits if facts.unit else 1_000_000_000), 'unit facts')
-        require(line['base_quantity_microunits'] == calc.base_quantity(line['quantity_microunits'], line['unit_factor_nanounits']), 'base quantity')
+        if facts.pricing_basis != 'allocated':
+            require(line['base_quantity_microunits'] == calc.base_quantity(line['quantity_microunits'], line['unit_factor_nanounits']), 'base quantity')
         require(line['pricing_basis'] == facts.pricing_basis, 'price basis projection')
-        if facts.pricing_basis == 'amount':
+        if facts.pricing_basis == 'allocated':
+            from bookflow.company.billing_checks import numeric_projection
+            require(data.get('billing_source') or (data['before'] and any(
+                a['document_line_id'] == envelope['id'] for a in data.get('billing_allocations',[]))),
+                'ordinary sale cannot create an allocation proof')
+            numeric_projection(s,line,facts.allocation_proof)
+        elif facts.pricing_basis == 'amount':
             require(line['unit_price_minor_units'] is None and line['net_minor_units'] == facts.net_amount_minor_units, 'amount extension')
         else:
             require(line['net_minor_units'] == calc.extension(line['quantity_microunits'], line['unit_price_minor_units']), 'line extension')

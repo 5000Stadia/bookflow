@@ -11,15 +11,15 @@ def protect_work(s, header, before, after):
         return
     identities = query.root_identities(s, header)
     roots = [(row['root_document_id'], row['root_line_id']) for row in identities.values()]
-    active = query.active_allocations(s, roots)
-    if not active:
+    from bookflow.company.billing_allocations import occupied_roots
+    occupied = occupied_roots(s, roots)
+    if not occupied:
         return
     from bookflow.company.billing import dependency
     if before['title'] != after['title'] or any(before['facts'][key] != after['facts'][key] for key in work.AGREED_FIELDS):
         dependency('billed work agreement cannot be changed while a sale consumes its roots', source_id=header['id'])
     if header['kind'] == 'estimate' and after['status'] != 'accepted':
         dependency('billed estimate acceptance cannot be revoked', source_id=header['id'])
-    occupied = {(row['root_document_id'], row['root_line_id']) for row in active}
     old = {entry['line_id']: entry['facts'] for entry in before['lines']}
     new = {entry['line_id']: entry['facts'] for entry in after['lines']}
     economic = lambda facts: {key: value for key, value in facts.items() if key not in ('completed_quantity_microunits', 'billable')}
@@ -28,6 +28,27 @@ def protect_work(s, header, before, after):
         if (ident['root_document_id'], ident['root_line_id']) in occupied:
             if key not in new or economic(facts) != economic(new[key]):
                 dependency('billed source line cannot be removed or changed', source_line_id=key)
+
+
+def retained_allocated_line(s, inp, previous, *, refresh=False):
+    """Reconstruct a retained line from its immutable source proof, not defaults."""
+    from bookflow.company import billing, billing_allocations as alloc, sales_defaults as defaults
+    if refresh or inp.model_fields_set - {'line_id', 'item'}:
+        billing.dependency('retained allocated lines accept only line_id and matching item; remove the line to release it',
+                           source_line_id=previous['line_id'])
+    item = defaults._row(s.company, 'item', inp.item, active=False)
+    if item['id'] != previous['item_id']:
+        billing.dependency('retained allocated item cannot change', source_line_id=previous['line_id'])
+    rows = work.rows(s, c.work_billing_allocations,
+        c.work_billing_allocations.c.document_line_id == previous['id'])
+    if len(rows) != 1:
+        raise sales.BookflowError('E_INTERNAL', message='Allocated sale line has no unique stored source proof')
+    proof = alloc.read_proof(rows[0])
+    facts = SalesLineProfile.model_validate_json(previous['item_snapshot'])
+    if proof is None or proof != facts.allocation_proof:
+        raise sales.BookflowError('E_INTERNAL', message='Allocated sale and stored source proofs disagree')
+    warnings = [] if item['active'] else ['Retaining the captured inactive item on an existing allocated line.']
+    return billing.resolved_line(alloc.captured_line(rows[0]), proof), warnings
 
 
 def protect_sale(s, inp, old, old_revision, resolved):

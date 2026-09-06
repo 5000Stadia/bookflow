@@ -497,6 +497,11 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
     if previous:
         snapshot = previous['item_snapshot']
         old = SalesLineProfile.model_validate_json(snapshot) if isinstance(snapshot, str) else SalesLineProfile.model_validate(snapshot)
+    if old is not None and old.pricing_basis == 'allocated':
+        if nonposting:
+            raise _invalid('item', 'allocated sale facts cannot become a work quote')
+        from bookflow.company.billing_edits import retained_allocated_line
+        return retained_allocated_line(s, inp, previous, refresh=refresh)
     fields = _Fields(inp, old, refresh, warnings)
     # Work owns its existing amount/markup hooks and captured representation.
     amount_mode = price_override is None and (

@@ -41,26 +41,8 @@ def source_selection(s, inp, kind):
     rev = work.revision(s, header)
     lines = work.saved_lines(s, rev)
     identities = query.root_identities(s, header)
-    roots = [(identities[line['line_id']]['root_document_id'], identities[line['line_id']]['root_line_id']) for line in lines]
-    consumed = {(a['root_document_id'], a['root_line_id']): a for a in query.active_allocations(s, roots)}
-    requested = set(inp.line_ids) if inp.line_ids is not None else None
-    if requested is not None and requested - {line['line_id'] for line in lines}:
-        raise _invalid('line_ids', 'select only current line identities from this source document')
-    selected = []
-    for line, root in zip(lines, roots):
-        if requested is not None and line['line_id'] not in requested:
-            continue
-        lf = work.line_facts(line)
-        used = consumed.get(root)
-        if used or not lf.billable:
-            if requested is not None:
-                dependency('selected line is already billed or not billable', source_line_id=line['line_id'],
-                    destination_id=used['transaction_id'] if used else None)
-            continue
-        selected.append((line, root, lf))
-    if not selected or sum(lf.gross_minor_units for _, _, lf in selected) <= 0:
-        dependency('No charge remains; zero-price lines were not invoiced', source_id=header['id'])
-    return header, rev, selected
+    from bookflow.company.billing_selection import select
+    return header, rev, select(s, inp, header, rev, lines, identities)
 
 
 def posting_eligibility(s, source, selected):
@@ -131,7 +113,7 @@ def financial_profile(s, inp, document_type, source):
     return profile, warnings
 
 
-def resolved_line(lf):
+def resolved_line(lf, proof=None):
     facts = lf.profile.model_dump()
     facts.update(schema_version=2 if lf.pricing_basis == 'amount' else 1,
         pricing_basis='amount' if lf.pricing_basis == 'amount' else 'unit',
@@ -143,11 +125,24 @@ def resolved_line(lf):
         facts['origins']['net_amount'] = Origin(kind='explicit').model_dump()
     else:
         facts['origins'] = dict(facts['origins'], unit_price=Origin(kind='explicit').model_dump())
+    if proof is not None:
+        facts.update(schema_version=3, pricing_basis='allocated', net_amount_minor_units=None,
+            allocation_proof=proof.model_dump(mode='json'))
     profile = SalesLineProfile.model_validate(facts)
-    return {key: getattr(lf, key) for key in ('item_id', 'description', 'quantity_microunits',
+    resolved = {key: getattr(lf, key) for key in ('item_id', 'description', 'quantity_microunits',
         'unit_id', 'unit_factor_nanounits', 'base_quantity_microunits', *sales.MONEY_COLUMNS)} | dict(
         line_id=None, profile=profile, taxes=[dict(rule=t.rule, taxable_minor_units=t.taxable_minor_units,
             tax_minor_units=t.tax_minor_units) for t in lf.taxes])
+    if proof is not None:
+        from bookflow.company import billing_math as math
+        net = proof.net()
+        taxes = [dict(rule=t.rule, taxable_minor_units=net,
+                      tax_minor_units=calc.tax(net,t.rule.rate_percent_millionths)) for t in lf.taxes]
+        tax = calc.total(t['tax_minor_units'] for t in taxes)
+        resolved.update(quantity_microunits=math.exact_microunits(proof.quantity()),
+            base_quantity_microunits=math.exact_microunits(proof.quantity(base=True)),
+            net_minor_units=net, tax_minor_units=tax, gross_minor_units=calc.total((net,tax)), taxes=taxes)
+    return resolved
 
 
 def resolve_commercial(s, inp, document_type, *, document_id, kind):
@@ -155,7 +150,7 @@ def resolve_commercial(s, inp, document_type, *, document_id, kind):
     warnings = posting_eligibility(s, rev, selected)
     profile, extra = financial_profile(s, inp, document_type, rev)
     warnings += extra
-    lines = [resolved_line(lf) for _, _, lf in selected]
+    lines = [resolved_line(item.facts, item.proof) if item.proof else resolved_line(item.facts) for item in selected]
     planned, extra = work._custom_plan(s, inp, document_type, document_id, carry=rev)
     warnings += extra
     number, sequence = effects.allocate(s, document_type, inp.number, document_id)
@@ -169,13 +164,14 @@ def resolve_commercial(s, inp, document_type, *, document_id, kind):
     identities = query.root_identities(s, header)
     source_roots = [(identities[line['line_id']]['root_document_id'], identities[line['line_id']]['root_line_id'])
         for line in work.saved_lines(s, rev)]
-    consumption = sorted((a['root_document_id'], a['root_line_id'], a['transaction_id'], a['revision_id'],
-        a['document_line_id']) for a in query.active_allocations(s, source_roots))
+    from bookflow.company.billing_allocations import consumption_fingerprint
+    consumption = consumption_fingerprint(s, source_roots)
     fingerprint = hashlib.sha256(sales.json_text(dict(company=s.company_row['id'], type=document_type,
         source_revision=rev['id'], source_version=header['version'],
         roots=[root for _, root, _ in selected], consumption=consumption, content=semantic, warnings=warnings)).encode()).hexdigest()
     if inp.expected_facts_fingerprint and inp.expected_facts_fingerprint != fingerprint:
-        raise BookflowError('E_PREVIEW_STALE', details={'facts_fingerprint': fingerprint})
+        raise BookflowError('E_PREVIEW_STALE', details=dict(facts_fingerprint=fingerprint,
+            consumption_changes=query.latest_consumption_changes(s, source_roots)))
     if document_type == 'sales_receipt' and money(inp.amount_received, rev['currency'], 'amount_received').minor_units != total:
         raise _invalid('amount_received', 'must equal the exact gross amount of the selected work')
     if document_type == 'invoice':
@@ -226,14 +222,19 @@ def prepare(s, ctx, inp, kind, destination):
         destination_type=destination, relation=kind + '_' + destination,
         conversion_key_hash=key, request_hash=request, **provenance)
     allocations = []
-    for envelope, (line, root, lf) in zip(data['pending']['document_lines'], selected):
+    profiles = {row['document_line_id']: row for row in data['pending']['sales_line_profiles']}
+    from bookflow.company.billing_allocations import stored_proof
+    for envelope, item in zip(data['pending']['document_lines'], selected):
+        line, root, lf = item
+        projected = profiles[envelope['id']]
         snapshot = dict(line=lf.model_dump(mode='json'), document=work.facts(source_rev).model_dump(mode='json'),
             title=source_rev['title'], source_number=source_rev['number'])
         allocations.append(dict(id=new_id(), transaction_id=header['id'], revision_id=rev['id'],
             document_line_id=envelope['id'], source_document_id=source['id'], source_revision_id=source_rev['id'],
             source_line_id=line['id'], root_document_id=root[0], root_line_id=root[1],
-            quantity_microunits=lf.quantity_microunits, net_minor_units=lf.net_minor_units,
-            tax_minor_units=lf.tax_minor_units, gross_minor_units=lf.gross_minor_units,
+            quantity_microunits=projected['quantity_microunits'], net_minor_units=projected['net_minor_units'],
+            tax_minor_units=projected['tax_minor_units'], gross_minor_units=projected['gross_minor_units'],
+            **stored_proof(item.proof),
             facts_snapshot=sales.json_text(snapshot), **provenance))
     data.update(kind=kind, destination=destination, billing_allocations=allocations,
         billing_conversion=conversion, work_header=current, work_before=source, work_pending=pending_work)
