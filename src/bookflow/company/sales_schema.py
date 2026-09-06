@@ -65,7 +65,8 @@ def define_tables(metadata, column, table):
         identifier('unit_id', 'Captured selected unit conversion; null without a unit.', 'unit_conversions.id', nullable=True),
         integer('unit_factor_nanounits', 'Positive captured base units per selected unit in billionths.'),
         integer('base_quantity_microunits', 'Positive rounded base quantity in millionths.'),
-        integer('unit_price_minor_units', 'Home-currency price per selected unit.'),
+        C('unit_price_minor_units', sa.BigInteger, 'Home-currency price per selected unit; null for amount pricing.', nullable=True),
+        C('pricing_basis', sa.String(16), 'Authoritative unit or amount pricing mode.', nullable=False, server_default='unit'),
         integer('net_minor_units', 'Rounded home-currency extended line price before tax.'),
         integer('tax_minor_units', 'Home-currency sum of this line tax components.'),
         integer('gross_minor_units', 'Home-currency line net plus tax.'),
@@ -76,7 +77,8 @@ def define_tables(metadata, column, table):
         sa.ForeignKeyConstraint(['transaction_id', 'revision_id', 'document_line_id'],
             ['document_lines.transaction_id', 'document_lines.revision_id', 'document_lines.id'], name='fk_sales_line_profile_line'),
         positive('quantity_microunits'), positive('unit_factor_nanounits'), positive('base_quantity_microunits'),
-        nonnegative('unit_price_minor_units'), nonnegative('net_minor_units'), nonnegative('tax_minor_units'),
+        sa.CheckConstraint("(pricing_basis = 'unit' AND typeof(unit_price_minor_units) = 'integer' AND unit_price_minor_units >= 0) OR (pricing_basis = 'amount' AND unit_price_minor_units IS NULL)", name='ck_sales_pricing_basis'),
+        nonnegative('net_minor_units'), nonnegative('tax_minor_units'),
         nonnegative('gross_minor_units'), object_check('item_snapshot'),
         description='Immutable one-to-one commercial item lines with exact quantities, prices and captured rules.')
 

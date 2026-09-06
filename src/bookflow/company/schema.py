@@ -1059,3 +1059,7 @@ globals().update(_define_sales_tables(metadata, _column, _table))
 from bookflow.company.work_schema import define_tables as _define_work_tables
 
 globals().update(_define_work_tables(metadata, _column, _table, _common))
+
+from bookflow.company.billing_schema import define_tables as _define_billing_tables
+
+globals().update(_define_billing_tables(metadata, _column, _table))
