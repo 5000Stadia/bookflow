@@ -126,7 +126,11 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
 def show(s, inp, document_type):
     header = resolve(s, getattr(inp, document_type), document_type)
     revision = journals.revision(s, header, inp.revision_number)
-    return SalesOutput(**summary(header, revision, profile_row(s, revision)), revision=revision_output(s, revision))
+    settlement = None
+    if document_type == 'invoice':
+        from bookflow.company.payment_queries import invoice_current
+        settlement = invoice_current(s, header['id'])
+    return SalesOutput(**summary(header, revision, profile_row(s, revision)), revision=revision_output(s, revision), settlement_current=settlement)
 
 
 def page(s, ctx, inp, document_type, *, history=False):
@@ -165,7 +169,12 @@ def page(s, ctx, inp, document_type, *, history=False):
     items = []
     for header in found:
         revision = journals.revision(s, header)
-        items.append(SalesSummaryOutput(**summary(header, revision, profile_row(s, revision))))
+        item = SalesSummaryOutput(**summary(header, revision, profile_row(s, revision)))
+        if document_type == 'invoice':
+            from bookflow.company.payment_queries import invoice_current
+            from bookflow.company.payment_outputs import InvoiceSettlementOutput
+            item.settlement_current = InvoiceSettlementOutput(**invoice_current(s, header['id']))
+        items.append(item)
     return SalesPageOutput(items=items, **shared)
 
 
@@ -261,6 +270,14 @@ def _version(s, header, expected):
             if fields is None:
                 exc.details['unknown_versions'] = [expected]
         exc.details['changed_fields'] = fields or []
+        if header['type'] == 'invoice' and fields is not None:
+            from bookflow.company.payment_dependencies import changes_since_version
+            changes = changes_since_version(s, header, expected)
+            if changes is not None:
+                settlement_changes = [row for row in changes if row['settlement_fields']]
+                if settlement_changes:
+                    fields = sorted((set(fields) - {'version'}) | {field for row in settlement_changes if row['record_id'] == header['id'] for field in row['settlement_fields']})
+                    exc.details.update(changed_fields=fields, settlement_changes=settlement_changes[:50], settlement_change_count=len(settlement_changes))
         raise BookflowError(exc.code, message=_sale_conflict_message(exc.details, fields),
             details=exc.details) from None
 
@@ -308,7 +325,8 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
         lines=[_line_semantic(line) for line in lines], custom_fields=_custom_semantic(custom_plan.snapshot))
     fingerprint = hashlib.sha256(json_text(dict(company_id=info['id'], type=document_type,
         version=old_header['version'] if old_header else 0, content=semantic)).encode()).hexdigest()
-    if inp.expected_facts_fingerprint is not None and inp.expected_facts_fingerprint != fingerprint:
+    if (inp.expected_facts_fingerprint is not None and inp.expected_facts_fingerprint != fingerprint
+            and not (document_type == 'invoice' and getattr(inp, 'operation_key', None))):
         raise BookflowError('E_PREVIEW_STALE', details={'facts_fingerprint': fingerprint})
     subtotal = calc.total((line['net_minor_units'] for line in lines), 'subtotal')
     tax = calc.total((line['tax_minor_units'] for line in lines), 'tax')
@@ -349,10 +367,18 @@ def _posting_accounts_active(s, resolved):
             raise BookflowError('E_INACTIVE_REFERENCE', details={'record_type': 'account', 'record_id': account['id']})
 
 
-def prepare(s, ctx, inp, document_type, operation, *, billing_source=None):
+def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _settlement_internal=False):
+    if document_type == 'invoice' and operation == 'update' and not _settlement_internal:
+        from bookflow.company.payment_invoice_corrections import prepare as settlement_prepare
+        return settlement_prepare(s, ctx, inp)
     old_header = resolve(s, getattr(inp, document_type), document_type) if operation != 'post' else None
     old_revision = journals.revision(s, old_header) if old_header else None
     meta = _version(s, old_header, inp.expected_version) if old_header else None
+    if document_type == 'invoice' and old_header:
+        from bookflow.company.payment_queries import active_applications
+        if operation == 'void' and active_applications(s, invoice=old_header['id']):
+            raise BookflowError('E_HAS_APPLICATIONS', details={'invoice_id': old_header['id'],
+                'next': 'Inspect invoice settlement dependencies before correcting or voiding.'})
     warnings = [w] if meta and (w := list_service.blind_write_warning(meta)) else []
     if operation == 'void':
         if not ctx.reason or not ctx.reason.strip():
@@ -487,8 +513,14 @@ def _business_postings(header, revision, batch, resolved, pending, created):
 
 def apply(plan, ctx, s):
     fresh = prepare(s, ctx, plan.data['input'], plan.data['document_type'], plan.data['operation'])
+    if fresh.data.get('recovered'):
+        from bookflow.core.registry import Applied
+        return Applied(fresh.preview, [], 'recovered invoice correction')
     from bookflow.company.sales_validation import validate
     validate(fresh, s, ctx)
+    if fresh.data.get('settlement_extension'):
+        from bookflow.company.payment_invoice_corrections import persist
+        return persist(fresh, ctx, s)
     if 'billing_allocations' in fresh.data:
         from bookflow.company.billing import persist
         return persist(fresh, ctx, s, command_name=plan.data['document_type'].replace('_', '-') + ' ' + plan.data['operation'])

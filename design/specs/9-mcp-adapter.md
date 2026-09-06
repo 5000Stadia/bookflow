@@ -1,7 +1,7 @@
-# 9 — MCP adapter implementation proposal, revision 3
+# 9 — MCP adapter implementation proposal, revision 3 with compact help
 
-Status: revised after plan FAIL; requires fresh independent review. No implementation approval or test-pass claim.
-Authority: main design/intention.md Row9 and first-class agent/GUI cooperation; blueprint §§4.2–4.4, 5, 15.3, 16, 17, 20. This revision supersedes the previous draft completely. Parent owns the numbered plan, goal, integration and closure. Only this temporary file is revised; main's reviewed copy stays untouched until the parent replaces it.
+Status: independent revision3 plan review passed; implementation is in progress. The compact-help amendment independently passed at d92eaf7. The bounded-validation/explicit-inspection amendment independently passed at fcb6d8b. Artifact verification and closure remain pending.
+Authority: main design/intention.md Row9 and first-class agent/GUI cooperation; blueprint §§4.2–4.4, 5, 15.3, 16, 17, 20. This revision supersedes the previous draft completely. Parent owns the numbered plan, goal, integration and closure. The parent owns this implementation plan and its integration state.
 
 Pass2 findings F9 and F17–F21 are accepted and resolved by this proposed replacement design, subject to independent review. Earlier dispositions remain; F13 remains a tracked Row7 dependency. The architectural expansion is material: shared execution/publication authorization plus owned binary and complete-result transport are necessary; a stdio wrapper with exclusions cannot meet parity. Payments remains primary. No payment schema, bookkeeping command, provider, NLP/chatbot, email, helper or publication work is added.
 
@@ -31,7 +31,7 @@ The published SDK requires Python>=3.10, Pydantic>=2.12, AnyIO>=4.9 on Python3.1
 
 Source inspection used read-only /tmp/bookflow-row21-critic at 40c5243a6a156367c468d008cf70c0400a587c71, application-equivalent to main's closure41b2276. Relevant sources: adapters/http/app.py and transfers.py; core/host.py, dispatch.py, transfers.py, transfer_resources.py, registry.py, config.py; hub/credentials.py and access.py; client.py; adapters/cli/app.py; documentation/generate.py, introspection.py, examples.py and packaged resources. Current registry introspection found250 commands. Main intention, blueprint and agent guide establish the target, not a claim that unfinished Row7/Row9 behavior already exists.
 
-The parent's latest executed /tmp/bookflow-queued-credential-witness.py, with -p tests.conftest, proves an existing shared-host bug: /tmp/bookflow-queued-credential-witness.log reports revocation200, queued write200, changed fax, subsequent call401; expected queued401 fails in13.01s. This is confirmed evidence, not a hypothetical. Earlier root-lock/description problems were fixture corrections. Row23 now owns this prerequisite: its focused plan passed Mendel and parent is implementing in /tmp/bookflow-queued-credentials against owning plan commit0dca2e0. Credential.revalidate uses the original secret/shared resolver inside the actual writer/reader callback before dispatch; publication is explicitly outside Row23. Do not duplicate that code. Parent will provide an integrated base only after independent Row23 artifact PASS; retain the corrected witness as integration regression evidence. Membership reload alone remains insufficient.
+The parent's latest executed /tmp/bookflow-queued-credential-witness.py, with -p tests.conftest, proves an existing shared-host bug: /tmp/bookflow-queued-credential-witness.log reports revocation200, queued write200, changed fax, subsequent call401; expected queued401 fails in13.01s. This is confirmed evidence, not a hypothetical. Earlier root-lock/description problems were fixture corrections. The execution prerequisite passed independent artifact review at e403732 and is integrated on main at7733b1f. Credential.revalidate uses the original secret/shared resolver inside the actual writer/reader callback before dispatch; publication remains Row9 work. Consume that integrated change rather than duplicating it; retain the corrected witness as integration regression evidence. Membership reload alone remains insufficient.
 
 Local context_from_envelope strips asserted identity and forces cli, so it is not an MCP bearer transport. Config.load may overlay a pending config projection by read-only hub inspection; selection fallback must account for this instead of assuming reading config never opens a file/database. Ordinary HTTP currently resolves credentials before queueing; transfer code already accepts a revalidation callback and checks current output permission during I/O. Reuse those mechanisms and extend the shared publication fence rather than invent MCP-only authority.
 
@@ -63,7 +63,78 @@ client_name is the configured launcher label, client_version its installed packa
 
 ## 5. Exact three-tool and context contract
 
-list_commands: optional prefix, limit integer1..200 default100, cursor. Returns deterministic command descriptors, next_cursor, registry_digest and bridge_version. help: required canonical command; returns the single-command generated documentation, full input/output schemas with local $defs, field descriptions, examples, command+infrastructure errors and accepted context/lifecycle/transfer metadata. Live host registry/renderer supplies both, not a local cache or scraped docs. Extract a pure single-command renderer from _command_page and share descriptors with docs/OpenAPI where fields coincide.
+list_commands: optional prefix, limit integer1..200 default20, cursor. Returns deterministic command descriptors, next_cursor, registry_digest and bridge_version. help: required canonical command; exposes the single-command generated documentation, full input/output schemas with local $defs, field descriptions, examples, command+infrastructure errors and accepted context/lifecycle/transfer metadata through the views below. Live host registry/renderer supplies both, not a local cache or scraped docs. Extract a pure single-command renderer from _command_page and share descriptors with docs/OpenAPI where fields coincide.
+
+### Compact help amendment — independently reviewed
+
+The actual fresh-agent invoice trial encountered unnecessarily large help responses:
+invoice post was 97,791 JSON bytes and invoice update was 98,149 bytes, measured
+as one complete structured help document before MCP wrapping by
+`len(json.dumps(document, ensure_ascii=True, separators=(", ", ": ")).encode("utf-8"))`.
+The documentation
+repeats output structure as a field table and example, alongside the separate
+schema. Preserve complete discovery while making ordinary first-use help practical.
+Catalog discovery defaults to20 complete descriptors per page, with the existing
+explicit1..200 range and continuation. The smaller default is part of this
+reviewed amendment; callers' explicit limits are never silently reduced.
+
+`bookflow_help` accepts `command` and optional `view`, a strict enum:
+`usage` (default), `input_schema`, `output_schema`, or `full`. Explicit null,
+unknown values and unknown keys follow the same declared envelope errors as the
+other tools. Every response includes the complete existing command descriptor,
+`bridge_version`, selected `view`, and `available_views`. These remain static
+authenticated metadata and never report the caller's business permissions.
+
+`usage` includes the exact full input schema with its local `$defs`, all accepted
+context constraints, command/infrastructure error codes, the existing generated
+invocation example, and concise generated usage documentation. This documentation
+retains command purpose, input constraints, preview/save/retry and file-lifecycle
+instructions where applicable. It excludes the expanded output field table,
+sample output tree, and duplicated CLI/HTTP transport instructions. Render it
+directly from the registry/metadata shared with ordinary docs; do not truncate or
+scrape rendered Markdown, maintain a second command registry, or omit business
+input constraints to meet a size target. Clearly identify the example's interface.
+
+`input_schema` and `output_schema` return their named complete schema with all
+local definitions and error/context metadata, without the other schema or the
+long documentation. `full` returns both exact schemas and the entire existing
+generated command documentation, including the existing examples. No limit,
+pagination or truncation is imposed on a schema or on full help by this amendment.
+Tools' static descriptions explain the default view and how to request complete
+output/full documentation; they do not require a private developer recipe.
+
+Context metadata/schema exposes existing limits, including reason at most140
+characters and the short-trigger guidance in blueprint5.8. Usage explains that
+`input: {}` is required for a command with no business fields. For posting commands,
+describe preview as unsaved and posting as saving to the books; sending remains a
+separate explicit operation. Preserve actual dry_run/result contracts rather than
+changing business output fields as a documentation shortcut.
+
+Because omitted help arguments now select a different response shape, increment
+the private bridge contract version to2. A mixed version1/version2 host/launcher
+is rejected through the existing compatibility preflight before submission; no
+silent fallback to old/full help. Both modern and legacy MCP SDK protocols expose
+the same help-view schema. Update installed literal guide and contract tests to
+request full/output views when checking those fields. Existing HTTP/CLI docs
+retain their complete pages; the shared renderer must not drop their output tables.
+
+Verify every registered command across all four views, exact schema equality to
+the registry, preserved `$ref` resolution, descriptors/context/errors/examples,
+strict envelopes, incompatible bridge behavior, and existing documentation parity.
+Record response bytes for invoice post/update/show and payment receive/apply when
+available. The invoice post/update usage documents must each fit20,000 bytes at
+this registry snapshot using the exact single-document serialization above,
+including every field of the selected view. The budget excludes the duplicate
+text representation, SDK result envelope and JSON-RPC framing; it is not a claim
+that the entire MCP response is at most20,000 bytes. Also record the complete
+SDK CallToolResult serialization size, with both required representations, as a
+separate transport-cost measurement. Compression or measuring documentation alone
+does not satisfy the document budget. Never drop inputs or slice text to pass;
+if complete usage cannot fit, report the failed budget for design resolution. Other
+commands remain complete regardless of size; genuinely large input contracts may
+require a later independently reviewed navigation facility. Repeat the ordinary
+blind task with a fresh agent and interview after implementation; reduced bytes
+alone are not first-attempt usability acceptance.
 
 Catalog/help are authenticated static product metadata, the same for all valid tokens. They contain no real examples, company identifiers, principal names, paths, runtime options or per-company permission verdicts. Descriptions of required authority are not a can_run promise. Runtime choices come from authorized commands. Protocol tools/list itself may expose the three static schemas without contacting the host; no business data is in them. No mutable selected company is held by the MCP protocol connection beyond the explicit launcher preference fallback above.
 
@@ -111,7 +182,7 @@ The private HTTP bridge owns machine framing; models see none of it. Use version
 
 The writer's database session closes and writer queue is released before any slow result streaming; a separate admitted delivery owner holds only the authoritative output/permit and transport slot, never a SQLite session. Pure publication rechecks acquire/close fresh short readers before each output record and terminal record. A terminal permission check on the original call is the final host publication boundary, including the narrowly allowed self-revocation receipt; do not turn that exception into a new HTTP request authenticated by a revoked token. The launcher publishes a verified destination immediately upon validated terminal completion, with no intervening unrelated work. Later inspection or recovery is a new request and always needs current ordinary authentication.
 
-For streaming JSON validation/inspection use the maintained `ijson` parser in the optional MCP extra, pinned initially to3.5.1 (published package requires Python>=3.9), with low-level events and use_float=False. Confirm the installed backend preserves large integers, decimal tokens, escapes and nested object/array keys; never silently convert money to float or emit Decimal as an unexpected JSON string. Use event-level traversal for JSON Pointer, not dotted-prefix guessing when a field contains a dot. The core's own serialization remains the output authority. Library/lock integration is implementation work, not performed for this plan. [Maintainer API](https://github.com/ICRAR/ijson), [published package metadata](https://pypi.org/project/ijson/3.5.1/).
+For framed result-file validation use incremental UTF-8 decoding and a complete JSON grammar validator that retains only bounded token state plus a stack proportional to nesting depth; do not materialize a complete string, key, number or dotted path merely to validate it. Reject malformed UTF-8, escapes, numbers, containers, trailing content and incomplete documents through the typed post-submission transport-error boundary. Validate the underlying error-document classification as well as syntax, channel digests and terminal completion. File-sink validation must demonstrate bounded additional allocation for individual scalar values and keys larger than 8MiB, independently of the allowed authoritative core model and explicit inline SDK result. Compare valid and malformed split-boundary cases with an independent JSON oracle. For input-file parsing and explicit JSON Pointer inspection use the maintained `ijson` parser in the optional MCP extra, pinned initially to3.5.1 (published package requires Python>=3.9), with low-level events and use_float=False; an explicitly requested inspection value may require memory for that value, which is separate from whole-document file-sink validation. Confirm the installed backend preserves large integers, decimal tokens, escapes and nested object/array keys; never silently convert money to float or emit Decimal as an unexpected JSON string. Use event-level traversal for JSON Pointer, not dotted-prefix guessing when a field contains a dot. The core's own serialization remains the output authority. Library/lock integration is implementation work, not performed for this plan. [Maintainer API](https://github.com/ICRAR/ijson), [published package metadata](https://pypi.org/project/ijson/3.5.1/).
 
 ### One frozen intent and recovery identity (F17)
 

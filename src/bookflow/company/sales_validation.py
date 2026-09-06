@@ -248,5 +248,9 @@ def validate(plan, s, ctx):
     sales._posting_accounts_active(s, expected)
     require(data['sequence'] == expected['sequence'], 'wrong number allocation')
     require(actual == expected['semantic'] == data['semantic'], 'derived facts differ from original command intent')
-    require(plan.preview.facts_fingerprint == expected['fingerprint'], 'incorrect preview fingerprint')
+    require(data.get('settlement_commercial_fingerprint', plan.preview.facts_fingerprint) == expected['fingerprint'],
+            'incorrect commercial preview fingerprint')
+    if data.get('settlement_commercial_fingerprint') is not None:
+        require(plan.preview.settlement is not None and plan.preview.settlement.facts_fingerprint == plan.preview.facts_fingerprint,
+                'incorrect composite settlement fingerprint')
     require(plan.preview.revision.total_minor_units == revision['total_minor_units'], 'incorrect rendered total')

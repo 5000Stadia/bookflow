@@ -50,6 +50,9 @@ _TARGETS.update({
     "custom_field_value": ("custom_field_values", "id"),
 })
 
+from bookflow.company.payment_authority import PAYMENT_TARGETS
+_TARGETS.update(PAYMENT_TARGETS)
+
 
 def target_types() -> tuple[str, ...]:
     return tuple(sorted(_TARGETS))
@@ -74,4 +77,14 @@ def resolve(session, record_type: str, record_id: str) -> str:
         raise BookflowError("E_RECORD_NOT_FOUND", details={
             "record_type": record_type, "record_id": record_id, "suggestions": [],
         })
+    from bookflow.company.payment_authority import record_transactions, authorize, authorize_event
+    if record_type == 'audit_event':
+        authorize_event(session, str(found))
+    elif record_type == 'audit_entry':
+        event = session.company.conn.execute(sa.select(schema.audit_entries.c.event_id).where(schema.audit_entries.c.id == found)).scalar_one()
+        authorize_event(session, event)
+    else:
+        ids = record_transactions(session.company, record_type, str(found))
+        if ids:
+            authorize(session, ids)
     return str(found)

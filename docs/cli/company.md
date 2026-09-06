@@ -510,6 +510,9 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `estimates_enabled` | `--estimates-enabled` | boolean | no | no | true | Enable new estimates; existing estimate workflows remain available |
 | `progress_billing_enabled` | `--progress-billing-enabled` | boolean | no | no | true | Enable partial work billing; disabling retains remaining-line and bounded recovery billing |
 | `close_estimates_after_billing` | `--close-estimates-after-billing` | boolean | no | no | false | Make estimates inactive after final positive net billing; effective only while progress billing is disabled |
+| `automatically_apply_payments` | `--automatically-apply-payments` | boolean | no | no | false | Suggest exact-match then oldest invoice allocations for new cash |
+| `automatically_calculate_payments` | `--automatically-calculate-payments` | boolean | no | no | false | Calculate selected invoice amounts while preserving entered cash |
+| `use_undeposited_funds_for_payments` | `--use-undeposited-funds-for-payments` | boolean | no | no | true | Default receipts to Undeposited Funds unless explicitly overridden |
 
 ### Command and context options
 
@@ -927,6 +930,9 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `estimates_enabled` | `--estimates-enabled` | boolean | no | no | null | Enable new estimates; omission preserves the saved setting; null rejects |
 | `progress_billing_enabled` | `--progress-billing-enabled` | boolean | no | no | null | Enable partial work billing; disabling retains remaining-line and bounded recovery billing; omission preserves, null rejects |
 | `close_estimates_after_billing` | `--close-estimates-after-billing` | boolean | no | no | null | Make estimates inactive after final positive net billing; effective only while progress billing is disabled; omission preserves, null rejects |
+| `automatically_apply_payments` | `--automatically-apply-payments` | boolean | no | no | null | Suggest exact-match then oldest invoice allocations; omission preserves, null rejects |
+| `automatically_calculate_payments` | `--automatically-calculate-payments` | boolean | no | no | null | Calculate selected invoice amounts; omission preserves, null rejects |
+| `use_undeposited_funds_for_payments` | `--use-undeposited-funds-for-payments` | boolean | no | no | null | Default receipts to Undeposited Funds; omission preserves, null rejects |
 
 ### Command and context options
 

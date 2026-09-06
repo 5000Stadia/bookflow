@@ -62,7 +62,7 @@ def define_tables(metadata, column, table, common):
             name='ck_ledger_party_pair')
 
     transactions = T('transactions', *common(),
-        text('type', 'Business document type: journal_entry, invoice or sales_receipt.', size=32),
+        text('type', 'Business document type: journal_entry, invoice, sales_receipt or payment.', size=32),
         text('number', 'Unique editable number within the document type.', size=64),
         identifier('current_revision_id', 'Immutable revision currently displayed.'),
         text('status', 'Current workflow state: posted or voided.', size=16),
@@ -71,7 +71,7 @@ def define_tables(metadata, column, table, common):
         text('void_reason', 'Reason supplied for the final void.', True, 140),
         identifier('void_posting_batch_id', 'Final reversal batch; no separate business number.', True),
         sa.UniqueConstraint('type', 'number', name='uq_transaction_type_number'),
-        sa.CheckConstraint("type IN ('journal_entry', 'invoice', 'sales_receipt')", name='ck_transaction_type'),
+        sa.CheckConstraint("type IN ('journal_entry', 'invoice', 'sales_receipt', 'payment')", name='ck_transaction_type'),
         sa.UniqueConstraint('id', 'type', name='uq_transaction_id_type'),
         sa.CheckConstraint("length(trim(number)) BETWEEN 1 AND 64", name='ck_transaction_number'),
         sa.CheckConstraint("(status = 'posted' AND voided_at IS NULL AND voided_by IS NULL AND void_reason IS NULL AND void_posting_batch_id IS NULL) OR "
@@ -112,7 +112,7 @@ def define_tables(metadata, column, table, common):
         identifier('revision_id', 'Immutable document revision containing this line.'),
         identifier('line_id', 'Stable line identity carried across revisions.'),
         integer('position', 'One-based entered line position within the revision.'),
-        text('kind', 'Entered line kind: journal or sale.', size=16),
+        text('kind', 'Entered line kind: journal, sale or payment.', size=16),
         C('account_id', sa.String(26), 'Posting account selected for a journal; null for a sale.', sa.ForeignKey('accounts.id'), nullable=True),
         text('side', 'Journal side: debit or credit; null for a sale.', True, size=6),
         integer('amount_minor_units', 'Positive journal amount; null for a sale.', True),
@@ -129,7 +129,7 @@ def define_tables(metadata, column, table, common):
             "(kind = 'journal' AND account_id IS NOT NULL AND side IS NOT NULL AND side IN ('debit', 'credit') "
             "AND typeof(amount_minor_units) = 'integer' AND amount_minor_units > 0 "
             "AND account_snapshot IS NOT NULL AND json_valid(account_snapshot) AND json_type(account_snapshot) = 'object') OR "
-            "(kind = 'sale' AND account_id IS NULL AND side IS NULL AND amount_minor_units IS NULL AND account_snapshot IS NULL "
+            "(kind IN ('sale', 'payment') AND account_id IS NULL AND side IS NULL AND amount_minor_units IS NULL AND account_snapshot IS NULL "
             "AND original_minor_units IS NULL AND original_currency IS NULL AND rate_used IS NULL AND rate_source IS NULL)",
             name='ck_document_line_kind_side'),
         description='Immutable ordered journal or sale envelopes, dimensions and original journal currency facts.')
@@ -187,6 +187,7 @@ def define_tables(metadata, column, table, common):
         text('currency', 'Home currency of this attributed amount.', size=3),
         identifier('reversed_source_id', 'Exactly retained attribution from an inverted posting line.', True),
         identifier('tax_component_id', 'Exact sale tax component; null for journal or sale net attribution.', True),
+        identifier('payment_component_id', 'Exact owned payment revision component; null for all earlier document types.', True),
         sa.UniqueConstraint('transaction_id', 'id', name='uq_posting_source_document'),
         sa.UniqueConstraint('reversed_source_id', name='uq_posting_source_reversed'),
         fk(['transaction_id', 'posting_line_id'], ['posting_lines.transaction_id', 'posting_lines.id'], 'fk_source_posting_line'),
@@ -194,6 +195,8 @@ def define_tables(metadata, column, table, common):
         fk(['transaction_id', 'revision_id', 'document_line_id', 'tax_component_id'],
            ['sales_tax_components.transaction_id', 'sales_tax_components.revision_id', 'sales_tax_components.document_line_id', 'sales_tax_components.id'], 'fk_source_tax_component'),
         fk(['transaction_id', 'reversed_source_id'], ['posting_line_sources.transaction_id', 'posting_line_sources.id'], 'fk_source_reversed'),
+        fk(['transaction_id', 'revision_id', 'document_line_id', 'payment_component_id'],
+           ['payment_components.transaction_id', 'payment_components.revision_id', 'payment_components.document_line_id', 'payment_components.id'], 'fk_source_payment_component'),
         positive('amount_minor_units'),
         sa.Index('ix_posting_sources_line', 'posting_line_id'),
         sa.Index('ix_posting_sources_document_line', 'document_line_id'),

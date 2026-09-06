@@ -34,6 +34,14 @@ INFRASTRUCTURE_CODES: dict[str, str] = {
 }
 
 COMMAND_CODES: dict[str, str] = {
+    "E_APPLICATION_CAPACITY": "The requested application exceeds the owned source or invoice capacity.",
+    "E_APPLICATION_INCOMPATIBLE": "Application source and target must have the same party, receivable account and currency.",
+    "E_APPLICATION_INACTIVE": "This application is already unapplied or its payment is voided.",
+    "E_HAS_APPLICATIONS": "Unapply the active settlements before this change.",
+    "E_APPLIED_EXCEEDS_TOTAL": "The corrected total is below active settlement capacity.",
+    "E_PAYMENT_OPERATION_KEY_REUSED": "This permanent operation key belongs to a different original request.",
+    "E_SELECTION_LIMIT": "An inline selection, input chunk or page exceeds its delivery bound; use a shared selection for a complete receipt.",
+    "E_SELECTION_CONSUMED": "This draft was consumed by a successful payment operation; recover that operation or start a new draft.",
     "E_NO_EXCHANGE_RATE": "No exchange rate exists for the exact accounting date and currency pair.",
     "E_UNBALANCED_ENTRY": "Journal debits and credits must be equal.",
     "E_PERIOD_CLOSED": "An affected accounting date is in a closed period.",

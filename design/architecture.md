@@ -2,6 +2,65 @@
 
 What is built, module by module: package skeleton, registry, data root, hub, organizations, companies, demo, CLI, company audit, versioned writes, presence, idempotency, directives, record notes, the event feed, the host process, HTTP routes, tokens, the POSIX local hand-off, the workbench, immutable domestic journals, accrual trial balance and general ledger reports, and generated command and schema documentation.
 
+## Row22 receipt and settlement increment (implementation candidate)
+
+The co0014 migration preserves existing raw rows and local schema extensions while
+adding payment preferences, immutable payment components, applications and allocation
+evidence, durable operation recovery, and shared selection history. Its frozen DDL
+and guards are independent of current metadata. `payment_schema.py` and
+`payment_guards.py` describe the current model; `payment_validation.py` independently
+checks positive monetary legs, exact-party capacity, attribution and proportional
+allocation before persistence.
+
+`payment_calculations.py` owns integer allocation and entered/calculated draft
+semantics. `payment_selection.py` persists reusable drafts without financial effects;
+`payment_preparation.py` discovers invoices and exposes separately labelled payer
+and family net AR. Page bounds limit delivery, not the size of one remittance.
+`payments.py` implements receipt creation and application of existing exact-party
+credit. Settlement-only header changes retain commercial revisions and postings.
+`payment_pages.py` recomputes prospective pages from the original typed intent and
+facts fingerprint, and reads immutable committed operation items.
+
+`payment_operations.py` and the narrow `Command.permanent_recovery` dispatch hook
+recover an authorized exact permanent retry before the new-write reason gate,
+without writing presence, provenance or financial state. `payment_authority.py`
+uses existing permissions for the complete historical payment/work graph and
+composite audit evidence. CLI commands share these models and services; no adapter
+implements separate accounting behavior.
+
+`payment_corrections.py` replaces receipt content with exact old-date reversals and
+new balanced postings, changing only payer capacity while retaining permanent job
+ownership. It restates source attribution at original application dates without
+changing target splits. Explicitly retaining a reference preserves its captured
+facts; new assignments require active masters, and replacement posting accounts
+still require activity. `payment_invoice_corrections.py` coordinates commercial
+invoice edits and immutable settlement evidence in the same audit/transaction;
+`payment_restatement.py` compares complete chronological allocations by durable
+line ordinal and semantic net/tax facts. Unchanged allocations keep their old
+physical revision references. `payment_cancellation.py` unapplies exact current
+allocations and requires explicit unapply before receipt void. A new no-effect
+operation has its own audit receipt; exact permanent replay has no new writes.
+
+`payment_dependencies.py` signs bounded audit-baseline guards and reconstructs
+owned headers in batches. Comparisons resolve each event's owned commercial
+revisions to actual business fields, distinguish its actor from the latest writer,
+and mark malformed or unowned history unknown. `payment_history.py` exposes
+immutable receipt/application/allocation chains and effective-date projections
+under current recorded knowledge, separately from all committed current capacity.
+Projection basis, generation time and audit watermark identify that distinction;
+pre-obligation and voided states are not labelled paid. Permanent request matching
+normalizes exact money through owning input-model types, retaining omissions,
+ordered intent and unrelated custom data. All preparation continuations bind
+relevant payer and selected-party lineage independently of unrelated draft writes.
+Current payment queries aggregate and filter in SQL before bounded delivery;
+prospective cursors instead bind exact original intent, financial fingerprint and
+last logical item identity without persisting a preview.
+
+This increment does not complete Row22. GUI controls and CP01–CP33 traceability,
+active examples, measured interactive query budgets, integrated HTTP/MCP journeys
+and blind-user acceptance remain required subsequent gates. Row23/Row9 adapter
+integration is owned separately; this checkout does not claim their acceptance.
+
 ## Layout
 
 ```
@@ -375,6 +434,23 @@ samples of a 20-line journal on the same 10,000-account fixture have median
 43.57 ms and maximum 45.84 ms. Garbage collection is enabled. These samples
 exclude host startup and include dispatch, authorization, company writer, audit
 and commit. They do not measure a journal populated with dozens of custom values.
+
+## Pure captured-policy tax calculation
+
+`company/tax_calculations.py` computes exact tax from resolved nonnegative line
+nets, captured flat rules, document-local tax ordinals and one home currency.
+It implements separate-component half-even, line-combined half-up and
+invoice-combined half-up. Compatible invoice buckets compare economic rule
+identities, rates, agencies and accounts; descriptive provenance is retained
+without changing bucket membership. Combined amounts are distributed by exact
+remainder, stable tax ordinal and binary tax-item identity. Zero cells remain
+visible. Intermediate integers are unbounded; persisted monetary totals are
+checked against signed64 bounds at every aggregation level.
+
+This pure module does not yet change any sales or work command. Policy capture,
+storage, history, posting and payment integration remain specified by Row24.
+Its result models are structural projections, not persisted-effect validators;
+integration must independently recompute and compare all attributed cells.
 
 ## Manual rates and foreign journal conversion
 
