@@ -68,8 +68,10 @@ list_commands: optional prefix, limit integer1..200 default20, cursor. Returns d
 ### Compact help amendment — proposed after the first blind business trial
 
 The actual fresh-agent invoice trial encountered unnecessarily large help responses:
-invoice post was 97,791 JSON bytes, including 53,534 bytes of documentation,
-7,207 bytes of input schema and 32,906 bytes of output schema. The documentation
+invoice post was 97,791 JSON bytes and invoice update was 98,149 bytes, measured
+as one complete structured help document before MCP wrapping by
+`len(json.dumps(document, ensure_ascii=True, separators=(", ", ": ")).encode("utf-8"))`.
+The documentation
 repeats output structure as a field table and example, alongside the separate
 schema. Preserve complete discovery while making ordinary first-use help practical.
 Catalog discovery defaults to20 complete descriptors per page, with the existing
@@ -120,8 +122,15 @@ Verify every registered command across all four views, exact schema equality to
 the registry, preserved `$ref` resolution, descriptors/context/errors/examples,
 strict envelopes, incompatible bridge behavior, and existing documentation parity.
 Record response bytes for invoice post/update/show and payment receive/apply when
-available. The invoice post/update usage responses must each fit20,000 UTF-8 JSON
-bytes at this registry snapshot without dropping inputs or slicing text. Other
+available. The invoice post/update usage documents must each fit20,000 bytes at
+this registry snapshot using the exact single-document serialization above,
+including every field of the selected view. The budget excludes the duplicate
+text representation, SDK result envelope and JSON-RPC framing; it is not a claim
+that the entire MCP response is at most20,000 bytes. Also record the complete
+SDK CallToolResult serialization size, with both required representations, as a
+separate transport-cost measurement. Compression or measuring documentation alone
+does not satisfy the document budget. Never drop inputs or slice text to pass;
+if complete usage cannot fit, report the failed budget for design resolution. Other
 commands remain complete regardless of size; genuinely large input contracts may
 require a later independently reviewed navigation facility. Repeat the ordinary
 blind task with a fresh agent and interview after implementation; reduced bytes
