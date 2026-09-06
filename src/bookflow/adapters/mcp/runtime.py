@@ -38,6 +38,8 @@ class Runtime:
 
     def __init__(self, host):
         require_parser()
+        from .limits import json_seconds
+        self.json_seconds = json_seconds()
         self.host = host
         self.intents = OwnedIntents(host)
 
@@ -217,3 +219,27 @@ class Runtime:
             with self.intents.lock:
                 intent.execution_returned = True
                 intent.progress = self.intents.clock()
+
+    def reopen_output(self, intent, credential):
+        """Reopen only the original verified body for delivery; never call execute."""
+        from bookflow.adapters.http.published_transfer import PublishedTransfer
+        header = intent.header
+        permit = PublicationPermit.from_retained(intent.publication)
+        permit.check(self.host, credential)
+        transfer = PublishedTransfer(self.host, permit.cmd, permit.inp.model_dump(mode="json", exclude_unset=True),
+            permit.ctx, credential.user_id, credential.login, header["selector"], header["source"], False,
+            authorize_session=lambda s: credential.revalidate(s.hub), credential=credential, defer_output=True)
+        try:
+            original = permit.projection["transfer"]
+            info = transfer.resource.info
+            if (str(transfer.resource.store), info.sha256, info.size_bytes) != original:
+                raise unknown("download_changed")
+        except BaseException:
+            transfer.close()
+            raise
+        intent.transfer = transfer
+        def cleanup():
+            transfer.close()
+            intent.transfer = None
+        intent.cleanup = cleanup
+        return transfer

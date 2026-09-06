@@ -13,10 +13,12 @@ from .intents import MIB
 
 
 class Delivery(StreamingResponse):
-    def __init__(self, runtime, intent, document, *, binary=None):
+    def __init__(self, runtime, intent, document, *, binary=None, recovery=False):
         self.runtime, self.intent = runtime, intent
+        self.original_response = not recovery
         self.started_at = time.monotonic()
-        runtime.intents.delivery(intent)
+        if not recovery:
+            runtime.intents.delivery(intent)
         self.frames = self._frames(document, binary)
         super().__init__(self.frames, media_type="application/vnd.bookflow.mcp-records",
             headers={"Cache-Control": "no-store", "X-Bookflow-MCP-Version": str(BRIDGE_VERSION)})
@@ -34,9 +36,11 @@ class Delivery(StreamingResponse):
                 cache.clear()
 
         def check():
-            if self.intent.abandoned or time.monotonic() - self.started_at >= 300:
+            if self.intent.abandoned or time.monotonic() - self.started_at >= self.runtime.json_seconds:
                 raise invalid("delivery_abandoned")
-            document.check(original_response=True)
+            if self.intent.completed is not None and self.runtime.intents.clock() - self.intent.completed >= 300:
+                raise invalid("receipt_expired")
+            document.check(original_response=self.original_response)
 
         def recovery():
             return self.runtime.intents.reserve_receipt(self.intent, bytes(cache) if cacheable else None,
@@ -52,7 +56,7 @@ class Delivery(StreamingResponse):
                 raise invalid("delivery_abandoned")
             self.intent.workers += 1
         async def timed_send(message):
-            remaining = 300 - (time.monotonic() - self.started_at)
+            remaining = self.runtime.json_seconds - (time.monotonic() - self.started_at)
             if remaining <= 0:
                 raise invalid("delivery_deadline")
             with anyio.fail_after(min(30, remaining)):

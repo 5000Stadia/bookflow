@@ -80,7 +80,11 @@ in full; cache availability is separately reported. File mappings have32 entries
 output files. Started writers finish under the host; delivery cancellation does
 not undo them or free their resources while they run. EOF closes the launcher
 without a final command document. JSON delivery currently has30s inactivity and
-300s absolute timeout.
+300s absolute timeout. Operators can set `BOOKFLOW_MCP_JSON_SECONDS` in both host
+and launcher environments to an integer from30 through86400 seconds for a slower
+complete JSON delivery. This does not extend preexecution/receipt lifetimes or
+binary leases, and imposes no byte/row cap. The host reports its value at preflight
+and in intent status; the two processes retain their own configured deadline.
 
 ## Literal disposable-company journey
 

@@ -1635,4 +1635,5 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             out = run(request, name, filters, company_id)
         except BookflowError as e:
             return page_error(request, e)
-        return render("audit.html", request, company_id=company_id, items=out["items"], next_before=out.get("next_before"), filters=filters, cmd=registry.get(name), leaves=F.leaves(registry.get(name).input_model))
+        older_url = (request.url.path + "?" + urlencode({**filters, "before": out["next_before"]})) if out.get("next_before") else None
+        return render("audit.html", request, company_id=company_id, items=out["items"], next_before=out.get("next_before"), older_url=older_url, filters=filters, cmd=registry.get(name), leaves=F.leaves(registry.get(name).input_model))

@@ -31,7 +31,10 @@ def mount_mcp(app, host, credential, make_context):
             await run_in_threadpool(authenticate, request)
             from .runtime import require_parser
             require_parser()
-            return response({"bridge_version": BRIDGE_VERSION, "host_version": host.version})
+            from .runtime import Runtime
+            timing = Runtime.for_host(host).json_seconds
+            return response({"bridge_version": BRIDGE_VERSION, "host_version": host.version,
+                             "json_delivery_seconds": timing})
         except BookflowError as exc:
             return response(exc.to_dict(), STATUS.get(exc.code, 400))
 

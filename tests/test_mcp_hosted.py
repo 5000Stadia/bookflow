@@ -53,6 +53,13 @@ def test_real_mcp_receipt_files_preview_upload_download_and_json_artifact(hosted
                 assert destination.read_bytes() == BODY
                 assert downloaded.structured_content['sha256'] == hashlib.sha256(BODY).hexdigest()
                 assert downloaded.meta['bookflow_delivery']['output_file'] == str(destination)
+                again_path = outbox / 'recovered.pdf'
+                recovered = await session.call_tool('bookflow_run', {
+                    'input_ref': downloaded.meta['bookflow_delivery']['operation_ref'],
+                    'action': 'execute', 'output_file': str(again_path)})
+                assert not recovered.is_error, recovered
+                assert recovered.structured_content == downloaded.structured_content
+                assert again_path.read_bytes() == BODY
                 artifact = outbox / 'attachments.json'
                 delivered = await run('attachment list', {'record_type': 'customer', 'record_id': record},
                                       transport={'result_file': str(artifact)})
@@ -64,6 +71,12 @@ def test_real_mcp_receipt_files_preview_upload_download_and_json_artifact(hosted
                     'action': 'inspect', 'pointer': '/count'})
                 assert not inspected.is_error, inspected
                 assert inspected.structured_content['value'] == 1
+                recovered_json = outbox / 'recovered.json'
+                saved_again = await session.call_tool('bookflow_run', {
+                    'operation_ref': delivered.structured_content['operation_ref'], 'action': 'execute',
+                    'result_file': str(recovered_json)})
+                assert not saved_again.is_error, saved_again
+                assert recovered_json.read_bytes() == content
                 assert not list(outbox.glob('.bookflow-mcp-*'))
     anyio.run(witness)
     assert not hosted.handle.host._transfers

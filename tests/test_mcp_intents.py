@@ -64,6 +64,24 @@ def test_terminal_reservation_does_not_release_active_delivery_capacity():
     assert not store.reservations
 
 
+def test_recovery_keeps_execution_identity_and_original_absolute_deadline():
+    clock = Clock()
+    store = Intents(clock=clock)
+    intent = ready(store)
+    store.queue(intent)
+    store.start(intent)
+    store.finish(intent, receipt=b'{"ok":true}', publication={'actor': 'actor'})
+    for second in range(50, 300, 50):
+        clock.now = second
+        assert store.resume_delivery(store.observe(intent.reference, OWNER))
+        assert not store.queue(intent)
+        store.reserve_receipt(intent, b'{"ok":true}', {'actor': 'actor'})
+        store.finish(intent)
+        assert intent.completed == 0
+    clock.now = 300
+    assert store.observe(intent.reference, OWNER) is None
+
+
 def test_orphaned_result_cleanup_waits_for_actual_callback_and_socket_owner():
     clock, cleaned = Clock(), []
     store = Intents(clock=clock)

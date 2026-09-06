@@ -9,7 +9,7 @@ import anyio
 
 from bookflow.core.errors import BookflowError
 from .catalog import BRIDGE_VERSION
-from .envelopes import RunArguments
+from .envelopes import RunArguments, intent_reference
 from .framing import Decoder, invalid, json_chunks
 
 
@@ -17,6 +17,8 @@ class Client:
     def __init__(self, http, inputs, outputs):
         self.http, self.inputs, self.outputs = http, inputs, outputs
         from .inspection import Mappings
+        from .limits import json_seconds
+        self.json_seconds = json_seconds()
         self.mappings = Mappings()
 
     def document(self, response, reference=None):
@@ -59,6 +61,7 @@ class Client:
             yield chunk
 
     async def result(self, reference, action, *, content=None, result_file=None, output_file=None):
+        reference = intent_reference(reference)
         path = f"/adapters/mcp/intents/{reference}/{action}"
         with ExitStack() as stack:
             json_sink = stack.enter_context(self.outputs.output(result_file)) if result_file else io.BytesIO()
@@ -81,7 +84,7 @@ class Client:
                         raise invalid('file_recovery_unavailable')
                     return value, set(value) == {'code', 'message', 'details'}, {"operation_ref": reference}
                 decoder = Decoder(json_sink, binary_sink, operation_ref=reference)
-                with anyio.fail_after(300):
+                with anyio.fail_after(self.json_seconds):
                     async for chunk in response.aiter_bytes(chunk_size=65536):
                         decoder.feed(chunk)
                 terminal = decoder.finish()
@@ -111,7 +114,7 @@ class Client:
         reference = None
         try:
             if not isinstance(arguments, RunArguments):
-                reference = arguments.operation_ref or arguments.input_ref
+                reference = intent_reference(arguments.operation_ref or arguments.input_ref)
                 if arguments.action == 'execute':
                     return await self.result(reference, 'execute', result_file=arguments.result_file,
                                              output_file=arguments.output_file)
@@ -136,9 +139,10 @@ class Client:
             output_file = files.output_file or (self.outputs.destination() if direction == 'output' else None)
             header = arguments.model_dump(exclude_unset=True, exclude={'input', 'transport'})
             admitted = await self.post('/adapters/mcp/intents/new', json={'arguments': header, 'company_selection': selection})
-            reference = admitted['operation_ref']
-            if not isinstance(reference, str) or not 1 <= len(reference) <= 128:
-                raise invalid('invalid_admission')
+            try:
+                reference = intent_reference(admitted.get('operation_ref'))
+            except BookflowError:
+                raise invalid('invalid_admission') from None
             raw = self.source(files.input_json_file) if files.input_json_file else self.object_source(arguments.input)
             if not direction and not files.prepare_only:
                 return await self.result(reference, 'run', content=raw, result_file=files.result_file)

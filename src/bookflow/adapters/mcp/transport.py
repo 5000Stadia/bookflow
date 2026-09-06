@@ -105,6 +105,13 @@ def mount_transport(app, host, authenticate, make_context, response):
         return {"operation_ref": intent.reference, "state": intent.state,
             "reason": intent.reason, "receipt_available": intent.receipt is not None,
             "inspection_available": intent.completed is not None and intent.publication is not None,
+            "limits": {"active_host": 8, "active_principal": 2, "preexecution_idle_seconds": 30,
+                "preexecution_absolute_seconds": 300, "prepared_host_bytes": 64 * 1024**2,
+                "prepared_principal_bytes": 8 * 1024**2, "receipt_bytes": 1024**2,
+                "completed_host": 128, "completed_principal": 16,
+                "completed_host_bytes": 32 * 1024**2, "completed_principal_bytes": 4 * 1024**2,
+                "completed_idle_seconds": 60, "completed_absolute_seconds": 300,
+                "json_delivery_seconds": rt.json_seconds},
             "outcome": "not_submitted" if intent.reason in {"expired_before_submission", "released_before_submission", "rejected_before_submission"} else "unknown"}
 
     @app.post("/adapters/mcp/intents/new", include_in_schema=False)
@@ -211,7 +218,15 @@ def mount_transport(app, host, authenticate, make_context, response):
                 from bookflow.core.publication import PublicationPermit
                 document = PublishedDocument(json.loads(intent.receipt), PublicationPermit.from_retained(intent.publication), host, credential)
                 protect(document, original_response=False)
-                return response(document)
+                if not rt.intents.resume_delivery(intent):
+                    return response(status(rt, intent))
+                try:
+                    transfer = (await run_in_threadpool(rt.reopen_output, intent, credential)
+                                if document.permit.cmd.transfer and document.permit.cmd.transfer.direction == "output" else None)
+                    return Delivery(rt, intent, document, binary=binary_chunks(transfer) if transfer else None, recovery=True)
+                except BaseException:
+                    await run_in_threadpool(rt.intents.finish, intent, receipt=intent.receipt, publication=intent.publication)
+                    raise
             protect_intent(rt, intent, credential)
             return response(status(rt, intent))
         protect(document)

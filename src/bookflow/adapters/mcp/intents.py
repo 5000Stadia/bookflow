@@ -198,6 +198,23 @@ class Intents:
             intent.state = "delivering"
             intent.progress = self.clock()
 
+    def resume_delivery(self, intent):
+        """Move one retained identity into a delivery slot, never an execution queue."""
+        self.sweep()
+        with self.lock:
+            if intent.state != "completed" or self.completed.get(intent.reference) is not intent:
+                return False
+            if intent.receipt is None or intent.publication is None or intent.abandoned:
+                return False
+            if self.closed or len(self.active) >= 8 or sum(i.owner[2] == intent.owner[2] for i in self.active.values()) >= 2:
+                raise BookflowError("E_DB_BUSY", details={"stage": "recovery_admission", "outcome": "unknown"})
+            del self.completed[intent.reference]
+            self.active[intent.reference] = intent
+            intent.state = "delivering"
+            intent.progress = self.clock()
+            intent.execution_returned = True
+            return True
+
     def reserve_receipt(self, intent, receipt, publication):
         """Reserve finite recovery memory before advertising it in a terminal.
 
@@ -225,7 +242,8 @@ class Intents:
                     or sum(row[1] for row in own) > 4 * MIB):
                 del self.reservations[intent.reference]
                 return unavailable
-            return {"mode": "retained", "retained_until": (datetime.now(timezone.utc) + timedelta(seconds=60)).isoformat().replace('+00:00', 'Z'),
+            seconds = min(60, 300 - (self.clock() - intent.completed)) if intent.completed is not None else 60
+            return {"mode": "retained", "retained_until": (datetime.now(timezone.utc) + timedelta(seconds=max(0, seconds))).isoformat().replace('+00:00', 'Z'),
                     "receipt_available": receipt is not None, "inspection_available": publication is not None}
 
     def finish(self, intent, *, receipt=None, publication=None, reason=None):
@@ -256,7 +274,8 @@ class Intents:
                 receipt, publication = reservation[2]["receipt"], reservation[2]["publication"]
             intent.frozen, intent.prepared_bytes = None, 0
             intent.state, intent.reason = "completed", reason
-            intent.completed = intent.progress = self.clock()
+            intent.completed = intent.completed if intent.completed is not None else self.clock()
+            intent.progress = self.clock()
             intent.receipt = receipt if isinstance(receipt, bytes) and len(receipt) <= MIB and not intent.abandoned else None
             intent.publication = publication
             # Include record fields/strings/metadata, not merely serialized JSON.
@@ -297,7 +316,7 @@ class Intents:
         self.sweep()
         with self.lock:
             intent = self._find(reference, owner)
-            if intent is not None and intent.completed is not None:
+            if intent is not None and intent.state == "completed":
                 intent.progress = self.clock()
             return intent
 
@@ -352,7 +371,7 @@ class Intents:
             for intent in list(self.completed.values()):
                 self._discard(intent)
         for intent in entries:
-            if intent.state == "cleanup_failed":
+            if intent.state == "cleanup_failed" or (getattr(intent, "execution_returned", False) and not intent.workers):
                 self.finish(intent, reason=intent.reason)
             else:
                 self.release(intent.reference, intent.owner)

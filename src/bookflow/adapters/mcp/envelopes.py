@@ -9,6 +9,14 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError,
 from bookflow.core.errors import BookflowError
 from bookflow.core.dispatch import CONTEXT_LIMITS
 
+REFERENCE_PATTERN = r"^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$"
+
+
+def intent_reference(value):
+    if not isinstance(value, str) or len(value) > 128 or re.fullmatch(REFERENCE_PATTERN, value) is None:
+        raise BookflowError("E_VALIDATION", details={"reason": "invalid_intent_reference"})
+    return value
+
 
 class Envelope(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -64,8 +72,8 @@ class RunArguments(Envelope):
 
 
 class RecoveryArguments(Envelope):
-    operation_ref: str | None = None
-    input_ref: str | None = None
+    operation_ref: str | None = Field(None, min_length=1, max_length=128, pattern=REFERENCE_PATTERN)
+    input_ref: str | None = Field(None, min_length=1, max_length=128, pattern=REFERENCE_PATTERN)
     action: Literal["execute", "status", "release", "inspect"]
     result_file: str | None = None
     output_file: str | None = None
@@ -133,6 +141,8 @@ def tool_schema(name):
         for field in ("operation_ref", "input_ref", "cursor"):
             if field in allowed:
                 branch["properties"][field] = {"type": "string", "minLength": 1}
+                if field != "cursor":
+                    branch["properties"][field].update(maxLength=128, pattern=REFERENCE_PATTERN)
         for field in ("result_file", "output_file"):
             if field in allowed:
                 branch["properties"][field] = deepcopy(file_schema)
