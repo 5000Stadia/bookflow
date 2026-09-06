@@ -1,6 +1,6 @@
 # 9 — MCP adapter implementation proposal, revision 3
 
-Status: independent revision3 plan review passed; implementation is in progress. Artifact verification and closure remain pending.
+Status: independent revision3 plan review passed; implementation is in progress. The compact-help amendment below awaits independent plan review before its implementation. Other approved work continues. Artifact verification and closure remain pending.
 Authority: main design/intention.md Row9 and first-class agent/GUI cooperation; blueprint §§4.2–4.4, 5, 15.3, 16, 17, 20. This revision supersedes the previous draft completely. Parent owns the numbered plan, goal, integration and closure. The parent owns this implementation plan and its integration state.
 
 Pass2 findings F9 and F17–F21 are accepted and resolved by this proposed replacement design, subject to independent review. Earlier dispositions remain; F13 remains a tracked Row7 dependency. The architectural expansion is material: shared execution/publication authorization plus owned binary and complete-result transport are necessary; a stdio wrapper with exclusions cannot meet parity. Payments remains primary. No payment schema, bookkeeping command, provider, NLP/chatbot, email, helper or publication work is added.
@@ -63,7 +63,66 @@ client_name is the configured launcher label, client_version its installed packa
 
 ## 5. Exact three-tool and context contract
 
-list_commands: optional prefix, limit integer1..200 default100, cursor. Returns deterministic command descriptors, next_cursor, registry_digest and bridge_version. help: required canonical command; returns the single-command generated documentation, full input/output schemas with local $defs, field descriptions, examples, command+infrastructure errors and accepted context/lifecycle/transfer metadata. Live host registry/renderer supplies both, not a local cache or scraped docs. Extract a pure single-command renderer from _command_page and share descriptors with docs/OpenAPI where fields coincide.
+list_commands: optional prefix, limit integer1..200 default100, cursor. Returns deterministic command descriptors, next_cursor, registry_digest and bridge_version. help: required canonical command; exposes the single-command generated documentation, full input/output schemas with local $defs, field descriptions, examples, command+infrastructure errors and accepted context/lifecycle/transfer metadata through the views below. Live host registry/renderer supplies both, not a local cache or scraped docs. Extract a pure single-command renderer from _command_page and share descriptors with docs/OpenAPI where fields coincide.
+
+### Compact help amendment — proposed after the first blind business trial
+
+The actual fresh-agent invoice trial encountered unnecessarily large help responses:
+invoice post was 97,791 JSON bytes, including 53,534 bytes of documentation,
+7,207 bytes of input schema and 32,906 bytes of output schema. The documentation
+repeats output structure as a field table and example, alongside the separate
+schema. Preserve complete discovery while making ordinary first-use help practical.
+
+`bookflow_help` accepts `command` and optional `view`, a strict enum:
+`usage` (default), `input_schema`, `output_schema`, or `full`. Explicit null,
+unknown values and unknown keys follow the same declared envelope errors as the
+other tools. Every response includes the complete existing command descriptor,
+`bridge_version`, selected `view`, and `available_views`. These remain static
+authenticated metadata and never report the caller's business permissions.
+
+`usage` includes the exact full input schema with its local `$defs`, all accepted
+context constraints, command/infrastructure error codes, the existing generated
+invocation example, and concise generated usage documentation. This documentation
+retains command purpose, input constraints, preview/save/retry and file-lifecycle
+instructions where applicable. It excludes the expanded output field table,
+sample output tree, and duplicated CLI/HTTP transport instructions. Render it
+directly from the registry/metadata shared with ordinary docs; do not truncate or
+scrape rendered Markdown, maintain a second command registry, or omit business
+input constraints to meet a size target. Clearly identify the example's interface.
+
+`input_schema` and `output_schema` return their named complete schema with all
+local definitions and error/context metadata, without the other schema or the
+long documentation. `full` returns both exact schemas and the entire existing
+generated command documentation, including the existing examples. No limit,
+pagination or truncation is imposed on a schema or on full help by this amendment.
+Tools' static descriptions explain the default view and how to request complete
+output/full documentation; they do not require a private developer recipe.
+
+Context metadata/schema exposes existing limits, including reason at most140
+characters and the short-trigger guidance in blueprint5.8. Usage explains that
+`input: {}` is required for a command with no business fields. For posting commands,
+describe preview as unsaved and posting as saving to the books; sending remains a
+separate explicit operation. Preserve actual dry_run/result contracts rather than
+changing business output fields as a documentation shortcut.
+
+Because omitted help arguments now select a different response shape, increment
+the private bridge contract version to2. A mixed version1/version2 host/launcher
+is rejected through the existing compatibility preflight before submission; no
+silent fallback to old/full help. Both modern and legacy MCP SDK protocols expose
+the same help-view schema. Update installed literal guide and contract tests to
+request full/output views when checking those fields. Existing HTTP/CLI docs
+retain their complete pages; the shared renderer must not drop their output tables.
+
+Verify every registered command across all four views, exact schema equality to
+the registry, preserved `$ref` resolution, descriptors/context/errors/examples,
+strict envelopes, incompatible bridge behavior, and existing documentation parity.
+Record response bytes for invoice post/update/show and payment receive/apply when
+available. The invoice post/update usage responses must each fit20,000 UTF-8 JSON
+bytes at this registry snapshot without dropping inputs or slicing text. Other
+commands remain complete regardless of size; genuinely large input contracts may
+require a later independently reviewed navigation facility. Repeat the ordinary
+blind task with a fresh agent and interview after implementation; reduced bytes
+alone are not first-attempt usability acceptance.
 
 Catalog/help are authenticated static product metadata, the same for all valid tokens. They contain no real examples, company identifiers, principal names, paths, runtime options or per-company permission verdicts. Descriptions of required authority are not a can_run promise. Runtime choices come from authorized commands. Protocol tools/list itself may expose the three static schemas without contacting the host; no business data is in them. No mutable selected company is held by the MCP protocol connection beyond the explicit launcher preference fallback above.
 
