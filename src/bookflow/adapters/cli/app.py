@@ -233,6 +233,9 @@ def _build_command(cmd: registry.Command):
         clears = kw.pop("clear", None) or []
         follow = kw.pop("follow", False)
         company = merged("company", kw.pop("company", None), cmd.scope == "company")
+        from bookflow.core.context_options import normalize_options
+        normalize_options(cmd, company=company, dry_run=dry_run, reason=reason,
+                          source_ref=source_ref, directive=directive, idempotency_key=idempotency_key)
         raw: dict[str, Any] = {}
         for path, flag, ann, help_, required, dflt in leaves:
             v = kw.get("f__" + path.replace(".", "__"))
@@ -276,18 +279,8 @@ def _build_command(cmd: registry.Command):
                     v = click_termui.prompt(label, default="", show_default=False, err=True, type=str)
                 if v != "":
                     _set_path(raw, path, _input_value(ann, v, path))
-        source = "option"
-        if cmd.scope == "company" and company is None:
-            env = os.environ.get("BOOKFLOW_COMPANY")
-            if env:
-                company, source = env, "env"
-            else:
-                from bookflow.core.config import Config, os_login
-                from bookflow.storage.paths import resolve_data_root
-                cfg = Config.load(resolve_data_root(data_root) / "config.toml")
-                table = cfg.user_table(os_login()) or {}
-                if table.get("default_company"):
-                    company, source = table["default_company"], "default"
+        from bookflow.core.company_selection import company_selection
+        company, source = company_selection(cmd.scope, company, selection_root=data_root)
         from bookflow.core.dispatch import run as dispatch_run
         ctx = Context.new(Interface.cli, "bookflow-cli", session_id=ctx_obj.get("session_id") or new_id(), reason=reason, source_ref=source_ref, directive_id=directive, idempotency_key=idempotency_key)
         if follow:
@@ -367,6 +360,8 @@ def _output_fields(model: type[BaseModel], prefix: str = "", depth: int = 0) -> 
 def _help_epilog(cmd: registry.Command) -> str:
     from bookflow.core.errors import INFRASTRUCTURE_CODES
     fields = ", ".join(_output_fields(cmd.output_model))
+    if cmd.protocol_stdout:
+        return "Stdout carries only protocol messages. EOF closes the launcher without a final command document. Diagnostics use stderr."
     codes = ", ".join(cmd.error_codes) if cmd.error_codes else "none beyond the infrastructure codes"
     return (f"Output fields: {fields}.\n\nErrors this command can return: {codes}. "
             f"Every command can also return: {', '.join(INFRASTRUCTURE_CODES)}.")

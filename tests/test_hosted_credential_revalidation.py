@@ -212,8 +212,11 @@ def test_reader_rejection_before_plan_releases_ownership(hosted, monkeypatch, dr
     planned = []
 
     def delayed_reader(*args, **kwargs):
-        started.set()
-        assert release.wait(8)
+        # Pause the first execution reader only. Writes now open an independent
+        # short publication reader after committing (including token revoke).
+        if not started.is_set():
+            started.set()
+            assert release.wait(8)
         return original_reader(*args, **kwargs)
 
     def observed_plan(*args, **kwargs):
@@ -227,7 +230,7 @@ def test_reader_rejection_before_plan_releases_ownership(hosted, monkeypatch, dr
         pending = pool.submit(hosted.api.post, path, json={'fax': 'preview'} if dry_run else {}, headers=hosted.bearer)
         try:
             assert started.wait(5)
-            # The write path does not use reader_session; admission uses _reader_hub.
+            # Revoke can finish through its separate publication reader.
             assert hosted.call('token.revoke', {'token': hosted.token}).status_code == 200
         finally:
             release.set()

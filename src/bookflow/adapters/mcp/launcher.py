@@ -5,7 +5,7 @@ import json
 import os
 import socket
 from contextlib import ExitStack
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, quote
 
 from bookflow.core.errors import BookflowError
 from bookflow.core.ids import new_id
@@ -15,6 +15,8 @@ from .envelopes import TOOLS, validate
 
 def host_origin(value):
     try:
+        if not isinstance(value, str) or any(ord(character) < 32 for character in value):
+            raise ValueError
         parsed = urlsplit(value or "")
         if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username is not None or parsed.password is not None:
             raise ValueError
@@ -36,7 +38,8 @@ async def serve(inp, origin, secret):
 
     headers = {
         "Authorization": "Bearer " + secret,
-        "X-Bookflow-Client-Name": inp.label,
+        "X-Bookflow-Client-Name": quote(inp.label, safe=""),
+        "X-Bookflow-Context-Encoding": "percent-utf8",
         "X-Bookflow-Client-Host": socket.gethostname(),
         "X-Bookflow-Client-Version": "0.0.1",
         "X-Bookflow-Session-Id": new_id(),
@@ -52,6 +55,7 @@ async def serve(inp, origin, secret):
             return types.ListToolsResult(tools=tools)
 
         async def call_tool(_ctx, params):
+            submitted = False
             try:
                 arguments = validate(params.name, params.arguments or {})
                 preflight = await client.get("/adapters/mcp")
@@ -69,6 +73,7 @@ async def serve(inp, origin, secret):
                     from .selection import company_selection
                     company, source = company_selection(metadata["scope"], arguments.company, selection_root=inp.selection_root)
                     payload["company_selection"] = {"value": company, "source": source}
+                submitted = params.name == "bookflow_run"
                 response = await client.post("/adapters/mcp/" + params.name,
                                              json=payload)
                 if response.headers.get("x-bookflow-mcp-version") != "1":
@@ -84,8 +89,14 @@ async def serve(inp, origin, secret):
                 document, is_error = exc.to_dict(), True
             except httpx2.HTTPError:
                 document, is_error = BookflowError("E_IO", details={"operation": "mcp_result", "reason": "connection", "stage": "post_submission", "outcome": "unknown"}).to_dict(), True
-            return types.CallToolResult(content=[types.TextContent(text=json.dumps(document, ensure_ascii=False))],
-                                        structured_content=document, is_error=is_error)
+            except Exception:
+                document, is_error = BookflowError("E_IO", details={"operation": "mcp_result", "reason": "invalid_response", "outcome": "unknown" if submitted else "not_submitted"}).to_dict(), True
+            try:
+                rendered = json.dumps(document, ensure_ascii=False, allow_nan=False)
+                return types.CallToolResult(content=[types.TextContent(text=rendered)], structured_content=document, is_error=is_error)
+            except Exception:
+                document = BookflowError("E_IO", details={"operation": "mcp_result", "reason": "serialization", "outcome": "unknown" if submitted else "not_submitted"}).to_dict()
+                return types.CallToolResult(content=[types.TextContent(text=json.dumps(document))], structured_content=document, is_error=True)
 
         server = Server("bookflow", version="0.0.1", on_list_tools=list_tools, on_call_tool=call_tool)
         async with stdio_server() as (read, write):

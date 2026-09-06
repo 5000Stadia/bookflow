@@ -126,6 +126,8 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
     registry.load_all()
     app = FastAPI(title="Bookflow", version=host.version, docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(CookieRenewalMiddleware, secure_cookies=secure_cookies)
+    from bookflow.adapters.http.publication import PublicationMiddleware
+    app.add_middleware(PublicationMiddleware)
 
     # ------------------------------------------------------------ credentials
     def credential(request: Request, *, renew_cookie: bool = True) -> Credential:
@@ -152,8 +154,11 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
                 queued = host.enqueue_token_refresh(row["id"], row["kind"])
                 if queued and via_cookie and renew_cookie:
                     request.state.renew_session_cookie = secret
-        return Credential(row["user_id"], row["id"], row["kind"], row["label"], on_behalf_of=row.get("on_behalf_of"),
-                          actor_kind=user["kind"], hub_admin=bool(user["hub_admin"]), secret=secret)
+        result = Credential(row["user_id"], row["id"], row["kind"], row["label"], on_behalf_of=row.get("on_behalf_of"),
+                            actor_kind=user["kind"], hub_admin=bool(user["hub_admin"]), secret=secret)
+        from bookflow.adapters.http.publication import protect_credentials
+        protect_credentials(host, result)
+        return result
 
     def secret_of(request: Request) -> str:
         header = request.headers.get("authorization", "")
@@ -177,25 +182,12 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
             return run_command_body(cmd, raw, ctx, cred, selector, source, dry_run)
 
     def run_command_body(cmd, raw: dict[str, Any], ctx: Context, cred: Credential, selector: str | None, source: str, dry_run: bool) -> dict[str, Any]:
-        from bookflow.core.dispatch import _close, execute, guard
+        from bookflow.adapters.http.execution import run_hosted
         bad = [k for k in raw if k in Context.model_fields]
         if bad:
             raise BookflowError("E_CONTEXT_IN_INPUT", message="Context values go in headers, not the body: " + ", ".join(f"{k} -> {CONTEXT_HEADERS.get(k, 'not accepted')}" for k in bad), details={"fields": bad})
 
-        def execute_authenticated(s):
-            cred.revalidate(s.hub)
-            return execute(cmd, raw, ctx, s, company_selector=selector, company_source=source, dry_run=dry_run)
-
-        if cmd.is_write and not dry_run or cmd.kind == "advisory":
-            return host.run_write(cred.user_id, cred.login, execute_authenticated)
-        s = host.reader_session(cred.user_id, cred.login)
-        try:
-            return execute_authenticated(s)
-        finally:
-            try:
-                guard(lambda: _close(s), cred.hub_admin)
-            finally:
-                host.reader_done()
+        return run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run)
 
     def lookup(route: str):
         name = command_name(route)
@@ -444,6 +436,16 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
     async def health():
         return {"ok": True}
 
+    from bookflow.adapters.mcp.bridge import mount_mcp
+
+    async def mcp_execute(request, cmd, arguments, ctx, cred, selection):
+        if cmd is None or any(arguments.transport.model_dump().values()):
+            raise BookflowError("E_USAGE", message="This transport operation is not ready in this implementation checkpoint.")
+        result = await run_in_threadpool(run_command, cmd, arguments.input, ctx, cred,
+                                        selection["value"], selection["source"], arguments.dry_run)
+        return JSONResponse(result, headers={"X-Bookflow-MCP-Version": "1", "Cache-Control": "no-store"})
+
+    mount_mcp(app, host, credential, make_context, mcp_execute)
     from bookflow.adapters.workbench.pages import mount_workbench
     mount_workbench(app, host, credential, make_context, run_command, secure_cookies)
     return app

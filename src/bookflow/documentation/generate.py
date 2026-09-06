@@ -68,6 +68,9 @@ def _field_flag(cmd: Any, path: str, secret: bool) -> str:
         container = path.split("[]", 1)[0].replace(".", "-").replace("_", "-")
         return f"inside `--{container}` JSON array"
     flag = path.replace(".", "-").replace("_", "-")
+    model_field = cmd.input_model.model_fields.get(path)
+    if model_field is not None and isinstance(model_field.json_schema_extra, dict):
+        flag = model_field.json_schema_extra.get("cli_flag", flag)
     suffix = " (secret)" if secret else ""
     return f"`--{flag}`{suffix}"
 
@@ -216,9 +219,13 @@ def _command_page(noun: str, commands: list[Any]) -> bytes:
                 f"| `{field.path}` | {_text(field.type)} | {'yes' if field.required else 'no'} | "
                 f"{'yes' if field.nullable else 'no'} | {_text(field.default)} | {_text(field.description)} |"
             )
-        lines.extend(["", "Example JSON output:", "", "```json"])
-        lines.extend(json.dumps(sample_model(cmd.output_model), indent=2, sort_keys=True).splitlines())
-        lines.extend(["```", "", "### Errors", "", "| Code | Meaning |", "|---|---|"])
+        if getattr(cmd, "protocol_stdout", False):
+            lines.extend(["", "Stdout carries only MCP protocol messages. EOF closes the launcher without a final command document; diagnostics use stderr. `--json` does not apply."])
+        else:
+            lines.extend(["", "Example JSON output:", "", "```json"])
+            lines.extend(json.dumps(sample_model(cmd.output_model), indent=2, sort_keys=True).splitlines())
+            lines.append("```")
+        lines.extend(["", "### Errors", "", "| Code | Meaning |", "|---|---|"])
         common = list(STANDALONE_INFRASTRUCTURE_CODES) if getattr(cmd, "standalone", False) else list(INFRASTRUCTURE_CODES)
         codes = list(dict.fromkeys([*cmd.error_codes, *common]))
         for code in sorted(codes):

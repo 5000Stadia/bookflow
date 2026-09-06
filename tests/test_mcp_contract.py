@@ -50,6 +50,32 @@ def test_false_and_nested_presence_preserved():
     assert validate("bookflow_run", raw).model_dump(exclude_unset=True) == raw
 
 
+def test_company_fallback_is_calling_machine_read_only(tmp_path, monkeypatch):
+    from bookflow.core.company_selection import company_selection
+    monkeypatch.setenv("BOOKFLOW_DATA_ROOT", str(tmp_path))
+    monkeypatch.delenv("BOOKFLOW_COMPANY", raising=False)
+    assert company_selection("company", login="worker") == (None, "none")
+    (tmp_path / "config.toml").write_text('[users.worker]\nuser_id="selection-only"\ndefault_company="saved"\n')
+    assert company_selection("company", login="worker") == ("saved", "default")
+    monkeypatch.setenv("BOOKFLOW_COMPANY", "environment")
+    assert company_selection("company", login="worker") == ("environment", "env")
+    assert company_selection("company", "", login="worker") == ("", "option")
+    assert company_selection("hub", login="worker") == (None, "none")
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["config.toml"]
+
+
+def test_shared_context_rejects_active_unsupported_but_accepts_null_false():
+    from bookflow.core import registry
+    from bookflow.core.context_options import normalize_options
+    registry.load_all()
+    cmd = registry.get("account list")
+    assert normalize_options(cmd, dry_run=False, reason=None)["dry_run"] is False
+    for option in ("reason", "directive", "source_ref", "idempotency_key"):
+        with pytest.raises(BookflowError) as caught:
+            normalize_options(cmd, **{option: ""})
+        assert caught.value.code == "E_USAGE"
+
+
 @pytest.mark.parametrize("value", ["http://example.com", "http://localhost:9", "https://user:secret@example.com", "https://example.com/?secret=x", "file:///etc/passwd", "https://example.com/path"])
 def test_origin_rejects_ambient_or_secret_routes(value):
     with pytest.raises(BookflowError) as caught:

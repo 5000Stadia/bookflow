@@ -1,21 +1,5 @@
-"""Read-only company preference lookup on the launcher machine."""
+"""MCP uses the same calling-machine selection preference as CLI/Python."""
 
-import os
+from bookflow.core.company_selection import company_selection
 
-from bookflow.core.config import Config, os_login
-from bookflow.core.errors import BookflowError
-from bookflow.storage.paths import resolve_data_root
-
-
-def company_selection(scope, explicit=None, *, selection_root=None):
-    if scope != "company":
-        if explicit is not None:
-            raise BookflowError("E_USAGE", details={"argument": "company"})
-        return None, "none"
-    if explicit is not None:
-        return explicit, "option"
-    if value := os.environ.get("BOOKFLOW_COMPANY"):
-        return value, "env"
-    config = Config.load(resolve_data_root(selection_root) / "config.toml")
-    default = (config.user_table(os_login()) or {}).get("default_company")
-    return (default, "default") if default else (None, "none")
+__all__ = ["company_selection"]

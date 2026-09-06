@@ -67,6 +67,11 @@ class _FlashStore:
             if owner != session_token:
                 return None
             self._items.pop(key, None)
+            from bookflow.adapters.http.publication import protect
+            result = payload.get("result")
+            if hasattr(result, "check"):
+                result.check(original_response=False)
+                protect(result, original_response=False)
             return payload
 
 
