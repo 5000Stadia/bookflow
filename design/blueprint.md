@@ -421,6 +421,11 @@ Browser calculator entry and the proposed optional fractional-cent unit-price/co
 precision are specified in [Numeric entry and precision](numeric-entry.md). The
 calculator does not change the posted-money contract.
 
+Sales-tax attribution and payment settlement are distinct calculations. Their
+stable ordering keys have separate namespaces: tax calculation must not create,
+replace or reorder settlement-line ordinals or alter a recorded application.
+Settlement consumes the exact stored net/tax components of its target revision.
+
 
 ### 8.2 Home currency
 

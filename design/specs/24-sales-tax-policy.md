@@ -1,6 +1,7 @@
 # Row 24 — captured sales-tax calculation policies
 
-Status: proposed plan; no runtime implementation. Parent owns this plan. Customer
+Status: proposed revision2 after independent findings F1–F12; no runtime
+implementation. Parent owns this plan. Customer
 payments owns the in-flight co14/sales changes. The pure arithmetic piece can be
 built in isolation after plan PASS; schema and integration start from the reviewed
 payment base. Full closure includes the payment and actual MCP witnesses below.
@@ -26,7 +27,7 @@ is no per-entry rounding acceptance dialog. Quantity and calculator precision,
 unit-price extension and price-level rounding keep their existing contracts.
 
 Supported consumers are every currently implemented invoice, sales receipt,
-estimate, work order and conversion/progress-billing path, including ordinary,
+priced proposal, estimate, work order and copying/conversion/progress-billing path, including ordinary,
 amount-priced and allocated lines. Payment allocations consume the resulting
 stored cents. Credits/refunds, discounts, inventory-specific tax bases, compound
 taxes and jurisdiction-specific caps are not implemented by this row: their
@@ -50,8 +51,10 @@ the existing signed64 nonnegative bounds. Range errors precede effects. Preserve
 zero-rate and rounding-to-zero commercial components; emit no zero ledger legs.
 
 A taxable bucket contains only lines with the same currency, calculation policy
-and complete captured flat-rule vector: tax-item IDs/versions, rates, agencies,
-liability accounts and their captured facts. Normalize comparison by tax-item ID,
+and economic flat-rule vector: tax-item IDs, rates, agency IDs, liability account
+IDs and taxable applicability. Descriptive labels and record-version numbers do
+not split otherwise identical economic buckets or change the amount charged;
+retain each line's complete captured provenance independently. Normalize comparison by tax-item ID,
 not display order. Taxable bases must have the same applicability; never merge
 different rule vectors because their combined percentages happen to match.
 Exempt/customer-exempt/disabled-tax lines have no taxable cells and contribute
@@ -70,19 +73,28 @@ ledger attribution rule; it does not independently round each tax agency's total
 or assert a jurisdiction's remittance calculation. Every bucket, line, liability
 account and document reconciles to the one rounded amount actually charged.
 
-Stable ordinals are document-local and never depend on display order, tax-group
+Stable tax ordinals are document-local and never depend on display order, tax-group
 member order, generated revision IDs or preview-generated random IDs. Existing
-invoice keys reuse Row22's durable settlement line ordinals; extend the same
-contract to sales receipts where needed. Work documents use an immutable mapping
-owned by work document/line identity, with foreign keys to work_line_identities.
-Existing identity populations are assigned in binary line-ID order; include
-retired identities. New document lines receive 1..N in submitted order; appended
+Row22 settlement ordinals retain their own lifecycle and are never reused or
+modified by this tax change. Tax allocation and settlement allocation are distinct
+calculations with explicitly separate key namespaces. A new immutable tax mapping
+for sales documents owns document/line identity with composite foreign keys;
+the analogous work mapping references work_line_identities. Legacy documents get
+tax ordinals only on their first changed tax-aware revision, using their entire
+historical identity population in binary line-ID order, including retired lines.
+This rule is identical whether that legacy invoice already has settlement keys
+or has never been paid. Existing tax keys always win and are never reassigned.
+New document lines receive 1..N in submitted order; appended
 lines receive values above the owner's historical maximum, in submitted order.
 Retirement never recycles an ordinal. Preview computes prospective ordinals without
 inserting rows; commit uses those same values under the owner version/fingerprint.
 Cloning/conversion makes a new document with its own submitted-order ordinals.
-The captured revision carries its line ordinal so verification never needs a
-current display order or another revision's ephemeral ID.
+Revision-owned tax-attribution snapshots capture their line ordinals outside the
+pricing/source-basis facts. Verification never needs current display order. Row22's
+first-settlement binary-ID ordering, retained keys and exact existing allocations
+are unchanged. Amend owning money/settlement documentation to name these separate
+namespaces when implementing; never silently substitute tax ordinals for settlement
+ordinals. Explicitly test an already-settled invoice whose two orders differ.
 
 ## Captured facts, defaults and history
 
@@ -96,12 +108,38 @@ when its origin is default. Explicit policy never refreshes incidentally. Null i
 invalid; this required effective value is not clearable. Inputs with explicit
 policy and its use-defaults request conflict under existing field semantics.
 
-Version-one commercial snapshots remain byte/wire compatible and mean the legacy
-policy. Do not add default keys when serializing old profiles, work facts, outputs,
-audit snapshots or idempotency receipts. Introduce a discriminated new snapshot
-version that requires captured policy and stable ordinals; reject inconsistent
-version/field combinations. Existing revised documents may create new-version
-facts while retaining their previous legacy policy and origins. Metadata-only
+All pre-policy facts imply legacy tax, not only schema-version-one pricing facts.
+The compatibility matrix is:
+
+| Fact family | Existing interpretation retained | New interpretation |
+|---|---|---|
+| CommercialProfile/SalesProfile/WorkProfile | Version1, no policy field: legacy. | Version2 requires captured policy; pricing facts remain separately discriminated. |
+| SalesLineProfile | Version1 unit, version2 amount, version3 allocated keep their exact serialized fields and arithmetic basis. | No pricing-version bump solely for tax. New revision-owned TaxAttribution v1 contains policy, origin, buckets, tax ordinals and exact cells outside pricing facts. |
+| WorkFacts/WorkLineFacts | Existing version1 (including amount-priced work with its nested version2 SalesLineProfile) retains legacy validation and hash. | WorkFacts2 and WorkLineFacts2 support document-level tax validation; new work TaxAttribution v1 owns derived cell cents/ordinals. |
+| Billing allocation rows/proofs | allocation_version1 whole-root and allocation_version2 interval/hash proofs remain readable, replayable and reversible with their original basis semantics. | allocation_version3 explicitly identifies basis_version2; interval arithmetic is unchanged. No reuse of an existing discriminator. |
+
+The implementation must verify this matrix against the frozen dependency base;
+if it adds another fact version, extend and review the matrix before assigning a
+colliding number. Retain every old persisted JSON byte, audit snapshot, stored
+idempotency response and nested historical revision serialization. New live
+show/history/preview outputs add a typed `tax_calculation_details` projection outside
+those historical payloads; it exposes effective policy, origin, attribution and
+legacy interpretation through the core on every surface. Previously saved retry
+responses remain unchanged and may lack that additive projection; their existing
+record links lead to current authorized inspection. Adapters never infer policy.
+
+Absent historical policy origin means `legacy_implicit`, not explicit user choice
+and not default origin. This effective marker is computed without rewriting old
+facts; a new tax-attribution snapshot retaining those economics captures it.
+Ordinary `refresh_defaults` leaves legacy_implicit policy alone. Explicit policy
+input changes it to explicit; explicitly requesting its company default changes
+it to default. A conversion retains the source mode and origin, including
+legacy_implicit. Origin discriminators belong to the tax policy snapshot/projection;
+do not widen all unrelated field-origin inputs. This field-specific rule applies
+to all pre-policy versions in the matrix.
+
+Existing revised documents may create new-version tax facts while retaining their
+previous legacy policy. Metadata-only
 edits and exact retries must not create a commercial revision merely to upgrade a
 snapshot's representation. Compare normalized economic semantics for no-op checks
 while retaining the original representation when unchanged.
@@ -111,7 +149,12 @@ current company default. Legacy per-component validations remain exact. Combined
 policies require document/bucket-level recomputation: a WorkTaxComponent validator
 cannot independently reject a valid allocated cell because it differs from its
 separately rounded rate. Retain local type/reference/bounds checks and verify the
-complete sibling set and bucket sum in the shared effect validator. No new pathway
+complete sibling set in the shared effect validator. Independently reconstruct
+every exact numerator, bucket, tax ordinal and remainder ordering; compare EVERY
+expected cell, line total and agency/account attribution, not just reconciled sums.
+Perform the same complete comparison for nonposting work. A coherent swap of A/Z
+cents in commercial facts and posting-source links must reject even when every
+document/account side still balances. No new pathway
 may bypass tax/base/ownership validation by calling a low-level command directly.
 
 Preview, save, refresh, show, query totals, history, print and generated schemas
@@ -140,14 +183,40 @@ mixing incompatible captured headers under the existing dependency error rather
 than silently picking one policy. Source agreement edits remain blocked while
 active bills consume its roots. Existing release/edit/rebill workflows remain.
 
+Legacy basis_version1 remains exactly the current full WorkLineFacts hash
+(excluding only completed quantity and billable as currently specified), retaining
+schema version, ordered component cents and existing hashes. Never reinterpret an
+active old proof. A legacy source converted after partial billing carries its exact
+legacy line facts/basis, even if the destination display order differs.
+
+New basis_version2 hashes exactly `{basis_version:2, sales_tax_calculation:mode,
+economics:E, tax_rules:R}`. E is the validated WorkLineFacts model dump with exactly
+`schema_version`, `completed_quantity_microunits`, `billable`, `tax_minor_units`,
+`gross_minor_units` and `taxes` removed. R is the ordered list of complete captured
+`rule` objects from those tax components; empty means no tax applies to this
+captured line. Keep all other declared E fields, including net, quantity, unit,
+cost, description, classification and nested profile/origin facts. Tax-attribution
+ordinals/wrappers live outside WorkLineFacts and cannot enter E. Reject undeclared
+extra fields before hashing. The basis payload uses the existing canonical
+JSON/hash encoding with its explicit version2 discriminator.
+Conversion preserves this economic projection byte-for-byte while the new document
+calculates its own derived attribution. Independent work-order additions can change
+derived quoted tax cells without changing consumed roots' economics. Extend work
+source protection accordingly, retaining all actual economic guards. Old active
+bases do not upgrade just to enable redistribution: keep the legacy line/rule on
+that lineage. Explicit economic changes require releasing all active allocations
+under the existing dependency contract before capturing a new basis.
+
 Progress entitlement and exact allocated net math are unchanged. After all
 destination lines are resolved, calculate tax over the destination document's
 compatible buckets. Never calculate separately per entitlement span. Each new
 installment rounds independently; its total tax need not add up to the estimate's
 informational tax. No final installment silently absorbs tax residue.
 
-For combined-invoice policy, inserting/removing an ordinary line can redistribute
-tax cents on a retained linked line. Permit only this derived redistribution:
+For combined-invoice policy, any otherwise permitted composition change can
+redistribute tax cents on a retained linked line: adding/removing an independent
+line, changing its quantity/net/rate/taxability, or removing an entire linked line
+while retaining another. Reordering alone cannot change attribution. Permit only this derived redistribution:
 the captured policy, rules, source proof, net and quoted economics stay fixed.
 Separate those protected source facts from document-level derived cell tax in
 `billing_edits.protect_sale`; do not permit a policy/rate/price change to masquerade
@@ -157,11 +226,19 @@ This is an explicit amendment to the existing whole-line equality check, not a
 license to rewrite the source quote.
 
 Remaining-tax forecasts calculate all remaining billable nets together under the
-source policy and compatible rules, then allocate their rounded forecast to source
-line ordinals. Label it a forecast for billing that remaining scope together;
+source policy and compatible rules. Build the exact prospective complete-remaining
+selection in the source's current displayed order; assign the same prospective
+destination tax ordinals as conversion and map its allocated tax back to source
+line IDs for display. Explicitly returned selection/order metadata is covered by
+the preview fingerprint. Billing that unchanged selection together must reproduce
+every forecast cell and aggregate. Reordering or selecting different scope changes
+the forecast, requiring a fresh preview. Label it a forecast for billing that remaining scope together;
 future installment partitioning or extra sale lines can differ. Previous and
 cumulative values remain actual postings and never use a current default or a
 fresh forecast. Forecasts and previews reserve no entitlement or stored amounts.
+Sales-receipt creation/correction still requires its amount_received confirmation
+to match the complete newly calculated gross, including redistributed tax. Do not
+silently alter a cash confirmation while accepting an otherwise legal line edit.
 
 On an applied invoice correction, feed the revised exact net/tax component cents
 into Row22's complete-graph settlement restatement. Use its logical keys, version
@@ -179,7 +256,11 @@ its original result under current authority even after the company changes polic
    gate only; it does not satisfy Row24's done.
 2. From the reviewed Row22 base, implement the next unused company migration
    (expected co15, verify numbering at that point): add the company policy with
-   legacy migration default and any immutable ordinal mappings absent from Row22.
+   legacy migration default and the separately owned immutable tax ordinal mappings.
+   Add revision-owned document/work tax-attribution storage with proper composite
+   ownership FKs and immutable triggers. These rows carry policy/origin, ordinals,
+   complete bucket membership and exact cells; include them in the ordinary audit
+   and independent effect validation. They are portable company-local facts.
    No hub migration. Use preserving additive DDL, no table rebuild or rewriting
    historical JSON, audit, posting rows, rowids or local extension DDL. Fresh rollout
    explicitly sets its new-company default. Migration and company-info audit expose
@@ -213,13 +294,17 @@ Independent hand-fixed examples, with ordinary posted USD values:
 | Two 5-cent lines at 10% | Legacy 0; line-combined 2 cents; invoice-combined 1 cent assigned to ordinal1. |
 | Two 10-cent lines, two 5% rules A/Z | Invoice-combined 2 cents: ordinal1/A1, ordinal1/Z1, ordinal2/A0, ordinal2/Z0 under the stated global cell rule. |
 | Reorder those lines or A/Z display order | Captured ordinals/IDs govern ties; assigned cents do not move. |
+| Two5-cent lines at10%, same economic rule but different captured labels/versions | One invoice bucket,1cent total. Provenance differences alone cannot charge2cents. |
 
 Cover just below/at/above half-cent; differing rates/agencies/accounts with equal
 total percentage; exemption and disabled tax; zero net/rates; maximum rule/line
 counts and signed64 result overflow without intermediate overflow; duplicate cells;
 new/appended/retired/reordered lines and preview-versus-save ordinal stability.
 Check exact bucket/component/line/account sums with independent expected values,
-not only comparing the implementation with itself.
+not only comparing the implementation with itself. Inject a coherent swapped-cell/
+wrong-agency attribution across facts and posting sources and prove independent
+validation rejects it. Existing settlement-key order must remain unchanged even
+when it differs from tax-key order; verify first later payment and repeated edits.
 
 Preserving migration witnesses include an old company with posted, voided,
 corrected, partially billed, amount-priced and paid documents; old preview/retry
@@ -228,18 +313,30 @@ historical raw bytes and results, company roots, rowids and exact old seed prefi
 No-op, show, history, print, old retry and reversal survive a policy default change.
 New rollout uses the new default while migrated rollout remains legacy.
 
-Exercise estimate→work order→multiple progress invoices/receipts, partial spans,
+Exercise priced proposal creation/correction/copy/history→estimate→work order→
+multiple progress invoices/receipts, partial spans,
 ordinary extra lines and changed line composition redistributing a linked tax
 cent, source protection, release/rebill, remaining forecast and actual cumulative
-tax. Apply payments, change invoice tax policy or composition, verify original
+tax. Include partially billed/reordered estimate→work-order conversion, independent
+new work-order scope, repricing an independent sale line, removing one of multiple
+linked lines, legacy/current basis proofs and confirmed receipt gross changes.
+Apply payments, change invoice tax policy or composition, verify original
 cash plus all active allocations and cents reconcile, then test unapply/void and
 permanent replay. Include closed old/new/application dates, stale versions and
 missing composite authority with complete rollback evidence.
 
+Copy/relocate and attach both a migrated legacy company and a new-policy company
+through the documented company-copy workflow into a fresh disposable root. Check
+historical rendering/bytes, exact reversal, remaining-work billing and permanent
+payment recovery there. Policy origins, tax keys, basis validation and authority
+must not depend on original-root paths, hub-local calculation data or caches.
+
 Real desktop1280/phone390 company selection→preview→post→history/print and
 agent↔human continuation must agree with CLI/HTTP/Python and actual MCP. A blind
 agent gets ordinary tax/business wording, discovers the applicable setting and
-preview, then reports the result and uncertainty; interview and fix/retest under
+preview, posts the authorized invoice and hands its persisted identity to the
+human GUI. Independently check cents, agency attribution, audit actor/interface,
+history and absence of duplicates. Then interview and fix/retest under
 D109. No claim of legal compliance follows from that usability test.
 
 Use an independent plan critic before code and an independent artifact critic on
@@ -260,3 +357,20 @@ remain 2005/2014 and the statute page is labelled2025. They motivate capabilitie
 not jurisdiction selection. New-company default, internal cell allocation and
 historical-preservation rules above are Bookflow design choices under the approved
 goal. No federal rule is presented as universal state sales-tax authority.
+
+## First-review disposition
+
+| Finding | Revision2 constraint |
+|---|---|
+| F1 | Explicit priced proposal create/correct/copy/history and proposal→estimate coverage. |
+| F2 | Separate immutable tax-key namespace/lifecycle. Existing or future Row22 settlement keys/allocations never change; blueprint8.1 names the separation. |
+| F3 | Version1 hashes/proofs remain exact; explicit version2 economic projection excludes derived document attribution. Test partial-billing conversion and added independent work. |
+| F4 | Forecast constructs the same complete-remaining selection/order and prospective destination ordinals as actual conversion. |
+| F5 | Explicit header/pricing/work/allocation matrix, including amount/allocated legacy versions and new allocation3/basis2. |
+| F6 | Derived legacy_implicit origin preserves historical uncertainty; only explicit policy/default reset changes it. |
+| F7 | Enumerated legal composition/repricing/linked-line-removal triggers; preserved economics plus receipt amount_received guard. |
+| F8 | Independent exact per-cell reconstruction and coherent wrong-agency mutation, not sum-only validation. |
+| F9 | Persisted/retry/nested historical bytes retained; additive live shared-core tax_calculation_details exposes interpretation. |
+| F10 | Economic bucket key ignores descriptive/version differences while preserving each captured provenance. |
+| F11 | Relocated/attached migrated and new-policy company witnesses cover history, reversal, work and payment recovery. |
+| F12 | Blind agent previews AND posts, hands persisted identity to human GUI, independent persisted-state checks before interview. |
