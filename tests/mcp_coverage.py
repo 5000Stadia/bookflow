@@ -292,6 +292,8 @@ FINANCIAL = {n + ' ' + v for n in ('journal', 'invoice', 'sales-receipt') for v 
 
 
 def execution_map():
+    from tests.test_mcp_registry_work import FAMILIES as WORK_FAMILIES
+    from tests.test_mcp_registry_work_billing import FAMILIES as BILLING_FAMILIES
     from tests.test_mcp_registry_hub_reads import FAMILIES as HUB_FAMILIES
     from tests.test_mcp_registry_supporting import FAMILIES
     from tests.test_mcp_registry_payment_preparation import FAMILIES as PAYMENT_FAMILIES
@@ -307,7 +309,9 @@ def execution_map():
                    'tests/test_mcp_registry_supporting.py::test_supporting_family_full_documents_and_rejections' if any(cmd.name in names for names in FAMILIES.values()) else
                    'tests/test_mcp_registry_payment_preparation.py::test_payment_preparation_four_surface_documents_context_and_rejections' if any(cmd.name in names for names in PAYMENT_FAMILIES.values()) else
                    'tests/test_mcp_registry_payments.py::test_payment_financial_lifecycle_full_documents_and_exact_ledger' if cmd.name in PAYMENT_FINANCIAL else
-                   'tests/test_mcp_registry_hub_reads.py::test_hub_read_full_documents_and_scope_boundaries' if any(cmd.name in names for names in HUB_FAMILIES.values()) else None)
+                   'tests/test_mcp_registry_hub_reads.py::test_hub_read_full_documents_and_scope_boundaries' if any(cmd.name in names for names in HUB_FAMILIES.values()) else
+                   'tests/test_mcp_registry_work.py::test_nonposting_work_lifecycle_full_documents_and_lineage' if any(cmd.name in names for names in WORK_FAMILIES.values()) else
+                   'tests/test_mcp_registry_work_billing.py::test_work_billing_full_documents_retries_and_exact_batches' if any(cmd.name in names for names in BILLING_FAMILIES.values()) else None)
         mode = ('standalone_protocol' if cmd.protocol_stdout else 'standalone_local' if cmd.standalone else
                 'local_lifecycle' if cmd.local_only else 'binary_' + cmd.transfer.direction if cmd.transfer else
                 'advisory' if cmd.kind == 'advisory' else 'finite_poll_with_local_follow' if cmd.streams else 'routed_json')
