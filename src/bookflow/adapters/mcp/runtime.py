@@ -141,7 +141,7 @@ class Runtime:
                         cmd.authorize_input(permit.inp, ctx, session)
                     if cmd.transfer is not None:
                         cmd.transfer.prepare(permit.inp, ctx, session)
-                    permit.authorize_hub_input(session)
+                    permit.authorize_initial_input(session)
                 except BookflowError as exc:
                     rejection = exc
         if rejection is not None:

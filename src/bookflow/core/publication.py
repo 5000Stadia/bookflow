@@ -309,15 +309,19 @@ class PublicationPermit:
         elif name == "token revoke":
             host_cmds.authorize_token_revoke(self.inp, self.ctx, s)
 
-    def _additional(self, s):
+    def authorize_initial_input(self, s):
+        """Pure target predicates shared by preparation and result publication."""
         self.authorize_hub_input(s)
         name = self.cmd.name
-        if name == "directive add" and s.actor.kind != "human" and not self.ctx.on_behalf_of:
-            _deny()
-        elif name == "undo":
+        if name == "undo":
             from bookflow.company import undo, schema as c
             original = s.company.conn.execute(sa.select(c.audit_events.c.command).where(
                 c.audit_events.c.id == self.inp.event_id.upper())).scalar_one_or_none()
             if original is None:
-                _deny()
+                raise BookflowError("E_EVENT_NOT_FOUND")
             undo._require_original_role(s, undo._event_required_role(original))
+
+    def _additional(self, s):
+        self.authorize_initial_input(s)
+        if self.cmd.name == "directive add" and s.actor.kind != "human" and not self.ctx.on_behalf_of:
+            _deny()

@@ -17,9 +17,11 @@ def test_installed_input_rejections_publish_exact_error_files_and_no_writes(host
     source = inbox / 'receipt.pdf'; source.write_bytes(b'%PDF-1.4\nreceipt')
     before = hosted.ok('audit.list', {'limit': 200}, company=hosted.company_id)
     from bookflow.core import registry
+    original_undo = hosted.call('undo', {'event_id': '01ARZ3NDEKTSV4RRFFQ69G5FAV'}, company=hosted.company_id).json()
+    assert original_undo['code'] == 'E_EVENT_NOT_FOUND'
     def unexpected_execution(*args, **kwargs):
         raise AssertionError('A validation/preparation rejection executed a business planner')
-    for name in ('company update', 'account list', 'attachment add', 'attachment get'):
+    for name in ('company update', 'account list', 'attachment add', 'attachment get', 'undo'):
         monkeypatch.setattr(registry.get(name), 'plan', unexpected_execution)
 
     cases = [
@@ -30,6 +32,7 @@ def test_installed_input_rejections_publish_exact_error_files_and_no_writes(host
         ('account create', {'name': 'Checking', 'type': 'bank'}, {}),
         ('attachment get', {'attachment': '01ARZ3NDEKTSV4RRFFQ69G5FAV'}, {}),
         ('attachment add', {'record_type': 'customer', 'record_id': '01ARZ3NDEKTSV4RRFFQ69G5FAV', 'original_filename': 'receipt.pdf', 'media_type': 'application/pdf'}, {'input_file': str(source)}),
+        ('undo', {'event_id': '01ARZ3NDEKTSV4RRFFQ69G5FAV'}, {}),
     ]
     async def witness():
         binary = os.environ.get('BOOKFLOW_MCP_TEST_BINARY', str(Path(sys.executable).with_name('bookflow')))
@@ -46,10 +49,12 @@ def test_installed_input_rejections_publish_exact_error_files_and_no_writes(host
                     assert reply.structured_content['delivery'] == 'complete_json_file', reply
                     assert reply.meta['bookflow_transport']['response_kind'] == 'verified_command_completion'
                     document = json.loads(destination.read_bytes())
-                    assert document['code'] == ('E_NAME_TAKEN' if command == 'account create' else 'E_RECORD_NOT_FOUND' if index >= 5 else 'E_VALIDATION')
+                    assert document['code'] == ('E_EVENT_NOT_FOUND' if command == 'undo' else 'E_NAME_TAKEN' if command == 'account create' else 'E_RECORD_NOT_FOUND' if index >= 5 else 'E_VALIDATION')
                     assert set(document) == {'code', 'message', 'details'}
                     assert 'operation_ref' not in document['details'] and 'outcome' not in document['details']
-                    if not command.startswith('attachment '):
+                    if command == 'undo':
+                        assert document == original_undo
+                    elif not command.startswith('attachment '):
                         original = hosted.call(command.replace(' ', '.'), raw, company=hosted.company_id)
                         assert original.json() == document
                     again = await session.call_tool('bookflow_run', {'input_ref': reply.structured_content['operation_ref'], 'action': 'execute'})
