@@ -376,6 +376,23 @@ samples of a 20-line journal on the same 10,000-account fixture have median
 exclude host startup and include dispatch, authorization, company writer, audit
 and commit. They do not measure a journal populated with dozens of custom values.
 
+## Pure captured-policy tax calculation
+
+`company/tax_calculations.py` computes exact tax from resolved nonnegative line
+nets, captured flat rules, document-local tax ordinals and one home currency.
+It implements separate-component half-even, line-combined half-up and
+invoice-combined half-up. Compatible invoice buckets compare economic rule
+identities, rates, agencies and accounts; descriptive provenance is retained
+without changing bucket membership. Combined amounts are distributed by exact
+remainder, stable tax ordinal and binary tax-item identity. Zero cells remain
+visible. Intermediate integers are unbounded; persisted monetary totals are
+checked against signed64 bounds at every aggregation level.
+
+This pure module does not yet change any sales or work command. Policy capture,
+storage, history, posting and payment integration remain specified by Row24.
+Its result models are structural projections, not persisted-effect validators;
+integration must independently recompute and compare all attributed cells.
+
 ## Manual rates and foreign journal conversion
 
 Company migration co0008 adds the declared versioned exchange_rates table.

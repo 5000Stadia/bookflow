@@ -1,7 +1,8 @@
 # Row 24 — captured sales-tax calculation policies
 
 Status: revision4 independently PLAN PASSED at1e5654c; F1–F16 resolved at
-plan level. Pure arithmetic implementation begins; no runtime integration yet. Parent owns this plan. Customer
+plan level. Pure arithmetic independently artifact PASSED at5b81dee and integrated
+at a0292a3; no sales/work runtime integration yet. Parent owns this plan. Customer
 payments owns the in-flight co14/sales changes. The pure arithmetic piece can be
 built in isolation after plan PASS; schema and integration start from the reviewed
 payment base. Full closure includes the payment and actual MCP witnesses below.
