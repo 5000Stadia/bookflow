@@ -12,6 +12,8 @@ from bookflow.company import schema as c, document_effects as effects, sales_cal
 from bookflow.company import journal_custom_fields as custom, custom_fields as cf
 from bookflow.company import work_defaults
 from bookflow.company.work_facts import WorkFacts, WorkLineFacts
+from bookflow.company import work_tax
+from bookflow.company.work_tax_facts import read_facts, read_line
 from bookflow.company.work_models import WorkLineInput
 from bookflow.company.work_outputs import (
     WorkOutput, WorkWriteOutput, WorkSummaryOutput, WorkRevisionOutput,
@@ -32,7 +34,9 @@ KINDS = ('proposal', 'estimate', 'work_order')
 QUOTE_STATES = ('draft', 'open', 'accepted', 'declined', 'superseded', 'cancelled')
 WORK_STATES = ('draft', 'scheduled', 'in_progress', 'on_hold', 'complete', 'cancelled')
 TABLE_KINDS = (('work_revisions', 'work_revision'), ('work_line_identities', 'work_line'),
-               ('work_lines', 'work_revision_line'), ('work_links', 'work_link'))
+               ('work_lines', 'work_revision_line'), ('work_links', 'work_link'),
+               ('work_tax_line_keys','work_tax_line_key'), ('work_tax_attributions','work_tax_attribution'),
+               ('work_tax_attribution_lines','work_tax_attribution_line'))
 LINE_COLUMNS = ('item_id', 'unit_id', 'quantity_microunits', 'completed_quantity_microunits',
     'unit_factor_nanounits', 'base_quantity_microunits', 'unit_price_minor_units',
     'net_minor_units', 'tax_minor_units', 'gross_minor_units', 'estimated_unit_cost_minor_units',
@@ -69,11 +73,11 @@ def saved_lines(s, rev):
 
 
 def facts(rev):
-    return WorkFacts.model_validate_json(rev['facts_snapshot'])
+    return read_facts(rev['facts_snapshot'])
 
 
 def line_facts(line):
-    return WorkLineFacts.model_validate_json(line['facts_snapshot'])
+    return read_line(line['facts_snapshot'])
 
 
 def _amounts(rev):
@@ -116,13 +120,16 @@ def revision_output(s, rev, pending=None, *, summary_only=False):
     if missing:
         identities.update({row['id']: row for row in rows(s, c.work_line_identities,
             c.work_line_identities.c.id.in_(missing))})
+    mapping=[row for row in pending.get('work_tax_attribution_lines',[]) if row['revision_id']==rev['id']]
+    if not mapping:mapping=rows(s,c.work_tax_attribution_lines,c.work_tax_attribution_lines.c.revision_id==rev['id'])
+    tax_ordinals={row['work_line_id']:row['tax_ordinal'] for row in mapping}
     output, known, complete = [], 0, True
     for line in lines:
         f, ident = line_facts(line), identities[line['line_id']]
         currency = rev['currency']
         def amount(value):
             return Money(value, currency).to_dict() if value is not None else None
-        output.append(WorkLineOutput(**{key: line[key] for key in ('id', 'document_id', 'revision_id',
+        output.append(WorkLineOutput(tax_ordinal=tax_ordinals.get(line['id']),**{key: line[key] for key in ('id', 'document_id', 'revision_id',
             'line_id', 'position', 'created_at', 'created_by', 'created_via')},
             **{key: ident[key] for key in ('root_document_id', 'root_line_id', 'source_line_id')},
             facts=f, quantity=format_quantity_micro_units(f.quantity_microunits),
@@ -295,6 +302,7 @@ def _reason(ctx):
 
 
 def _agreed(value):
+    value=work_tax.normalized(value)
     return {key: value[key] for key in ('date', 'number', 'title', 'lines', 'custom_fields')} | {
         'facts': {key: item for key, item in value['facts'].items() if key not in ('memo', *OPERATIONAL_FIELDS)}}
 
@@ -368,6 +376,8 @@ def _dependencies(s, header, before, after):
     protect_work(s, header, before, after)
     if header is None:
         return
+    before,after=deepcopy(before),deepcopy(after)
+    for value in (before,after):value['facts']['profile']=work_tax.normalized(value)['facts']['profile']
     t = c.work_links
     if header['kind'] == 'estimate':
         linked = rows(s, t, t.c.source_document_id == header['id'], t.c.relation == 'estimate_work_order')
@@ -385,7 +395,7 @@ def _dependencies(s, header, before, after):
         old = {row['line_id']: row['facts'] for row in before['lines']}
         new = {row['line_id']: row['facts'] for row in after['lines']}
         def economic(value):
-            return {key: item for key, item in value.items() if key not in ('billable', 'completed_quantity_microunits')}
+            return work_tax.economics(value)
         if any(key not in new or economic(old[key]) != economic(new[key]) for key in quoted if key in old):
             raise BookflowError('E_WORK_DEPENDENCY', details={'source_id': linked[0]['source_document_id'], 'problem': 'quoted lines cannot be removed or repriced'})
 
@@ -411,7 +421,7 @@ def _assignees(s, requested, previous=()):
 
 def _validated_input_facts(values):
     try:
-        return WorkFacts.model_validate(values)
+        return read_facts(values)
     except ValidationError as error:
         raise BookflowError('E_VALIDATION', details={'fields': [
             {'field': '.'.join(str(part) for part in item['loc']) or 'facts', 'problem': item['msg']}
@@ -426,7 +436,7 @@ def _resolve_facts(s, inp, kind, old=None, old_date=None, old_status=None):
     if old and not inp.refresh_defaults:
         issuer = old.issuer_snapshot
     values = old.model_dump() if old else {}
-    values.update(profile=profile, issuer_snapshot=issuer)
+    values.update(schema_version=2, profile=profile.model_dump(mode="json"), issuer_snapshot=issuer)
     for key in WorkFacts.model_fields:
         if key in ('schema_version', 'profile', 'issuer_snapshot', 'assignees'):
             continue
@@ -456,8 +466,13 @@ def _resolve_lines(s, inp, kind, profile, old_rev=None, old_profile=None):
             seen.add(key)
         resolved, line_warnings = work_defaults.resolve_line(s, line, profile,
             previous=line_facts(prior[key]) if key else None, previous_header=old_profile,
-            refresh=inp.refresh_defaults, kind=kind)
-        out.append({'line_id': key, 'facts': resolved.model_dump(mode='json')})
+            refresh=inp.refresh_defaults, kind=kind, document_tax=True)
+        payload=resolved.model_dump(mode='json')
+        if key and line_facts(prior[key]).schema_version==1 and profile.sales_tax_calculation=='line_component_half_even':
+            payload['schema_version']=1
+            for component in payload['taxes']:component['tax_minor_units']=calc.tax(payload['net_minor_units'],component['rule']['rate_percent_millionths'])
+            payload['tax_minor_units']=sum(t['tax_minor_units'] for t in payload['taxes']);payload['gross_minor_units']=payload['net_minor_units']+payload['tax_minor_units']
+        out.append({'line_id': key, 'facts': payload})
         warnings.extend(line_warnings)
     return out, warnings
 
@@ -555,7 +570,9 @@ def _new_revision(s, ctx, header, value, custom_snapshot, old_rev, pending, even
         accepted = dict(accepted_revision_id=rev_id, accepted_at=at, accepted_by=s.actor.id)
     if value['status'] != 'accepted':
         accepted = dict(accepted_revision_id=None, accepted_at=None, accepted_by=None)
-    lf = [WorkLineFacts.model_validate(line['facts']) for line in value['lines']]
+    value=deepcopy(value)
+    work_tax.prepare(s,header['id'],value)
+    lf = [read_line(line['facts']) for line in value['lines']]
     net = calc.total((line.net_minor_units for line in lf), 'net')
     tax = calc.total((line.tax_minor_units for line in lf), 'tax')
     rev = dict(id=rev_id, document_id=header['id'], revision_number=old_rev['revision_number'] + 1 if old_rev else 1,
@@ -581,14 +598,17 @@ def _new_revision(s, ctx, header, value, custom_snapshot, old_rev, pending, even
         pending['work_lines'].append(dict(id=new_id(), document_id=header['id'], revision_id=rev_id,
             line_id=identity, position=position, **{key: getattr(line, key) for key in LINE_COLUMNS},
             facts_snapshot=line.model_dump_json(), **provenance))
+    work_tax.persist(s,header,rev,value,pending,provenance)
     return rev
 
 
-def _fingerprint(s, inp, kind, operation, value, source, warnings):
+def _fingerprint(s, inp, kind, operation, value, source, warnings, document_id):
     content = deepcopy(value)
     # Automatic end time is generated at commit, not a master fact to stale a preview.
     if operation == 'complete' and 'actual_end' not in inp.model_fields_set and source and not facts(source).actual_end:
         content['facts']['actual_end'] = '$command_time'
+    attribution,ordinals,_=work_tax.prepare(s,document_id,deepcopy(value))
+    content['tax_attribution']=attribution.model_dump(mode='json')
     token = dict(company=s.company_row['id'], kind=kind, operation=operation,
         source_revision=source['id'] if source else None, value=content, warnings=warnings)
     new_estimate = operation == 'estimate' or (kind == 'estimate' and operation in ('create', 'copy'))
@@ -648,12 +668,13 @@ def prepare(s, ctx, inp, kind, operation):
             facts=resolved.model_dump(mode='json'), lines=line_values,
             custom_fields=_custom_semantic(custom_plan.snapshot))
         custom_snapshot = custom_plan.snapshot
+    work_tax.prepare(s,header['id'],value)
     _lifecycle(kind, before, value, inp, ctx)
     _state_invariants(kind, value)
     _dependencies(s, old, before, value)
     _accepted_group(s, header, value['status'])
-    fingerprint = _fingerprint(s, inp, kind, operation, value, old_rev, warnings)
-    changes = _changes(before, value) if before else list(value)
+    fingerprint = _fingerprint(s, inp, kind, operation, value, old_rev, warnings, header['id'])
+    changes = _changes(work_tax.normalized(before), work_tax.normalized(value)) if before else list(value)
     if old and not changes and (custom_plan is None or not custom_plan.changed):
         return Plan(WorkWriteOutput(**output(s, old, old_rev, ctx=ctx).model_dump(), changed=False,
             facts_fingerprint=fingerprint, warnings=warnings),
@@ -732,8 +753,9 @@ def _prepare_destination(s, ctx, inp, kind, operation):
     value = dict(date=inp.date, number=number, title=getattr(inp, 'title', None) or source_rev['title'],
         status='draft', active=True, decision_note=None, facts=f, custom_fields=_custom_semantic(custom_plan.snapshot),
         lines=[dict(line_id=None, facts=dict(json.loads(line['facts_snapshot']), completed_quantity_microunits=0)) for line in source_lines])
+    work_tax.prepare(s,header['id'],value)
     _state_invariants(destination_kind, value)
-    fingerprint = _fingerprint(s, inp, kind, operation, value, source_rev, warnings)
+    fingerprint = _fingerprint(s, inp, kind, operation, value, source_rev, warnings, header['id'])
     pending = {table: [] for table, _ in TABLE_KINDS}
     rev = _new_revision(s, ctx, header, value, custom_plan.snapshot, None, pending, event, at,
         source_lines=source_lines, inherit_roots=relation == 'estimate_work_order')
@@ -771,7 +793,7 @@ def apply(plan, ctx, s):
         touched.append(Touched('work_document', header['id'], 'update' if old else 'create',
             old['version'] if old else None, header['version'], header, old, db='company'))
     for table, kind in TABLE_KINDS:
-        touched.extend(Touched(kind, row['id'], 'create', None, 1, effects.decoded(row), db='company')
+        touched.extend(Touched(kind, row[work_tax.TABLE_KEYS.get(table,'id')], 'create', None, 1, effects.decoded(row), db='company')
                        for row in data['pending'][table])
     for planned in data['customs']:
         touched.extend(custom.touches(planned))

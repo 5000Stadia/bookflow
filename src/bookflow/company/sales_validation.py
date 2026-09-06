@@ -1,6 +1,7 @@
 """Independent checks of commercial intent, attribution and exact reversals."""
 from collections import Counter
 import json
+from pydantic import ValidationError
 
 from bookflow.company import schema as c, document_effects as effects
 from bookflow.company import tax_attribution as tax_facts
@@ -21,6 +22,13 @@ def amount(value, *, positive=False):
 
 
 def validate(plan, s, ctx):
+    try:
+        return _validate(plan, s, ctx)
+    except (ValidationError, json.JSONDecodeError) as exc:
+        raise BookflowError('E_INTERNAL', message='Invalid sales aggregate: malformed captured facts') from exc
+
+
+def _validate(plan, s, ctx):
     from bookflow.company import sales
     data = plan.data
     if not data['changed']:

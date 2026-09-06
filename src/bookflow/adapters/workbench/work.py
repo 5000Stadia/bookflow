@@ -1,6 +1,7 @@
 """Customer-work browser projections. Commands remain the sole business authority."""
 from copy import deepcopy
 from decimal import Decimal
+from bookflow.core.money import Money
 from bookflow.company.tax_policy import POLICY_LABELS, POLICY_EXPLANATIONS
 from bookflow.company.sales_contract import FORM_DEFINITIONS, SalesFormDefinition
 from bookflow.company.lists import ReferenceDefinition
@@ -36,6 +37,7 @@ def editable_values(record):
     if p.get('customer_message_item'):
         out.pop('customer_message')
     # A new decision must be deliberately entered, even if its wording repeats.
+    if r.get('tax_calculation_details'):out['sales_tax_calculation']=r['tax_calculation_details']['policy']
     out['decision_note'] = None
     out['assignees'] = [v['id'] for v in f['assignees']]
     out['custom_fields'] = {v['definition_id']: deepcopy(v['value']) for v in r['custom_fields']}
@@ -66,6 +68,7 @@ def detail_context(record, company_id, *, preview=False):
     record = deepcopy(record)
     r = record['revision']
     for line in r['lines']:
+        line['tax_components']=[dict(rule=t['rule'],tax=Money(t['tax_minor_units'],r['currency']).to_dict(),taxable=Money(t['taxable_minor_units'],r['currency']).to_dict(),rate_display=format(Decimal(t['rule']['rate_percent_millionths'])/1000000,'f')) for t in line['facts']['taxes']]
         markup = line['facts']['markup_percent_millionths']
         line['markup_display'] = format(Decimal(markup) / 1000000, 'f') if markup is not None else None
     base = f"/c/{company_id}/{record['kind'].replace('_', '-')}/{record['id']}"

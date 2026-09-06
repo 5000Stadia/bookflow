@@ -376,10 +376,9 @@ def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
                 raise
             out['sales_tax_item'], out['tax_rules'] = None, None
     out['origins'] = fields.origins
-    if not nonposting:
-        from bookflow.company import tax_policy
-        policy, policy_origin = tax_policy.resolve(inp, previous, info)
-        out.update(schema_version=2, sales_tax_calculation=policy, tax_policy_origin=policy_origin)
+    from bookflow.company import tax_policy
+    policy, policy_origin = tax_policy.resolve(inp, previous, info)
+    out.update(schema_version=2, sales_tax_calculation=policy, tax_policy_origin=policy_origin)
     return (CommercialProfile(**out) if nonposting else SalesProfile(**out)), warnings
 
 

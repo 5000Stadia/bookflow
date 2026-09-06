@@ -2,12 +2,19 @@
 from typing import Literal
 import json
 import sqlalchemy as sa
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, ValidationError
 from bookflow.company import schema as c, tax_policy
 from bookflow.company.tax_calculations import TaxCalculation, TaxLine, TaxRule, calculate_tax
 
 
 class TaxAttribution(BaseModel):
+    @field_validator('schema_version', mode='before')
+    @classmethod
+    def exact_schema_version(cls, value):
+        if type(value) is not int:
+            raise ValueError('schema_version must be an integer discriminator')
+        return value
+
     model_config = ConfigDict(extra='forbid', strict=True)
     schema_version: Literal[1] = 1
     origin: tax_policy.TaxOrigin
@@ -75,10 +82,18 @@ def apply(lines, attribution, ordinals):
             tax['tax_minor_units'] = cells[ordinal, tax['rule'].id].tax_minor_units
 
 
+def read_snapshot(snapshot):
+    from bookflow.core.errors import BookflowError
+    try:
+        return TaxAttribution.model_validate_json(snapshot)
+    except ValidationError as exc:
+        raise BookflowError('E_INTERNAL', message='Invalid tax aggregate: malformed captured attribution') from exc
+
+
 def details(profile, snapshot=None):
     return TaxDetails(policy=tax_policy.effective(profile), origin=tax_policy.origin(profile),
         legacy_interpretation=profile.schema_version == 1,
-        attribution=TaxAttribution.model_validate_json(snapshot) if snapshot else None)
+        attribution=read_snapshot(snapshot) if snapshot else None)
 
 
 def semantic_profile(profile):
@@ -122,7 +137,7 @@ def validate_sales(s, header, revision, profile, pending, require):
         require(rules is not None, 'missing applicable rules')
         inputs.append(dict(net_minor_units=row['net_minor_units'], taxes=[dict(rule=rule) for rule in rules]))
     expected = calculate(inputs, profile, revision['currency'], ordinals)
-    captured = TaxAttribution.model_validate_json(snapshots[0]['facts_snapshot'])
+    captured = read_snapshot(snapshots[0]['facts_snapshot'])
     require(captured == expected, 'exact tax buckets, cells or origin differ from authoritative facts')
     id_by_ordinal = {ordinal: line['id'] for line, ordinal in zip(envelopes, ordinals)}
     return {(id_by_ordinal[cell.tax_ordinal], cell.rule.id): cell.tax_minor_units

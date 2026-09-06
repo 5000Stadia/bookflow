@@ -155,3 +155,15 @@ def test_emitted_links_resolve(tmp_path):
         for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", page.read_text()):
             if "://" not in target and not target.startswith("#"):
                 assert (page.parent / target.split("#", 1)[0]).resolve().is_file(), (page, target)
+
+
+def test_versioned_work_and_allocation_branches_remain_documented():
+    from bookflow.company.work_outputs import WorkWriteOutput
+    from bookflow.company.sales_outputs import SalesWriteOutput
+    fields={field.path:field for field in generation.model_fields(WorkWriteOutput)}
+    assert 'revision.facts.profile.sales_tax_calculation' in fields
+    assert 'revision.lines[].facts.estimated_unit_cost_minor_units' in fields
+    assert fields['revision.facts.schema_version'].type=='literal[1] | literal[2]'
+    sales={field.path for field in generation.model_fields(SalesWriteOutput)}
+    assert 'revision.lines[].item_snapshot.allocation_proof.basis_version' in sales
+    assert 'revision.billing_sources[].allocation_proof.basis_version' in sales

@@ -469,30 +469,44 @@ Sales updates retain captured policy; use_defaults reselects the company policy,
 and refresh_defaults only refreshes default origin. Reversals use stored cents.
 The existing payment correction hook consumes revised component cents and retains
 its own immutable settlement keys, cash, version guards and permanent recovery.
-Legacy work-to-sale conversion carries legacy policy and receives destination tax
-attribution. Work policy capture, basis v2/allocation v3, combined progress,
-full UI/seed integration and final cross-interface acceptance remain Row24 work;
-this storage/sales checkpoint does not close that row.
+Work writers capture policy and origin in WorkFacts2/profile2, with WorkLineFacts2
+for document-allocated cells. Exact integer discriminators and matching root/profile
+versions are checked before normalization. WorkFacts1/profile1 and legacy line
+arithmetic remain distinct. Changed legacy agreements may capture their implicit
+policy without rewriting old rows; linked legacy lines retain their original
+version1 basis including ordered component cents.
 
-Builder checks for this checkpoint: 260 arithmetic, sales/default/amount,
-company-settings, payment-correction, migration, schema and generated-reference
-checks passed in151.40s. After tightening new-revision attribution requirements
-and adding line-ordinal projections, 26 tax/migration/presentation checks passed
-in47.16s. Frozen co14 fixtures exercise posted/voided/corrected/amount/progress and
-paid history; raw old columns, rowids and local DDL are preserved. Independent
-artifact review, full combined-work tests and actual-MCP acceptance remain open.
+Basis2 contains captured economic agreement and complete ordered tax rules, excluding
+only the specified operational fields and derived tax/gross. Allocation3 explicitly
+identifies this basis; allocation1/2 retain their legacy meaning. Co0016 performs the
+reviewed narrow preserving rebuild of work_billing_allocations, widening three CHECKs
+and the exact allocation-shape discriminator. Frozen DDL, known guards, rowid/storage
+class/quote/bytes comparisons, restored local DDL, integrity and FK checks bound the
+migration. The existing migration runner restores FK enforcement after success or
+rollback. Co0015 and earlier migrations remain unchanged.
 
-The separate presentation follow-up supplies typed policy choice labels, sales edit
-baselines that omit unchanged policy, and readable captured-tax details in sales
-and legacy work views. Historical work retry outputs still omit absent live
-projections. Active DEMO/REF-TAX examples distinguish zero/two/one tax cents on
-otherwise identical five-cent lines; their additional ledger is AR33/income30/
-tax-liability3 cents. Prior seed manifest bytes remain an exact prefix.
-`work_tax_facts.py` prepares distinct WorkFacts2/WorkLineFacts2 and the reviewed
-basis2 economic hash, preserving the original local legacy types. These new types
-are not yet connected to work writers or allocation storage. The allocation3
-CHECK/additive-only design conflict remains with the parent; no old guard changes
-or version reinterpretation were selected here.
+Work conversion, progress, released-span rebilling and linked sale corrections use
+the captured source policy and destination tax ordinals. Economic source protections
+remain; compatible independent scope can redistribute derived cells on retained
+lines. Existing receipt confirmation predicates and complete payment restatement
+apply to the new exact gross/components. Historical postings and basis facts remain
+immutable. Copy and relocation preserve captured knowledge and permanent recovery.
+
+Remaining forecasts stream complete free intervals without constructing an oversized
+posting selection. They calculate all remaining billable nets together in current
+source order, return prospective destination ordinals, exact attribution, fingerprint
+and bounded eligibility reasons. The 200-span line/2000-span conversion caps still
+apply to execution. Prior and cumulative figures are actual postings. Bounded net
+recovery and fewer-complete-line recovery remain explicit, including progress-disabled
+companies; forecasts reserve no entitlement.
+
+Shared descriptions and browser details expose policy/source, stable tax order,
+captured rules, bases and allocated cents. Print opens marked accounting disclosures
+for printing and restores their prior state afterward. Active invoice examples add
+AR33/income30/tax3 cents, and the active work chain adds AR6/income5/tax1 cents per
+seed company. Exact preexisting manifest bytes remain a prefix. Independent review
+and parent-owned combined-candidate acceptance are required; this implementation
+description does not close Row24.
 
 ## Manual rates and foreign journal conversion
 

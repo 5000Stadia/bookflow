@@ -71,7 +71,7 @@ class _OverridePrice:
 
 
 def resolve_line(s, inp, header, previous: WorkLineFacts | None = None,
-                 previous_header=None, refresh=False, kind='estimate'):
+                 previous_header=None, refresh=False, kind='estimate', document_tax=False):
     """Resolve one line; the service owns identities, ordering and aggregate totals."""
     if kind not in WORK_KINDS:
         raise _invalid('kind', 'expected proposal, estimate or work_order')
@@ -106,7 +106,7 @@ def resolve_line(s, inp, header, previous: WorkLineFacts | None = None,
     override = _OverridePrice(s, inp, currency, previous, refresh, warnings, mode, markup) if mode in ('markup', 'amount') else None
     resolved, shared_warnings = sales_defaults.resolve_line(
         s, sales_input, header, previous=saved, previous_header=previous_header, refresh=refresh,
-        nonposting=True, price_override=override, net_override=net,
+        nonposting=True, price_override=override, net_override=net, defer_tax=document_tax,
     )
     warnings.extend(shared_warnings)
     profile = resolved['profile']
@@ -126,7 +126,9 @@ def resolve_line(s, inp, header, previous: WorkLineFacts | None = None,
         raise _invalid('completed_quantity', 'only work orders support completed quantity')
     if completed > resolved['quantity_microunits']:
         raise _invalid('completed_quantity', 'cannot exceed ordered quantity')
-    return WorkLineFacts(**resolved, completed_quantity_microunits=completed,
+    from bookflow.company.work_tax_facts import WorkLineFacts2
+    model = WorkLineFacts2 if document_tax else WorkLineFacts
+    return model(**resolved, completed_quantity_microunits=completed,
         estimated_unit_cost_minor_units=cost,
         estimated_cost_minor_units=extension(resolved['quantity_microunits'], cost) if cost is not None else None,
         estimated_cost_origin=origin, pricing_basis=mode, markup_percent_millionths=markup,

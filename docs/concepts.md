@@ -346,7 +346,7 @@ line accepts `net_amount` and shows a blank unit price. Changing quantity preser
 an amount override; rate-based lines extend the new quantity. Explicitly supplying
 one mode clears the previous price mode. `use_defaults=["unit_price"]` returns to
 catalog pricing; `use_defaults=["estimated_unit_cost"]` restores catalog cost.
-Prices, quoted taxes and costs use exact minor-unit half-even arithmetic.
+Prices and costs use exact minor-unit half-even arithmetic. Quoted tax uses the document’s captured sales tax calculation policy. Copies retain that policy; a changed company default does not reinterpret earlier work.
 
 Updates require the current `expected_version`. Dry-run writes resolve defaults
 and return a `facts_fingerprint`; pass it as `expected_facts_fingerprint` to reject
@@ -381,3 +381,10 @@ Financial conversion and progress billing, invoice payments, formal change order
 reusable templates, rendering and delivery are staged separately. Stock sales orders
 and pick/pack/ship are a separate inventory workflow. An invoice that has been paid
 will be settled by a customer payment, not replaced with a second sales receipt.
+
+The active `DEMO-TAX-PROP-LEGACY`, `DEMO-TAX-PROP-LINE` and
+`DEMO-TAX-PROP-TOTAL` proposals show the three policies on two five-cent services.
+The total-rounding proposal continues through `DEMO-TAX-EST` to `DEMO-TAX-WO`.
+`DEMO-TAX-WORK-INV` bills one service for six cents; five cents of net work remain,
+with one cent forecast tax if billed together. Physical completion leaves that
+remaining billing scope intact. Reference Plumbing Co has matching `REF-` examples.

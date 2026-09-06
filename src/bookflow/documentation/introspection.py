@@ -120,13 +120,22 @@ def _constraints(field: Any) -> str:
     return "; ".join(parts)
 
 
-def model_fields(model: type[BaseModel], *, leaves_only: bool = False, prefix: str = "") -> list[FieldDoc]:
+def model_fields(model: type[BaseModel], *, leaves_only: bool = False, prefix: str = "",
+                 _constraint_cache: dict[int, str] | None = None) -> list[FieldDoc]:
+    # A traversal can visit the same captured profile through many union branches.
+    # Reuse schemas within this traversal or render, never across separate renders.
+    return _model_fields(model, leaves_only=leaves_only, prefix=prefix,
+                         constraints={} if _constraint_cache is None else _constraint_cache)
+
+
+def _model_fields(model, *, leaves_only, prefix, constraints):
     result: list[FieldDoc] = []
     for name, field in model.model_fields.items():
         path = prefix + name
         nested = _base_model(field.annotation)
         base, _ = _optional(field.annotation)
-        variants = ()
+        variants = base if isinstance(base, tuple) and all(
+            inspect.isclass(item) and issubclass(item, BaseModel) for item in base) else ()
         if get_origin(base) in (list, tuple, set):
             member = get_args(base)[0]
             members, _ = _optional(member)
@@ -135,6 +144,8 @@ def model_fields(model: type[BaseModel], *, leaves_only: bool = False, prefix: s
         origin = get_origin(_optional(field.annotation)[0])
         child_prefix = path + ("[]." if origin in (list, tuple, set) else ".")
         extra = field.json_schema_extra if isinstance(field.json_schema_extra, dict) else {}
+        if id(field) not in constraints:
+            constraints[id(field)] = _constraints(field)
         doc = FieldDoc(
             path=path,
             type=type_name(field.annotation),
@@ -142,20 +153,21 @@ def model_fields(model: type[BaseModel], *, leaves_only: bool = False, prefix: s
             nullable=_optional(field.annotation)[1],
             default=_default(field),
             description=(field.description or "").strip(),
-            constraints=_constraints(field),
+            constraints=constraints[id(field)],
             secret=bool(extra.get("secret")),
             leaf=nested is None and not variants,
         )
         if not leaves_only or doc.leaf:
             result.append(doc)
         if nested is not None:
-            result.extend(model_fields(nested, leaves_only=leaves_only, prefix=child_prefix))
+            result.extend(_model_fields(nested, leaves_only=leaves_only, prefix=child_prefix, constraints=constraints))
         elif variants:
-            branches = [model_fields(variant, leaves_only=leaves_only, prefix=child_prefix) for variant in variants]
-            paths = dict.fromkeys(item.path for branch in branches for item in branch)
-            for variant_path in paths:
-                present = [(variant, item) for variant, branch in zip(variants, branches)
-                           for item in branch if item.path == variant_path]
+            branches = [_model_fields(variant, leaves_only=leaves_only, prefix=child_prefix, constraints=constraints) for variant in variants]
+            by_path = {}
+            for variant, branch in zip(variants, branches):
+                for item in branch:
+                    by_path.setdefault(item.path, []).append((variant, item))
+            for present in by_path.values():
                 item = present[0][1]
                 description = item.description
                 if len(present) != len(variants):

@@ -8,7 +8,8 @@ from bookflow.company.journal_outputs import CreatedOutput, JournalBatchOutput, 
 from bookflow.company.sales_facts import SalesProfile, SalesLineProfile, SalesTaxComponent
 from bookflow.company.sales_models import StrictModel
 from bookflow.company.tax_attribution import TaxDetails
-from bookflow.company.billing_facts import AllocationProof, ExactFraction
+from bookflow.company.tax_forecasts import WorkTaxForecast
+from bookflow.company.billing_facts import AllocationProof, TaxAllocationProof, ExactFraction
 from bookflow.core.models import WriteOutput
 from bookflow.company.payment_outputs import InvoiceSettlementOutput, InvoiceCorrectionOutput
 
@@ -89,8 +90,8 @@ class BillingSourceOutput(CreatedOutput):
     tax_minor_units: int
     gross_minor_units: int
     facts_snapshot: dict
-    allocation_version: Literal[1, 2] = 1
-    allocation_proof: AllocationProof | None = None
+    allocation_version: Literal[1, 2, 3] = 1
+    allocation_proof: AllocationProof | TaxAllocationProof | None = None
 
 
 class SalesRevisionSummaryOutput(CreatedOutput):
@@ -217,6 +218,7 @@ class SalesWriteOutput(SalesOutput, WriteOutput):
     settlement: InvoiceCorrectionOutput | None = None
     source_effect: WorkBillingSourceEffect | None = None
     source_current: WorkBillingCurrent | None = None
+    billing_forecast: WorkTaxForecast | None = None
     billing_progress: list[BillingProgressLine] = Field(default_factory=list)
     facts_fingerprint: str | None = None
     changed: bool = True
@@ -227,6 +229,7 @@ class SalesWriteOutput(SalesOutput, WriteOutput):
     @model_serializer(mode='wrap')
     def compatible_payment_settlement(self, handler):
         result = handler(self)
+        if self.billing_forecast is None:result.pop('billing_forecast',None)
         if self.settlement is None:
             result.pop('settlement', None)
         if self.settlement_current is None:

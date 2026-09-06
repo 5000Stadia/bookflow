@@ -6,6 +6,7 @@
 <h3>Existing bills</h3>
 <ul>{% for bill in billing.destinations %}<li><a href="/c/{{ company_id }}/{{ bill.type.replace('_', '-') }}/{{ bill.id }}">{{ bill.type.replace('_',' ')|capitalize }} {{ bill.number }}</a> · {{ bill.status }} · Total {{ bill.total.amount }} {{ bill.currency }} · Amount due {{ bill.amount_due.amount }} {{ bill.amount_due.currency }}{% if bill.type == 'sales_receipt' %} · Paid sale{% else %} · Invoice settlement is not available yet{% endif %}</li>{% else %}<li>No existing bills.</li>{% endfor %}</ul>
 {% if billing.next_cursor %}<a rel="next" href="{{ billing.source_url }}/billing?limit={{ billing_limit|default(50)|urlencode }}&amp;cursor={{ billing.next_cursor|urlencode }}&amp;billing_qty={{ request.query_params.get('billing_qty', '1')|urlencode }}&amp;billing_percent={{ request.query_params.get('billing_percent', '1')|urlencode }}">Next existing bills</a>{% endif %}
+{% set forecast = billing %}{% include 'tax_forecast.html' %}
 <h3>Posted state · quoted, previously billed and remaining scope</h3>
 <p>Completed quantities describe physical fulfillment, not billing or payment. Percentages measure original quoted scope. Quoted tax is informational; actual installment tax can differ. Remaining tax is a forecast for billing the remaining net together, never a tax debt.</p>
 {% set show_quantity = request.query_params.get('billing_qty', '1') != '0' %}

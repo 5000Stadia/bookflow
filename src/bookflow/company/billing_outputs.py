@@ -5,6 +5,7 @@ from bookflow.company.sales_models import StrictModel
 from bookflow.company.sales_outputs import SalesSummaryOutput, MoneyOutput
 from bookflow.company.billing_facts import ExactFraction
 from bookflow.company.work_preferences import WorkBillingPreferences
+from bookflow.company.tax_forecasts import WorkTaxForecast
 
 
 class BillingLineOutput(StrictModel):
@@ -42,7 +43,7 @@ class BillingDestinationOutput(SalesSummaryOutput):
     amount_due: MoneyOutput
 
 
-class BillingOutput(StrictModel):
+class BillingOutput(WorkTaxForecast):
     preferences: WorkBillingPreferences
     closes_on_remaining_bill: bool
     source_id: str

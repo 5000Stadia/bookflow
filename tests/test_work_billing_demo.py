@@ -28,7 +28,7 @@ assert (FULL, CORRECTED, LABOR, REPAIR, sum(AMOUNT)) == (22681, 22140, 21600, 10
 @pytest.mark.parametrize("resource", ["seed.toml", "reference.toml"])
 def test_manifests_append_all_six_billing_commands_after_the_old_entries(resource):
     commands = tomllib.loads(files("bookflow.demo").joinpath(resource).read_text())["commands"]
-    old, new = commands[:OLD_COUNTS[resource]], commands[OLD_COUNTS[resource]:]
+    old, new = commands[:OLD_COUNTS[resource]], commands[OLD_COUNTS[resource]:OLD_COUNTS[resource]+41]
     assert not [e for e in old if e["command"] in BILLING]
     assert {e["command"] for e in new if e["command"] in BILLING} == BILLING
     prefix = ("DEMO" if resource == "seed.toml" else "REF") + "-BILL-"
@@ -76,7 +76,7 @@ def test_billing_chain_lineage_corrections_and_replay(reference_client, company,
     assert (first["version"], first["status"]) == (2, "voided")
     lines = first["revision"]["lines"]
     assert [(l["pricing_basis"], l["unit_price"] and l["unit_price"]["minor_units"], l["net_minor_units"], l["tax_minor_units"])
-            for l in lines] == [("unit", 10000, *CATALOG), ("amount", None, *AMOUNT)]
+            for l in lines] == [("allocated", 10000, *CATALOG), ("allocated", None, *AMOUNT)]
     sources = first["revision"]["billing_sources"]
     assert [(s["source_document_id"], s["root_document_id"]) for s in sources] == [(estimate["id"], estimate["id"])] * 2
     assert [s["root_line_id"] for s in sources] == [l["root_line_id"] for l in estimate["revision"]["lines"][:2]]
@@ -180,11 +180,11 @@ def test_billing_chain_lineage_corrections_and_replay(reference_client, company,
 @pytest.mark.parametrize("company,prefix", COMPANIES)
 def test_voided_billing_demos_leave_every_old_balance_and_zero_net_effect(reference_client, company, prefix):
     client, _ = reference_client
-    checking, trial, journals, profit, equity = ((624895, 690195, 10, 133095, 633095) if prefix == "DEMO"
-                                                 else (7267800, 8030600, 36, 6439000, 7439000))
+    checking, trial, journals, profit, equity = ((624895, 690234, 10, 133130, 633130) if prefix == "DEMO"
+                                                 else (7267800, 8030639, 36, 6439035, 7439035))
     assert client.account.show(account="Checking", company=company)["balance"]["minor_units"] == checking
-    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == 12800
-    assert client.account.show(account="Sales Tax Payable", company=company)["balance"]["minor_units"] == 1600
+    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == 12839
+    assert client.account.show(account="Sales Tax Payable", company=company)["balance"]["minor_units"] == 1604
     totals = client.report.trial_balance(company=company, date_to="2026-12-31", limit=200)["totals"]
     assert totals["debit"]["minor_units"] == totals["credit"]["minor_units"] == trial
     statement = client.report.profit_and_loss(company=company, date_from="2026-01-01", date_to="2026-12-31")

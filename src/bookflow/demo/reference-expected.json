@@ -682,11 +682,11 @@
         "Insurance Expense": 120000,
         "Depreciation Expense": 50000,
         "Accumulated Depreciation": -50000,
-        "Service Income": -6099030,
+        "Service Income": -6099035,
         "Opening Balance Equity": -1000000,
         "Business Credit Card": 0,
-        "Accounts Receivable": 12833,
-        "Sales Tax Payable": -1603
+        "Accounts Receivable": 12839,
+        "Sales Tax Payable": -1604
       },
       "gross_debits_credits": {
         "Checking": [
@@ -715,7 +715,7 @@
         ],
         "Service Income": [
           850252,
-          6949282
+          6949287
         ],
         "Opening Balance Equity": [
           0,
@@ -726,18 +726,18 @@
           0
         ],
         "Accounts Receivable": [
-          220224,
+          220230,
           207391
         ],
         "Sales Tax Payable": [
           20420,
-          22023
+          22024
         ]
       },
-      "trial_balance": 7150633,
-      "income": 5654030,
-      "net_assets": 6654030,
-      "accounts_receivable": 12833,
+      "trial_balance": 7150639,
+      "income": 5654035,
+      "net_assets": 6654035,
+      "accounts_receivable": 12839,
       "accounts_payable": 0
     },
     {
@@ -749,11 +749,11 @@
         "Insurance Expense": 120000,
         "Depreciation Expense": 60000,
         "Accumulated Depreciation": -60000,
-        "Service Income": -6949030,
+        "Service Income": -6949035,
         "Opening Balance Equity": -1000000,
         "Business Credit Card": -20000,
-        "Accounts Receivable": 12833,
-        "Sales Tax Payable": -1603
+        "Accounts Receivable": 12839,
+        "Sales Tax Payable": -1604
       },
       "gross_debits_credits": {
         "Checking": [
@@ -782,7 +782,7 @@
         ],
         "Service Income": [
           850252,
-          7799282
+          7799287
         ],
         "Opening Balance Equity": [
           0,
@@ -793,18 +793,18 @@
           30000
         ],
         "Accounts Receivable": [
-          220224,
+          220230,
           207391
         ],
         "Sales Tax Payable": [
           20420,
-          22023
+          22024
         ]
       },
-      "trial_balance": 8030633,
-      "income": 6439030,
-      "net_assets": 7439030,
-      "accounts_receivable": 12833,
+      "trial_balance": 8030639,
+      "income": 6439035,
+      "net_assets": 7439035,
+      "accounts_receivable": 12839,
       "accounts_payable": 0
     }
   ],
@@ -817,11 +817,11 @@
       "Insurance Expense": 120000,
       "Depreciation Expense": 60000,
       "Accumulated Depreciation": -60000,
-      "Service Income": -6949030,
+      "Service Income": -6949035,
       "Opening Balance Equity": -1000000,
       "Business Credit Card": -20000,
-      "Accounts Receivable": 12833,
-      "Sales Tax Payable": -1603
+      "Accounts Receivable": 12839,
+      "Sales Tax Payable": -1604
     },
     "gross_debits_credits": {
       "Checking": [
@@ -850,7 +850,7 @@
       ],
       "Service Income": [
         850252,
-        7799282
+        7799287
       ],
       "Opening Balance Equity": [
         0,
@@ -861,18 +861,18 @@
         30000
       ],
       "Accounts Receivable": [
-        220224,
+        220230,
         207391
       ],
       "Sales Tax Payable": [
         20420,
-        22023
+        22024
       ]
     },
-    "trial_balance": 8030633,
-    "income": 6439030,
-    "net_assets": 7439030,
-    "accounts_receivable": 12833,
+    "trial_balance": 8030639,
+    "income": 6439035,
+    "net_assets": 7439035,
+    "accounts_receivable": 12839,
     "accounts_payable": 0
   },
   "second_half": {
@@ -918,7 +918,7 @@
       ],
       "Service Income": [
         350252,
-        4724282
+        4724287
       ],
       "Opening Balance Equity": [
         0,
@@ -929,12 +929,12 @@
         30000
       ],
       "Accounts Receivable": [
-        220224,
+        220230,
         207391
       ],
       "Sales Tax Payable": [
         20420,
-        22023
+        22024
       ]
     }
   }

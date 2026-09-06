@@ -1,8 +1,10 @@
 """Independent integrity checks before a work aggregate reaches persistence."""
 import json
+from pydantic import ValidationError
 from bookflow.company import schema as c, work, journal_custom_fields as custom
 from bookflow.company import sales_calculations as calc
-from bookflow.company.work_facts import WorkFacts, WorkLineFacts
+from bookflow.company.work_tax_facts import read_facts, read_line
+from bookflow.company import work_tax
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import INT64_MAX
 
@@ -19,6 +21,13 @@ def amount(value, *, positive=False, nullable=False):
 
 
 def validate(plan, s, ctx):
+    try:
+        return _validate(plan, s, ctx)
+    except (ValidationError, json.JSONDecodeError) as exc:
+        raise BookflowError('E_INTERNAL', message='Invalid work aggregate: malformed captured facts') from exc
+
+
+def _validate(plan, s, ctx):
     data = plan.data
     if not data['changed']:
         return
@@ -27,10 +36,19 @@ def validate(plan, s, ctx):
     require(set(pending) == {table for table, _ in work.TABLE_KINDS}, 'unexpected or missing persistence table')
     indexed = {}
     for name, _ in work.TABLE_KINDS:
-        indexed[name] = {row['id']: row for row in pending[name]}
+        key=work_tax.TABLE_KEYS.get(name,'id')
+        indexed[name] = {row[key]: row for row in pending[name]}
         require(len(indexed[name]) == len(pending[name]), 'duplicate immutable identity')
-        require(not work.rows(s, getattr(c, name), getattr(c, name).c.id.in_(indexed[name])), 'reused immutable identity')
+        require(not work.rows(s, getattr(c, name), getattr(c, name).c[key].in_(indexed[name])), 'reused immutable identity')
+    for name in work_tax.TABLE_KEYS:
+        for row in pending[name]:
+            require(row['document_id'] in headers,'unowned work tax fact')
+            owner=headers[row['document_id']]
+            require((row['created_at'],row['created_by'],row['created_via'])==(owner['updated_at'],s.actor.id,ctx.interface.value),'wrong work tax provenance')
+            if 'tax_ordinal' in row:require(type(row['tax_ordinal']) is int and row['tax_ordinal']>0,'invalid tax ordinal')
     revisions = indexed['work_revisions']
+    for name in ('work_tax_attributions','work_tax_attribution_lines'):
+        require(all(row['revision_id'] in revisions for row in pending[name]),'orphan work tax revision')
     require(len(revisions) == len(headers), 'one new revision per changed document')
     for header in headers.values():
         require(header['kind'] in work.KINDS and header['current_revision_id'] in revisions, 'wrong document/revision kind')
@@ -50,16 +68,17 @@ def validate(plan, s, ctx):
         require(all(rev[key] == header[key] for key in ('number', 'status', 'active')), 'current projection differs from revision')
         require(rev['audit_event_id'] == data['event'], 'wrong audit event')
         require(rev['created_by'] == s.actor.id and rev['created_via'] == ctx.interface.value and rev['created_at'] == header['updated_at'], 'wrong revision provenance')
-        f = WorkFacts.model_validate_json(rev['facts_snapshot'])
+        f = read_facts(rev['facts_snapshot'])
         require(rev['customer_id'] == f.profile.customer.id and rev['currency'] == s.company_info_row['home_currency'], 'wrong customer/currency')
         own_lines = [row for row in pending['work_lines'] if row['revision_id'] == rev['id']]
         require(len(own_lines) <= 200 and (bool(own_lines) or header['kind'] != 'estimate'), 'invalid line count')
         require(sorted(row['position'] for row in own_lines) == list(range(1, len(own_lines) + 1)), 'line order is not contiguous')
         require(len({row['line_id'] for row in own_lines}) == len(own_lines), 'repeated stable line')
+        expected_cells=work_tax.validate(s,rev,own_lines,pending,require)
         for line in own_lines:
             require(line['document_id'] == header['id'], 'line from another document')
             require(line['created_by'] == s.actor.id and line['created_via'] == ctx.interface.value and line['created_at'] == rev['created_at'], 'wrong line provenance')
-            lf = WorkLineFacts.model_validate_json(line['facts_snapshot'])
+            lf = read_line(line['facts_snapshot'])
             require(all(line[key] == getattr(lf, key) for key in work.LINE_COLUMNS), 'line projection differs from typed facts')
             require(lf.item_id == lf.profile.item.id, 'wrong item identity')
             require(lf.unit_id == (lf.profile.unit.id if lf.profile.unit else None), 'wrong selected unit')
@@ -90,7 +109,7 @@ def validate(plan, s, ctx):
             require(rules is not None and len(rules) == len(lf.taxes), 'incomplete quoted tax rules')
             for component, rule in zip(lf.taxes, rules):
                 require(component.rule == rule, 'tax rule differs from captured header')
-                require(component.taxable_minor_units == lf.net_minor_units and component.tax_minor_units == calc.tax(lf.net_minor_units, rule.rate_percent_millionths), 'incorrect quoted tax')
+                require(component.taxable_minor_units == lf.net_minor_units and component.tax_minor_units == expected_cells[line['id'],rule.id], 'incorrect quoted tax')
             require(lf.tax_minor_units == calc.total(component.tax_minor_units for component in lf.taxes), 'wrong line tax total')
             require(lf.gross_minor_units == calc.total((lf.net_minor_units, lf.tax_minor_units)), 'wrong line gross')
             identity = indexed['work_line_identities'].get(line['line_id'])
@@ -168,7 +187,8 @@ def validate(plan, s, ctx):
         old_rev = work.revision(s, old)
         new_rev = revisions[header['current_revision_id']]
         new_lines = sorted((line for line in pending['work_lines'] if line['revision_id'] == new_rev['id']), key=lambda row: row['position'])
-        require(work._semantic(old_rev, work.saved_lines(s, old_rev)) == work._semantic(new_rev, new_lines), 'conversion rewrote source facts')
+        require([read_line(row['facts_snapshot']).schema_version for row in new_lines]==[read_line(row['facts_snapshot']).schema_version for row in work.saved_lines(s,old_rev)],'conversion changed source line fact version')
+        require(work_tax.normalized(work._semantic(old_rev, work.saved_lines(s, old_rev))) == work_tax.normalized(work._semantic(new_rev, new_lines)), 'conversion rewrote source facts')
         require(all(old_rev[key] == new_rev[key] for key in ('accepted_revision_id', 'accepted_at', 'accepted_by')), 'conversion changed source acceptance')
     require(plan.preview.id in headers and plan.preview.revision.id == headers[plan.preview.id]['current_revision_id'], 'preview shows another document')
     require(plan.preview.gross_minor_units == revisions[plan.preview.revision.id]['gross_minor_units'], 'preview total differs')

@@ -172,3 +172,18 @@ def test_tax_order_differs_from_first_settlement_binary_order(client,tax_sale,mo
     assert cells(changed)==cells(invoice)
     with sqlite3.connect(database_path(client)) as db:
         assert dict(db.execute('SELECT line_id,ordinal FROM settlement_line_keys WHERE transaction_id=?',(invoice['id'],)))==settlement
+
+
+@pytest.mark.parametrize('value',[True,1.0,'1',None])
+def test_attribution_version_rejects_before_normalization(client,tax_sale,monkeypatch,value):
+    from bookflow.company import sales_validation
+    original=sales_validation.validate
+    def altered(plan,s,ctx):
+        row=plan.data['pending']['sales_tax_attributions'][0]
+        facts=json.loads(row['facts_snapshot']);facts['schema_version']=value
+        row['facts_snapshot']=json.dumps(facts)
+        return original(plan,s,ctx)
+    monkeypatch.setattr(sales_validation,'validate',altered)
+    before=snapshot(client)
+    with pytest.raises(BookflowError) as exc:client.run('invoice post',request(tax_sale),company=COMPANY)
+    assert exc.value.code=='E_INTERNAL' and snapshot(client)==before

@@ -26,7 +26,80 @@ Read prospective receipt/application effect pages by pure recomputation of exact
 |---|---|---|---|---|---|---|
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
-| `request` | `--request` | object \| object \| object \| object \| object \| object | yes | no | — | — |
+| `request.command` | `--request-command` | literal["payment receive"] \| literal["payment apply"] \| literal["payment unapply"] \| literal["payment void"] \| literal["payment update"] \| literal["invoice update"] | yes | no | — | — |
+| `request.input.customer` | `--request-input-customer` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest.; minimum length 1; maximum length 1004 |
+| `request.input.date` | `--request-input-date` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, ApplyPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest.; minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
+| `request.input.amount` | `--request-input-amount` | string \| object \| string \| object \| null | no | no | — | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `request.input.operation_key` | `--request-input-operation-key` | string \| string \| null | no | no | — | pattern "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" |
+| `request.input.applications.mode` | `--request-input-applications-mode` | literal["inline"] \| literal["selection"] | no | no | "inline" | Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `request.input.applications.items[].invoice` | inside `--request-input-applications-items` JSON array | string | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest.; minimum length 1; maximum length 1004 |
+| `request.input.applications.items[].expected_version` | inside `--request-input-applications-items` JSON array | integer | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest.; minimum 1 |
+| `request.input.applications.items[].amount` | inside `--request-input-applications-items` JSON array | string \| object | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `request.input.applications.selection` | `--request-input-applications-selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest.; minimum length 1; maximum length 1004 |
+| `request.input.applications.expected_version` | `--request-input-applications-expected-version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest.; minimum 1 |
+| `request.input.payment_method` | `--request-input-payment-method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `request.input.ar_account` | `--request-input-ar-account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `request.input.deposit_to` | `--request-input-deposit-to` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `request.input.number` | `--request-input-number` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `request.input.reference` | `--request-input-reference` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `request.input.memo` | `--request-input-memo` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `request.input.custom_fields` | `--request-input-custom-fields` | object[string, any \| null] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `request.input.expected_custom_field_kinds` | `--request-input-expected-custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `request.input.expected_facts_fingerprint` | `--request-input-expected-facts-fingerprint` | string \| null | no | yes | null | — |
+| `request.context.reason` | `--request-context-reason` | string \| null | no | yes | null | — |
+| `request.context.directive_id` | `--request-context-directive-id` | string \| null | no | yes | null | — |
+| `request.input.payment` | `--request-input-payment` | string | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest.; minimum length 1; maximum length 1004 |
+| `request.input.expected_version` | `--request-input-expected-version` | integer \| integer \| null | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest.; minimum 1 |
+| `request.input.applications[].application_id` | inside `--request-input-applications` JSON array | string | no | no | — | Present in UnapplyPreviewRequest.; minimum length 1; maximum length 1004 |
+| `request.input.applications[].invoice_expected_version` | inside `--request-input-applications` JSON array | integer | no | no | — | Present in UnapplyPreviewRequest.; minimum 1 |
+| `request.input.invoice_versions[].invoice` | inside `--request-input-invoice-versions` JSON array | string | no | no | — | Present in UpdatePreviewRequest.; minimum length 1; maximum length 1004 |
+| `request.input.invoice_versions[].expected_version` | inside `--request-input-invoice-versions` JSON array | integer | no | no | — | Present in UpdatePreviewRequest.; minimum 1 |
+| `request.input.settlement_guard` | `--request-input-settlement-guard` | string \| null | no | yes | null | Present in UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `request.input.terms` | `--request-input-terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.due_date` | `--request-input-due-date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.sales_tax_calculation` | `--request-input-sales-tax-calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
+| `request.input.customer_message` | `--request-input-customer-message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.customer_message_item` | `--request-input-customer-message-item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.customer_purchase_order` | `--request-input-customer-purchase-order` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.billing_address.line1` | `--request-input-billing-address-line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.billing_address.line2` | `--request-input-billing-address-line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.billing_address.city` | `--request-input-billing-address-city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.billing_address.state` | `--request-input-billing-address-state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.billing_address.postal_code` | `--request-input-billing-address-postal-code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.billing_address.country` | `--request-input-billing-address-country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.shipping_address.line1` | `--request-input-shipping-address-line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.shipping_address.line2` | `--request-input-shipping-address-line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.shipping_address.city` | `--request-input-shipping-address-city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.shipping_address.state` | `--request-input-shipping-address-state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.shipping_address.postal_code` | `--request-input-shipping-address-postal-code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.shipping_address.country` | `--request-input-shipping-address-country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.shipping_address_id` | `--request-input-shipping-address-id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.ship_date` | `--request-input-ship-date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.ship_method` | `--request-input-ship-method` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.sales_rep` | `--request-input-sales-rep` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.class_id` | `--request-input-class-id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.customer_tax_code` | `--request-input-customer-tax-code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.sales_tax_item` | `--request-input-sales-tax-item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.price_level` | `--request-input-price-level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.refresh_defaults` | `--request-input-refresh-defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.use_defaults` | `--request-input-use-defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.custom_field_kinds` | `--request-input-custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].line_id` | inside `--request-input-lines` JSON array | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].item` | inside `--request-input-lines` JSON array | string | no | no | — | Present in InvoiceUpdatePreviewRequest.; minimum length 1; maximum length 1004 |
+| `request.input.lines[].quantity` | inside `--request-input-lines` JSON array | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].unit` | inside `--request-input-lines` JSON array | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].unit_price` | inside `--request-input-lines` JSON array | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].net_amount` | inside `--request-input-lines` JSON array | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].description` | inside `--request-input-lines` JSON array | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].class_id` | inside `--request-input-lines` JSON array | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].tax_code` | inside `--request-input-lines` JSON array | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].price_level` | inside `--request-input-lines` JSON array | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].price_basis_amount` | inside `--request-input-lines` JSON array | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].refresh_defaults` | inside `--request-input-lines` JSON array | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].use_defaults` | inside `--request-input-lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.invoice` | `--request-input-invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest.; minimum length 1; maximum length 1004 |
+| `request.input.settlement_versions[].payment` | inside `--request-input-settlement-versions` JSON array | string | no | no | — | Present in InvoiceUpdatePreviewRequest.; minimum length 1; maximum length 1004 |
+| `request.input.settlement_versions[].expected_version` | inside `--request-input-settlement-versions` JSON array | integer | no | no | — | Present in InvoiceUpdatePreviewRequest.; minimum 1 |
 | `facts_fingerprint` | `--facts-fingerprint` | string | yes | no | — | pattern "^[0-9a-f]{64}$" |
 | `kind` | `--kind` | literal["source_components", "applications", "allocations", "document_changes"] | yes | no | — | — |
 

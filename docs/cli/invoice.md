@@ -530,8 +530,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.billing_sources[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.billing_sources[].gross_minor_units` | integer | yes | no | — | — |
 | `revision.billing_sources[].facts_snapshot` | dict | yes | no | — | — |
-| `revision.billing_sources[].allocation_version` | literal[1, 2] | no | no | 1 | — |
-| `revision.billing_sources[].allocation_proof` | object \| null | no | yes | null | — |
+| `revision.billing_sources[].allocation_version` | literal[1, 2, 3] | no | no | 1 | — |
+| `revision.billing_sources[].allocation_proof` | object \| object \| null | no | yes | null | — |
 | `revision.billing_sources[].allocation_proof.source_document_id` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.source_revision_id` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.source_line_id` | string | yes | no | — | — |
@@ -545,6 +545,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.billing_sources[].allocation_proof.spans` | array[object] | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.spans[].end` | string | yes | no | — | — |
+| `revision.billing_sources[].allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -770,7 +771,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].item_snapshot.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].item_snapshot.net_amount_minor_units` | integer \| null | no | yes | null | — |
-| `revision.lines[].item_snapshot.allocation_proof` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.allocation_proof` | object \| object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_document_id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_revision_id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_line_id` | string | yes | no | — | — |
@@ -784,6 +785,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.allocation_proof.spans` | array[object] | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].end` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -981,6 +983,89 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages` | array[object] | no | no | [] | — |
 | `settlement.prospective_pages[].command` | literal["payment preview items"] | no | no | "payment preview items" | — |
 | `settlement.prospective_pages[].request` | object \| object \| object \| object \| object \| object | yes | no | — | — |
+| `settlement.prospective_pages[].request.command` | literal["payment receive"] \| literal["payment apply"] \| literal["payment unapply"] \| literal["payment void"] \| literal["payment update"] \| literal["invoice update"] | yes | no | — | — |
+| `settlement.prospective_pages[].request.input` | object | yes | no | — | — |
+| `settlement.prospective_pages[].request.input.customer` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.date` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, ApplyPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.amount` | string \| object \| string \| object \| null | no | no | — | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.operation_key` | string \| string \| null | no | no | — | — |
+| `settlement.prospective_pages[].request.input.applications` | object \| object \| array[object] | no | no | {"items": [], "mode": "inline"} | Present in ReceivePreviewRequest, ApplyPreviewRequest, UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.mode` | literal["inline"] \| literal["selection"] | no | no | "inline" | Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items` | array[object] | no | no | [] | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].invoice` | string | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].expected_version` | integer | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].amount` | string \| object | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.number` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.reference` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.memo` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.custom_fields` | object[string, any \| null] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_facts_fingerprint` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.context` | object | no | no | {"directive_id": null, "reason": null} | — |
+| `settlement.prospective_pages[].request.context.reason` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.context.directive_id` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.input.payment` | string | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_version` | integer \| integer \| null | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications[].application_id` | string | no | no | — | Present in UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications[].invoice_expected_version` | integer | no | no | — | Present in UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions` | array[object] | no | no | [] | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions[].invoice` | string | no | no | — | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions[].expected_version` | integer | no | no | — | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_guard` | string \| null | no | yes | null | Present in UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.due_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_message_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_purchase_order` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address` | object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.postal_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address` | object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.postal_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ship_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ship_method` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_rep` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.class_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_tax_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.use_defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines` | array[object] \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].line_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].item` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].quantity` | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].unit` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].unit_price` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].net_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].description` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].class_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].price_basis_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions[].payment` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions[].expected_version` | integer | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].facts_fingerprint` | string | yes | no | — | — |
 | `settlement.prospective_pages[].kind` | literal["source_components", "applications", "allocations", "document_changes"] | yes | no | — | — |
 | `settlement.prospective_pages[].total_count` | integer | yes | no | — | — |
@@ -1001,6 +1086,64 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `source_current.version` | integer | yes | no | — | — |
 | `source_current.active` | boolean | yes | no | — | — |
 | `source_current.status` | string | yes | no | — | — |
+| `billing_forecast` | object \| null | no | yes | null | — |
+| `billing_forecast.forecast_basis` | literal["all_remaining_together"] | no | no | "all_remaining_together" | — |
+| `billing_forecast.can_bill_together` | boolean | yes | no | — | — |
+| `billing_forecast.forecast_eligibility_reasons` | array[object] | no | no | [] | — |
+| `billing_forecast.forecast_eligibility_reasons[].code` | literal["line_span_limit", "conversion_span_limit", "source_ineligible", "posting_ineligible", "no_charge"] | yes | no | — | — |
+| `billing_forecast.forecast_eligibility_reasons[].line_id` | string \| null | no | yes | null | — |
+| `billing_forecast.forecast_eligibility_reasons[].recovery` | string | yes | no | — | — |
+| `billing_forecast.forecast_line_ordinals` | object[string, integer] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.schema_version` | literal[1] | no | no | 1 | — |
+| `billing_forecast.forecast_tax_attribution.origin` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.origin.source_id` | string \| null | no | yes | null | — |
+| `billing_forecast.forecast_tax_attribution.calculation` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.policy` | enum["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.currency` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].tax_ordinals` | array[integer] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].exact_numerator` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].tax_ordinal` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.label` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.version` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.rate_percent_millionths` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.label` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.version` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.name` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.full_name` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.number` | string \| null | yes | yes | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.type` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].exact_numerator` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].tax_ordinal` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].agency_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].liability_account_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts[].liability_account_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_fingerprint` | string | yes | no | — | — |
 | `billing_progress` | array[object] | no | no | [] | — |
 | `billing_progress[].line_id` | string | yes | no | — | — |
 | `billing_progress[].root_document_id` | string | yes | no | — | — |
@@ -1811,8 +1954,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.billing_sources[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.billing_sources[].gross_minor_units` | integer | yes | no | — | — |
 | `revision.billing_sources[].facts_snapshot` | dict | yes | no | — | — |
-| `revision.billing_sources[].allocation_version` | literal[1, 2] | no | no | 1 | — |
-| `revision.billing_sources[].allocation_proof` | object \| null | no | yes | null | — |
+| `revision.billing_sources[].allocation_version` | literal[1, 2, 3] | no | no | 1 | — |
+| `revision.billing_sources[].allocation_proof` | object \| object \| null | no | yes | null | — |
 | `revision.billing_sources[].allocation_proof.source_document_id` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.source_revision_id` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.source_line_id` | string | yes | no | — | — |
@@ -1826,6 +1969,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.billing_sources[].allocation_proof.spans` | array[object] | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.spans[].end` | string | yes | no | — | — |
+| `revision.billing_sources[].allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -2051,7 +2195,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].item_snapshot.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].item_snapshot.net_amount_minor_units` | integer \| null | no | yes | null | — |
-| `revision.lines[].item_snapshot.allocation_proof` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.allocation_proof` | object \| object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_document_id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_revision_id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_line_id` | string | yes | no | — | — |
@@ -2065,6 +2209,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.allocation_proof.spans` | array[object] | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].end` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -2586,8 +2731,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.billing_sources[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.billing_sources[].gross_minor_units` | integer | yes | no | — | — |
 | `revision.billing_sources[].facts_snapshot` | dict | yes | no | — | — |
-| `revision.billing_sources[].allocation_version` | literal[1, 2] | no | no | 1 | — |
-| `revision.billing_sources[].allocation_proof` | object \| null | no | yes | null | — |
+| `revision.billing_sources[].allocation_version` | literal[1, 2, 3] | no | no | 1 | — |
+| `revision.billing_sources[].allocation_proof` | object \| object \| null | no | yes | null | — |
 | `revision.billing_sources[].allocation_proof.source_document_id` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.source_revision_id` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.source_line_id` | string | yes | no | — | — |
@@ -2601,6 +2746,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.billing_sources[].allocation_proof.spans` | array[object] | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.spans[].end` | string | yes | no | — | — |
+| `revision.billing_sources[].allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -2826,7 +2972,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].item_snapshot.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].item_snapshot.net_amount_minor_units` | integer \| null | no | yes | null | — |
-| `revision.lines[].item_snapshot.allocation_proof` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.allocation_proof` | object \| object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_document_id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_revision_id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_line_id` | string | yes | no | — | — |
@@ -2840,6 +2986,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.allocation_proof.spans` | array[object] | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].end` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -3037,6 +3184,89 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages` | array[object] | no | no | [] | — |
 | `settlement.prospective_pages[].command` | literal["payment preview items"] | no | no | "payment preview items" | — |
 | `settlement.prospective_pages[].request` | object \| object \| object \| object \| object \| object | yes | no | — | — |
+| `settlement.prospective_pages[].request.command` | literal["payment receive"] \| literal["payment apply"] \| literal["payment unapply"] \| literal["payment void"] \| literal["payment update"] \| literal["invoice update"] | yes | no | — | — |
+| `settlement.prospective_pages[].request.input` | object | yes | no | — | — |
+| `settlement.prospective_pages[].request.input.customer` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.date` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, ApplyPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.amount` | string \| object \| string \| object \| null | no | no | — | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.operation_key` | string \| string \| null | no | no | — | — |
+| `settlement.prospective_pages[].request.input.applications` | object \| object \| array[object] | no | no | {"items": [], "mode": "inline"} | Present in ReceivePreviewRequest, ApplyPreviewRequest, UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.mode` | literal["inline"] \| literal["selection"] | no | no | "inline" | Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items` | array[object] | no | no | [] | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].invoice` | string | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].expected_version` | integer | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].amount` | string \| object | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.number` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.reference` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.memo` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.custom_fields` | object[string, any \| null] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_facts_fingerprint` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.context` | object | no | no | {"directive_id": null, "reason": null} | — |
+| `settlement.prospective_pages[].request.context.reason` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.context.directive_id` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.input.payment` | string | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_version` | integer \| integer \| null | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications[].application_id` | string | no | no | — | Present in UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications[].invoice_expected_version` | integer | no | no | — | Present in UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions` | array[object] | no | no | [] | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions[].invoice` | string | no | no | — | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions[].expected_version` | integer | no | no | — | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_guard` | string \| null | no | yes | null | Present in UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.due_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_message_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_purchase_order` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address` | object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.postal_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address` | object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.postal_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ship_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ship_method` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_rep` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.class_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_tax_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.use_defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines` | array[object] \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].line_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].item` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].quantity` | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].unit` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].unit_price` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].net_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].description` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].class_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].price_basis_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions[].payment` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions[].expected_version` | integer | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].facts_fingerprint` | string | yes | no | — | — |
 | `settlement.prospective_pages[].kind` | literal["source_components", "applications", "allocations", "document_changes"] | yes | no | — | — |
 | `settlement.prospective_pages[].total_count` | integer | yes | no | — | — |
@@ -3057,6 +3287,64 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `source_current.version` | integer | yes | no | — | — |
 | `source_current.active` | boolean | yes | no | — | — |
 | `source_current.status` | string | yes | no | — | — |
+| `billing_forecast` | object \| null | no | yes | null | — |
+| `billing_forecast.forecast_basis` | literal["all_remaining_together"] | no | no | "all_remaining_together" | — |
+| `billing_forecast.can_bill_together` | boolean | yes | no | — | — |
+| `billing_forecast.forecast_eligibility_reasons` | array[object] | no | no | [] | — |
+| `billing_forecast.forecast_eligibility_reasons[].code` | literal["line_span_limit", "conversion_span_limit", "source_ineligible", "posting_ineligible", "no_charge"] | yes | no | — | — |
+| `billing_forecast.forecast_eligibility_reasons[].line_id` | string \| null | no | yes | null | — |
+| `billing_forecast.forecast_eligibility_reasons[].recovery` | string | yes | no | — | — |
+| `billing_forecast.forecast_line_ordinals` | object[string, integer] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.schema_version` | literal[1] | no | no | 1 | — |
+| `billing_forecast.forecast_tax_attribution.origin` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.origin.source_id` | string \| null | no | yes | null | — |
+| `billing_forecast.forecast_tax_attribution.calculation` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.policy` | enum["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.currency` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].tax_ordinals` | array[integer] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].exact_numerator` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].tax_ordinal` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.label` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.version` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.rate_percent_millionths` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.label` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.version` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.name` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.full_name` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.number` | string \| null | yes | yes | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.type` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].exact_numerator` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].tax_ordinal` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].agency_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].liability_account_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts[].liability_account_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_fingerprint` | string | yes | no | — | — |
 | `billing_progress` | array[object] | no | no | [] | — |
 | `billing_progress[].line_id` | string | yes | no | — | — |
 | `billing_progress[].root_document_id` | string | yes | no | — | — |
@@ -3565,8 +3853,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.billing_sources[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.billing_sources[].gross_minor_units` | integer | yes | no | — | — |
 | `revision.billing_sources[].facts_snapshot` | dict | yes | no | — | — |
-| `revision.billing_sources[].allocation_version` | literal[1, 2] | no | no | 1 | — |
-| `revision.billing_sources[].allocation_proof` | object \| null | no | yes | null | — |
+| `revision.billing_sources[].allocation_version` | literal[1, 2, 3] | no | no | 1 | — |
+| `revision.billing_sources[].allocation_proof` | object \| object \| null | no | yes | null | — |
 | `revision.billing_sources[].allocation_proof.source_document_id` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.source_revision_id` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.source_line_id` | string | yes | no | — | — |
@@ -3580,6 +3868,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.billing_sources[].allocation_proof.spans` | array[object] | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.billing_sources[].allocation_proof.spans[].end` | string | yes | no | — | — |
+| `revision.billing_sources[].allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -3805,7 +4094,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.origins` | object[string, object] | no | no | {} | — |
 | `revision.lines[].item_snapshot.pricing_basis` | literal["unit", "amount", "allocated"] | no | no | "unit" | — |
 | `revision.lines[].item_snapshot.net_amount_minor_units` | integer \| null | no | yes | null | — |
-| `revision.lines[].item_snapshot.allocation_proof` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.allocation_proof` | object \| object \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_document_id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_revision_id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.source_line_id` | string | yes | no | — | — |
@@ -3819,6 +4108,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.allocation_proof.spans` | array[object] | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].start` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.allocation_proof.spans[].end` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.allocation_proof.basis_version` | literal[2] | no | no | — | Present in TaxAllocationProof. |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -4016,6 +4306,89 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages` | array[object] | no | no | [] | — |
 | `settlement.prospective_pages[].command` | literal["payment preview items"] | no | no | "payment preview items" | — |
 | `settlement.prospective_pages[].request` | object \| object \| object \| object \| object \| object | yes | no | — | — |
+| `settlement.prospective_pages[].request.command` | literal["payment receive"] \| literal["payment apply"] \| literal["payment unapply"] \| literal["payment void"] \| literal["payment update"] \| literal["invoice update"] | yes | no | — | — |
+| `settlement.prospective_pages[].request.input` | object | yes | no | — | — |
+| `settlement.prospective_pages[].request.input.customer` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.date` | string \| string \| null | no | no | — | Present in ReceivePreviewRequest, ApplyPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.amount` | string \| object \| string \| object \| null | no | no | — | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.operation_key` | string \| string \| null | no | no | — | — |
+| `settlement.prospective_pages[].request.input.applications` | object \| object \| array[object] | no | no | {"items": [], "mode": "inline"} | Present in ReceivePreviewRequest, ApplyPreviewRequest, UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.mode` | literal["inline"] \| literal["selection"] | no | no | "inline" | Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items` | array[object] | no | no | [] | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].invoice` | string | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].expected_version` | integer | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.items[].amount` | string \| object | no | no | — | Present in InlineApplications. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.selection` | string | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.number` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.reference` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.memo` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.custom_fields` | object[string, any \| null] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_facts_fingerprint` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.context` | object | no | no | {"directive_id": null, "reason": null} | — |
+| `settlement.prospective_pages[].request.context.reason` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.context.directive_id` | string \| null | no | yes | null | — |
+| `settlement.prospective_pages[].request.input.payment` | string | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.expected_version` | integer \| integer \| null | no | no | — | Present in ApplyPreviewRequest, UnapplyPreviewRequest, VoidPreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications[].application_id` | string | no | no | — | Present in UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.applications[].invoice_expected_version` | integer | no | no | — | Present in UnapplyPreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions` | array[object] | no | no | [] | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions[].invoice` | string | no | no | — | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice_versions[].expected_version` | integer | no | no | — | Present in UpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_guard` | string \| null | no | yes | null | Present in UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.terms` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.due_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | no | no | null | Captured tax calculation; omission selects company default on creation and retains policy on correction; null rejects Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_message` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_message_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_purchase_order` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address` | object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.postal_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.billing_address.country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address` | object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.line1` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.line2` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.city` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.state` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.postal_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address.country` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.shipping_address_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ship_date` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.ship_method` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_rep` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.class_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.customer_tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.sales_tax_item` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.use_defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines` | array[object] \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].line_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].item` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].quantity` | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].unit` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].unit_price` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].net_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].description` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].class_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].tax_code` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].price_level` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].price_basis_amount` | string \| object \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].refresh_defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].use_defaults` | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.invoice` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions` | array[object] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions[].payment` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.settlement_versions[].expected_version` | integer | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].facts_fingerprint` | string | yes | no | — | — |
 | `settlement.prospective_pages[].kind` | literal["source_components", "applications", "allocations", "document_changes"] | yes | no | — | — |
 | `settlement.prospective_pages[].total_count` | integer | yes | no | — | — |
@@ -4036,6 +4409,64 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `source_current.version` | integer | yes | no | — | — |
 | `source_current.active` | boolean | yes | no | — | — |
 | `source_current.status` | string | yes | no | — | — |
+| `billing_forecast` | object \| null | no | yes | null | — |
+| `billing_forecast.forecast_basis` | literal["all_remaining_together"] | no | no | "all_remaining_together" | — |
+| `billing_forecast.can_bill_together` | boolean | yes | no | — | — |
+| `billing_forecast.forecast_eligibility_reasons` | array[object] | no | no | [] | — |
+| `billing_forecast.forecast_eligibility_reasons[].code` | literal["line_span_limit", "conversion_span_limit", "source_ineligible", "posting_ineligible", "no_charge"] | yes | no | — | — |
+| `billing_forecast.forecast_eligibility_reasons[].line_id` | string \| null | no | yes | null | — |
+| `billing_forecast.forecast_eligibility_reasons[].recovery` | string | yes | no | — | — |
+| `billing_forecast.forecast_line_ordinals` | object[string, integer] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.schema_version` | literal[1] | no | no | 1 | — |
+| `billing_forecast.forecast_tax_attribution.origin` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.origin.source_id` | string \| null | no | yes | null | — |
+| `billing_forecast.forecast_tax_attribution.calculation` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.policy` | enum["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.currency` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].tax_ordinals` | array[integer] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].exact_numerator` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].tax_ordinal` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.label` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.version` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.rate_percent_millionths` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.label` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.agency.version` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account` | object | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.name` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.full_name` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.number` | string \| null | yes | yes | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.type` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].rule.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].exact_numerator` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.buckets[].cells[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].tax_ordinal` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.lines[].gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].agency_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].liability_account_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.liabilities[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts` | array[object] | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts[].liability_account_id` | string | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.accounts[].tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.net_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.tax_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_tax_attribution.calculation.gross_minor_units` | integer | yes | no | — | — |
+| `billing_forecast.forecast_fingerprint` | string | yes | no | — | — |
 | `billing_progress` | array[object] | no | no | [] | — |
 | `billing_progress[].line_id` | string | yes | no | — | — |
 | `billing_progress[].root_document_id` | string | yes | no | — | — |

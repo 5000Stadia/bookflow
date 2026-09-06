@@ -1,5 +1,5 @@
 {% if tax_details %}
-<details class="tax-details"><summary>Tax calculation · {{ tax_labels[tax_details.policy] }}</summary>
+<details data-tax-print class="tax-details"><summary>Tax calculation · {{ tax_labels[tax_details.policy] }}</summary>
 <p>{{ tax_explanations[tax_details.policy] }}</p>
 <p>Policy source: {{ 'Legacy implicit policy' if tax_details.origin.kind == 'legacy_implicit' else 'Captured company default' if tax_details.origin.kind == 'default' else 'Explicit document choice' }}.</p>
 {% if tax_details.legacy_interpretation %}<p>Historical calculation: saved amounts remain as recorded. No new attribution has been assigned to this revision.</p>

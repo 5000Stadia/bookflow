@@ -121,6 +121,9 @@ def source_effects():
                      ('Service Income', '2026-11-10', 'REF-TAX-'+tag, 'original', 0, 5)]
             if tax:
                 rows.append(('Sales Tax Payable', '2026-11-10', 'REF-TAX-'+tag, 'original', 0, tax))
+    rows += [('Accounts Receivable','2026-11-12','REF-TAX-WORK-INV','original',6,0),
+             ('Service Income','2026-11-12','REF-TAX-WORK-INV','original',0,5),
+             ('Sales Tax Payable','2026-11-12','REF-TAX-WORK-INV','original',0,1)]
     return rows
 
 
@@ -140,10 +143,10 @@ def test_stored_oracles_match_independent_source_arithmetic():
         assert checkpoint['income'] == -b['Service Income']-b['Professional Fees']-b['Insurance Expense']-b['Depreciation Expense']
         assert checkpoint['net_assets'] == b['Checking']+b['Equipment']+b['Accumulated Depreciation']+b['Business Credit Card']+b['Accounts Receivable']+b['Sales Tax Payable']
         assert checkpoint['net_assets'] == 1000000 + checkpoint['income']
-        assert checkpoint['accounts_receivable'] == (12833 if month >= 11 else 12800 if month >= 9 else 0)
+        assert checkpoint['accounts_receivable'] == (12839 if month >= 11 else 12800 if month >= 9 else 0)
         assert checkpoint['accounts_payable'] == 0
     assert EXPECTED['annual'] == EXPECTED['monthly'][-1]
-    assert (EXPECTED['annual']['trial_balance'], EXPECTED['annual']['income'], EXPECTED['annual']['net_assets']) == (8030633,6439030,7439030)
+    assert (EXPECTED['annual']['trial_balance'], EXPECTED['annual']['income'], EXPECTED['annual']['net_assets']) == (8030639,6439035,7439035)
     assert EXPECTED['monthly'][5]['trial_balance'] == 3575000
     assert EXPECTED['second_half']['opening'] == EXPECTED['monthly'][5]['balances']
     for account, gross in EXPECTED['second_half']['gross_debits_credits'].items():
@@ -220,8 +223,8 @@ def assert_balances(c):
         assert shown['balance']['minor_units'] == listed['balance']['minor_units'] == normal
         assert shown['balance']['currency'] == 'USD'
         assert shown['id'] != c.account.show(company=DEMO,account='Checking')['id']
-    assert c.report.trial_balance(company=REFERENCE,date_to='2026-12-31')['totals']['debit']['minor_units'] == 8030633
-    assert c.report.trial_balance(company=DEMO,date_to='2026-12-31')['totals']['debit']['minor_units'] == 690228
+    assert c.report.trial_balance(company=REFERENCE,date_to='2026-12-31')['totals']['debit']['minor_units'] == 8030639
+    assert c.report.trial_balance(company=DEMO,date_to='2026-12-31')['totals']['debit']['minor_units'] == 690234
     assert c.account.show(company=DEMO,account='Checking')['balance']['minor_units'] == 624895
     assert c.journal.query(company=DEMO)['count'] == 10
 
@@ -252,6 +255,8 @@ def snapshot(root):
     return {str(p.relative_to(root)):(p.stat().st_mode,hashlib.sha256(p.read_bytes()).hexdigest()) for p in root.rglob('*') if p.is_file() and p.name != 'root.lock' and not p.name.endswith(('-wal','-shm'))}
 
 
+# Multiple full company resets include the active tax work examples (83–89s measured).
+@pytest.mark.timeout(180)
 def test_preview_default_repeated_reset_and_whole_organization_boundary(reference_client):
     c, root = reference_client
     before = snapshot(root)
@@ -300,7 +305,7 @@ def test_readonly_and_sibling_permissions(reference_client):
     make_actor(root,'reference-reader',company_role=(cid,'readonly'))
     reader = as_user(root,'reference-reader')
     assert [r['company_id'] for r in reader.company.list()['items']] == [cid]
-    assert reader.report.trial_balance(company=cid,date_to='2026-12-31')['totals']['debit']['minor_units'] == 8030633
+    assert reader.report.trial_balance(company=cid,date_to='2026-12-31')['totals']['debit']['minor_units'] == 8030639
     for name, args, context in [('demo reset',{'include_reference':True},{}),('journal post',{'date':'2026-12-31','lines':[{'account':'Checking','side':'debit','amount':'1.00'},{'account':'Service Income','side':'credit','amount':'1.00'}]},{'company':cid})]:
         with pytest.raises(BookflowError) as caught:
             reader.run(name,args,**context)
@@ -309,6 +314,8 @@ def test_readonly_and_sibling_permissions(reference_client):
         reader.report.trial_balance(company=DEMO,date_to='2026-12-31')
 
 
+# Multiple full company resets include the active tax work examples (83–89s measured).
+@pytest.mark.timeout(180)
 def test_partial_seed_failure_reports_committed_effects_and_rerun_recovers(reference_client, monkeypatch):
     from bookflow.commands import hub_cmds
     c, root = reference_client

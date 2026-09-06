@@ -1,0 +1,8 @@
+{% if forecast %}
+<div class="workflow-note" aria-label="Remaining tax forecast">
+{% if forecast.can_bill_together %}<p>Forecast for billing all remaining scope together in the current source order. Separate installments or added sale charges can produce different tax.</p>
+{% else %}<p><strong>Hypothetical total — this remaining scope cannot currently be billed together.</strong> Actual bounded installments round independently and may charge different tax.</p>
+<ul>{% for reason in forecast.forecast_eligibility_reasons %}<li>{{ reason.recovery }}</li>{% endfor %}</ul>{% endif %}
+<p>Preview reserves no work. Rebilling preserves released scope and net. With invoice rounding, the same scope and rates preserve total tax; a different source order can move cents between lines or agencies. Line rounding treats each line separately. Inspect the new preview before saving; earlier bills keep their original attribution.</p>
+</div>
+{% endif %}

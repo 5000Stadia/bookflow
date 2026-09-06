@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 from typing import Literal
-from pydantic import Field, model_serializer, model_validator
+from pydantic import field_validator, Field, model_serializer, model_validator
 
 from bookflow.company.tax_policy import Policy, TaxOrigin
 from bookflow.company.sales_models import Address, StrictModel
-from bookflow.company.billing_facts import AllocationProof
+from bookflow.company.billing_facts import AllocationProof, TaxAllocationProof
 from bookflow.core.exact import INT64_MAX
 
 
@@ -89,6 +89,13 @@ class Preferences(StrictModel):
 
 
 class CommercialProfile(StrictModel):
+    @field_validator('schema_version', mode='before')
+    @classmethod
+    def exact_schema_version(cls, value):
+        if type(value) is not int:
+            raise ValueError('schema_version must be an integer discriminator')
+        return value
+
     schema_version: Literal[1, 2] = 1
     sales_tax_calculation: Policy | None = None
     tax_policy_origin: TaxOrigin | None = None
@@ -157,6 +164,13 @@ class SalesProfile(CommercialProfile):
 
 
 class SalesLineProfile(StrictModel):
+    @field_validator('schema_version', mode='before')
+    @classmethod
+    def exact_schema_version(cls, value):
+        if type(value) is not int:
+            raise ValueError('schema_version must be an integer discriminator')
+        return value
+
     schema_version: Literal[1, 2, 3] = 1
     item: Reference
     item_type: Literal["service", "non_inventory_part", "other_charge"]
@@ -172,7 +186,7 @@ class SalesLineProfile(StrictModel):
 
     pricing_basis: Literal["unit", "amount", "allocated"] = "unit"
     net_amount_minor_units: int | None = Field(default=None, ge=0, le=INT64_MAX)
-    allocation_proof: AllocationProof | None = None
+    allocation_proof: AllocationProof | TaxAllocationProof | None = None
 
     @model_validator(mode="before")
     @classmethod

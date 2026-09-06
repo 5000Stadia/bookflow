@@ -43,7 +43,9 @@ Path(sys.argv[2]).write_text(json.dumps(dict(invoice=invoice,payment=payment)))
     return root, json.loads((parent/'results.json').read_text())
 
 
-def test_preserve_all_columns_rowids_local_ddl_and_legacy_policy(co14_root, tmp_path):
+def test_preserve_all_columns_rowids_local_ddl_and_legacy_policy(co14_root, tmp_path, monkeypatch):
+    from bookflow.storage.migrate import HEADS
+    monkeypatch.setitem(HEADS,"company","co0015")
     root, results = co14_root
     path = tmp_path/'company.db'
     shutil.copyfile(next(root.glob('organizations/*/Demo Plumbing Co/company.db')),path)

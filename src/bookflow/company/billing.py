@@ -172,9 +172,11 @@ def resolve_commercial(s, inp, document_type, *, document_id, kind):
         for line in work.saved_lines(s, rev)]
     from bookflow.company.billing_allocations import consumption_fingerprint
     consumption = consumption_fingerprint(s, source_roots)
+    from bookflow.company import tax_forecasts
+    remaining_forecast,_=tax_forecasts.remaining(s,header,rev)
     fingerprint = hashlib.sha256(sales.json_text(dict(company=s.company_row['id'], type=document_type,
         source_revision=rev['id'], source_version=header['version'],
-        roots=[root for _, root, _ in selected], consumption=consumption, content=semantic, warnings=warnings,
+        roots=[root for _, root, _ in selected], consumption=consumption, forecast=remaining_forecast.model_dump(mode="json"), content=semantic, warnings=warnings,
         tax_attribution=attribution.model_dump(mode='json'), preferences=policy.financial_projection(s, kind))).encode()).hexdigest()
     if inp.expected_facts_fingerprint and inp.expected_facts_fingerprint != fingerprint:
         raise BookflowError('E_PREVIEW_STALE', details=dict(facts_fingerprint=fingerprint,
@@ -263,7 +265,7 @@ def prepare(s, ctx, inp, kind, destination):
     from bookflow.company.billing_validation import validate
     validate(sale, s, ctx)
     from bookflow.company.billing_progress import projection
-    sale.preview.billing_progress = projection(s, source, source_rev, allocations)
+    sale.preview.billing_progress, sale.preview.billing_forecast = projection(s, source, source_rev, allocations)
     return sale
 
 
@@ -301,7 +303,7 @@ def persist(plan, ctx, s, *, command_name):
     if data.get('billing_conversion'):
         wh, wb = data['work_header'], data['work_before']
         touched.append(Touched('work_document', wh['id'], 'update', wb['version'], wh['version'], wh, wb, db='company'))
-        inserts += [(getattr(c, table), data['work_pending'][table], kind, 'id') for table, kind in work.TABLE_KINDS]
+        inserts += [(getattr(c, table), data['work_pending'][table], kind, work.work_tax.TABLE_KEYS.get(table,'id')) for table, kind in work.TABLE_KINDS]
         inserts.append((c.work_billing_conversions, [data['billing_conversion']], 'work_billing_conversion', 'id'))
     for table, rows, kind, key in inserts:
         touched.extend(Touched(kind, row[key], 'create', None, 1, effects.decoded(row), db='company') for row in rows)

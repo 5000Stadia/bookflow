@@ -175,9 +175,9 @@ def test_reference_monthly_annual_half_year_cli_and_read_only(reference_client):
         assert balance["totals"]["current_year_income"] == profit["totals"]["net_income"]
         assert balance["totals"]["difference"]["minor_units"] == 0
     half=c.report.profit_and_loss(company=REFERENCE,date_from="2026-07-01",date_to="2026-12-31")
-    assert half["totals"]["net_income"]["minor_units"] == 6439030-2305000
+    assert half["totals"]["net_income"]["minor_units"] == 6439035-2305000
     rollover=c.report.balance_sheet(company=REFERENCE,date_to="2027-01-01")
-    assert rollover["totals"]["prior_earnings"]["minor_units"] == 6439030
+    assert rollover["totals"]["prior_earnings"]["minor_units"] == 6439035
     assert rollover["totals"]["current_year_income"]["minor_units"] == 0
     for name,args in (("profit-and-loss",["--date-from","2026-01-01"]),("balance-sheet",[])):
         output=cli_run(root,"report",name,"--company",REFERENCE,"--date-to","2026-12-31",*args)

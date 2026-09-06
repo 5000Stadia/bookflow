@@ -23,13 +23,15 @@ def projection(s, source, revision, allocations):
     """
     pending = {(row['root_document_id'],row['root_line_id']): row for row in allocations}
     identities = query.root_identities(s, source)
+    from bookflow.company import tax_forecasts
+    forecast,remaining_values=tax_forecasts.remaining(s,source,revision,pending=allocations)
     result = []
     for line in work.saved_lines(s, revision):
         identity = identities[line['line_id']]
         root = identity['root_document_id'], identity['root_line_id']
         facts = work.line_facts(line)
         d = math.denominator(facts.quantity_microunits, facts.net_minor_units)
-        free_length, free_net = alloc.remaining(s, root, facts)
+        free_length, free_net = alloc.remaining(s, root, facts,policy=alloc.source_policy(s,line))
         prior = alloc.active_totals(s, root)
         row = pending.get(root)
         width = net = tax = 0
@@ -40,12 +42,12 @@ def projection(s, source, revision, allocations):
         before_width = d-free_length
         after_width = free_length-width
         remaining_net = free_net-net if facts.billable else 0
-        forecast = sum(calc.tax(remaining_net,t.rule.rate_percent_millionths) for t in facts.taxes)
+        remaining_tax = remaining_values[line['line_id']]['tax']
         def part(length, net, tax):
             return amount(Fraction(facts.quantity_microunits*length,d*1_000_000),
                           Fraction(100*length,d),net,tax)
         result.append(BillingProgressLine(line_id=line['line_id'],root_document_id=root[0],root_line_id=root[1],
             previous=part(before_width,prior['net'],prior['tax']), current=part(width,net,tax),
             cumulative=part(before_width+width,prior['net']+net,prior['tax']+tax),
-            remaining=part(after_width,remaining_net,forecast)))
-    return result
+            remaining=part(after_width,remaining_net,remaining_tax)))
+    return result,forecast

@@ -1,16 +1,25 @@
 """Typed non-posting work documents and inspectable operational history."""
-from typing import Literal
-from pydantic import Field, model_serializer
+from typing import Literal, Annotated
+from pydantic import model_validator, Field, model_serializer
 from bookflow.commands.common import CommonOut
 from bookflow.company.journal_outputs import CreatedOutput, JournalMoneyOutput as MoneyOutput
 from bookflow.company.journal_custom_fields import SnapshotField
 from bookflow.company.sales_models import StrictModel
 from bookflow.company.work_facts import WorkFacts, WorkLineFacts
+from bookflow.company.work_tax_facts import WorkFacts2, WorkLineFacts2
 from bookflow.core.models import WriteOutput
 from bookflow.company.tax_attribution import TaxDetails
 
 
 class WorkLineOutput(CreatedOutput):
+    tax_ordinal: int | None = None
+
+    @model_serializer(mode='wrap')
+    def legacy_ordinal(self,handler):
+        result=handler(self)
+        if self.tax_ordinal is None:result.pop('tax_ordinal',None)
+        return result
+
     document_id: str
     revision_id: str
     line_id: str
@@ -18,7 +27,7 @@ class WorkLineOutput(CreatedOutput):
     root_document_id: str
     root_line_id: str
     source_line_id: str | None
-    facts: WorkLineFacts
+    facts: Annotated[WorkLineFacts | WorkLineFacts2, Field(discriminator="schema_version", description="Version1 keeps independent component arithmetic; version2 contains cells allocated by the complete document calculation.")]
     quantity: str
     completed_quantity: str
     unit_price: MoneyOutput | None
@@ -64,13 +73,22 @@ class WorkRevisionSummary(CreatedOutput):
 
 
 class WorkRevisionOutput(WorkRevisionSummary):
-    facts: WorkFacts
+    facts: Annotated[WorkFacts | WorkFacts2, Field(discriminator="schema_version", description="Work root1 requires profile1; root2 requires profile2 with captured tax policy and origin.")]
     custom_fields_snapshot: dict[str, SnapshotField]
     custom_fields: list[SnapshotField]
     lines: list[WorkLineOutput]
     known_cost_total: MoneyOutput
     cost_complete: bool
     estimated_profit: MoneyOutput | None
+
+    @model_validator(mode='after')
+    def line_version_matrix(self):
+        from bookflow.company.tax_policy import effective, LEGACY
+        if self.facts.schema_version==1 and any(line.facts.schema_version!=1 for line in self.lines):
+            raise ValueError('legacy work revisions require legacy line facts')
+        if effective(self.facts.profile)!=LEGACY and any(line.facts.schema_version!=2 for line in self.lines):
+            raise ValueError('combined-policy work requires version2 line facts')
+        return self
 
 
 class WorkLinkOutput(CreatedOutput):

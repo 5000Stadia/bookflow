@@ -3,7 +3,9 @@
 {% set action = ((base ~ "/" ~ record_id) if record_id else base) ~ (("/" ~ verb) if verb else "") %}
 {% if billing and request.url.query %}{% set action = action ~ "?" ~ request.url.query %}{% endif %}
 <nav class="crumbs"><a href="{{ base }}">{{ noun }}</a> / {{ verb or "run" }}</nav>
-<h1>{{ noun }} {{ verb }}</h1><p class="muted">{{ cmd.description }}</p>
+<h1>{{ noun }} {{ verb }}</h1>
+{% if noun in ('estimate','work-order') and verb in ('billing','invoice','sales-receipt') %}<p class="muted">Review quoted, billed and remaining work before preparing the next bill.</p><details><summary>Billing rules and command help</summary><p>{{ cmd.description }}</p></details>
+{% else %}<p class="muted">{{ cmd.description }}</p>{% endif %}
 {% if noun == 'journal' and verb in ('post', 'update') %}<p class="workflow-note">Enter a currency with an amount, such as <code>2345 JPY</code>. Rates mean home-currency units per one foreign unit. Leave Rate empty to use saved conversions or the exact-date rate. Changing a saved entry's date or memo preserves unchanged conversions; choose Refresh rates to reprice them.</p>{% endif %}
 {% if captured_foreign_lines %}<details><summary>Saved currency conversions</summary><div class="table-wrap"><table><thead><tr><th>Line</th><th>Original</th><th>Home amount</th><th>Rate</th><th>Source</th></tr></thead><tbody>{% for line in captured_foreign_lines %}<tr><td>{{ line.position }}</td><td>{{ line.original_amount.amount }} {{ line.original_currency }}</td><td>{{ line.amount.amount }} {{ line.currency }}</td><td>{{ line.rate_used }}</td><td>{{ line.rate_source }}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}
 {% if error %}<div class="error"><b>{{ error.code }}</b> {{ error.message }}{% if error.details.fields %}<ul>{% for f in error.details.fields %}<li>{{ f.field }}: {{ f.problem }}</li>{% endfor %}</ul>{% endif %}{% if error.details.suggestions %}<p>Did you mean: {{ error.details.suggestions | join(", ") }}</p>{% endif %}</div>{% endif %}

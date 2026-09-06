@@ -25,7 +25,7 @@ Database: `company`.
 | `created_at` | VARCHAR(32) | no | — | — | — | — | UTC creation timestamp. |
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Principal creating this billing history. |
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface creating this billing history. |
-| `allocation_version` | INTEGER | no | — | — | — | — | 1 occupies the full root; 2 carries exact interval proof. |
+| `allocation_version` | INTEGER | no | — | — | — | — | 1 occupies the full root; 2 carries legacy-basis intervals; 3 carries basis2 intervals. |
 | `source_basis_hash` | VARCHAR(64) | yes | — | — | — | — | Version 2 captured economic basis SHA256 in lowercase hex. |
 | `denominator_hex` | VARCHAR(40) | yes | — | — | — | — | Version 2 positive unsigned 160-bit denominator in fixed-width lowercase hex. |
 | `spans_json` | TEXT | yes | — | — | — | — | Version 2 canonical array of 1–200 fixed-width hex endpoint pairs. |
