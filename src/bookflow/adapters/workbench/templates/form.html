@@ -56,7 +56,8 @@
 {% endif %}
 {% endmacro %}
 
-{% macro structured_help(control) %}
+{% macro structured_help(control, name) %}
+{% if control.any_json %}<label class="clear-control object-clear-control"><input type="checkbox" name="json:{{ name }}" value="1"{% if attempted.get("json:" ~ collection_attempt_key(attempted, name)) == "1" %} checked{% endif %}> Treat this field as a JSON value (objects, exact integers, quoted text or null)</label>{% endif %}
 {% if control.structured_schema %}<details class="structured-input-help"><summary>JSON object alternative</summary><p>This field also accepts a JSON object{% if control.nullable %}, or null to clear it{% endif %}. Enter it in the same field; its integer values are preserved exactly.</p><pre>{{ json.dumps(control.structured_schema, indent=1) }}</pre></details>{% endif %}
 {% endmacro %}
 
@@ -66,7 +67,7 @@
 {% elif control.kind == "choice" %}<select id="{{ id }}" name="{{ name }}"><option value="">(choose)</option>{% for choice in control.choices %}<option value="{{ choice }}"{% if cur == choice %} selected{% endif %}>{{ choice }}</option>{% endfor %}</select>
 {% elif control.kind == "bool" %}<select id="{{ id }}" name="{{ name }}"><option value="unset">(unset)</option><option value="true"{% if cur == true or cur == "true" %} selected{% endif %}>true</option><option value="false"{% if cur == false or cur == "false" %} selected{% endif %}>false</option></select>
 {% else %}<input id="{{ id }}" name="{{ name }}" value="{{ cur if cur is not none else '' }}"{{ math_attrs(control, name) }}{% if control.math %} inputmode="decimal"{% elif control.kind == "number" %} inputmode="numeric"{% endif %}>{% endif %}
-{{ structured_help(control) }}
+{{ structured_help(control, name) }}
 {% if sales_form and control.name in ('description', 'unit', 'class_id', 'tax_code', 'price_level', 'estimated_unit_cost') %}<label class="clear-control"><input type="checkbox" name="clear:{{ name }}" value="1"{% if attempted.get('clear:' ~ name) == '1' %} checked{% endif %}> Clear {{ control.name.replace('_', ' ') }}</label>{% endif %}
 {% endmacro %}
 
@@ -131,11 +132,11 @@
 <select id="control-{{ index }}" name="{{ form_name }}"><option value="">{{ "(choose)" if l.required and not record_id else "(unchanged)" }}</option>{% for c in l.choices %}<option value="{{ c }}" {% if cur == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
 {% elif l.definition_default %}<span data-definition-default>
 {% if l.default_kind == 'bool' %}<select id="control-{{ index }}" name="{{ form_name }}"><option value="">(no default)</option><option value="true"{% if cur is sameas true or cur == 'true' %} selected{% endif %}>true</option><option value="false"{% if cur is sameas false or cur == 'false' %} selected{% endif %}>false</option></select>
-{% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"{{ math_attrs(l, form_name) }}>{% endif %}</span>
+{% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"{{ math_attrs(l, form_name) }}>{% endif %}<label class="clear-control object-clear-control" data-definition-empty{% if l.default_kind != 'text' %} hidden{% endif %}><input type="checkbox" name="empty:default" value="1"{% if attempted.get('empty:default') == '1' %} checked{% endif %}{% if l.default_kind != 'text' %} disabled{% endif %}> Set empty text (overrides this field; clear takes precedence)</label></span>
 {% elif l.kind == "bool" %}
 <select id="control-{{ index }}" name="{{ form_name }}"><option value="unset">(unset)</option><option value="true" {% if cur == true or cur == "true" %}selected{% endif %}>true</option><option value="false" {% if cur == false or cur == "false" %}selected{% endif %}>false</option></select>
 {% elif l.kind == "secret" %}<input id="control-{{ index }}" type="password" name="{{ form_name }}">
-{% elif l.kind == "collection" %}{{ collection_control(l.collection, l.path, l.collection["values"], 0, l.path) }}
+{% elif l.kind == "collection" %}{{ collection_control(l.collection, l.path, l.collection["values"], 0, l.path) }}{% if not l.required %}<label class="clear-control object-clear-control"><input type="checkbox" name="empty:{{ l.path }}" value="1"{% if attempted.get('empty:' ~ l.path) == '1' %} checked{% endif %}> Set empty list (overrides entries; clear takes precedence)</label>{% endif %}
 {% elif l.kind == "json" %}<textarea name="{{ form_name }}" id="control-{{ index }}" rows="6" spellcheck="false">{{ cur if cur is not none else '' }}</textarea>
 {% elif l.runtime %}
 <input type="hidden" name="cf-kind:{{ l.definition_id }}" value="{{ l.wire_kind }}">
@@ -153,7 +154,7 @@
 {% endif %}</select>
 {% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"{% if l.date_input %} type="date"{% elif l.wire_kind == 'number' %} inputmode="decimal" data-math-scale="9" data-math-active='{{ [{"name": "cf-state:" ~ l.definition_id, "values": ["set"]}] | tojson }}' data-math-clear="clear:custom_fields.{{ l.definition_id }}"{% endif %}>{% endif %}
 {% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"{{ math_attrs(l, form_name) }} {% if l.math %}inputmode="decimal"{% elif l.kind == "number" %}inputmode="numeric"{% endif %}>{% endif %}
-{{ structured_help(l) }}
+{{ structured_help(l, form_name) }}
 </div>
 <span>{% for parent in l.object_controls or [] %}<label class="clear-control object-clear-control"><input type="checkbox" name="clear:{{ parent }}" value="1" {% if attempted.get("clear:" ~ parent) == "1" %}checked{% endif %}> clear entire {{ parent }} (overrides child fields)</label>{% endfor %}{% if cmd.clearable and not l.runtime and l.nullable and l.kind != "json" and not (noun == 'journal' and l.path == 'rate') %}<label class="clear-control"><input type="checkbox" name="clear:{{ l.path }}" value="1" {% if attempted.get("clear:" ~ l.path) == "1" %}checked{% endif %}> clear</label>{% endif %}</span>
 </div>

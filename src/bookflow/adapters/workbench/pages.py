@@ -1385,6 +1385,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       statement=S.view(result, report_input, company_id) if result and report_input is not None and cmd.name in S.COMMANDS else None,
                       source_report_watermark=source_report_watermark,
                       preview=preview, get=F.get_path, form_value=F.form_value,
+                      collection_attempt_key=F.collection_attempt_key,
                       return_context=return_context, workflow_note=workflow_note,
                       reference_values=reference_values,
                       preferences_settings_url=f'/c/{company_id}/company/self/update' if authorized_company and _role_allows(registry.get('company update'), authorized_company, hub_admin=cred.hub_admin) else None,
