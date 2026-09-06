@@ -79,9 +79,10 @@ def test_immutable_and_active_root_insertion(client, records):
 def test_allocation_bounds_and_composite_ownership(client, records, change):
     allocation = records[-2]
     with open_database(database_path(client), writable=True) as db:
+        before = db.raw.execute('SELECT * FROM work_billing_allocations ORDER BY id').fetchall()
         with pytest.raises(sqlite3.IntegrityError):
             insert(db.raw, 'work_billing_allocations', allocation(**change))
-        assert db.raw.execute('SELECT count(*) FROM work_billing_allocations').fetchone()[0] == 0
+        assert db.raw.execute('SELECT * FROM work_billing_allocations ORDER BY id').fetchall() == before
 
 
 @pytest.mark.parametrize('change', [
@@ -129,6 +130,29 @@ def test_final_pointer_and_status_boundary_and_own_replacement(client, records):
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
 
 
+@pytest.fixture
+def historical_client(tmp_path, monkeypatch):
+    """Populate only the pre-billing demo prefix before restoring co0010 DDL.
+
+    A historical company cannot contain the amount-priced sales first added by
+    co0011. Build its actual old workload; never fake rates to fit newer facts.
+    """
+    import bookflow
+    from bookflow.commands import hub_cmds
+    load = hub_cmds._load_seed
+    def historical_seed(resource='seed.toml'):
+        seed = load(resource)
+        seed['commands'] = seed['commands'][:201 if resource == 'seed.toml' else 107]
+        return seed
+    monkeypatch.setattr(hub_cmds, '_load_seed', historical_seed)
+    root = tmp_path / 'historical-root'
+    monkeypatch.setenv('BOOKFLOW_DATA_ROOT', str(root))
+    client = bookflow.connect(data_root=str(root))
+    client.init()
+    client.demo.reset()
+    return client
+
+
 def old_company(client, local=True):
     """Restore the frozen co0010 price table on this disposable populated company."""
     path = database_path(client)
@@ -170,9 +194,8 @@ def snapshot(raw):
     return {name: raw.execute(f'SELECT * FROM "{name}" ORDER BY rowid').fetchall() for (name,) in tables}
 
 
-def test_populated_local_columns_generated_values_and_objects_survive(client, sale):
-    post(client, sale)
-    path = old_company(client)
+def test_populated_local_columns_generated_values_and_objects_survive(historical_client):
+    path = old_company(historical_client)
     with open_database(path, writable=True) as db:
         before = snapshot(db.raw)
         columns = [r[1] for r in db.raw.execute('PRAGMA table_xinfo(sales_line_profiles)')]
@@ -190,9 +213,8 @@ def test_populated_local_columns_generated_values_and_objects_survive(client, sa
 
 
 @pytest.mark.parametrize('failure', ['unknown', 'late'])
-def test_migration_failure_rolls_back_every_object_and_row(client, sale, monkeypatch, failure):
-    post(client, sale)
-    path = old_company(client)
+def test_migration_failure_rolls_back_every_object_and_row(historical_client, monkeypatch, failure):
+    path = old_company(historical_client)
     with open_database(path, writable=True) as db:
         if failure == 'unknown':
             db.raw.execute("ALTER TABLE sales_line_profiles ADD COLUMN pricing_basis TEXT DEFAULT 'local'")
