@@ -12,6 +12,7 @@ from bookflow.company.payment_outputs import (
 
 from bookflow.company import payments, payment_operations
 from bookflow.company.payment_models import PaymentReceiveInput, PaymentApplyInput, PaymentShowInput
+from bookflow.company.payment_models import PaymentUnapplyInput, PaymentVoidInput, PaymentUpdateInput
 from bookflow.company.payment_outputs import PaymentWriteOutput, PaymentOutput
 
 
@@ -23,13 +24,19 @@ def _financial(verb, model):
             plan.preview = preview_output(s, ctx, inp, plan)
         return plan
     cmd = command('payment ' + verb, scope='company',
-        description='Receive new cash with derived exact-party AR ownership and immutable invoice applications.' if verb == 'receive' else
-                    'Apply existing payment credit to invoices of its permanently owned party, AR account and currency; no ledger posting.',
+        description={
+            'receive': 'Receive new cash with derived exact-party AR ownership and immutable invoice applications.',
+            'apply': 'Apply existing payment credit to its exact-party invoices without ledger posting.',
+            'unapply': 'Reverse selected active applications and their current allocations at original dates; retain owned credit without ledger posting.',
+            'void': 'Void an unapplied receipt with exact original-date ledger reversals; applications must be explicitly unapplied first.',
+            'update': 'Correct receipt content with immutable replacement postings, fixed job ownership and complete source allocation restatement.',
+        }[verb],
         input_model=model, output_model=PaymentWriteOutput, writes={'company'}, required_role='standard', capability='ledger.post',
         accepts_idempotency_key=True, positional=[] if verb == 'receive' else ['payment'],
         error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_APPLICATION_CAPACITY', 'E_APPLICATION_INCOMPATIBLE',
             'E_APPLICATION_INACTIVE', 'E_PAYMENT_OPERATION_KEY_REUSED', 'E_SELECTION_CONSUMED', 'E_PREVIEW_STALE',
-            'E_PERIOD_CLOSED', 'E_INACTIVE_REFERENCE', 'E_DUPLICATE_NUMBER', 'E_AMOUNT_PRECISION', 'E_VALUE_RANGE'])(planner)
+            'E_PERIOD_CLOSED', 'E_INACTIVE_REFERENCE', 'E_DUPLICATE_NUMBER', 'E_AMOUNT_PRECISION', 'E_VALUE_RANGE',
+            'E_REASON_REQUIRED', 'E_HAS_APPLICATIONS'])(planner)
     cmd.ledger = True
     cmd.permanent_recovery = lambda inp, ctx, s: payment_operations.recover(inp, ctx, s, 'payment ' + verb)
     cmd.applier(payments.apply)
@@ -38,13 +45,19 @@ def _financial(verb, model):
 
 payment_receive = _financial('receive', PaymentReceiveInput)
 payment_apply = _financial('apply', PaymentApplyInput)
+payment_unapply = _financial('unapply', PaymentUnapplyInput)
+payment_void = _financial('void', PaymentVoidInput)
+payment_update = _financial('update', PaymentUpdateInput)
 
 
 @command('payment show', scope='company', description='Show a receipt revision separately from current owned credit and application capacity.',
     input_model=PaymentShowInput, output_model=PaymentOutput, required_role='member', capability='ledger.read',
     positional=['payment'], error_codes=['E_RECORD_NOT_FOUND'])
 def payment_show(inp, ctx, s):
-    return Plan(payments.show(s, inp))
+    from bookflow.company.payment_dependencies import issue
+    output = payments.show(s, inp)
+    output.settlement_guard = issue(s, 'payment', output.id)
+    return Plan(output)
 
 
 from bookflow.company import payment_preparation
@@ -68,6 +81,32 @@ payment_calculate = _preparation('calculate', PaymentCalculateInput, PaymentCalc
 payment_query = _preparation('query', PaymentQueryInput, PaymentPageOutput, payment_preparation.payment_page)
 
 
+from bookflow.company.payment_models import PaymentHistoryInput, ApplicationShowInput, ApplicationHistoryInput
+from bookflow.company.payment_outputs import ApplicationOutput, SettlementHistoryOutput
+from bookflow.company import payment_history
+
+
+@command('payment history', scope='company', description='Page receipt revisions and immutable settlement operation, application and allocation history in audit order.',
+    input_model=PaymentHistoryInput, output_model=SettlementHistoryOutput, required_role='member', capability='ledger.read',
+    positional=['payment'], error_codes=['E_RECORD_NOT_FOUND', 'E_QUERY_STALE'])
+def payment_history_read(inp, ctx, s):
+    return Plan(SettlementHistoryOutput(**payment_history.payment_history(s, inp)))
+
+
+@command('application show', scope='company', description='Inspect an original application or exact inverse separately from its current live allocations and payment/invoice state.',
+    input_model=ApplicationShowInput, output_model=ApplicationOutput, required_role='member', capability='ledger.read',
+    positional=['application'], error_codes=['E_RECORD_NOT_FOUND'])
+def application_show(inp, ctx, s):
+    return Plan(ApplicationOutput(**payment_history.application_show(s, inp)))
+
+
+@command('application history', scope='company', description='Page an application and all exact inverse and allocation restatement evidence in immutable audit order.',
+    input_model=ApplicationHistoryInput, output_model=SettlementHistoryOutput, required_role='member', capability='ledger.read',
+    positional=['application'], error_codes=['E_RECORD_NOT_FOUND', 'E_QUERY_STALE'])
+def application_history(inp, ctx, s):
+    return Plan(SettlementHistoryOutput(**payment_history.application_history(s, inp)))
+
+
 from bookflow.company.payment_models import PaymentPreviewItemsInput, PaymentOperationShowInput
 from bookflow.company.payment_outputs import PaymentEffectItemsOutput, PaymentOperationOutput
 from bookflow.company import payment_pages
@@ -89,12 +128,14 @@ def payment_operation_show(inp, ctx, s):
     row, request = payment_pages.operation(s, inp)
     original = request['original_request']
     output = json.loads(row['effect_snapshot'])
+    invoice_correction = row['command'] == 'invoice update'
     return Plan(PaymentOperationOutput(operation_id=row['id'], operation_key=row['operation_key'],
         audit_event_id=row['audit_event_id'], request_schema_version=row['request_schema_version'], canonical_hash=row['request_hash'],
         provided_fields=original['provided_fields'], context_provided_fields=original['context_provided_fields'],
         execution=json.loads(row['execution_snapshot']),
         request=dict(command=original['command'], input=dict(original['input'], operation_key=row['operation_key']), context=original['context']),
-        original=output, current=payments.current_output(s, output['id'])))
+        original=output['settlement'] if invoice_correction else output,
+        current=query.invoice_current(s, output['id']) if invoice_correction else payments.current_output(s, output['id'])))
 
 
 from bookflow.company.payment_models import PaymentOperationItemsInput
@@ -110,38 +151,50 @@ def payment_operation_items(inp, ctx, s):
                        c.payment_operation_items.c.kind == inp.kind, order=c.payment_operation_items.c.ordinal)
     values = [json.loads(row['item_snapshot']) for row in rows]
     return Plan(PaymentEffectItemsOutput(**query.page(s, 'payment operation items', inp, values,
-        facts=[operation['id'], inp.kind, values]), projection='committed'))
+        facts=[operation['id'], inp.kind, values]), projection='committed', committed=True, kind=inp.kind))
 
 
 from bookflow.company.payment_models import PaymentSettlementInput, InvoiceSettlementInput
-from bookflow.company.payment_outputs import InvoiceSettlementOutput
+from bookflow.company.payment_outputs import InvoiceSettlementOutput, InvoiceSettlementReadOutput, PaymentSettlementOutput
 
 
 @command('payment settlement', scope='company', description='Page all current exact-party credit components or active applications, including capacity committed at future dates.',
-    input_model=PaymentSettlementInput, output_model=PaymentEffectItemsOutput, required_role='member', capability='ledger.read',
+    input_model=PaymentSettlementInput, output_model=PaymentSettlementOutput, required_role='member', capability='ledger.read',
     positional=['payment'], error_codes=['E_RECORD_NOT_FOUND', 'E_QUERY_STALE'])
 def payment_settlement(inp, ctx, s):
-    from bookflow.core.money import Money
-    facts = query.payment_facts(s, inp.payment)
-    current = payments.current_output(s, inp.payment, complete_components=True)
-    if inp.kind == 'components':
-        rows = current['components']
-    else:
-        rows = []
-        for app in facts['applications']:
-            invoice = query.invoice_facts(s, app['paid_transaction_id'])
-            rows.append(dict(application_id=app['id'], invoice_id=app['paid_transaction_id'], invoice_version=invoice['header']['version'],
-                source_component_key_id=app['source_component_key_id'], party_id=facts['keys'][app['source_component_key_id']]['party_id'],
-                amount=Money(app['amount_minor_units'], app['currency']).to_dict(), effective_date=app['effective_date']))
-    return Plan(PaymentEffectItemsOutput(**query.page(s, 'payment settlement', inp, rows,
-        facts=[current['version'], current, rows]), projection='current'))
+    from bookflow.company.payment_history import payment
+    return Plan(PaymentSettlementOutput(**payment(s, inp)))
 
 
 @command('invoice settlement', scope='company', description='Show current invoice gross, applied and due with separate concurrency and commercial revision identities.',
-    input_model=InvoiceSettlementInput, output_model=InvoiceSettlementOutput, required_role='member', capability='ledger.read',
-    positional=['invoice'], error_codes=['E_RECORD_NOT_FOUND'])
+    input_model=InvoiceSettlementInput, output_model=InvoiceSettlementReadOutput, required_role='member', capability='ledger.read',
+    positional=['invoice'], error_codes=['E_RECORD_NOT_FOUND', 'E_QUERY_STALE'])
 def invoice_settlement(inp, ctx, s):
-    return Plan(InvoiceSettlementOutput(**query.invoice_current(s, inp.invoice)))
+    from bookflow.company.payment_dependencies import issue
+    from bookflow.company.payment_history import invoice
+    output = InvoiceSettlementReadOutput(**invoice(s, inp))
+    output.settlement_guard = issue(s, 'invoice', output.invoice_id)
+    return Plan(output)
+
+
+from bookflow.company.payment_models import SettlementChangesInput
+from bookflow.company.payment_outputs import SettlementChangesOutput
+
+
+@command('payment settlement changes', scope='company',
+    description='Inspect actual intervening settlement events from an authenticated owned audit baseline; unknown history is explicit.',
+    input_model=SettlementChangesInput, output_model=SettlementChangesOutput, required_role='member', capability='ledger.read',
+    error_codes=['E_RECORD_NOT_FOUND', 'E_PREVIEW_STALE', 'E_QUERY_STALE'])
+def settlement_changes(inp, ctx, s):
+    from bookflow.company.payment_dependencies import compare, issue
+    result = compare(s, inp.guard)
+    saved = result['saved']
+    # Age is display data and must not invalidate the fixed fact continuation.
+    stable = [{k: v for k, v in row.items() if k != 'age_seconds'} for row in result['changes']]
+    page = query.page(s, 'payment settlement changes', inp, result['changes'],
+        facts=[result['current']['digest'], result['unknown_record_ids'], stable])
+    return Plan(SettlementChangesOutput(**page, unknown_history=result['unknown_history'],
+        unknown_record_ids=result['unknown_record_ids'], settlement_guard=issue(s, saved['owner_type'], saved['owner_id'])))
 
 
 def _write(verb, model):

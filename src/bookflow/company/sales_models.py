@@ -215,8 +215,30 @@ class SalesUpdateInput(SalesFields):
         return self
 
 
+class SettlementPaymentVersion(StrictModel):
+    payment: Selector
+    expected_version: _Version
+
+
 class InvoiceUpdateInput(SalesUpdateInput, InvoiceFields):
     invoice: Selector
+    operation_key: Annotated[str, Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$')] | None = None
+    settlement_versions: list[SettlementPaymentVersion] = Field(default_factory=list)
+    settlement_guard: str | None = Field(default=None, max_length=2048)
+
+    @model_validator(mode='after')
+    def settlement_input(self):
+        if self.settlement_guard is not None and self.settlement_versions:
+            raise ValueError('settlement_guard and settlement_versions are mutually exclusive')
+        return self
+
+    @model_serializer(mode='wrap')
+    def compatible_settlement(self, handler):
+        values = handler(self)
+        for key in ('operation_key', 'settlement_versions', 'settlement_guard'):
+            if key not in self.model_fields_set:
+                values.pop(key, None)
+        return values
 
 
 class SalesReceiptUpdateInput(SalesUpdateInput, ReceiptFields):

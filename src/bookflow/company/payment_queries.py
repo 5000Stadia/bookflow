@@ -123,3 +123,34 @@ applied before this function, on EVERY page, including all graph members.
         encode = lambda value: base64.urlsafe_b64encode(value).decode().rstrip('=')
         next_cursor = encode(raw) + '.' + encode(hmac.digest(key, domain + raw, 'sha256'))
     return dict(items=selected, total_count=len(items), next_cursor=next_cursor, facts_fingerprint=fp)
+
+
+def sql_page(s, noun, inp, statement):
+    """Bound current query delivery with an authenticated fixed audit watermark."""
+    mark = s.company.conn.execute(sa.select(sa.func.coalesce(sa.func.max(c.audit_events.c.seq), 0))).scalar_one()
+    fp = digest([s.company_row['id'], noun, inp.model_dump(mode='json', exclude={'cursor'}), mark])
+    domain, key = b'bookflow.payment.query.v1\0', _cursor_key(s.company)
+    offset = 0
+    if inp.cursor:
+        try:
+            body, signature = inp.cursor.split('.')
+            raw = base64.b64decode(body + '=' * (-len(body) % 4), altchars=b'-_', validate=True)
+            mac = base64.b64decode(signature + '=' * (-len(signature) % 4), altchars=b'-_', validate=True)
+            if not hmac.compare_digest(mac, hmac.digest(key, domain + raw, 'sha256')):
+                raise ValueError()
+            value = json.loads(raw)
+            if not isinstance(value, dict) or set(value) != {'v', 'fp', 'offset'} or value['v'] != 1 or type(value['offset']) is not int or value['offset'] < 0:
+                raise ValueError()
+            if value['fp'] != fp:
+                raise BookflowError('E_QUERY_STALE')
+            offset = value['offset']
+        except (ValueError, TypeError, KeyError):
+            raise BookflowError('E_VALIDATION', details={'field': 'cursor'}) from None
+    count = s.company.conn.execute(sa.select(sa.func.count()).select_from(statement.order_by(None).subquery())).scalar_one()
+    rows = [dict(row) for row in s.company.conn.execute(statement.offset(offset).limit(inp.limit)).mappings()]
+    cursor = None
+    if offset + len(rows) < count:
+        raw = canonical(dict(v=1, fp=fp, offset=offset + len(rows))).encode()
+        encode = lambda value: base64.urlsafe_b64encode(value).decode().rstrip('=')
+        cursor = encode(raw) + '.' + encode(hmac.digest(key, domain + raw, 'sha256'))
+    return dict(items=rows, total_count=count, next_cursor=cursor, facts_fingerprint=fp)

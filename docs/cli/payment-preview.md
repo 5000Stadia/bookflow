@@ -26,7 +26,7 @@ Read prospective receipt/application effect pages by pure recomputation of exact
 |---|---|---|---|---|---|---|
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
-| `request` | `--request` | object \| object | yes | no | — | — |
+| `request` | `--request` | object \| object \| object \| object \| object \| object | yes | no | — | — |
 | `facts_fingerprint` | `--facts-fingerprint` | string | yes | no | — | pattern "^[0-9a-f]{64}$" |
 | `kind` | `--kind` | literal["source_components", "applications", "allocations", "document_changes"] | yes | no | — | — |
 
@@ -56,7 +56,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
-| `items` | array[object \| object \| object \| object \| object] | yes | no | — | — |
+| `committed` | boolean | no | no | false | — |
+| `kind` | string \| null | no | yes | null | — |
+| `items` | array[object \| object \| object \| object \| object \| object] | yes | no | — | — |
+| `items[].kind` | literal["apply", "unapply"] \| literal["allocation", "reversal"] | no | no | "apply" | Present in PaymentApplicationOutput, PaymentAllocationOutput. |
+| `items[].reverses_application_id` | string \| null | no | yes | null | Present in PaymentApplicationOutput. |
 | `items[].application_id` | string \| null | no | yes | — | Present in PaymentApplicationOutput, PaymentAllocationOutput. |
 | `items[].invoice_id` | string | no | no | — | Present in PaymentApplicationOutput, PaymentAllocationOutput, InvoiceSettlementOutput. |
 | `items[].invoice_version` | integer | no | no | — | Present in PaymentApplicationOutput. |
@@ -67,6 +71,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].amount.currency` | string | no | no | — | Present in PaymentApplicationOutput, PaymentAllocationOutput. |
 | `items[].amount.minor_units` | integer | no | no | — | Present in PaymentApplicationOutput, PaymentAllocationOutput. |
 | `items[].effective_date` | string | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].reverses_allocation_id` | string \| null | no | yes | null | Present in PaymentAllocationOutput. |
 | `items[].allocation_id` | string \| null | no | yes | — | Present in PaymentAllocationOutput. |
 | `items[].target_ordinal` | integer | no | no | — | Present in PaymentAllocationOutput. |
 | `items[].logical_kind` | literal["net", "tax"] | no | no | — | Present in PaymentAllocationOutput. |
@@ -75,15 +80,40 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].component_id` | string \| null | no | yes | — | Present in PaymentComponentOutput. |
 | `items[].party_name` | string | no | no | — | Present in PaymentComponentOutput. |
 | `items[].ar_account_id` | string | no | no | — | Present in PaymentComponentOutput. |
-| `items[].currency` | string | no | no | — | Present in PaymentComponentOutput, InvoiceSettlementOutput. |
-| `items[].received_minor_units` | integer | no | no | — | Present in PaymentComponentOutput. |
-| `items[].applied_minor_units` | integer | no | no | — | Present in PaymentComponentOutput, InvoiceSettlementOutput. |
-| `items[].available_minor_units` | integer | no | no | — | Present in PaymentComponentOutput. |
-| `items[].version` | integer | no | no | — | Present in InvoiceSettlementOutput. |
-| `items[].revision_id` | string | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].currency` | string | no | no | — | Present in PaymentComponentOutput, InvoiceSettlementOutput, PaymentCurrentOutput. |
+| `items[].received_minor_units` | integer | no | no | — | Present in PaymentComponentOutput, PaymentCurrentOutput. |
+| `items[].applied_minor_units` | integer | no | no | — | Present in PaymentComponentOutput, InvoiceSettlementOutput, PaymentCurrentOutput. |
+| `items[].available_minor_units` | integer | no | no | — | Present in PaymentComponentOutput, PaymentCurrentOutput. |
+| `items[].version` | integer | no | no | — | Present in InvoiceSettlementOutput, PaymentCurrentOutput. |
+| `items[].revision_id` | string \| null | no | yes | — | Present in InvoiceSettlementOutput, PaymentCurrentOutput. |
 | `items[].gross_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
 | `items[].due_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
-| `items[].status` | literal["unpaid", "partial", "paid", "voided"] | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].status` | literal["unpaid", "partial", "paid", "voided"] \| literal["posted", "voided"] | no | no | — | Present in InvoiceSettlementOutput, PaymentCurrentOutput. |
+| `items[].settlement_guard` | string \| null | no | yes | null | Present in InvoiceSettlementOutput. |
+| `items[].as_of` | string \| null | no | yes | null | Present in InvoiceSettlementOutput. |
+| `items[].audit_watermark` | integer \| null | no | yes | null | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current` | object \| null | no | yes | null | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.invoice_id` | string | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.version` | integer | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.revision_id` | string \| null | no | yes | — | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.gross_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.applied_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.due_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.currency` | string | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.status` | literal["unpaid", "partial", "paid", "voided"] | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].payment_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. |
+| `items[].effective_received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].components` | array[object] | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].components[].component_key_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. |
+| `items[].components[].component_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. |
+| `items[].components[].party_id` | string | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].components[].party_name` | string | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].components[].ar_account_id` | string | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].components[].currency` | string | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].components[].received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].components[].applied_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].components[].available_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].component_count` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `items[].invoice` | string | no | no | — | Present in InvoiceAmount. |
 | `items[].expected_version` | integer | no | no | — | Present in InvoiceAmount. |
 | `total_count` | integer | yes | no | — | — |
@@ -95,8 +125,10 @@ Example JSON output:
 
 ```json
 {
+  "committed": false,
   "facts_fingerprint": "value",
   "items": [],
+  "kind": null,
   "next_cursor": null,
   "projection": "prospective",
   "total_count": 1

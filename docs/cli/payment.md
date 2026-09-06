@@ -4,7 +4,7 @@
 
 ## `payment apply`
 
-Apply existing payment credit to invoices of its permanently owned party, AR account and currency; no ledger posting.
+Apply existing payment credit to its exact-party invoices without ledger posting.
 
 | Contract | Value |
 |---|---|
@@ -69,61 +69,18 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
-| `id` | string | yes | no | — | — |
+| `changed` | boolean | no | no | true | — |
+| `new_effect` | boolean | no | no | true | — |
+| `id` | string \| null | yes | yes | — | — |
 | `version` | integer | yes | no | — | — |
 | `operation_key` | string | yes | no | — | — |
 | `facts_fingerprint` | string | yes | no | — | — |
 | `idempotent_replay` | boolean | no | no | false | — |
-| `effect` | object | yes | no | — | — |
-| `effect.kind` | literal["receive", "apply", "unapply", "update", "void", "invoice_update"] | yes | no | — | — |
-| `effect.financial_changed` | boolean | yes | no | — | — |
-| `effect.operation_id` | string \| null | yes | yes | — | — |
-| `effect.payment_id` | string | yes | no | — | — |
-| `effect.source_components` | array[object] | yes | no | — | — |
-| `effect.source_components[].component_key_id` | string \| null | yes | yes | — | — |
-| `effect.source_components[].component_id` | string \| null | yes | yes | — | — |
-| `effect.source_components[].party_id` | string | yes | no | — | — |
-| `effect.source_components[].party_name` | string | yes | no | — | — |
-| `effect.source_components[].ar_account_id` | string | yes | no | — | — |
-| `effect.source_components[].currency` | string | yes | no | — | — |
-| `effect.source_components[].received_minor_units` | integer | yes | no | — | — |
-| `effect.source_components[].applied_minor_units` | integer | yes | no | — | — |
-| `effect.source_components[].available_minor_units` | integer | yes | no | — | — |
-| `effect.applications` | array[object] | yes | no | — | — |
-| `effect.applications[].application_id` | string \| null | yes | yes | — | — |
-| `effect.applications[].invoice_id` | string | yes | no | — | — |
-| `effect.applications[].invoice_version` | integer | yes | no | — | — |
-| `effect.applications[].source_component_key_id` | string \| null | yes | yes | — | — |
-| `effect.applications[].party_id` | string | yes | no | — | — |
-| `effect.applications[].amount` | object | yes | no | — | — |
-| `effect.applications[].amount.amount` | string | yes | no | — | — |
-| `effect.applications[].amount.currency` | string | yes | no | — | — |
-| `effect.applications[].amount.minor_units` | integer | yes | no | — | — |
-| `effect.applications[].effective_date` | string | yes | no | — | — |
-| `effect.allocations` | array[object] | yes | no | — | — |
-| `effect.allocations[].allocation_id` | string \| null | yes | yes | — | — |
-| `effect.allocations[].application_id` | string \| null | yes | yes | — | — |
-| `effect.allocations[].invoice_id` | string | yes | no | — | — |
-| `effect.allocations[].target_ordinal` | integer | yes | no | — | — |
-| `effect.allocations[].logical_kind` | literal["net", "tax"] | yes | no | — | — |
-| `effect.allocations[].tax_item_id` | string \| null | yes | yes | — | — |
-| `effect.allocations[].amount` | object | yes | no | — | — |
-| `effect.allocations[].amount.amount` | string | yes | no | — | — |
-| `effect.allocations[].amount.currency` | string | yes | no | — | — |
-| `effect.allocations[].amount.minor_units` | integer | yes | no | — | — |
-| `effect.document_changes` | array[object] | yes | no | — | — |
-| `effect.document_changes[].invoice_id` | string | yes | no | — | — |
-| `effect.document_changes[].version` | integer | yes | no | — | — |
-| `effect.document_changes[].revision_id` | string | yes | no | — | — |
-| `effect.document_changes[].gross_minor_units` | integer | yes | no | — | — |
-| `effect.document_changes[].applied_minor_units` | integer | yes | no | — | — |
-| `effect.document_changes[].due_minor_units` | integer | yes | no | — | — |
-| `effect.document_changes[].currency` | string | yes | no | — | — |
-| `effect.document_changes[].status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `effect` | object \| object \| object \| object \| object | yes | no | — | — |
 | `current` | object | yes | no | — | — |
-| `current.payment_id` | string | yes | no | — | — |
+| `current.payment_id` | string \| null | yes | yes | — | — |
 | `current.version` | integer | yes | no | — | — |
-| `current.revision_id` | string | yes | no | — | — |
+| `current.revision_id` | string \| null | yes | yes | — | — |
 | `current.status` | literal["posted", "voided"] | yes | no | — | — |
 | `current.received_minor_units` | integer | yes | no | — | — |
 | `current.effective_received_minor_units` | integer | yes | no | — | — |
@@ -148,7 +105,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `effect_counts.document_changes` | integer | yes | no | — | — |
 | `prospective_pages` | array[object] | no | no | [] | — |
 | `prospective_pages[].command` | literal["payment preview items"] | no | no | "payment preview items" | — |
-| `prospective_pages[].request` | object \| object | yes | no | — | — |
+| `prospective_pages[].request` | object \| object \| object \| object \| object \| object | yes | no | — | — |
 | `prospective_pages[].facts_fingerprint` | string | yes | no | — | — |
 | `prospective_pages[].kind` | literal["source_components", "applications", "allocations", "document_changes"] | yes | no | — | — |
 | `prospective_pages[].total_count` | integer | yes | no | — | — |
@@ -161,6 +118,7 @@ Example JSON output:
 
 ```json
 {
+  "changed": true,
   "current": {
     "applied_minor_units": 1,
     "available_minor_units": 1,
@@ -168,21 +126,25 @@ Example JSON output:
     "components": [],
     "currency": "USD",
     "effective_received_minor_units": 1,
-    "payment_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "payment_id": null,
     "received_minor_units": 1,
-    "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "revision_id": null,
     "status": "posted",
     "version": 1
   },
   "dry_run": false,
   "effect": {
+    "after_header": null,
     "allocations": [],
     "applications": [],
+    "audit_event_id": null,
+    "before_header": null,
     "document_changes": [],
     "financial_changed": false,
     "kind": "receive",
     "operation_id": null,
-    "payment_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "payment_id": null,
+    "preferences": null,
     "source_components": []
   },
   "effect_counts": {
@@ -192,8 +154,9 @@ Example JSON output:
     "source_components": 1
   },
   "facts_fingerprint": "value",
-  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "id": null,
   "idempotent_replay": false,
+  "new_effect": true,
   "operation_key": "value",
   "prospective_pages": [],
   "version": 1,
@@ -219,6 +182,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
@@ -369,6 +333,199 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 | `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `payment history`
+
+Page receipt revisions and immutable settlement operation, application and allocation history in audit order.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | ledger.read |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/payment.history` |
+| External binary body | none |
+
+### CLI
+
+`bookflow payment history 01ARZ3NDEKTSV4RRFFQ69G5FAV --limit 25 --company 'Demo Plumbing Co' --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `payment` | `PAYMENT` | string | yes | no | — | minimum length 1; maximum length 1004 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/payment.history`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `items` | array[object] | yes | no | — | — |
+| `items[].id` | string | yes | no | — | — |
+| `items[].audit_event_id` | string | yes | no | — | — |
+| `items[].audit_sequence` | integer | yes | no | — | — |
+| `items[].kind` | literal["application", "allocation", "receipt_revision", "operation"] | yes | no | — | — |
+| `items[].application` | object \| null | no | yes | null | — |
+| `items[].application.id` | string | yes | no | — | — |
+| `items[].application.kind` | literal["apply", "unapply"] | yes | no | — | — |
+| `items[].application.paying_transaction_id` | string | yes | no | — | — |
+| `items[].application.paid_transaction_id` | string | yes | no | — | — |
+| `items[].application.source_component_key_id` | string | yes | no | — | — |
+| `items[].application.amount_minor_units` | integer | yes | no | — | — |
+| `items[].application.currency` | string | yes | no | — | — |
+| `items[].application.effective_date` | string | yes | no | — | — |
+| `items[].application.reverses_application_id` | string \| null | yes | yes | — | — |
+| `items[].application.created_at` | string | yes | no | — | — |
+| `items[].application.created_by` | string | yes | no | — | — |
+| `items[].application.created_via` | string | yes | no | — | — |
+| `items[].application.audit_event_id` | string | yes | no | — | — |
+| `items[].allocation` | object \| null | no | yes | null | — |
+| `items[].allocation.id` | string | yes | no | — | — |
+| `items[].allocation.application_id` | string | yes | no | — | — |
+| `items[].allocation.kind` | literal["allocation", "reversal"] | yes | no | — | — |
+| `items[].allocation.reverses_allocation_id` | string \| null | yes | yes | — | — |
+| `items[].allocation.source_transaction_id` | string | yes | no | — | — |
+| `items[].allocation.source_revision_id` | string | yes | no | — | — |
+| `items[].allocation.source_component_id` | string | yes | no | — | — |
+| `items[].allocation.source_posting_source_id` | string | yes | no | — | — |
+| `items[].allocation.target_transaction_id` | string | yes | no | — | — |
+| `items[].allocation.target_revision_id` | string | yes | no | — | — |
+| `items[].allocation.target_document_line_id` | string | yes | no | — | — |
+| `items[].allocation.target_line_id` | string | yes | no | — | — |
+| `items[].allocation.target_ordinal` | integer | yes | no | — | — |
+| `items[].allocation.logical_kind` | literal["net", "tax"] | yes | no | — | — |
+| `items[].allocation.tax_item_id` | string \| null | yes | yes | — | — |
+| `items[].allocation.tax_component_id` | string \| null | yes | yes | — | — |
+| `items[].allocation.target_ar_source_id` | string | yes | no | — | — |
+| `items[].allocation.target_recognition_source_id` | string | yes | no | — | — |
+| `items[].allocation.recognition_role` | literal["sales_net", "tax_liability"] | yes | no | — | — |
+| `items[].allocation.amount_minor_units` | integer | yes | no | — | — |
+| `items[].allocation.currency` | string | yes | no | — | — |
+| `items[].allocation.effective_date` | string | yes | no | — | — |
+| `items[].allocation.facts_snapshot` | string | yes | no | — | — |
+| `items[].allocation.created_at` | string | yes | no | — | — |
+| `items[].allocation.created_by` | string | yes | no | — | — |
+| `items[].allocation.created_via` | string | yes | no | — | — |
+| `items[].allocation.audit_event_id` | string | yes | no | — | — |
+| `items[].revision` | object \| null | no | yes | null | — |
+| `items[].revision.id` | string | yes | no | — | — |
+| `items[].revision.revision_number` | integer | yes | no | — | — |
+| `items[].revision.date` | string | yes | no | — | — |
+| `items[].revision.number` | string | yes | no | — | — |
+| `items[].revision.memo` | string \| null | yes | yes | — | — |
+| `items[].revision.reference` | string \| null | yes | yes | — | — |
+| `items[].revision.total` | object | yes | no | — | — |
+| `items[].revision.total.amount` | string | yes | no | — | — |
+| `items[].revision.total.currency` | string | yes | no | — | — |
+| `items[].revision.total.minor_units` | integer | yes | no | — | — |
+| `items[].revision.audit_event_id` | string | yes | no | — | — |
+| `items[].revision.profile` | object | yes | no | — | — |
+| `items[].revision.profile.schema_version` | literal[1] | no | no | 1 | — |
+| `items[].revision.profile.payer` | object | yes | no | — | — |
+| `items[].revision.profile.payer.id` | string | yes | no | — | — |
+| `items[].revision.profile.payer.label` | string | yes | no | — | — |
+| `items[].revision.profile.payer.version` | integer | yes | no | — | — |
+| `items[].revision.profile.lineage` | array[object] | yes | no | — | — |
+| `items[].revision.profile.lineage[].id` | string | yes | no | — | — |
+| `items[].revision.profile.lineage[].label` | string | yes | no | — | — |
+| `items[].revision.profile.lineage[].version` | integer | yes | no | — | — |
+| `items[].revision.profile.billing_address` | object[string, string \| null] | yes | no | — | — |
+| `items[].revision.profile.ar_account` | object | yes | no | — | — |
+| `items[].revision.profile.ar_account.id` | string | yes | no | — | — |
+| `items[].revision.profile.ar_account.name` | string | yes | no | — | — |
+| `items[].revision.profile.ar_account.full_name` | string | yes | no | — | — |
+| `items[].revision.profile.ar_account.number` | string \| null | yes | yes | — | — |
+| `items[].revision.profile.ar_account.type` | string | yes | no | — | — |
+| `items[].revision.profile.ar_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `items[].revision.profile.deposit_account` | object | yes | no | — | — |
+| `items[].revision.profile.deposit_account.id` | string | yes | no | — | — |
+| `items[].revision.profile.deposit_account.name` | string | yes | no | — | — |
+| `items[].revision.profile.deposit_account.full_name` | string | yes | no | — | — |
+| `items[].revision.profile.deposit_account.number` | string \| null | yes | yes | — | — |
+| `items[].revision.profile.deposit_account.type` | string | yes | no | — | — |
+| `items[].revision.profile.deposit_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `items[].revision.profile.payment_method` | object | yes | no | — | — |
+| `items[].revision.profile.payment_method.id` | string | yes | no | — | — |
+| `items[].revision.profile.payment_method.label` | string | yes | no | — | — |
+| `items[].revision.profile.payment_method.version` | integer | yes | no | — | — |
+| `items[].revision.profile.preferences` | object | yes | no | — | — |
+| `items[].revision.profile.preferences.automatically_apply_payments` | boolean | yes | no | — | — |
+| `items[].revision.profile.preferences.automatically_calculate_payments` | boolean | yes | no | — | — |
+| `items[].revision.profile.preferences.use_undeposited_funds_for_payments` | boolean | yes | no | — | — |
+| `items[].revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
+| `items[].operation_key` | string \| null | no | yes | null | — |
+| `items[].command` | string \| null | no | yes | null | — |
+| `total_count` | integer | yes | no | — | — |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `facts_fingerprint` | string | yes | no | — | — |
+| `audit_watermark` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "audit_watermark": 1,
+  "facts_fingerprint": "value",
+  "items": [],
+  "next_cursor": null,
+  "total_count": 1
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
 
 ## `payment invoices`
 
@@ -705,61 +862,18 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
-| `id` | string | yes | no | — | — |
+| `changed` | boolean | no | no | true | — |
+| `new_effect` | boolean | no | no | true | — |
+| `id` | string \| null | yes | yes | — | — |
 | `version` | integer | yes | no | — | — |
 | `operation_key` | string | yes | no | — | — |
 | `facts_fingerprint` | string | yes | no | — | — |
 | `idempotent_replay` | boolean | no | no | false | — |
-| `effect` | object | yes | no | — | — |
-| `effect.kind` | literal["receive", "apply", "unapply", "update", "void", "invoice_update"] | yes | no | — | — |
-| `effect.financial_changed` | boolean | yes | no | — | — |
-| `effect.operation_id` | string \| null | yes | yes | — | — |
-| `effect.payment_id` | string | yes | no | — | — |
-| `effect.source_components` | array[object] | yes | no | — | — |
-| `effect.source_components[].component_key_id` | string \| null | yes | yes | — | — |
-| `effect.source_components[].component_id` | string \| null | yes | yes | — | — |
-| `effect.source_components[].party_id` | string | yes | no | — | — |
-| `effect.source_components[].party_name` | string | yes | no | — | — |
-| `effect.source_components[].ar_account_id` | string | yes | no | — | — |
-| `effect.source_components[].currency` | string | yes | no | — | — |
-| `effect.source_components[].received_minor_units` | integer | yes | no | — | — |
-| `effect.source_components[].applied_minor_units` | integer | yes | no | — | — |
-| `effect.source_components[].available_minor_units` | integer | yes | no | — | — |
-| `effect.applications` | array[object] | yes | no | — | — |
-| `effect.applications[].application_id` | string \| null | yes | yes | — | — |
-| `effect.applications[].invoice_id` | string | yes | no | — | — |
-| `effect.applications[].invoice_version` | integer | yes | no | — | — |
-| `effect.applications[].source_component_key_id` | string \| null | yes | yes | — | — |
-| `effect.applications[].party_id` | string | yes | no | — | — |
-| `effect.applications[].amount` | object | yes | no | — | — |
-| `effect.applications[].amount.amount` | string | yes | no | — | — |
-| `effect.applications[].amount.currency` | string | yes | no | — | — |
-| `effect.applications[].amount.minor_units` | integer | yes | no | — | — |
-| `effect.applications[].effective_date` | string | yes | no | — | — |
-| `effect.allocations` | array[object] | yes | no | — | — |
-| `effect.allocations[].allocation_id` | string \| null | yes | yes | — | — |
-| `effect.allocations[].application_id` | string \| null | yes | yes | — | — |
-| `effect.allocations[].invoice_id` | string | yes | no | — | — |
-| `effect.allocations[].target_ordinal` | integer | yes | no | — | — |
-| `effect.allocations[].logical_kind` | literal["net", "tax"] | yes | no | — | — |
-| `effect.allocations[].tax_item_id` | string \| null | yes | yes | — | — |
-| `effect.allocations[].amount` | object | yes | no | — | — |
-| `effect.allocations[].amount.amount` | string | yes | no | — | — |
-| `effect.allocations[].amount.currency` | string | yes | no | — | — |
-| `effect.allocations[].amount.minor_units` | integer | yes | no | — | — |
-| `effect.document_changes` | array[object] | yes | no | — | — |
-| `effect.document_changes[].invoice_id` | string | yes | no | — | — |
-| `effect.document_changes[].version` | integer | yes | no | — | — |
-| `effect.document_changes[].revision_id` | string | yes | no | — | — |
-| `effect.document_changes[].gross_minor_units` | integer | yes | no | — | — |
-| `effect.document_changes[].applied_minor_units` | integer | yes | no | — | — |
-| `effect.document_changes[].due_minor_units` | integer | yes | no | — | — |
-| `effect.document_changes[].currency` | string | yes | no | — | — |
-| `effect.document_changes[].status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `effect` | object \| object \| object \| object \| object | yes | no | — | — |
 | `current` | object | yes | no | — | — |
-| `current.payment_id` | string | yes | no | — | — |
+| `current.payment_id` | string \| null | yes | yes | — | — |
 | `current.version` | integer | yes | no | — | — |
-| `current.revision_id` | string | yes | no | — | — |
+| `current.revision_id` | string \| null | yes | yes | — | — |
 | `current.status` | literal["posted", "voided"] | yes | no | — | — |
 | `current.received_minor_units` | integer | yes | no | — | — |
 | `current.effective_received_minor_units` | integer | yes | no | — | — |
@@ -784,7 +898,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `effect_counts.document_changes` | integer | yes | no | — | — |
 | `prospective_pages` | array[object] | no | no | [] | — |
 | `prospective_pages[].command` | literal["payment preview items"] | no | no | "payment preview items" | — |
-| `prospective_pages[].request` | object \| object | yes | no | — | — |
+| `prospective_pages[].request` | object \| object \| object \| object \| object \| object | yes | no | — | — |
 | `prospective_pages[].facts_fingerprint` | string | yes | no | — | — |
 | `prospective_pages[].kind` | literal["source_components", "applications", "allocations", "document_changes"] | yes | no | — | — |
 | `prospective_pages[].total_count` | integer | yes | no | — | — |
@@ -797,6 +911,7 @@ Example JSON output:
 
 ```json
 {
+  "changed": true,
   "current": {
     "applied_minor_units": 1,
     "available_minor_units": 1,
@@ -804,21 +919,25 @@ Example JSON output:
     "components": [],
     "currency": "USD",
     "effective_received_minor_units": 1,
-    "payment_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "payment_id": null,
     "received_minor_units": 1,
-    "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "revision_id": null,
     "status": "posted",
     "version": 1
   },
   "dry_run": false,
   "effect": {
+    "after_header": null,
     "allocations": [],
     "applications": [],
+    "audit_event_id": null,
+    "before_header": null,
     "document_changes": [],
     "financial_changed": false,
     "kind": "receive",
     "operation_id": null,
-    "payment_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "payment_id": null,
+    "preferences": null,
     "source_components": []
   },
   "effect_counts": {
@@ -828,8 +947,9 @@ Example JSON output:
     "source_components": 1
   },
   "facts_fingerprint": "value",
-  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "id": null,
   "idempotent_replay": false,
+  "new_effect": true,
   "operation_key": "value",
   "prospective_pages": [],
   "version": 1,
@@ -855,6 +975,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
@@ -906,6 +1027,7 @@ Page all current exact-party credit components or active applications, including
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
 | `payment` | `PAYMENT` | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `kind` | `--kind` | literal["components", "applications"] | no | no | "components" | — |
+| `as_of` | `--as-of` | string \| null | no | yes | null | — |
 
 ### Command and context options
 
@@ -933,7 +1055,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
-| `items` | array[object \| object \| object \| object \| object] | yes | no | — | — |
+| `committed` | boolean | no | no | false | — |
+| `kind` | string \| null | no | yes | null | — |
+| `items` | array[object \| object \| object \| object \| object \| object] | yes | no | — | — |
+| `items[].kind` | literal["apply", "unapply"] \| literal["allocation", "reversal"] | no | no | "apply" | Present in PaymentApplicationOutput, PaymentAllocationOutput. |
+| `items[].reverses_application_id` | string \| null | no | yes | null | Present in PaymentApplicationOutput. |
 | `items[].application_id` | string \| null | no | yes | — | Present in PaymentApplicationOutput, PaymentAllocationOutput. |
 | `items[].invoice_id` | string | no | no | — | Present in PaymentApplicationOutput, PaymentAllocationOutput, InvoiceSettlementOutput. |
 | `items[].invoice_version` | integer | no | no | — | Present in PaymentApplicationOutput. |
@@ -944,6 +1070,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].amount.currency` | string | no | no | — | Present in PaymentApplicationOutput, PaymentAllocationOutput. |
 | `items[].amount.minor_units` | integer | no | no | — | Present in PaymentApplicationOutput, PaymentAllocationOutput. |
 | `items[].effective_date` | string | no | no | — | Present in PaymentApplicationOutput. |
+| `items[].reverses_allocation_id` | string \| null | no | yes | null | Present in PaymentAllocationOutput. |
 | `items[].allocation_id` | string \| null | no | yes | — | Present in PaymentAllocationOutput. |
 | `items[].target_ordinal` | integer | no | no | — | Present in PaymentAllocationOutput. |
 | `items[].logical_kind` | literal["net", "tax"] | no | no | — | Present in PaymentAllocationOutput. |
@@ -952,31 +1079,102 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].component_id` | string \| null | no | yes | — | Present in PaymentComponentOutput. |
 | `items[].party_name` | string | no | no | — | Present in PaymentComponentOutput. |
 | `items[].ar_account_id` | string | no | no | — | Present in PaymentComponentOutput. |
-| `items[].currency` | string | no | no | — | Present in PaymentComponentOutput, InvoiceSettlementOutput. |
-| `items[].received_minor_units` | integer | no | no | — | Present in PaymentComponentOutput. |
-| `items[].applied_minor_units` | integer | no | no | — | Present in PaymentComponentOutput, InvoiceSettlementOutput. |
-| `items[].available_minor_units` | integer | no | no | — | Present in PaymentComponentOutput. |
-| `items[].version` | integer | no | no | — | Present in InvoiceSettlementOutput. |
-| `items[].revision_id` | string | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].currency` | string | no | no | — | Present in PaymentComponentOutput, InvoiceSettlementOutput, PaymentCurrentOutput. |
+| `items[].received_minor_units` | integer | no | no | — | Present in PaymentComponentOutput, PaymentCurrentOutput. |
+| `items[].applied_minor_units` | integer | no | no | — | Present in PaymentComponentOutput, InvoiceSettlementOutput, PaymentCurrentOutput. |
+| `items[].available_minor_units` | integer | no | no | — | Present in PaymentComponentOutput, PaymentCurrentOutput. |
+| `items[].version` | integer | no | no | — | Present in InvoiceSettlementOutput, PaymentCurrentOutput. |
+| `items[].revision_id` | string \| null | no | yes | — | Present in InvoiceSettlementOutput, PaymentCurrentOutput. |
 | `items[].gross_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
 | `items[].due_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
-| `items[].status` | literal["unpaid", "partial", "paid", "voided"] | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].status` | literal["unpaid", "partial", "paid", "voided"] \| literal["posted", "voided"] | no | no | — | Present in InvoiceSettlementOutput, PaymentCurrentOutput. |
+| `items[].settlement_guard` | string \| null | no | yes | null | Present in InvoiceSettlementOutput. |
+| `items[].as_of` | string \| null | no | yes | null | Present in InvoiceSettlementOutput. |
+| `items[].audit_watermark` | integer \| null | no | yes | null | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current` | object \| null | no | yes | null | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.invoice_id` | string | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.version` | integer | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.revision_id` | string \| null | no | yes | — | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.gross_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.applied_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.due_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.currency` | string | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.status` | literal["unpaid", "partial", "paid", "voided"] | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].payment_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. |
+| `items[].effective_received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].components` | array[object] | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].components[].component_key_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. |
+| `items[].components[].component_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. |
+| `items[].components[].party_id` | string | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].components[].party_name` | string | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].components[].ar_account_id` | string | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].components[].currency` | string | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].components[].received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].components[].applied_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].components[].available_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
+| `items[].component_count` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `items[].invoice` | string | no | no | — | Present in InvoiceAmount. |
 | `items[].expected_version` | integer | no | no | — | Present in InvoiceAmount. |
 | `total_count` | integer | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
 | `facts_fingerprint` | string | yes | no | — | — |
 | `projection` | literal["prospective", "committed", "current"] | yes | no | — | — |
+| `as_of` | string \| null | yes | yes | — | — |
+| `audit_watermark` | integer | yes | no | — | — |
+| `received_minor_units` | integer | yes | no | — | — |
+| `applied_minor_units` | integer | yes | no | — | — |
+| `unapplied_minor_units` | integer | yes | no | — | — |
+| `all_committed_current` | object | yes | no | — | — |
+| `all_committed_current.payment_id` | string \| null | yes | yes | — | — |
+| `all_committed_current.version` | integer | yes | no | — | — |
+| `all_committed_current.revision_id` | string \| null | yes | yes | — | — |
+| `all_committed_current.status` | literal["posted", "voided"] | yes | no | — | — |
+| `all_committed_current.received_minor_units` | integer | yes | no | — | — |
+| `all_committed_current.effective_received_minor_units` | integer | yes | no | — | — |
+| `all_committed_current.applied_minor_units` | integer | yes | no | — | — |
+| `all_committed_current.available_minor_units` | integer | yes | no | — | — |
+| `all_committed_current.currency` | string | yes | no | — | — |
+| `all_committed_current.components` | array[object] | yes | no | — | — |
+| `all_committed_current.components[].component_key_id` | string \| null | yes | yes | — | — |
+| `all_committed_current.components[].component_id` | string \| null | yes | yes | — | — |
+| `all_committed_current.components[].party_id` | string | yes | no | — | — |
+| `all_committed_current.components[].party_name` | string | yes | no | — | — |
+| `all_committed_current.components[].ar_account_id` | string | yes | no | — | — |
+| `all_committed_current.components[].currency` | string | yes | no | — | — |
+| `all_committed_current.components[].received_minor_units` | integer | yes | no | — | — |
+| `all_committed_current.components[].applied_minor_units` | integer | yes | no | — | — |
+| `all_committed_current.components[].available_minor_units` | integer | yes | no | — | — |
+| `all_committed_current.component_count` | integer | yes | no | — | — |
 
 Example JSON output:
 
 ```json
 {
+  "all_committed_current": {
+    "applied_minor_units": 1,
+    "available_minor_units": 1,
+    "component_count": 1,
+    "components": [],
+    "currency": "USD",
+    "effective_received_minor_units": 1,
+    "payment_id": null,
+    "received_minor_units": 1,
+    "revision_id": null,
+    "status": "posted",
+    "version": 1
+  },
+  "applied_minor_units": 1,
+  "as_of": null,
+  "audit_watermark": 1,
+  "committed": false,
   "facts_fingerprint": "value",
   "items": [],
+  "kind": null,
   "next_cursor": null,
   "projection": "prospective",
-  "total_count": 1
+  "received_minor_units": 1,
+  "total_count": 1,
+  "unapplied_minor_units": 1
 }
 ```
 
@@ -1068,6 +1266,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
+| `settlement_guard` | string \| null | no | yes | null | — |
 | `type` | literal["payment"] | no | no | "payment" | — |
 | `number` | string | yes | no | — | — |
 | `status` | literal["posted", "voided"] | yes | no | — | — |
@@ -1119,9 +1318,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.profile.preferences.use_undeposited_funds_for_payments` | boolean | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `current` | object | yes | no | — | — |
-| `current.payment_id` | string | yes | no | — | — |
+| `current.payment_id` | string \| null | yes | yes | — | — |
 | `current.version` | integer | yes | no | — | — |
-| `current.revision_id` | string | yes | no | — | — |
+| `current.revision_id` | string \| null | yes | yes | — | — |
 | `current.status` | literal["posted", "voided"] | yes | no | — | — |
 | `current.received_minor_units` | integer | yes | no | — | — |
 | `current.effective_received_minor_units` | integer | yes | no | — | — |
@@ -1154,9 +1353,9 @@ Example JSON output:
     "components": [],
     "currency": "USD",
     "effective_received_minor_units": 1,
-    "payment_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "payment_id": null,
     "received_minor_units": 1,
-    "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "revision_id": null,
     "status": "posted",
     "version": 1
   },
@@ -1214,6 +1413,7 @@ Example JSON output:
       "minor_units": 1
     }
   },
+  "settlement_guard": null,
   "status": "posted",
   "type": "payment",
   "updated_at": "2026-01-01T00:00:00Z",
@@ -1374,4 +1574,630 @@ Example JSON output:
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `payment unapply`
+
+Reverse selected active applications and their current allocations at original dates; retain owned credit without ledger posting.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/payment.unapply` |
+| External binary body | none |
+
+### CLI
+
+`bookflow payment unapply 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --operation-key example-unapply-1 --applications '[{"application_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","invoice_expected_version":2}]' --company 'Demo Plumbing Co' --json --reason 'Correct recorded remittance'`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `payment` | `PAYMENT` | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
+| `applications[].application_id` | inside `--applications` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `applications[].invoice_expected_version` | inside `--applications` JSON array | integer | yes | no | — | minimum 1 |
+| `operation_key` | `--operation-key` | string | yes | no | — | pattern "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" |
+| `expected_facts_fingerprint` | `--expected-facts-fingerprint` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/payment.unapply`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `changed` | boolean | no | no | true | — |
+| `new_effect` | boolean | no | no | true | — |
+| `id` | string \| null | yes | yes | — | — |
+| `version` | integer | yes | no | — | — |
+| `operation_key` | string | yes | no | — | — |
+| `facts_fingerprint` | string | yes | no | — | — |
+| `idempotent_replay` | boolean | no | no | false | — |
+| `effect` | object \| object \| object \| object \| object | yes | no | — | — |
+| `current` | object | yes | no | — | — |
+| `current.payment_id` | string \| null | yes | yes | — | — |
+| `current.version` | integer | yes | no | — | — |
+| `current.revision_id` | string \| null | yes | yes | — | — |
+| `current.status` | literal["posted", "voided"] | yes | no | — | — |
+| `current.received_minor_units` | integer | yes | no | — | — |
+| `current.effective_received_minor_units` | integer | yes | no | — | — |
+| `current.applied_minor_units` | integer | yes | no | — | — |
+| `current.available_minor_units` | integer | yes | no | — | — |
+| `current.currency` | string | yes | no | — | — |
+| `current.components` | array[object] | yes | no | — | — |
+| `current.components[].component_key_id` | string \| null | yes | yes | — | — |
+| `current.components[].component_id` | string \| null | yes | yes | — | — |
+| `current.components[].party_id` | string | yes | no | — | — |
+| `current.components[].party_name` | string | yes | no | — | — |
+| `current.components[].ar_account_id` | string | yes | no | — | — |
+| `current.components[].currency` | string | yes | no | — | — |
+| `current.components[].received_minor_units` | integer | yes | no | — | — |
+| `current.components[].applied_minor_units` | integer | yes | no | — | — |
+| `current.components[].available_minor_units` | integer | yes | no | — | — |
+| `current.component_count` | integer | yes | no | — | — |
+| `effect_counts` | object | yes | no | — | — |
+| `effect_counts.source_components` | integer | yes | no | — | — |
+| `effect_counts.applications` | integer | yes | no | — | — |
+| `effect_counts.allocations` | integer | yes | no | — | — |
+| `effect_counts.document_changes` | integer | yes | no | — | — |
+| `prospective_pages` | array[object] | no | no | [] | — |
+| `prospective_pages[].command` | literal["payment preview items"] | no | no | "payment preview items" | — |
+| `prospective_pages[].request` | object \| object \| object \| object \| object \| object | yes | no | — | — |
+| `prospective_pages[].facts_fingerprint` | string | yes | no | — | — |
+| `prospective_pages[].kind` | literal["source_components", "applications", "allocations", "document_changes"] | yes | no | — | — |
+| `prospective_pages[].total_count` | integer | yes | no | — | — |
+| `prospective_pages[].limit` | integer | no | no | 50 | — |
+| `prospective_pages[].next_cursor` | string \| null | yes | yes | — | — |
+| `prospective_pages[].projection` | literal["prospective"] | no | no | "prospective" | — |
+| `prospective_pages[].committed` | literal[false] | no | no | false | — |
+
+Example JSON output:
+
+```json
+{
+  "changed": true,
+  "current": {
+    "applied_minor_units": 1,
+    "available_minor_units": 1,
+    "component_count": 1,
+    "components": [],
+    "currency": "USD",
+    "effective_received_minor_units": 1,
+    "payment_id": null,
+    "received_minor_units": 1,
+    "revision_id": null,
+    "status": "posted",
+    "version": 1
+  },
+  "dry_run": false,
+  "effect": {
+    "after_header": null,
+    "allocations": [],
+    "applications": [],
+    "audit_event_id": null,
+    "before_header": null,
+    "document_changes": [],
+    "financial_changed": false,
+    "kind": "receive",
+    "operation_id": null,
+    "payment_id": null,
+    "preferences": null,
+    "source_components": []
+  },
+  "effect_counts": {
+    "allocations": 1,
+    "applications": 1,
+    "document_changes": 1,
+    "source_components": 1
+  },
+  "facts_fingerprint": "value",
+  "id": null,
+  "idempotent_replay": false,
+  "new_effect": true,
+  "operation_key": "value",
+  "prospective_pages": [],
+  "version": 1,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_APPLICATION_CAPACITY` | The requested application exceeds the owned source or invoice capacity. |
+| `E_APPLICATION_INACTIVE` | This application is already unapplied or its payment is voided. |
+| `E_APPLICATION_INCOMPATIBLE` | Application source and target must have the same party, receivable account and currency. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PAYMENT_OPERATION_KEY_REUSED` | This permanent operation key belongs to a different original request. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_SELECTION_CONSUMED` | This draft was consumed by a successful payment operation; recover that operation or start a new draft. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `payment update`
+
+Correct receipt content with immutable replacement postings, fixed job ownership and complete source allocation restatement.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/payment.update` |
+| External binary body | none |
+
+### CLI
+
+`bookflow payment update 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --operation-key example-correction-1 --memo 'Corrected remittance note' --company 'Demo Plumbing Co' --json --reason 'Correct recorded remittance'`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `payment` | `PAYMENT` | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
+| `operation_key` | `--operation-key` | string | yes | no | — | pattern "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" |
+| `expected_facts_fingerprint` | `--expected-facts-fingerprint` | string \| null | no | yes | null | — |
+| `date` | `--date` | string \| null | no | yes | null | — |
+| `amount` | `--amount` | string \| object \| null | no | yes | null | — |
+| `number` | `--number` | string \| null | no | yes | null | — |
+| `reference` | `--reference` | string \| null | no | yes | null | — |
+| `memo` | `--memo` | string \| null | no | yes | null | — |
+| `payment_method` | `--payment-method` | string \| null | no | yes | null | — |
+| `deposit_to` | `--deposit-to` | string \| null | no | yes | null | — |
+| `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
+| `expected_custom_field_kinds` | `--expected-custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `invoice_versions[].invoice` | inside `--invoice-versions` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `invoice_versions[].expected_version` | inside `--invoice-versions` JSON array | integer | yes | no | — | minimum 1 |
+| `settlement_guard` | `--settlement-guard` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/payment.update`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `changed` | boolean | no | no | true | — |
+| `new_effect` | boolean | no | no | true | — |
+| `id` | string \| null | yes | yes | — | — |
+| `version` | integer | yes | no | — | — |
+| `operation_key` | string | yes | no | — | — |
+| `facts_fingerprint` | string | yes | no | — | — |
+| `idempotent_replay` | boolean | no | no | false | — |
+| `effect` | object \| object \| object \| object \| object | yes | no | — | — |
+| `current` | object | yes | no | — | — |
+| `current.payment_id` | string \| null | yes | yes | — | — |
+| `current.version` | integer | yes | no | — | — |
+| `current.revision_id` | string \| null | yes | yes | — | — |
+| `current.status` | literal["posted", "voided"] | yes | no | — | — |
+| `current.received_minor_units` | integer | yes | no | — | — |
+| `current.effective_received_minor_units` | integer | yes | no | — | — |
+| `current.applied_minor_units` | integer | yes | no | — | — |
+| `current.available_minor_units` | integer | yes | no | — | — |
+| `current.currency` | string | yes | no | — | — |
+| `current.components` | array[object] | yes | no | — | — |
+| `current.components[].component_key_id` | string \| null | yes | yes | — | — |
+| `current.components[].component_id` | string \| null | yes | yes | — | — |
+| `current.components[].party_id` | string | yes | no | — | — |
+| `current.components[].party_name` | string | yes | no | — | — |
+| `current.components[].ar_account_id` | string | yes | no | — | — |
+| `current.components[].currency` | string | yes | no | — | — |
+| `current.components[].received_minor_units` | integer | yes | no | — | — |
+| `current.components[].applied_minor_units` | integer | yes | no | — | — |
+| `current.components[].available_minor_units` | integer | yes | no | — | — |
+| `current.component_count` | integer | yes | no | — | — |
+| `effect_counts` | object | yes | no | — | — |
+| `effect_counts.source_components` | integer | yes | no | — | — |
+| `effect_counts.applications` | integer | yes | no | — | — |
+| `effect_counts.allocations` | integer | yes | no | — | — |
+| `effect_counts.document_changes` | integer | yes | no | — | — |
+| `prospective_pages` | array[object] | no | no | [] | — |
+| `prospective_pages[].command` | literal["payment preview items"] | no | no | "payment preview items" | — |
+| `prospective_pages[].request` | object \| object \| object \| object \| object \| object | yes | no | — | — |
+| `prospective_pages[].facts_fingerprint` | string | yes | no | — | — |
+| `prospective_pages[].kind` | literal["source_components", "applications", "allocations", "document_changes"] | yes | no | — | — |
+| `prospective_pages[].total_count` | integer | yes | no | — | — |
+| `prospective_pages[].limit` | integer | no | no | 50 | — |
+| `prospective_pages[].next_cursor` | string \| null | yes | yes | — | — |
+| `prospective_pages[].projection` | literal["prospective"] | no | no | "prospective" | — |
+| `prospective_pages[].committed` | literal[false] | no | no | false | — |
+
+Example JSON output:
+
+```json
+{
+  "changed": true,
+  "current": {
+    "applied_minor_units": 1,
+    "available_minor_units": 1,
+    "component_count": 1,
+    "components": [],
+    "currency": "USD",
+    "effective_received_minor_units": 1,
+    "payment_id": null,
+    "received_minor_units": 1,
+    "revision_id": null,
+    "status": "posted",
+    "version": 1
+  },
+  "dry_run": false,
+  "effect": {
+    "after_header": null,
+    "allocations": [],
+    "applications": [],
+    "audit_event_id": null,
+    "before_header": null,
+    "document_changes": [],
+    "financial_changed": false,
+    "kind": "receive",
+    "operation_id": null,
+    "payment_id": null,
+    "preferences": null,
+    "source_components": []
+  },
+  "effect_counts": {
+    "allocations": 1,
+    "applications": 1,
+    "document_changes": 1,
+    "source_components": 1
+  },
+  "facts_fingerprint": "value",
+  "id": null,
+  "idempotent_replay": false,
+  "new_effect": true,
+  "operation_key": "value",
+  "prospective_pages": [],
+  "version": 1,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_APPLICATION_CAPACITY` | The requested application exceeds the owned source or invoice capacity. |
+| `E_APPLICATION_INACTIVE` | This application is already unapplied or its payment is voided. |
+| `E_APPLICATION_INCOMPATIBLE` | Application source and target must have the same party, receivable account and currency. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PAYMENT_OPERATION_KEY_REUSED` | This permanent operation key belongs to a different original request. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_SELECTION_CONSUMED` | This draft was consumed by a successful payment operation; recover that operation or start a new draft. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `payment void`
+
+Void an unapplied receipt with exact original-date ledger reversals; applications must be explicitly unapplied first.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/payment.void` |
+| External binary body | none |
+
+### CLI
+
+`bookflow payment void 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 3 --operation-key example-void-1 --company 'Demo Plumbing Co' --json --reason 'Correct recorded remittance'`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `payment` | `PAYMENT` | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
+| `operation_key` | `--operation-key` | string | yes | no | — | pattern "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" |
+| `expected_facts_fingerprint` | `--expected-facts-fingerprint` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/payment.void`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `changed` | boolean | no | no | true | — |
+| `new_effect` | boolean | no | no | true | — |
+| `id` | string \| null | yes | yes | — | — |
+| `version` | integer | yes | no | — | — |
+| `operation_key` | string | yes | no | — | — |
+| `facts_fingerprint` | string | yes | no | — | — |
+| `idempotent_replay` | boolean | no | no | false | — |
+| `effect` | object \| object \| object \| object \| object | yes | no | — | — |
+| `current` | object | yes | no | — | — |
+| `current.payment_id` | string \| null | yes | yes | — | — |
+| `current.version` | integer | yes | no | — | — |
+| `current.revision_id` | string \| null | yes | yes | — | — |
+| `current.status` | literal["posted", "voided"] | yes | no | — | — |
+| `current.received_minor_units` | integer | yes | no | — | — |
+| `current.effective_received_minor_units` | integer | yes | no | — | — |
+| `current.applied_minor_units` | integer | yes | no | — | — |
+| `current.available_minor_units` | integer | yes | no | — | — |
+| `current.currency` | string | yes | no | — | — |
+| `current.components` | array[object] | yes | no | — | — |
+| `current.components[].component_key_id` | string \| null | yes | yes | — | — |
+| `current.components[].component_id` | string \| null | yes | yes | — | — |
+| `current.components[].party_id` | string | yes | no | — | — |
+| `current.components[].party_name` | string | yes | no | — | — |
+| `current.components[].ar_account_id` | string | yes | no | — | — |
+| `current.components[].currency` | string | yes | no | — | — |
+| `current.components[].received_minor_units` | integer | yes | no | — | — |
+| `current.components[].applied_minor_units` | integer | yes | no | — | — |
+| `current.components[].available_minor_units` | integer | yes | no | — | — |
+| `current.component_count` | integer | yes | no | — | — |
+| `effect_counts` | object | yes | no | — | — |
+| `effect_counts.source_components` | integer | yes | no | — | — |
+| `effect_counts.applications` | integer | yes | no | — | — |
+| `effect_counts.allocations` | integer | yes | no | — | — |
+| `effect_counts.document_changes` | integer | yes | no | — | — |
+| `prospective_pages` | array[object] | no | no | [] | — |
+| `prospective_pages[].command` | literal["payment preview items"] | no | no | "payment preview items" | — |
+| `prospective_pages[].request` | object \| object \| object \| object \| object \| object | yes | no | — | — |
+| `prospective_pages[].facts_fingerprint` | string | yes | no | — | — |
+| `prospective_pages[].kind` | literal["source_components", "applications", "allocations", "document_changes"] | yes | no | — | — |
+| `prospective_pages[].total_count` | integer | yes | no | — | — |
+| `prospective_pages[].limit` | integer | no | no | 50 | — |
+| `prospective_pages[].next_cursor` | string \| null | yes | yes | — | — |
+| `prospective_pages[].projection` | literal["prospective"] | no | no | "prospective" | — |
+| `prospective_pages[].committed` | literal[false] | no | no | false | — |
+
+Example JSON output:
+
+```json
+{
+  "changed": true,
+  "current": {
+    "applied_minor_units": 1,
+    "available_minor_units": 1,
+    "component_count": 1,
+    "components": [],
+    "currency": "USD",
+    "effective_received_minor_units": 1,
+    "payment_id": null,
+    "received_minor_units": 1,
+    "revision_id": null,
+    "status": "posted",
+    "version": 1
+  },
+  "dry_run": false,
+  "effect": {
+    "after_header": null,
+    "allocations": [],
+    "applications": [],
+    "audit_event_id": null,
+    "before_header": null,
+    "document_changes": [],
+    "financial_changed": false,
+    "kind": "receive",
+    "operation_id": null,
+    "payment_id": null,
+    "preferences": null,
+    "source_components": []
+  },
+  "effect_counts": {
+    "allocations": 1,
+    "applications": 1,
+    "document_changes": 1,
+    "source_components": 1
+  },
+  "facts_fingerprint": "value",
+  "id": null,
+  "idempotent_replay": false,
+  "new_effect": true,
+  "operation_key": "value",
+  "prospective_pages": [],
+  "version": 1,
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_APPLICATION_CAPACITY` | The requested application exceeds the owned source or invoice capacity. |
+| `E_APPLICATION_INACTIVE` | This application is already unapplied or its payment is voided. |
+| `E_APPLICATION_INCOMPATIBLE` | Application source and target must have the same party, receivable account and currency. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PAYMENT_OPERATION_KEY_REUSED` | This permanent operation key belongs to a different original request. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_SELECTION_CONSUMED` | This draft was consumed by a successful payment operation; recover that operation or start a new draft. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 | `E_VERSION_CONFLICT` | The record changed since the version you read. |

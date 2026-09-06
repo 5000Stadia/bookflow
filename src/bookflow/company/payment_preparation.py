@@ -1,4 +1,5 @@
 """Complete invoice discovery and shared origin-aware receipt calculations."""
+import json
 from bookflow.company import schema as c, document_effects as effects, sales_defaults as defaults
 from bookflow.company import payment_selection as selection, payment_queries as query, payment_calculations as calc, sales
 from bookflow.company.sales_models import money, _invalid
@@ -10,6 +11,8 @@ def candidates(s, inp):
     context = selection.context(s, inp)
     funding = query.payment_facts(s, context['payment_id']) if context['payment_id'] else None
     result = []
+    if funding and context['date'] < funding['revision']['date']:
+        return context, result
     for header in effects.rows(s, c.transactions, c.transactions.c.type == 'invoice', c.transactions.c.status == 'posted'):
         try:
             facts = query.invoice_facts(s, header['id'])
@@ -106,10 +109,12 @@ def calculate(s, inp):
     if 'amount' in inp.model_fields_set:
         amount = money(inp.amount, context['currency'], 'amount').minor_units if inp.amount is not None else None
         origin = 'entered' if amount is not None else 'selection_total' if context['automatically_calculate'] else 'unresolved'
-    if inp.amount_mode != 'company':
+    if inp.amount_mode != 'company' and not (origin == 'entered' and amount is not None and inp.amount_mode == 'selection_total'):
         origin = inp.amount_mode
     try:
-        result = calc.calculate(amount, origin, selection._rows(items), calculate_unresolved=context['automatically_calculate'])
+        result = calc.calculate(amount, origin, selection._rows(items),
+            calculate_unresolved=context['automatically_calculate'] or inp.amount_mode == 'selection_total',
+            **selection.funding_calculation(s, context, items))
     except ValueError as exc:
         raise _invalid('applications', str(exc)) from None
     originals = {row['invoice_id']: row for row in items}
@@ -120,37 +125,55 @@ def calculate(s, inp):
 
 
 def payment_page(s, inp):
+    """SQL aggregates and filtering precede bounded delivery; no per-row history walk."""
+    import sqlalchemy as sa
+    from bookflow.company.payment_authority import require_resource
     customer = defaults._row(s.company, 'customer', inp.customer, active=False)['id'] if inp.customer else None
     component_customer = defaults._row(s.company, 'customer', inp.component_customer, active=False)['id'] if inp.component_customer else None
     method = defaults._row(s.company, 'payment_method', inp.payment_method, active=False)['id'] if inp.payment_method else None
     family = {customer}
     if customer and inp.include_descendants:
-        family.update(row[0] for row in s.company.raw.execute('''WITH RECURSIVE family(id) AS (
+        family.update(row[0] for row in s.company.raw.execute("""WITH RECURSIVE family(id) AS (
             SELECT id FROM customers WHERE id=? UNION SELECT c.id FROM customers c JOIN family f ON c.parent_id=f.id)
-            SELECT id FROM family''', (customer,)))
-    result = []
-    for header in effects.rows(s, c.transactions, c.transactions.c.type == 'payment'):
-        try:
-            facts = query.payment_facts(s, header['id'])
-        except BookflowError as exc:
-            if exc.code == 'E_PERMISSION':
-                continue
+            SELECT id FROM family""", (customer,)))
+    t, r, p, a = c.transactions, c.transaction_revisions, c.payment_profiles, c.applications
+    inverse = a.alias('inverse')
+    applied = sa.select(a.c.paying_transaction_id, sa.func.sum(a.c.amount_minor_units).label('amount')).where(
+        a.c.kind == 'apply', ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_application_id == a.c.id))
+    ).group_by(a.c.paying_transaction_id).subquery()
+    used = sa.func.coalesce(applied.c.amount, 0)
+    available = sa.case((t.c.status == 'posted', r.c.total_minor_units-used), else_=0)
+    statement = sa.select(t.c.id, t.c.version, t.c.number, r.c.date, t.c.status, p.c.payer_id.label('customer_id'),
+        p.c.payment_method_id, r.c.currency, r.c.total_minor_units.label('received_minor_units'),
+        used.label('applied_minor_units'), available.label('unapplied_minor_units')).select_from(t).join(r,
+        r.c.id == t.c.current_revision_id).join(p, p.c.revision_id == r.c.id).outerjoin(applied,
+        applied.c.paying_transaction_id == t.c.id).where(t.c.type == 'payment')
+    try:
+        require_resource(s, 'customer-work', 'member')
+    except BookflowError as exc:
+        if exc.code != 'E_PERMISSION':
             raise
-        profile, revision = facts['profile'], facts['revision']
-        if (customer and profile['payer_id'] not in family or method and profile['payment_method_id'] != method or
-            component_customer and not any(key['party_id'] == component_customer for key in facts['keys'].values()) or
-            inp.status and header['status'] != inp.status or inp.number and header['number'] != inp.number or
-            inp.date_from and revision['date'] < inp.date_from or inp.date_to and revision['date'] > inp.date_to):
-            continue
-        if inp.q and inp.q.casefold() not in ' '.join([header['number'], revision['memo'] or '', profile['reference'] or '']).casefold():
-            continue
-        available = sum(facts['available'].values())
-        if inp.has_available_credit is not None and bool(available > 0) != inp.has_available_credit:
-            continue
-        result.append(dict(id=header['id'], version=header['version'], number=header['number'], date=revision['date'],
-            status=header['status'], customer_id=profile['payer_id'], payment_method_id=profile['payment_method_id'],
-            currency=revision['currency'], received_minor_units=revision['total_minor_units'],
-            applied_minor_units=sum(row['amount_minor_units'] for row in facts['applications']), unapplied_minor_units=available))
-    sort = {'received': 'received_minor_units', 'unapplied': 'unapplied_minor_units'}.get(inp.sort, inp.sort)
-    result.sort(key=lambda row: (row[sort], row['id']), reverse=inp.direction == 'desc')
-    return query.page(s, 'payment query', inp, result)
+        protected = sa.exists(sa.select(a.c.id).join(c.work_billing_allocations,
+            c.work_billing_allocations.c.transaction_id == a.c.paid_transaction_id).where(a.c.paying_transaction_id == t.c.id))
+        statement = statement.where(~protected)
+    if customer:
+        statement = statement.where(p.c.payer_id.in_(family))
+    if component_customer:
+        statement = statement.where(sa.exists(sa.select(c.payment_component_keys.c.id).where(
+            c.payment_component_keys.c.transaction_id == t.c.id, c.payment_component_keys.c.party_id == component_customer)))
+    for condition in ([p.c.payment_method_id == method] if method else []) + ([t.c.status == inp.status] if inp.status else []) + ([t.c.number == inp.number] if inp.number else []):
+        statement = statement.where(condition)
+    if inp.date_from:
+        statement = statement.where(r.c.date >= inp.date_from)
+    if inp.date_to:
+        statement = statement.where(r.c.date <= inp.date_to)
+    if inp.has_available_credit is not None:
+        statement = statement.where(available > 0 if inp.has_available_credit else available <= 0)
+    if inp.q:
+        s.company.raw.create_function('payment_casefold', 1, lambda value: (value or '').casefold(), deterministic=True)
+        captured = sa.func.coalesce(sa.func.json_extract(p.c.profile_snapshot, '$.payer.label'), '')
+        text = t.c.number + ' ' + sa.func.coalesce(r.c.memo, '') + ' ' + sa.func.coalesce(p.c.reference, '') + ' ' + captured
+        statement = statement.where(sa.func.payment_casefold(text).contains(inp.q.casefold(), autoescape=True))
+    order = {'date': r.c.date, 'number': t.c.number, 'received': r.c.total_minor_units, 'unapplied': available}[inp.sort]
+    statement = statement.order_by(order.desc() if inp.direction == 'desc' else order.asc(), t.c.id.desc() if inp.direction == 'desc' else t.c.id.asc())
+    return query.sql_page(s, 'payment query', inp, statement)

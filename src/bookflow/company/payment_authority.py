@@ -56,7 +56,18 @@ def record_transactions(db, record_type, record_id, seen=None):
     if identity in seen:
         return set()
     seen.add(identity)
+    if record_type == 'attachment':
+        links = db.conn.execute(sa.select(c.attachment_links.c.id).where(c.attachment_links.c.attachment_id == record_id)).scalars().all()
+        # Historical associations remain authority-bearing after unlink. An
+        # attachment with no associations is ordinary unattached evidence.
+        ids = set()
+        for identifier in links:
+            ids.update(record_transactions(db, 'attachment_link', identifier, seen))
+        return ids
     if record_type == 'transaction':
+        if db.conn.execute(sa.select(c.transactions.c.id).where(c.transactions.c.id == record_id)).first() is None:
+            from bookflow.core.errors import BookflowError
+            raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'})
         return {record_id}
     target = PAYMENT_TARGETS.get(record_type)
     if target is None:
@@ -110,12 +121,10 @@ def event_requirements(db, event_id):
     """One disclosure decision for the complete mixed payment audit event."""
     entries = list(db.conn.execute(sa.select(c.audit_entries.c.record_type, c.audit_entries.c.record_id).where(
         c.audit_entries.c.event_id == event_id)))
-    if not any(kind in PAYMENT_TARGETS for kind, _ in entries):
-        return ()
     ids = set()
     for kind, identifier in entries:
         ids.update(record_transactions(db, kind, identifier))
-    return requirements(db, ids)
+    return requirements(db, ids) if ids or any(kind in PAYMENT_TARGETS for kind, _ in entries) else ()
 
 
 def authorize_event(s, event_id):
@@ -126,7 +135,8 @@ def authorize_event(s, event_id):
 def denied_events(s):
     from bookflow.core.errors import BookflowError
     events = s.company.conn.execute(sa.select(c.audit_entries.c.event_id).where(
-        c.audit_entries.c.record_type.in_(PAYMENT_TARGETS)).distinct()).scalars()
+        c.audit_entries.c.record_type.in_((*PAYMENT_TARGETS, 'transaction', 'transaction_revision', 'document_line',
+            'document_line_identity', 'posting_batch', 'posting_line', 'posting_line_source', 'note', 'attachment', 'attachment_link'))).distinct()).scalars()
     denied = []
     for event in events:
         try:

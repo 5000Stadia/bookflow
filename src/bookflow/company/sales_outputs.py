@@ -9,7 +9,7 @@ from bookflow.company.sales_facts import SalesProfile, SalesLineProfile, SalesTa
 from bookflow.company.sales_models import StrictModel
 from bookflow.company.billing_facts import AllocationProof, ExactFraction
 from bookflow.core.models import WriteOutput
-from bookflow.company.payment_outputs import InvoiceSettlementOutput
+from bookflow.company.payment_outputs import InvoiceSettlementOutput, InvoiceCorrectionOutput
 
 MoneyOutput = JournalMoneyOutput
 
@@ -115,6 +115,14 @@ class SalesRevisionOutput(SalesRevisionSummaryOutput):
 
 
 class SalesSummaryOutput(CommonOut):
+    settlement_current: InvoiceSettlementOutput | None = None
+
+    @model_serializer(mode='wrap')
+    def compatible_summary(self, handler):
+        result = handler(self)
+        if self.settlement_current is None:
+            result.pop('settlement_current', None)
+        return result
     type: Literal["invoice", "sales_receipt"]
     number: str
     current_revision_id: str
@@ -187,6 +195,7 @@ class WorkBillingCurrent(StrictModel):
 
 
 class SalesWriteOutput(SalesOutput, WriteOutput):
+    settlement: InvoiceCorrectionOutput | None = None
     source_effect: WorkBillingSourceEffect | None = None
     source_current: WorkBillingCurrent | None = None
     billing_progress: list[BillingProgressLine] = Field(default_factory=list)
@@ -195,6 +204,15 @@ class SalesWriteOutput(SalesOutput, WriteOutput):
     changed_fields: list[str] = Field(default_factory=list)
     merged_over_versions: list[int] = Field(default_factory=list)
     idempotent_replay: bool = False
+
+    @model_serializer(mode='wrap')
+    def compatible_payment_settlement(self, handler):
+        result = handler(self)
+        if self.settlement is None:
+            result.pop('settlement', None)
+        if self.settlement_current is None:
+            result.pop('settlement_current', None)
+        return result
 
 
 class SalesPageOutput(StrictModel):

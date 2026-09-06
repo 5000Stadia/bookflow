@@ -247,6 +247,13 @@ _PAYMENT_EXAMPLES = {
     'payment receive': _PAYMENT_RECEIVE,
     'payment apply': dict(payment=ID, expected_version=1, date='2026-06-01', operation_key='example-apply-1', applications=dict(mode='inline', items=[dict(invoice=ID, expected_version=1, amount='50.00')])),
     'payment show': dict(payment=ID),
+    'payment update': dict(payment=ID, expected_version=1, operation_key='example-correction-1', memo='Corrected remittance note'),
+    'payment unapply': dict(payment=ID, expected_version=2, operation_key='example-unapply-1', applications=[dict(application_id=ID, invoice_expected_version=2)]),
+    'payment void': dict(payment=ID, expected_version=3, operation_key='example-void-1'),
+    'payment history': dict(payment=ID, limit=25),
+    'payment settlement changes': dict(guard='authenticated-guard-from-payment-show', limit=25),
+    'application show': dict(application=ID),
+    'application history': dict(application=ID, limit=25),
     'payment query': dict(payment_method='Check', limit=25),
     'payment invoices': dict(mode='new_receipt', customer=ID, date='2026-06-01'),
     'payment suggest': dict(mode='new_receipt', customer=ID, date='2026-06-01', amount='150.00', strategy='exact_then_oldest'),
@@ -264,6 +271,8 @@ _PAYMENT_EXAMPLES = {
     'invoice settlement': dict(invoice=ID),
 }
 _PAYMENT_POSITIONALS = {
+    **{'payment ' + verb: 'payment' for verb in ('update', 'unapply', 'void', 'history')},
+    'application show': 'application', 'application history': 'application',
     'payment apply': 'payment', 'payment show': 'payment', 'payment settlement': 'payment',
     'invoice settlement': 'invoice', 'payment operation show': 'operation_key', 'payment operation items': 'operation_key',
     **{'payment selection ' + verb: 'selection' for verb in ('update', 'clear', 'show', 'items')},
@@ -280,4 +289,6 @@ for _name, _payload in _PAYMENT_EXAMPLES.items():
             continue
         _args.extend(['--' + _field.replace('_', '-'), _payment_json.dumps(_value, separators=(',', ':')) if isinstance(_value, (dict, list)) else str(_value)])
     _args.extend(['--company', 'Demo Plumbing Co', '--json'])
+    if _name in ('payment update', 'payment unapply', 'payment void'):
+        _args.extend(['--reason', 'Correct recorded remittance'])
     EXAMPLES[_name] = Example(' '.join(_payment_shell.quote(value) for value in _args), _payload)

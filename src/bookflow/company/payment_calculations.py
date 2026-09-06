@@ -90,7 +90,8 @@ class Calculation:
     problems: tuple[str, ...]
 
 
-def calculate(amount: int | None, origin: str, rows: list[DraftRow], *, calculate_unresolved=False) -> Calculation:
+def calculate(amount: int | None, origin: str, rows: list[DraftRow], *, calculate_unresolved=False,
+              source_capacities: dict[str, int] | None = None, source_owners: dict[str, str] | None = None) -> Calculation:
     """Recompute derived values, preserving entered values even when invalid.
 
 Policy adoption is supplied explicitly by the caller. This function never
@@ -107,6 +108,16 @@ consults today's company preference to reinterpret a saved draft.
         raise ValueError('duplicate invoice or ordinal')
     entered = sum(row.amount for row in rows if row.origin == 'entered')
     remaining = max(0, amount - entered) if origin == 'entered' else None
+    source_remaining = dict(source_capacities) if source_capacities is not None else None
+    if source_remaining is not None:
+        for units in source_remaining.values():
+            _units(units)
+        if source_owners is None or set(source_owners) != {row.invoice for row in rows}:
+            raise ValueError('every selected invoice requires an exact source owner')
+        for row in ordered:
+            if row.origin == 'entered':
+                owner = source_owners[row.invoice]
+                source_remaining[owner] = source_remaining.get(owner, 0) - row.amount
     result = []
     for row in ordered:
         if row.origin == 'calculated' or row.origin == 'unresolved' and calculate_unresolved:
@@ -114,11 +125,17 @@ consults today's company preference to reinterpret a saved draft.
                 row = replace(row, amount=None, origin='unresolved')
             else:
                 value = row.due if remaining is None else min(row.due, remaining)
+                if source_remaining is not None:
+                    owner = source_owners[row.invoice]
+                    value = min(value, max(0, source_remaining.get(owner, 0)))
+                    source_remaining[owner] = source_remaining.get(owner, 0) - value
                 row = replace(row, amount=value, origin='calculated')
                 if remaining is not None:
                     remaining -= value
         result.append(row)
     problems = []
+    if source_remaining is not None:
+        problems.extend(f'{owner}:exceeds_source_capacity' for owner, units in source_remaining.items() if units < 0)
     for row in result:
         if row.amount is None:
             problems.append(f'{row.invoice}:unresolved')

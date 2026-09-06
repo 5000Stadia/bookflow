@@ -16,7 +16,11 @@ def _write(document_type, verb, model):
     noun = document_type.replace('_', '-')
 
     def planner(inp, ctx, s):
-        return sales.prepare(s, ctx, inp, document_type, verb)
+        plan = sales.prepare(s, ctx, inp, document_type, verb)
+        if s.dry_run and document_type == 'invoice' and verb == 'update' and plan.preview.settlement is not None and not plan.data.get('recovered'):
+            from bookflow.company.payment_pages import invoice_preview_output
+            plan.preview.settlement = invoice_preview_output(s, ctx, inp, plan.preview.settlement)
+        return plan
 
     cmd = command(
         noun + ' ' + verb, scope='company', description={
@@ -31,7 +35,7 @@ def _write(document_type, verb, model):
         version_source=None if verb == 'post' else (noun + ' show', document_type, 'version'),
         error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_PERIOD_CLOSED',
                      'E_DUPLICATE_NUMBER', 'E_INACTIVE_REFERENCE', 'E_VALUE_RANGE',
-                     'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED', 'E_HAS_APPLICATIONS']
+                     'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED', 'E_HAS_APPLICATIONS', 'E_APPLIED_EXCEEDS_TOTAL', 'E_PAYMENT_OPERATION_KEY_REUSED']
                     + (['E_PREVIEW_STALE', 'E_WORK_DEPENDENCY'] if verb != 'void' else ['E_WORK_DEPENDENCY']),
     )(planner)
     if verb != 'post':
@@ -39,6 +43,9 @@ def _write(document_type, verb, model):
         cmd.authorize_input = lambda inp, ctx, s: authorize_sale(inp, ctx, s, document_type, True)
         cmd.authorization = 'standard ledger.post; customer-work standard when linked work is consumed'
     cmd.ledger = True
+    if document_type == 'invoice' and verb == 'update':
+        from bookflow.company.payment_operations import recover
+        cmd.permanent_recovery = lambda inp, ctx, s: recover(inp, ctx, s, 'invoice update')
     cmd.applier(sales.apply)
     return cmd
 

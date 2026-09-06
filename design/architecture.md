@@ -2,7 +2,7 @@
 
 What is built, module by module: package skeleton, registry, data root, hub, organizations, companies, demo, CLI, company audit, versioned writes, presence, idempotency, directives, record notes, the event feed, the host process, HTTP routes, tokens, the POSIX local hand-off, the workbench, immutable domestic journals, accrual trial balance and general ledger reports, and generated command and schema documentation.
 
-## Row22 receipt increment (implementation candidate)
+## Row22 receipt and settlement increment (implementation candidate)
 
 The co0014 migration preserves existing raw rows and local schema extensions while
 adding payment preferences, immutable payment components, applications and allocation
@@ -28,11 +28,30 @@ uses existing permissions for the complete historical payment/work graph and
 composite audit evidence. CLI commands share these models and services; no adapter
 implements separate accounting behavior.
 
-This increment does not complete Row22. Coordinated payment/invoice corrections,
-unapply/void, dated settlement history and complete recovery guards remain in the
-next financial increment. Until coordinated restatement is implemented, invoice
-correction rejects active applications explicitly. GUI controls, active examples,
-and integrated HTTP/MCP and blind-user acceptance remain required subsequent gates.
+`payment_corrections.py` replaces receipt content with exact old-date reversals and
+new balanced postings, changing only payer capacity while retaining permanent job
+ownership. It restates source attribution at original application dates without
+changing target splits. `payment_invoice_corrections.py` coordinates commercial
+invoice edits and immutable settlement evidence in the same audit/transaction;
+`payment_restatement.py` compares complete chronological allocations by durable
+line ordinal and semantic net/tax facts. Unchanged allocations keep their old
+physical revision references. `payment_cancellation.py` unapplies exact current
+allocations and requires explicit unapply before receipt void. A new no-effect
+operation has its own audit receipt; exact permanent replay has no new writes.
+
+`payment_dependencies.py` signs bounded audit-baseline guards and reconstructs
+owned headers in batches. Comparisons distinguish each event's actor/fields from
+the latest writer and mark malformed history unknown. `payment_history.py` exposes
+immutable receipt/application/allocation chains and effective-date projections
+under current recorded knowledge, separately from all committed current capacity.
+Current payment queries aggregate and filter in SQL before bounded delivery;
+prospective cursors instead bind exact original intent, financial fingerprint and
+last logical item identity without persisting a preview.
+
+This increment does not complete Row22. GUI controls and CP01–CP33 traceability,
+active examples, measured interactive query budgets, integrated HTTP/MCP journeys
+and blind-user acceptance remain required subsequent gates. Row23/Row9 adapter
+integration is owned separately; this checkout does not claim their acceptance.
 
 ## Layout
 

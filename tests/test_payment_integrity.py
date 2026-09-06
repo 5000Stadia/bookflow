@@ -16,6 +16,20 @@ from tests.test_payment_receipts import method, posted, snapshots
 from tests.test_row8_journal import database_path
 
 
+def test_receipt_preview_binds_resolved_automatic_number(client, sale):
+    args = dict(customer=sale['customer'], date='2026-06-02', amount='1.00', payment_method=method(client), operation_key='number-reviewed')
+    preview = client.run('payment receive', args, company=COMPANY, dry_run=True)
+    client.run('payment receive', dict(args, operation_key='number-consumer'), company=COMPANY)
+    before = snapshots(client)
+    with pytest.raises(BookflowError) as caught:
+        client.run('payment receive', dict(args, expected_facts_fingerprint=preview['facts_fingerprint']), company=COMPANY)
+    assert caught.value.code == 'E_PREVIEW_STALE' and snapshots(client) == before
+    fresh = client.run('payment receive', args, company=COMPANY, dry_run=True)
+    assert fresh['facts_fingerprint'] != preview['facts_fingerprint']
+    paid = client.run('payment receive', dict(args, expected_facts_fingerprint=fresh['facts_fingerprint']), company=COMPANY)
+    assert paid['effect']['after_header']['number'] == fresh['effect']['after_header']['number']
+
+
 def test_tax_partial_then_final_owning_cents_and_reports(client, sale):
     agency = client.vendor.create(name='Payment tax agency', is_tax_agency=True, company=COMPANY)['id']
     taxable = next(row['id'] for row in client.run('sales-tax-code list', {}, company=COMPANY)['items'] if row['taxable'])

@@ -10,6 +10,15 @@ def invoice(client, sale, number):
         lines=[dict(item=sale['item'], quantity='1', unit_price='100.00')]), company=COMPANY)
 
 
+def test_explicit_calculation_fills_rows_without_overwriting_entered_cash(client, sale):
+    first, second = invoice(client, sale, 'PAY-CALC-CASH-A'), invoice(client, sale, 'PAY-CALC-CASH-B')
+    result = client.run('payment calculate', dict(mode='new_receipt', customer=sale['customer'], date='2026-06-01',
+        amount='150.00', amount_mode='selection_total', applications=dict(mode='inline', items=[
+            dict(invoice=row['id'], expected_version=1) for row in (first, second)])), company=COMPANY)
+    assert result['amount']['minor_units'] == 15000 and result['amount_origin'] == 'entered'
+    assert [row['amount_minor_units'] for row in result['items']] == [10000, 5000]
+
+
 def test_public_draft_origins_history_clear_and_stale(client, sale):
     first, second = invoice(client, sale, 'PAY-DRAFT-A'), invoice(client, sale, 'PAY-DRAFT-B')
     draft = client.run('payment selection create', dict(mode='new_receipt', customer=sale['customer'],

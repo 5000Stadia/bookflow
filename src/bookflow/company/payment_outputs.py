@@ -1,5 +1,5 @@
 """Typed shared payment drafts and settlement projections."""
-from typing import Literal
+from typing import Annotated, Literal
 from pydantic import Field
 
 from bookflow.company.sales_models import StrictModel
@@ -13,6 +13,10 @@ from bookflow.company.payment_models import InvoiceAmount
 
 
 class SelectionContextOutput(StrictModel):
+    funding_version: int | None = None
+    funding_date: str | None = None
+    funding_capacities: dict[str, int] = Field(default_factory=dict)
+    funding_owners: dict[str, str] | None = None
     mode: Literal['new_receipt', 'existing_credit']
     customer_id: str
     ar_account_id: str
@@ -68,15 +72,22 @@ class SelectionPageOutput(StrictModel):
     facts_fingerprint: str
 
 
-class InvoiceSettlementOutput(StrictModel):
+class InvoiceSettlementAmounts(StrictModel):
     invoice_id: str
     version: int
-    revision_id: str
+    revision_id: str | None
     gross_minor_units: int
     applied_minor_units: int
     due_minor_units: int
     currency: str
     status: Literal['unpaid', 'partial', 'paid', 'voided']
+
+
+class InvoiceSettlementOutput(InvoiceSettlementAmounts):
+    settlement_guard: str | None = None
+    as_of: str | None = None
+    audit_watermark: int | None = None
+    all_committed_current: InvoiceSettlementAmounts | None = None
 
 
 class PaymentPreferencesOutput(StrictModel):
@@ -109,9 +120,9 @@ class PaymentComponentOutput(StrictModel):
 
 
 class PaymentCurrentOutput(StrictModel):
-    payment_id: str
+    payment_id: str | None
     version: int
-    revision_id: str
+    revision_id: str | None
     status: Literal['posted', 'voided']
     received_minor_units: int
     effective_received_minor_units: int
@@ -136,6 +147,7 @@ class PaymentRevisionOutput(StrictModel):
 
 
 class PaymentOutput(CommonOut):
+    settlement_guard: str | None = None
     type: Literal['payment'] = 'payment'
     number: str
     status: Literal['posted', 'voided']
@@ -145,6 +157,8 @@ class PaymentOutput(CommonOut):
 
 
 class PaymentApplicationOutput(StrictModel):
+    kind: Literal['apply', 'unapply'] = 'apply'
+    reverses_application_id: str | None = None
     application_id: str | None
     invoice_id: str
     invoice_version: int
@@ -155,6 +169,8 @@ class PaymentApplicationOutput(StrictModel):
 
 
 class PaymentAllocationOutput(StrictModel):
+    kind: Literal['allocation', 'reversal'] = 'allocation'
+    reverses_allocation_id: str | None = None
     allocation_id: str | None
     application_id: str | None
     invoice_id: str
@@ -164,15 +180,53 @@ class PaymentAllocationOutput(StrictModel):
     amount: JournalMoneyOutput
 
 
+class PaymentEffectHeader(StrictModel):
+    id: str | None
+    version: int
+    revision_id: str | None
+    revision_number: int
+    number: str
+    date: str
+    amount: JournalMoneyOutput
+    status: Literal['posted', 'voided']
+
+
 class PaymentEffectOutput(StrictModel):
     kind: Literal['receive', 'apply', 'unapply', 'update', 'void', 'invoice_update']
     financial_changed: bool
+    audit_event_id: str | None = None
+    before_header: PaymentEffectHeader | None = None
+    after_header: PaymentEffectHeader | None = None
+    preferences: PaymentPreferencesOutput | None = None
     operation_id: str | None
-    payment_id: str
+    payment_id: str | None
     source_components: list[PaymentComponentOutput]
     applications: list[PaymentApplicationOutput]
     allocations: list[PaymentAllocationOutput]
     document_changes: list[InvoiceSettlementOutput]
+
+
+class ReceiveEffect(PaymentEffectOutput):
+    kind: Literal['receive']
+
+
+class ApplyEffect(PaymentEffectOutput):
+    kind: Literal['apply']
+
+
+class UnapplyEffect(PaymentEffectOutput):
+    kind: Literal['unapply']
+
+
+class UpdateEffect(PaymentEffectOutput):
+    kind: Literal['update']
+
+
+class VoidEffect(PaymentEffectOutput):
+    kind: Literal['void']
+
+
+PaymentEffect = Annotated[ReceiveEffect | ApplyEffect | UnapplyEffect | UpdateEffect | VoidEffect, Field(discriminator='kind')]
 
 
 class ProspectivePageOutput(StrictModel):
@@ -195,23 +249,148 @@ class PaymentEffectCounts(StrictModel):
 
 
 class PaymentWriteOutput(WriteOutput):
-    id: str
+    changed: bool = True
+    new_effect: bool = True
+    id: str | None
     version: int
     operation_key: str
     facts_fingerprint: str
     idempotent_replay: bool = False
-    effect: PaymentEffectOutput
+    effect: PaymentEffect
     current: PaymentCurrentOutput
     effect_counts: PaymentEffectCounts
     prospective_pages: list[ProspectivePageOutput] = Field(default_factory=list)
 
 
 class PaymentEffectItemsOutput(StrictModel):
-    items: list[PaymentApplicationOutput | PaymentAllocationOutput | PaymentComponentOutput | InvoiceSettlementOutput | InvoiceAmount]
+    committed: bool = False
+    kind: str | None = None
+    items: list[PaymentApplicationOutput | PaymentAllocationOutput | PaymentComponentOutput | InvoiceSettlementOutput | PaymentCurrentOutput | InvoiceAmount]
     total_count: int
     next_cursor: str | None
     facts_fingerprint: str
     projection: Literal['prospective', 'committed', 'current']
+
+
+class PaymentSettlementOutput(PaymentEffectItemsOutput):
+    as_of: str | None
+    audit_watermark: int
+    received_minor_units: int
+    applied_minor_units: int
+    unapplied_minor_units: int
+    all_committed_current: PaymentCurrentOutput
+
+
+class ApplicationRecordOutput(StrictModel):
+    id: str
+    kind: Literal['apply', 'unapply']
+    paying_transaction_id: str
+    paid_transaction_id: str
+    source_component_key_id: str
+    amount_minor_units: int
+    currency: str
+    effective_date: str
+    reverses_application_id: str | None
+    created_at: str
+    created_by: str
+    created_via: str
+    audit_event_id: str
+
+
+class InvoiceSettlementReadOutput(InvoiceSettlementOutput):
+    applications: list[ApplicationRecordOutput]
+    application_count: int
+    next_cursor: str | None
+    facts_fingerprint: str
+    net_applied_minor_units: int
+    tax_applied_minor_units: int
+
+
+class AllocationHistoryOutput(StrictModel):
+    id: str
+    application_id: str
+    kind: Literal['allocation', 'reversal']
+    reverses_allocation_id: str | None
+    source_transaction_id: str
+    source_revision_id: str
+    source_component_id: str
+    source_posting_source_id: str
+    target_transaction_id: str
+    target_revision_id: str
+    target_document_line_id: str
+    target_line_id: str
+    target_ordinal: int
+    logical_kind: Literal['net', 'tax']
+    tax_item_id: str | None
+    tax_component_id: str | None
+    target_ar_source_id: str
+    target_recognition_source_id: str
+    recognition_role: Literal['sales_net', 'tax_liability']
+    amount_minor_units: int
+    currency: str
+    effective_date: str
+    facts_snapshot: str
+    created_at: str
+    created_by: str
+    created_via: str
+    audit_event_id: str
+
+
+class ApplicationOutput(StrictModel):
+    record: ApplicationRecordOutput
+    original_application_id: str
+    active: bool
+    reverse_application_id: str | None
+    current_payment: PaymentCurrentOutput
+    current_invoice: InvoiceSettlementOutput
+    current_allocations: list[AllocationHistoryOutput]
+    current_allocation_count: int
+
+
+class SettlementHistoryEntry(StrictModel):
+    id: str
+    audit_event_id: str
+    audit_sequence: int
+    kind: Literal['application', 'allocation', 'receipt_revision', 'operation']
+    application: ApplicationRecordOutput | None = None
+    allocation: AllocationHistoryOutput | None = None
+    revision: PaymentRevisionOutput | None = None
+    operation_key: str | None = None
+    command: str | None = None
+
+
+class SettlementHistoryOutput(StrictModel):
+    items: list[SettlementHistoryEntry]
+    total_count: int
+    next_cursor: str | None
+    facts_fingerprint: str
+    audit_watermark: int
+
+
+class InvoiceCorrectionEffect(StrictModel):
+    kind: Literal['invoice_update'] = 'invoice_update'
+    operation_id: str | None
+    invoice_id: str
+    audit_event_id: str | None = None
+    before_header: PaymentEffectHeader | None = None
+    after_header: PaymentEffectHeader | None = None
+    source_components: list[PaymentComponentOutput] = Field(default_factory=list)
+    applications: list[PaymentApplicationOutput] = Field(default_factory=list)
+    allocations: list[PaymentAllocationOutput]
+    document_changes: list[InvoiceSettlementOutput | PaymentCurrentOutput]
+    payment_changes: list[PaymentCurrentOutput]
+
+
+class InvoiceCorrectionOutput(StrictModel):
+    operation_key: str
+    facts_fingerprint: str
+    changed: bool
+    new_effect: bool
+    idempotent_replay: bool = False
+    effect: InvoiceCorrectionEffect
+    current: InvoiceSettlementOutput
+    effect_counts: PaymentEffectCounts
+    prospective_pages: list[ProspectivePageOutput] = Field(default_factory=list)
 
 
 class PaymentExecutionOutput(StrictModel):
@@ -221,6 +400,34 @@ class PaymentExecutionOutput(StrictModel):
     reason: str | None
     directive_id: str | None
     directive_code: str | None
+
+
+class SettlementChangeOutput(StrictModel):
+    record_id: str
+    event_id: str
+    at: str
+    actor_id: str | None
+    on_behalf_of: str | None
+    interface: str
+    version_before: int | None
+    version_after: int | None
+    baseline_version: int | None
+    current_version: int | None
+    fields: list[str] | None
+    unknown_fields: bool
+    settlement_fields: list[str]
+    latest_writer_id: str | None
+    age_seconds: int
+
+
+class SettlementChangesOutput(StrictModel):
+    items: list[SettlementChangeOutput]
+    total_count: int
+    next_cursor: str | None
+    facts_fingerprint: str
+    unknown_history: bool
+    unknown_record_ids: list[str]
+    settlement_guard: str
 
 
 class PaymentOperationOutput(StrictModel):
@@ -233,8 +440,8 @@ class PaymentOperationOutput(StrictModel):
     context_provided_fields: list[str]
     execution: PaymentExecutionOutput
     request: PreviewRequest
-    original: PaymentWriteOutput
-    current: PaymentCurrentOutput
+    original: PaymentWriteOutput | InvoiceCorrectionOutput
+    current: PaymentCurrentOutput | InvoiceSettlementOutput
 
 
 class PaymentCandidateOutput(StrictModel):

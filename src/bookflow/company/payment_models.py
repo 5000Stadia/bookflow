@@ -6,6 +6,7 @@ from pydantic import Field, model_validator, model_serializer
 from bookflow.company.custom_fields import CustomFieldKindExpectations, CustomFieldValuePatch
 from bookflow.company.journal_models import _Date, _Number, _Version
 from bookflow.company.sales_models import StrictModel, Selector, Fingerprint, SalesMoneyInput
+from bookflow.company.sales_models import InvoiceUpdateInput
 
 Amount = str | SalesMoneyInput
 OperationKey = Annotated[str, Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$')]
@@ -103,10 +104,11 @@ class SelectionUpdateInput(StrictModel):
     amount: Amount | None = None
     amount_origin: Literal['entered', 'selection_total', 'unresolved'] | None = None
     adopt_calculation_policy: bool | None = None
+    adopt_funding_version: _Version | None = None
 
     @model_validator(mode='after')
     def patch(self):
-        if not self.set_items and not self.remove_invoices and not ({'amount', 'amount_origin', 'adopt_calculation_policy'} & self.model_fields_set):
+        if not self.set_items and not self.remove_invoices and not ({'amount', 'amount_origin', 'adopt_calculation_policy', 'adopt_funding_version'} & self.model_fields_set):
             raise ValueError('selection update requires a change')
         identifiers = [row.invoice for row in self.set_items]
         if len(set(identifiers)) != len(identifiers) or len(set(self.remove_invoices)) != len(self.remove_invoices):
@@ -165,6 +167,54 @@ class PaymentShowInput(StrictModel):
     revision: _Version | None = None
 
 
+class UnapplyReference(StrictModel):
+    application_id: Selector
+    invoice_expected_version: _Version
+
+
+class PaymentUnapplyInput(StrictModel):
+    payment: Selector
+    expected_version: _Version
+    applications: list[UnapplyReference] = Field(min_length=1)
+    operation_key: OperationKey
+    expected_facts_fingerprint: Fingerprint | None = None
+
+
+class PaymentVoidInput(StrictModel):
+    payment: Selector
+    expected_version: _Version
+    operation_key: OperationKey
+    expected_facts_fingerprint: Fingerprint | None = None
+
+
+class InvoiceVersion(StrictModel):
+    invoice: Selector
+    expected_version: _Version
+
+
+class PaymentUpdateInput(PaymentVoidInput):
+    date: _Date | None = None
+    amount: Amount | None = None
+    number: _Number | None = None
+    reference: str | None = Field(default=None, max_length=128)
+    memo: str | None = Field(default=None, max_length=2000)
+    payment_method: Selector | None = None
+    deposit_to: Selector | None = None
+    custom_fields: CustomFieldValuePatch = Field(default_factory=lambda: CustomFieldValuePatch({}))
+    expected_custom_field_kinds: CustomFieldKindExpectations = Field(default_factory=lambda: CustomFieldKindExpectations({}))
+    invoice_versions: list[InvoiceVersion] = Field(default_factory=list)
+    settlement_guard: str | None = Field(default=None, max_length=2048)
+
+    @model_validator(mode='after')
+    def correction(self):
+        for field in ('date', 'amount', 'number', 'payment_method', 'deposit_to'):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f'{field} cannot be null')
+        if self.settlement_guard is not None and self.invoice_versions:
+            raise ValueError('settlement_guard and invoice_versions are mutually exclusive')
+        return self
+
+
 class PaymentQueryInput(Page):
     customer: Selector | None = None
     include_descendants: bool = False
@@ -179,6 +229,14 @@ class PaymentQueryInput(Page):
     sort: Literal['date', 'number', 'received', 'unapplied'] = 'date'
     direction: Literal['asc', 'desc'] = 'desc'
 
+    @model_validator(mode='after')
+    def filters(self):
+        if self.include_descendants and self.customer is None:
+            raise ValueError('include_descendants requires customer')
+        if self.date_from and self.date_to and self.date_from > self.date_to:
+            raise ValueError('date_from must not follow date_to')
+        return self
+
 
 class PaymentOperationShowInput(StrictModel):
     operation_key: OperationKey
@@ -187,10 +245,28 @@ class PaymentOperationShowInput(StrictModel):
 class PaymentSettlementInput(Page):
     payment: Selector
     kind: Literal['components', 'applications'] = 'components'
+    as_of: _Date | None = None
 
 
-class InvoiceSettlementInput(StrictModel):
+class InvoiceSettlementInput(Page):
     invoice: Selector
+    as_of: _Date | None = None
+
+
+class PaymentHistoryInput(Page):
+    payment: Selector
+
+
+class ApplicationShowInput(StrictModel):
+    application: Selector
+
+
+class ApplicationHistoryInput(ApplicationShowInput, Page):
+    pass
+
+
+class SettlementChangesInput(Page):
+    guard: str = Field(max_length=2048)
 
 
 class PaymentOperationItemsInput(PaymentOperationShowInput, Page):
@@ -228,7 +304,27 @@ class ApplyPreviewRequest(StrictModel):
         return result
 
 
-PreviewRequest = Annotated[ReceivePreviewRequest | ApplyPreviewRequest, Field(discriminator='command')]
+class UnapplyPreviewRequest(ApplyPreviewRequest):
+    command: Literal['payment unapply']
+    input: PaymentUnapplyInput
+
+
+class VoidPreviewRequest(ApplyPreviewRequest):
+    command: Literal['payment void']
+    input: PaymentVoidInput
+
+
+class UpdatePreviewRequest(ApplyPreviewRequest):
+    command: Literal['payment update']
+    input: PaymentUpdateInput
+
+
+class InvoiceUpdatePreviewRequest(ApplyPreviewRequest):
+    command: Literal['invoice update']
+    input: InvoiceUpdateInput
+
+
+PreviewRequest = Annotated[ReceivePreviewRequest | ApplyPreviewRequest | UnapplyPreviewRequest | VoidPreviewRequest | UpdatePreviewRequest | InvoiceUpdatePreviewRequest, Field(discriminator='command')]
 
 
 class PaymentPreviewItemsInput(Page):

@@ -35,16 +35,43 @@ TABLE_KINDS = (
 PREFERENCES = ('automatically_apply_payments', 'automatically_calculate_payments', 'use_undeposited_funds_for_payments')
 
 
+def party_lineage(s, party):
+    rows = list_service.hierarchy_ancestors(s.company, c.customers, party)
+    return [defaults._ref(row).model_dump() for row in rows]
+
+
+def used_reference_facts(value):
+    """Master version counters are informational; bind the fields actually used."""
+    if isinstance(value, dict):
+        return {key: used_reference_facts(item) for key, item in value.items() if key != 'version'}
+    if isinstance(value, list):
+        return [used_reference_facts(item) for item in value]
+    return value
+
+
+def effect_header(header, revision):
+    if header is None:
+        return None
+    return dict(id=header['id'], version=header['version'], revision_id=revision['id'],
+        revision_number=revision['revision_number'], number=header['number'], date=revision['date'],
+        amount=Money(revision['total_minor_units'], revision['currency']).to_dict(), status=header['status'])
+
+
 def current_output(s, selector, *, complete_components=False):
     facts = query.payment_facts(s, selector)
     header, revision = facts['header'], facts['revision']
     capacities = {row['component_key_id']: row for row in facts['components']}
+    applied_by_key = {}
+    for row in facts['applications']:
+        key = row['source_component_key_id']
+        applied_by_key[key] = applied_by_key.get(key, 0) + row['amount_minor_units']
     rendered = []
-    for key_id, key in sorted(facts['keys'].items(), key=lambda pair: (pair[1]['party_id'], pair[0])):
+    ordered = sorted(facts['keys'].items(), key=lambda pair: (pair[1]['party_id'], pair[0]))
+    for key_id, key in ordered if complete_components else ordered[:50]:
         component = capacities.get(key_id)
         capacity = component['amount_minor_units'] if component else 0
         party = defaults._row(s.company, 'customer', key['party_id'], active=False)
-        applied = sum(row['amount_minor_units'] for row in facts['applications'] if row['source_component_key_id'] == key_id)
+        applied = applied_by_key.get(key_id, 0)
         rendered.append(dict(component_key_id=key_id, component_id=component['id'] if component else None,
             party_id=key['party_id'], party_name=party['full_name'], ar_account_id=key['ar_account_id'], currency=key['currency'],
             received_minor_units=capacity, applied_minor_units=applied, available_minor_units=facts['available'][key_id]))
@@ -53,7 +80,7 @@ def current_output(s, selector, *, complete_components=False):
         effective_received_minor_units=revision['total_minor_units'] if header['status'] == 'posted' else 0,
         applied_minor_units=sum(row['amount_minor_units'] for row in facts['applications']),
         available_minor_units=sum(facts['available'].values()), currency=revision['currency'],
-        components=rendered if complete_components else rendered[:50], component_count=len(rendered))
+        components=rendered, component_count=len(ordered))
 
 
 def show(s, inp):
@@ -93,6 +120,12 @@ def _applications(s, inp, context_, *, amount=None):
             raise _invalid('amount', 'cash must equal the resolved saved selection header')
         if revision['amount_minor_units'] is None:
             raise _invalid('applications', 'resolve the shared header amount before posting')
+        try:
+            selection.funding_calculation(s, captured, items)
+        except BookflowError as exc:
+            if exc.code == 'E_QUERY_STALE':
+                raise BookflowError('E_PREVIEW_STALE', details=exc.details) from None
+            raise
         entries = [(item['invoice_id'], item['expected_version'], item['amount_minor_units']) for item in items]
         selected = dict(header=selected, revision=revision, items=items)
     else:
@@ -192,6 +225,12 @@ def prepare(s, ctx, inp, operation):
         if recovered:
             return Plan(recovered.output, dict(recovered=True))
         raise BookflowError('E_PAYMENT_OPERATION_KEY_REUSED')
+    if operation in ('unapply', 'void'):
+        from bookflow.company.payment_cancellation import prepare as cancellation
+        return cancellation(s, ctx, inp, operation)
+    if operation == 'update':
+        from bookflow.company.payment_corrections import prepare as correction
+        return correction(s, ctx, inp)
     at, event, operation_id = clock.now_iso(), new_id(), new_id()
     created = lambda: dict(id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
     audited = lambda: dict(**created(), audit_event_id=event)
@@ -253,7 +292,8 @@ def prepare(s, ctx, inp, operation):
             pending['payment_component_keys'].append(key)
             component = dict(**audited(), transaction_id=header['id'], revision_id=revision['id'], document_line_id=line['id'],
                 component_key_id=key['id'], amount_minor_units=capacity, currency=context_['currency'],
-                component_snapshot=query.canonical(dict(party=defaults._ref(party).model_dump(), ar_account=profile.ar_account.model_dump())))
+                component_snapshot=query.canonical(dict(party=defaults._ref(party).model_dump(), ar_account=profile.ar_account.model_dump(),
+                                                       lineage=party_lineage(s, party))))
             pending['payment_components'].append(component)
             ar = leg(profile.ar_account, capacity, False, party, position)
             for posting in (cash, ar):
@@ -268,7 +308,8 @@ def prepare(s, ctx, inp, operation):
     else:
         funding = query.payment_facts(s, inp.payment, write=True)
         previous, revision = funding['header'], funding['revision']
-        journals.version_meta(s, previous, inp.expected_version, history_decoder=sales._history_snapshot)
+        from bookflow.company.payment_dependencies import payment_version
+        payment_version(s, previous, inp.expected_version)
         if previous['status'] != 'posted':
             raise BookflowError('E_APPLICATION_INACTIVE')
         header = dict(previous, version=previous['version'] + 1, updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
@@ -328,6 +369,7 @@ def prepare(s, ctx, inp, operation):
                 target_ordinal=key.ordinal, logical_kind=allocation['logical_kind'], tax_item_id=component['tax_item_id'],
                 amount=Money(allocated, context_['currency']).to_dict()))
         recipes.append([invoice['id'], invoice['version'], invoice_revision['id'], units,
+            used_reference_facts(party_lineage(s, defaults._row(s.company, 'customer', party))),
             [(key.ordinal, key.kind, key.tax_item_id, value['capacity'], value['semantic'], split.get(key, 0)) for key, value in sorted(capacities.items())]])
     component_outputs = []
     for party, key in sorted(keys.items()):
@@ -336,8 +378,15 @@ def prepare(s, ctx, inp, operation):
         component_outputs.append(dict(component_key_id=key['id'], component_id=component_rows[party]['id'] if party in component_rows else None,
             party_id=party, party_name=party_row['full_name'], ar_account_id=context_['ar_account_id'], currency=context_['currency'],
             received_minor_units=capacity, applied_minor_units=capacity - available.get(party, 0), available_minor_units=available.get(party, 0)))
-    fp = query.digest([operations.request(inp, ctx, s, command), context_, recipes,
-        profile.model_dump() if operation == 'receive' else [previous['id'], previous['version'], funding['available']],
+    profile_dependencies = None
+    if operation == 'receive':
+        profile_dependencies = used_reference_facts(profile.model_dump(exclude={'preferences'}))
+        if inp.deposit_to is None:
+            profile_dependencies['use_undeposited_funds_for_payments'] = profile.preferences.use_undeposited_funds_for_payments
+    financial_context = {key: context_[key] for key in ('mode', 'customer_id', 'ar_account_id', 'payment_id', 'date', 'currency')}
+    fp = query.digest([operations.request(inp, ctx, s, command), financial_context, recipes,
+        [header['number'], revision['date'], revision['total_minor_units'], revision['memo']],
+        profile_dependencies if operation == 'receive' else [previous['id'], previous['version'], funding['available']],
         selected['revision']['manifest_hash'] if selected else None, components,
         sales._custom_semantic(custom_plan.snapshot) if custom_plan else None,
         defaults._info(s.company)['closing_date']])
@@ -348,6 +397,8 @@ def prepare(s, ctx, inp, operation):
         applied_minor_units=sum(row['applied_minor_units'] for row in component_outputs),
         available_minor_units=sum(available.values()), currency=context_['currency'], components=component_outputs, component_count=len(component_outputs))
     effect = dict(kind=operation, financial_changed=True, operation_id=operation_id, payment_id=header['id'],
+        audit_event_id=event, before_header=effect_header(previous, revision), after_header=effect_header(header, revision),
+        preferences=profile.preferences.model_dump() if operation == 'receive' else json.loads(funding['profile']['profile_snapshot'])['preferences'],
         source_components=component_outputs, applications=app_outputs, allocations=allocation_outputs, document_changes=changes)
     output = PaymentWriteOutput(id=header['id'], version=header['version'], operation_key=inp.operation_key,
         facts_fingerprint=fp, effect=effect, current=current,
@@ -365,7 +416,12 @@ def apply(plan, ctx, s):
         return Applied(fresh.preview, [], 'recovered payment operation')
     if fresh.data['fingerprint'] != plan.data['fingerprint']:
         raise BookflowError('E_PREVIEW_STALE', details={'reason': 'payment_facts'})
-    from bookflow.company.payment_validation import validate
+    if fresh.data['operation'] in ('unapply', 'void'):
+        from bookflow.company.payment_cancellation import validate
+    elif fresh.data['operation'] == 'update':
+        from bookflow.company.payment_corrections import validate
+    else:
+        from bookflow.company.payment_validation import validate
     validate(fresh, s, ctx)
     data = fresh.data
     header, before, pending = data['header'], data['before'], data['pending']
@@ -373,7 +429,7 @@ def apply(plan, ctx, s):
     for kind in ('source_components', 'applications', 'allocations', 'document_changes'):
         setattr(fresh.preview.effect, kind, getattr(fresh.preview.effect, kind)[:50])
     fresh.preview.current.components = fresh.preview.current.components[:50]
-    touched = [Touched('transaction', header['id'], 'update' if before else 'create',
+    touched = [] if header == before else [Touched('transaction', header['id'], 'update' if before else 'create',
         before['version'] if before else None, header['version'], header, before, db='company')]
     touched.extend(Touched('transaction', after['id'], 'update', old['version'], after['version'], after, old, db='company')
                    for old, after in data['changed_headers'])
@@ -383,13 +439,13 @@ def apply(plan, ctx, s):
         touched.extend(custom.touches(data['custom_plan']))
     operation = dict(id=data['operation_id'], operation_key=data['input'].operation_key, command='payment ' + data['operation'],
         request_schema_version=1, request_hash=operations.request_hash(data['input'], ctx, s, 'payment ' + data['operation']),
-        request_snapshot=query.canonical(dict(original_request=operations.request(data['input'], ctx, s, 'payment ' + data['operation']),
+        request_snapshot=query.canonical(dict(original_request=operations.original_request(data['input'], ctx, s, 'payment ' + data['operation']),
             resolved_transaction_ids=[header['id'], *(after['id'] for _, after in data['changed_headers'])],
             expanded_selection_hash=data['selected']['revision']['manifest_hash'] if data['selected'] else None)),
         effect_snapshot=query.canonical(fresh.preview.model_dump(mode='json')),
         execution_snapshot=query.canonical(dict(actor_id=s.actor.id, interface=ctx.interface.value,
             on_behalf_of=ctx.on_behalf_of, reason=ctx.reason, directive_id=ctx.directive_id, directive_code=getattr(s, 'directive_code', None))),
-        created_at=header['updated_at'], created_by=s.actor.id, created_via=ctx.interface.value, audit_event_id=data['event'])
+        created_at=data.get('at', header['updated_at']), created_by=s.actor.id, created_via=ctx.interface.value, audit_event_id=data['event'])
     touched.append(Touched('payment_operation', operation['id'], 'create', None, 1, effects.decoded(operation), db='company'))
     operation_items = []
     collections = {('effect_applications' if kind == 'applications' else kind): complete_effect[kind]
@@ -411,9 +467,9 @@ def apply(plan, ctx, s):
         touched.append(Touched('payment_selection', old['id'], 'update', old['version'], old['version'], selected_header, old, db='company'))
     audit.write_event_to(s.company, ctx, operation['command'], f"{data['operation']} payment {header['number']}", touched,
         actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=getattr(s, 'directive_code', None), event_id=data['event'])
-    if before:
+    if before and header != before:
         s.company.conn.execute(c.transactions.update().where(c.transactions.c.id == header['id']).values(**header))
-    else:
+    elif not before:
         s.company.conn.execute(c.transactions.insert().values(**header))
     for _, after in data['changed_headers']:
         s.company.conn.execute(c.transactions.update().where(c.transactions.c.id == after['id']).values(**after))

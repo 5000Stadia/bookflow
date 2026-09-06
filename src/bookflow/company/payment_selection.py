@@ -23,20 +23,38 @@ def context(s, inp):
         payer = facts['profile']['payer_id']
         ar = facts['profile']['ar_account_id']
         payment = facts['header']['id']
+        if facts['header']['status'] != 'posted':
+            raise BookflowError('E_APPLICATION_INACTIVE')
     else:
         payer = defaults._row(s.company, 'customer', inp.customer)['id']
         ar = inp.ar_account
         if ar is None:
             candidates = s.company.conn.execute(sa.select(c.accounts.c.id).where(
-                c.accounts.c.type == 'accounts_receivable', c.accounts.c.active.is_(True))).scalars().all()
+                c.accounts.c.system_role == 'accounts_receivable', c.accounts.c.active.is_(True))).scalars().all()
             if len(candidates) != 1:
-                raise _invalid('ar_account', 'select an active AR account when there is not exactly one')
+                raise _invalid('ar_account', 'select an active AR account when the system AR default is unavailable')
             ar = candidates[0]
         ar = defaults._account(s.company, ar, 'ar_account', {'accounts_receivable'}).id
         payment = None
-    return dict(mode=inp.mode, customer_id=payer, ar_account_id=ar, payment_id=payment,
+    result = dict(mode=inp.mode, customer_id=payer, ar_account_id=ar, payment_id=payment,
         date=inp.date, currency=info['home_currency'], label=getattr(inp, 'label', None),
         automatically_calculate=bool(info['automatically_calculate_payments']))
+    result.update(funding_version=facts['header']['version'] if payment else None,
+        funding_date=facts['revision']['date'] if payment else None,
+        funding_capacities={facts['keys'][key]['party_id']: value for key, value in facts['available'].items()} if payment else {})
+    return result
+
+
+def funding_calculation(s, context_, items):
+    if not context_['payment_id']:
+        return {}
+    facts = query.payment_facts(s, context_['payment_id'])
+    if facts['header']['version'] != context_.get('funding_version'):
+        raise BookflowError('E_QUERY_STALE', details={'reason': 'funding_version', 'payment_id': facts['header']['id']})
+    if facts['header']['status'] != 'posted' or context_['date'] < facts['revision']['date']:
+        raise _invalid('date', 'select available credit on or after its receipt date')
+    return dict(source_capacities={facts['keys'][key]['party_id']: units for key, units in facts['available'].items()},
+        source_owners={row['invoice_id']: query.invoice_facts(s, row['invoice_id'])['profile']['customer_id'] for row in items})
 
 
 def resolve(s, selector):
@@ -92,7 +110,12 @@ def _rows(items):
 
 
 def output(header, revision, context_, items):
-    result = calc.calculate(revision['amount_minor_units'], revision['amount_origin'], _rows(items))
+    # Rendering a stored revision validates its saved amounts; it must not run
+    # a cash-only recalculation that replaces already funded derived amounts.
+    stored = [calc.DraftRow(row['invoice_id'], row['ordinal'], row['due_minor_units'], row['amount_minor_units'],
+                           'entered' if row['amount_minor_units'] is not None else 'unresolved') for row in items]
+    funding = dict(source_capacities=context_['funding_capacities'], source_owners=context_['funding_owners']) if context_.get('funding_owners') is not None else {}
+    result = calc.calculate(revision['amount_minor_units'], revision['amount_origin'], stored, **funding)
     return dict(id=header['id'], version=header['version'], revision_id=revision['id'],
         revision_version=revision['version'], state=header['state'], consumed_operation_id=header['consumed_operation_id'],
         context=context_, amount=Money(result.amount, context_['currency']).to_dict() if result.amount is not None else None,
@@ -147,6 +170,14 @@ def prepare(s, ctx, inp, operation):
                       updated_via=ctx.interface, current_revision_id=new_id())
         amount, origin = previous['amount_minor_units'], previous['amount_origin']
     prior_items = {row['invoice_id']: dict(row) for row in items}
+    if operation == 'update' and inp.adopt_funding_version is not None:
+        if not context_['payment_id']:
+            raise _invalid('adopt_funding_version', 'only existing-credit drafts have funding versions')
+        facts = query.payment_facts(s, context_['payment_id'], write=True)
+        from bookflow.company.payment_dependencies import payment_version
+        payment_version(s, facts['header'], inp.adopt_funding_version)
+        context_ = dict(context_, funding_version=facts['header']['version'], funding_date=facts['revision']['date'],
+            funding_capacities={facts['keys'][key]['party_id']: units for key, units in facts['available'].items()})
     if operation == 'clear':
         items = []
     elif operation == 'update':
@@ -195,7 +226,11 @@ def prepare(s, ctx, inp, operation):
         if facts['due'] != item['due_minor_units']:
             raise BookflowError('E_PREVIEW_STALE', details={'reason': 'selection_invoice_due', 'invoice_id': item['invoice_id']})
     try:
-        calculated = calc.calculate(amount, origin, _rows(items), calculate_unresolved=context_['automatically_calculate'])
+        funding = funding_calculation(s, context_, items)
+        if funding:
+            context_['funding_owners'] = funding['source_owners']
+        calculated = calc.calculate(amount, origin, _rows(items), calculate_unresolved=context_['automatically_calculate'],
+                                    **funding)
     except ValueError as exc:
         raise _invalid('amount_origin', str(exc)) from None
     by_id = {row['invoice_id']: row for row in items}

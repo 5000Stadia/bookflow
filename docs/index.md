@@ -13,6 +13,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 
 - [`account`](cli/account.md)
 - [`activity`](cli/activity.md)
+- [`application`](cli/application.md)
 - [`attachment`](cli/attachment.md)
 - [`audit`](cli/audit.md)
 - [`chart`](cli/chart.md)
@@ -41,6 +42,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`payment operation`](cli/payment-operation.md)
 - [`payment preview`](cli/payment-preview.md)
 - [`payment selection`](cli/payment-selection.md)
+- [`payment settlement`](cli/payment-settlement.md)
 - [`payment-method`](cli/payment-method.md)
 - [`presence`](cli/presence.md)
 - [`price-level`](cli/price-level.md)

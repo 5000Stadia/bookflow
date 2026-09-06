@@ -72,6 +72,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `state` | literal["open", "consumed"] | yes | no | — | — |
 | `consumed_operation_id` | string \| null | yes | yes | — | — |
 | `context` | object | yes | no | — | — |
+| `context.funding_version` | integer \| null | no | yes | null | — |
+| `context.funding_date` | string \| null | no | yes | null | — |
+| `context.funding_capacities` | object[string, integer] | no | no | {} | — |
+| `context.funding_owners` | object[string, string] \| null | no | yes | null | — |
 | `context.mode` | literal["new_receipt", "existing_credit"] | yes | no | — | — |
 | `context.customer_id` | string | yes | no | — | — |
 | `context.ar_account_id` | string | yes | no | — | — |
@@ -105,6 +109,10 @@ Example JSON output:
     "currency": "USD",
     "customer_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "date": "2026-01-01",
+    "funding_capacities": {},
+    "funding_date": null,
+    "funding_owners": null,
+    "funding_version": null,
     "label": null,
     "mode": "new_receipt",
     "payment_id": null
@@ -236,6 +244,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `state` | literal["open", "consumed"] | yes | no | — | — |
 | `consumed_operation_id` | string \| null | yes | yes | — | — |
 | `context` | object | yes | no | — | — |
+| `context.funding_version` | integer \| null | no | yes | null | — |
+| `context.funding_date` | string \| null | no | yes | null | — |
+| `context.funding_capacities` | object[string, integer] | no | no | {} | — |
+| `context.funding_owners` | object[string, string] \| null | no | yes | null | — |
 | `context.mode` | literal["new_receipt", "existing_credit"] | yes | no | — | — |
 | `context.customer_id` | string | yes | no | — | — |
 | `context.ar_account_id` | string | yes | no | — | — |
@@ -269,6 +281,10 @@ Example JSON output:
     "currency": "USD",
     "customer_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "date": "2026-01-01",
+    "funding_capacities": {},
+    "funding_date": null,
+    "funding_owners": null,
+    "funding_version": null,
     "label": null,
     "mode": "new_receipt",
     "payment_id": null
@@ -489,6 +505,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].state` | literal["open", "consumed"] | yes | no | — | — |
 | `items[].consumed_operation_id` | string \| null | yes | yes | — | — |
 | `items[].context` | object | yes | no | — | — |
+| `items[].context.funding_version` | integer \| null | no | yes | null | — |
+| `items[].context.funding_date` | string \| null | no | yes | null | — |
+| `items[].context.funding_capacities` | object[string, integer] | no | no | {} | — |
+| `items[].context.funding_owners` | object[string, string] \| null | no | yes | null | — |
 | `items[].context.mode` | literal["new_receipt", "existing_credit"] | yes | no | — | — |
 | `items[].context.customer_id` | string | yes | no | — | — |
 | `items[].context.ar_account_id` | string | yes | no | — | — |
@@ -608,6 +628,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `state` | literal["open", "consumed"] | yes | no | — | — |
 | `consumed_operation_id` | string \| null | yes | yes | — | — |
 | `context` | object | yes | no | — | — |
+| `context.funding_version` | integer \| null | no | yes | null | — |
+| `context.funding_date` | string \| null | no | yes | null | — |
+| `context.funding_capacities` | object[string, integer] | no | no | {} | — |
+| `context.funding_owners` | object[string, string] \| null | no | yes | null | — |
 | `context.mode` | literal["new_receipt", "existing_credit"] | yes | no | — | — |
 | `context.customer_id` | string | yes | no | — | — |
 | `context.ar_account_id` | string | yes | no | — | — |
@@ -641,6 +665,10 @@ Example JSON output:
     "currency": "USD",
     "customer_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "date": "2026-01-01",
+    "funding_capacities": {},
+    "funding_date": null,
+    "funding_owners": null,
+    "funding_version": null,
     "label": null,
     "mode": "new_receipt",
     "payment_id": null
@@ -717,6 +745,7 @@ Prepare a shared nonposting payment draft with immutable header/row amount origi
 | `amount` | `--amount` | string \| object \| null | no | yes | null | — |
 | `amount_origin` | `--amount-origin` | literal["entered", "selection_total", "unresolved"] \| null | no | yes | null | — |
 | `adopt_calculation_policy` | `--adopt-calculation-policy` | boolean \| null | no | yes | null | — |
+| `adopt_funding_version` | `--adopt-funding-version` | integer \| null | no | yes | null | — |
 
 ### Command and context options
 
@@ -763,6 +792,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `state` | literal["open", "consumed"] | yes | no | — | — |
 | `consumed_operation_id` | string \| null | yes | yes | — | — |
 | `context` | object | yes | no | — | — |
+| `context.funding_version` | integer \| null | no | yes | null | — |
+| `context.funding_date` | string \| null | no | yes | null | — |
+| `context.funding_capacities` | object[string, integer] | no | no | {} | — |
+| `context.funding_owners` | object[string, string] \| null | no | yes | null | — |
 | `context.mode` | literal["new_receipt", "existing_credit"] | yes | no | — | — |
 | `context.customer_id` | string | yes | no | — | — |
 | `context.ar_account_id` | string | yes | no | — | — |
@@ -796,6 +829,10 @@ Example JSON output:
     "currency": "USD",
     "customer_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "date": "2026-01-01",
+    "funding_capacities": {},
+    "funding_date": null,
+    "funding_owners": null,
+    "funding_version": null,
     "label": null,
     "mode": "new_receipt",
     "payment_id": null

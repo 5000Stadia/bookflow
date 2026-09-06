@@ -23,6 +23,14 @@ def find(s, operation_key):
     return rows[0] if rows else None
 
 
+def original_request(inp, ctx, s, command):
+    value = request(inp, ctx, s, command)
+    if 'expected_facts_fingerprint' in inp.model_fields_set:
+        value['input']['expected_facts_fingerprint'] = inp.expected_facts_fingerprint
+        value['provided_fields'] = sorted([*value['provided_fields'], 'expected_facts_fingerprint'])
+    return value
+
+
 def request_hash(inp, ctx, s, command):
     from bookflow.company.sales_models import money
     value = request(inp, ctx, s, command)
@@ -40,6 +48,8 @@ def request_hash(inp, ctx, s, command):
 
 
 def recover(inp, ctx, s, command):
+    if not inp.operation_key:
+        return None
     operation = find(s, inp.operation_key)
     if operation is None:
         return None
@@ -51,6 +61,14 @@ def recover(inp, ctx, s, command):
     from bookflow.company.payments import current_output
     from bookflow.company.payment_outputs import PaymentWriteOutput
     output = json.loads(operation['effect_snapshot'])
+    if command == 'invoice update':
+        from bookflow.company.sales_outputs import SalesWriteOutput
+        output['settlement']['current'] = query.invoice_current(s, output['id'])
+        output['settlement'].update(changed=False, new_effect=False, idempotent_replay=True)
+        output.update(changed=False, idempotent_replay=True)
+        return MatchedRecovery(SalesWriteOutput.model_validate(output))
     output['current'] = current_output(s, output['id'])
     output['idempotent_replay'] = True
+    output['changed'] = False
+    output['new_effect'] = False
     return MatchedRecovery(PaymentWriteOutput.model_validate(output))
