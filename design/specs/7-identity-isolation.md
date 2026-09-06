@@ -52,8 +52,9 @@ own authority. Agent ownership conveys no inherited membership or administration
 Effective permission equality applies to assigned humans; the agent may have a
 narrower grant, and execution requires the intersection of agent and bound human
 permissions. Role thresholds remain mandatory even with explicit capability grants.
-Cross-scope conflicting capability overrides remain a pending product decision;
-the resolver and dependent command APIs are not frozen before that decision.
+Company capability resolution, Delete admission and effective-authority transition
+rules are specified in `design/permission-resolution.md`. Membershipless hub-admin
+visibility remains a pending user decision; dependent access APIs are not frozen.
 
 Every authorized authority reduction and every change leaving an assigned set
 unequal atomically suspends affected agents, increments their epochs and revokes

@@ -9,8 +9,9 @@ User setup must allow deletion permission to be assigned separately for each use
 Permission to create, edit or void a transaction does not itself grant deletion.
 Resolve deletion authority within the selected organization/company using the
 identity and capability contract. Only an authorized user administrator may change
-these permissions; changes are audited. The owning implementation plan must define
-capability names, transaction-type granularity and role defaults explicitly.
+these permissions; changes are audited. `design/permission-resolution.md` defines exact supported-family capabilities,
+default-off assignment, role/read prerequisites and current graph authorization.
+Each additional transaction lifecycle requires its own reviewed admission graph.
 
 Enforce the permission in the core for browser, CLI, Python, HTTP and MCP access,
 including current authority on retries. Agents remain constrained by their own
