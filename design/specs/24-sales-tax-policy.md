@@ -1,7 +1,8 @@
 # Row 24 — captured sales-tax calculation policies
 
-Status: revision4 independently PLAN PASSED at1e5654c; F1–F16 resolved at
-plan level. Pure arithmetic independently artifact PASSED at5b81dee and integrated
+Status: revision5 retains revision4 independently PLAN PASSED at1e5654c;
+F1–F16 resolved at plan level. The bounded allocation-storage exception below
+is independently PLAN PASSED; implementation preservation evidence remains required. Pure arithmetic independently artifact PASSED at5b81dee and integrated
 at a0292a3; no sales/work runtime integration yet. Parent owns this plan. Customer
 payments core co14/sales changes are independently reviewed and integrated at15cb601; payment GUI work remains in flight. The pure arithmetic piece can be
 built in isolation after plan PASS; schema and integration start from the reviewed
@@ -294,10 +295,9 @@ its original result under current authority even after the company changes polic
    ownership FKs and immutable triggers. These rows carry policy/origin, ordinals,
    complete bucket membership and exact cells; include them in the ordinary audit
    and independent effect validation. They are portable company-local facts.
-   No hub migration. Use preserving additive DDL, no table rebuild or rewriting
-   historical JSON, audit, posting rows, rowids or local extension DDL. Fresh rollout
-   explicitly sets its new-company default. Migration and company-info audit expose
-   the retained policy. Unknown unsupported local shapes fail atomically.
+   No hub migration. Fresh rollout explicitly sets its new-company default.
+   Migration and company-info audit expose the retained policy. The preserving
+   storage exception below governs allocation-version admission.
 3. Resolve all line nets/rules before the shared document tax pass; then serialize,
    fingerprint, validate and post through existing sales/work/billing services.
    Split historical snapshot types instead of weakening legacy checks. Extend the
@@ -308,6 +308,45 @@ its original result under current authority even after the company changes polic
    extend deterministic demo manifests without rewriting old seed facts. Include
    active witnesses that distinguish line and aggregate cents, not only cancelled
    examples. Record the exact new ledger delta in seed tests.
+
+### Allocation storage preservation
+
+Use preserving additive DDL except that the next unused company migration after
+co15 may perform a preserving rebuild of work_billing_allocations solely to widen
+its allocation-version, fractional-quantity and proof constraints for version3.
+Verify the next migration number before allocation. Do not alter frozen co15 or
+prior migrations. No hub migration. Retain versions1/2 with their original meanings
+and validation. Version3 carries the same exact interval-proof representation but
+identifies basis_version2; the owning typed fact, basis hash, ownership, interval
+and independent-effect validators enforce the complete version matrix. Null
+quantity is allowed for unrepresentable fractions in versions2/3 only. Version1
+retains its original null-proof/full-root constraints. Unsupported discriminators
+remain rejected.
+
+Use the existing preserving migration machinery/pattern, with frozen explicit old
+and replacement definitions, never runtime application metadata or writable_schema.
+Preflight exact known owned constraint/guard shapes and reserved temporary names.
+Unknown unsupported local shapes fail atomically before leaving changed data.
+Preserve all historical rows, rowids, storage classes, quote values and raw bytes,
+including historical JSON, audit and posting facts. Preserve local columns,
+generated columns, indexes, triggers, views, foreign keys and their definitions;
+only the explicitly enumerated owned constraints and any owned proof guard whose
+old version discriminator must widen may change. Enumerate any such owned guard
+with exact old/new definition in the migration and its tests. Never weaken legacy
+branches or remove immutability/ownership/overlap guards. Recreate retained objects
+inside the same atomic migration, restore FK enforcement, and check integrity and
+foreign keys before acceptance. No unsupported schema shape is silently normalized.
+
+Required evidence: upgrade populated co14 through co15 and the new migration;
+upgrade separately frozen co15; raw bidirectional before/after row comparisons
+including rowid/type/quoted/raw bytes, local extension DDL and generated values;
+unchanged old retry responses, historical rendering and billing behaviors. Exercise
+rollback after preflight/rebuild failures with old schema/data/version intact.
+Test version1/2 accepted/rejected shapes unchanged, valid version3 basis2 and
+malformed/cross-version proofs rejected. Test new work billing, mixed historical
+work, partial fractional allocations, corrections, reversals and concurrency under
+the full existing Row24 contract. No narrowed work/progress scope or gate removal.
+Independent artifact review remains required before main integration.
 
 Main integration stays parent-owned. No demo hosting, protected company access,
 provider connections, push, or new communications authority is granted. Estimate:
