@@ -1057,3 +1057,215 @@ input = { "work_order" = "${work_order.id}" }
 [[commands]]
 command = "work-order query"
 input = { "customer" = "${sale_customer.id}", "date_from" = "2026-01-01", "date_to" = "2026-12-31" }
+
+# Row 17 work billing: whole-line conversion of independent work sources into
+# invoices and paid sales receipts, permanent retry, correction, void and
+# deliberate rebill. Every financial demonstration ends voided, so the ledger,
+# trial balance, profit and customer balances above are unchanged.
+
+[[commands]]
+command = "customer create"
+capture = "bill_customer"
+reason = "Create the customer for work billing examples"
+input = { "name" = "Billing Example Customer" }
+
+[[commands]]
+command = "estimate create"
+capture = "bill_estimate"
+reason = "Quote a water heater replacement with catalog, amount, zero-price and nonbillable lines"
+input = { "date" = "2026-09-15", "number" = "DEMO-BILL-EST-1", "customer" = "${bill_customer.id}", "title" = "Water heater replacement", "sales_tax_item" = "${sale_tax.id}", "customer_tax_code" = "${sale_taxable.id}", "scope" = "Remove the failed heater, install the replacement and test.", "lines" = [{ "item" = "${sale_service.id}", "quantity" = "2", "description" = "Installation labor at catalog rate" }, { "item" = "${sale_service.id}", "quantity" = "2", "description" = "Haul-away quoted as an amount", "net_amount" = "10.01" }, { "item" = "${sale_service.id}", "quantity" = "1", "description" = "Warranty registration at no charge", "unit_price" = "0" }, { "item" = "${sale_service.id}", "quantity" = "1", "description" = "Internal inspection, not billable", "unit_price" = "20.00", "billable" = false }] }
+
+[[commands]]
+command = "note add"
+input = { record_type = "work_document", record_id = "${bill_estimate.id}", body = "Heater model and serial photos are attached to this estimate." }
+
+[[commands]]
+command = "attachment add"
+capture = "bill_estimate_file"
+body_fixture = "example.pdf"
+input = { record_type = "work_document", record_id = "${bill_estimate.id}", original_filename = "Example service document.pdf", media_type = "application/pdf", caption = "Heater specification sheet" }
+
+[[commands]]
+command = "estimate update"
+capture = "bill_estimate_accepted"
+reason = "Record acceptance so the work can be billed"
+input = { "estimate" = "${bill_estimate.id}", "expected_version" = "${bill_estimate.version}", "status" = "accepted", "decision_note" = "Accepted by email on 2026-09-15" }
+
+[[commands]]
+command = "estimate billing"
+input = { "estimate" = "${bill_estimate.id}" }
+
+[[commands]]
+command = "estimate invoice"
+capture = "bill_invoice"
+reason = "Invoice the two selected priced lines; the zero-price line is left unselected"
+input = { "estimate" = "${bill_estimate.id}", "expected_version" = "${bill_estimate_accepted.version}", "conversion_key" = "DEMO-BILL-EST-1 first invoice", "date" = "2026-09-16", "number" = "DEMO-BILL-INV-1", "line_ids" = ["${bill_estimate.revision.lines.0.line_id}", "${bill_estimate.revision.lines.1.line_id}"] }
+
+[[commands]]
+command = "estimate invoice"
+capture = "bill_invoice_retry"
+reason = "Retry the identical conversion; the permanent key returns the same invoice"
+input = { "estimate" = "${bill_estimate.id}", "expected_version" = "${bill_estimate_accepted.version}", "conversion_key" = "DEMO-BILL-EST-1 first invoice", "date" = "2026-09-16", "number" = "DEMO-BILL-INV-1", "line_ids" = ["${bill_estimate.revision.lines.0.line_id}", "${bill_estimate.revision.lines.1.line_id}"] }
+
+[[commands]]
+command = "estimate billing"
+input = { "estimate" = "${bill_estimate.id}" }
+
+[[commands]]
+command = "invoice show"
+input = { "invoice" = "${bill_invoice.id}" }
+
+[[commands]]
+command = "invoice void"
+reason = "Void the first invoice; its work becomes billable again"
+input = { "invoice" = "${bill_invoice.id}", "expected_version" = "${bill_invoice.version}" }
+
+[[commands]]
+command = "estimate invoice"
+capture = "bill_invoice_after_void"
+reason = "Retry the old key after the void; it returns the voided invoice, never a new one"
+input = { "estimate" = "${bill_estimate.id}", "expected_version" = "${bill_estimate_accepted.version}", "conversion_key" = "DEMO-BILL-EST-1 first invoice", "date" = "2026-09-16", "number" = "DEMO-BILL-INV-1", "line_ids" = ["${bill_estimate.revision.lines.0.line_id}", "${bill_estimate.revision.lines.1.line_id}"] }
+
+[[commands]]
+command = "estimate show"
+capture = "bill_estimate_after_first"
+input = { "estimate" = "${bill_estimate.id}" }
+
+[[commands]]
+command = "estimate invoice"
+capture = "bill_invoice_rebill"
+reason = "Deliberately rebill all remaining billable lines with a new key and the current version"
+input = { "estimate" = "${bill_estimate.id}", "expected_version" = "${bill_estimate_after_first.version}", "conversion_key" = "DEMO-BILL-EST-1 rebill after void", "date" = "2026-09-17", "number" = "DEMO-BILL-INV-2" }
+
+[[commands]]
+command = "invoice update"
+capture = "bill_invoice_corrected"
+reason = "Remove the linked haul-away line to release it and add an independent trip charge"
+input = { "invoice" = "${bill_invoice_rebill.id}", "expected_version" = "${bill_invoice_rebill.version}", "lines" = [{ "item" = "${sale_service.id}", "line_id" = "${bill_invoice_rebill.revision.lines.0.line_id}" }, { "item" = "${sale_service.id}", "line_id" = "${bill_invoice_rebill.revision.lines.2.line_id}" }, { "item" = "${sale_service.id}", "quantity" = "1", "unit_price" = "5.00", "description" = "Independent trip charge" }] }
+
+[[commands]]
+command = "estimate billing"
+input = { "estimate" = "${bill_estimate.id}" }
+
+[[commands]]
+command = "invoice show"
+input = { "invoice" = "${bill_invoice_rebill.id}", "revision_number" = 1 }
+
+[[commands]]
+command = "invoice history"
+input = { "invoice" = "${bill_invoice_rebill.id}" }
+
+[[commands]]
+command = "invoice void"
+reason = "Void the corrected rebill so the demonstration leaves balances unchanged"
+input = { "invoice" = "${bill_invoice_rebill.id}", "expected_version" = "${bill_invoice_corrected.version}" }
+
+[[commands]]
+command = "estimate show"
+capture = "bill_estimate_after_second"
+input = { "estimate" = "${bill_estimate.id}" }
+
+[[commands]]
+command = "estimate work-order"
+capture = "bill_work_order"
+reason = "Schedule the accepted heater work; billing now belongs to the work order"
+input = { "estimate" = "${bill_estimate.id}", "expected_version" = "${bill_estimate_after_second.version}", "conversion_key" = "DEMO-BILL-EST-1 work order", "date" = "2026-09-18", "number" = "DEMO-BILL-WO-1" }
+
+[[commands]]
+command = "work-order billing"
+input = { "work_order" = "${bill_work_order.id}" }
+
+[[commands]]
+command = "work-order sales-receipt"
+capture = "bill_receipt"
+reason = "They paid by check on completion; record the paid sale for all remaining billable lines"
+input = { "work_order" = "${bill_work_order.id}", "expected_version" = "${bill_work_order.version}", "conversion_key" = "DEMO-BILL-WO-1 paid receipt", "date" = "2026-09-19", "number" = "DEMO-BILL-SR-1", "deposit_to" = "Checking", "payment_method" = "Check", "payment_reference" = "DEMO-BILL-CHECK-1", "amount_received" = "226.81" }
+
+[[commands]]
+command = "work-order sales-receipt"
+capture = "bill_receipt_retry"
+reason = "Retry the identical paid-sale conversion; the permanent key returns the same receipt"
+input = { "work_order" = "${bill_work_order.id}", "expected_version" = "${bill_work_order.version}", "conversion_key" = "DEMO-BILL-WO-1 paid receipt", "date" = "2026-09-19", "number" = "DEMO-BILL-SR-1", "deposit_to" = "Checking", "payment_method" = "Check", "payment_reference" = "DEMO-BILL-CHECK-1", "amount_received" = "226.81" }
+
+[[commands]]
+command = "sales-receipt show"
+input = { "sales_receipt" = "${bill_receipt.id}" }
+
+[[commands]]
+command = "sales-receipt void"
+reason = "Void the demonstration receipt so the bank balance is unchanged"
+input = { "sales_receipt" = "${bill_receipt.id}", "expected_version" = "${bill_receipt.version}" }
+
+[[commands]]
+command = "work-order show"
+capture = "bill_work_order_after_receipt"
+input = { "work_order" = "${bill_work_order.id}" }
+
+[[commands]]
+command = "work-order invoice"
+capture = "bill_work_order_invoice"
+reason = "Invoice only the installation labor from the work order"
+input = { "work_order" = "${bill_work_order.id}", "expected_version" = "${bill_work_order_after_receipt.version}", "conversion_key" = "DEMO-BILL-WO-1 labor invoice", "date" = "2026-09-20", "number" = "DEMO-BILL-INV-3", "line_ids" = ["${bill_work_order.revision.lines.0.line_id}"] }
+
+[[commands]]
+command = "work-order billing"
+input = { "work_order" = "${bill_work_order.id}" }
+
+[[commands]]
+command = "invoice void"
+reason = "Void the labor invoice so the demonstration leaves balances unchanged"
+input = { "invoice" = "${bill_work_order_invoice.id}", "expected_version" = "${bill_work_order_invoice.version}" }
+
+[[commands]]
+command = "estimate create"
+capture = "bill_estimate_2"
+reason = "Quote a small repair that the customer pays on the spot"
+input = { "date" = "2026-09-15", "number" = "DEMO-BILL-EST-2", "customer" = "${bill_customer.id}", "title" = "Garbage disposal repair", "sales_tax_item" = "${sale_tax.id}", "customer_tax_code" = "${sale_taxable.id}", "lines" = [{ "item" = "${sale_service.id}", "quantity" = "1" }] }
+
+[[commands]]
+command = "estimate update"
+capture = "bill_estimate_2_accepted"
+reason = "Record acceptance of the repair quote"
+input = { "estimate" = "${bill_estimate_2.id}", "expected_version" = "${bill_estimate_2.version}", "status" = "accepted", "decision_note" = "Accepted on site" }
+
+[[commands]]
+command = "estimate sales-receipt"
+capture = "bill_receipt_2"
+reason = "They paid by check for the repair; record the paid sale from the estimate"
+input = { "estimate" = "${bill_estimate_2.id}", "expected_version" = "${bill_estimate_2_accepted.version}", "conversion_key" = "DEMO-BILL-EST-2 paid receipt", "date" = "2026-09-15", "number" = "DEMO-BILL-SR-2", "deposit_to" = "Checking", "payment_method" = "Check", "payment_reference" = "DEMO-BILL-CHECK-2", "amount_received" = "108.00" }
+
+[[commands]]
+command = "sales-receipt history"
+input = { "sales_receipt" = "${bill_receipt_2.id}" }
+
+[[commands]]
+command = "sales-receipt void"
+reason = "Void the repair receipt so the demonstration leaves balances unchanged"
+input = { "sales_receipt" = "${bill_receipt_2.id}", "expected_version" = "${bill_receipt_2.version}" }
+
+[[commands]]
+command = "estimate billing"
+input = { "estimate" = "${bill_estimate_2.id}" }
+
+[[commands]]
+command = "invoice post"
+capture = "bill_amount_invoice"
+reason = "Record an ordinary invoice with an exact amount-priced line and no unit rate"
+input = { "date" = "2026-09-21", "number" = "DEMO-BILL-INV-AMT", "customer" = "${bill_customer.id}", "sales_tax_item" = "${sale_tax.id}", "customer_tax_code" = "${sale_taxable.id}", "terms" = "Net 30", "lines" = [{ "item" = "${sale_service.id}", "quantity" = "2", "net_amount" = "10.01", "description" = "Two visits quoted as one amount" }] }
+
+[[commands]]
+command = "invoice show"
+input = { "invoice" = "${bill_amount_invoice.id}" }
+
+[[commands]]
+command = "invoice void"
+reason = "Void the amount-priced invoice so the demonstration leaves balances unchanged"
+input = { "invoice" = "${bill_amount_invoice.id}", "expected_version" = "${bill_amount_invoice.version}" }
+
+[[commands]]
+command = "estimate history"
+input = { "estimate" = "${bill_estimate.id}" }
+
+[[commands]]
+command = "invoice query"
+input = { "customer" = "${bill_customer.id}", "date_from" = "2026-01-01", "date_to" = "2026-12-31" }
