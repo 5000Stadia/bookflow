@@ -25,7 +25,7 @@ def _actor(s):
 
 
 def _deny():
-    raise BookflowError("E_PERMISSION", details={"stage": "publication", "reason": "authority_changed"})
+    raise BookflowError("E_PERMISSION", details={"stage": "publication", "reason": "authority_changed", "outcome": "unknown"})
 
 
 def _snapshot(value):
@@ -73,12 +73,13 @@ class PublicationPermit:
     execution_succeeded: bool = False
     targets: dict = field(default_factory=dict)
     projection: dict = field(default_factory=dict)
+    input_error: dict | None = None
 
     def retained(self):
         """Only owned values enter the bounded receipt cache, never host/registry handles."""
         state = {item.name: getattr(self, item.name) for item in fields(self)
                  if item.name not in {"cmd", "inp", "ctx"}}
-        state.update(command=self.cmd.name, input=self.inp.model_dump(mode="json", exclude_unset=True),
+        state.update(command=self.cmd.name, input=None if self.inp is None else self.inp.model_dump(mode="json", exclude_unset=True),
                      context=self.ctx.model_dump(mode="json"))
         return deepcopy(state)
 
@@ -90,7 +91,13 @@ class PublicationPermit:
         cmd = registry.get(values.pop("command"))
         if cmd is None:
             raise BookflowError("E_QUERY_STALE", details={"reason": "registry_changed"})
-        inp = validate_input(cmd, values.pop("input"))
+        raw = values.pop("input")
+        if values.get("input_error") is not None:
+            if raw is not None or values.get("execution_succeeded"):
+                raise BookflowError("E_IO", details={"reason": "invalid_rejection_permit"})
+            inp = None
+        else:
+            inp = validate_input(cmd, raw)
         ctx = Context.model_validate(values.pop("context"))
         return cls(cmd=cmd, inp=inp, ctx=ctx, **values)
 
@@ -98,17 +105,25 @@ class PublicationPermit:
     def capture(cls, cmd, raw, ctx, s, cred, selector, source, dry_run):
         from bookflow.core.publication_inventory import policy
         policy(cmd)
-        inp = validate_input(cmd, raw)
+        input_error = None
+        try:
+            inp = validate_input(cmd, raw)
+        except BookflowError as exc:
+            if exc.code not in {"E_VALIDATION", "E_CONTEXT_IN_INPUT"}:
+                raise
+            inp, input_error = None, exc.to_dict()
         token = s.hub.conn.execute(sa.select(h.api_tokens).where(h.api_tokens.c.id == cred.token_id)).mappings().first()
         if token is None:
             raise BookflowError("E_UNAUTHENTICATED")
         return cls(cmd, inp, ctx, _actor(s), frozenset(_membership(row) for row in s.memberships),
-                   None, dict(token), None, dry_run)
+                   None, dict(token), None, dry_run, input_error=input_error)
 
     def finish(self, s, *, succeeded=True, result=None):
         """Capture only a committed, same-request audit certificate, after execute."""
         if self.cmd.scope == "company" and s.company_row is not None:
             self.company = s.company_row["id"], s.company_row["organization_id"]
+        if succeeded and self.input_error is not None:
+            raise BookflowError("E_IO", details={"reason": "invalid_rejection_permit"})
         self.execution_succeeded = succeeded
         if succeeded and self.cmd.transfer is not None:
             self.projection["transfer"] = (str(s.transfer.store), s.transfer.info.sha256, s.transfer.info.size_bytes)

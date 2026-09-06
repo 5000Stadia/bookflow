@@ -713,3 +713,32 @@ The CLI supplies --kind with a boolean default; generated browser forms use the
 selected or retained kind and a boolean selector; definition scope objects from
 show are projected to the scope names accepted by update. Text false stays text, omission
 stays omission, and explicit clear remains null.
+
+MCP response classification is explicit. A pre-intent rejection of the shared
+context/selection/authorization check carries the private command_rejection
+response marker. Its AdmissionRejection guard reruns only that pure check under
+current credentials and requires the identical rejection before publication.
+Only this admission response is preserved as an unframed original command error.
+All later command output/error documents use verified J/T framing. Other HTTP
+errors are adapter/protocol/publication errors and retain the known operation
+reference, stage and uncertainty. Recovery status/release/upload observations
+have separately validated schemas and are never business completion. Control
+JSON is limited to one64KiB record; full business/error documents are streamed
+without that limit. Verified destinations and classification are exposed under
+_meta.bookflow_transport.
+
+PublicationPermit represents invalid business input with input_error and no
+validated input model. Such a permit cannot finish as a successful execution or
+rehydrate as one. It guards the original rejection with current credential,
+actor/membership and selected-company authority. MCP preparation can deliver this
+rejection, shared conditional/transfer-preparation errors and an upload body-limit
+error without queuing a business execution. Its rejection delivery owns cleanup
+and can retain the same guarded error receipt. Recovery of a failed download
+redelivers only its error document; it never reopens the missing binary resource.
+
+The Row9 test ledger tests/mcp_coverage.py explicitly classifies all251 registered
+commands by routed JSON, advisory, finite poll/local follow, binary direction,
+local lifecycle or standalone protocol. Four-interface execution scenarios cover
+176 commands;75 remain explicitly pending. The existing actual all-command form
+check emits schema-path/control/variant/context mapping. This fetched-form map is
+separate from the still-incomplete browser interaction/output/success mapping.

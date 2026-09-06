@@ -19,8 +19,8 @@ def mount_mcp(app, host, credential, make_context):
             raise BookflowError("E_UNAUTHENTICATED")
         return credential(request, renew_cookie=False)
 
-    def response(document, status=200):
-        return JSONResponse(document, status_code=status, headers={"X-Bookflow-MCP-Version": str(BRIDGE_VERSION), "Cache-Control": "no-store"})
+    def response(document, status=200, *, kind=None):
+        return JSONResponse(document, status_code=status, headers={"X-Bookflow-MCP-Version": str(BRIDGE_VERSION), "Cache-Control": "no-store", **({"X-Bookflow-MCP-Response": kind} if kind else {})})
 
     from .transport import mount_transport
     mount_transport(app, host, authenticate, make_context, response)

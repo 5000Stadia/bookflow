@@ -1,5 +1,7 @@
 """One host-owned MCP intent registry, using shared authorization and execution."""
 
+from dataclasses import dataclass
+
 from bookflow.core import registry
 from bookflow.core.context import Context
 from bookflow.core.context_options import normalize_options
@@ -26,6 +28,38 @@ def owner(credential):
     return credential.token_id, credential.user_id, credential.on_behalf_of or credential.user_id
 
 
+def admission_authorize(cmd, ctx, session, selector, source, dry_run):
+    normalize_options(cmd, company=selector, reason=ctx.reason, source_ref=ctx.source_ref,
+                      directive=ctx.directive_id, idempotency_key=ctx.idempotency_key, dry_run=dry_run)
+    validate_context(ctx)
+    return authorize(cmd, ctx, session, company_selector=selector, company_source=source,
+                     dry_run=dry_run, read_only=True)
+
+
+@dataclass(repr=False)
+class AdmissionRejection:
+    host: object
+    credential: object
+    cmd: object
+    ctx: object
+    selector: object
+    source: str
+    dry_run: bool
+    document: dict
+
+    def check(self, **_kwargs):
+        # Re-establish the identical pure admission rejection. No planner, input
+        # body, execution, intent or business receipt exists at this boundary.
+        with publication_reader(self.host, self.credential) as session:
+            self.credential.revalidate(session.hub)
+            try:
+                admission_authorize(self.cmd, self.ctx, session, self.selector, self.source, self.dry_run)
+            except BookflowError as exc:
+                if exc.to_dict() == self.document:
+                    return
+        raise BookflowError('E_PERMISSION', details={'stage': 'publication', 'outcome': 'unknown'})
+
+
 class Runtime:
     @classmethod
     def for_host(cls, host):
@@ -47,13 +81,13 @@ class Runtime:
         """Scope admission precedes reading a caller's input JSON or binary file."""
         if cmd.local_only or cmd.standalone:
             raise BookflowError("E_USAGE", details={"boundary": "local_only"})
-        normalize_options(cmd, company=selector, reason=ctx.reason, source_ref=ctx.source_ref,
-                          directive=ctx.directive_id, idempotency_key=ctx.idempotency_key, dry_run=dry_run)
-        validate_context(ctx)
         with publication_reader(self.host, credential) as session:
             credential.revalidate(session.hub)
-            ctx = authorize(cmd, ctx, session, company_selector=selector,
-                            company_source=source, dry_run=dry_run, read_only=True)
+            try:
+                ctx = admission_authorize(cmd, ctx, session, selector, source, dry_run)
+            except BookflowError as exc:
+                exc.admission_rejection = AdmissionRejection(self.host, credential, cmd, ctx, selector, source, dry_run, exc.to_dict())
+                raise
             header = {"command": cmd.name, "context": ctx.model_dump(mode="json"),
                       "selector": session.company_row["id"] if cmd.scope == "company" else None,
                       "source": source, "dry_run": dry_run, "actor": _actor(session),
@@ -83,23 +117,60 @@ class Runtime:
             self._header_authority(intent, credential)
         return intent
 
-    def prepare_json(self, intent, raw, credential, *, retain=True):
+    def input_permit(self, intent, raw, credential):
+        """Shared preparation yields guarded command rejections, not protocol errors."""
+        from bookflow.adapters.http.execution import PublishedDocument
+        header = intent.header
+        cmd = registry.get(header['command'])
+        self._header_authority(intent, credential)
+        rejection = None
+        with publication_reader(self.host, credential) as session:
+            credential.revalidate(session.hub)
+            ctx = authorize(cmd, Context.model_validate(header['context']), session,
+                company_selector=header['selector'], company_source=header['source'],
+                dry_run=header['dry_run'], read_only=True)
+            permit = PublicationPermit.capture(cmd, raw, ctx, session, credential,
+                header['selector'], header['source'], header['dry_run'])
+            permit.company = ((session.company_row['id'], session.company_row['organization_id'])
+                              if session.company_row is not None else None)
+            if permit.input_error is not None:
+                rejection = BookflowError(permit.input_error['code'], message=permit.input_error['message'], details=permit.input_error['details'])
+            else:
+                try:
+                    if cmd.authorize_input is not None:
+                        cmd.authorize_input(permit.inp, ctx, session)
+                    if cmd.transfer is not None:
+                        cmd.transfer.prepare(permit.inp, ctx, session)
+                except BookflowError as exc:
+                    rejection = exc
+        if rejection is not None:
+            permit.check(self.host, credential)
+            rejection.publication_document = PublishedDocument(rejection.to_dict(), permit, self.host, credential)
+            rejection.preparation_rejection = True
+            raise rejection
+        return permit
+
+    def prepare_json(self, intent, raw, credential, *, retain=True, deliver_rejection=False):
         """Validate/freeze ordinary input; no planner or business execution runs here."""
-        prepared = False
         try:
-            payload = self._prepare_json(intent, raw, credential, retain=retain)
-            prepared = True
-            return payload
-        finally:
-            if not prepared and intent.completed is None:
+            return self._prepare_json(intent, raw, credential, retain=retain)
+        except BookflowError as exc:
+            # A verified rejection has a delivery owner; it must not be released
+            # before that owner's terminal and cleanup. Other failures abandon it.
+            if (not deliver_rejection or getattr(exc, 'publication_document', None) is None) and intent.completed is None:
                 self.intents.release(intent.reference, owner(credential))
+            raise
+        except BaseException:
+            if intent.completed is None:
+                self.intents.release(intent.reference, owner(credential))
+            raise
 
     def _prepare_json(self, intent, raw, credential, *, retain):
         header = intent.header
         cmd = registry.get(header["command"])
         if cmd.transfer is not None:
             raise BookflowError("E_USAGE", message="Use this command's binary preparation.")
-        self._header_authority(intent, credential)
+        self.input_permit(intent, raw, credential)
         with self.intents.preparation_worker(intent):
             with publication_reader(self.host, credential) as session:
                 credential.revalidate(session.hub)
@@ -143,11 +214,16 @@ class Runtime:
                 intent.execution_returned = True
                 intent.progress = self.intents.clock()
 
-    def prepare_transfer(self, intent, raw, credential):
+    def prepare_transfer(self, intent, raw, credential, *, deliver_rejection=False):
         """Acquire the registered transfer before the launcher opens its file."""
         from bookflow.adapters.http.published_transfer import PublishedTransfer
         header = intent.header
-        self._header_authority(intent, credential)
+        try:
+            self.input_permit(intent, raw, credential)
+        except BookflowError as exc:
+            if not deliver_rejection or getattr(exc, 'publication_document', None) is None:
+                self.intents.release(intent.reference, owner(credential))
+            raise
         try:
             with self.intents.preparation_worker(intent):
                 transfer = PublishedTransfer(self.host, registry.get(header["command"]), raw,

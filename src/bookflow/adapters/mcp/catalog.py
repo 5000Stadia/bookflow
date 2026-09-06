@@ -54,7 +54,7 @@ def command_help(name, view="usage"):
                           for key in ("company", "dry_run", "reason", "source_ref", "directive", "idempotency_key")}
     result = {
         **row,
-        "context_schema": {"type": "object", "additionalProperties": False,
+        "context_schema": {"type": "object", "description": "Schema fragment for top-level bookflow_run execution fields, not a nested context argument.", "additionalProperties": False,
             "properties": context_properties},
         "context_usage": "Omit optional context or use null; dry_run omitted/false is inactive and null is invalid. Active context applies only where listed. Use a short audit reason naming the trigger (at most 140 characters), not a narrative. Agent writes require reason or an active directive. Company selection: explicit non-null company, then calling-machine environment, then calling-machine configuration; null behaves as omitted.",
         "error_codes": sorted(set(cmd.error_codes) | set(INFRASTRUCTURE_CODES)),

@@ -71,7 +71,7 @@ def test_actual_mcp_own_detach_receipt_and_independent_loss(hosted, live, tmp_pa
                 if loss == 'none':
                     assert not reply.is_error, reply.structured_content
                     assert reply.structured_content['company_id'] == hosted.company_id
-                    ref = reply.meta['bookflow_delivery']['operation_ref']
+                    ref = reply.meta['bookflow_transport']['operation_ref']
                     recovered = await session.call_tool('bookflow_run', {'input_ref': ref, 'action': 'execute'})
                     assert not recovered.is_error
                     assert recovered.structured_content == reply.structured_content

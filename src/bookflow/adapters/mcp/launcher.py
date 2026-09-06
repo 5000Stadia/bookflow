@@ -59,8 +59,13 @@ async def serve(inp, origin, secret, inputs, outputs):
         async def call_tool(_ctx, params):
             submitted = False
             delivery = None
+            reference = None
             try:
                 arguments = validate(params.name, params.arguments or {})
+                from .envelopes import RecoveryArguments
+                if isinstance(arguments, RecoveryArguments):
+                    reference = arguments.operation_ref or arguments.input_ref
+
                 preflight = await client.get("/adapters/mcp")
                 if preflight.status_code == 404 or preflight.headers.get("x-bookflow-mcp-version") != str(BRIDGE_VERSION):
                     raise BookflowError("E_VERSION_MISMATCH", details={"supported_bridge_versions": [BRIDGE_VERSION], "received_bridge_version": preflight.headers.get("x-bookflow-mcp-version"), "stage": "preflight", "outcome": "not_submitted"})
@@ -94,6 +99,9 @@ async def serve(inp, origin, secret, inputs, outputs):
                         raise BookflowError("E_IO", details={"operation": "mcp_result", "reason": "invalid_json", "stage": "post_submission", "outcome": "unknown"}) from None
                     is_error = response.status_code >= 400
             except BookflowError as exc:
+                if reference is not None:
+                    from .responses import annotate
+                    annotate(exc, reference, submitted=True)
                 document, is_error = exc.to_dict(), True
             except httpx2.HTTPError:
                 document, is_error = BookflowError("E_IO", details={"operation": "mcp_result", "reason": "connection", "stage": "post_submission", "outcome": "unknown"}).to_dict(), True
@@ -105,7 +113,7 @@ async def serve(inp, origin, secret, inputs, outputs):
                 if delivery and delivery.get("output_file"):
                     content.append(types.TextContent(text="Verified downloaded file: " + delivery["output_file"]))
                 return types.CallToolResult(content=content, structured_content=document, is_error=is_error,
-                                            meta={"bookflow_delivery": delivery} if delivery else None)
+                                            meta={"bookflow_transport": delivery} if delivery else None)
             except Exception:
                 document = BookflowError("E_IO", details={"operation": "mcp_result", "reason": "serialization", "outcome": "unknown" if submitted else "not_submitted",
                     **({"operation_ref": delivery["operation_ref"]} if delivery else {})}).to_dict()

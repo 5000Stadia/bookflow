@@ -52,7 +52,7 @@ For "attach this receipt", supply the registered attachment metadata and
 reads, hashes, streams and verifies it in one call; the model supplies no digest,
 base64 or chunks. Downloads use `transport.output_file`, or a generated name in
 the configured outbox. Business metadata remains the structured result; verified
-download location is also returned in text and `_meta.bookflow_delivery`.
+download location is also returned in text and `_meta.bookflow_transport`.
 `transport.input_json_file` replaces the business input object for large inputs.
 `transport.result_file` publishes the complete JSON output/error artifact and
 returns a tagged delivery receipt. Inspect that verified document through
@@ -223,3 +223,10 @@ facts fingerprint. A conflict is not permission to overwrite the other writer.
 The program's SDK context exit sends EOF; it does not stop the separately owned
 host or delete the company's history or caller-owned output files. Use the
 operator-bootstrap cleanup for that disposable host after completing the trial.
+
+For clients that expose both MCP result representations, read `structuredContent`
+once. The text content contains the same complete document for compatibility;
+concatenating both duplicates the help. Request individual command help as needed
+instead of concatenating multiple full help responses. Neither representation is
+truncated by Bookflow. Tool execution fields such as `company` and `reason` belong
+beside `command` and `input`, not in a nested `context` object.

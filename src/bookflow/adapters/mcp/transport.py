@@ -96,10 +96,16 @@ def mount_transport(app, host, authenticate, make_context, response):
         return Runtime.for_host(host)
 
     async def authenticated(request, reference=None):
-        credential = await run_in_threadpool(authenticate, request)
-        rt = runtime()
-        intent = None if reference is None else await run_in_threadpool(rt.lookup, reference, credential)
-        return rt, credential, intent
+        try:
+            credential = await run_in_threadpool(authenticate, request)
+            rt = runtime()
+            intent = None if reference is None else await run_in_threadpool(rt.lookup, reference, credential)
+            return rt, credential, intent
+        except BookflowError as exc:
+            if reference is not None:
+                from .responses import annotate
+                annotate(exc, reference, submitted=True)
+            raise
 
     def status(rt, intent):
         return {"operation_ref": intent.reference, "state": intent.state,
@@ -113,6 +119,13 @@ def mount_transport(app, host, authenticate, make_context, response):
                 "completed_idle_seconds": 60, "completed_absolute_seconds": 300,
                 "json_delivery_seconds": rt.json_seconds},
             "outcome": "not_submitted" if intent.reason in {"expired_before_submission", "released_before_submission", "rejected_before_submission"} else "unknown"}
+
+    def rejected_input(rt, intent, exc):
+        document = getattr(exc, 'publication_document', None)
+        if document is None or not getattr(exc, 'preparation_rejection', False):
+            return None
+        protect(document)
+        return Delivery(rt, intent, document, rejection=True)
 
     @app.post("/adapters/mcp/intents/new", include_in_schema=False)
     async def admit(request: Request):
@@ -129,8 +142,16 @@ def mount_transport(app, host, authenticate, make_context, response):
             raise BookflowError("E_USAGE", details={"reason": "unknown_command"})
         selection = envelope["company_selection"]
         ctx = command_context(request, credential, args, selection, make_context)
-        intent = await run_in_threadpool(rt.admit, cmd, ctx, credential,
-            selection["value"], selection["source"], args.dry_run)
+        try:
+            intent = await run_in_threadpool(rt.admit, cmd, ctx, credential,
+                selection["value"], selection["source"], args.dry_run)
+        except BookflowError as exc:
+            rejected = getattr(exc, 'admission_rejection', None)
+            if rejected is None:
+                raise
+            from bookflow.adapters.http.app import STATUS
+            protect(rejected)
+            return response(exc.to_dict(), STATUS.get(exc.code, 400), kind='command_rejection')
         protect_intent(rt, intent, credential)
         return response(status(rt, intent))
 
@@ -141,12 +162,18 @@ def mount_transport(app, host, authenticate, make_context, response):
             with rt.intents.preparation_worker(intent):
                 raw = await input_object(request, rt, intent)
                 if registry.get(intent.header["command"]).transfer:
-                    await run_in_threadpool(rt.prepare_transfer, intent, raw, credential)
+                    await run_in_threadpool(rt.prepare_transfer, intent, raw, credential, deliver_rejection=True)
                 else:
-                    await run_in_threadpool(rt.prepare_json, intent, raw, credential)
+                    await run_in_threadpool(rt.prepare_json, intent, raw, credential, deliver_rejection=True)
             await run_in_threadpool(rt.lookup, reference, credential)
             protect_intent(rt, intent, credential)
             return response(status(rt, intent))
+        except BookflowError as exc:
+            rejection = rejected_input(rt, intent, exc)
+            if rejection is not None:
+                return rejection
+            rt.intents.release(reference, owner(credential))
+            raise
         except BaseException:
             rt.intents.release(reference, owner(credential))
             raise
@@ -174,10 +201,26 @@ def mount_transport(app, host, authenticate, make_context, response):
                         for start in range(0, len(chunk), 65536):
                             await run_in_threadpool(rt.lookup, reference, credential)
                             rt.intents.progress(intent)
-                            await run_in_threadpool(transfer.body.write, chunk[start:start + 65536])
+                            try:
+                                await run_in_threadpool(transfer.body.write, chunk[start:start + 65536])
+                            except BookflowError as exc:
+                                if exc.code == 'E_VALUE_RANGE':
+                                    from bookflow.core.publication import PublicationPermit
+                                    from bookflow.adapters.http.execution import PublishedDocument
+                                    permit = PublicationPermit.from_retained(intent.publication)
+                                    permit.execution_succeeded = False
+                                    exc.publication_document = PublishedDocument(exc.to_dict(), permit, host, credential)
+                                    exc.preparation_rejection = True
+                                raise
                 # The launcher closes/verifies its source before the separate seal.
                 protect_intent(rt, intent, credential)
                 return response({"sha256": transfer.body.digest.hexdigest(), "size_bytes": transfer.body.size})
+        except BookflowError as exc:
+            rejection = rejected_input(rt, intent, exc)
+            if rejection is not None:
+                return rejection
+            rt.intents.release(reference, owner(credential))
+            raise
         except BaseException:
             rt.intents.release(reference, owner(credential))
             raise
@@ -199,13 +242,16 @@ def mount_transport(app, host, authenticate, make_context, response):
     async def execute(rt, credential, intent, raw=None):
         try:
             if raw is not None:
-                payload = await run_in_threadpool(rt.prepare_json, intent, raw, credential, retain=False)
+                payload = await run_in_threadpool(rt.prepare_json, intent, raw, credential, retain=False, deliver_rejection=True)
                 document = await run_in_threadpool(rt.execute_json, intent, credential, direct=payload)
             elif getattr(intent, "transfer", None):
                 document = await run_in_threadpool(rt.execute_transfer, intent, credential)
             else:
                 document = await run_in_threadpool(rt.execute_json, intent, credential)
         except BookflowError as exc:
+            rejection = rejected_input(rt, intent, exc)
+            if rejection is not None:
+                return rejection
             document = getattr(exc, "publication_document", None)
             if document is None:
                 await run_in_threadpool(rt.intents.finish, intent, reason="execution_result_unavailable")
@@ -222,7 +268,7 @@ def mount_transport(app, host, authenticate, make_context, response):
                     return response(status(rt, intent))
                 try:
                     transfer = (await run_in_threadpool(rt.reopen_output, intent, credential)
-                                if document.permit.cmd.transfer and document.permit.cmd.transfer.direction == "output" else None)
+                                if document.permit.execution_succeeded and document.permit.cmd.transfer and document.permit.cmd.transfer.direction == "output" else None)
                     return Delivery(rt, intent, document, binary=binary_chunks(transfer) if transfer else None, recovery=True)
                 except BaseException:
                     await run_in_threadpool(rt.intents.finish, intent, receipt=intent.receipt, publication=intent.publication)

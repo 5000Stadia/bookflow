@@ -191,6 +191,18 @@ class Intents:
             intent.frozen, intent.prepared_bytes = None, 0
             return frozen
 
+    def reject_delivery(self, intent):
+        """A typed input rejection may deliver once, without scheduling execution."""
+        with self.lock:
+            self._preexecution(intent)
+            if intent.state not in {'preparing', 'ready', 'receiving'} or intent.workers:
+                raise RuntimeError('Input rejection lost its preparation owner')
+            intent.state = 'delivering'
+            intent.reason = 'rejected_before_submission'
+            intent.progress = self.clock()
+            intent.execution_returned = True
+            intent.frozen, intent.prepared_bytes = None, 0
+
     def delivery(self, intent):
         with self.lock:
             if self.active.get(intent.reference) is not intent or intent.state != "started":
@@ -273,7 +285,7 @@ class Intents:
             if reservation is not None:
                 receipt, publication = reservation[2]["receipt"], reservation[2]["publication"]
             intent.frozen, intent.prepared_bytes = None, 0
-            intent.state, intent.reason = "completed", reason
+            intent.state, intent.reason = "completed", reason or intent.reason
             intent.completed = intent.completed if intent.completed is not None else self.clock()
             intent.progress = self.clock()
             intent.receipt = receipt if isinstance(receipt, bytes) and len(receipt) <= MIB and not intent.abandoned else None

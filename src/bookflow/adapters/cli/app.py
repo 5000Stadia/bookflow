@@ -220,8 +220,6 @@ def _build_command(cmd: registry.Command):
 
         def merged(name: str, local: Any, applicable: bool) -> Any:
             root_v = ctx_obj.get(name)
-            if root_v not in (None, False) and not applicable:
-                raise BookflowError("E_USAGE", message=f"--{name.replace('_', '-')} does not apply to `{cmd.name}`")
             if root_v not in (None, False) and local not in (None, False) and root_v != local:
                 raise BookflowError("E_USAGE", message=f"--{name.replace('_', '-')} was given twice with different values")
             return local if local not in (None, False) else root_v

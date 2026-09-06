@@ -52,10 +52,10 @@ def test_real_mcp_receipt_files_preview_upload_download_and_json_artifact(hosted
                     transport={'output_file': str(destination)})
                 assert destination.read_bytes() == BODY
                 assert downloaded.structured_content['sha256'] == hashlib.sha256(BODY).hexdigest()
-                assert downloaded.meta['bookflow_delivery']['output_file'] == str(destination)
+                assert downloaded.meta['bookflow_transport']['output_file'] == str(destination)
                 again_path = outbox / 'recovered.pdf'
                 recovered = await session.call_tool('bookflow_run', {
-                    'input_ref': downloaded.meta['bookflow_delivery']['operation_ref'],
+                    'input_ref': downloaded.meta['bookflow_transport']['operation_ref'],
                     'action': 'execute', 'output_file': str(again_path)})
                 assert not recovered.is_error, recovered
                 assert recovered.structured_content == downloaded.structured_content
@@ -112,6 +112,14 @@ def test_real_stdio_discovery_help_and_attributed_host_write(hosted, live, tmp_p
                 assert help_["input_schema"]["type"] == "object"
                 assert "account list" in help_["documentation"]
                 assert help_["view"] == "usage" and "output_schema" not in help_
+                # Follow the discovered complete tool arguments, without inventing
+                # a nested context envelope from the context_schema fragment.
+                import json, re
+                query_help = await call("bookflow_help", {"command": "invoice query"})
+                arguments = json.loads(re.search(r"```json\n(.*?)\n```", query_help['documentation'], re.S)[1])
+                arguments['company'] = hosted.company_id
+                queried = await call('bookflow_run', arguments)
+                assert queried['count'] == len(queried['items'])
                 full = await call("bookflow_help", {"command": "account list", "view": "full"})
                 assert full["output_schema"]["type"] == "object"
                 assert full["input_schema"] == help_["input_schema"]

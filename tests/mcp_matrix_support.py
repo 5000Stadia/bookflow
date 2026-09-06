@@ -116,6 +116,10 @@ def normalize(documents, root, baseline_ids):
     ids = {}
     def visit(value, key=None):
         if isinstance(value, dict):
+            if value.get('code') == 'E_DIRECTIVE_INACTIVE':
+                stamp = value['details']['deactivated_at']
+                assert stamp in value['message']
+                value = {**value, 'message': value['message'].replace(stamp, '<timestamp>')}
             if value.get('code') == 'E_VERSION_CONFLICT':
                 value = {**value, 'message': re.sub(r'[0-9.]+ s ago', '<elapsed> s ago', value['message'])}
             return {k: visit(v, k) for k, v in sorted(value.items())}

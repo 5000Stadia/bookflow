@@ -8,6 +8,7 @@ from pathlib import Path
 import sqlite3
 import subprocess
 import sys
+import threading
 from urllib.parse import parse_qs, urlsplit
 from zoneinfo import ZoneInfo
 
@@ -161,6 +162,25 @@ def test_weekly_agent_principal_filters_pagination_and_dst_on_all_surfaces(hoste
                 break
         assert found == ids
 
+    # Force the first filtered document to expose its new URL before its table
+    # arrives. This witnesses why URL-only completion can read an unfinished DOM.
+    body_waiting, release_body = threading.Event(), threading.Event()
+    original_app = hosted.handle.app.middleware_stack
+    async def delayed_document(scope, receive, send):
+        selected = (scope['type'] == 'http' and scope.get('path', '').endswith('/audit')
+                    and b'limit=2' in scope.get('query_string', b'') and not body_waiting.is_set())
+        async def split_send(message):
+            if selected and message['type'] == 'http.response.body' and b'<main' in message.get('body', b''):
+                body = message['body']
+                split = body.index(b'<main')
+                await send({**message, 'body': body[:split], 'more_body': True})
+                body_waiting.set()
+                assert await anyio.to_thread.run_sync(lambda: release_body.wait(15))
+                await send({**message, 'body': body[split:]})
+            else:
+                await send(message)
+        await original_app(scope, receive, split_send)
+    monkeypatch.setattr(hosted.handle.app, 'middleware_stack', delayed_document)
     browser = _Cdp(tmp_path / 'weekly-chrome')
     try:
         browser.navigate(live + '/login')
@@ -173,8 +193,17 @@ def test_weekly_agent_principal_filters_pagination_and_dst_on_all_surfaces(hoste
             for(const [name,value] of Object.entries(values)) document.querySelector(`[name="${{name}}"]`).value=value;
             document.querySelector('main form').requestSubmit();}})()''')
         browser.wait_for('new URL(location.href).searchParams.get("limit") === "2"')
+        premature = browser.evaluate('({ready:document.readyState, rows:document.querySelectorAll(".table-wrap table tr td:first-child a").length})')
+        try:
+            assert body_waiting.is_set() and premature['ready'] != 'complete', premature
+            assert premature['rows'] == 0, premature
+            print('URL-only weekly completion accepted unfinished document:', premature)
+        finally:
+            release_body.set()
+        browser.wait_for('document.readyState === "complete" && !!document.querySelector(".table-wrap table")')
         found = []
         while True:
+            browser.wait_for('document.readyState === "complete" && !!document.querySelector(".table-wrap table")')
             found.extend(browser.evaluate('Array.from(document.querySelectorAll(".table-wrap table tr td:first-child a")).map(a=>a.href.split("/").pop())'))
             older = browser.evaluate('Array.from(document.querySelectorAll("a")).find(a=>a.textContent.trim()==="older")?.href || null')
             if older is None:
@@ -184,4 +213,5 @@ def test_weekly_agent_principal_filters_pagination_and_dst_on_all_surfaces(hoste
             browser.navigate(older)
         assert found == expected[0]
     finally:
+        release_body.set()
         browser.close()

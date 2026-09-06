@@ -1316,12 +1316,14 @@ def _page_url(cmd, company_id):
     return f"{base}/self/{cmd.verb}" if cmd.version_source else f"{base}/{cmd.verb}"
 
 
-def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted):
+def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted, tmp_path):
     import re
 
     from bookflow.adapters.workbench import forms as F
     from bookflow.core import registry
     registry.load_all()
+    from tests.mcp_coverage import workbench_row, local_workbench_boundaries
+    coverage = []
     commercial_fields = {}
     for noun in ("invoice", "sales-receipt", "proposal", "estimate", "work-order"):
         scope = noun.replace("-", "_")
@@ -1397,6 +1399,10 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
                     leaf["path"],
                 )
         assert 'name="originals"' in page.text, cmd.name
+        coverage.append(workbench_row(cmd, str(page.url), page.text))
+    coverage.extend(local_workbench_boundaries())
+    assert {row['command'] for row in coverage} == {cmd.name for cmd in registry.all_commands(include_standalone=True)}
+    (tmp_path / 'workbench-coverage.json').write_text(json.dumps(coverage, indent=2))
 
 
 def test_an_update_form_carries_expected_version_and_the_originals(hosted):

@@ -5,7 +5,7 @@ The core still validates the selected kind, choices, defaults and every change.
 
 
 def decode_definition_default(command, raw, originals=None):
-    if command.name not in {'custom-field create', 'custom-field update'}:
+    if getattr(command, 'name', None) not in {'custom-field create', 'custom-field update'}:
         return
     kind = raw.get('kind', (originals or {}).get('kind'))
     value = raw.get('default')

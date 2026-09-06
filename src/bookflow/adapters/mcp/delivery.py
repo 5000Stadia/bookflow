@@ -13,11 +13,13 @@ from .intents import MIB
 
 
 class Delivery(StreamingResponse):
-    def __init__(self, runtime, intent, document, *, binary=None, recovery=False):
+    def __init__(self, runtime, intent, document, *, binary=None, recovery=False, rejection=False):
         self.runtime, self.intent = runtime, intent
         self.original_response = not recovery
         self.started_at = time.monotonic()
-        if not recovery:
+        if rejection:
+            runtime.intents.reject_delivery(intent)
+        elif not recovery:
             runtime.intents.delivery(intent)
         self.frames = self._frames(document, binary)
         super().__init__(self.frames, media_type="application/vnd.bookflow.mcp-records",

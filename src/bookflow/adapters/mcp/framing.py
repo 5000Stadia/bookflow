@@ -210,7 +210,7 @@ class Decoder:
                     raise ValueError
                 if terminal["binary"] and self.sinks[b"B"] is None:
                     raise ValueError
-            except (ValueError, TypeError, KeyError, UnicodeError):
+            except (ValueError, TypeError, KeyError, UnicodeError, RecursionError):
                 raise invalid("invalid_completion") from None
             _recovery(terminal["recovery"])
             self.document_validator.finish(terminal["is_error"])

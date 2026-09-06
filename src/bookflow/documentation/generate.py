@@ -148,8 +148,21 @@ def command_usage(cmd: Any) -> str:
     """
     lines = [f"# `{cmd.name}`", "", *_purpose(cmd), "",
              "Supply `input: {}` when the command has no business input fields.",
-             "The input_schema contains the complete input constraints and local definitions.", "",
+             "The input_schema describes only business fields inside input. context_schema describes execution fields placed at the top level beside command and input; it is not a nested context object.", "",
              "Existing CLI invocation example:", f"`{EXAMPLES[cmd.name].invocation}`"]
+    if not (cmd.local_only or cmd.standalone):
+        example = {"command": cmd.name, "input": EXAMPLES[cmd.name].input}
+        if cmd.scope == "company":
+            example["company"] = "Company ID or name"
+        if cmd.is_write:
+            example.update(dry_run=True, reason="Preview the requested change")
+        if cmd.transfer:
+            example["transport"] = {"input_file" if cmd.transfer.direction == "input" else "output_file": "/permitted-directory/receipt.pdf"}
+        lines.extend(["", "Complete bookflow_run tool arguments (replace sample business values and company/file placeholders):",
+                      "```json", json.dumps(example, ensure_ascii=True), "```",
+                      "company, dry_run, reason, source_ref, directive, idempotency_key and transport are top-level execution fields, never fields inside input or a nested context object. Supply only the applicable fields described by this command's context_schema."])
+    if cmd.name in {"invoice update", "sales-receipt update"}:
+        lines.extend(["", "For a correction, send only the fields you intend to change with the current expected_version. Supplying a price or tax selection explicitly records an explicit choice, even when it equals a displayed default. Omit unchanged fields; use refresh_defaults/use_defaults only when deliberately requesting new defaults. When supplying replacement lines, retain the existing line_id for each line you are correcting. Preview first and submit that preview's expected_facts_fingerprint unchanged."])
     if cmd.accepts_idempotency_key:
         lines.extend(["", "Use the same idempotency_key when deliberately retrying the same business create. Recover an existing transport intent by its reference without submitting new work."])
     if cmd.clearable:

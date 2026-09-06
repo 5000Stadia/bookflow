@@ -1,4 +1,5 @@
 import json
+import re
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -50,6 +51,15 @@ def test_every_registry_command_has_complete_views_and_resolvable_schemas():
                 assert 'CLI invocation' in doc['documentation']
                 assert '### Output' not in doc['documentation']
                 assert 'input: {}' in doc['documentation']
+                if not (cmd.local_only or cmd.standalone):
+                    example = json.loads(re.search(r'```json\n(.*?)\n```', doc['documentation'], re.S)[1])
+                    assert example['command'] == cmd.name and 'context' not in example
+                    validate('bookflow_run', example)
+                    cmd.input_model.model_validate(example['input'])
+                    assert ('company' in example) == (cmd.scope == 'company')
+                    assert ('dry_run' in example) == cmd.is_write
+                    assert ('transport' in example) == bool(cmd.transfer)
+
             if view.endswith('_schema'):
                 assert 'documentation' not in doc
     assert len(list_commands()['commands']) == 20
