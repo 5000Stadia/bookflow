@@ -130,3 +130,14 @@ def test_unknown_target_can_be_corrected_without_retyping(site):
     assert submit(state,client,token,'Keep <this> exactly','22').status_code==303
     notes=roadmap.bridge.Project(state.root,state.comments).comments()
     assert len(notes)==1 and notes[0]['row']=='22' and notes[0]['text']=='Keep <this> exactly'
+
+def test_correction_form_offers_remain_valid_after_module_closes(site):
+    state,client,intention=site
+    csrf=login(state,client)
+    intention.write_text(intention.read_text()+'| 25 | New module | Useful |\n')
+    response=submit(state,client,csrf,'Keep correction draft','999')
+    assert response.status_code==409 and '<option value="25">' in response.text
+    intention.write_text(intention.read_text().replace('| 25 | New module | Useful |\n',''))
+    token=re.search(r'name="csrf" value="([^"]+)"',response.text).group(1)
+    assert submit(state,client,token,'Keep correction draft','25').status_code==303
+    assert 'Keep correction draft' in client.get('/').text

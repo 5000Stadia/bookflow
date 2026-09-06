@@ -84,6 +84,12 @@ class State:
             str(row['row']) for group in ('next', 'later', 'completed') for row in status.get(group, []) if 'row' in row
         } | {str(note['row']) for note in project.comments()}
 
+    def offer_targets(self, project, status, session):
+        # Every form renderer uses this same admission path, including recovery forms.
+        with self.lock:
+            session['targets'].update(self.targets(project, status))
+            return set(session['targets'])
+
     def append(self, session, fields):
         with self.lock:
             if not self.refresh_key() or not any(value is session and value['expires'] > time.time() for value in self.sessions.values()):
@@ -113,7 +119,7 @@ def draft_page(message, fields=None):
 
 def correction_page(state, session, fields):
     project, status = state.data()
-    targets = state.targets(project, status) | session['targets']
+    targets = state.offer_targets(project, status, session)
     labels = {row.number: status.get('rows', {}).get(row.number, {}).get('title', 'Module ' + row.number) for row in project.rows}
     labels['project'] = 'General project notes'
     options = '<option value="" disabled selected>Choose a module</option>' + ''.join(
@@ -131,8 +137,7 @@ def correction_page(state, session, fields):
 
 def render(state, session):
     project, status = state.data()
-    with state.lock:
-        session['targets'].update(state.targets(project, status))
+    state.offer_targets(project, status, session)
     notes = project.comments()
     grouped = {}
     for note in notes:
