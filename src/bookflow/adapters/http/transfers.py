@@ -17,7 +17,8 @@ from bookflow.adapters.http import auth
 from bookflow.core.dispatch import guard
 from bookflow.core.errors import BookflowError
 from bookflow.core.transfer_protocol import decode_input, encode_input
-from bookflow.core.transfers import CHUNK_BYTES, HostedTransfer
+from bookflow.core.transfers import CHUNK_BYTES
+from bookflow.adapters.http.published_transfer import PublishedTransfer as HostedTransfer
 
 
 def disposition(filename: str) -> str:
@@ -71,7 +72,7 @@ class LeasedDownload(StreamingResponse):
         headers = {"Content-Disposition": disposition(metadata["original_filename"]),
                    "Content-Length": str(info.size_bytes), "Cache-Control": "no-store",
                    "X-Content-Type-Options": "nosniff", "X-Bookflow-SHA256": info.sha256,
-                   "X-Bookflow-Output": encode_input(transfer.output)}
+                   "X-Bookflow-Output": encode_input(dict(transfer.output))}
         super().__init__(self.chunks(), media_type=metadata["media_type"], headers=headers)
 
     async def chunks(self):
@@ -124,7 +125,8 @@ def install(app, host, *, credential, lookup, selector_of, make_context, secret_
                 if row["id"] != cred.token_id or row["user_id"] != cred.user_id or row.get("on_behalf_of") != cred.on_behalf_of:
                     raise BookflowError("E_UNAUTHENTICATED", details={"reason": "credential changed"})
             transfer = guard(lambda: HostedTransfer(host, cmd, raw, make_context(request, cred),
-                         cred.user_id, cred.login, selector, source, dry_run, recheck), cred.hub_admin)
+                         cred.user_id, cred.login, selector, source, dry_run, recheck,
+                         credential=cred), cred.hub_admin)
             owner.adopt(transfer)
             return transfer
 

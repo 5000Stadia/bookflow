@@ -3,7 +3,8 @@
 No planner, applier, replay, migration or compensating write is invoked here.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
+from copy import deepcopy
 from contextlib import contextmanager
 
 import sqlalchemy as sa
@@ -73,6 +74,26 @@ class PublicationPermit:
     targets: dict = field(default_factory=dict)
     projection: dict = field(default_factory=dict)
 
+    def retained(self):
+        """Only owned values enter the bounded receipt cache, never host/registry handles."""
+        state = {item.name: getattr(self, item.name) for item in fields(self)
+                 if item.name not in {"cmd", "inp", "ctx"}}
+        state.update(command=self.cmd.name, input=self.inp.model_dump(mode="json"),
+                     context=self.ctx.model_dump(mode="json"))
+        return deepcopy(state)
+
+    @classmethod
+    def from_retained(cls, state):
+        """Rehydrate an internal cache snapshot; no client-supplied permit is accepted."""
+        from bookflow.core import registry
+        values = dict(state)
+        cmd = registry.get(values.pop("command"))
+        if cmd is None:
+            raise BookflowError("E_QUERY_STALE", details={"reason": "registry_changed"})
+        inp = validate_input(cmd, values.pop("input"))
+        ctx = Context.model_validate(values.pop("context"))
+        return cls(cmd=cmd, inp=inp, ctx=ctx, **values)
+
     @classmethod
     def capture(cls, cmd, raw, ctx, s, cred, selector, source, dry_run):
         from bookflow.core.publication_inventory import policy
@@ -89,6 +110,8 @@ class PublicationPermit:
         if self.cmd.scope == "company" and s.company_row is not None:
             self.company = s.company_row["id"], s.company_row["organization_id"]
         self.execution_succeeded = succeeded
+        if succeeded and self.cmd.transfer is not None:
+            self.projection["transfer"] = (str(s.transfer.store), s.transfer.info.sha256, s.transfer.info.size_bytes)
         if result is not None:
             self.targets = {key: result[key] for key in ("id", "user_id", "organization_id", "on_behalf_of", "authority_epoch") if key in result}
             if self.cmd.name == "company list":
@@ -210,6 +233,13 @@ class PublicationPermit:
                     _deny()
             if self.cmd.authorize_input is not None:
                 self.cmd.authorize_input(self.inp, self.ctx, s)
+            if self.cmd.transfer is not None:
+                prepared = self.cmd.transfer.prepare(self.inp, self.ctx, s)
+                store, digest, size = self.projection["transfer"]
+                if str(prepared.store) != store or size > prepared.limit:
+                    _deny()
+                if self.cmd.transfer.direction == "output" and (prepared.info.sha256, prepared.info.size_bytes) != (digest, size):
+                    _deny()
             self._additional(s)
 
     def _additional(self, s):

@@ -20,6 +20,30 @@ def test_publication_inventory_covers_registry_and_refuses_unknown_hub_projectio
         policy(SimpleNamespace(name="new hub projection", scope="hub", local_only=False, standalone=False))
 
 
+def test_real_publication_snapshot_is_accountable_and_rechecks_current_authority(hosted, monkeypatch):
+    from bookflow.adapters.mcp.intents import retained_size
+    original = PublicationPermit.check
+    snapshots = []
+
+    def restored(self, host, credential, **kwargs):
+        state = self.retained()
+        assert 0 < retained_size(state) < 1024 * 1024
+        clone = PublicationPermit.from_retained(state)
+        assert clone.cmd is self.cmd and clone.ctx == self.ctx and clone.inp == self.inp
+        snapshots.append((state, host, credential))
+        return original(clone, host, credential, **kwargs)
+
+    observer = hosted.ok("token.issue", {"label": "snapshot observer"})["secret"]
+    monkeypatch.setattr(PublicationPermit, "check", restored)
+    assert hosted.call("company.show", {}, company=hosted.company_id).status_code == 200
+    state, host, credential = snapshots[-1]
+    assert hosted.call("token.revoke", {"token": hosted.token}, headers={"Authorization": "Bearer " + observer}).status_code == 200
+    from bookflow.core.errors import BookflowError
+    with pytest.raises(BookflowError) as caught:
+        original(PublicationPermit.from_retained(state), host, credential, original_response=False)
+    assert caught.value.code == "E_UNAUTHENTICATED"
+
+
 @pytest.mark.parametrize("write", [False, True])
 @pytest.mark.parametrize("loss", ["revoke", "downgrade"])
 def test_publication_rechecks_after_execution(hosted, monkeypatch, write, loss):

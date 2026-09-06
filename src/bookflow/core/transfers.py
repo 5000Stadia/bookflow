@@ -172,7 +172,7 @@ class HostedTransfer:
                 self.resource = TransferResource(lease, self.prepared.store, self.prepared.info)
                 if cmd.transfer.direction == "output":
                     s.transfer = self.resource
-                    self.output = execute(cmd, raw, ctx, s, dry_run=False)
+                    self.output = self._execute(s, dry_run=False)
             finally:
                 try:
                     _close(s)
@@ -194,6 +194,11 @@ class HostedTransfer:
     def receive(self, stream):
         self.body.receive(stream)
 
+    def _execute(self, session, **options):
+        """Adapter observer seam around the same authoritative transfer execution."""
+        from bookflow.core.dispatch import execute
+        return execute(self.cmd, self.raw, self.ctx, session, **options)
+
     def finish_input(self):
         from bookflow.core.dispatch import _close, execute
         self.body.complete()
@@ -201,8 +206,8 @@ class HostedTransfer:
         def finish(s):
             self.authorize_session(s)
             s.transfer = self.resource
-            return execute(self.cmd, self.raw, self.ctx, s, company_selector=self.selector,
-                           company_source=self.source, dry_run=self.dry_run)
+            return self._execute(s, company_selector=self.selector,
+                                 company_source=self.source, dry_run=self.dry_run)
         if not self.dry_run:
             self.output = self.host.run_write(self.user_id, self.login, finish, resource=self.resource.lease)
         else:

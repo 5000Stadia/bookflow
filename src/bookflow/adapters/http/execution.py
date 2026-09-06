@@ -26,7 +26,7 @@ class PublishedDocument(dict):
         return result
 
 
-def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run):
+def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_execute=None):
     normalize_options(cmd, company=selector if cmd.scope == "company" else None, reason=ctx.reason,
                       source_ref=ctx.source_ref, directive=ctx.directive_id,
                       idempotency_key=ctx.idempotency_key, dry_run=dry_run)
@@ -42,6 +42,8 @@ def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run):
     def authenticated(session):
         nonlocal permit
         cred.revalidate(session.hub)
+        if before_execute is not None:
+            before_execute(session)
         permit = PublicationPermit.capture(cmd, raw, ctx, session, cred, selector, source, dry_run)
         try:
             result = execute(cmd, raw, ctx, session, company_selector=selector, company_source=source, dry_run=dry_run)
