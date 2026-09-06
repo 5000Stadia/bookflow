@@ -1334,6 +1334,17 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
             source = hosted.ok(cmd.noun + ".query", {"limit": 1}, company=hosted.company_id)["items"][0]
             page = api.get(f"/c/{hosted.company_id}/{cmd.noun}/{source['id']}/{cmd.verb}")
             assert page.status_code == 200, (cmd.name, page.text[:300])
+            if cmd.verb in ("invoice", "sales-receipt"):
+                billing = hosted.ok(cmd.noun + ".billing", {
+                    cmd.noun.replace("-", "_"): source["id"],
+                }, company=hosted.company_id)
+                line_ids = sorted(line["line_id"] for line in billing["lines"])
+                assert page.text.count('name="billing-selection"') == 1, cmd.name
+                assert page.text.count('name="billing-percent"') == 1, cmd.name
+                for control in ("billing-line", "billing-mode", "billing-value"):
+                    rendered_ids = re.findall(rf'name="{control}:([^"]+)"', page.text)
+                    assert sorted(rendered_ids) == line_ids, (cmd.name, control)
+                    assert len(rendered_ids) == len(set(rendered_ids)), (cmd.name, control)
         definition = registry.noun_meta(cmd.noun).get("definition")
         for leaf in F.leaves(cmd.input_model):
             if leaf["path"] == "custom_fields" and (
@@ -1361,9 +1372,10 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
                 # Statement continuations belong to the result's Next form;
                 # rerunning the filter form must always start a fresh report.
                 assert 'name="f:cursor"' not in page.text, cmd.name
-            elif leaf["path"] == "line_ids" and cmd.noun in ("estimate", "work-order") and cmd.verb in ("invoice", "sales-receipt"):
-                assert 'name="billing-selection"' in page.text, cmd.name
-                assert 'name="f:line_ids"' not in page.text, cmd.name
+            elif leaf["path"] in ("line_ids", "selections", "percent") and cmd.noun in ("estimate", "work-order") and cmd.verb in ("invoice", "sales-receipt"):
+                # These shared inputs use the source-aware controls checked above.
+                assert f'name="f:{leaf["path"]}"' not in page.text, cmd.name
+                assert f'name="collection:{leaf["path"]}"' not in page.text, cmd.name
             elif leaf["kind"] == "collection":
                 assert page.text.count(
                     f'name="collection:{leaf["path"]}"'
