@@ -62,11 +62,12 @@ async def serve(inp, origin, secret, inputs, outputs):
             reference = None
             stage = "preflight"
 
-            def error_document(exc):
+            def error_document(exc, *, adapter_failure=False):
                 # A failed observation cannot establish that an earlier intent
                 # never executed. Keep that identity through every local failure.
                 known = reference or (delivery or {}).get("operation_ref")
-                exc.details.setdefault("stage", stage)
+                if known is not None or adapter_failure:
+                    exc.details.setdefault("stage", stage)
                 if known is not None:
                     from .responses import annotate
                     exc.details["outcome"] = "unknown"
@@ -125,9 +126,9 @@ async def serve(inp, origin, secret, inputs, outputs):
             except BookflowError as exc:
                 document, is_error = error_document(exc), True
             except httpx2.HTTPError:
-                document, is_error = error_document(BookflowError("E_IO", details={"operation": "mcp_result", "reason": "connection", "outcome": "unknown" if submitted else "not_submitted"})), True
+                document, is_error = error_document(BookflowError("E_IO", details={"operation": "mcp_result", "reason": "connection", "outcome": "unknown" if submitted else "not_submitted"}), adapter_failure=True), True
             except Exception:
-                document, is_error = error_document(BookflowError("E_IO", details={"operation": "mcp_result", "reason": "invalid_response", "outcome": "unknown" if submitted else "not_submitted"})), True
+                document, is_error = error_document(BookflowError("E_IO", details={"operation": "mcp_result", "reason": "invalid_response", "outcome": "unknown" if submitted else "not_submitted"}), adapter_failure=True), True
             try:
                 rendered = json.dumps(document, ensure_ascii=False, allow_nan=False)
                 content = [types.TextContent(text=rendered)]
@@ -136,11 +137,13 @@ async def serve(inp, origin, secret, inputs, outputs):
                 return types.CallToolResult(content=content, structured_content=document, is_error=is_error,
                                             meta={"bookflow_transport": delivery} if delivery else None)
             except Exception:
-                document = error_document(BookflowError("E_IO", details={"operation": "mcp_result", "reason": "serialization", "outcome": "unknown" if submitted else "not_submitted"}))
+                document = error_document(BookflowError("E_IO", details={"operation": "mcp_result", "reason": "serialization", "outcome": "unknown" if submitted else "not_submitted"}), adapter_failure=True)
                 return types.CallToolResult(content=[types.TextContent(text=json.dumps(document))], structured_content=document, is_error=True)
 
         server = Server("bookflow", version="0.0.1", on_list_tools=list_tools, on_call_tool=call_tool)
+        from .stdio import eof_fenced_streams
         async with stdio_server() as (read, write):
+            read, write = eof_fenced_streams(read, write)
             await server.run(read, write, server.create_initialization_options())
 
 
