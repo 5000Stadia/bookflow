@@ -126,7 +126,12 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
 def show(s, inp, document_type):
     header = resolve(s, getattr(inp, document_type), document_type)
     revision = journals.revision(s, header, inp.revision_number)
-    return SalesOutput(**summary(header, revision, profile_row(s, revision)), revision=revision_output(s, revision))
+    settlement = None
+    if document_type == 'invoice' and s.company.conn.execute(sa.select(c.applications.c.id).where(
+            c.applications.c.paid_transaction_id == header['id']).limit(1)).first():
+        from bookflow.company.payment_queries import invoice_current
+        settlement = invoice_current(s, header['id'])
+    return SalesOutput(**summary(header, revision, profile_row(s, revision)), revision=revision_output(s, revision), settlement_current=settlement)
 
 
 def page(s, ctx, inp, document_type, *, history=False):
@@ -353,6 +358,13 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None):
     old_header = resolve(s, getattr(inp, document_type), document_type) if operation != 'post' else None
     old_revision = journals.revision(s, old_header) if old_header else None
     meta = _version(s, old_header, inp.expected_version) if old_header else None
+    if document_type == 'invoice' and old_header:
+        from bookflow.company.payment_queries import active_applications
+        if active_applications(s, invoice=old_header['id']):
+            # Gate A protects settlement capacity until the coordinated
+            # correction/restatement path supplies all dependent versions.
+            raise BookflowError('E_HAS_APPLICATIONS', details={'invoice_id': old_header['id'],
+                'next': 'Inspect invoice settlement dependencies before correcting or voiding.'})
     warnings = [w] if meta and (w := list_service.blind_write_warning(meta)) else []
     if operation == 'void':
         if not ctx.reason or not ctx.reason.strip():

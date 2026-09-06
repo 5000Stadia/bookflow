@@ -260,7 +260,7 @@ def open_company(s: Session, ctx: Context, writable: bool) -> None:
     """Open the selected company database, completing pending moves on writable opens."""
     row = s.company_row
     assert row is not None and s.hub is not None
-    path = resolve_company_folder(s, ctx, row, s.hub.writable)
+    path = resolve_company_folder(s, ctx, row, writable and s.hub.writable)
     db_path = path / "company.db"
     if not db_path.exists():
         raise BookflowError("E_COMPANY_MISSING", details={"company_id": row["id"], "check": "database", "path": str(db_path)})
@@ -380,10 +380,21 @@ def execute(cmd: Command, raw_input: dict[str, Any], ctx: Context, s: Session, *
             raise BookflowError("E_USAGE", message=f"`{cmd.name}` is not a company-scoped command; --company does not apply.")
         inp = validate_input(cmd, raw_input)
         validate_context(ctx)
+        recovered = _permanent_recovery(cmd, inp, ctx, s, company_selector, company_source, dry_run)
+        if recovered is not None:
+            return recovered
+        if cmd.permanent_recovery is not None and not dry_run and not s.hub.writable:
+            # Offline recovery first opens the hub without writable pragmas or
+            # migrations. Only a miss enters the ordinary writable path.
+            s.close_company()
+            s._hub_cm.__exit__(None, None, None)
+            s._hub_cm = None
+            _open_hub(s, True, ctx)
+            _migrate_hub(s, ctx)
         if s.hub is not None and s.hub.writable and not dry_run:
             s.config.flush_pending(s.hub)
             _complete_pending_organizations(s, ctx)
-        return run_in_session(cmd, inp, ctx, s, company_selector=company_selector, company_source=company_source, dry_run=dry_run)
+        return run_in_session(cmd, inp, ctx, s, company_selector=company_selector, company_source=company_source, dry_run=dry_run, _recovery_checked=True)
     with performance.span("command.execute", command=cmd.name):
         return guard(body, s.is_hub_admin)
 
@@ -449,6 +460,8 @@ def _run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: st
             try:
                 s.config = Config.load(s.data_root / "config.toml")
                 needs_hub_write = (bool(cmd.writes & {"hub", "config"}) or cmd.kind == "advisory" or (cmd.scope == "company" and "company" in cmd.writes)) and not dry_run
+                if cmd.permanent_recovery is not None:
+                    needs_hub_write = False
                 _open_hub(s, needs_hub_write, ctx, skip_head_check=(dry_run and cmd.name == "upgrade"))
                 _load_actor(s)
                 ctx2 = ctx.model_copy(update={"actor_id": s.actor.id, "actor_kind": ActorKind(s.actor.kind)})
@@ -461,7 +474,8 @@ def _run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: st
 
 
 def authorize(cmd: Command, ctx: Context, s: Session, *, company_selector: str | None = None,
-              company_source: str = "option", dry_run: bool = False, read_only: bool = False) -> Context:
+              company_source: str = "option", dry_run: bool = False, read_only: bool = False,
+              _recovery_only: bool = False) -> Context:
     """Shared company, role, directive and reason checks, with optional read-only opening."""
     if cmd.scope == "company":
         if s.company_row is None or (company_selector is not None):
@@ -479,6 +493,10 @@ def authorize(cmd: Command, ctx: Context, s: Session, *, company_selector: str |
             open_company(s, ctx, "company" in cmd.writes and not dry_run and not read_only)
     elif cmd.required_role == "hub_admin" and not s.is_hub_admin:
         raise BookflowError("E_PERMISSION", details={"capability": cmd.capability, "required_role": "hub_admin"})
+    if _recovery_only:
+        if cmd.permanent_recovery is None or not read_only:
+            raise BookflowError('E_INTERNAL', message='Invalid permanent recovery authorization route')
+        return ctx
     # directive resolution and the reason gate (blueprint 5.8)
     s.directive_code = None
     if ctx.directive_id:
@@ -495,12 +513,45 @@ def authorize(cmd: Command, ctx: Context, s: Session, *, company_selector: str |
     return ctx
 
 
+def _permanent_recovery(cmd, inp, ctx, s, selector, source, dry_run):
+    if cmd.permanent_recovery is None:
+        return None
+    recovered_ctx = authorize(cmd, ctx, s, company_selector=selector, company_source=source,
+                              dry_run=dry_run, read_only=True, _recovery_only=True)
+    from bookflow.core.registry import MatchedRecovery
+    try:
+        result = cmd.permanent_recovery(inp, recovered_ctx, s)
+        if result is None:
+            return None
+        if not isinstance(result, MatchedRecovery):
+            raise BookflowError('E_INTERNAL', message='Permanent recovery returned an invalid match')
+        if ctx.idempotency_key:
+            from bookflow.core import idempotency
+            # Keep the additional generic key's full-request mismatch rule;
+            # lookup itself neither prunes nor writes its 30-day cache.
+            idempotency.lookup(s.company, s.actor.id, ctx.idempotency_key, cmd.name,
+                idempotency.input_hash(inp.model_dump(mode='json'), s.company_row['id']))
+        output = result.output.model_dump(mode='json')
+        output['idempotent_replay'] = True
+        if dry_run:
+            output['dry_run'] = True
+        return redact_paths(output, s.is_hub_admin)
+    finally:
+        # A miss reopens through ordinary authorization and write maintenance.
+        # Never upgrade this read handle in place or run a write finalizer here.
+        s.close_company()
+
+
 def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, company_selector: str | None = None,
-                   company_source: str = "option", dry_run: bool = False) -> dict[str, Any]:
+                   company_source: str = "option", dry_run: bool = False, _recovery_checked: bool = False) -> dict[str, Any]:
     """Run a command inside an open, locked session with a loaded actor. Used by run(), demo reset, and later the host."""
     from bookflow.core import idempotency
     s.dry_run = dry_run
     s.hub_touched, s.company_touched = [], []
+    if not _recovery_checked:
+        recovered = _permanent_recovery(cmd, inp, ctx, s, company_selector, company_source, dry_run)
+        if recovered is not None:
+            return recovered
     ctx = authorize(cmd, ctx, s, company_selector=company_selector,
                     company_source=company_source, dry_run=dry_run)
     if cmd.authorize_input is not None:

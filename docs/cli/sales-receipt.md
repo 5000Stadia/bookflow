@@ -174,7 +174,7 @@ Example JSON output:
 
 ## `sales-receipt post`
 
-Post a home-currency service sale with captured commercial facts and typed custom fields; dry-run previews defaults, which resolve atomically at execution unless expected_facts_fingerprint is supplied. Paying an existing invoice requires the upcoming customer-payment operation.
+Post a home-currency service sale with captured commercial facts and typed custom fields; dry-run previews defaults, which resolve atomically at execution unless expected_facts_fingerprint is supplied. Use payment receive or payment apply to settle an existing invoice.
 
 | Contract | Value |
 |---|---|
@@ -687,6 +687,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `settlement_current` | object \| null | no | yes | null | — |
+| `settlement_current.invoice_id` | string | yes | no | — | — |
+| `settlement_current.version` | integer | yes | no | — | — |
+| `settlement_current.revision_id` | string | yes | no | — | — |
+| `settlement_current.gross_minor_units` | integer | yes | no | — | — |
+| `settlement_current.applied_minor_units` | integer | yes | no | — | — |
+| `settlement_current.due_minor_units` | integer | yes | no | — | — |
+| `settlement_current.currency` | string | yes | no | — | — |
+| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
 | `source_effect` | object \| null | no | yes | null | — |
 | `source_effect.source_id` | string | yes | no | — | — |
 | `source_effect.source_kind` | literal["estimate", "work_order"] | yes | no | — | — |
@@ -925,6 +934,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
@@ -1546,6 +1556,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `settlement_current` | object \| null | no | yes | null | — |
+| `settlement_current.invoice_id` | string | yes | no | — | — |
+| `settlement_current.version` | integer | yes | no | — | — |
+| `settlement_current.revision_id` | string | yes | no | — | — |
+| `settlement_current.gross_minor_units` | integer | yes | no | — | — |
+| `settlement_current.applied_minor_units` | integer | yes | no | — | — |
+| `settlement_current.due_minor_units` | integer | yes | no | — | — |
+| `settlement_current.currency` | string | yes | no | — | — |
+| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
 
 Example JSON output:
 
@@ -2236,6 +2255,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `settlement_current` | object \| null | no | yes | null | — |
+| `settlement_current.invoice_id` | string | yes | no | — | — |
+| `settlement_current.version` | integer | yes | no | — | — |
+| `settlement_current.revision_id` | string | yes | no | — | — |
+| `settlement_current.gross_minor_units` | integer | yes | no | — | — |
+| `settlement_current.applied_minor_units` | integer | yes | no | — | — |
+| `settlement_current.due_minor_units` | integer | yes | no | — | — |
+| `settlement_current.currency` | string | yes | no | — | — |
+| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
 | `source_effect` | object \| null | no | yes | null | — |
 | `source_effect.source_id` | string | yes | no | — | — |
 | `source_effect.source_kind` | literal["estimate", "work_order"] | yes | no | — | — |
@@ -2474,6 +2502,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
@@ -2967,6 +2996,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `settlement_current` | object \| null | no | yes | null | — |
+| `settlement_current.invoice_id` | string | yes | no | — | — |
+| `settlement_current.version` | integer | yes | no | — | — |
+| `settlement_current.revision_id` | string | yes | no | — | — |
+| `settlement_current.gross_minor_units` | integer | yes | no | — | — |
+| `settlement_current.applied_minor_units` | integer | yes | no | — | — |
+| `settlement_current.due_minor_units` | integer | yes | no | — | — |
+| `settlement_current.currency` | string | yes | no | — | — |
+| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
 | `source_effect` | object \| null | no | yes | null | — |
 | `source_effect.source_id` | string | yes | no | — | — |
 | `source_effect.source_kind` | literal["estimate", "work_order"] | yes | no | — | — |
@@ -3205,6 +3243,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |

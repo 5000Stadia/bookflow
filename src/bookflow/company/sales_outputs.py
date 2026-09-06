@@ -1,6 +1,6 @@
 """Commercial sales results shared by all command adapters."""
 from typing import Literal
-from pydantic import Field
+from pydantic import Field, model_serializer
 
 from bookflow.commands.common import CommonOut
 from bookflow.company.journal_custom_fields import SnapshotField
@@ -9,6 +9,7 @@ from bookflow.company.sales_facts import SalesProfile, SalesLineProfile, SalesTa
 from bookflow.company.sales_models import StrictModel
 from bookflow.company.billing_facts import AllocationProof, ExactFraction
 from bookflow.core.models import WriteOutput
+from bookflow.company.payment_outputs import InvoiceSettlementOutput
 
 MoneyOutput = JournalMoneyOutput
 
@@ -138,6 +139,14 @@ class SalesSummaryOutput(CommonOut):
 
 class SalesOutput(SalesSummaryOutput):
     revision: SalesRevisionOutput
+    settlement_current: InvoiceSettlementOutput | None = None
+
+    @model_serializer(mode='wrap')
+    def compatible_settlement(self, handler):
+        result = handler(self)
+        if self.settlement_current is None:
+            result.pop('settlement_current', None)
+        return result
 
 
 class BillingProgressAmount(StrictModel):

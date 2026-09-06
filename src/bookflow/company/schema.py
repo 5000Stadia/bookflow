@@ -202,6 +202,9 @@ company_info = _table(
     _column("estimates_enabled", sa.Boolean, "Enable new estimates; existing estimate workflows remain available.", nullable=False, server_default="1"),
     _column("progress_billing_enabled", sa.Boolean, "Enable partial quantity, amount, percentage and exact rebill selections.", nullable=False, server_default="1"),
     _column("close_estimates_after_billing", sa.Boolean, "Make estimates inactive after final positive net billing, effective only with progress billing disabled.", nullable=False, server_default="0"),
+    _column("automatically_apply_payments", sa.Boolean, "Suggest exact-match then oldest invoice allocations for new cash.", nullable=False, server_default="0"),
+    _column("automatically_calculate_payments", sa.Boolean, "Derive amounts for selected invoices while preserving explicitly entered cash.", nullable=False, server_default="0"),
+    _column("use_undeposited_funds_for_payments", sa.Boolean, "Default new receipts to Undeposited Funds unless explicitly overridden.", nullable=False, server_default="1"),
     description="Authoritative company identity, contact, calendar, currency, and accounting settings.",
 )
 
@@ -1066,3 +1069,7 @@ globals().update(_define_work_tables(metadata, _column, _table, _common))
 from bookflow.company.billing_schema import define_tables as _define_billing_tables
 
 globals().update(_define_billing_tables(metadata, _column, _table))
+
+from bookflow.company.payment_schema import define_tables as _define_payment_tables
+
+globals().update(_define_payment_tables(metadata, _column, _table, _common))

@@ -2213,6 +2213,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `settlement_current` | object \| null | no | yes | null | — |
+| `settlement_current.invoice_id` | string | yes | no | — | — |
+| `settlement_current.version` | integer | yes | no | — | — |
+| `settlement_current.revision_id` | string | yes | no | — | — |
+| `settlement_current.gross_minor_units` | integer | yes | no | — | — |
+| `settlement_current.applied_minor_units` | integer | yes | no | — | — |
+| `settlement_current.due_minor_units` | integer | yes | no | — | — |
+| `settlement_current.currency` | string | yes | no | — | — |
+| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
 | `source_effect` | object \| null | no | yes | null | — |
 | `source_effect.source_id` | string | yes | no | — | — |
 | `source_effect.source_kind` | literal["estimate", "work_order"] | yes | no | — | — |
@@ -3106,6 +3115,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `settlement_current` | object \| null | no | yes | null | — |
+| `settlement_current.invoice_id` | string | yes | no | — | — |
+| `settlement_current.version` | integer | yes | no | — | — |
+| `settlement_current.revision_id` | string | yes | no | — | — |
+| `settlement_current.gross_minor_units` | integer | yes | no | — | — |
+| `settlement_current.applied_minor_units` | integer | yes | no | — | — |
+| `settlement_current.due_minor_units` | integer | yes | no | — | — |
+| `settlement_current.currency` | string | yes | no | — | — |
+| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
 | `source_effect` | object \| null | no | yes | null | — |
 | `source_effect.source_id` | string | yes | no | — | — |
 | `source_effect.source_kind` | literal["estimate", "work_order"] | yes | no | — | — |

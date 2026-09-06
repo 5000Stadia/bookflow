@@ -12,11 +12,12 @@ Database: `company`.
 | `created_at` | VARCHAR(32) | no | — | — | — | — | UTC time this history record was written. |
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Company principal that wrote this history record. |
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface that wrote this history record. |
-| `transaction_id` | VARCHAR(26) | no | — | unique with transaction_id + id | — | document_lines.transaction_id, posting_line_sources.transaction_id, posting_lines.transaction_id, sales_tax_components.transaction_id | Stable document owning this source attribution. |
+| `transaction_id` | VARCHAR(26) | no | — | unique with transaction_id + id | — | document_lines.transaction_id, payment_components.transaction_id, posting_line_sources.transaction_id, posting_lines.transaction_id, sales_tax_components.transaction_id | Stable document owning this source attribution. |
 | `posting_line_id` | VARCHAR(26) | no | — | — | ix_posting_sources_line | posting_lines.id | Posting line receiving this attributed amount. |
-| `revision_id` | VARCHAR(26) | no | — | — | — | document_lines.revision_id, sales_tax_components.revision_id | Exact immutable source revision. |
-| `document_line_id` | VARCHAR(26) | no | — | — | ix_posting_sources_document_line | document_lines.id, sales_tax_components.document_line_id | Revision-local entered line that produced this effect. |
+| `revision_id` | VARCHAR(26) | no | — | — | — | document_lines.revision_id, payment_components.revision_id, sales_tax_components.revision_id | Exact immutable source revision. |
+| `document_line_id` | VARCHAR(26) | no | — | — | ix_posting_sources_document_line | document_lines.id, payment_components.document_line_id, sales_tax_components.document_line_id | Revision-local entered line that produced this effect. |
 | `amount_minor_units` | BIGINT | no | — | — | — | — | Positive home amount attributed to the entered source line. |
 | `currency` | VARCHAR(3) | no | — | — | — | — | Home currency of this attributed amount. |
 | `reversed_source_id` | VARCHAR(26) | yes | — | unique | — | posting_line_sources.id | Exactly retained attribution from an inverted posting line. |
 | `tax_component_id` | VARCHAR(26) | yes | — | — | — | sales_tax_components.id | Exact sale tax component; null for journal or sale net attribution. |
+| `payment_component_id` | VARCHAR(26) | yes | — | — | — | payment_components.id | Exact owned payment revision component; null for all earlier document types. |

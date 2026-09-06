@@ -20,7 +20,7 @@ def _write(document_type, verb, model):
 
     cmd = command(
         noun + ' ' + verb, scope='company', description={
-            'post': 'Post a home-currency service sale with captured commercial facts and typed custom fields; dry-run previews defaults, which resolve atomically at execution unless expected_facts_fingerprint is supplied. Paying an existing invoice requires the upcoming customer-payment operation.',
+            'post': 'Post a home-currency service sale with captured commercial facts and typed custom fields; dry-run previews defaults, which resolve atomically at execution unless expected_facts_fingerprint is supplied. Use payment receive or payment apply to settle an existing invoice.',
             'update': 'Append an immutable sale correction with an exact old-date reversal and a full new-date replacement; dry-run previews resolved facts for optional expected_facts_fingerprint verification.',
             'void': 'Void a sale with a required context reason and an exact reversal at its current accounting date.',
         }[verb] + (' A gross-changing receipt with linked-work history requires amount_received equal to the new gross; any supplied amount_received must match.'
@@ -31,7 +31,7 @@ def _write(document_type, verb, model):
         version_source=None if verb == 'post' else (noun + ' show', document_type, 'version'),
         error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_PERIOD_CLOSED',
                      'E_DUPLICATE_NUMBER', 'E_INACTIVE_REFERENCE', 'E_VALUE_RANGE',
-                     'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED']
+                     'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED', 'E_HAS_APPLICATIONS']
                     + (['E_PREVIEW_STALE', 'E_WORK_DEPENDENCY'] if verb != 'void' else ['E_WORK_DEPENDENCY']),
     )(planner)
     if verb != 'post':

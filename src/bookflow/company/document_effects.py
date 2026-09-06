@@ -12,7 +12,12 @@ def rows(s, table, *where, order=None):
     query = sa.select(table).where(*where)
     if order is not None:
         query = query.order_by(order)
-    return [dict(row) for row in s.company.conn.execute(query).mappings()]
+    values = [dict(row) for row in s.company.conn.execute(query).mappings()]
+    if table is c.posting_line_sources:
+        for row in values:
+            if row.get('payment_component_id') is None:
+                row.pop('payment_component_id', None)
+    return values
 
 
 def allocate(s, document_type, explicit, own=None):
@@ -45,6 +50,10 @@ def reverse(s, header, revision, current_batch, event, created, pending):
             credit_minor_units=leg['debit_minor_units'], reversed_line_id=leg['id'])
         pending['posting_lines'].append(new)
         for source in rows(s, c.posting_line_sources, c.posting_line_sources.c.posting_line_id == leg['id']):
+            # Preserve pre-payment source shape in old document audit/replay
+            # facts and in mixed inverse/replacement bulk insert parameters.
+            if source.get('payment_component_id') is None:
+                source.pop('payment_component_id', None)
             pending['posting_line_sources'].append(dict(source, **created(), posting_line_id=new['id'],
                 reversed_source_id=source['id']))
     return inverse

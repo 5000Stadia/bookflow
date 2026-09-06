@@ -406,6 +406,9 @@ class CompanyNewInput(BaseModel):
     estimates_enabled: bool = Field(True, strict=True, description="Enable new estimates; existing estimate workflows remain available")
     progress_billing_enabled: bool = Field(True, strict=True, description="Enable partial work billing; disabling retains remaining-line and bounded recovery billing")
     close_estimates_after_billing: bool = Field(False, strict=True, description="Make estimates inactive after final positive net billing; effective only while progress billing is disabled")
+    automatically_apply_payments: bool = Field(False, strict=True, description="Suggest exact-match then oldest invoice allocations for new cash")
+    automatically_calculate_payments: bool = Field(False, strict=True, description="Calculate selected invoice amounts while preserving entered cash")
+    use_undeposited_funds_for_payments: bool = Field(True, strict=True, description="Default receipts to Undeposited Funds unless explicitly overridden")
 
     @field_validator("display_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "organization", "free_on_board", mode="before")
     @classmethod
@@ -499,6 +502,9 @@ def _info_columns(inp: CompanyNewInput) -> dict[str, Any]:
         "estimates_enabled": inp.estimates_enabled,
         "progress_billing_enabled": inp.progress_billing_enabled,
         "close_estimates_after_billing": inp.close_estimates_after_billing,
+        "automatically_apply_payments": inp.automatically_apply_payments,
+        "automatically_calculate_payments": inp.automatically_calculate_payments,
+        "use_undeposited_funds_for_payments": inp.use_undeposited_funds_for_payments,
     }
     for prefix, a in (("address", addr), ("legal_address", legal), ("ship_address", ship)):
         for f in ("line1", "line2", "city", "state", "postal_code", "country"):

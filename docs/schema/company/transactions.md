@@ -16,7 +16,7 @@ Database: `company`.
 | `updated_at` | VARCHAR(32) | no | — | — | — | — | UTC timestamp of the latest update to this record. |
 | `updated_by` | VARCHAR(26) | no | — | — | — | — | User id recorded for the latest update to this record. |
 | `updated_via` | VARCHAR(16) | no | — | — | — | — | Interface recorded for the latest update to this record. |
-| `type` | VARCHAR(32) | no | — | unique with id + type, unique with type + number | — | — | Business document type: journal_entry, invoice or sales_receipt. |
+| `type` | VARCHAR(32) | no | — | unique with id + type, unique with type + number | — | — | Business document type: journal_entry, invoice, sales_receipt or payment. |
 | `number` | VARCHAR(64) | no | — | unique with type + number | ix_transactions_status_number | — | Unique editable number within the document type. |
 | `current_revision_id` | VARCHAR(26) | no | — | — | — | transaction_revisions.id | Immutable revision currently displayed. |
 | `status` | VARCHAR(16) | no | — | — | ix_transactions_status_number | — | Current workflow state: posted or voided. |

@@ -44,6 +44,12 @@ class Applied:
 
 
 @dataclass(frozen=True)
+class MatchedRecovery:
+    """Currently authorized exact permanent recovery; no write pipeline runs."""
+    output: BaseModel
+
+
+@dataclass(frozen=True)
 class TransferDescriptor:
     """One out-of-band body and an authorization-time business preparation callback."""
 
@@ -83,6 +89,7 @@ class Command:
     transfer: TransferDescriptor | None = None
     authorization: str | None = None  # exact human-readable rule when required_role alone cannot express it
     replay: Callable[..., dict[str, Any]] | None = None  # read-only refresh after normal authorization and matching request-cache lookup
+    permanent_recovery: Callable[..., MatchedRecovery | None] | None = None  # narrowly opted-in exact recovery before new-write reason/directive gates
 
     resource_requirements: tuple[tuple[str, str], ...] = ()  # additional (capability, role) checks
     authorize_input: Callable[..., None] | None = None  # conditional resources, before replay or plan
@@ -224,6 +231,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.attachment_cmds": ["attachment"],
     "bookflow.commands.journal_cmds": ["journal"],
     "bookflow.commands.sales_cmds": ["invoice", "sales-receipt"],
+    "bookflow.commands.payment_cmds": ["payment", "payment selection", "invoice settlement"],
     "bookflow.commands.work_cmds": ["proposal", "estimate", "work-order"],
     "bookflow.commands.billing_cmds": ["estimate", "work-order"],
     "bookflow.commands.register_cmds": ["register"],

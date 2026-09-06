@@ -174,7 +174,7 @@ Example JSON output:
 
 ## `invoice post`
 
-Post a home-currency service sale with captured commercial facts and typed custom fields; dry-run previews defaults, which resolve atomically at execution unless expected_facts_fingerprint is supplied. Paying an existing invoice requires the upcoming customer-payment operation.
+Post a home-currency service sale with captured commercial facts and typed custom fields; dry-run previews defaults, which resolve atomically at execution unless expected_facts_fingerprint is supplied. Use payment receive or payment apply to settle an existing invoice.
 
 | Contract | Value |
 |---|---|
@@ -687,6 +687,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `settlement_current` | object \| null | no | yes | null | — |
+| `settlement_current.invoice_id` | string | yes | no | — | — |
+| `settlement_current.version` | integer | yes | no | — | — |
+| `settlement_current.revision_id` | string | yes | no | — | — |
+| `settlement_current.gross_minor_units` | integer | yes | no | — | — |
+| `settlement_current.applied_minor_units` | integer | yes | no | — | — |
+| `settlement_current.due_minor_units` | integer | yes | no | — | — |
+| `settlement_current.currency` | string | yes | no | — | — |
+| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
 | `source_effect` | object \| null | no | yes | null | — |
 | `source_effect.source_id` | string | yes | no | — | — |
 | `source_effect.source_kind` | literal["estimate", "work_order"] | yes | no | — | — |
@@ -925,6 +934,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
@@ -1081,6 +1091,108 @@ Example JSON output:
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
+## `invoice settlement`
+
+Show current invoice gross, applied and due with separate concurrency and commercial revision identities.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | ledger.read |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/invoice.settlement` |
+| External binary body | none |
+
+### CLI
+
+`bookflow invoice settlement 01ARZ3NDEKTSV4RRFFQ69G5FAV --company 'Demo Plumbing Co' --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `invoice` | `INVOICE` | string | yes | no | — | minimum length 1; maximum length 1004 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/invoice.settlement`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `invoice_id` | string | yes | no | — | — |
+| `version` | integer | yes | no | — | — |
+| `revision_id` | string | yes | no | — | — |
+| `gross_minor_units` | integer | yes | no | — | — |
+| `applied_minor_units` | integer | yes | no | — | — |
+| `due_minor_units` | integer | yes | no | — | — |
+| `currency` | string | yes | no | — | — |
+| `status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "applied_minor_units": 1,
+  "currency": "USD",
+  "due_minor_units": 1,
+  "gross_minor_units": 1,
+  "invoice_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "status": "unpaid",
+  "version": 1
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
@@ -1546,6 +1658,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `settlement_current` | object \| null | no | yes | null | — |
+| `settlement_current.invoice_id` | string | yes | no | — | — |
+| `settlement_current.version` | integer | yes | no | — | — |
+| `settlement_current.revision_id` | string | yes | no | — | — |
+| `settlement_current.gross_minor_units` | integer | yes | no | — | — |
+| `settlement_current.applied_minor_units` | integer | yes | no | — | — |
+| `settlement_current.due_minor_units` | integer | yes | no | — | — |
+| `settlement_current.currency` | string | yes | no | — | — |
+| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
 
 Example JSON output:
 
@@ -2235,6 +2356,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `settlement_current` | object \| null | no | yes | null | — |
+| `settlement_current.invoice_id` | string | yes | no | — | — |
+| `settlement_current.version` | integer | yes | no | — | — |
+| `settlement_current.revision_id` | string | yes | no | — | — |
+| `settlement_current.gross_minor_units` | integer | yes | no | — | — |
+| `settlement_current.applied_minor_units` | integer | yes | no | — | — |
+| `settlement_current.due_minor_units` | integer | yes | no | — | — |
+| `settlement_current.currency` | string | yes | no | — | — |
+| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
 | `source_effect` | object \| null | no | yes | null | — |
 | `source_effect.source_id` | string | yes | no | — | — |
 | `source_effect.source_kind` | literal["estimate", "work_order"] | yes | no | — | — |
@@ -2473,6 +2603,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |
@@ -2966,6 +3097,15 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `settlement_current` | object \| null | no | yes | null | — |
+| `settlement_current.invoice_id` | string | yes | no | — | — |
+| `settlement_current.version` | integer | yes | no | — | — |
+| `settlement_current.revision_id` | string | yes | no | — | — |
+| `settlement_current.gross_minor_units` | integer | yes | no | — | — |
+| `settlement_current.applied_minor_units` | integer | yes | no | — | — |
+| `settlement_current.due_minor_units` | integer | yes | no | — | — |
+| `settlement_current.currency` | string | yes | no | — | — |
+| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
 | `source_effect` | object \| null | no | yes | null | — |
 | `source_effect.source_id` | string | yes | no | — | — |
 | `source_effect.source_kind` | literal["estimate", "work_order"] | yes | no | — | — |
@@ -3204,6 +3344,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |

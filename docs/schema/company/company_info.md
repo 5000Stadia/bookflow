@@ -73,3 +73,6 @@ Database: `company`.
 | `estimates_enabled` | BOOLEAN | no | — | — | — | — | Enable new estimates; existing estimate workflows remain available. |
 | `progress_billing_enabled` | BOOLEAN | no | — | — | — | — | Enable partial quantity, amount, percentage and exact rebill selections. |
 | `close_estimates_after_billing` | BOOLEAN | no | — | — | — | — | Make estimates inactive after final positive net billing, effective only with progress billing disabled. |
+| `automatically_apply_payments` | BOOLEAN | no | — | — | — | — | Suggest exact-match then oldest invoice allocations for new cash. |
+| `automatically_calculate_payments` | BOOLEAN | no | — | — | — | — | Derive amounts for selected invoices while preserving explicitly entered cash. |
+| `use_undeposited_funds_for_payments` | BOOLEAN | no | — | — | — | — | Default new receipts to Undeposited Funds unless explicitly overridden. |

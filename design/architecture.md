@@ -2,6 +2,38 @@
 
 What is built, module by module: package skeleton, registry, data root, hub, organizations, companies, demo, CLI, company audit, versioned writes, presence, idempotency, directives, record notes, the event feed, the host process, HTTP routes, tokens, the POSIX local hand-off, the workbench, immutable domestic journals, accrual trial balance and general ledger reports, and generated command and schema documentation.
 
+## Row22 receipt increment (implementation candidate)
+
+The co0014 migration preserves existing raw rows and local schema extensions while
+adding payment preferences, immutable payment components, applications and allocation
+evidence, durable operation recovery, and shared selection history. Its frozen DDL
+and guards are independent of current metadata. `payment_schema.py` and
+`payment_guards.py` describe the current model; `payment_validation.py` independently
+checks positive monetary legs, exact-party capacity, attribution and proportional
+allocation before persistence.
+
+`payment_calculations.py` owns integer allocation and entered/calculated draft
+semantics. `payment_selection.py` persists reusable drafts without financial effects;
+`payment_preparation.py` discovers invoices and exposes separately labelled payer
+and family net AR. Page bounds limit delivery, not the size of one remittance.
+`payments.py` implements receipt creation and application of existing exact-party
+credit. Settlement-only header changes retain commercial revisions and postings.
+`payment_pages.py` recomputes prospective pages from the original typed intent and
+facts fingerprint, and reads immutable committed operation items.
+
+`payment_operations.py` and the narrow `Command.permanent_recovery` dispatch hook
+recover an authorized exact permanent retry before the new-write reason gate,
+without writing presence, provenance or financial state. `payment_authority.py`
+uses existing permissions for the complete historical payment/work graph and
+composite audit evidence. CLI commands share these models and services; no adapter
+implements separate accounting behavior.
+
+This increment does not complete Row22. Coordinated payment/invoice corrections,
+unapply/void, dated settlement history and complete recovery guards remain in the
+next financial increment. Until coordinated restatement is implemented, invoice
+correction rejects active applications explicitly. GUI controls, active examples,
+and integrated HTTP/MCP and blind-user acceptance remain required subsequent gates.
+
 ## Layout
 
 ```
