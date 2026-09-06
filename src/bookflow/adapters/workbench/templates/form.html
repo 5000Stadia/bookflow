@@ -43,11 +43,22 @@
 </div>
 {% endmacro %}
 
+{% macro math_attrs(control, name) %}
+{% set math = control.math or {} %}
+{% if math %}
+{% if math.scale is defined %} data-math-scale="{{ math.scale }}"{% endif %}
+{% if math.currency %} data-math-currency="{{ math.currency }}"{% if noun == 'price-level' %} data-math-currency-field="f:currency"{% endif %}{% endif %}
+ data-math-clear="clear:{{ name[2:] if name.startswith('f:') else name }}"
+{% if math.active %} data-math-active='{{ math.active | tojson }}'{% endif %}
+{% if name.startswith('c:lines:') and sales_form %} data-math-line-field="{{ control.name }}" data-math-price-mode="price-mode:{{ name[2:].rsplit(':', 1)[0] }}" data-math-defaults-prefix="c:{{ name[2:].rsplit(':', 1)[0] }}:use_defaults:"{% endif %}
+{% endif %}
+{% endmacro %}
+
 {% macro collection_scalar(control, name, cur, id) %}
 {% if control.reference %}{{ reference_control(control.reference, name, cur, id, reference_values.get(name), not control.required) }}
 {% elif control.kind == "choice" %}<select id="{{ id }}" name="{{ name }}"><option value="">(choose)</option>{% for choice in control.choices %}<option value="{{ choice }}"{% if cur == choice %} selected{% endif %}>{{ choice }}</option>{% endfor %}</select>
 {% elif control.kind == "bool" %}<select id="{{ id }}" name="{{ name }}"><option value="unset">(unset)</option><option value="true"{% if cur == true or cur == "true" %} selected{% endif %}>true</option><option value="false"{% if cur == false or cur == "false" %} selected{% endif %}>false</option></select>
-{% else %}<input id="{{ id }}" name="{{ name }}" value="{{ cur if cur is not none else '' }}"{% if control.kind == "number" %} inputmode="numeric"{% endif %}>{% endif %}
+{% else %}<input id="{{ id }}" name="{{ name }}" value="{{ cur if cur is not none else '' }}"{{ math_attrs(control, name) }}{% if control.math %} inputmode="decimal"{% elif control.kind == "number" %} inputmode="numeric"{% endif %}>{% endif %}
 {% if sales_form and control.name in ('description', 'unit', 'class_id', 'tax_code', 'price_level', 'estimated_unit_cost') %}<label class="clear-control"><input type="checkbox" name="clear:{{ name }}" value="1"{% if attempted.get('clear:' ~ name) == '1' %} checked{% endif %}> Clear {{ control.name.replace('_', ' ') }}</label>{% endif %}
 {% endmacro %}
 
@@ -128,8 +139,8 @@
 {% if cur not in (true, false, 'true', 'false') %}<option value="{{ cur if cur is not none else 'unset' }}" selected>{{ cur if cur is not none else '(choose)' }}</option>{% endif %}
 <option value="true"{% if cur is sameas true or cur == 'true' %} selected{% endif %}>true</option><option value="false"{% if cur is sameas false or cur == 'false' %} selected{% endif %}>false</option>
 {% endif %}</select>
-{% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"{% if l.date_input %} type="date"{% elif l.wire_kind == 'number' %} inputmode="decimal"{% endif %}>{% endif %}
-{% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}" {% if l.kind == "number" %}inputmode="numeric"{% endif %}>{% endif %}
+{% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"{% if l.date_input %} type="date"{% elif l.wire_kind == 'number' %} inputmode="decimal" data-math-scale="9" data-math-active='{{ [{"name": "cf-state:" ~ l.definition_id, "values": ["set"]}] | tojson }}' data-math-clear="clear:custom_fields.{{ l.definition_id }}"{% endif %}>{% endif %}
+{% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"{{ math_attrs(l, form_name) }} {% if l.math %}inputmode="decimal"{% elif l.kind == "number" %}inputmode="numeric"{% endif %}>{% endif %}
 </div>
 <span>{% if cmd.clearable and not l.runtime and l.nullable and l.kind != "json" and not (noun == 'journal' and l.path == 'rate') %}<label class="clear-control"><input type="checkbox" name="clear:{{ l.path }}" value="1" {% if attempted.get("clear:" ~ l.path) == "1" %}checked{% endif %}> clear</label>{% endif %}</span>
 </div>
@@ -140,7 +151,7 @@
 {% if sales_form and noun in ('invoice', 'sales-receipt') and verb == 'update' %}<p id="ordinary-lines">Additional entries are independent ordinary sale lines. Preview and save this correction separately; for a paid receipt, review the received-total requirement below.</p>{% endif %}
 {% if noun == 'sales-receipt' and verb == 'update' %}<section class="workspace-card" aria-label="Receipt correction payment">
 <label for="receipt-update-received">Actual total amount received, including tax</label>
-<input id="receipt-update-received" name="f:amount_received" type="text" inputmode="decimal" aria-describedby="receipt-update-received-help" value="{{ attempted.get('f:amount_received', '') }}">
+<input id="receipt-update-received" name="f:amount_received" type="text" inputmode="decimal" data-math-currency="company" aria-describedby="receipt-update-received-help" value="{{ attempted.get('f:amount_received', '') }}">
 <p id="receipt-update-received-help">If this receipt has ever billed linked work, a correction that changes its gross requires the exact new total received, including tax, even after linked lines are removed. Enter the whole receipt total, not just the additional charge. Leave blank for a same-total or metadata-only correction, or an ordinary receipt with no linked-work history. Any amount you enter must match the new receipt total.</p>
 </section>{% endif %}
 {% if sales_form %}<input type="hidden" name="f:expected_facts_fingerprint" value="{{ sales_fingerprint }}"><p data-sales-preview-status aria-live="polite">{{ 'Preview checked. Save these values.' if sales_fingerprint else 'Preview your values before saving.' }}</p>{% endif %}

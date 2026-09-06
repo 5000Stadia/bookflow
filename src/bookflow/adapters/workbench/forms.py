@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from bookflow.core import registry
 from bookflow.core.errors import BookflowError
+from bookflow.adapters.workbench.numeric_metadata import metadata as numeric_metadata
 
 
 def _base(ann):
@@ -53,6 +54,7 @@ def _scalar_descriptor(
     name: str,
     description: str = "",
     required: bool = False,
+    extra: Any = None,
 ) -> dict[str, Any]:
     base, nullable = _base(annotation)
     kind, choices = "text", None
@@ -72,6 +74,7 @@ def _scalar_descriptor(
         "required": required,
         "nullable": nullable,
         "annotation": annotation,
+        "math": numeric_metadata(name, base, extra),
     }
 
 
@@ -105,6 +108,7 @@ def collection_schema(annotation: Any) -> dict[str, Any] | None:
                     name=name,
                     description=field.description or "",
                     required=field.is_required(),
+                    extra=field.json_schema_extra,
                 ))
         item = {"kind": "object", "model": item_base, "fields": fields}
     else:
@@ -182,7 +186,7 @@ def leaves(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
                     "json_shape": json_shape, "choices": choices,
                     "description": f.description or "", "default": default,
                     "required": f.is_required(), "nullable": nullable,
-                    "annotation": f.annotation})
+                    "annotation": f.annotation, "math": numeric_metadata(name, base, extra)})
     return out
 
 
@@ -270,6 +274,8 @@ def describe_fields(
         "sales-rep": "name_type",
     }
     for leaf in described:
+        if noun == 'custom-field' and leaf['path'] == 'default':
+            leaf['math'] = {'scale': 9, 'active': [{'name': 'f:kind', 'values': ['number']}]}
         if leaf["kind"] == "collection":
             schema = collection_schema(leaf["annotation"])
             assert schema is not None
@@ -343,7 +349,8 @@ def custom_field_descriptors(
             description="Unavailable attempt — change or clear explicitly." if d is None else "Keep preserves the value; Set includes an empty text value; Clear removes it.",
             creation_default=d.get("default") if d else None,
             default=None if update or not d else d.get("default"), required=bool(d and d.get("required")),
-            nullable=True, runtime=True, pinned=False))
+            nullable=True, runtime=True, pinned=False,
+            math={'scale': 9} if kind == 'number' else {}))
     return out
 
 

@@ -25,6 +25,7 @@ from bookflow.adapters.workbench import work as Work
 from bookflow.adapters.workbench import billing as Billing
 from bookflow.core import registry
 from bookflow.core.errors import BookflowError
+from bookflow.core.money import CURRENCIES
 from bookflow.core.models import list_columns
 from bookflow.hub.access import ROLE_FOR_REQUIRED, ROLE_RANK
 from bookflow.storage import migrate
@@ -391,13 +392,15 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("style.css", "htmx.min.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css")
+        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
         if not ctx.get("company_id") and request.cookies.get(LAST_COMPANY):
             ctx.setdefault("header_company_id", request.cookies.get(LAST_COMPANY))  # hub pages keep the company links
         company_view = getattr(request.state, "workbench_company", None)
+        ctx['math_currencies'] = {code: value[0] for code, value in CURRENCIES.items()}
+        ctx['math_company_currency'] = (company_view or {}).get('home_currency', '') if company_view and company_view.get('company_id') == ctx.get('company_id') else ''
         if company_view and company_view["company_id"] == (ctx.get("company_id") or ctx.get("header_company_id")):
             ctx["company_label"] = company_view["display_name"]
             if _role_allows(registry.get('company update'), company_view, hub_admin=credential(request).hub_admin):

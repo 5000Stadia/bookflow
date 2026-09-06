@@ -15,6 +15,11 @@ uv run bookflow company list
 
 Data lives in `~/.bookflow` unless `BOOKFLOW_DATA_ROOT` or `--data-root` says otherwise. Every command takes `--json`; `uv run bookflow --help` lists the rest. Activate the environment (`source .venv/bin/activate`) to drop the `uv run` prefix.
 
+Numeric fields in the browser accept calculations such as `12.5 * 3`, `1 / 3`,
+and `(20 + 5) / 2`. The result appears as you type; Enter, Tab, or leaving the
+field enters it, automatically rounded to that field's precision. Quantities use
+six decimal places and currency amounts use the currency's precision.
+
 The host serves the same commands over HTTP and a browser workbench:
 
 ```

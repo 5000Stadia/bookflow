@@ -117,6 +117,7 @@
     const box = node('fieldset'), legend = node('legend', 'Allocation'), fields = node('div', null, 'register-split-fields'); box.append(legend, fields);
     const a = picker(fields, 'Split account', 'account', value.account, labels.account);
     const amount = textControl(fields, 'Split amount', value.amount, true);
+    amount.dataset.mathCurrency = c.currency;
     const directionLabel = node('label', 'Split movement'), direction = node('select');
     for (const [v, text] of [['', 'Same as main entry'], ...c.directions]) { const o = node('option', text); o.value = v; direction.append(o); }
     direction.value = value.direction || ''; directionLabel.append(direction); fields.append(directionLabel);
@@ -186,11 +187,15 @@
         const date = new Date(text(value) + 'T12:00:00Z');
         const validDate = value == null || value === '' || (!Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value);
         input.type = kind === 'date' && validDate ? 'date' : 'text';
-        if (kind === 'number') input.inputMode = 'decimal';
+        if (kind === 'number') {
+          input.inputMode = 'decimal'; input.dataset.mathScale = '9';
+          input.dataset.mathActive = JSON.stringify([{name: 'register-custom-action:' + id, values: ['set']}]);
+        }
         input.value = text(value);
       }
       const actionLabel = node('label', 'Action for ' + state.label), action = node('select');
       action.dataset.customAction = id;
+      action.name = 'register-custom-action:' + id;
       action.style.cssText = 'max-width:100%';
       for (const [v, title] of [['keep', p.journal ? 'Keep stored value' : 'Use creation default / omit'], ['set', 'Set value (including empty text)'], ['clear', 'Clear']]) {
         const option = node('option', title); option.value = v; action.append(option);
@@ -360,6 +365,7 @@
   async function record() {
     if (pending || sending || storageBlocked) { pendingView(); return; }
     try {
+      if (!window.bookflowMath.prepare(form)) return;
       const p = payload(); if (!form.reportValidity()) return;
       const context = {};
       for (const [name, header] of [['reason', 'X-Bookflow-Reason'], ['source_ref', 'X-Bookflow-Source-Ref'], ['directive_id', 'X-Bookflow-Directive']]) if (field(name).value) context[header] = field(name).value;
@@ -475,8 +481,10 @@
     $('register-split-clear').addEventListener('click', () => { splits = []; $('register-allocations').replaceChildren(); splitMode = false; $('register-splits').hidden = true; $('register-category').hidden = false; dirty = true; category.input.focus(); });
     $('register-split-close').addEventListener('click', () => { $('register-splits').hidden = true; $('register-splits-open').focus(); });
     $('register-recalculate').addEventListener('click', async () => {
+      if (pending || sending || storageBlocked) { pendingView(); return; }
+      if (!window.bookflowMath.prepare($('register-allocations'))) return;
       try { const rows = allocations().map(({line_id, ...a}) => a); const result = await command('register.calculate', {account: c.account, direction: field('direction').value, allocations: rows});
-        field('amount').value = result.amount.amount; dirty = true; $('register-error').textContent = ''; $('register-recalculate').focus();
+        field('amount').value = result.amount.amount; window.bookflowMath.refresh(); dirty = true; $('register-error').textContent = ''; $('register-recalculate').focus();
       } catch (e) { error(e); }
     });
     $('register-record').addEventListener('click', record);

@@ -1,6 +1,7 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{% block title %}Bookflow{% endblock %}</title>
-<link rel="stylesheet" href="{{ static_urls['style.css'] }}"><script src="{{ static_urls['htmx.min.js'] }}"></script><script src="{{ static_urls['workflow.js'] }}" defer></script></head>
-<body hx-headers='{"X-Bookflow-Workbench": "1"}'>
+<link rel="stylesheet" href="{{ static_urls['style.css'] }}"><script src="{{ static_urls['htmx.min.js'] }}"></script><script src="{{ static_urls['numeric-context.js'] }}" defer></script><script src="{{ static_urls['numeric-entry.js'] }}" defer></script><script src="{{ static_urls['workflow.js'] }}" defer></script></head>
+<body hx-headers='{"X-Bookflow-Workbench": "1"}' data-math-company-currency="{{ math_company_currency }}">
+<script type="application/json" id="math-currencies">{{ math_currencies | tojson }}</script>
 <link rel="stylesheet" href="{{ static_urls['sales.css'] }}"><script src="{{ static_urls['sales.js'] }}" defer></script>
 <header><a href="/"><strong>Bookflow</strong></a><a href="/companies">Companies</a>
 {% set hc = company_id or header_company_id %}{% if hc %}<a class="current-company" href="/c/{{ hc }}/" aria-label="Current company: {{ company_label or 'Company' }}">{{ company_label or 'Company' }}</a><a href="/c/{{ hc }}/audit">audit</a>{% endif %}

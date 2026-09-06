@@ -17,7 +17,7 @@
 <section aria-label="Register entry">
 <h2 id="register-entry-title">{{ 'Edit journal' if config.edit else 'New journal entry' }}</h2>
 <p class="muted">Journal numbering applies. T = company today; + / − = adjacent day. Only Record posts an entry.</p>
-<form id="register-form" novalidate>
+<form id="register-form" novalidate data-math-company-currency="{{ config.currency }}">
 <fieldset id="register-fields">
 <div class="register-entry-grid">
 <label>Date <input id="register-date" name="date" type="text" inputmode="numeric" placeholder="YYYY-MM-DD" required aria-describedby="register-date-help"></label>
@@ -26,7 +26,7 @@
 <label>Journal number <input name="number" maxlength="64" placeholder="Automatic"></label>
 <div id="register-payee"></div>
 <label>Movement <select name="direction">{% for value, label in config.directions %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
-<label>Amount ({{ config.currency }}) <input name="amount" inputmode="decimal" required autocomplete="off"></label>
+<label>Amount ({{ config.currency }}) <input name="amount" inputmode="decimal" data-math-currency="{{ config.currency }}" required autocomplete="off"></label>
 <div id="register-category"></div>
 <label>Memo <input name="memo" maxlength="2000"></label>
 <div id="register-class"></div>
