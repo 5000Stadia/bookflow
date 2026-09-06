@@ -147,7 +147,8 @@ def test_completed_followups_reenter_global_queue_and_keep_history(site):
     state,client,intention=site
     path=state.root/'notes/roadmap-status.json'
     status=json.loads(path.read_text())
-    status['rows']={'22':{'title':'Full payment module','status':'Building'}}
+    status['rows']={'22':{'title':'Full payment module','status':'Building'},
+                    '21':{'title':'Old active history title','status':'Building'}}
     status['completed']=[{'row':'22','title':'Payment engine','summary':'Reviewed component'},
                          {'row':'21','title':'History','summary':'Reviewed history'}]
     path.write_text(json.dumps(status))
@@ -173,7 +174,7 @@ def test_completed_followups_reenter_global_queue_and_keep_history(site):
     assert submit(state,client,csrf,'Correction after completion','21').status_code==303
     queue=client.get('/').text.split('<section id="unread">')[1].split('</section>')[0]
     assert 'Notes to read (1)' in queue and 'Correction after completion' in queue
-    assert 'History' in queue
+    assert 'History' in queue and 'Old active history title' not in queue
     status['completed'][1]['status']='Reopened'
     status['completed'][1]['summary']='Confirmed original-scope defect; fix pending review.'
     path.write_text(json.dumps(status))

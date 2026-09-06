@@ -140,13 +140,11 @@ def note_html(note):
 
 
 def target_labels(project, status):
-    labels = {}
+    labels = {str(key): info.get('title', 'Module ' + str(key)) for key, info in status.get('rows', {}).items()}
     for group in ('completed', 'later', 'next'):
         for info in status.get(group, []):
             if 'row' in info:
                 labels[str(info['row'])] = info['title']
-    for key, info in status.get('rows', {}).items():
-        labels[str(key)] = info.get('title', 'Module ' + str(key))
     for row in project.rows:
         labels[row.number] = status.get('rows', {}).get(row.number, {}).get('title', 'Module ' + row.number)
     labels['project'] = 'General project notes'
