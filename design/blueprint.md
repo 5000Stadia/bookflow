@@ -486,6 +486,7 @@ Table `company_info` in company.db, exactly one row. This table and the rollout 
 | enable_price_levels | whether later sales forms expose price-level defaults; default false |
 | units_of_measure_mode | `disabled`, `single_unit_per_item`, or `multiple_related_units`; default `disabled` |
 | sales_tax_enabled | whether later sales forms calculate sales tax; default false |
+| sales_tax_calculation | captured sales algorithm default: line_component_half_even, line_combined_half_up or invoice_combined_half_up; new companies use invoice_combined_half_up, upgrades retain line_component_half_even |
 | default_sales_tax_item_id | nullable sales-tax item or group used by later forms |
 | sales_tax_liability_basis | `invoice_date` or `payment_receipt`; default `invoice_date` |
 | sales_tax_remittance_frequency | `monthly`, `quarterly`, or `annually`; default `quarterly` |

@@ -145,7 +145,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.facts` | object | yes | no | — | — |
 | `revision.facts.schema_version` | literal[1] | no | no | 1 | — |
 | `revision.facts.profile` | object | yes | no | — | — |
-| `revision.facts.profile.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.facts.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
+| `revision.facts.profile.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] \| null | no | yes | null | — |
+| `revision.facts.profile.tax_policy_origin` | object \| null | no | yes | null | — |
+| `revision.facts.profile.tax_policy_origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.facts.profile.tax_policy_origin.source_id` | string \| null | no | yes | null | — |
 | `revision.facts.profile.customer` | object | yes | no | — | — |
 | `revision.facts.profile.customer.id` | string | yes | no | — | — |
 | `revision.facts.profile.customer.label` | string | yes | no | — | — |
@@ -848,7 +852,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.facts` | object | yes | no | — | — |
 | `revision.facts.schema_version` | literal[1] | no | no | 1 | — |
 | `revision.facts.profile` | object | yes | no | — | — |
-| `revision.facts.profile.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.facts.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
+| `revision.facts.profile.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] \| null | no | yes | null | — |
+| `revision.facts.profile.tax_policy_origin` | object \| null | no | yes | null | — |
+| `revision.facts.profile.tax_policy_origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.facts.profile.tax_policy_origin.source_id` | string \| null | no | yes | null | — |
 | `revision.facts.profile.customer` | object | yes | no | — | — |
 | `revision.facts.profile.customer.id` | string | yes | no | — | — |
 | `revision.facts.profile.customer.label` | string | yes | no | — | — |
@@ -1504,7 +1512,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.facts` | object | yes | no | — | — |
 | `revision.facts.schema_version` | literal[1] | no | no | 1 | — |
 | `revision.facts.profile` | object | yes | no | — | — |
-| `revision.facts.profile.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.facts.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
+| `revision.facts.profile.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] \| null | no | yes | null | — |
+| `revision.facts.profile.tax_policy_origin` | object \| null | no | yes | null | — |
+| `revision.facts.profile.tax_policy_origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.facts.profile.tax_policy_origin.source_id` | string \| null | no | yes | null | — |
 | `revision.facts.profile.customer` | object | yes | no | — | — |
 | `revision.facts.profile.customer.id` | string | yes | no | — | — |
 | `revision.facts.profile.customer.label` | string | yes | no | — | — |
@@ -2428,7 +2440,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.facts` | object | yes | no | — | — |
 | `revision.facts.schema_version` | literal[1] | no | no | 1 | — |
 | `revision.facts.profile` | object | yes | no | — | — |
-| `revision.facts.profile.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.facts.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
+| `revision.facts.profile.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] \| null | no | yes | null | — |
+| `revision.facts.profile.tax_policy_origin` | object \| null | no | yes | null | — |
+| `revision.facts.profile.tax_policy_origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.facts.profile.tax_policy_origin.source_id` | string \| null | no | yes | null | — |
 | `revision.facts.profile.customer` | object | yes | no | — | — |
 | `revision.facts.profile.customer.id` | string | yes | no | — | — |
 | `revision.facts.profile.customer.label` | string | yes | no | — | — |
@@ -3115,7 +3131,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.facts` | object | yes | no | — | — |
 | `revision.facts.schema_version` | literal[1] | no | no | 1 | — |
 | `revision.facts.profile` | object | yes | no | — | — |
-| `revision.facts.profile.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.facts.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
+| `revision.facts.profile.sales_tax_calculation` | literal["line_component_half_even", "line_combined_half_up", "invoice_combined_half_up"] \| null | no | yes | null | — |
+| `revision.facts.profile.tax_policy_origin` | object \| null | no | yes | null | — |
+| `revision.facts.profile.tax_policy_origin.kind` | literal["legacy_implicit", "default", "explicit"] | yes | no | — | — |
+| `revision.facts.profile.tax_policy_origin.source_id` | string \| null | no | yes | null | — |
 | `revision.facts.profile.customer` | object | yes | no | — | — |
 | `revision.facts.profile.customer.id` | string | yes | no | — | — |
 | `revision.facts.profile.customer.label` | string | yes | no | — | — |

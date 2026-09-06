@@ -65,8 +65,10 @@ def protect_sale(s, inp, old, old_revision, resolved):
     retained = [line for line in resolved['lines'] if line['line_id'] in prior]
     if not retained:
         return
-    profile = json.loads(sales.profile_row(s, old_revision)['profile_snapshot'])
-    replacement = resolved['profile'].model_dump()
+    from bookflow.company.sales_facts import SalesProfile
+    from bookflow.company.tax_attribution import semantic_profile
+    profile = semantic_profile(SalesProfile.model_validate_json(sales.profile_row(s, old_revision)['profile_snapshot']))
+    replacement = semantic_profile(resolved['profile'])
     financial = {'control_account', 'due_date', 'discount_date', 'discount_available', 'payment_method', 'payment_reference', 'origins'}
     if any(profile.get(key) != replacement.get(key) for key in set(profile) | set(replacement) if key not in financial):
         dependency('retained linked sale lines freeze captured commercial header', source_id=old['id'])

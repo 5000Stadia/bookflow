@@ -49,7 +49,7 @@ revision_number. A selector must match the requested type even when it is an id.
 Post fields: date, optional number, customer (customer or job selector), lines
 (1–200), memo, customer_message, customer_purchase_order, terms, due_date,
 billing_address, shipping_address, ship_date, ship_method, sales_rep, class_id,
-customer_tax_code, sales_tax_item, price_level, custom_fields and
+customer_tax_code, sales_tax_item, sales_tax_calculation, price_level, custom_fields and
 custom_field_kinds. Address overrides use the existing typed address shape.
 Invoice adds optional ar_account: require an explicit active AR account unless
 exactly one active AR exists. Sales receipt instead requires deposit_to (active
@@ -123,8 +123,13 @@ is null and factor 1. An explicit unit price is per selected unit; derived price
 is base price times unit factor rounded half-even to a minor unit. Quantity and base_quantity store signed64 micro-units. Base quantity is quantity
 times factor rounded half-even once to six decimals; reject overflow or positive
 quantity collapsing to zero. Output uses canonical decimal strings; never float. Line net is quantity times selected
-unit price, rounded half-even once to currency minor units. Each tax component
-rounds line net times its percentage half-even to minor units independently.
+unit price, rounded half-even once to currency minor units. The captured sales_tax_calculation selects the rounding boundary: legacy separate
+components per line use half-even; combined-line and combined-invoice policies
+round compatible exact component sums half-up. Combined-invoice compatibility is
+the economic rule vector (IDs, rates, agency/account IDs), not labels/versions.
+Largest remainders allocate the charged cents by permanent tax ordinal and binary
+tax-item ID. All cells, including zero, are independently reconstructed during
+sales effect validation. Attribution never substitutes settlement ordinals.
 Tax groups expand their active member tax items once each in stored order; no
 compounding. Gross = net + component taxes; total = sum line gross. All monetary
 results and accumulated batch sides fit signed64. Rate zero and rounding-to-zero
@@ -187,7 +192,7 @@ Tax-rule refresh never changes explicit exemption. New tax groups capture their
 ordered member rules; old group changes do not rewrite existing components.
 
 Header `use_defaults` accepts only billing_address, shipping_address, terms,
-due_date, ship_method, sales_rep, class_id, customer_tax_code, sales_tax_item,
+due_date, ship_method, sales_rep, class_id, customer_tax_code, sales_tax_item, sales_tax_calculation,
 price_level and payment_method; invoice/receipt applicability still holds. Line
 `use_defaults` accepts only description, unit, unit_price, class_id, tax_code and
 price_level. Reject unknown/duplicate names. Header refresh_defaults=true applies
@@ -468,3 +473,23 @@ actual Chrome entry/preview/post/history at1280/390; readonly and sibling-compan
 isolation. Existing focused journal/register/report checks stay green. Additional
 forms and conversions follow the customer-work-and-billing contract and their
 own detailed calculation and storage contracts.
+
+
+## Captured calculation policy storage
+
+Company co0015 appends sales_tax_calculation with a legacy migration default;
+fresh rollout explicitly selects invoice_combined_half_up. SalesProfile version2
+requires policy and field-specific origin. Existing version1 headers imply legacy
+with legacy_implicit origin; all pricing versions retain their old representation.
+Ordinary edits retain policy, explicit use_defaults selects the company policy,
+and refresh_defaults refreshes policy only for default origin. No-op comparison
+normalizes these semantics without rewriting any persisted historical JSON.
+
+Sales tax keys have immutable composite document/line ownership. Legacy documents
+assign all historical identities, including retired lines, in binary ID order on
+the first changed revision; existing keys always win. New/appended lines take
+submitted-order ordinals above the historical maximum. Revision attribution and
+line mappings are immutable, audited company-local rows. Preview computes the
+same prospective ordering without writing, and fingerprints include the complete
+tax result. Live tax_calculation_details sits outside historical pricing facts;
+stored old retry payloads remain exact and may omit that projection.

@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Literal
 from pydantic import Field, model_serializer, model_validator
 
+from bookflow.company.tax_policy import Policy, TaxOrigin
 from bookflow.company.sales_models import Address, StrictModel
 from bookflow.company.billing_facts import AllocationProof
 from bookflow.core.exact import INT64_MAX
@@ -88,7 +89,26 @@ class Preferences(StrictModel):
 
 
 class CommercialProfile(StrictModel):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[1, 2] = 1
+    sales_tax_calculation: Policy | None = None
+    tax_policy_origin: TaxOrigin | None = None
+
+    @model_validator(mode="after")
+    def captured_policy(self):
+        if self.schema_version == 1:
+            if self.sales_tax_calculation is not None or self.tax_policy_origin is not None:
+                raise ValueError('version one has no captured tax policy')
+        elif self.sales_tax_calculation is None or self.tax_policy_origin is None:
+            raise ValueError('version two requires policy and origin')
+        return self
+
+    @model_serializer(mode="wrap")
+    def legacy_policy_facts(self, handler):
+        values = handler(self)
+        if self.schema_version == 1:
+            values.pop('sales_tax_calculation', None)
+            values.pop('tax_policy_origin', None)
+        return values
     customer: Customer
     preferences: Preferences
     billing_address: Address | None = None
@@ -130,7 +150,10 @@ class SalesProfile(CommercialProfile):
             'payment_reference', 'customer_message', 'customer_message_item',
             'customer_purchase_order', 'origins',
         )
-        return {key: values[key] for key in order if key in values}
+        result = {key: values[key] for key in order if key in values}
+        if self.schema_version == 2:
+            result.update(sales_tax_calculation=values['sales_tax_calculation'], tax_policy_origin=values['tax_policy_origin'])
+        return result
 
 
 class SalesLineProfile(StrictModel):

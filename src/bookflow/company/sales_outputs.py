@@ -7,6 +7,7 @@ from bookflow.company.journal_custom_fields import SnapshotField
 from bookflow.company.journal_outputs import CreatedOutput, JournalBatchOutput, JournalMoneyOutput
 from bookflow.company.sales_facts import SalesProfile, SalesLineProfile, SalesTaxComponent
 from bookflow.company.sales_models import StrictModel
+from bookflow.company.tax_attribution import TaxDetails
 from bookflow.company.billing_facts import AllocationProof, ExactFraction
 from bookflow.core.models import WriteOutput
 from bookflow.company.payment_outputs import InvoiceSettlementOutput, InvoiceCorrectionOutput
@@ -30,6 +31,15 @@ class TaxComponentOutput(CreatedOutput):
 
 
 class SalesLineOutput(CreatedOutput):
+    tax_ordinal: int | None = None
+
+    @model_serializer(mode='wrap')
+    def preserve_legacy_tax_order(self, handler):
+        result = handler(self)
+        if self.tax_ordinal is None:
+            result.pop('tax_ordinal', None)
+        return result
+
     transaction_id: str
     revision_id: str
     line_id: str
@@ -84,6 +94,15 @@ class BillingSourceOutput(CreatedOutput):
 
 
 class SalesRevisionSummaryOutput(CreatedOutput):
+    tax_calculation_details: TaxDetails | None = None
+
+    @model_serializer(mode='wrap')
+    def preserve_legacy_retry(self, handler):
+        result = handler(self)
+        if self.tax_calculation_details is None:
+            result.pop('tax_calculation_details', None)
+        return result
+
     transaction_id: str
     revision_number: int
     supersedes_revision_id: str | None

@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import re
 import shutil
+from bookflow.company.tax_policy import Policy
+
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import model_serializer, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from bookflow.commands.common import (CompanySummary, Empty, ListInput, NameInput, OrganizationOutput, WriteOutput,
                                       company_summary, organization_output)
@@ -361,6 +363,13 @@ _TAX_SHAPES = {"ein": re.compile(r"^\d{2}-\d{7}$"), "ssn": re.compile(r"^\d{3}-\
 
 
 class CompanyNewInput(BaseModel):
+    @model_serializer(mode='wrap')
+    def legacy_tax_request(self, handler):
+        values = handler(self)
+        if 'sales_tax_calculation' not in self.model_fields_set:
+            values.pop('sales_tax_calculation', None)
+        return values
+
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     legal_name: str = Field(description="Name on tax forms", max_length=200)
     home_currency: str = Field(description="ISO 4217 code, upper case; immutable after creation", max_length=3)
@@ -398,6 +407,7 @@ class CompanyNewInput(BaseModel):
     prompt_for_class: bool = Field(False, description="Require or warn for a class on later forms")
     enable_price_levels: bool = Field(False, description="Enable price-level controls on later sales forms")
     units_of_measure_mode: Literal["disabled", "single_unit_per_item", "multiple_related_units"] = "disabled"
+    sales_tax_calculation: Policy = "invoice_combined_half_up"
     sales_tax_enabled: bool = Field(False, description="Enable sales-tax controls on later forms")
     sales_tax_liability_basis: Literal["invoice_date", "payment_receipt"] = "invoice_date"
     sales_tax_remittance_frequency: Literal["monthly", "quarterly", "annually"] = "quarterly"
@@ -495,6 +505,7 @@ def _info_columns(inp: CompanyNewInput) -> dict[str, Any]:
         "use_classes": inp.use_classes, "prompt_for_class": inp.prompt_for_class,
         "enable_price_levels": inp.enable_price_levels, "units_of_measure_mode": inp.units_of_measure_mode,
         "sales_tax_enabled": inp.sales_tax_enabled, "default_sales_tax_item_id": None,
+        "sales_tax_calculation": inp.sales_tax_calculation,
         "sales_tax_liability_basis": inp.sales_tax_liability_basis,
         "sales_tax_remittance_frequency": inp.sales_tax_remittance_frequency,
         "default_ship_method_id": None, "free_on_board": inp.free_on_board,

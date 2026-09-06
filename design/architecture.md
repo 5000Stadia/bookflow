@@ -447,10 +447,40 @@ remainder, stable tax ordinal and binary tax-item identity. Zero cells remain
 visible. Intermediate integers are unbounded; persisted monetary totals are
 checked against signed64 bounds at every aggregation level.
 
-This pure module does not yet change any sales or work command. Policy capture,
-storage, history, posting and payment integration remain specified by Row24.
-Its result models are structural projections, not persisted-effect validators;
-integration must independently recompute and compare all attributed cells.
+Sales posting and correction now resolve nets/rules before a complete tax pass.
+`tax_policy.py` owns the three policy values and field-specific explicit/default/
+legacy_implicit origins. `tax_attribution.py` assigns prospective immutable tax
+ordinals independently of settlement keys and recomputes each bucket/cell from
+captured commercial nets and rules during effect validation. The calculator's
+result models remain structural projections, never persisted-effect validators.
+
+Company co0015 appends the policy default and six immutable tax tables without
+rebuilding existing tables. Existing companies retain line_component_half_even;
+rollout explicitly selects invoice_combined_half_up. SalesProfile v1 bytes remain
+readable unchanged; v2 requires captured policy/origin. SalesLineProfile pricing
+versions stay 1/2/3. Revision-owned attribution snapshots and composite line
+mappings contain exact cells and stable tax ordinals outside pricing facts. New
+live revision outputs expose tax_calculation_details; old stored retries omit
+that projection when it was absent. Semantically unchanged legacy corrections
+write no commercial revision or tax keys. Ordinary changed legacy revisions
+capture legacy_implicit until explicit policy/default selection.
+
+Sales updates retain captured policy; use_defaults reselects the company policy,
+and refresh_defaults only refreshes default origin. Reversals use stored cents.
+The existing payment correction hook consumes revised component cents and retains
+its own immutable settlement keys, cash, version guards and permanent recovery.
+Legacy work-to-sale conversion carries legacy policy and receives destination tax
+attribution. Work policy capture, basis v2/allocation v3, combined progress,
+full UI/seed integration and final cross-interface acceptance remain Row24 work;
+this storage/sales checkpoint does not close that row.
+
+Builder checks for this checkpoint: 260 arithmetic, sales/default/amount,
+company-settings, payment-correction, migration, schema and generated-reference
+checks passed in151.40s. After tightening new-revision attribution requirements
+and adding line-ordinal projections, 26 tax/migration/presentation checks passed
+in47.16s. Frozen co14 fixtures exercise posted/voided/corrected/amount/progress and
+paid history; raw old columns, rowids and local DDL are preserved. Independent
+artifact review, full combined-work tests and actual-MCP acceptance remain open.
 
 ## Manual rates and foreign journal conversion
 

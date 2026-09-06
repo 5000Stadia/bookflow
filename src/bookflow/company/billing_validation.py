@@ -113,10 +113,13 @@ def validate(plan, s, ctx):
     captured_header = work.facts(rev)
     posted_header = SalesProfile.model_validate_json(data['pending']['sales_profiles'][0]['profile_snapshot'])
     for field in type(captured_header.profile).model_fields:
-        if field == 'origins' or (field == 'terms' and (dest == 'sales_receipt' or 'terms' in inp.model_fields_set)):
+        if field in ('origins', 'schema_version', 'sales_tax_calculation', 'tax_policy_origin') or (field == 'terms' and (dest == 'sales_receipt' or 'terms' in inp.model_fields_set)):
             continue
         require(getattr(posted_header, field) == getattr(captured_header.profile, field),
             'captured commercial header differs: ' + field)
+    from bookflow.company import tax_policy
+    require(tax_policy.effective(posted_header) == tax_policy.effective(captured_header.profile)
+        and tax_policy.origin(posted_header) == tax_policy.origin(captured_header.profile), 'captured tax policy differs')
     if dest == 'sales_receipt':
         require(posted_header.terms is None, 'paid receipt cannot carry invoice credit terms')
     require(json.loads(created['issuer_snapshot']) == captured_header.issuer_snapshot, 'captured issuer differs')

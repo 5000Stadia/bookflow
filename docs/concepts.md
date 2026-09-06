@@ -237,7 +237,16 @@ outside the machine.
 Funds account, with a payment method. Both support service, non-inventory part
 and fixed other-charge items in home currency. Quantities have six decimal
 places; prices and totals are exact money. Tax groups retain separate component
-rates and round each component on each line to nearest, ties to even.
+rates. The captured sales_tax_calculation selects separate component taxes per
+line with legacy ties-to-even rounding, combined tax per line with half-cent-up
+rounding, or combined tax on compatible taxable totals with half-cent-up rounding.
+The last policy is the new-company default; upgraded companies retain legacy.
+Company policy changes apply to newly defaulted documents. Corrections retain
+captured policy unless explicitly changed or returned to defaults. Tax details
+show policy and its explicit, default or legacy_implicit origin. Combined tax is
+allocated by exact fractional remainder, then permanent tax-line order and binary
+tax-item ID; it never independently rounds each agency. Tax ordinals and payment
+settlement ordinals are separate. A line reorder cannot move captured tax cents.
 
 Use `--dry-run` to inspect captured customer, address, item, price, unit, term and
 tax facts. Copy its `facts_fingerprint` into `expected_facts_fingerprint` when

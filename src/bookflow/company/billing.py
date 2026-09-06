@@ -14,6 +14,7 @@ from bookflow.core.errors import BookflowError
 from bookflow.core.registry import Plan, Applied, Touched
 from bookflow.hub.access import require_resource
 from bookflow.company import work_preferences as policy
+from bookflow.company import tax_attribution as tax_facts
 
 
 def dependency(problem, **details):
@@ -156,12 +157,15 @@ def resolve_commercial(s, inp, document_type, *, document_id, kind):
     planned, extra = work._custom_plan(s, inp, document_type, document_id, carry=rev)
     warnings += extra
     number, sequence = effects.allocate(s, document_type, inp.number, document_id)
+    ordinals, tax_keys = tax_facts.prospective(s.company, document_id, [None for _ in lines])
+    attribution = tax_facts.calculate(lines, profile, rev['currency'], ordinals)
+    tax_facts.apply(lines, attribution, ordinals)
     subtotal = calc.total(line['net_minor_units'] for line in lines)
     tax = calc.total(line['tax_minor_units'] for line in lines)
     total = calc.total((subtotal, tax))
     issuer = work.facts(rev).issuer_snapshot
     semantic = dict(date=inp.date, number=number, memo=inp.memo, issuer=issuer,
-        profile=profile.model_dump(), lines=[sales._line_semantic(line) for line in lines],
+        profile=tax_facts.semantic_profile(profile), lines=[sales._line_semantic(line) for line in lines],
         custom_fields=sales._custom_semantic(planned.snapshot))
     identities = query.root_identities(s, header)
     source_roots = [(identities[line['line_id']]['root_document_id'], identities[line['line_id']]['root_line_id'])
@@ -171,7 +175,7 @@ def resolve_commercial(s, inp, document_type, *, document_id, kind):
     fingerprint = hashlib.sha256(sales.json_text(dict(company=s.company_row['id'], type=document_type,
         source_revision=rev['id'], source_version=header['version'],
         roots=[root for _, root, _ in selected], consumption=consumption, content=semantic, warnings=warnings,
-        preferences=policy.financial_projection(s, kind))).encode()).hexdigest()
+        tax_attribution=attribution.model_dump(mode='json'), preferences=policy.financial_projection(s, kind))).encode()).hexdigest()
     if inp.expected_facts_fingerprint and inp.expected_facts_fingerprint != fingerprint:
         raise BookflowError('E_PREVIEW_STALE', details=dict(facts_fingerprint=fingerprint,
             consumption_changes=query.latest_consumption_changes(s, source_roots),
@@ -185,7 +189,8 @@ def resolve_commercial(s, inp, document_type, *, document_id, kind):
             warnings.append(warning)
     return dict(profile=profile, date=inp.date, number=number, sequence=sequence, memo=inp.memo,
         issuer=issuer, lines=lines, custom_plan=planned, warnings=warnings, semantic=semantic,
-        fingerprint=fingerprint, subtotal=subtotal, tax=tax, total=total, currency=rev['currency'])
+        fingerprint=fingerprint, subtotal=subtotal, tax=tax, total=total, currency=rev['currency'],
+        tax_attribution=attribution, tax_keys=tax_keys)
 
 
 def replay_plan(s, ctx, inp, kind, destination):
