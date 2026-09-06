@@ -68,7 +68,7 @@ def define_tables(metadata, column, table):
         integer('net_minor_units', 'Exact captured source net amount.'),
         integer('tax_minor_units', 'Exact captured source tax amount.'),
         integer('gross_minor_units', 'Exact captured source gross amount.'),
-        text('facts_snapshot', 'Versioned typed captured WorkLineFacts object.'), *created(),
+        text('facts_snapshot', 'Captured source document scope and typed work-line facts.'), *created(),
         sa.UniqueConstraint('revision_id', 'root_document_id', 'root_line_id', name='uq_work_billing_revision_root'),
         owner(['transaction_id', 'revision_id', 'document_line_id'],
               ['sales_line_profiles.transaction_id', 'sales_line_profiles.revision_id', 'sales_line_profiles.document_line_id'], 'allocation_destination'),

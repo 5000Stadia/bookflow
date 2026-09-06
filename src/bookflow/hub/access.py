@@ -85,3 +85,14 @@ def role_satisfies(role: str | None, access: str | None, required: str | None, h
     if role is None:
         return False
     return ROLE_RANK[role] >= ROLE_FOR_REQUIRED[required]
+
+
+def require_resource(s: Session, capability: str, required_role: str) -> None:
+    """Common company resource check; granular grants/denies remain Row7."""
+    from bookflow.core.errors import BookflowError
+    access, role = company_role(s, s.company_row['id'], s.company_row['organization_id'])
+    if access is None:
+        raise BookflowError('E_COMPANY_NOT_FOUND')
+    if not role_satisfies(role, access, required_role, s.is_hub_admin):
+        raise BookflowError('E_PERMISSION', details={'capability': capability,
+            'required_role': required_role, 'role': role})

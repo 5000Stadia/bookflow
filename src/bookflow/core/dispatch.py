@@ -472,6 +472,8 @@ def authorize(cmd: Command, ctx: Context, s: Session, *, company_selector: str |
             raise BookflowError("E_COMPANY_NOT_FOUND", details={"source": company_source})
         if not access.role_satisfies(role, acc, cmd.required_role, s.is_hub_admin):
             raise BookflowError("E_PERMISSION", details={"capability": cmd.capability, "required_role": cmd.required_role, "role": role})
+        for capability, required_role in cmd.resource_requirements:
+            access.require_resource(s, capability, required_role)
         ctx = ctx.model_copy(update={"company_id": s.company_row["id"]})
         if s.company is None:
             open_company(s, ctx, "company" in cmd.writes and not dry_run and not read_only)
@@ -501,6 +503,8 @@ def run_in_session(cmd: Command, inp: BaseModel, ctx: Context, s: Session, *, co
     s.hub_touched, s.company_touched = [], []
     ctx = authorize(cmd, ctx, s, company_selector=company_selector,
                     company_source=company_source, dry_run=dry_run)
+    if cmd.authorize_input is not None:
+        cmd.authorize_input(inp, ctx, s)
     if cmd.transfer is not None:
         from bookflow.core.transfers import validate_resource
         validate_resource(cmd, inp, ctx, s)

@@ -41,17 +41,34 @@ class SalesLineOutput(CreatedOutput):
     base_quantity_microunits: int
     unit_id: str | None
     unit_factor_nanounits: int
-    unit_price: MoneyOutput
+    unit_price: MoneyOutput | None
+    pricing_basis: Literal["unit", "amount"] = "unit"
     net: MoneyOutput
     tax: MoneyOutput
     gross: MoneyOutput
-    unit_price_minor_units: int
+    unit_price_minor_units: int | None
     net_minor_units: int
     tax_minor_units: int
     gross_minor_units: int
     currency: str
     item_snapshot: SalesLineProfile
     tax_components: list[TaxComponentOutput]
+
+
+class BillingSourceOutput(CreatedOutput):
+    transaction_id: str
+    revision_id: str
+    source_document_id: str
+    source_revision_id: str
+    source_line_id: str
+    root_document_id: str
+    root_line_id: str
+    document_line_id: str
+    quantity_microunits: int
+    net_minor_units: int
+    tax_minor_units: int
+    gross_minor_units: int
+    facts_snapshot: dict
 
 
 class SalesRevisionSummaryOutput(CreatedOutput):
@@ -73,6 +90,7 @@ class SalesRevisionSummaryOutput(CreatedOutput):
     audit_event_id: str
     line_count: int
     batches: list[JournalBatchOutput]
+    billing_sources: list[BillingSourceOutput] = Field(default_factory=list)
 
 
 class SalesRevisionOutput(SalesRevisionSummaryOutput):

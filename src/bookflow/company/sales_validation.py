@@ -106,6 +106,8 @@ def validate(plan, s, ctx):
                 expected_source = dict(source, id=new['id'], posting_line_id=actual['id'], reversed_source_id=source['id'],
                     created_at=new['created_at'], created_by=new['created_by'], created_via=new['created_via'])
                 require(new == expected_source, 'reversal changed its source')
+    from bookflow.company.billing_validation import validate_sale_allocations
+    validate_sale_allocations(plan, s)
     if operation == 'void':
         require(all(not pending[name] for name in ('transaction_revisions', 'document_line_identities', 'document_lines',
             'sales_profiles', 'sales_line_profiles', 'sales_tax_components')), 'void created commercial history')
@@ -160,11 +162,16 @@ def validate(plan, s, ctx):
         for name in ('quantity_microunits', 'base_quantity_microunits', 'unit_factor_nanounits'):
             amount(line[name], positive=True)
         for name in sales.MONEY_COLUMNS:
-            amount(line[name])
+            if name != 'unit_price_minor_units' or facts.pricing_basis == 'unit':
+                amount(line[name])
         require(line['unit_id'] == (facts.unit.id if facts.unit else None)
                 and line['unit_factor_nanounits'] == (facts.unit.factor_nanounits if facts.unit else 1_000_000_000), 'unit facts')
         require(line['base_quantity_microunits'] == calc.base_quantity(line['quantity_microunits'], line['unit_factor_nanounits']), 'base quantity')
-        require(line['net_minor_units'] == calc.extension(line['quantity_microunits'], line['unit_price_minor_units']), 'line extension')
+        require(line['pricing_basis'] == facts.pricing_basis, 'price basis projection')
+        if facts.pricing_basis == 'amount':
+            require(line['unit_price_minor_units'] is None and line['net_minor_units'] == facts.net_amount_minor_units, 'amount extension')
+        else:
+            require(line['net_minor_units'] == calc.extension(line['quantity_microunits'], line['unit_price_minor_units']), 'line extension')
         own_taxes = sorted((comp for comp in components if comp['document_line_id'] == envelope['id']),
             key=lambda comp: json.loads(comp['component_snapshot'])['position'])
         taxable = profile.preferences.sales_tax_enabled and bool(facts.tax_code and facts.tax_code.taxable)
@@ -209,12 +216,12 @@ def validate(plan, s, ctx):
             and row['tax_minor_units'] == calc.total(line['tax_minor_units'] for line in lines)
             and revision['total_minor_units'] == calc.total(line['gross_minor_units'] for line in lines), 'commercial totals')
     custom_plan = data['custom_plan']
-    require(custom_plan is not None and json.loads(custom_plan.patch_json) == data['input'].custom_fields.root
+    require(custom_plan is not None and (data.get('billing_source') is not None or json.loads(custom_plan.patch_json) == data['input'].custom_fields.root)
             and custom_plan.refresh == data['input'].refresh_defaults, 'custom intent mismatch')
     custom.validate(s.company, custom_plan, header['id'], json.loads(revision['custom_fields_snapshot']), record_type=document_type)
     actual = dict(date=revision['date'], number=revision['number'], memo=revision['memo'], issuer=json.loads(revision['issuer_snapshot']),
         profile=profile.model_dump(), lines=semantic_lines, custom_fields=sales._custom_semantic(json.loads(revision['custom_fields_snapshot'])))
-    expected = sales.commercial(s, data['input'], document_type, old, data['old_revision'], document_id=header['id'])
+    expected = sales.commercial(s, data['input'], document_type, old, data['old_revision'], document_id=header['id'], billing_source=data.get('billing_source'))
     sales._posting_accounts_active(s, expected)
     require(data['sequence'] == expected['sequence'], 'wrong number allocation')
     require(actual == expected['semantic'] == data['semantic'], 'derived facts differ from original command intent')

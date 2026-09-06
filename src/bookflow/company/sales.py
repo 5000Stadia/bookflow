@@ -99,6 +99,8 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
     values.update(subtotal_minor_units=profile['subtotal_minor_units'], tax_minor_units=profile['tax_minor_units'],
         subtotal=Money(profile['subtotal_minor_units'], currency).to_dict(), tax=Money(profile['tax_minor_units'], currency).to_dict(),
         total=Money(revision['total_minor_units'], currency).to_dict(), line_count=line_count if summary_only else len(lines), batches=summaries)
+    from bookflow.company.billing_queries import sale_source_output
+    values['billing_sources'] = sale_source_output(s, revision['id'])
     if summary_only:
         return SalesRevisionSummaryOutput(**values)
     rendered = []
@@ -112,7 +114,8 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
         rendered.append(dict(line, item_snapshot=json.loads(line['item_snapshot']),
             quantity=format_quantity_micro_units(line['quantity_microunits']),
             base_quantity=format_quantity_micro_units(line['base_quantity_microunits']),
-            unit_price=Money(line['unit_price_minor_units'], currency).to_dict(), net=Money(line['net_minor_units'], currency).to_dict(),
+            unit_price=Money(line['unit_price_minor_units'], currency).to_dict() if line['unit_price_minor_units'] is not None else None,
+            pricing_basis=line.get('pricing_basis', 'unit'), net=Money(line['net_minor_units'], currency).to_dict(),
             tax=Money(line['tax_minor_units'], currency).to_dict(), gross=Money(line['gross_minor_units'], currency).to_dict(), tax_components=taxes))
     snapshot = json.loads(revision['custom_fields_snapshot'])
     return SalesRevisionOutput(**values, profile=json.loads(profile['profile_snapshot']), lines=rendered,
@@ -216,8 +219,11 @@ def _version(s, header, expected):
         raise
 
 
-def commercial(s, inp, document_type, old_header=None, old_revision=None, *, document_id):
+def commercial(s, inp, document_type, old_header=None, old_revision=None, *, document_id, billing_source=None):
     """Resolve original intent without allocating any persisted effect identities."""
+    if billing_source is not None:
+        from bookflow.company.billing import resolve_commercial
+        return resolve_commercial(s, inp, document_type, document_id=document_id, kind=billing_source)
     from bookflow.company import sales_defaults
     old_profile = SalesProfile.model_validate_json(profile_row(s, old_revision)['profile_snapshot']) if old_revision else None
     profile, warnings = sales_defaults.resolve_header(s, inp, document_type, previous=old_profile,
@@ -246,6 +252,8 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
         resolved['line_id'] = key
         lines.append(resolved)
         warnings.extend(line_warnings)
+    from bookflow.company.billing_edits import protect_sale
+    protect_sale(s, inp, old_header, old_revision, dict(profile=profile, lines=lines))
     custom.validate_kinds(s.company, inp.custom_fields, inp.custom_field_kinds, record_type=document_type)
     custom_plan = custom.prepare(s.company, document_id, inp.custom_fields,
         json.loads(old_revision['custom_fields_snapshot']) if old_revision else {}, creating=old_header is None,
@@ -286,7 +294,7 @@ def _posting_accounts_active(s, resolved):
             raise BookflowError('E_INACTIVE_REFERENCE', details={'record_type': 'account', 'record_id': account['id']})
 
 
-def prepare(s, ctx, inp, document_type, operation):
+def prepare(s, ctx, inp, document_type, operation, *, billing_source=None):
     old_header = resolve(s, getattr(inp, document_type), document_type) if operation != 'post' else None
     old_revision = journals.revision(s, old_header) if old_header else None
     meta = _version(s, old_header, inp.expected_version) if old_header else None
@@ -311,7 +319,7 @@ def prepare(s, ctx, inp, document_type, operation):
     resolved, changed_fields, custom_plan, sequence = None, [], None, None
     fingerprint = None
     if operation != 'void':
-        resolved = commercial(s, inp, document_type, old_header, old_revision, document_id=header['id'])
+        resolved = commercial(s, inp, document_type, old_header, old_revision, document_id=header['id'], billing_source=billing_source)
         warnings += resolved['warnings']
         fingerprint = resolved['fingerprint']
         changed_fields = _changes(_saved_semantic(s, old_revision), resolved['semantic']) if old_revision else []
@@ -347,7 +355,7 @@ def prepare(s, ctx, inp, document_type, operation):
             pending['document_lines'].append(envelope)
             pending['sales_line_profiles'].append(dict(document_line_id=envelope['id'], transaction_id=header['id'],
                 revision_id=revision['id'], **provenance, **{k: line[k] for k in ('item_id', 'quantity_microunits', 'unit_id',
-                    'unit_factor_nanounits', 'base_quantity_microunits', *MONEY_COLUMNS)}, item_snapshot=json_text(facts.model_dump())))
+                    'unit_factor_nanounits', 'base_quantity_microunits', *MONEY_COLUMNS)}, item_snapshot=json_text(facts.model_dump()), pricing_basis=facts.pricing_basis))
             for tax_position, component in enumerate(line['taxes'], 1):
                 rule = component['rule']
                 snapshot = SalesTaxComponent(position=tax_position, tax_item=rule.model_dump(include={'id', 'label', 'version'}),
@@ -377,8 +385,13 @@ def prepare(s, ctx, inp, document_type, operation):
     output = SalesWriteOutput(**summary(header, revision, view_profile), revision=revision_output(s, revision, pending),
         facts_fingerprint=fingerprint, warnings=warnings, changed_fields=changed_fields)
     plan = Plan(output, dict(input=inp, operation=operation, document_type=document_type, changed=True, header=header,
-        before=old_header, old_revision=old_revision, pending=pending, sequence=sequence, event=event, custom_plan=custom_plan,
+        before=old_header, old_revision=old_revision, pending=pending, sequence=sequence, event=event, custom_plan=custom_plan, billing_source=billing_source,
         semantic=resolved['semantic'] if resolved else None))
+    from bookflow.company.billing_edits import carry_allocations
+    carry_allocations(plan, s)
+    if 'billing_allocations' in plan.data and operation != 'void':
+        from bookflow.company.billing_queries import sale_source_output
+        plan.preview.revision.billing_sources = sale_source_output(s, revision['id'], plan.data['billing_allocations'])
     from bookflow.company.sales_validation import validate
     validate(plan, s, ctx)
     return plan
@@ -421,4 +434,7 @@ def apply(plan, ctx, s):
     fresh = prepare(s, ctx, plan.data['input'], plan.data['document_type'], plan.data['operation'])
     from bookflow.company.sales_validation import validate
     validate(fresh, s, ctx)
+    if 'billing_allocations' in fresh.data:
+        from bookflow.company.billing import persist
+        return persist(fresh, ctx, s, command_name=plan.data['document_type'].replace('_', '-') + ' ' + plan.data['operation'])
     return effects.persist(fresh, ctx, s, command_name=plan.data['document_type'].replace('_', '-') + ' ' + plan.data['operation'], table_kinds=TABLE_KINDS)

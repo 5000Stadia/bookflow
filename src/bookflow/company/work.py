@@ -359,6 +359,8 @@ def _state_invariants(kind, value):
 
 
 def _dependencies(s, header, before, after):
+    from bookflow.company.billing_edits import protect_work
+    protect_work(s, header, before, after)
     if header is None:
         return
     t = c.work_links
@@ -663,6 +665,8 @@ def _prepare_destination(s, ctx, inp, kind, operation):
         key_hash = hashlib.sha256(inp.conversion_key.encode()).hexdigest()
         intent = inp.model_dump(mode='json', exclude={'expected_facts_fingerprint'})
         request_hash = hashlib.sha256(json_text(dict(kind=kind, operation=operation, input=intent)).encode()).hexdigest()
+        if rows(s, c.work_billing_conversions, c.work_billing_conversions.c.conversion_key_hash == key_hash):
+            raise BookflowError('E_CONVERSION_KEY_REUSED', details={'problem': 'key belongs to a financial conversion'})
         matches = rows(s, c.work_links, c.work_links.c.conversion_key_hash == key_hash)
         if matches:
             match = matches[0]

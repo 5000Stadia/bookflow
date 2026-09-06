@@ -31,8 +31,12 @@ def _write(document_type, verb, model):
         error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_PERIOD_CLOSED',
                      'E_DUPLICATE_NUMBER', 'E_INACTIVE_REFERENCE', 'E_VALUE_RANGE',
                      'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED']
-                    + (['E_PREVIEW_STALE'] if verb != 'void' else []),
+                    + (['E_PREVIEW_STALE', 'E_WORK_DEPENDENCY'] if verb != 'void' else ['E_WORK_DEPENDENCY']),
     )(planner)
+    if verb != 'post':
+        from bookflow.company.billing_queries import authorize_sale
+        cmd.authorize_input = lambda inp, ctx, s: authorize_sale(inp, ctx, s, document_type, True)
+        cmd.authorization = 'standard ledger.post; customer-work standard when linked work is consumed'
     cmd.ledger = True
     cmd.applier(sales.apply)
     return cmd
@@ -46,7 +50,7 @@ def _read(document_type, verb, model, output_model):
             return Plan(sales.show(s, inp, document_type))
         return Plan(sales.page(s, ctx, inp, document_type, history=verb == 'history'))
 
-    return command(
+    cmd = command(
         noun + ' ' + verb, scope='company', description={
             'show': 'Show a sale and its current or selected immutable revision, captured commercial and custom facts, ordered lines, tax components and separate posting batch totals.',
             'query': 'Page sales in accounting-date and stable-id order with exact customer, date, status and number filters; restart on company audit changes.',
@@ -57,6 +61,11 @@ def _read(document_type, verb, model, output_model):
         positional=[] if verb == 'query' else [document_type],
         error_codes=['E_RECORD_NOT_FOUND'] + (['E_QUERY_STALE'] if verb != 'show' else []),
     )(planner)
+    if verb != 'query':
+        from bookflow.company.billing_queries import authorize_sale
+        cmd.authorize_input = lambda inp, ctx, s: authorize_sale(inp, ctx, s, document_type, False)
+        cmd.authorization = 'member ledger.read; customer-work member before linked source details'
+    return cmd
 
 
 invoice_post = _write('invoice', 'post', InvoicePostInput)
