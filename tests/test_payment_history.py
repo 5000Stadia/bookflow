@@ -1,6 +1,40 @@
 """Dated projections retain current knowledge and future capacity reservations."""
+import pytest
+
 from tests.test_service_sales_lifecycle import sale, COMPANY
 from tests.test_payment_receipts import posted, method
+from tests.test_payment_receipts import snapshots
+
+
+@pytest.mark.parametrize('dates', [
+    ('2026-06-10',),
+    ('2026-05-20',),
+    ('2026-06-10', '2026-05-20', '2026-06-15'),
+    ('2026-06-10', '2026-05-20'),
+])
+@pytest.mark.parametrize('voided', [False, True])
+def test_dated_existence_follows_final_corrected_obligation(client, sale, dates, voided):
+    invoice = posted(client, sale['customer'], sale['item'], '1.00', 'CORRECTED-DATES')
+    version = 1
+    for date in dates:
+        result = client.run('invoice update', dict(invoice=invoice['id'], expected_version=version,
+            date=date, operation_key=f'correct-date-{version}'), company=COMPANY, reason='Correct effective date')
+        version = result['version']
+    if voided:
+        client.run('invoice void', dict(invoice=invoice['id'], expected_version=version),
+            company=COMPANY, reason='Cancel final corrected obligation')
+        version += 1
+    before = snapshots(client)
+    for cutoff in ('2026-05-19', '2026-05-20', '2026-06-01', '2026-06-05', '2026-06-10', '2026-06-15'):
+        state = client.run('invoice settlement', dict(invoice=invoice['id'], as_of=cutoff), company=COMPANY)
+        effective = cutoff >= dates[-1]
+        expected_status = 'not_effective' if not effective else 'voided' if voided else 'unpaid'
+        assert state['status'] == expected_status
+        assert state['gross_minor_units'] == state['due_minor_units'] == (100 if effective and not voided else 0)
+        assert state['applied_minor_units'] == 0
+        assert state['all_committed_current']['status'] == ('voided' if voided else 'unpaid')
+        assert state['all_committed_current']['version'] == version
+    assert snapshots(client) == before
 
 
 def test_effective_cutoff_future_capacity_and_unapply_history(client, sale):

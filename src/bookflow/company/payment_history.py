@@ -41,8 +41,13 @@ def invoice(s, inp):
             .join(b, b.c.id == p.c.batch_id).join(a, a.c.id == p.c.account_id).where(
                 p.c.transaction_id == facts['header']['id'], a.c.type == 'accounts_receivable', b.c.effective_date <= inp.as_of)).scalar_one()
         applied = sum(row['amount_minor_units'] for row in dated_applications(s, invoice=facts['header']['id'], as_of=inp.as_of))
+        # Corrections cancel each superseded batch at that batch's own date.
+        # All-current-knowledge existence therefore follows the final commercial
+        # revision, even when a later void has canceled its monetary effect.
+        # Neither an obsolete original nor a zero net amount establishes status.
         effective = s.company.conn.execute(sa.select(b.c.id).where(b.c.transaction_id == facts['header']['id'],
-            b.c.kind != 'reversal', b.c.effective_date <= inp.as_of).limit(1)).first() is not None
+            b.c.revision_id == facts['revision']['id'], b.c.kind != 'reversal',
+            b.c.effective_date <= inp.as_of).limit(1)).first() is not None
         status = ('not_effective' if not effective else 'voided' if facts['header']['status'] == 'voided'
                   else 'paid' if gross > 0 and gross == applied else 'partial' if applied else 'unpaid')
         out.update(gross_minor_units=gross, applied_minor_units=applied, due_minor_units=gross-applied,
