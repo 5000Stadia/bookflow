@@ -1551,3 +1551,166 @@ input = { estimate = "${pref_estimate.id}", expected_version = "${pref_accepted.
 command = "company update"
 reason = "Restore the compatibility defaults"
 input = { estimates_enabled = true, progress_billing_enabled = true, close_estimates_after_billing = false }
+
+# Row22: 33 commands. Active examples add bank17000, AR1000, income18000 cents.
+[[commands]]
+command = "customer create"
+capture = "pay_customer"
+input = { "name" = "Payment Example Customer" }
+
+[[commands]]
+command = "customer create"
+capture = "pay_a"
+input = { "name" = "Job A", "parent_id" = "${pay_customer.id}" }
+
+[[commands]]
+command = "customer create"
+capture = "pay_b"
+input = { "name" = "Job B", "parent_id" = "${pay_customer.id}" }
+
+[[commands]]
+command = "account create"
+capture = "pay_income"
+input = { "name" = "Payment Example Income", "type" = "income" }
+
+[[commands]]
+command = "account create"
+capture = "pay_bank"
+input = { "name" = "Payment Example Bank", "type" = "bank" }
+
+[[commands]]
+command = "payment-method create"
+capture = "pay_method"
+input = { "name" = "Payment Example Check", "kind" = "check" }
+
+[[commands]]
+command = "item create"
+capture = "pay_item"
+input = { "name" = "Payment Example Labor", "type" = "service", "sales_enabled" = true, "income_account_id" = "${pay_income.id}", "sales_tax_code_id" = "${sale_exempt.id}", "price" = "1.00", "description" = "Exempt completed payment example work" }
+
+[[commands]]
+command = "invoice post"
+reason = "Record completed work for the active payment examples"
+capture = "pay_inv_customer"
+input = { "customer" = "${pay_customer.id}", "date" = "2026-10-03", "number" = "DEMO-PAY-INV-CUSTOMER", "customer_tax_code" = "${sale_exempt.id}", "lines" = [{ "item" = "${pay_item.id}", "quantity" = "1", "net_amount" = "20.00" }] }
+
+[[commands]]
+command = "invoice post"
+reason = "Record completed work for the active payment examples"
+capture = "pay_inv_a"
+input = { "customer" = "${pay_a.id}", "date" = "2026-10-03", "number" = "DEMO-PAY-INV-A", "customer_tax_code" = "${sale_exempt.id}", "lines" = [{ "item" = "${pay_item.id}", "quantity" = "1", "net_amount" = "100.00" }] }
+
+[[commands]]
+command = "invoice post"
+reason = "Record completed work for the active payment examples"
+capture = "pay_inv_b"
+input = { "customer" = "${pay_b.id}", "date" = "2026-10-03", "number" = "DEMO-PAY-INV-B", "customer_tax_code" = "${sale_exempt.id}", "lines" = [{ "item" = "${pay_item.id}", "quantity" = "1", "net_amount" = "60.00" }] }
+
+[[commands]]
+command = "payment receive"
+capture = "pay_p1"
+input = { "customer" = "${pay_customer.id}", "date" = "2026-10-05", "amount" = "125.00", "number" = "DEMO-PAY-P1", "payment_method" = "${pay_method.id}", "deposit_to" = "${pay_bank.id}", "operation_key" = "DEMO-PAY-P1-receive", "applications" = { "mode" = "inline", "items" = [{ "invoice" = "${pay_inv_customer.id}", "expected_version" = 1, "amount" = "10.00" }, { "invoice" = "${pay_inv_a.id}", "expected_version" = 1, "amount" = "80.00" }, { "invoice" = "${pay_inv_b.id}", "expected_version" = 1, "amount" = "30.00" }] } }
+
+[[commands]]
+command = "payment show"
+capture = "pay_p1_guard"
+input = { "payment" = "${pay_p1.id}" }
+
+[[commands]]
+command = "payment update"
+capture = "pay_p1_corrected"
+reason = "Correct actual remittance by five dollars; preserve job ownership"
+input = { "payment" = "${pay_p1.id}", "expected_version" = 1, "amount" = "130.00", "operation_key" = "DEMO-PAY-P1-correct", "settlement_guard" = "${pay_p1_guard.settlement_guard}" }
+
+[[commands]]
+command = "invoice show"
+capture = "pay_a_after_correction"
+input = { "invoice" = "${pay_inv_a.id}" }
+
+[[commands]]
+command = "payment unapply"
+capture = "pay_p1_unapplied"
+reason = "Release Job A application at its original date"
+input = { "payment" = "${pay_p1.id}", "expected_version" = "${pay_p1_corrected.version}", "operation_key" = "DEMO-PAY-P1-unapply-A", "applications" = [{ "application_id" = "${pay_p1.effect.applications.1.application_id}", "invoice_expected_version" = "${pay_a_after_correction.version}" }] }
+
+[[commands]]
+command = "invoice show"
+capture = "pay_a_after_unapply"
+input = { "invoice" = "${pay_inv_a.id}" }
+
+[[commands]]
+command = "payment apply"
+capture = "pay_p1_reapplied"
+input = { "payment" = "${pay_p1.id}", "expected_version" = "${pay_p1_unapplied.version}", "date" = "2026-10-05", "operation_key" = "DEMO-PAY-P1-reapply-A", "applications" = { "mode" = "inline", "items" = [{ "invoice" = "${pay_inv_a.id}", "expected_version" = "${pay_a_after_unapply.version}", "amount" = "80.00" }] } }
+
+[[commands]]
+command = "payment receive"
+capture = "pay_p2"
+input = { "customer" = "${pay_b.id}", "date" = "2026-10-06", "amount" = "40.00", "number" = "DEMO-PAY-P2", "payment_method" = "${pay_method.id}", "deposit_to" = "${pay_bank.id}", "operation_key" = "DEMO-PAY-P2-receive", "applications" = { "mode" = "inline", "items" = [{ "invoice" = "${pay_inv_b.id}", "expected_version" = 3, "amount" = "30.00" }] } }
+
+[[commands]]
+command = "payment receive"
+input = { "customer" = "${pay_customer.id}", "date" = "2026-10-05", "amount" = "125.00", "number" = "DEMO-PAY-P1", "payment_method" = "${pay_method.id}", "deposit_to" = "${pay_bank.id}", "operation_key" = "DEMO-PAY-P1-receive", "applications" = { "mode" = "inline", "items" = [{ "invoice" = "${pay_inv_customer.id}", "expected_version" = 1, "amount" = "10.00" }, { "invoice" = "${pay_inv_a.id}", "expected_version" = 1, "amount" = "80.00" }, { "invoice" = "${pay_inv_b.id}", "expected_version" = 1, "amount" = "30.00" }] } }
+
+[[commands]]
+command = "invoice post"
+reason = "Record completed work for the active payment examples"
+capture = "pay_inv_void"
+input = { "customer" = "${pay_customer.id}", "date" = "2026-10-07", "number" = "DEMO-PAY-INV-VOID", "customer_tax_code" = "${sale_exempt.id}", "lines" = [{ "item" = "${pay_item.id}", "quantity" = "1", "net_amount" = "10.00" }] }
+
+[[commands]]
+command = "payment receive"
+capture = "pay_void"
+input = { "customer" = "${pay_customer.id}", "date" = "2026-10-08", "amount" = "10.00", "number" = "DEMO-PAY-P-VOID", "payment_method" = "${pay_method.id}", "deposit_to" = "${pay_bank.id}", "operation_key" = "DEMO-PAY-void-receive", "applications" = { "mode" = "inline", "items" = [{ "invoice" = "${pay_inv_void.id}", "expected_version" = 1, "amount" = "10.00" }] } }
+
+[[commands]]
+command = "payment unapply"
+capture = "pay_void_unapplied"
+reason = "Unapply cancelled example before either document is voided"
+input = { "payment" = "${pay_void.id}", "expected_version" = 1, "operation_key" = "DEMO-PAY-void-unapply", "applications" = [{ "application_id" = "${pay_void.effect.applications.0.application_id}", "invoice_expected_version" = 2 }] }
+
+[[commands]]
+command = "invoice void"
+reason = "Cancel the isolated example invoice"
+input = { "invoice" = "${pay_inv_void.id}", "expected_version" = 3 }
+
+[[commands]]
+command = "payment void"
+reason = "Reverse cancelled example receipt at its original date"
+input = { "payment" = "${pay_void.id}", "expected_version" = 2, "operation_key" = "DEMO-PAY-void-payment" }
+
+[[commands]]
+command = "payment show"
+input = { "payment" = "${pay_p1.id}" }
+
+[[commands]]
+command = "payment show"
+input = { "payment" = "${pay_p2.id}" }
+
+[[commands]]
+command = "customer show"
+input = { "customer" = "${pay_customer.id}" }
+
+[[commands]]
+command = "customer show"
+input = { "customer" = "${pay_a.id}" }
+
+[[commands]]
+command = "customer show"
+input = { "customer" = "${pay_b.id}" }
+
+[[commands]]
+command = "invoice settlement"
+input = { "invoice" = "${pay_inv_customer.id}" }
+
+[[commands]]
+command = "invoice settlement"
+input = { "invoice" = "${pay_inv_a.id}" }
+
+[[commands]]
+command = "invoice settlement"
+input = { "invoice" = "${pay_inv_b.id}" }
+
+[[commands]]
+command = "payment history"
+input = { "payment" = "${pay_p1.id}" }

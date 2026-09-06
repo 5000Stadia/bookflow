@@ -56,10 +56,32 @@ Current payment queries aggregate and filter in SQL before bounded delivery;
 prospective cursors instead bind exact original intent, financial fingerprint and
 last logical item identity without persisting a preview.
 
-This increment does not complete Row22. GUI controls and CP01–CP33 traceability,
-active examples, measured interactive query budgets, integrated HTTP/MCP journeys
-and blind-user acceptance remain required subsequent gates. Row23/Row9 adapter
-integration is owned separately; this checkout does not claim their acceptance.
+`adapters/workbench/payments.py` installs receive/apply/correction, payment query,
+shared-selection, application-history and dated invoice-settlement pages over the
+same registry reads. `payments.js` persists amount/row origins through shared
+selection commands, retrieves complete prospective effects before enabling Save,
+and retains the exact submitted operation across ambiguous response loss. The
+form stays locked until recovery resolves. It uses the existing 200-row public
+read limit for a fresh prospective continuation recipe without changing financial
+intent, its fingerprint or the 50-row initial descriptor. No browser allocation
+calculator or permission system is introduced. `invoice-settlement.js` retrieves
+the complete invoice-correction recipe; the ordinary editor retains its commercial
+draft while explicitly reviewing current settlement versions. Captured receipt
+facts, internal printing and current availability remain distinct. Company forms
+expose all three payment preferences independently. Numeric-entry metadata uses
+the existing exact calculator, including calculator-only Enter.
+
+The active payment examples append exactly33 commands to each frozen295/201 demo
+prefix. `payment-expected.json` enumerates independent gross/net/storage oracles;
+each company gains bank17000, AR1000 and income18000 cents. Raw prior financial
+and audit rows remain unchanged. `docs/customer-payment-workflows.md` maps
+CP01–CP33 to implemented receipt controls and required dependent increments.
+
+Row23's reviewed execution-credential revalidation is integrated here. This
+candidate does not complete Row22: independent GUI acceptance, calibrated
+interactive query budgets, actual integrated Row9 MCP journeys and the fresh
+blind-user exercise/interview remain required. Parent owns integration and
+acceptance; receipt-core completion does not close the comprehensive goal.
 
 ## Layout
 

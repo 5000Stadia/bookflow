@@ -68,8 +68,10 @@ def work_counts(client, company, prefix):
         for name in ("work_revisions", "work_lines", "work_line_identities"):
             counts[name] = db.execute(f'SELECT count(*) FROM "{name}" WHERE document_id IN ({docs})', (like,)).fetchone()[0]
         counts["work_links"] = db.execute(f"SELECT count(*) FROM work_links WHERE source_document_id IN ({docs})", (like,)).fetchone()[0]
-        prior_sales = "SELECT id FROM transactions WHERE number NOT LIKE ? AND number NOT LIKE ?"
-        later = (prefix + '-BILL-%', prefix + '-PROG-%')  # Row 17 and Row 18 voided billing demos
+        # The Row16 witness owns the pre-work journals and Row15 sales only.
+        # Newer namespaces have independent complete raw-row/prefix proofs.
+        prior_sales = "SELECT id FROM transactions WHERE type = 'journal_entry' OR number LIKE ?"
+        later = (prefix + '-SALE-%',)
         counts['transactions'] = db.execute(f'SELECT count(*) FROM ({prior_sales})', later).fetchone()[0]
         counts.update({name: db.execute(f'SELECT count(*) FROM "{name}" WHERE transaction_id IN ({prior_sales})',
                        later).fetchone()[0]
@@ -219,10 +221,10 @@ def test_seeded_work_chain_lineage_arithmetic_and_history(reference_client, comp
 @pytest.mark.parametrize("company,prefix", COMPANIES)
 def test_work_seeds_post_nothing_and_previews_change_nothing(reference_client, company, prefix):
     client, _ = reference_client
-    checking, trial, journals, profit = ((624895, 690195, 10, 133095) if prefix == "DEMO"
-                                         else (7267800, 8030600, 36, 6439000))
+    checking, trial, journals, profit = ((624895, 708195, 10, 151095) if prefix == "DEMO"
+                                         else (7267800, 8048600, 36, 6457000))
     assert client.account.show(account="Checking", company=company)["balance"]["minor_units"] == checking
-    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == 12800
+    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == 13800
     totals = client.report.trial_balance(company=company, date_to="2026-12-31", limit=200)["totals"]
     assert totals["debit"]["minor_units"] == totals["credit"]["minor_units"] == trial
     statement = client.report.profit_and_loss(company=company, date_from="2026-01-01", date_to="2026-12-31")

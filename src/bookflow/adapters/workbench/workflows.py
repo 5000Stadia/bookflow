@@ -33,12 +33,17 @@ def label(field: str) -> str:
 def company_form_groups(leaves):
     preferences = {'estimates_enabled', 'progress_billing_enabled', 'close_estimates_after_billing'}
     labels = dict(estimates_enabled='Create estimates', progress_billing_enabled='Enable progress billing',
-        close_estimates_after_billing='Make estimates inactive after final billing (only with progress billing off)')
+        close_estimates_after_billing='Make estimates inactive after final billing (only with progress billing off)',
+        automatically_apply_payments='Suggest matching invoice, then oldest invoices for new payments',
+        automatically_calculate_payments='Calculate selected invoice payments when no amount was entered',
+        use_undeposited_funds_for_payments='Default new payments to Undeposited Funds')
+    payment_preferences = {'automatically_apply_payments', 'automatically_calculate_payments', 'use_undeposited_funds_for_payments'}
     for leaf in leaves:
         if leaf['path'] in labels:
             leaf['label'] = labels[leaf['path']]
-    return [dict(title=title, open=True, leaves=[leaf for leaf in leaves if (leaf['path'] in preferences) == selected])
-        for title, selected in [('Customer work preferences', True), ('Company information', False)]]
+    return [dict(title=title, open=True, leaves=[leaf for leaf in leaves if leaf['path'] in fields])
+        for title, fields in [('Customer work preferences', preferences), ('Customer payment preferences', payment_preferences),
+            ('Company information', {leaf['path'] for leaf in leaves} - preferences - payment_preferences)]]
 
 
 def customer_form_groups(leaves: list[dict[str, Any]]) -> list[dict[str, Any]]:

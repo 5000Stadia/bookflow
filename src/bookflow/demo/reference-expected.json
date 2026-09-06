@@ -16,7 +16,9 @@
         "Opening Balance Equity": -1000000,
         "Business Credit Card": 0,
         "Accounts Receivable": 0,
-        "Sales Tax Payable": 0
+        "Sales Tax Payable": 0,
+        "Payment Example Bank": 0,
+        "Payment Example Income": 0
       },
       "gross_debits_credits": {
         "Checking": [
@@ -62,6 +64,14 @@
         "Sales Tax Payable": [
           0,
           0
+        ],
+        "Payment Example Bank": [
+          0,
+          0
+        ],
+        "Payment Example Income": [
+          0,
+          0
         ]
       },
       "trial_balance": 1300000,
@@ -83,7 +93,9 @@
         "Opening Balance Equity": -1000000,
         "Business Credit Card": 0,
         "Accounts Receivable": 0,
-        "Sales Tax Payable": 0
+        "Sales Tax Payable": 0,
+        "Payment Example Bank": 0,
+        "Payment Example Income": 0
       },
       "gross_debits_credits": {
         "Checking": [
@@ -129,6 +141,14 @@
         "Sales Tax Payable": [
           0,
           0
+        ],
+        "Payment Example Bank": [
+          0,
+          0
+        ],
+        "Payment Example Income": [
+          0,
+          0
         ]
       },
       "trial_balance": 1650000,
@@ -150,7 +170,9 @@
         "Opening Balance Equity": -1000000,
         "Business Credit Card": 0,
         "Accounts Receivable": 0,
-        "Sales Tax Payable": 0
+        "Sales Tax Payable": 0,
+        "Payment Example Bank": 0,
+        "Payment Example Income": 0
       },
       "gross_debits_credits": {
         "Checking": [
@@ -196,6 +218,14 @@
         "Sales Tax Payable": [
           0,
           0
+        ],
+        "Payment Example Bank": [
+          0,
+          0
+        ],
+        "Payment Example Income": [
+          0,
+          0
         ]
       },
       "trial_balance": 2050000,
@@ -217,7 +247,9 @@
         "Opening Balance Equity": -1000000,
         "Business Credit Card": 0,
         "Accounts Receivable": 0,
-        "Sales Tax Payable": 0
+        "Sales Tax Payable": 0,
+        "Payment Example Bank": 0,
+        "Payment Example Income": 0
       },
       "gross_debits_credits": {
         "Checking": [
@@ -263,6 +295,14 @@
         "Sales Tax Payable": [
           0,
           0
+        ],
+        "Payment Example Bank": [
+          0,
+          0
+        ],
+        "Payment Example Income": [
+          0,
+          0
         ]
       },
       "trial_balance": 2500000,
@@ -284,7 +324,9 @@
         "Opening Balance Equity": -1000000,
         "Business Credit Card": 0,
         "Accounts Receivable": 0,
-        "Sales Tax Payable": 0
+        "Sales Tax Payable": 0,
+        "Payment Example Bank": 0,
+        "Payment Example Income": 0
       },
       "gross_debits_credits": {
         "Checking": [
@@ -330,6 +372,14 @@
         "Sales Tax Payable": [
           0,
           0
+        ],
+        "Payment Example Bank": [
+          0,
+          0
+        ],
+        "Payment Example Income": [
+          0,
+          0
         ]
       },
       "trial_balance": 3025000,
@@ -351,7 +401,9 @@
         "Opening Balance Equity": -1000000,
         "Business Credit Card": 0,
         "Accounts Receivable": 0,
-        "Sales Tax Payable": 0
+        "Sales Tax Payable": 0,
+        "Payment Example Bank": 0,
+        "Payment Example Income": 0
       },
       "gross_debits_credits": {
         "Checking": [
@@ -397,6 +449,14 @@
         "Sales Tax Payable": [
           0,
           0
+        ],
+        "Payment Example Bank": [
+          0,
+          0
+        ],
+        "Payment Example Income": [
+          0,
+          0
         ]
       },
       "trial_balance": 3575000,
@@ -418,7 +478,9 @@
         "Opening Balance Equity": -1000000,
         "Business Credit Card": 0,
         "Accounts Receivable": 0,
-        "Sales Tax Payable": 0
+        "Sales Tax Payable": 0,
+        "Payment Example Bank": 0,
+        "Payment Example Income": 0
       },
       "gross_debits_credits": {
         "Checking": [
@@ -464,6 +526,14 @@
         "Sales Tax Payable": [
           0,
           0
+        ],
+        "Payment Example Bank": [
+          0,
+          0
+        ],
+        "Payment Example Income": [
+          0,
+          0
         ]
       },
       "trial_balance": 4185000,
@@ -485,7 +555,9 @@
         "Opening Balance Equity": -1000000,
         "Business Credit Card": 0,
         "Accounts Receivable": 0,
-        "Sales Tax Payable": 0
+        "Sales Tax Payable": 0,
+        "Payment Example Bank": 0,
+        "Payment Example Income": 0
       },
       "gross_debits_credits": {
         "Checking": [
@@ -531,6 +603,14 @@
         "Sales Tax Payable": [
           0,
           0
+        ],
+        "Payment Example Bank": [
+          0,
+          0
+        ],
+        "Payment Example Income": [
+          0,
+          0
         ]
       },
       "trial_balance": 4845000,
@@ -552,7 +632,9 @@
         "Opening Balance Equity": -1000000,
         "Business Credit Card": 0,
         "Accounts Receivable": 12800,
-        "Sales Tax Payable": -1600
+        "Sales Tax Payable": -1600,
+        "Payment Example Bank": 0,
+        "Payment Example Income": 0
       },
       "gross_debits_credits": {
         "Checking": [
@@ -598,6 +680,14 @@
         "Sales Tax Payable": [
           20420,
           22020
+        ],
+        "Payment Example Bank": [
+          0,
+          0
+        ],
+        "Payment Example Income": [
+          0,
+          0
         ]
       },
       "trial_balance": 5580600,
@@ -618,8 +708,10 @@
         "Service Income": -5299000,
         "Opening Balance Equity": -1000000,
         "Business Credit Card": 0,
-        "Accounts Receivable": 12800,
-        "Sales Tax Payable": -1600
+        "Accounts Receivable": 13800,
+        "Sales Tax Payable": -1600,
+        "Payment Example Bank": 17000,
+        "Payment Example Income": -18000
       },
       "gross_debits_credits": {
         "Checking": [
@@ -659,18 +751,26 @@
           0
         ],
         "Accounts Receivable": [
-          220191,
-          207391
+          252691,
+          238891
         ],
         "Sales Tax Payable": [
           20420,
           22020
+        ],
+        "Payment Example Bank": [
+          30500,
+          13500
+        ],
+        "Payment Example Income": [
+          1000,
+          19000
         ]
       },
-      "trial_balance": 6340600,
-      "income": 4889000,
-      "net_assets": 5889000,
-      "accounts_receivable": 12800,
+      "trial_balance": 6358600,
+      "income": 4907000,
+      "net_assets": 5907000,
+      "accounts_receivable": 13800,
       "accounts_payable": 0
     },
     {
@@ -685,8 +785,10 @@
         "Service Income": -6099000,
         "Opening Balance Equity": -1000000,
         "Business Credit Card": 0,
-        "Accounts Receivable": 12800,
-        "Sales Tax Payable": -1600
+        "Accounts Receivable": 13800,
+        "Sales Tax Payable": -1600,
+        "Payment Example Bank": 17000,
+        "Payment Example Income": -18000
       },
       "gross_debits_credits": {
         "Checking": [
@@ -726,18 +828,26 @@
           0
         ],
         "Accounts Receivable": [
-          220191,
-          207391
+          252691,
+          238891
         ],
         "Sales Tax Payable": [
           20420,
           22020
+        ],
+        "Payment Example Bank": [
+          30500,
+          13500
+        ],
+        "Payment Example Income": [
+          1000,
+          19000
         ]
       },
-      "trial_balance": 7150600,
-      "income": 5654000,
-      "net_assets": 6654000,
-      "accounts_receivable": 12800,
+      "trial_balance": 7168600,
+      "income": 5672000,
+      "net_assets": 6672000,
+      "accounts_receivable": 13800,
       "accounts_payable": 0
     },
     {
@@ -752,8 +862,10 @@
         "Service Income": -6949000,
         "Opening Balance Equity": -1000000,
         "Business Credit Card": -20000,
-        "Accounts Receivable": 12800,
-        "Sales Tax Payable": -1600
+        "Accounts Receivable": 13800,
+        "Sales Tax Payable": -1600,
+        "Payment Example Bank": 17000,
+        "Payment Example Income": -18000
       },
       "gross_debits_credits": {
         "Checking": [
@@ -793,18 +905,26 @@
           30000
         ],
         "Accounts Receivable": [
-          220191,
-          207391
+          252691,
+          238891
         ],
         "Sales Tax Payable": [
           20420,
           22020
+        ],
+        "Payment Example Bank": [
+          30500,
+          13500
+        ],
+        "Payment Example Income": [
+          1000,
+          19000
         ]
       },
-      "trial_balance": 8030600,
-      "income": 6439000,
-      "net_assets": 7439000,
-      "accounts_receivable": 12800,
+      "trial_balance": 8048600,
+      "income": 6457000,
+      "net_assets": 7457000,
+      "accounts_receivable": 13800,
       "accounts_payable": 0
     }
   ],
@@ -820,8 +940,10 @@
       "Service Income": -6949000,
       "Opening Balance Equity": -1000000,
       "Business Credit Card": -20000,
-      "Accounts Receivable": 12800,
-      "Sales Tax Payable": -1600
+      "Accounts Receivable": 13800,
+      "Sales Tax Payable": -1600,
+      "Payment Example Bank": 17000,
+      "Payment Example Income": -18000
     },
     "gross_debits_credits": {
       "Checking": [
@@ -861,18 +983,26 @@
         30000
       ],
       "Accounts Receivable": [
-        220191,
-        207391
+        252691,
+        238891
       ],
       "Sales Tax Payable": [
         20420,
         22020
+      ],
+      "Payment Example Bank": [
+        30500,
+        13500
+      ],
+      "Payment Example Income": [
+        1000,
+        19000
       ]
     },
-    "trial_balance": 8030600,
-    "income": 6439000,
-    "net_assets": 7439000,
-    "accounts_receivable": 12800,
+    "trial_balance": 8048600,
+    "income": 6457000,
+    "net_assets": 7457000,
+    "accounts_receivable": 13800,
     "accounts_payable": 0
   },
   "second_half": {
@@ -889,7 +1019,9 @@
       "Opening Balance Equity": -1000000,
       "Business Credit Card": 0,
       "Accounts Receivable": 0,
-      "Sales Tax Payable": 0
+      "Sales Tax Payable": 0,
+      "Payment Example Bank": 0,
+      "Payment Example Income": 0
     },
     "gross_debits_credits": {
       "Checking": [
@@ -929,12 +1061,20 @@
         30000
       ],
       "Accounts Receivable": [
-        220191,
-        207391
+        252691,
+        238891
       ],
       "Sales Tax Payable": [
         20420,
         22020
+      ],
+      "Payment Example Bank": [
+        30500,
+        13500
+      ],
+      "Payment Example Income": [
+        1000,
+        19000
       ]
     }
   }

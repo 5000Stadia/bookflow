@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Customer payments{% endblock %}
+{% block body %}
+<link rel="stylesheet" href="{{ static_urls['payments.css'] }}">
+<script src="{{ static_urls['payments.js'] }}" defer></script>
+<script type="application/json" id="payment-config">{{ payment_workspace | tojson }}</script>
+<div id="payment-workspace">
+<nav class="payment-actions"><a href="/c/{{ company_id }}/payment">Find payments</a><a href="/c/{{ company_id }}/payment-drafts">Saved selections</a><a href="/c/{{ company_id }}/company/self/update">Payment preferences</a></nav>
+<h1 id="payment-title">Receive customer payment</h1>
+<p id="payment-message" role="status" aria-live="polite"></p>
+<section id="payment-error" role="alert" hidden><h2>Review before continuing</h2><p></p><div data-comparisons></div><button type="button" id="payment-review">Review current amounts and versions</button><button type="button" id="payment-retry" hidden>Recover exact submitted payment</button></section>
+<section id="payment-record" hidden></section>
+<form id="payment-form">
+<fieldset id="payment-header"><legend>Receipt details</legend>
+<div class="payment-grid">
+<label>Customer or job<input id="payment-customer" autocomplete="off" placeholder="Search customer or job"><button type="button" id="payment-find-customer">Find customer</button></label>
+<div id="payment-customer-results" aria-live="polite"></div>
+<label>Received date<input id="payment-date" type="date" required></label>
+<label>Payment number (automatic when blank)<input id="payment-number" maxlength="64"></label>
+<label>Amount received<input id="payment-amount" type="text" inputmode="decimal" data-math-kind="money" autocomplete="off"><span id="payment-amount-origin" class="muted"></span></label>
+<label>Payment method<select id="payment-method"><option value="">Customer default</option></select></label>
+<label>Reference / check number<input id="payment-reference" maxlength="128"></label>
+<label>Deposit to<select id="payment-destination"><option value="">Company default</option></select></label>
+<label>Receivables account<select id="payment-ar"><option value="">System accounts receivable</option></select></label>
+<label>Memo<textarea id="payment-memo" maxlength="2000"></textarea></label>
+</div>
+<div id="payment-custom" class="payment-grid"></div>
+<button type="button" id="payment-load">Use this customer and date</button>
+</fieldset>
+<section id="payment-balances" aria-label="Current customer balances" hidden><h2>Current net accounts receivable</h2><p><strong id="payment-payer-balance"></strong> — selected customer/job only</p><p><strong id="payment-family-balance"></strong> — selected customer/job and descendants</p><p class="muted">Posting-derived balances include unapplied credit; they are separate from the selected invoice totals below.</p></section>
+<section id="payment-selection"><h2 id="payment-selection-title">Invoices to settle</h2><p id="payment-selection-status"></p>
+<div class="payment-actions"><button type="button" id="payment-auto">Auto Apply</button><button type="button" id="payment-calculate">Calculate selected amounts</button><button type="button" id="payment-clear">Clear draft selections</button><button type="button" id="payment-refresh-draft">Reload shared selection</button></div>
+<div class="payment-table-wrap"><table class="payment-invoices"><thead><tr><th>Select</th><th>Date</th><th>Job / invoice</th><th>Original</th><th>Applied</th><th>Due</th><th>Payment</th></tr></thead><tbody id="payment-invoices"></tbody></table></div>
+<button type="button" id="payment-more" hidden>Next invoice page</button>
+<div id="payment-totals" aria-live="polite"></div>
+</section>
+<label id="payment-reason-label">Reason for correction / unapply / void<input id="payment-reason" maxlength="140"></label>
+<div class="payment-actions"><button type="button" id="payment-preview">Preview payment</button><button type="button" id="payment-save" disabled>Save &amp; Close</button><button type="button" id="payment-save-new" disabled>Save &amp; New</button></div>
+</form>
+<section id="payment-preview-result" hidden aria-label="Payment preview"></section>
+<section id="payment-history" hidden></section>
+</div>
+{% endblock %}

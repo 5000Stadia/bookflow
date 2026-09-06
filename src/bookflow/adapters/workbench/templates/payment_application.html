@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block title %}Payment application{% endblock %}{% block body %}
+<link rel="stylesheet" href="{{ static_urls['payments.css'] }}">
+<h1>Payment application</h1>
+<p>{{ amount.amount }} {{ amount.currency }} · {{ application.record.effective_date }} · {{ 'Currently applied' if application.active else 'Unapplied' }}</p>
+<p><a href="/c/{{ company_id }}/receive-payments?payment={{ payment.id }}">Payment {{ payment.number }}</a> → <a href="/c/{{ company_id }}/invoice/{{ invoice.id }}">Invoice {{ invoice.number }}</a></p>
+<p>The recorded application and its reversals remain immutable. Current availability and invoice due are separate.</p>
+<section><h2>Current settlement</h2><p>Invoice {{ application.current_invoice.status }}; payment {{ application.current_payment.status }}.</p><p><a href="/c/{{ company_id }}/receive-payments?payment={{ payment.id }}">Inspect available payment credit and actions</a></p></section>
+<section><h2>Application and allocation history</h2><p>{{ application_history.total_count }} recorded entries</p>
+{% for entry in application_history['items'] %}<div class="payment-effect">
+<p>{{ entry.kind.replace('_',' ') }} · {{ entry.amount_label }} · <a href="/c/{{ company_id }}/audit/{{ entry.audit_event_id }}">Audit {{ entry.audit_sequence }}</a></p>
+{% if entry.application %}<p>{{ entry.application.kind }} at {{ entry.application.effective_date }}</p>{% endif %}
+{% if entry.allocation %}<p>{{ entry.allocation.kind }} · line {{ entry.allocation.target_ordinal }} · {{ entry.allocation.logical_kind }} · effective {{ entry.allocation.effective_date }}</p>{% endif %}
+</div>{% endfor %}
+{% if application_history.next_cursor %}<a href="?cursor={{ application_history.next_cursor | urlencode }}">Next history page</a>{% endif %}
+</section>{% endblock %}

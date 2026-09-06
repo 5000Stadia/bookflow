@@ -316,6 +316,7 @@ def all_nouns() -> list[str]:
 # Overrides where a noun's record type or identifier differs from the derivation (record type = noun; identifier = the
 # show command's first positional). `company show` takes no positional: the record is the selected company.
 NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
+    "payment": {"record_type": "transaction", "identifier": "payment", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "number", "singular_label": "Customer payment", "plural_label": "Customer payments"},
     "invoice": {"record_type": "transaction", "identifier": "invoice", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "number", "singular_label": "Invoice", "plural_label": "Invoices"},
     "sales-receipt": {"record_type": "transaction", "identifier": "sales_receipt", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "number", "singular_label": "Sales receipt", "plural_label": "Sales receipts"},
     "company": {"record_type": "company_info", "identifier": None},

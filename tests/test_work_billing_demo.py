@@ -28,7 +28,10 @@ assert (FULL, CORRECTED, LABOR, REPAIR, sum(AMOUNT)) == (22681, 22140, 21600, 10
 @pytest.mark.parametrize("resource", ["seed.toml", "reference.toml"])
 def test_manifests_append_all_six_billing_commands_after_the_old_entries(resource):
     commands = tomllib.loads(files("bookflow.demo").joinpath(resource).read_text())["commands"]
-    old, new = commands[:OLD_COUNTS[resource]], commands[OLD_COUNTS[resource]:]
+    # Row17 owns its 41-command extension; Row22 deliberately has active cash
+    # examples, with a separate exact prefix/row/net oracle.
+    old, new = commands[:OLD_COUNTS[resource]], commands[OLD_COUNTS[resource]:OLD_COUNTS[resource]+41]
+    assert len(new) == 41
     assert not [e for e in old if e["command"] in BILLING]
     assert {e["command"] for e in new if e["command"] in BILLING} == BILLING
     prefix = ("DEMO" if resource == "seed.toml" else "REF") + "-BILL-"
@@ -180,10 +183,10 @@ def test_billing_chain_lineage_corrections_and_replay(reference_client, company,
 @pytest.mark.parametrize("company,prefix", COMPANIES)
 def test_voided_billing_demos_leave_every_old_balance_and_zero_net_effect(reference_client, company, prefix):
     client, _ = reference_client
-    checking, trial, journals, profit, equity = ((624895, 690195, 10, 133095, 633095) if prefix == "DEMO"
-                                                 else (7267800, 8030600, 36, 6439000, 7439000))
+    checking, trial, journals, profit, equity = ((624895, 708195, 10, 151095, 651095) if prefix == "DEMO"
+                                                 else (7267800, 8048600, 36, 6457000, 7457000))
     assert client.account.show(account="Checking", company=company)["balance"]["minor_units"] == checking
-    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == 12800
+    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == 13800
     assert client.account.show(account="Sales Tax Payable", company=company)["balance"]["minor_units"] == 1600
     totals = client.report.trial_balance(company=company, date_to="2026-12-31", limit=200)["totals"]
     assert totals["debit"]["minor_units"] == totals["credit"]["minor_units"] == trial

@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block title %}Invoice settlement{% endblock %}{% block body %}
+<link rel="stylesheet" href="{{ static_urls['payments.css'] }}">
+<h1>Invoice {{ invoice.number }} — settlement</h1>
+<p class="payment-actions"><a href="/c/{{ company_id }}/invoice/{{ invoice.id }}">Invoice and commercial history</a><a href="/c/{{ company_id }}/receive-payments?invoice={{ invoice.id }}">Receive payment</a></p>
+<form method="get"><label>Effective-date cutoff (blank for current)<input type="date" name="as_of" value="{{ settlement.as_of or '' }}"></label><button>View settlement</button></form>
+<section aria-label="Dated invoice settlement"><h2>{{ 'As of ' ~ settlement.as_of if settlement.as_of else 'Current settlement' }}</h2>
+<p>{{ settlement.status.replace('_',' ')|capitalize }} · Gross {{ settlement.gross.amount }} · Applied {{ settlement.applied.amount }} · Due {{ settlement.due.amount }} {{ settlement.currency }}</p>
+<p>All currently recorded corrections and their effective dates. This is not a reconstruction of what was known at an earlier time.</p><p class="muted">Generated {{ settlement.generated_at }} · audit watermark {{ settlement.audit_watermark }}</p></section>
+{% if settlement.as_of %}{% set current = settlement.all_committed_current %}<section aria-label="All committed current settlement"><h2>All committed current settlement</h2><p>{{ current.status.replace('_',' ')|capitalize }} · Gross {{ current.gross.amount }} · Applied {{ current.applied.amount }} · Due {{ current.due.amount }} {{ current.currency }}</p><p>Current editable capacity includes future recorded activity. Dated views do not authorize new applications.</p></section>{% endif %}
+<section><h2>Recorded applications and reversals</h2><p>{{ settlement.application_count }} entries for this view</p>
+{% for row in settlement.applications %}<div class="payment-effect"><p>{{ row.kind }} · {{ row.effective_date }} · {{ row.amount.amount }} {{ row.amount.currency }} · <a href="/c/{{ company_id }}/application/{{ row.id }}/history">Application history</a> · <a href="/c/{{ company_id }}/receive-payments?payment={{ row.paying_transaction_id }}">Payment</a></p></div>{% endfor %}
+{% if next_url %}<a href="{{ next_url }}">Next application page</a>{% endif %}</section>
+{% endblock %}

@@ -1323,7 +1323,7 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
     from bookflow.core import registry
     registry.load_all()
     commercial_fields = {}
-    for noun in ("invoice", "sales-receipt", "proposal", "estimate", "work-order"):
+    for noun in ("invoice", "sales-receipt", "proposal", "estimate", "work-order", "payment"):
         scope = noun.replace("-", "_")
         hosted.ok("custom-field.create", {
             "name": f"{noun} form ownership", "kind": "text", "scopes": [scope],
@@ -1338,6 +1338,33 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
         url = _page_url(cmd, hosted.company_id)
         page = api.get(url)
         assert page.status_code == 200, (cmd.name, url, page.status_code, page.text[:300])
+        if cmd.noun == 'payment' and cmd.verb in ('receive', 'apply', 'update', 'unapply', 'void'):
+            # These controls use shared selection/captured-header state. Actual
+            # Chrome witnesses exercise each mode's complete emitted command,
+            # source versions, custom kinds, review, paging and exact recovery.
+            source = None
+            if cmd.verb != 'receive':
+                source = hosted.ok('payment.query', {'status': 'posted', 'limit': 1}, company=hosted.company_id)['items'][0]
+                page = api.get(f'/c/{hosted.company_id}/receive-payments?payment={source["id"]}&mode={cmd.verb}')
+                assert page.status_code == 200, (cmd.name, page.text[:300])
+            config = json.loads(re.search(r'id="payment-config">(.*?)</script>', page.text, re.S).group(1))
+            assert config['mode'] == cmd.verb and cmd.verb in config['allowed']
+            if source:
+                assert config['initial']['id'] == source['id'] and config['initial']['version'] == source['version']
+                assert config['initial']['settlement_guard']
+            else:
+                assert config['initial'] is None
+            for control in ('customer', 'date', 'number', 'amount', 'method', 'reference', 'destination', 'ar', 'memo',
+                            'custom', 'reason', 'invoices', 'auto', 'calculate', 'clear', 'refresh-draft',
+                            'preview', 'save', 'save-new', 'review', 'retry'):
+                assert page.text.count(f'id="payment-{control}"') == 1, (cmd.name, control)
+            assert 'name="originals"' not in page.text
+            continue
+        if cmd.name == 'invoice update':
+            source = hosted.ok('invoice.query', {'status': 'posted', 'limit': 1}, company=hosted.company_id)['items'][0]
+            page = api.get(f'/c/{hosted.company_id}/invoice/{source["id"]}/update')
+            assert page.status_code == 200, page.text[:300]
+            assert re.search(r'name="f:settlement_guard" value="[^"]+"', page.text)
         if cmd.noun in ("estimate", "work-order") and cmd.verb in ("invoice", "sales-receipt", "billing"):
             # Billing cards first pick a real bounded source, then expose that source's inputs.
             assert 'data-billing-source-picker' in page.text, cmd.name
@@ -1386,6 +1413,12 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
                 # These shared inputs use the source-aware controls checked above.
                 assert f'name="f:{leaf["path"]}"' not in page.text, cmd.name
                 assert f'name="collection:{leaf["path"]}"' not in page.text, cmd.name
+            elif cmd.name == 'invoice update' and leaf['path'] == 'settlement_versions':
+                # The mutually exclusive complete signed baseline is the GUI's
+                # chosen version representation, checked against a real source.
+                assert page.text.count('name="f:settlement_guard"') == 1
+                assert 'name="collection:settlement_versions"' not in page.text
+                assert page.text.count('value="review-settlement"') == 1
             elif leaf["kind"] == "collection":
                 assert page.text.count(
                     f'name="collection:{leaf["path"]}"'

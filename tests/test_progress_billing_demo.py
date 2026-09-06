@@ -181,10 +181,10 @@ def test_progress_chain_exact_installments_rebill_correction_and_lineage(referen
 @pytest.mark.parametrize("company,prefix", COMPANIES)
 def test_voided_progress_demos_leave_every_old_balance_and_zero_net_effect(reference_client, company, prefix):
     client, _ = reference_client
-    checking, trial, journals, profit, equity = ((624895, 690195, 10, 133095, 633095) if prefix == "DEMO"
-                                                 else (7267800, 8030600, 36, 6439000, 7439000))
+    checking, trial, journals, profit, equity = ((624895, 708195, 10, 151095, 651095) if prefix == "DEMO"
+                                                 else (7267800, 8048600, 36, 6457000, 7457000))
     assert client.account.show(account="Checking", company=company)["balance"]["minor_units"] == checking
-    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == 12800
+    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == 13800
     assert client.account.show(account="Sales Tax Payable", company=company)["balance"]["minor_units"] == 1600
     totals = client.report.trial_balance(company=company, date_to="2026-12-31", limit=200)["totals"]
     assert totals["debit"]["minor_units"] == totals["credit"]["minor_units"] == trial

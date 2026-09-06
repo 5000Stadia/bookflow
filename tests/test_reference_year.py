@@ -114,6 +114,22 @@ def source_effects():
     # Preference example: exempt $10 invoice and exact same-date reversal.
     billed('REF-PREF-INV-1', '2026-10-02', 'Accounts Receivable', [('original',
         [('{control}', 1000, 0), ('Service Income', 0, 1000)])])
+    # Row22 active remittance: three invoices $20/$100/$60; $125 cash
+    # corrected to $130, plus $40 job cash. Unapply/reapply has no GL legs.
+    for suffix, amount in [('CUSTOMER', 2000), ('A', 10000), ('B', 6000)]:
+        entry('2026-10-03', 'REF-PAY-INV-'+suffix, 'Accounts Receivable', 'Payment Example Income', amount)
+    for kind, total, components in [('original', 12500, (1500, 8000, 3000)),
+                                     ('reversal', 12500, (1500, 8000, 3000)),
+                                     ('replacement', 13000, (2000, 8000, 3000))]:
+        legs = [('Payment Example Bank', total, 0)] + [('Accounts Receivable', 0, amount) for amount in components]
+        if kind == 'reversal':
+            legs = [(account, credit, debit) for account, debit, credit in legs]
+        rows.extend((account, '2026-10-05', 'REF-PAY-P1', kind, debit, credit) for account, debit, credit in legs)
+    entry('2026-10-06', 'REF-PAY-P2', 'Payment Example Bank', 'Accounts Receivable', 4000)
+    entry('2026-10-07', 'REF-PAY-INV-VOID', 'Accounts Receivable', 'Payment Example Income', 1000)
+    entry('2026-10-07', 'REF-PAY-INV-VOID', 'Payment Example Income', 'Accounts Receivable', 1000, 'reversal')
+    entry('2026-10-08', 'REF-PAY-P-VOID', 'Payment Example Bank', 'Accounts Receivable', 1000)
+    entry('2026-10-08', 'REF-PAY-P-VOID', 'Accounts Receivable', 'Payment Example Bank', 1000, 'reversal')
     return rows
 
 
@@ -130,13 +146,13 @@ def test_stored_oracles_match_independent_source_arithmetic():
         b = checkpoint['balances']
         assert sum(b.values()) == 0
         assert checkpoint['trial_balance'] == sum(max(0,n) for n in b.values())
-        assert checkpoint['income'] == -b['Service Income']-b['Professional Fees']-b['Insurance Expense']-b['Depreciation Expense']
-        assert checkpoint['net_assets'] == b['Checking']+b['Equipment']+b['Accumulated Depreciation']+b['Business Credit Card']+b['Accounts Receivable']+b['Sales Tax Payable']
+        assert checkpoint['income'] == -b['Service Income']-b['Professional Fees']-b['Insurance Expense']-b['Depreciation Expense']-b['Payment Example Income']
+        assert checkpoint['net_assets'] == b['Checking']+b['Equipment']+b['Accumulated Depreciation']+b['Business Credit Card']+b['Accounts Receivable']+b['Sales Tax Payable']+b['Payment Example Bank']
         assert checkpoint['net_assets'] == 1000000 + checkpoint['income']
-        assert checkpoint['accounts_receivable'] == (12800 if month >= 9 else 0)
+        assert checkpoint['accounts_receivable'] == (12800 if month >= 9 else 0) + (1000 if month >= 10 else 0)
         assert checkpoint['accounts_payable'] == 0
     assert EXPECTED['annual'] == EXPECTED['monthly'][-1]
-    assert (EXPECTED['annual']['trial_balance'], EXPECTED['annual']['income'], EXPECTED['annual']['net_assets']) == (8030600,6439000,7439000)
+    assert (EXPECTED['annual']['trial_balance'], EXPECTED['annual']['income'], EXPECTED['annual']['net_assets']) == (8048600,6457000,7457000)
     assert EXPECTED['monthly'][5]['trial_balance'] == 3575000
     assert EXPECTED['second_half']['opening'] == EXPECTED['monthly'][5]['balances']
     for account, gross in EXPECTED['second_half']['gross_debits_credits'].items():
@@ -213,8 +229,8 @@ def assert_balances(c):
         assert shown['balance']['minor_units'] == listed['balance']['minor_units'] == normal
         assert shown['balance']['currency'] == 'USD'
         assert shown['id'] != c.account.show(company=DEMO,account='Checking')['id']
-    assert c.report.trial_balance(company=REFERENCE,date_to='2026-12-31')['totals']['debit']['minor_units'] == 8030600
-    assert c.report.trial_balance(company=DEMO,date_to='2026-12-31')['totals']['debit']['minor_units'] == 690195
+    assert c.report.trial_balance(company=REFERENCE,date_to='2026-12-31')['totals']['debit']['minor_units'] == 8048600
+    assert c.report.trial_balance(company=DEMO,date_to='2026-12-31')['totals']['debit']['minor_units'] == 708195
     assert c.account.show(company=DEMO,account='Checking')['balance']['minor_units'] == 624895
     assert c.journal.query(company=DEMO)['count'] == 10
 
@@ -293,7 +309,7 @@ def test_readonly_and_sibling_permissions(reference_client):
     make_actor(root,'reference-reader',company_role=(cid,'readonly'))
     reader = as_user(root,'reference-reader')
     assert [r['company_id'] for r in reader.company.list()['items']] == [cid]
-    assert reader.report.trial_balance(company=cid,date_to='2026-12-31')['totals']['debit']['minor_units'] == 8030600
+    assert reader.report.trial_balance(company=cid,date_to='2026-12-31')['totals']['debit']['minor_units'] == 8048600
     for name, args, context in [('demo reset',{'include_reference':True},{}),('journal post',{'date':'2026-12-31','lines':[{'account':'Checking','side':'debit','amount':'1.00'},{'account':'Service Income','side':'credit','amount':'1.00'}]},{'company':cid})]:
         with pytest.raises(BookflowError) as caught:
             reader.run(name,args,**context)
