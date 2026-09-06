@@ -18,6 +18,7 @@
   let mode = config.mode, payment = config.initial, draft = config.draft, selected = new Map(), candidates = [];
   let customer = null, nextCursor = null, preview = null, submitted = null, busy = false, customDefinitions = [], applicationRows = [];
   let selectedApplications = new Set();
+  let destinationOverride = !config.preferences.use_undeposited_funds_for_payments, defaultDestination = null;
   let key = 'WB-' + crypto.randomUUID();
   let customerPending = false, reviewedPayment = null, draftAttempt = null, reviewedDraft = null, activeAction = null;
   const busyStatus=el('p');busyStatus.id='payment-busy-status';busyStatus.setAttribute('role','status');busyStatus.hidden=true;root.prepend(busyStatus);
@@ -107,11 +108,24 @@
       } catch(readError) {area.append(el('p',`Current comparison could not be completed: ${readError.message || readError.code}. Keep the draft and review again.`));}
     }
   }
+  // Pause native editing while reads/actions can replace form controls. Inert
+  // does not overwrite business disabled state or the submitted-request lock.
+  function pauseEditors(paused) {
+    for(const control of root.querySelectorAll('input,select,textarea')) control.inert=paused;
+  }
+  new MutationObserver(()=>{if(busy) pauseEditors(true);}).observe(root,{childList:true,subtree:true});
+  function drawDestination() {
+    const useDefault=mode==='receive'&&!destinationOverride;
+    $('destination-label').hidden=useDefault;
+    $('destination').required=['receive','update'].includes(mode)&&!useDefault;
+    $('destination-default').hidden=!useDefault;
+    $('destination-reset').hidden=mode!=='receive'||!destinationOverride||!config.preferences.use_undeposited_funds_for_payments;
+  }
   async function perform(fn) {
     if (busy) {busyStatus.textContent='Finishing the current action. Your next action is queued.';await activeAction;return perform(fn);}
-    let done;activeAction=new Promise(resolve=>{done=resolve;});busy=true; root.setAttribute('aria-busy','true');
-    busyStatus.hidden=false;busyStatus.textContent='Working on this payment. Please wait for confirmation.';
-    try { await fn(); } catch(err) { await error(err); } finally {busy=false;root.removeAttribute('aria-busy');busyStatus.hidden=true;done();}
+    let done;activeAction=new Promise(resolve=>{done=resolve;});busy=true; pauseEditors(true);root.setAttribute('aria-busy','true');
+    busyStatus.hidden=false;busyStatus.textContent='Working on this payment. Editing is paused until this action finishes.';
+    try { await fn(); } catch(err) { await error(err); } finally {busy=false;pauseEditors(false);root.removeAttribute('aria-busy');busyStatus.hidden=true;done();}
   }
   async function command(name,input={},options={}) {
     const headers={'Content-Type':'application/json','X-Bookflow-Workbench':'1','X-Bookflow-Client-Name':'bookflow-workbench',
@@ -184,18 +198,18 @@
     for (const row of candidates) {
       const chosen=selected.get(row.invoice_id), tr=el('tr');tr.dataset.invoice=row.invoice_id;
       const check=el('input');check.type='checkbox';check.checked=!!chosen;check.setAttribute('aria-label','Select invoice '+row.number);
-      check.addEventListener('change',()=>perform(async()=>{
+      check.addEventListener('change',()=>{const checked=check.checked;return perform(async()=>{
         if (!draft) await makeDraft();
-        await changeDraft(check.checked?{set_items:[{invoice:row.invoice_id,expected_version:row.expected_version,amount_origin:'unresolved'}]}:{remove_invoices:[row.invoice_id]});
-      }));
+        await changeDraft(checked?{set_items:[{invoice:row.invoice_id,expected_version:row.expected_version,amount_origin:'unresolved'}]}:{remove_invoices:[row.invoice_id]});
+      });});
       const description=el('span');description.append(el('span',row.customer_label+' · '),link(row.number,`/c/${config.company}/invoice/${row.invoice_id}`));
       const input=el('input');input.type='text';input.inputMode='decimal';input.dataset.mathCurrency=config.currency;input.value=chosen?.amount_minor_units!=null?units(chosen.amount_minor_units):'';
       input.setAttribute('aria-label','Payment for invoice '+row.number);
-      input.addEventListener('change',()=>perform(async()=>{
+      input.addEventListener('change',()=>{const value=input.value;return perform(async()=>{
         if (!draft) await makeDraft();
         await changeDraft({set_items:[{invoice:row.invoice_id,expected_version:row.expected_version,
-          ...(input.value?{amount:input.value,amount_origin:'entered'}:{amount_origin:'unresolved'})}]});
-      }));
+          ...(value?{amount:value,amount_origin:'entered'}:{amount_origin:'unresolved'})}]});
+      });});
       const entry=el('span');entry.append(input,el('small',chosen?' '+chosen.amount_origin:' Not selected'));
       const cells=[check,el('span',row.date),description,el('span',units(row.original_gross_minor_units)),el('span',units(row.gross_minor_units)),el('span',units(row.applied_minor_units)),el('span',units(row.due_minor_units)),entry];
       const labels=['Select','Date','Job / invoice','Original','Current','Applied','Due','Payment'];
@@ -264,6 +278,8 @@
     if(mode==='update') Object.assign(input,{date:$('date').value,amount:$('amount').value,settlement_guard:payment.settlement_guard},customInput());
     if(mode==='receive'||mode==='update') {
       for(const [field,id] of [['number','number'],['payment_method','method'],['deposit_to','destination'],['reference','reference'],['memo','memo']]) {
+        if(field==='deposit_to'&&mode==='receive'&&!destinationOverride) continue;
+        if(field==='deposit_to'&&mode==='receive'&&!$(id).value) throw {message:'Choose a bank or Undeposited Funds destination before previewing.'};
         if($(id).value) input[field]=$(id).value;
         else if(mode==='update'&&['reference','memo'].includes(field)) input[field]=null;
       }
@@ -300,6 +316,7 @@
   function drawPreview() {
     const area=$('preview-result');area.hidden=false;area.replaceChildren(el('h2',preview.out.idempotent_replay?'Original recorded effect — no new payment':'Proposed payment effect'));
     area.append(el('p',`Received ${units(preview.out.current.received_minor_units)}; applied ${units(preview.out.current.applied_minor_units)}; available ${units(preview.out.current.available_minor_units)} ${config.currency}.`));
+    if(['receive','update'].includes(mode)) area.append(el('p',`Deposit to: ${Object.hasOwn(preview.request.input,'deposit_to')?$('destination').selectedOptions[0]?.textContent:(defaultDestination?.full_name||defaultDestination?.name||'Unresolved')} · ${Object.hasOwn(preview.request.input,'deposit_to')?'explicit choice':'company default (Undeposited Funds)'}.`));
     for(const [kind,rows] of Object.entries(preview.complete)) {
       const section=el('details');section.open=rows.length<=10;section.append(el('summary',kind.replaceAll('_',' ')+': '+rows.length+' complete changes'));
       const container=el('div');container.className='payment-effects';
@@ -516,7 +533,7 @@
     if(preserved) {await chooseCustomer(preserved.context.customer_id);$('date').value=preserved.context.date;$('ar').value=preserved.context.ar_account_id;await reloadDraft();await loadInvoices();}
     else if(mode==='unapply') await loadApplications();
     else if(mode==='apply') {await makeDraft();await loadInvoices();}
-    await drawCustom();
+    drawDestination();await drawCustom();
     if(mode==='void') note('Unapply every recorded application first. Voiding reverses receipt cash and AR at its original dates.');
   }
   async function initialize() {
@@ -529,7 +546,9 @@
       if(row.type==='accounts_receivable') $('ar').append(new Option(row.full_name||row.name,row.id));
     }
     customDefinitions=await Promise.all(defs.items.filter(row=>row.active).map(row=>command('custom-field show',{custom_field:row.id})));
-    if(config.preferences.use_undeposited_funds_for_payments) $('destination').value=accounts.items.find(row=>row.system_role==='undeposited_funds')?.id||'';
+    defaultDestination=accounts.items.find(row=>row.system_role==='undeposited_funds');
+    if(config.preferences.use_undeposited_funds_for_payments) $('destination').value=defaultDestination?.id||'';
+    drawDestination();
     if(draft) await startMode(mode,draft);
     else if(payment&&mode==='show') await drawRecord(payment);
     else if(payment) await startMode(mode);
@@ -555,10 +574,13 @@
     if(!out.items.length) results.append(el('p','No matching customers.'));
   }));
   $('load').addEventListener('click',()=>perform(async()=>{invalidate();await makeDraft();await loadInvoices();if(!selected.size && draft.amount?.minor_units>0 && config.preferences.automatically_apply_payments) await autoApply();}));
-  $('amount').addEventListener('change',()=>perform(async()=>{
-    if(draft&&!draftAttempt&&draft.amount_origin==='entered'&&$('amount').value===draft.amount?.amount) return;
-    invalidate();if(draft) {await changeDraft({amount:$('amount').value||null});
-    if(!selected.size && draft.amount?.minor_units>0 && config.preferences.automatically_apply_payments) await autoApply();}}));
+  $('amount').addEventListener('change',()=>{const value=$('amount').value;return perform(async()=>{
+    $('amount').value=value;
+    if(draft&&!draftAttempt&&draft.amount_origin==='entered'&&value===draft.amount?.amount) return;
+    invalidate();if(draft) {await changeDraft({amount:value||null});
+    if(!selected.size && draft.amount?.minor_units>0 && config.preferences.automatically_apply_payments) await autoApply();}});});
+  $('destination-override').addEventListener('click',()=>perform(()=>{destinationOverride=true;invalidate();drawDestination();}));
+  $('destination-reset').addEventListener('click',()=>perform(()=>{destinationOverride=false;invalidate();drawDestination();}));
   for(const event of ['input','change']) $('customer').addEventListener(event,()=>{
     customerPending=true;invalidate();$('balances').hidden=true;$('invoices').replaceChildren();
     note('Choose a matching customer. The previous preview cannot be saved; any prior shared selection remains in Saved selections.');

@@ -10,7 +10,10 @@ same party, AR account and currency. Remaining new cash belongs to the payer.
 
 Open **Receive customer payment** from a customer or invoice, or **Customer payments**
 from the company navigation. Choose customer/job, received date, method and deposit
-destination. The form shows authoritative selected-party and family net AR,
+destination. With the Undeposited Funds preference enabled, the ordinary destination
+chooser is hidden and the untouched request uses the company default. Preview shows
+Undeposited Funds. **Choose another destination** opens an explicit override;
+**Use company default destination** returns to omission. The form shows authoritative selected-party and family net AR,
 separately from the selected invoice totals. Partial payments leave invoice due;
 unapplied cash remains available credit and is not additional income.
 
@@ -25,6 +28,8 @@ at $50, it stays $50 and leaves $100 unapplied.
 **Calculate selected amounts** uses the shared calculation command. **Auto Apply**
 uses its matching/oldest suggestions. Both prepare a shared draft. **Clear draft
 selections** removes proposed choices without unapplying recorded payments.
+Editable fields pause while an action is running so delayed reads cannot erase new
+input. Action buttons serialize their requests; resume editing after completion.
 **Preview payment** loads every proposed effect page before enabling Save.
 **Save & Close** displays the saved receipt; **Save & New** starts a fresh payment
 only after confirmed success, retaining customer/date/method/destination.
@@ -75,7 +80,7 @@ Required follow-ups remain required under the active project goal.
 | CP04 | Explicit cash and selection-derived totals are two supported paths; shared origins survive handoff. |
 | CP05 | Received date and explicit application dates; corrected-history cutoff reads remain distinct from current capacity. |
 | CP06 | Captured payment method and reference, customer default. Card data/provider execution belongs to the provider increment. |
-| CP07 | Visible bank/Undeposited Funds destination and the independent company default preference. |
+| CP07 | UF-default mode hides the destination chooser and shows resolved UF in preview; Choose another destination deliberately overrides it. Preference-off mode requires the bank/UF chooser. |
 | CP08 | Memo and internal receipt printing now; no delivery/provider confirmation claim. |
 | CP09 | Paged invoice date/job/number/original/applied/due/payment grid and complete preview. Discount/credit-memo/aging columns depend on their owning increments. |
 | CP10 | Independent automatic-application preference plus explicit matching/oldest suggestions; draft preparation precedes preview/save. |

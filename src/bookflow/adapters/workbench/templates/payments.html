@@ -21,7 +21,9 @@
 <label><span id="payment-amount-label">Amount received</span><input id="payment-amount" type="text" inputmode="decimal" data-math-kind="money" autocomplete="off"><span id="payment-amount-origin" class="muted"></span></label>
 <label>Payment method<select id="payment-method"><option value="">Customer default</option></select></label>
 <label>Reference / check number<input id="payment-reference" maxlength="128"></label>
-<label>Deposit to<select id="payment-destination"><option value="">Company default</option></select></label>
+<label id="payment-destination-label">Deposit to<select id="payment-destination"><option value="">Choose bank or Undeposited Funds</option></select></label>
+<div id="payment-destination-default" hidden><p>Company default: Undeposited Funds. Preview confirms the destination.</p><button type="button" id="payment-destination-override">Choose another destination</button></div>
+<button type="button" id="payment-destination-reset" hidden>Use company default destination</button>
 <label>Receivables account<select id="payment-ar"><option value="">System accounts receivable</option></select></label>
 <label>Memo<textarea id="payment-memo" maxlength="2000"></textarea></label>
 </div>
