@@ -57,7 +57,8 @@ bank or system Undeposited Funds), requires a resolved payment_method (explicit 
 and rejects invoice-only terms/due_date/AR inputs. No automatic cash assumption.
 
 Line inputs: optional current line_id for an update, item selector, quantity
-(decimal string, default 1, at most six fractional digits), optional unit,
+(decimal string, default 1, at most six fractional digits; `.5` accepts and
+normalizes to `0.5`), optional unit,
 unit_price (exact nonnegative integer money shape or decimal string), description, class_id,
 tax_code. No floats, negative quantities/prices, arbitrary account overrides or
 caller-supplied posting legs. The command resolves accounts from the item.

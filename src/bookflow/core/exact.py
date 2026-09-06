@@ -113,8 +113,13 @@ def format_percentage_millionths(
 
 
 def parse_quantity_micro_units(value: Any, *, field: str = "quantity") -> int:
-    """Parse a signed quantity with at most six fractional digits."""
+    """Parse a signed quantity with at most six fractional digits; .5 is 0.5."""
 
+    if isinstance(value, str):
+        if value.startswith("."):
+            value = "0" + value
+        elif value.startswith("-."):
+            value = "-0" + value[1:]
     return _parse_scaled_decimal(value, scale=QUANTITY_SCALE, field=field)
 
 

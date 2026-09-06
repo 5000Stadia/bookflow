@@ -48,6 +48,20 @@ def test_invoice_correction_void_and_customer_balance(client, sale):
     assert client.customer.show(customer=sale['customer'], company=COMPANY)['current_balance']['minor_units'] == 0
 
 
+def test_leading_decimal_quantity_posts_exact_half_price(client, sale):
+    data = dict(date='2026-01-12', customer=sale['customer'],
+        lines=[dict(item=sale['item'], quantity='.5')])
+    preview = client.run('invoice post', data, company=COMPANY, dry_run=True)
+    invoice = client.run('invoice post', dict(data,
+        expected_facts_fingerprint=preview['facts_fingerprint']), company=COMPANY)
+    assert invoice['total_minor_units'] == preview['total_minor_units'] == 617
+    line = invoice['revision']['lines'][0]
+    assert line['quantity'] == '0.5' and line['quantity_microunits'] == 500_000
+    ar = invoice['revision']['profile']['control_account']['id']
+    assert_oracle(client, invoice['id'], {('2026-01-12', ar): 617,
+        ('2026-01-12', sale['income']): -617})
+
+
 def test_preview_replay_noop_and_stale_facts(client, sale):
     data = dict(date='2026-01-12', customer=sale['customer'], lines=[dict(item=sale['item'])])
     preview = client.run('invoice post', data, company=COMPANY, dry_run=True)

@@ -253,8 +253,9 @@ exactly one of quantity, net_amount, percent, rebill_allocation_id; extra member
 reject. line_id is the current stable work-line identity from BillingLineOutput,
 not its source_line_id revision row. rebill_allocation_id is the canonical ID from
 revision.billing_sources[].id, including older/voided revision history.
-Quantity and percentage are plain positive decimal strings, no exponent or sign,
-at most six fractional places; percent is <=100. JSON numeric values reject.
+Quantity and percentage are plain positive decimal strings with no exponent or
+sign and at most six fractional places; percent is <=100. Quantity accepts a
+leading decimal point (`.5` becomes `0.5`). JSON numeric values reject.
 net_amount uses existing SalesMoneyInput or decimal money-string syntax and must
 be positive home-currency money. Malformed/foreign/duplicate identity or shape
 errors use E_VALIDATION with the indexed field path. Valid numeric requests beyond

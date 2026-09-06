@@ -26,6 +26,9 @@ def test_scaled_parsers_and_formatters_are_canonical():
     assert parse_percentage_millionths("-0.000001") == -1
 
     assert parse_quantity_micro_units("00012.500000") == 12_500_000
+    assert parse_quantity_micro_units(".5") == 500_000
+    assert parse_quantity_micro_units("-.5") == -500_000
+    assert parse_quantity_micro_units(".000001") == 1
     assert format_quantity_micro_units(12_500_000) == "12.5"
     assert format_quantity_micro_units(-1) == "-0.000001"
 

@@ -10,6 +10,8 @@ from bookflow.core.exact import parse_percentage_millionths, parse_quantity_micr
 
 
 def _positive_decimal(value, *, percent=False):
+    if not percent and isinstance(value, str) and value.startswith('.'):
+        value = '0' + value
     if not isinstance(value, str) or not re.fullmatch(r'[0-9]+(?:\.[0-9]{1,6})?', value):
         raise ValueError('use a positive decimal string with at most six fractional places')
     parsed = parse_percentage_millionths(value) if percent else parse_quantity_micro_units(value)

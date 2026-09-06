@@ -17,6 +17,16 @@ def scope_line(source, index=0):
     return source['revision']['lines'][index]['line_id']
 
 
+def test_leading_decimal_quote_and_partial_quantity(client, sale):
+    source = accepted(client, sale, lines=[dict(item=sale['item'], quantity='.5', net_amount='50.00')])
+    first = bill(client, source, selections=[dict(line_id=scope_line(source), quantity='.25')])
+    assert first['subtotal_minor_units'] == 2500
+    assert first['revision']['lines'][0]['quantity'] == '0.25'
+    remaining = run(client, 'estimate', 'billing', estimate=source['id'])
+    assert remaining['lines'][0]['remaining_quantity'] == '0.25'
+    assert remaining['remaining_net_minor_units'] == 2500
+
+
 @pytest.mark.parametrize('noun',['estimate','work-order'])
 @pytest.mark.parametrize('verb',['invoice','sales-receipt'])
 def test_sub_microunit_amount_partial_and_remaining(client,sale,noun,verb):

@@ -31,8 +31,14 @@ def test_existing_permanent_request_hash_is_byte_compatible():
     assert hashes(partial, 'work_order', 'invoice')[1] != hashes(old, 'work_order', 'invoice')[1]
 
 
+def test_leading_decimal_quantity_has_same_permanent_identity():
+    def request(quantity):
+        return WorkOrderInvoiceInput(**BASE, selections=[dict(line_id='0'*26, quantity=quantity)])
+    assert hashes(request('.5'), 'work_order', 'invoice') == hashes(request('0.5'), 'work_order', 'invoice')
+
+
 @pytest.mark.parametrize('selection', [
-    {'quantity': '0.25'}, {'net_amount': '40.00'}, {'percent': '25'},
+    {'quantity': '0.25'}, {'quantity': '.5'}, {'net_amount': '40.00'}, {'percent': '25'},
     {'net_amount': {'minor_units': 40, 'currency': 'USD'}}, {'rebill_allocation_id': '1'*26},
 ])
 def test_public_per_line_selection_roundtrips(selection):
@@ -46,6 +52,9 @@ def test_public_per_line_selection_roundtrips(selection):
     {'percent': '100.000001'}, {'percent': '0'}, {'percent': '-1'}, {'percent': '1e1'},
     {'selections': [{'line_id': '0'*26, 'quantity': '0'}]},
     {'selections': [{'line_id': '0'*26, 'quantity': '0.0000001'}]},
+    {'selections': [{'line_id': '0'*26, 'quantity': '.0000001'}]},
+    {'selections': [{'line_id': '0'*26, 'quantity': '.'}]},
+    {'selections': [{'line_id': '0'*26, 'quantity': '-.5'}]},
     {'selections': [{'line_id': '0'*26, 'quantity': None}]},
     {'selections': [{'line_id': '0'*26, 'quantity': '1', 'percent': '10'}]},
     {'selections': [{'line_id': '0'*26, 'percent': '1'}]*2},
