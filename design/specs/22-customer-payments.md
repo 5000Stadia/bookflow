@@ -1,6 +1,6 @@
 # Row22 — Customer payments, invoice settlement and cooperating interfaces
 
-Status: complete proposal for independent plan review; not implementation authorization. Written 2026-09-05 against frozen `40c5243a6a156367c468d008cf70c0400a587c71` in `/tmp/bookflow-financial-version-history`. Parent owns intention, public design and integration. Row21 has independently passed and is closed in main; its diagnostic prerequisite is available. This proposal supersedes the exact-party-only *new receipt* alternative in `notes/payment-design-draft.md`.
+Status: independent revision3 plan review passed; implementation is in progress. Artifact verification and closure remain pending. Written 2026-09-05 against frozen `40c5243a6a156367c468d008cf70c0400a587c71` in `/tmp/bookflow-financial-version-history`. Parent owns intention, public design and integration. Row21 has independently passed and is closed in main; its diagnostic prerequisite is available. This proposal supersedes the exact-party-only *new receipt* alternative in `notes/payment-design-draft.md`.
 
 ## 1. Owning outcome and boundary
 
