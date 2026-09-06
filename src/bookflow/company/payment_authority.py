@@ -10,21 +10,48 @@ from bookflow.company import schema as c
 from bookflow.hub.access import require_resource
 
 
-def linked_work_required(db, transaction_ids):
+def work_link_predicate(transaction_id):
+    """SQL equivalent of historical work linkage, for complete list filtering."""
+    work, apps = c.work_billing_allocations, c.applications
+    return sa.or_(
+        sa.exists(sa.select(work.c.id).where(work.c.transaction_id == transaction_id)),
+        sa.exists(sa.select(apps.c.id).join(work, work.c.transaction_id == apps.c.paid_transaction_id)
+            .where(apps.c.paying_transaction_id == transaction_id)))
+
+
+def readable_predicate(s, transaction_id):
+    """Use the existing resource gate once; never disclose protected list counts."""
+    from bookflow.core.errors import BookflowError
+    try:
+        require_resource(s, 'customer-work', 'member')
+    except BookflowError as exc:
+        if exc.code != 'E_PERMISSION':
+            raise
+        return ~work_link_predicate(transaction_id)
+    return sa.true()
+
+
+def linked_work_required(db, transaction_ids, cache=None):
     ids = set(transaction_ids)
     if not ids:
         return False
     # Historical settlement edges remain evidence even after full unapply.
     apps = c.applications
+    if cache is not None:
+        targets = _evidence_rows(db, apps, 'paying_transaction_id', None, cache)
+        for identifier in tuple(ids):
+            ids.update(row['paid_transaction_id'] for row in targets.get(identifier, []))
+        work = _evidence_rows(db, c.work_billing_allocations, 'transaction_id', None, cache)
+        return any(identifier in work for identifier in ids)
     ids.update(db.conn.execute(sa.select(apps.c.paid_transaction_id).where(
         apps.c.paying_transaction_id.in_(ids))).scalars())
     return db.conn.execute(sa.select(c.work_billing_allocations.c.id).where(
         c.work_billing_allocations.c.transaction_id.in_(ids)).limit(1)).first() is not None
 
 
-def requirements(db, transaction_ids, *, write=False):
+def requirements(db, transaction_ids, *, write=False, cache=None):
     result = [('ledger.post' if write else 'ledger.read', 'standard' if write else 'member')]
-    if linked_work_required(db, transaction_ids):
+    if linked_work_required(db, transaction_ids, cache):
         result.append(('customer-work', 'standard' if write else 'member'))
     return tuple(result)
 
@@ -32,6 +59,19 @@ def requirements(db, transaction_ids, *, write=False):
 def authorize(s, transaction_ids, *, write=False):
     for resource, role in requirements(s.company, transaction_ids, write=write):
         require_resource(s, resource, role)
+
+
+def authorize_query(s, transaction_ids, *, write=False):
+    """Authorize a complete SQL-selected graph without a Python ID expansion."""
+    selected = transaction_ids.cte('payment_authority_transactions')
+    ids = sa.select(selected.c.transaction_id)
+    targets = sa.select(c.applications.c.paid_transaction_id).where(c.applications.c.paying_transaction_id.in_(ids))
+    linked = s.company.conn.execute(sa.select(c.work_billing_allocations.c.id).where(sa.or_(
+        c.work_billing_allocations.c.transaction_id.in_(ids),
+        c.work_billing_allocations.c.transaction_id.in_(targets))).limit(1)).first() is not None
+    require_resource(s, 'ledger.post' if write else 'ledger.read', 'standard' if write else 'member')
+    if linked:
+        require_resource(s, 'customer-work', 'standard' if write else 'member')
 
 
 PAYMENT_TARGETS = {
@@ -49,7 +89,20 @@ PAYMENT_TARGETS = {
 }
 
 
-def record_transactions(db, record_type, record_id, seen=None):
+def _evidence_rows(db, table, field, value, cache):
+    """Batch reads only within one disclosure decision and its DB snapshot."""
+    if cache is None:
+        return list(db.conn.execute(sa.select(table).where(table.c[field] == value)).mappings())
+    key = (table.name, field)
+    if key not in cache:
+        groups = {}
+        for row in db.conn.execute(sa.select(table)).mappings():
+            groups.setdefault(row[field], []).append(row)
+        cache[key] = groups
+    return cache[key] if value is None else cache[key].get(value, [])
+
+
+def record_transactions(db, record_type, record_id, seen=None, cache=None):
     """Owned reference traversal for composite evidence; unknown links fail closed."""
     seen = set() if seen is None else seen
     identity = (record_type, record_id)
@@ -57,15 +110,15 @@ def record_transactions(db, record_type, record_id, seen=None):
         return set()
     seen.add(identity)
     if record_type == 'attachment':
-        links = db.conn.execute(sa.select(c.attachment_links.c.id).where(c.attachment_links.c.attachment_id == record_id)).scalars().all()
+        links = [row['id'] for row in _evidence_rows(db, c.attachment_links, 'attachment_id', record_id, cache)]
         # Historical associations remain authority-bearing after unlink. An
         # attachment with no associations is ordinary unattached evidence.
         ids = set()
         for identifier in links:
-            ids.update(record_transactions(db, 'attachment_link', identifier, seen))
+            ids.update(record_transactions(db, 'attachment_link', identifier, seen, cache))
         return ids
     if record_type == 'transaction':
-        if db.conn.execute(sa.select(c.transactions.c.id).where(c.transactions.c.id == record_id)).first() is None:
+        if not _evidence_rows(db, c.transactions, 'id', record_id, cache):
             from bookflow.core.errors import BookflowError
             raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'})
         return {record_id}
@@ -80,7 +133,8 @@ def record_transactions(db, record_type, record_id, seen=None):
         else:
             return set()
     table = c.metadata.tables[target[0]]
-    row = db.conn.execute(sa.select(table).where(table.c[target[1]] == record_id)).mappings().one_or_none()
+    found = _evidence_rows(db, table, target[1], record_id, cache)
+    row = found[0] if len(found) == 1 else None
     if row is None:
         from bookflow.core.errors import BookflowError
         raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'})
@@ -97,13 +151,11 @@ def record_transactions(db, record_type, record_id, seen=None):
             from bookflow.core.errors import BookflowError
             raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'}) from None
     if record_type == 'payment_operation_item':
-        ids.update(record_transactions(db, 'payment_operation', row['operation_id'], seen))
+        ids.update(record_transactions(db, 'payment_operation', row['operation_id'], seen, cache))
     if record_type.startswith('payment_selection'):
         selection_id = row['id'] if record_type == 'payment_selection' else row['selection_id']
-        ids.update(db.conn.execute(sa.select(c.payment_selection_items.c.invoice_id).where(
-            c.payment_selection_items.c.selection_id == selection_id, c.payment_selection_items.c.invoice_id.is_not(None))).scalars())
-        contexts = db.conn.execute(sa.select(c.payment_selection_revisions.c.context_snapshot).where(
-            c.payment_selection_revisions.c.selection_id == selection_id)).scalars()
+        ids.update(item['invoice_id'] for item in _evidence_rows(db, c.payment_selection_items, 'selection_id', selection_id, cache) if item['invoice_id'])
+        contexts = [revision['context_snapshot'] for revision in _evidence_rows(db, c.payment_selection_revisions, 'selection_id', selection_id, cache)]
         try:
             for context in contexts:
                 payment = json.loads(context)['payment_id']
@@ -113,18 +165,17 @@ def record_transactions(db, record_type, record_id, seen=None):
             from bookflow.core.errors import BookflowError
             raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'}) from None
     if record_type in ('note', 'attachment_link') and row.get('record_type') and row.get('record_id'):
-        ids.update(record_transactions(db, row['record_type'], row['record_id'], seen))
+        ids.update(record_transactions(db, row['record_type'], row['record_id'], seen, cache))
     return ids
 
 
-def event_requirements(db, event_id):
+def event_requirements(db, event_id, cache=None):
     """One disclosure decision for the complete mixed payment audit event."""
-    entries = list(db.conn.execute(sa.select(c.audit_entries.c.record_type, c.audit_entries.c.record_id).where(
-        c.audit_entries.c.event_id == event_id)))
+    entries = [(row['record_type'], row['record_id']) for row in _evidence_rows(db, c.audit_entries, 'event_id', event_id, cache)]
     ids = set()
     for kind, identifier in entries:
-        ids.update(record_transactions(db, kind, identifier))
-    return requirements(db, ids) if ids or any(kind in PAYMENT_TARGETS for kind, _ in entries) else ()
+        ids.update(record_transactions(db, kind, identifier, cache=cache))
+    return requirements(db, ids, cache=cache) if ids or any(kind in PAYMENT_TARGETS for kind, _ in entries) else ()
 
 
 def authorize_event(s, event_id):
@@ -137,10 +188,11 @@ def denied_events(s):
     events = s.company.conn.execute(sa.select(c.audit_entries.c.event_id).where(
         c.audit_entries.c.record_type.in_((*PAYMENT_TARGETS, 'transaction', 'transaction_revision', 'document_line',
             'document_line_identity', 'posting_batch', 'posting_line', 'posting_line_source', 'note', 'attachment', 'attachment_link'))).distinct()).scalars()
-    denied = []
+    denied, cache = [], {}
     for event in events:
         try:
-            authorize_event(s, event)
+            for resource, role in event_requirements(s.company, event, cache):
+                require_resource(s, resource, role)
         except BookflowError as exc:
             if exc.code != 'E_PERMISSION':
                 raise

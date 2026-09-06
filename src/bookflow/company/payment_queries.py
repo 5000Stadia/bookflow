@@ -56,16 +56,28 @@ def payer_balances(s, customer_id):
     """CP02: actual payer/family net AR, authorized over the contributing graph."""
     from bookflow.company import customer_balances
     from bookflow.core.money import Money
-    family = [row[0] for row in s.company.raw.execute('''WITH RECURSIVE family(id) AS (
-        SELECT id FROM customers WHERE id=? UNION SELECT c.id FROM customers c JOIN family f ON c.parent_id=f.id)
-        SELECT id FROM family''', (customer_id,))]
-    transactions = s.company.conn.execute(sa.select(c.posting_lines.c.transaction_id).join(c.accounts,
+    from bookflow.core.exact import _require_i64
+    from bookflow.company.payment_authority import authorize_query
+    family = sa.select(c.customers.c.id).where(c.customers.c.id == customer_id).cte('balance_family', recursive=True)
+    family = family.union(sa.select(c.customers.c.id).join(family, c.customers.c.parent_id == family.c.id))
+    transactions = sa.select(c.posting_lines.c.transaction_id).join(c.accounts,
         c.accounts.c.id == c.posting_lines.c.account_id).where(c.accounts.c.type == 'accounts_receivable',
-        c.posting_lines.c.name_type == 'customer', c.posting_lines.c.name_id.in_(family)).distinct()).scalars().all()
-    authorize(s, transactions)
+        c.posting_lines.c.name_type == 'customer', c.posting_lines.c.name_id.in_(sa.select(family.c.id))).distinct()
+    authorize_query(s, transactions)
     currency = s.company_info_row['home_currency']
-    return dict(customer_id=customer_id, payer_balance=Money(customer_balances.own_balance(s.company, customer_id), currency).to_dict(),
-        family_balance=Money(customer_balances.family_balance(s.company, customer_id), currency).to_dict())
+    # One lossless posting scan supplies both CP02 projections. Reuse the owning
+    # arbitrary-intermediate aggregate and checked Money boundary, never SQLite
+    # SUM/REAL or a stored running balance.
+    customer_balances.register_functions(s.company)
+    lines = c.posting_lines
+    net = lines.c.debit_minor_units - lines.c.credit_minor_units
+    payer, family_net = s.company.conn.execute(sa.select(
+        sa.func.bookflow_sum_int(sa.case((lines.c.name_id == customer_id, net), else_=0)),
+        sa.func.bookflow_sum_int(net)).select_from(lines).join(c.accounts, c.accounts.c.id == lines.c.account_id).where(
+            lines.c.name_type == 'customer', c.accounts.c.type == 'accounts_receivable',
+            lines.c.name_id.in_(sa.select(family.c.id)))).one()
+    return dict(customer_id=customer_id, payer_balance=Money(_require_i64(int(payer or '0'), field='current_balance'), currency).to_dict(),
+        family_balance=Money(_require_i64(int(family_net or '0'), field='family_balance'), currency).to_dict())
 
 
 def payment_facts(s, selector, *, write=False):
@@ -125,10 +137,11 @@ applied before this function, on EVERY page, including all graph members.
     return dict(items=selected, total_count=len(items), next_cursor=next_cursor, facts_fingerprint=fp)
 
 
-def sql_page(s, noun, inp, statement):
-    """Bound current query delivery with an authenticated fixed audit watermark."""
-    mark = s.company.conn.execute(sa.select(sa.func.coalesce(sa.func.max(c.audit_events.c.seq), 0))).scalar_one()
-    fp = digest([s.company_row['id'], noun, inp.model_dump(mode='json', exclude={'cursor'}), mark])
+def sql_page(s, noun, inp, statement, *, facts=None, known_count=None):
+    """SQL delivery; ordinary queries pin audit, preparation pins relevant facts."""
+    if facts is None:
+        facts = s.company.conn.execute(sa.select(sa.func.coalesce(sa.func.max(c.audit_events.c.seq), 0))).scalar_one()
+    fp = digest([s.company_row['id'], noun, inp.model_dump(mode='json', exclude={'cursor'}), facts])
     domain, key = b'bookflow.payment.query.v1\0', _cursor_key(s.company)
     offset = 0
     if inp.cursor:
@@ -146,7 +159,7 @@ def sql_page(s, noun, inp, statement):
             offset = value['offset']
         except (ValueError, TypeError, KeyError):
             raise BookflowError('E_VALIDATION', details={'field': 'cursor'}) from None
-    count = s.company.conn.execute(sa.select(sa.func.count()).select_from(statement.order_by(None).subquery())).scalar_one()
+    count = known_count if known_count is not None else s.company.conn.execute(sa.select(sa.func.count()).select_from(statement.order_by(None).subquery())).scalar_one()
     rows = [dict(row) for row in s.company.conn.execute(statement.offset(offset).limit(inp.limit)).mappings()]
     cursor = None
     if offset + len(rows) < count:

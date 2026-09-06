@@ -46,3 +46,22 @@ def test_attachment_and_annotation_audit_require_historical_work_graph(client, s
     filtered = client.audit.list(record_type='note', record_id=note['id'], company=COMPANY)
     assert filtered['items'] == []
     assert ('customer-work', 'member') in seen
+
+
+@pytest.mark.parametrize('snapshot', ['[]', '{}', '{"resolved_transaction_ids":[1]}'])
+def test_batched_audit_disclosure_keeps_unknown_operation_ownership_closed(client, sale, monkeypatch, snapshot):
+    paid=client.run('payment receive',dict(customer=sale['customer'],date='2026-06-02',amount='1',
+        payment_method=method(client),operation_key='unresolved-evidence'),company=COMPANY)
+    original=payment_authority._evidence_rows
+    operation=paid['effect']['operation_id']
+    def malformed(db,table,field,value,cache):
+        rows=original(db,table,field,value,cache)
+        if table.name=='payment_operations' and value is not None:
+            return [dict(row,request_snapshot=snapshot) if row['id']==operation else row for row in rows]
+        return rows
+    event=client.audit.list(record_type='payment_operation',record_id=operation,company=COMPANY)['items'][0]['id']
+    monkeypatch.setattr(payment_authority,'_evidence_rows',malformed)
+    with pytest.raises(BookflowError) as caught:
+        client.audit.show(event=event,company=COMPANY)
+    assert caught.value.code=='E_PERMISSION'
+    assert client.audit.list(record_type='payment_operation',record_id=operation,company=COMPANY)['items']==[]

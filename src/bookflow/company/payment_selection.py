@@ -130,6 +130,50 @@ def show(s, inp):
     return SelectionOutput(**output(header, revision, context_, items))
 
 
+def query_page(s, inp):
+    """Filter complete historical ownership in SQL, reconstruct only the page."""
+    from bookflow.company.payment_authority import require_resource, work_link_predicate
+    h, r, i = c.payment_selections, c.payment_selection_revisions, c.payment_selection_items
+    statement = sa.select(h)
+    if inp.state is not None:
+        statement = statement.where(h.c.state == inp.state)
+    try:
+        require_resource(s, 'customer-work', 'member')
+    except BookflowError as exc:
+        if exc.code != 'E_PERMISSION':
+            raise
+        protected_item = sa.exists(sa.select(i.c.id).where(i.c.selection_id == h.c.id,
+            i.c.invoice_id.is_not(None), work_link_predicate(i.c.invoice_id)))
+        payment = sa.func.json_extract(r.c.context_snapshot, '$.payment_id')
+        protected_source = sa.exists(sa.select(r.c.id).where(r.c.selection_id == h.c.id,
+            payment.is_not(None), work_link_predicate(payment)))
+        statement = statement.where(~protected_item, ~protected_source)
+    result = query.sql_page(s, 'payment selection query', inp,
+        statement.order_by(h.c.created_at.desc(), h.c.id.desc()))
+    headers = result['items']
+    if not headers:
+        return result
+    revisions = {row['id']: dict(row) for row in s.company.conn.execute(sa.select(r).where(
+        r.c.id.in_([header['current_revision_id'] for header in headers]))).mappings()}
+    events = s.company.conn.execute(sa.select(i).join(r, r.c.id == i.c.revision_id).join(h, h.c.id == i.c.selection_id)
+        .where(h.c.id.in_([header['id'] for header in headers]), r.c.version <= h.c.version)
+        .order_by(i.c.selection_id, r.c.version, i.c.id)).mappings()
+    items = {header['id']: {} for header in headers}
+    for event in events:
+        current = items[event['selection_id']]
+        if event['kind'] == 'clear':
+            current.clear()
+        elif event['kind'] == 'remove':
+            current.pop(event['invoice_id'], None)
+        else:
+            current[event['invoice_id']] = {key:event[key] for key in (
+                'invoice_id','ordinal','expected_version','due_minor_units','amount_minor_units','amount_origin')}
+    result['items'] = [output(header, revisions[header['current_revision_id']],
+        json.loads(revisions[header['current_revision_id']]['context_snapshot']),
+        sorted(items[header['id']].values(), key=lambda row:(row['ordinal'],row['invoice_id']))) for header in headers]
+    return result
+
+
 def compatible(s, context_, facts):
     profile, revision, header = facts['profile'], facts['revision'], facts['header']
     if profile['control_account_id'] != context_['ar_account_id'] or revision['currency'] != context_['currency']:
