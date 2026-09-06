@@ -666,6 +666,16 @@ def _read_calls(hosted):
 def test_every_routed_read_returns_the_same_document_over_http_as_in_the_library(hosted, root, monkeypatch):
     # Both requests share one diagnostic report generation time for exact parity.
     monkeypatch.setattr("bookflow.company.ledger_reports.now_iso", lambda: "2026-09-05T00:00:00.000Z")
+    from datetime import datetime, timezone
+    comparison_time = datetime.now(timezone.utc)
+
+    class ComparisonDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return comparison_time.astimezone(tz) if tz else comparison_time.replace(tzinfo=None)
+
+    # Preference ages must describe the same instant on the sequential surfaces.
+    monkeypatch.setattr("bookflow.company.work_preferences.datetime", ComparisonDateTime)
     from bookflow.core import registry
     from tests.test_row1_flow import normalize
     registry.load_all()
