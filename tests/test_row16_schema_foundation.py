@@ -21,6 +21,13 @@ NEW = ('work_documents', 'work_revisions', 'work_line_identities', 'work_lines',
 CHANGED = ('custom_field_scopes',)
 
 
+@pytest.fixture(autouse=True)
+def frozen_row16_head(monkeypatch):
+    # These fixtures assert the co9-to-co10 artifact, independently of newer heads.
+    from bookflow.storage.migrate import HEADS
+    monkeypatch.setitem(HEADS, 'company', 'co0010')
+
+
 @pytest.fixture
 def old(tmp_path, monkeypatch):
     path = tmp_path / 'co9.db'

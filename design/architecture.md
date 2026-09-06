@@ -38,7 +38,7 @@ src/bookflow/
     traced_sqlite.py      capture-enabled per-connection native subclasses; bounded statement classification, execute/fetch/transaction timing, caller factories preserved
     migrate.py           HEADS constants; classify(); backup via sqlite backup API; migrate_to_head(); Alembic loaded only when migrating
     hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection), hub0007 (note capabilities), hub0008 (attachment/activity capabilities), hub0009 (agent principal assignments, authority epochs and credential conversion), hub0010 (ledger and report capabilities), hub0011 (customer-work read/write role defaults)
-    company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit/presence/directives), co0003 (20 supporting lists), co0004 (job delivery inheritance), co0005 (notes), co0006 (attachments, links, collection intent, byte limit), co0007 (journal identities, immutable revisions and postings, numbering prefix, private report cursor key), co0008 (journal header custom ownership), co0009 (commercial sales), co0010 (nonposting customer work and preserving custom scope CHECK widening)
+    company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit/presence/directives), co0003 (20 supporting lists), co0004 (job delivery inheritance), co0005 (notes), co0006 (attachments, links, collection intent, byte limit), co0007 (journal identities, immutable revisions and postings, numbering prefix, private report cursor key), co0008 (journal header custom ownership), co0009 (commercial sales), co0010 (nonposting customer work and preserving custom scope CHECK widening), co0011 (immutable linked billing and preserving sales amount-price widening)
     migrate.py           + migrate_company(): the one owner of company migrations: migrate entry by the system user, baseline entry, marker, hub projection entry
   hub/
     schema.py            users, api_tokens, agent_principals, agent_authority, organizations, companies, memberships, role_capabilities, features, audit_events, audit_entries; co-located table and column descriptions
@@ -521,3 +521,38 @@ append30/31commands covering all21work commands, alternative acceptance, complet
 quantities, permanent replay, independent copies, markup/amount/unknown-cost/zero
 pricing, nonbillable lines, custom false/clear/history and source notes/files.
 These operational extensions add no ledger effects.
+
+
+## Linked work billing
+
+[Whole-line work billing](specs/17-work-billing.md) defines six commands under
+estimate and work-order: invoice, sales-receipt and billing. company/billing.py
+resolves captured source facts and financial choices, then appends the sale,
+source revision/version, allocations, permanent conversion and audit in one company
+transaction. billing_validation.py independently checks the selected roots, source
+scope/provenance and exact destination facts. billing_edits.py freezes consumed
+source economics and retained linked sale lines; corrections carry immutable
+allocation rows and removal or void releases only their own active roots.
+
+billing_queries.py derives consumption from posted transactions' current revisions.
+Billing reads show current ownership, quantities, no-charge/nonbillable states,
+remaining exact amounts and bounded destination history. Full sale revisions expose
+billing_sources with internal snapshots; history summaries expose compact
+billing_links. Both operational and financial conversions share permanent company
+key identity across their durable stores, including replay after generic cache
+expiry and after void. Composite resource requirements and conditional source
+reads are checked before cached responses or preview; granular grants/denies remain
+Row7 and actual MCP transport remains Row9.
+
+Amount-priced sales retain net_amount and positive descriptive quantity with a
+null unit price. Version2 amount profiles have an explicit pricing basis; version1
+unit-price facts retain their original serialized form. Quantity-only edits retain
+explicit amounts. Explicit amount/rate/default-reset conflicts reject. Captured
+quote tax and income/liability mappings remain authoritative for billing, with
+current eligibility checked before posting.
+
+Company co0011 widens the known sales_line_profiles price constraint and adds
+pricing_basis while preserving all prior columns, values and local schema objects.
+Unknown table definitions reject before alteration. Immutable conversion and
+allocation tables use composite ownership keys, permanent-key collision guards and
+active-root guards on allocation insertion and transaction revision activation.

@@ -248,3 +248,18 @@ for _noun, _conversion in (('proposal', 'estimate'), ('estimate', 'work-order'),
             'E_RECORD_NOT_FOUND': 'document or customer filter absent from selected company',
             'E_QUERY_STALE': 'company audit changed between bounded pages',
         }
+
+for _noun in ('estimate', 'work-order'):
+    for _verb in ('invoice', 'sales-receipt'):
+        MATRIX[f'{_noun} {_verb}'] = {
+            **_SALES_WRITE_ERRORS, **_WORK_WRITE_ERRORS,
+            'E_WORK_DEPENDENCY': 'source not accepted, redirected to work order, cancelled, consumed, or linked economics changed',
+            'E_CONVERSION_KEY_REUSED': 'permanent key already names a different operational or financial intent',
+        }
+    MATRIX[f'{_noun} billing'] = {
+        'E_RECORD_NOT_FOUND': 'source absent from selected company',
+        'E_QUERY_STALE': 'company audit changed between linked destination pages',
+    }
+for _noun in ('invoice', 'sales-receipt'):
+    for _verb in ('post', 'update', 'void'):
+        MATRIX[f'{_noun} {_verb}']['E_WORK_DEPENDENCY'] = 'retained source-linked line or commercial scope changed'

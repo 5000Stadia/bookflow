@@ -644,6 +644,8 @@ def _read_calls(hosted):
         calls[f"{noun} query"] = ({"active": None, "limit": 2}, cid)
         calls[f"{noun} show"] = (selector, cid)
         calls[f"{noun} history"] = ({**selector, "limit": 2}, cid)
+        if noun in ("estimate", "work-order"):
+            calls[f"{noun} billing"] = ({**selector, "limit": 2}, cid)
     journal = hosted.ok("journal.query", company=cid)["items"][0]
     calls.update({
         "journal query": ({}, cid),
@@ -1345,7 +1347,7 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
                 assert kinds and sorted(kinds) == sorted(values), cmd.name
                 assert len(kinds) == len(set(kinds)), cmd.name
                 if cmd.noun in commercial_fields:
-                    destination = cmd.verb if cmd.name in ("proposal estimate", "estimate work-order") else cmd.noun
+                    destination = cmd.verb if cmd.name in ("proposal estimate", "estimate work-order", "estimate invoice", "estimate sales-receipt", "work-order invoice", "work-order sales-receipt") else cmd.noun
                     assert set(values) == commercial_fields[destination], cmd.name
             elif leaf["path"] == "cursor" and cmd.name in (
                 "report balance-sheet", "report profit-and-loss"
@@ -1353,6 +1355,9 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
                 # Statement continuations belong to the result's Next form;
                 # rerunning the filter form must always start a fresh report.
                 assert 'name="f:cursor"' not in page.text, cmd.name
+            elif leaf["path"] == "line_ids" and cmd.noun in ("estimate", "work-order") and cmd.verb in ("invoice", "sales-receipt"):
+                assert 'name="billing-selection"' in page.text, cmd.name
+                assert 'name="f:line_ids"' not in page.text, cmd.name
             elif leaf["kind"] == "collection":
                 assert page.text.count(
                     f'name="collection:{leaf["path"]}"'

@@ -417,3 +417,46 @@ def test_shared_core_mcp_attribution_and_replay_without_transport_claim(client, 
     with pytest.raises(BookflowError) as err:
         dispatch(cmd, dict(data, date='2026-01-14'), ctx, data_root=client.data_root, company_selector=COMPANY, _login=client._login)
     assert err.value.code == 'E_CONVERSION_KEY_REUSED'
+
+
+def test_billing_custom_values_carry_required_destination_and_original_files(client, sale):
+    import io
+    shared = client.run('custom-field create', dict(name='Billing approved', kind='bool',
+        scopes=['estimate', 'invoice']), company=COMPANY)
+    required = client.run('custom-field create', dict(name='Billing reference', kind='text',
+        scopes=['invoice'], required=True), company=COMPANY)
+    source = accepted(client, sale, custom_fields={shared['id']: False})
+    body = b'Original signed work scope\n'
+    attachment = client.attachment.add(record_type='work_document', record_id=source['id'],
+        original_filename='signed-scope.txt', media_type='text/plain', input_stream=io.BytesIO(body), company=COMPANY)
+    with pytest.raises(BookflowError) as err:
+        bill(client, source)
+    assert err.value.code == 'E_VALIDATION'
+    first = bill(client, source, custom_fields={required['id']: 'B-100'})
+    snapshot = first['revision']['custom_fields_snapshot']
+    assert snapshot[shared['id']]['value'] is False
+    assert snapshot[shared['id']]['value_id'] != source['revision']['custom_fields_snapshot'][shared['id']]['value_id']
+    assert snapshot[required['id']]['value'] == 'B-100'
+    link = first['revision']['billing_sources'][0]
+    assert link['source_document_id'] == source['id'] and link['source_revision_id'] == source['revision']['id']
+    sink = io.BytesIO()
+    client.attachment.get(attachment=attachment['attachment']['id'], output_stream=sink, company=COMPANY)
+    assert sink.getvalue() == body
+    assert client.run('attachment list', dict(record_type='transaction', record_id=first['id']), company=COMPANY)['count'] == 0
+
+
+@pytest.mark.parametrize('target', ['customer', 'item', 'income'])
+def test_billing_rejects_current_ineligible_captured_posting_reference(client, sale, target):
+    source = accepted(client, sale)
+    if target == 'income':
+        replacement = client.account.create(name='New billing income mapping', type='income', company=COMPANY)['id']
+        item = client.item.show(item=sale['item'], company=COMPANY)
+        client.item.update(item=sale['item'], expected_version=item['version'], income_account_id=replacement, company=COMPANY)
+    noun = 'account' if target == 'income' else target
+    shown = client.run(noun + ' show', {noun: sale[target]}, company=COMPANY)
+    client.run(noun + ' deactivate', {noun: sale[target], 'expected_version': shown['version']}, company=COMPANY)
+    with pytest.raises(BookflowError) as err:
+        bill(client, source)
+    assert err.value.code == 'E_INACTIVE_REFERENCE'
+    assert run(client, 'estimate', 'show', estimate=source['id'])['version'] == source['version']
+    assert run(client, 'estimate', 'billing', estimate=source['id'])['remaining_net_minor_units'] == 2468
