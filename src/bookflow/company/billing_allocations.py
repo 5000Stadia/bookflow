@@ -97,6 +97,15 @@ def occupied_roots(s, roots):
     return {tuple(row) for row in s.company.conn.execute(query)}
 
 
+def has_active_for_document(s, document_id):
+    a, t, i = c.work_billing_allocations,c.transactions,c.work_line_identities
+    query = sa.select(a.c.id).join(t,sa.and_(t.c.id == a.c.transaction_id,
+        t.c.current_revision_id == a.c.revision_id,t.c.status == 'posted')).join(i,
+        sa.and_(i.c.root_document_id == a.c.root_document_id,i.c.root_line_id == a.c.root_line_id)).where(
+            i.c.document_id == document_id).limit(1)
+    return s.company.conn.execute(query).first() is not None
+
+
 def occupied_spans(s, root, facts, *, excluding=None):
     """SQLite orders canonical hex coordinates; Python retains one row at a time."""
     from bookflow.company import billing_math as math

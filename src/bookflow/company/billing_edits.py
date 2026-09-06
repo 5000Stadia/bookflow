@@ -11,9 +11,9 @@ def protect_work(s, header, before, after):
         return
     identities = query.root_identities(s, header)
     roots = [(row['root_document_id'], row['root_line_id']) for row in identities.values()]
-    from bookflow.company.billing_allocations import occupied_roots
+    from bookflow.company.billing_allocations import occupied_roots, has_active_for_document
     occupied = occupied_roots(s, roots)
-    if not occupied:
+    if not has_active_for_document(s,header['id']):
         return
     from bookflow.company.billing import dependency
     if before['title'] != after['title'] or any(before['facts'][key] != after['facts'][key] for key in work.AGREED_FIELDS):

@@ -11,20 +11,10 @@ from bookflow.hub.access import require_resource
 
 
 def root_identities(s, header):
+    current = sa.select(c.work_lines.c.line_id).where(c.work_lines.c.document_id == header['id'],
+        c.work_lines.c.revision_id == header['current_revision_id'])
     return {row['id']: row for row in work.rows(s, c.work_line_identities,
-        c.work_line_identities.c.document_id == header['id'])}
-
-
-def active_allocations(s, roots, *, excluding=None):
-    a, t = c.work_billing_allocations, c.transactions
-    if not roots:
-        return []
-    query = sa.select(a, t.c.type.label('destination_type')).join(t,
-        sa.and_(t.c.id == a.c.transaction_id, t.c.current_revision_id == a.c.revision_id,
-                t.c.status == 'posted')).where(sa.tuple_(a.c.root_document_id, a.c.root_line_id).in_(roots))
-    if excluding:
-        query = query.where(t.c.id != excluding)
-    return [dict(row) for row in s.company.conn.execute(query).mappings()]
+        c.work_line_identities.c.document_id == header['id'], c.work_line_identities.c.id.in_(current))}
 
 
 def current_owner(s, header):
