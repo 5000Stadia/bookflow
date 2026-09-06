@@ -14,7 +14,7 @@ def test_exact_prior_tax_prefix(resource):
     old_commands = tomllib.loads(old.decode())['commands']
     commands = tomllib.loads(current.decode())['commands']
     assert commands[:len(old_commands)] == old_commands
-    own = commands[len(old_commands):]
+    own = commands[len(old_commands):len(old_commands)+17]
     assert len(own) == 17
     assert [entry['input']['sales_tax_calculation'] for entry in own if entry['command']=='invoice post'] == [
         'line_component_half_even','line_combined_half_up','invoice_combined_half_up']

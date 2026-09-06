@@ -179,14 +179,26 @@ def page(s, ctx, inp, document_type, *, history=False):
     if history:
         return SalesHistoryOutput(**{k: header[k] for k in ('id', 'version', 'current_revision_id', 'number', 'status')},
             items=[revision_output(s, revision, summary_only=True) for revision in found], **shared)
+    revision_ids = [header['current_revision_id'] for header in found]
+    revisions = {row['id']: dict(row) for row in s.company.conn.execute(sa.select(c.transaction_revisions).where(
+        c.transaction_revisions.c.id.in_(revision_ids))).mappings()} if found else {}
+    profiles = {row['revision_id']: dict(row) for row in s.company.conn.execute(sa.select(c.sales_profiles).where(
+        c.sales_profiles.c.revision_id.in_(revision_ids))).mappings()} if found else {}
+    for header in found:
+        revision = revisions.get(header['current_revision_id'])
+        if revision is None or revision['transaction_id'] != header['id']:
+            raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': 'transaction_revision'})
+    settlements = {}
+    if document_type == 'invoice':
+        from bookflow.company.payment_queries import invoice_currents
+        from bookflow.company.payment_outputs import InvoiceSettlementOutput
+        settlements = invoice_currents(s, found, revisions)
     items = []
     for header in found:
-        revision = journals.revision(s, header)
-        item = SalesSummaryOutput(**summary(header, revision, profile_row(s, revision)))
+        revision = revisions[header['current_revision_id']]
+        item = SalesSummaryOutput(**summary(header, revision, profiles[revision['id']]))
         if document_type == 'invoice':
-            from bookflow.company.payment_queries import invoice_current
-            from bookflow.company.payment_outputs import InvoiceSettlementOutput
-            item.settlement_current = InvoiceSettlementOutput(**invoice_current(s, header['id']))
+            item.settlement_current = InvoiceSettlementOutput(**settlements[header['id']])
         items.append(item)
     return SalesPageOutput(items=items, **shared)
 

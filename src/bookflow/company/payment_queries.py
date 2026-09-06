@@ -46,26 +46,63 @@ def invoice_facts(s, selector, *, write=False):
 def invoice_current(s, selector):
     facts = invoice_facts(s, selector)
     header, revision = facts['header'], facts['revision']
+    return _invoice_current_values(header, revision, facts['applied'])
+
+
+def _invoice_current_values(header, revision, applied):
+    gross = revision['total_minor_units'] if header['status'] == 'posted' else 0
+    due = gross - applied
     return dict(invoice_id=header['id'], version=header['version'], revision_id=revision['id'],
-                gross_minor_units=facts['gross'], applied_minor_units=facts['applied'], due_minor_units=facts['due'],
+                gross_minor_units=gross, applied_minor_units=applied, due_minor_units=due,
                 currency=revision['currency'], status=('voided' if header['status'] == 'voided' else
-                    'paid' if facts['due'] == 0 else 'partial' if facts['applied'] else 'unpaid'))
+                    'paid' if due == 0 else 'partial' if applied else 'unpaid'))
+
+
+def invoice_currents(s, headers, revisions):
+    """Current settlement for one already-selected sales page, with full authority."""
+    if not headers:
+        return {}
+    ids = [header['id'] for header in headers]
+    authorize(s, ids)
+    app, inverse = c.applications, c.applications.alias('page_inverse')
+    amounts = {identifier: 0 for identifier in ids}
+    # Python integers preserve the single-record projection's exact arithmetic;
+    # the query is restricted to page identities, not all company applications.
+    for identifier, amount in s.company.conn.execute(sa.select(app.c.paid_transaction_id,
+            app.c.amount_minor_units).where(app.c.paid_transaction_id.in_(ids), app.c.kind == 'apply',
+            ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_application_id == app.c.id)))):
+        amounts[identifier] += amount
+    return {header['id']: _invoice_current_values(header, revisions[header['current_revision_id']], amounts[header['id']])
+        for header in headers}
 
 
 def payer_balances(s, customer_id):
     """CP02: actual payer/family net AR, authorized over the contributing graph."""
     from bookflow.company import customer_balances
     from bookflow.core.money import Money
-    family = [row[0] for row in s.company.raw.execute('''WITH RECURSIVE family(id) AS (
-        SELECT id FROM customers WHERE id=? UNION SELECT c.id FROM customers c JOIN family f ON c.parent_id=f.id)
-        SELECT id FROM family''', (customer_id,))]
-    transactions = s.company.conn.execute(sa.select(c.posting_lines.c.transaction_id).join(c.accounts,
+    from bookflow.core.exact import _require_i64
+    from bookflow.company.payment_authority import authorize_query
+    family = sa.select(c.customers.c.id).where(c.customers.c.id == customer_id).cte('balance_family', recursive=True)
+    family = family.union(sa.select(c.customers.c.id).join(family, c.customers.c.parent_id == family.c.id))
+    transactions = sa.select(c.posting_lines.c.transaction_id).join(c.accounts,
         c.accounts.c.id == c.posting_lines.c.account_id).where(c.accounts.c.type == 'accounts_receivable',
-        c.posting_lines.c.name_type == 'customer', c.posting_lines.c.name_id.in_(family)).distinct()).scalars().all()
-    authorize(s, transactions)
+        c.posting_lines.c.name_type == 'customer', c.posting_lines.c.name_id.in_(sa.select(family.c.id))).distinct()
+    authorize_query(s, transactions)
     currency = s.company_info_row['home_currency']
-    return dict(customer_id=customer_id, payer_balance=Money(customer_balances.own_balance(s.company, customer_id), currency).to_dict(),
-        family_balance=Money(customer_balances.family_balance(s.company, customer_id), currency).to_dict())
+    # One lossless posting scan supplies both CP02 projections. Reuse the owning
+    # arbitrary-intermediate aggregate and checked Money boundary, never SQLite
+    # SUM/REAL or a stored running balance.
+    customer_balances.register_functions(s.company)
+    lines = c.posting_lines
+    net = lines.c.debit_minor_units - lines.c.credit_minor_units
+    payer, family_net = s.company.conn.execute(sa.select(
+        sa.func.bookflow_sum_int(net).filter(lines.c.name_id == customer_id),
+        sa.func.bookflow_sum_int(net)).select_from(lines).where(
+            lines.c.name_type == 'customer',
+            lines.c.account_id.in_(sa.select(c.accounts.c.id).where(c.accounts.c.type == 'accounts_receivable')),
+            lines.c.name_id.in_(sa.select(family.c.id)))).one()
+    return dict(customer_id=customer_id, payer_balance=Money(_require_i64(int(payer or '0'), field='current_balance'), currency).to_dict(),
+        family_balance=Money(_require_i64(int(family_net or '0'), field='family_balance'), currency).to_dict())
 
 
 def payment_facts(s, selector, *, write=False):
@@ -125,10 +162,11 @@ applied before this function, on EVERY page, including all graph members.
     return dict(items=selected, total_count=len(items), next_cursor=next_cursor, facts_fingerprint=fp)
 
 
-def sql_page(s, noun, inp, statement):
-    """Bound current query delivery with an authenticated fixed audit watermark."""
-    mark = s.company.conn.execute(sa.select(sa.func.coalesce(sa.func.max(c.audit_events.c.seq), 0))).scalar_one()
-    fp = digest([s.company_row['id'], noun, inp.model_dump(mode='json', exclude={'cursor'}), mark])
+def sql_page(s, noun, inp, statement, *, facts=None, known_count=None, count_with_page=False):
+    """SQL delivery; ordinary queries pin audit, preparation pins relevant facts."""
+    if facts is None:
+        facts = s.company.conn.execute(sa.select(sa.func.coalesce(sa.func.max(c.audit_events.c.seq), 0))).scalar_one()
+    fp = digest([s.company_row['id'], noun, inp.model_dump(mode='json', exclude={'cursor'}), facts])
     domain, key = b'bookflow.payment.query.v1\0', _cursor_key(s.company)
     offset = 0
     if inp.cursor:
@@ -146,8 +184,19 @@ def sql_page(s, noun, inp, statement):
             offset = value['offset']
         except (ValueError, TypeError, KeyError):
             raise BookflowError('E_VALIDATION', details={'field': 'cursor'}) from None
-    count = s.company.conn.execute(sa.select(sa.func.count()).select_from(statement.order_by(None).subquery())).scalar_one()
-    rows = [dict(row) for row in s.company.conn.execute(statement.offset(offset).limit(inp.limit)).mappings()]
+    count_statement = sa.select(sa.func.count()).select_from(statement.order_by(None).subquery())
+    if count_with_page and known_count is None:
+        # Expensive text/capacity predicates are evaluated once, before paging.
+        # Keep the ordinary two-query path for cheap/indexed queries, where a
+        # window would unnecessarily materialize the complete selected relation.
+        projection = statement.add_columns(sa.func.count().over().label('__page_total'))
+        rows = [dict(row) for row in s.company.conn.execute(projection.offset(offset).limit(inp.limit)).mappings()]
+        count = rows[0]['__page_total'] if rows else (0 if offset == 0 else s.company.conn.execute(count_statement).scalar_one())
+        for row in rows:
+            del row['__page_total']
+    else:
+        count = known_count if known_count is not None else s.company.conn.execute(count_statement).scalar_one()
+        rows = [dict(row) for row in s.company.conn.execute(statement.offset(offset).limit(inp.limit)).mappings()]
     cursor = None
     if offset + len(rows) < count:
         raw = canonical(dict(v=1, fp=fp, offset=offset + len(rows))).encode()

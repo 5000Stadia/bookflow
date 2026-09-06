@@ -56,10 +56,61 @@ Current payment queries aggregate and filter in SQL before bounded delivery;
 prospective cursors instead bind exact original intent, financial fingerprint and
 last logical item identity without persisting a preview.
 
-This increment does not complete Row22. GUI controls and CP01–CP33 traceability,
-active examples, measured interactive query budgets, integrated HTTP/MCP journeys
-and blind-user acceptance remain required subsequent gates. Row23/Row9 adapter
-integration is owned separately; this checkout does not claim their acceptance.
+`adapters/workbench/payments.py` installs receive/apply/correction, payment query,
+shared-selection, application-history and dated invoice-settlement pages over the
+same registry reads. `payments.js` persists amount/row origins through shared
+selection commands, retrieves complete prospective effects before enabling Save,
+and retains the exact submitted operation across ambiguous response loss. The
+form stays locked until recovery resolves. It uses the existing 200-row public
+read limit for a fresh prospective continuation recipe without changing financial
+intent, its fingerprint or the 50-row initial descriptor. No browser allocation
+calculator or permission system is introduced. `invoice-settlement.js` retrieves
+the complete invoice-correction recipe; the ordinary editor retains its commercial
+draft while explicitly reviewing current settlement versions. Captured receipt
+facts, internal printing and current availability remain distinct. Company forms
+expose all three payment preferences independently. Numeric-entry metadata uses
+the existing exact calculator, including calculator-only Enter. `exact-json.js`
+preserves accepted integer minor units as BigInt across JSON reads, shared-draft
+writes and formatting, including values above JavaScript's safe-integer range.
+The candidate grid exposes original/current revision identities and gross amounts
+separately. Payer edits invalidate executable previews and draft-derived displays;
+Save & New clears those displays while retaining the documented defaults.
+Stale review renders saved/current money and retained entries, retrieves every
+bounded diagnostic page, and distinguishes change-event actors from latest writers.
+Every receipt-intent construction checks that the visible payer is resolved, even
+when a shared selection already exists. Rejected selection patches remain separate
+from the saved baseline and current shared revision. Review compares all three,
+rebases only those patches onto the explicitly reviewed version, and retains other
+writers' row edits. A second concurrent change requires another review. Pending
+edits cannot be discarded by refresh, clear or suggestion controls. Workbench
+actions serialize with visible busy/queued feedback instead of dropping activation.
+Invoice and funding baselines refresh together in a bounded selection update.
+When the stale graph exceeds that update's public bound, explicit review creates
+a complete recovered shared selection through ordinary bounded preparation
+commands, retains the original selection, and identifies the replacement in the UI.
+Consumed selections cannot enter that copy path. Existing-credit forms distinguish
+the retained allocation budget's unallocated amount from current available payment
+credit; preview continues to use the authoritative settlement projection.
+Invoice correction pages render proposed received/applied/available or gross/applied/due
+balances for each identifiable affected document before Save becomes available.
+
+Preparation candidates and saved-draft query pages batch their SQL projections;
+history filters operation ownership before decoding recorded effects. Composite
+audit disclosure batches owned-row reads within one decision and database snapshot,
+retaining unresolved-evidence rejection and historical work-link checks. These are
+read-only changes; the separate complete 10,000-record calibration remains required.
+
+The active payment examples append exactly33 commands to each frozen295/201 demo
+prefix. `payment-expected.json` enumerates independent gross/net/storage oracles;
+each company gains bank17000, AR1000 and income18000 cents. Raw prior financial
+and audit rows remain unchanged. `docs/customer-payment-workflows.md` maps
+CP01–CP33 to implemented receipt controls and required dependent increments.
+
+Row23's reviewed execution-credential revalidation is integrated here. This
+candidate does not complete Row22: independent GUI acceptance, calibrated
+interactive query budgets, actual integrated Row9 MCP journeys and the fresh
+blind-user exercise/interview remain required. Parent owns integration and
+acceptance; receipt-core completion does not close the comprehensive goal.
 
 ## Layout
 

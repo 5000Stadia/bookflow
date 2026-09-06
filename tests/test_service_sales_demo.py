@@ -60,10 +60,10 @@ def test_reference_expectations_include_exact_commercial_arithmetic():
         assert sum(b.values()) == 0
         assert checkpoint["trial_balance"] == sum(max(v, 0) for v in b.values())
         assert checkpoint["income"] == -sum(b[a] for a in (
-            "Service Income", "Professional Fees", "Insurance Expense", "Depreciation Expense"))
+            "Service Income", "Professional Fees", "Insurance Expense", "Depreciation Expense", "Payment Example Income"))
         assert checkpoint["net_assets"] == sum(b[a] for a in (
             "Checking", "Accounts Receivable", "Equipment", "Accumulated Depreciation",
-            "Business Credit Card", "Sales Tax Payable"))
+            "Business Credit Card", "Sales Tax Payable", "Payment Example Bank"))
         assert checkpoint["net_assets"] == 1000000 + checkpoint["income"]
         assert checkpoint["accounts_receivable"] == b["Accounts Receivable"]
         assert checkpoint["accounts_payable"] == 0
@@ -73,7 +73,7 @@ def test_reference_expectations_include_exact_commercial_arithmetic():
         facts = [r for r in effects if r[0] == account and r[1] >= "2026-07-01"]
         assert gross == [sum(r[i] for r in facts) for i in (4, 5)]
     annual = EXPECTED["annual"]
-    assert (annual["trial_balance"], annual["income"], annual["net_assets"]) == (8030639, 6439035, 7439035)
+    assert (annual["trial_balance"], annual["income"], annual["net_assets"]) == (8048639, 6457035, 7457035)
 
 
 @pytest.mark.parametrize("resource", ["seed.toml", "reference.toml"])
@@ -82,7 +82,7 @@ def test_both_seed_manifests_exercise_all_twelve_sales_commands(resource):
     sales = [e for e in commands if e["command"].split()[0] in ("invoice", "sales-receipt")]
     assert {e["command"] for e in sales} == {
         f"{noun} {verb}" for noun in ("invoice", "sales-receipt")
-        for verb in ("post", "update", "void", "show", "query", "history")}
+        for verb in ("post", "update", "void", "show", "query", "history")} | {"invoice settlement"}
     for entry in sales:
         if entry["command"].split()[1] in ("post", "update", "void"):
             assert entry["reason"].strip()
@@ -134,14 +134,15 @@ def test_seed_sales_history_custom_facts_and_exact_effects(reference_client, com
 @pytest.mark.parametrize("company,prefix", COMPANIES)
 def test_seed_known_balances_counts_and_readonly_preview(reference_client, company, prefix):
     client, _ = reference_client
-    checking, trial, journals = (624895, 690234, 10) if prefix == "DEMO" else (7267800, 8030639, 36)
+    checking, trial, journals = (624895, 708234, 10) if prefix == "DEMO" else (7267800, 8048639, 36)
     assert client.account.show(account="Checking", company=company)["balance"]["minor_units"] == checking
-    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == 12839
+    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == 13839
     assert client.account.show(account="Sales Tax Payable", company=company)["balance"]["minor_units"] == 1604
     balance = client.report.trial_balance(company=company, date_to="2026-12-31", limit=200)
     totals = balance["totals"]
     assert totals["debit"]["minor_units"] == totals["credit"]["minor_units"] == trial
-    expected_balances = ({"Checking": 624895, "Accounts Receivable": 12839,
+    expected_balances = ({"Checking": 624895, "Accounts Receivable": 13839,
+                          "Payment Example Bank": 17000, "Payment Example Income": -18000,
                           "Professional Fees": 52500, "Service Income": -185630,
                           "Opening Balance Equity": -500000, "Business Credit Card": -3000,
                           "Sales Tax Payable": -1604} if prefix == "DEMO"
@@ -149,8 +150,8 @@ def test_seed_known_balances_counts_and_readonly_preview(reference_client, compa
     assert {r["current_account_label"]: r["signed_net"]["minor_units"] for r in balance["rows"]} == expected_balances
     profit = client.report.profit_and_loss(company=company, date_from="2026-01-01", date_to="2026-12-31")
     sheet = client.report.balance_sheet(company=company, date_to="2026-12-31")
-    assert profit["totals"]["net_income"]["minor_units"] == (133130 if prefix == "DEMO" else 6439035)
-    assert sheet["totals"]["total_equity"]["minor_units"] == (633130 if prefix == "DEMO" else 7439035)
+    assert profit["totals"]["net_income"]["minor_units"] == (151130 if prefix == "DEMO" else 6457035)
+    assert sheet["totals"]["total_equity"]["minor_units"] == (651130 if prefix == "DEMO" else 7457035)
     assert sheet["totals"]["difference"]["minor_units"] == 0
     assert client.journal.query(company=company, limit=200)["count"] == journals
     database = Path(client.company.show(company=company)["path"]) / "company.db"
@@ -160,12 +161,12 @@ def test_seed_known_balances_counts_and_readonly_preview(reference_client, compa
                     for name in ("transactions", "transaction_revisions", "posting_batches", "posting_lines",
                                  "sales_profiles", "sales_line_profiles", "sales_tax_components", "audit_events")}
     before = counts()
-    assert before["transactions"] == journals + 23  # 4 sales + 6 whole-work + 8 progress + 1 preference + 4 active tax invoices
-    assert before["sales_profiles"] == 29
-    assert before["sales_line_profiles"] == 50
+    assert before["transactions"] == journals + 23 + 7  # tax parent plus four payment invoices and three receipts
+    assert before["sales_profiles"] == 29 + 4
+    assert before["sales_line_profiles"] == 50 + 4
     assert before["sales_tax_components"] == 45
     assert (before["transaction_revisions"], before["posting_batches"], before["posting_lines"]) == (
-        (43, 71, 283) if prefix == "DEMO" else (66, 91, 316))
+        (43 + 8, 71 + 11, 283 + 28) if prefix == "DEMO" else (66 + 8, 91 + 11, 316 + 28))
     for noun in ("invoice", "sales-receipt"):
         args = dict(date="2026-09-07", customer="Commercial Example Customer",
                     sales_tax_item="Commercial Example Tax 8%", customer_tax_code="Tax",
@@ -178,3 +179,20 @@ def test_seed_known_balances_counts_and_readonly_preview(reference_client, compa
         assert preview["revision"]["custom_fields"][0]["value"] is True
     assert counts() == before
     print(company, before)
+
+
+@pytest.mark.parametrize("company,prefix", COMPANIES)
+def test_combined_active_tax_and_payment_samples_have_separate_exact_effects(reference_client, company, prefix):
+    client, _ = reference_client
+    # Fixed two-five-cent-line rounding examples plus one five-cent work bill.
+    for suffix, net, tax in [('LEGACY',10,0), ('LINE',10,2), ('TOTAL',10,1), ('WORK-INV',5,1)]:
+        invoice = client.run('invoice show', {'invoice':prefix+'-TAX-'+suffix}, company=company)
+        assert invoice['status'] == 'posted'
+        assert (invoice['subtotal_minor_units'], invoice['tax_minor_units'], invoice['total_minor_units']) == (net,tax,net+tax)
+    # Parent fixed remittance facts: $130/$40 received; $120/$30 applied.
+    for suffix, received, applied, available in [('P1',13000,12000,1000), ('P2',4000,3000,1000)]:
+        payment = client.run('payment show', {'payment':prefix+'-PAY-'+suffix}, company=company)
+        assert payment['status'] == 'posted'
+        assert tuple(payment['current'][field+'_minor_units'] for field in ('received','applied','available')) == (received,applied,available)
+    assert client.account.show(account='Payment Example Bank',company=company)['balance']['minor_units'] == 17000
+    assert client.account.show(account='Accounts Receivable',company=company)['balance']['minor_units'] == 12800+39+1000

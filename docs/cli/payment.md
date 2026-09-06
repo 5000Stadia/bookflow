@@ -769,6 +769,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
 | `items` | array[object] | yes | no | — | — |
+| `items[].revision_id` | string | yes | no | — | Current immutable commercial revision; settlement-only versions do not replace it. |
+| `items[].original_revision_id` | string | yes | no | — | First immutable commercial revision, distinct from the current correction. |
+| `items[].original_gross_minor_units` | integer | yes | no | — | Original gross in currency minor units, before any commercial corrections. |
 | `items[].invoice_id` | string | yes | no | — | — |
 | `items[].expected_version` | integer | yes | no | — | — |
 | `items[].number` | string | yes | no | — | — |

@@ -35,6 +35,9 @@
 </details>
 {% set billing_sources = r.billing_sources %}{% include "billing_sources.html" %}
 <nav class="actions" aria-label="Sales revisions">{% for label, href in sale.links %}<a href="{{ href }}">{{ label }}</a>{% endfor %}</nav>
-<p class="muted">Sending is not available yet.{% if sale.record.type == 'invoice' %} Paying an invoice requires the upcoming customer-payment operation.{% endif %}</p>
+{% if sale.record.type == 'invoice' and not sale.preview %}<section aria-label="Current invoice settlement"><h3>Current invoice settlement</h3>
+{% if sale.settlement %}<p>{{ sale.settlement.status|capitalize }} · Gross {{ sale.settlement.gross.amount }} · Applied {{ sale.settlement.applied.amount }} · Due {{ sale.settlement.due.amount }} {{ sale.settlement.currency }}</p><p class="muted">All recorded current settlement, separate from the selected historical invoice revision.</p>{% endif %}
+<a href="{{ sale.settlement_url }}">Settlement and applications, including dated views</a></section>{% endif %}
+<p class="muted">Sending is not available yet.</p>
 </section>
 <details class="workspace-card sales-document"><summary>Accounting history for this revision</summary><p>Commercial gross: {{ r.total.amount }} {{ r.currency }}. Posting batches are shown separately.</p><div class="table-wrap"><table><thead><tr><th>Effect</th><th>Accounting date</th><th>Recorded</th><th>Debits</th><th>Credits</th></tr></thead><tbody>{% for batch in r.batches %}<tr><td>{{ batch.kind }}</td><td>{{ batch.effective_date }}</td><td>{{ batch.created_at }}</td><td>{{ batch.debit_total.amount }}</td><td>{{ batch.credit_total.amount }}</td></tr>{% endfor %}</tbody></table></div></details>

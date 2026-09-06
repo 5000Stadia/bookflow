@@ -392,7 +392,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css")
+        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css", "payments.js", "payments.css", "invoice-settlement.js", "exact-json.js")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -474,6 +474,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         }
         return {"company": company_id, "target": {"record_type": record_type, "record_id": key},
                 "allowed": allowed, "writes": [name for name in allowed if registry.get(name).is_write]}
+
+    from bookflow.adapters.workbench import payments as Payments
+    Payments.mount(app, render=render, run=run, credential=credential, page_error=page_error, role_allows=_role_allows,
+        form_page=lambda request, company_id, noun, verb: form_page(request, company_id, noun, verb, None))
 
     @app.get("/static/{name}")
     def static(name: str):
@@ -705,6 +709,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         return HTMLResponse("".join(options), headers={"Cache-Control": "no-store"})
 
     def noun_page(request: Request, company_id: str | None, noun: str):
+        if company_id and noun == 'payment selection':
+            return RedirectResponse('/c/' + company_id + '/payment-drafts', status_code=303)
         if noun in ("audit", "hub audit"):
             return audit_common(request, company_id if noun == "audit" else None)
         role_view = None
@@ -985,6 +991,13 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         workflow_note: str | None = None,
         report_input: dict | None = None,
     ):
+        if company_id and noun == 'payment' and verb in ('receive', 'apply', 'update', 'unapply', 'void'):
+            if verb != 'receive' and record_id in (None, 'self'):
+                return RedirectResponse('/c/' + company_id + '/payment', status_code=303)
+            query = {'mode': verb}
+            if record_id not in (None, 'self'):
+                query['payment'] = record_id
+            return RedirectResponse('/c/' + company_id + '/receive-payments?' + urlencode(query), status_code=303)
         cmd = registry.get(f"{noun} {verb}".strip())
         if cmd is None or cmd.local_only:
             return page_error(request, BookflowError("E_USAGE", message=f"unknown command {noun} {verb}"))
@@ -1046,6 +1059,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         elif cmd.version_source and record_id is None:
             return page_error(request, BookflowError("E_USAGE", message="open this update from a record page"))
         originals = originals or {}
+        if noun == 'invoice' and verb == 'update' and shown and not attempted:
+            settlement = run(request, 'invoice settlement', {'invoice': shown['id']}, company_id)
+            attempted['f:operation_key'] = 'WB-' + secrets.token_urlsafe(24)
+            attempted['f:settlement_guard'] = settlement['settlement_guard']
         if noun in Work.NOUNS and verb in ('copy', 'estimate', 'work-order', 'complete', 'invoice', 'sales-receipt'):
             originals = {k: v for k, v in originals.items() if k in (noun.replace('-', '_'), 'expected_version')}
         if noun in Work.NOUNS and 'conversion_key' in cmd.input_model.model_fields and not attempted:
@@ -1157,6 +1174,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         if definition is not None and definition.custom_fields:
             originals["custom_fields"] = _custom_value_map(originals.get("custom_fields"))
         described = F.describe_fields(noun, verb, cmd.input_model, originals, attempted)
+        if noun == 'invoice' and verb == 'update':
+            described = [leaf for leaf in described if leaf['path'] not in ('operation_key', 'settlement_guard', 'settlement_versions')]
         sales_form = (noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')) or (noun in Work.NOUNS and cmd.is_write)
         if noun in Work.NOUNS:
             described = Work.describe(described, noun)
@@ -1515,6 +1534,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             if Billing.is_conversion(noun, verb):
                 raw = Billing.selection(raw, form)
             if (noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')) or (noun in Work.NOUNS and cmd.is_write):
+                if noun == 'invoice' and verb == 'update' and form.get('action') == 'review-settlement':
+                    current = run(request, 'invoice settlement', {'invoice': record_id}, company_id)
+                    form = dict(form, **{'f:settlement_guard': current['settlement_guard'],
+                        'f:expected_version': str(current['version']), 'f:expected_facts_fingerprint': ''})
+                    return form_page(request, company_id, noun, verb, record_id, attempted=form,
+                        workflow_note='Current invoice and settlement versions reviewed. Your commercial entries are retained; preview again before saving.')
                 if verb == 'update':
                     raw = Sales.preserve_line_origins(raw, comparison)
                 if preview:

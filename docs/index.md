@@ -6,6 +6,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 
 - [Agent guide](agent-guide.md) — install or select the command, start an isolated host, and complete a versioned audited write.
 - [Reference year](reference-year.md) — opt-in demo reset, source journals and independent report arithmetic.
+- [Customer payments](customer-payment-workflows.md) — shared drafts, receipt corrections, recovery, active examples and control coverage.
 - [Concepts](concepts.md) — selection, context, concurrency, audit, identity, money, and error behavior.
 - [Binary transfers](transfers.md) — CLI files, Python streams, HTTP raw bodies, and verified completion.
 

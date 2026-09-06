@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}Shared payment selections{% endblock %}{% block body %}
+<h1>Shared payment selections</h1><p>Open a saved human or agent selection. Amount and row origins are retained in the shared draft.</p>
+<a href="/c/{{ company_id }}/receive-payments">New customer payment</a>
+{% for draft in drafts['items'] %}<section class="workspace-card"><h2><a href="/c/{{ company_id }}/receive-payments?selection={{ draft.id }}">{{ draft.customer_label }}</a></h2><p>{{ draft.context.date }} · {{ draft.context.mode.replace('_', ' ') }} · {{ draft.item_count }} invoices · {{ draft.state }}</p><p>Amount: {{ draft.amount.amount if draft.amount else 'unresolved' }} {{ draft.context.currency }} · {{ draft.amount_origin.replace('_', ' ') }}</p></section>{% else %}<p>No open selections.</p>{% endfor %}
+{% if drafts.next_cursor %}<a href="?cursor={{ drafts.next_cursor | urlencode }}">Next page</a>{% endif %}
+{% endblock %}

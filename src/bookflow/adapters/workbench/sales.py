@@ -7,6 +7,7 @@ Render sales_detail.html with sale=detail_context(result, company_id, preview=..
 from copy import deepcopy
 from decimal import Decimal
 from urllib.parse import quote
+from bookflow.core.money import Money
 
 from bookflow.company.tax_policy import POLICY_LABELS, POLICY_EXPLANATIONS
 
@@ -107,8 +108,13 @@ def detail_context(record, company_id, *, preview=False):
         for component in line.get('tax_components', []):
             component['rate_display'] = format(Decimal(component['rate_percent_millionths']) / Decimal(1_000_000), 'f')
     issuer = revision.get('issuer_snapshot', {})
+    settlement = deepcopy(record.get('settlement_current'))
+    if settlement:
+        for field in ('gross', 'applied', 'due'):
+            settlement[field] = Money(settlement[field + '_minor_units'], settlement['currency']).to_dict()
     return dict(record=record, revision=revision, profile=revision['profile'], preview=preview,
                 tax_labels=POLICY_LABELS, tax_explanations=POLICY_EXPLANATIONS,
+                settlement=settlement, settlement_url=url+'/settlement',
                 title='Invoice' if noun == 'invoice' else 'Sales receipt', links=links,
                 issuer=issuer, billing=address_lines(revision['profile'].get('billing_address')),
                 shipping=address_lines(revision['profile'].get('shipping_address')),

@@ -1,0 +1,13 @@
+{
+  "basis": "Row22 plan section12 fixed business sequence; integer USD cents",
+  "old_command_counts": {"seed.toml": 295, "reference.toml": 201},
+  "append_count": 33,
+  "final_command_counts": {"seed.toml": 345, "reference.toml": 251},
+  "net": {"Payment Example Bank": 17000, "Accounts Receivable": 1000, "Payment Example Income": -18000},
+  "gross_debits_credits": {"Payment Example Bank": [30500, 13500], "Accounts Receivable": [32500, 31500], "Payment Example Income": [1000, 19000]},
+  "new_rows": {"transactions": 7, "transaction_revisions": 8, "document_lines": 8, "posting_batches": 11, "posting_lines": 28, "posting_line_sources": 34, "payment_component_keys": 5, "payment_components": 8, "applications": 8, "application_allocations": 14, "payment_operations": 8, "audit_events": 20},
+  "invoice_due": {"parent": 1000, "A": 2000, "B": 0},
+  "party_AR": {"parent": 0, "A": 2000, "B": -1000},
+  "payments": {"P1": {"received": 13000, "applied": 12000, "available": 1000, "version": 4}, "P2": {"received": 4000, "applied": 3000, "available": 1000, "version": 1}},
+  "invoice_versions": {"parent": 3, "A": 5, "B": 4, "voided": 4}
+}

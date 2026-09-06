@@ -1,0 +1,32 @@
+#payment-workspace { max-width: 1180px; margin: auto; }
+.payment-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:1rem; }
+.payment-grid label { display:flex; flex-direction:column; gap:.35rem; }
+.payment-grid input,.payment-grid select,.payment-grid textarea { width:100%; min-width:0; box-sizing:border-box; }
+.payment-actions { display:flex; flex-wrap:wrap; gap:.7rem; margin:1rem 0; }
+#payment-workspace section { margin:1.2rem 0; padding:1rem; border:1px solid #d4dce4; border-radius:6px; }
+#payment-workspace [hidden] { display:none !important; }
+#payment-error { border-color:#b14535 !important; background:#fff4f0; }
+#payment-message { min-height:1.5em; }
+.payment-table-wrap { max-width:100%; overflow:auto; }
+.payment-invoices { width:100%; border-collapse:collapse; }
+.payment-invoices th,.payment-invoices td { padding:.65rem; border-bottom:1px solid #d4dce4; text-align:left; }
+.payment-invoices input[type=text] { width:7.5rem; max-width:100%; }
+.payment-effects { display:grid; gap:.6rem; }
+.payment-effect { padding:.6rem; background:#f4f7fa; overflow-wrap:anywhere; }
+#payment-workspace pre { white-space:pre-wrap; overflow-wrap:anywhere; }
+.payment-technical .field { grid-template-columns:minmax(0,35%) minmax(0,1fr); overflow-wrap:anywhere; }
+.payment-technical pre { min-width:0; white-space:pre-wrap; overflow-wrap:anywhere; }
+#payment-workspace fieldset { min-width:0; }
+@media(max-width:650px) {
+ .payment-grid { grid-template-columns:1fr; }
+ .payment-invoices thead { display:none; }
+ .payment-invoices,.payment-invoices tbody,.payment-invoices tr,.payment-invoices td { display:block; width:auto; }
+ .payment-invoices tr { border:1px solid #d4dce4; border-radius:5px; margin-bottom:.8rem; padding:.4rem; }
+ .payment-invoices td { display:flex; justify-content:space-between; gap:.7rem; border:0; padding:.3rem; }
+ .payment-invoices td:before { content:attr(data-label); font-weight:600; }
+ .payment-invoices td:nth-child(3) { flex-wrap:wrap; }
+}
+@media print {
+ header,nav,#payment-form,#payment-error,.payment-actions,body>p { display:none !important; }
+ #payment-record { display:block !important; border:0 !important; }
+}

@@ -358,8 +358,12 @@ selected explicitly. No create/copy/complete operation sends anything.
 
 `invoice post` creates an independent service invoice. `estimate invoice` and
 `work-order invoice` bill the linked source; their `sales-receipt` counterparts
-record genuinely received payment for a new sale. Payment of an existing invoice
-and delivery remain staged. Never report a document sent when only its record was
+record genuinely received payment for a new sale. Use `payment receive` for new
+cash against existing invoices, and `payment apply` for already recorded available
+credit. Shared selection drafts preserve entered/calculated amount origins across
+interfaces; read [customer payment workflows](customer-payment-workflows.md) before
+preparing a remittance or correcting an applied document. Delivery remains staged.
+Never report a document sent when only its record was
 created, or improvise an external send from a create-only request.
 
 ## Bill work in installments

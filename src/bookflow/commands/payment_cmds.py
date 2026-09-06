@@ -239,18 +239,4 @@ def selection_items(inp, ctx, s):
     input_model=SelectionQueryInput, output_model=SelectionPageOutput, required_role='member', capability='ledger.read',
     error_codes=['E_QUERY_STALE'])
 def selection_query(inp, ctx, s):
-    from bookflow.core.errors import BookflowError
-    headers = effects.rows(s, c.payment_selections, order=c.payment_selections.c.created_at.desc())
-    headers.sort(key=lambda row: (row['created_at'], row['id']), reverse=True)
-    values = []
-    for header in headers:
-        if inp.state is not None and header['state'] != inp.state:
-            continue
-        try:
-            revision, context, items = selection.saved(s, header)
-        except BookflowError as exc:
-            if exc.code == 'E_PERMISSION':
-                continue
-            raise
-        values.append(selection.output(header, revision, context, items))
-    return Plan(SelectionPageOutput(**query.page(s, 'payment selection query', inp, values)))
+    return Plan(SelectionPageOutput(**selection.query_page(s, inp)))

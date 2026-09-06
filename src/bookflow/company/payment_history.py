@@ -151,7 +151,10 @@ def payment_history(s, inp):
     for row in effects.rows(s, c.transaction_revisions, c.transaction_revisions.c.transaction_id == identifier):
         revision = payments.show(s, PaymentShowInput(payment=identifier, revision=row['revision_number'])).revision.model_dump(mode='json')
         items.append(_entry(s, row, 'receipt_revision', revision=revision))
-    for row in effects.rows(s, c.payment_operations):
+    resolved = sa.func.json_each(c.payment_operations.c.request_snapshot,
+        '$.resolved_transaction_ids').table_valued('value')
+    relevant = sa.exists(sa.select(resolved.c.value).where(resolved.c.value == identifier))
+    for row in effects.rows(s, c.payment_operations, relevant):
         captured = json.loads(row['request_snapshot'])
         if identifier in captured['resolved_transaction_ids']:
             from bookflow.company.payment_authority import authorize

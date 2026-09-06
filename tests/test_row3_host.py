@@ -660,6 +660,37 @@ def _read_calls(hosted):
         "report trial-balance": ({"date_to": "2026-12-31"}, cid),
         "report general-ledger": ({"date_from": "2026-01-01", "date_to": "2026-12-31"}, cid),
     })
+    paid = hosted.ok("payment.query", {"status": "posted", "limit": 1}, company=cid)["items"][0]
+    payment = hosted.ok("payment.show", {"payment": paid["id"]}, company=cid)
+    with sqlite3.connect(company_db) as conn:
+        application = conn.execute("SELECT id FROM applications ORDER BY id LIMIT 1").fetchone()[0]
+        operation = conn.execute("SELECT operation_key FROM payment_operations ORDER BY id LIMIT 1").fetchone()[0]
+    context = dict(mode="new_receipt", customer=payment["revision"]["profile"]["payer"]["id"], date="2026-12-31")
+    draft = hosted.ok("payment.selection.create", dict(context, amount="1.00"), company=cid)
+    request = dict(command="payment receive", input=dict(customer=context["customer"], date=context["date"],
+        amount="1.00", payment_method=payment["revision"]["profile"]["payment_method"]["id"],
+        deposit_to=payment["revision"]["profile"]["deposit_account"]["id"], operation_key="HTTP-PARITY-PREVIEW"))
+    preview = hosted.ok("payment.receive?dry_run=true", request["input"], company=cid)
+    calls.update({
+        "payment query": ({"limit": 2}, cid),
+        "payment show": ({"payment": paid["id"]}, cid),
+        "payment history": ({"payment": paid["id"], "limit": 2}, cid),
+        "payment settlement": ({"payment": paid["id"], "limit": 2}, cid),
+        "invoice settlement": (calls["invoice show"][0], cid),
+        "application show": ({"application": application}, cid),
+        "application history": ({"application": application, "limit": 2}, cid),
+        "payment invoices": (dict(context, limit=2), cid),
+        "payment suggest": (dict(context, amount="1.00", limit=2), cid),
+        "payment calculate": (dict(context, amount="1.00", amount_mode="entered", limit=2), cid),
+        "payment selection query": ({"limit": 2}, cid),
+        "payment selection show": ({"selection": draft["id"]}, cid),
+        "payment selection items": ({"selection": draft["id"], "revision": draft["version"], "limit": 2}, cid),
+        "payment operation show": ({"operation_key": operation}, cid),
+        "payment operation items": ({"operation_key": operation, "kind": "source_components", "limit": 2}, cid),
+        "payment settlement changes": ({"guard": payment["settlement_guard"], "limit": 2}, cid),
+        "payment preview items": ({"request": request, "kind": "source_components",
+            "facts_fingerprint": preview["facts_fingerprint"], "limit": 2}, cid),
+    })
     return calls
 
 
@@ -676,6 +707,7 @@ def test_every_routed_read_returns_the_same_document_over_http_as_in_the_library
 
     # Preference ages must describe the same instant on the sequential surfaces.
     monkeypatch.setattr("bookflow.company.work_preferences.datetime", ComparisonDateTime)
+    monkeypatch.setattr("bookflow.core.clock.now_iso", lambda: comparison_time.isoformat(timespec="milliseconds").replace("+00:00", "Z"))
     from bookflow.core import registry
     from tests.test_row1_flow import normalize
     registry.load_all()
@@ -1323,7 +1355,7 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
     from bookflow.core import registry
     registry.load_all()
     commercial_fields = {}
-    for noun in ("invoice", "sales-receipt", "proposal", "estimate", "work-order"):
+    for noun in ("invoice", "sales-receipt", "proposal", "estimate", "work-order", "payment"):
         scope = noun.replace("-", "_")
         hosted.ok("custom-field.create", {
             "name": f"{noun} form ownership", "kind": "text", "scopes": [scope],
@@ -1338,6 +1370,33 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
         url = _page_url(cmd, hosted.company_id)
         page = api.get(url)
         assert page.status_code == 200, (cmd.name, url, page.status_code, page.text[:300])
+        if cmd.noun == 'payment' and cmd.verb in ('receive', 'apply', 'update', 'unapply', 'void'):
+            # These controls use shared selection/captured-header state. Actual
+            # Chrome witnesses exercise each mode's complete emitted command,
+            # source versions, custom kinds, review, paging and exact recovery.
+            source = None
+            if cmd.verb != 'receive':
+                source = hosted.ok('payment.query', {'status': 'posted', 'limit': 1}, company=hosted.company_id)['items'][0]
+                page = api.get(f'/c/{hosted.company_id}/receive-payments?payment={source["id"]}&mode={cmd.verb}')
+                assert page.status_code == 200, (cmd.name, page.text[:300])
+            config = json.loads(re.search(r'id="payment-config">(.*?)</script>', page.text, re.S).group(1))
+            assert config['mode'] == cmd.verb and cmd.verb in config['allowed']
+            if source:
+                assert config['initial']['id'] == source['id'] and config['initial']['version'] == source['version']
+                assert config['initial']['settlement_guard']
+            else:
+                assert config['initial'] is None
+            for control in ('customer', 'date', 'number', 'amount', 'method', 'reference', 'destination', 'ar', 'memo',
+                            'custom', 'reason', 'invoices', 'auto', 'calculate', 'clear', 'refresh-draft',
+                            'preview', 'save', 'save-new', 'review', 'retry'):
+                assert page.text.count(f'id="payment-{control}"') == 1, (cmd.name, control)
+            assert 'name="originals"' not in page.text
+            continue
+        if cmd.name == 'invoice update':
+            source = hosted.ok('invoice.query', {'status': 'posted', 'limit': 1}, company=hosted.company_id)['items'][0]
+            page = api.get(f'/c/{hosted.company_id}/invoice/{source["id"]}/update')
+            assert page.status_code == 200, page.text[:300]
+            assert re.search(r'name="f:settlement_guard" value="[^"]+"', page.text)
         if cmd.noun in ("estimate", "work-order") and cmd.verb in ("invoice", "sales-receipt", "billing"):
             # Billing cards first pick a real bounded source, then expose that source's inputs.
             assert 'data-billing-source-picker' in page.text, cmd.name
@@ -1386,6 +1445,12 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted)
                 # These shared inputs use the source-aware controls checked above.
                 assert f'name="f:{leaf["path"]}"' not in page.text, cmd.name
                 assert f'name="collection:{leaf["path"]}"' not in page.text, cmd.name
+            elif cmd.name == 'invoice update' and leaf['path'] == 'settlement_versions':
+                # The mutually exclusive complete signed baseline is the GUI's
+                # chosen version representation, checked against a real source.
+                assert page.text.count('name="f:settlement_guard"') == 1
+                assert 'name="collection:settlement_versions"' not in page.text
+                assert page.text.count('value="review-settlement"') == 1
             elif leaf["kind"] == "collection":
                 assert page.text.count(
                     f'name="collection:{leaf["path"]}"'

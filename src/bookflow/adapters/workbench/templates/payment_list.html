@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% block title %}Customer payments{% endblock %}{% block body %}
+<link rel="stylesheet" href="{{ static_urls['payments.css'] }}">
+<h1>Customer payments</h1><p class="payment-actions">{% if may_receive %}<a href="/c/{{ company_id }}/receive-payments">Receive new payment</a>{% endif %}<a href="/c/{{ company_id }}/payment-drafts">Open shared selections</a></p>
+<form method="get" class="payment-grid" aria-label="Find customer payments">
+<label>Number, reference, memo or captured customer<input name="q" value="{{ filters.get('q','') }}"></label>
+<label>Payment method<select name="payment_method"><option value="">All methods</option>{% for method in methods %}<option value="{{ method.id }}"{% if filters.get('payment_method') == method.id %} selected{% endif %}>{{ method.name }}{{ ' (inactive)' if not method.active else '' }}</option>{% endfor %}</select></label>
+<label>From date<input type="date" name="date_from" value="{{ filters.get('date_from','') }}"></label><label>Through date<input type="date" name="date_to" value="{{ filters.get('date_to','') }}"></label>
+<label>Status<select name="status"><option value="">All</option>{% for value in ('posted','voided') %}<option value="{{ value }}"{% if filters.get('status')==value %} selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+<label><input type="checkbox" name="available" value="1"{% if filters.get('available') %} checked{% endif %}> Available payment credit only</label><button>Find payments</button>
+</form><p>{{ payments.total_count }} matching payments</p>
+<div class="payment-table-wrap"><table class="payment-invoices"><thead><tr><th>Date</th><th>Payment</th><th>Customer</th><th>Method</th><th>Received</th><th>Applied</th><th>Unapplied credit</th><th>Status</th></tr></thead><tbody>
+{% for row in payments['items'] %}<tr><td data-label="Date">{{ row.date }}</td><td data-label="Payment"><a href="/c/{{ company_id }}/receive-payments?payment={{ row.id }}">{{ row.number }}</a></td><td data-label="Customer">{{ row.payer_label }}</td><td data-label="Method">{{ row.method_label }}</td><td data-label="Received">{{ row.received }} {{ row.currency }}</td><td data-label="Applied">{{ row.applied }}</td><td data-label="Unapplied credit">{{ row.unapplied }}</td><td data-label="Status">{{ row.status }}</td></tr>{% endfor %}
+</tbody></table></div>{% if next_url %}<a href="{{ next_url }}">Next page</a>{% endif %}
+{% endblock %}

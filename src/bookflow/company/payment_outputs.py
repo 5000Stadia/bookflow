@@ -450,6 +450,9 @@ class PaymentOperationOutput(StrictModel):
 
 
 class PaymentCandidateOutput(StrictModel):
+    revision_id: str = Field(description='Current immutable commercial revision; settlement-only versions do not replace it.')
+    original_revision_id: str = Field(description='First immutable commercial revision, distinct from the current correction.')
+    original_gross_minor_units: int = Field(description='Original gross in currency minor units, before any commercial corrections.')
     invoice_id: str
     expected_version: int
     number: str
