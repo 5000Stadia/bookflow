@@ -1,6 +1,6 @@
 # 9 — MCP adapter implementation proposal, revision 3 with compact help
 
-Status: independent revision3 plan review passed; implementation is in progress. The compact-help amendment independently passed at d92eaf7. Artifact verification and closure remain pending.
+Status: independent revision3 plan review passed; implementation is in progress. The compact-help amendment independently passed at d92eaf7. The bounded-validation/explicit-inspection amendment independently passed at fcb6d8b. Artifact verification and closure remain pending.
 Authority: main design/intention.md Row9 and first-class agent/GUI cooperation; blueprint §§4.2–4.4, 5, 15.3, 16, 17, 20. This revision supersedes the previous draft completely. Parent owns the numbered plan, goal, integration and closure. The parent owns this implementation plan and its integration state.
 
 Pass2 findings F9 and F17–F21 are accepted and resolved by this proposed replacement design, subject to independent review. Earlier dispositions remain; F13 remains a tracked Row7 dependency. The architectural expansion is material: shared execution/publication authorization plus owned binary and complete-result transport are necessary; a stdio wrapper with exclusions cannot meet parity. Payments remains primary. No payment schema, bookkeeping command, provider, NLP/chatbot, email, helper or publication work is added.
