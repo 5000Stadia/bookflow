@@ -1,6 +1,6 @@
 # Row 24 — captured sales-tax calculation policies
 
-Status: proposed revision2 after independent findings F1–F12; no runtime
+Status: proposed revision3 after independent findings F1–F15; no runtime
 implementation. Parent owns this plan. Customer
 payments owns the in-flight co14/sales changes. The pure arithmetic piece can be
 built in isolation after plan PASS; schema and integration start from the reviewed
@@ -226,19 +226,49 @@ This is an explicit amendment to the existing whole-line equality check, not a
 license to rewrite the source quote.
 
 Remaining-tax forecasts calculate all remaining billable nets together under the
-source policy and compatible rules. Build the exact prospective complete-remaining
-selection in the source's current displayed order; assign the same prospective
-destination tax ordinals as conversion and map its allocated tax back to source
-line IDs for display. Explicitly returned selection/order metadata is covered by
-the preview fingerprint. Billing that unchanged selection together must reproduce
-every forecast cell and aggregate. Reordering or selecting different scope changes
-the forecast, requiring a fresh preview. Label it a forecast for billing that remaining scope together;
+source policy and compatible rules, independent of execution eligibility. Use the
+source's current displayed order and the prospective destination tax ordinals that
+an all-remaining conversion would use; map allocated tax back to source line IDs.
+Return explicit `forecast_basis=all_remaining_together`, `can_bill_together` and
+bounded eligibility reasons/recovery guidance. This mathematical forecast is not
+itself an executable selection descriptor. Calculate it from complete remaining
+net totals without constructing an over-limit posting request or truncating scope.
+
+When within both existing span limits (200 per destination line,2000 per conversion),
+an unchanged complete-remaining conversion must reproduce every forecast cell and
+aggregate. Order/eligibility metadata is fingerprinted. Above either limit return
+can_bill_together=false and clearly label the total hypothetical: actual bounded
+installments may charge different tax because they round independently. Billing
+inspection still succeeds and exposes the existing recommended_net_amount recovery
+for a fragmented root or fewer-line selection for the total limit. Do not relax
+limits, silently split posting or create a descriptor falsely promising one bill.
+With progress disabled, retain the existing exact recommended-net exception for
+a root with more than200 spans and complete-line subset recovery for the2000 limit.
+Test both limits, meaningful forecasts, readable guidance, successful bounded
+recovery and eventual complete positive-net billing under combined tax.
+Reordering or selecting different scope changes the forecast, requiring a fresh
+preview. Label eligible forecasts as billing that remaining scope together;
 future installment partitioning or extra sale lines can differ. Previous and
 cumulative values remain actual postings and never use a current default or a
 fresh forecast. Forecasts and previews reserve no entitlement or stored amounts.
-Sales-receipt creation/correction still requires its amount_received confirmation
-to match the complete newly calculated gross, including redistributed tax. Do not
-silently alter a cash confirmation while accepting an otherwise legal line edit.
+Preserve the exact existing receipt amount_received requirement/omission predicates:
+linked-work-history corrections require confirmation when gross changes, including
+after removal of the last linked line; metadata/no-op and same-gross corrections
+can omit it. Ordinary receipt corrections keep their existing omission contract.
+Whenever required or supplied, confirmation equals the complete newly calculated
+gross. Same-gross tax redistribution adds no confirmation requirement. Do not
+silently alter a supplied cash confirmation. Test omitted confirmation for ordinary,
+metadata-only and same-gross edits, and changed-gross linked-history enforcement.
+
+Released-spans rebilling retains exact spans/net. Under a new combined policy,
+identical grouping and rates preserve aggregate tax/gross; per-line/per-agency
+reproduction additionally requires the same destination tax-ordinal order. Reversed
+destination order can move tied cents between agencies; preview/print/inspection
+show the new attribution, while the old invoice and its allocations remain exact
+history. Legacy independent-component guarantees are unchanged. Hand-fixed witness:
+net5/net10, each with A10%/Z5%, produces total tax2. Net5 first attributes A2/Z0;
+net10 first attributes A1/Z1. Test release/rebill in both orders and explain this
+boundary in the shared public help, not only developer notes.
 
 On an applied invoice correction, feed the revised exact net/tax component cents
 into Row22's complete-graph settlement restatement. Use its logical keys, version
@@ -374,3 +404,6 @@ goal. No federal rule is presented as universal state sales-tax authority.
 | F10 | Economic bucket key ignores descriptive/version differences while preserving each captured provenance. |
 | F11 | Relocated/attached migrated and new-policy company witnesses cover history, reversal, work and payment recovery. |
 | F12 | Blind agent previews AND posts, hands persisted identity to human GUI, independent persisted-state checks before interview. |
+| F13 | Retain existing conditional receipt confirmation/omission predicates, including linked history after removal and same-gross edits. |
+| F14 | Mathematical all-remaining forecast is separate from executable selection; explicit eligibility and existing bounded recovery remain readable at both limits, including progress disabled. |
+| F15 | Rebill aggregate versus cell/agency reproduction distinguished; net5/net10 A10%/Z5% ordering oracle and public explanation required. |
