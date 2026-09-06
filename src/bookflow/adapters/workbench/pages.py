@@ -1575,7 +1575,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 headers={"Cache-Control": "no-store"},
             )
         target = _success_target(cmd, company_id, noun, record_id, out)
-        flash_id = flashes.put(session_token, {"command": cmd.name, "result": out})
+        flash_id = flashes.put(session_token, {"command": cmd.name, "is_write": cmd.is_write, "result": out})
         location = f"{target}?flash={flash_id}"
         if request.headers.get("hx-request", "").lower() == "true":
             # A 303 is followed inside the XHR and leaves the address bar on

@@ -388,18 +388,18 @@ def variant_policies():
         ('anyOf', ('Address', 'null')): ([parent], ['creation/default-origin override coverage']),
         ('anyOf', ('AddressInput', 'null')): ([parent], ['party-address defaults use a distinct owner model; browser witness required']),
         ('anyOf', ('RegisterParty', 'null')): ([nested, parent], ['top-level payee default/prefill witness']),
-        ('anyOf', ('MoneyInput', 'string')): ([money], ['structured integer-money object branch']),
-        ('anyOf', ('SalesMoneyInput', 'null', 'string')): ([money], ['structured money object and nullable line-origin overrides']),
-        ('anyOf', ('SalesMoneyInput', 'string')): ([money], ['structured integer-money object branch']),
+        ('anyOf', ('MoneyInput', 'string')): (['tests/test_mcp_nested_gui_browser.py::test_nested_collection_model_object_null_and_full_error', 'tests/test_mcp_money_gui_browser.py::test_structured_integer_money_object_exact_bytes_and_core_rejection'], []),
+        ('anyOf', ('SalesMoneyInput', 'null', 'string')): ([money, 'tests/test_mcp_money_gui_browser.py::test_top_level_money_object_nullable_branch_and_complete_calculation'], ['nullable line-origin overrides']),
+        ('anyOf', ('SalesMoneyInput', 'string')): ([money, 'tests/test_mcp_money_gui_browser.py::test_top_level_money_object_nullable_branch_and_complete_calculation'], []),
         ('anyOf', ('any', 'null')): ([custom], ['definition-default kind overrides beyond boolean']),
         ('anyOf', ('array', 'null')): ([custom, 'tests/test_mcp_nested_gui_browser.py::test_optional_nested_collection_order_empty_null_and_omission'], []),
         ('anyOf', ('boolean', 'null')): ([boolean], []),
         ('anyOf', ('integer', 'null')): ([number, 'tests/test_mcp_nested_gui_browser.py::test_optional_nested_collection_order_empty_null_and_omission'], []),
         ('anyOf', ('null', 'object')): ([custom, 'tests/test_mcp_payment_form_browser.py::test_generated_payment_json_object_error_preview_and_saved_false'], []),
         ('anyOf', ('null', 'string')): ([boolean], []),
-        ('oneOf', ('InlineApplications', 'SelectionReference')): ([payment, 'tests/test_mcp_payment_form_browser.py::test_generated_payment_json_object_error_preview_and_saved_false'], ['nested preview-request inactive branches']),
+        ('oneOf', ('InlineApplications', 'SelectionReference')): ([payment, 'tests/test_mcp_nested_payment_request_browser.py::test_all_six_nested_preview_request_branches_exact_input_results_and_inactive_controls'], []),
         ('oneOf', ('InlineCalculation', 'SelectionReference')): ([payment], ['calculation-specific inline amounts/origins and selection branch']),
-        ('oneOf', ('ApplyPreviewRequest', 'InvoiceUpdatePreviewRequest', 'ReceivePreviewRequest', 'UnapplyPreviewRequest', 'UpdatePreviewRequest', 'VoidPreviewRequest')): ([payment], ['all six nested request alternatives and inactive controls']),
+        ('oneOf', ('ApplyPreviewRequest', 'InvoiceUpdatePreviewRequest', 'ReceivePreviewRequest', 'UnapplyPreviewRequest', 'UpdatePreviewRequest', 'VoidPreviewRequest')): (['tests/test_mcp_nested_payment_request_browser.py::test_all_six_nested_preview_request_branches_exact_input_results_and_inactive_controls'], []),
     }
 
 
@@ -487,7 +487,7 @@ def workbench_row(cmd, url, page_text):
             'visible_when': leaf.get('visible_when'), 'choices': leaf.get('choices'),
             'rendered_children': [{'path': row['path'], 'visibility_cases': row.get('visibility_cases'),
                                    'kind': row['kind'], 'choices': row.get('choices')} for row in children],
-            'actual_tags': [{'tag': node['tag'], 'type': node.get('type')} for node in actual],
+            'actual_tags': [{'tag': node['tag'], 'type': node.get('type'), 'structured_alternative': node.get('data-math-structured')} for node in actual],
             'browser_witness': witness,
             'browser_acceptance': 'representative_family_mapped_not_individual_path_acceptance',
             'representative_limits': limits})
@@ -502,6 +502,7 @@ def workbench_row(cmd, url, page_text):
             'output_and_success_interaction': {
                 'scope': 'representative shared renderer behavior; not every command success target',
                 'preview_save_error': 'tests/test_mcp_workbench_control_browser.py::test_generated_boolean_false_omission_and_null_encoding',
+                'read_completion_label': 'tests/test_mcp_money_gui_browser.py::test_top_level_money_object_nullable_branch_and_complete_calculation',
                 'secret_output': 'tests/test_mcp_workbench_control_browser.py::test_generated_password_error_preview_and_save_never_echo_secret',
                 'sale_detail_history': 'tests/test_service_sales_browser.py::test_generated_sale_preview_correct_history_and_void',
                 'file_handoff': 'tests/test_mcp_file_gui_browser.py::test_installed_mcp_file_browser_and_agent_continuation',

@@ -65,3 +65,6 @@ nav.crumbs{margin:.5rem 0;color:#666}
 
 .record-heading{overflow-wrap:anywhere}
 .object-clear-control{white-space:normal;overflow-wrap:anywhere}
+.owned-collection,.collection-item{min-width:0}
+.structured-input-help{min-width:0;max-width:100%;grid-column:1/-1}
+.structured-input-help pre{box-sizing:border-box;max-width:100%}

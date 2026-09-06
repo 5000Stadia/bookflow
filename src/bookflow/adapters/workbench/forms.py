@@ -28,6 +28,25 @@ def _base(ann):
     return ann, False
 
 
+def _model_alternative(annotation):
+    """Return a declared structured alternative to a scalar, without a name list."""
+    while get_origin(annotation) is Annotated:
+        annotation = get_args(annotation)[0]
+    if get_origin(annotation) not in (Union, types.UnionType):
+        return None
+    alternatives = get_args(annotation)
+    if str not in alternatives:
+        return None
+    models = [value for value in alternatives
+              if inspect.isclass(value) and issubclass(value, BaseModel)]
+    return models[0] if len(models) == 1 else None
+
+
+def _structured_schema(annotation):
+    model = _model_alternative(annotation)
+    return model.model_json_schema() if model is not None else None
+
+
 _COLLECTION_ORIGINS = (list, tuple, set, frozenset)
 
 
@@ -72,6 +91,7 @@ def _scalar_descriptor(
         "name": name,
         "kind": kind,
         "json_shape": "object" if kind == "json" else None,
+        "structured_schema": _structured_schema(annotation),
         "choices": choices,
         "description": description,
         "required": required,
@@ -224,6 +244,7 @@ def leaves(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
         path = prefix + name
         out.append({"path": path, "path_parts": tuple(path.split(".")), "kind": kind,
                     "json_shape": json_shape, "choices": choices,
+                    "structured_schema": _structured_schema(f.annotation),
                     "description": f.description or "", "default": default,
                     "required": f.is_required(), "nullable": nullable,
                     "annotation": f.annotation, "math": numeric_metadata(name, base, extra)})
@@ -443,8 +464,10 @@ def _collection_prefix(path: tuple[str, ...]) -> str:
 
 
 def _coerce_scalar(annotation: Any, value: str) -> Any:
-    base, _ = _base(annotation)
-    if inspect.isclass(base) and issubclass(base, BaseModel):
+    base, nullable = _base(annotation)
+    structured = _model_alternative(annotation) is not None and (
+        value.lstrip().startswith("{") or nullable and value.strip() == "null")
+    if structured or inspect.isclass(base) and issubclass(base, BaseModel):
         try:
             return json.loads(value)
         except json.JSONDecodeError:
@@ -679,7 +702,7 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
             except ValueError:
                 v = value
         else:
-            v = value
+            v = _coerce_scalar(leaf["annotation"], value)
         if (
             originals is not None
             and not replacement
