@@ -28,7 +28,20 @@ remain visible. A zero-price line can accompany positive billing; the destinatio
 still requires positive gross. A positive entered net amount requires positive
 source net. Zero-amount requests omit the line instead of consuming hidden scope.
 
-The paid-receipt amount_received equals the preview's gross including allocated
+Extra charges use ordinary independent sale lines, never extra source entitlement.
+A request beyond remaining scope returns E_VALUE_RANGE with remaining quantity/net
+and explains the independent-line path. Billing reads and previews report zero
+remaining quoted scope when fully consumed. The conversion form explains the path;
+after posting, an "Add an unlinked line" action opens the existing sale editor.
+The editor labels these additional lines separately from captured quoted lines.
+This is an explicit second correcting write with its own preview/version check,
+not a silently appended conversion charge. If no quoted work remains, open an
+existing bill to add a line, or create an ordinary new invoice. Paid-receipt edits
+still require the actual received amount to equal the changed gross. Examples
+show a fully billed quote plus an independently described extra charge; source
+consumption remains100%. Formal change-order approval remains separate future work.
+
+The paid-receipt amount_received equals the preview's gross including calculated
 tax. Changed preview facts reject before asking for a new received total. Payment
 of an existing invoice remains a distinct future operation.
 
@@ -50,12 +63,15 @@ as millionths of one percent, requests p*D/100000000 units. These are integers.
 D fits an unsigned160-bit representation for the existing signed64 source bounds.
 All intermediate calculations use integers; money never uses floating point.
 
-For captured total T, an interval[a,b) owns
-half_even(T*b/D)-half_even(T*a/D) minor units. Apply this independently to net and
-EACH captured tax component. Add interval results to obtain the line's exact
-amounts. Full coverage telescopes to the quoted net and every quoted tax component.
-Ordinary sales retain their existing per-line extension and tax arithmetic; an
-allocated line explicitly uses the source-entitlement basis instead.
+For captured net N, an interval[a,b) owns
+half_even(N*b/D)-half_even(N*a/D) minor units. Add interval results to obtain the
+destination line's exact net. Full coverage telescopes to the quoted net.
+Each destination line's tax component is half_even(net*captured_rate/100000000),
+the ordinary sale rule. Calculate once per component on the combined line net,
+never separately per span. Zero net produces zero tax. Quoted tax is informational:
+independently rounded installment taxes may differ from the estimate's tax, and
+no final installment silently absorbs a tax adjustment. Net uses the entitlement
+basis; tax, gross and accounting legs retain ordinary sale arithmetic.
 
 Select earliest free intervals in ascending coordinate order. Quantity and percent
 requests consume their requested coordinate length, crossing occupied gaps without
@@ -63,7 +79,7 @@ consuming them. For a positive net request n on a free interval[a,b), let its ne
 capacity be half_even(N*b/D)-half_even(N*a/D). If capacity<=n, consume that whole
 interval and reduce n by capacity. Otherwise end at
 (half_even(N*a/D)+n)*(D/N). This endpoint is inside that interval and gives exactly
-n net minor units. Zero-net portions can carry tax cents and must not disappear.
+n net minor units. Zero-net portions carry no tax but still represent physical scope.
 Reject if the total requested net is unavailable.
 
 Canonical spans are positive-width, sorted, nonoverlapping, coalesced when adjacent,
@@ -75,7 +91,9 @@ incrementally and coalesce them; avoid loading an unbounded history into Python.
 History still uses bounded, authority- and watermark-scoped pages.
 
 Voiding or removing a linked line releases exactly its original spans. Rebilling
-those spans with a new permanent key preserves their cents. Neither a release nor
+those spans with a new permanent key preserves their net; identical grouping and
+captured rates preserve tax. Regrouping released portions can change rounded tax.
+Neither a release nor
 a later installment changes another issued invoice's amount, tax or allocation.
 Two concurrent conversions cannot consume overlapping spans or incompatible bases.
 
@@ -96,7 +114,7 @@ line representation; partial or fragmented remaining coverage uses allocated fac
 Allocated facts carry the source revision/root identity, source economic basis,
 D and canonical spans. The immutable source snapshot retains the complete quoted
 quantity, rate/amount, component taxes and classifications. The invoice's net and
-taxes come from the allocation; its displayed quoted rate is not asserted to be
+taxes use the net allocation and captured tax rates; its displayed quoted rate is not asserted to be
 an independently rounded multiplication producing that net.
 
 Quantity equals Q*sum(span lengths)/(D*1000000) in the quoted selling unit.
@@ -171,7 +189,10 @@ span and has no accounting/operational/audit effects.
 
 Billing forms offer remaining work, selected remaining lines, one original-scope
 percentage, or per-line quantity/net/percentage. Show estimated, previously billed,
-current, cumulative and remaining quantities/net/tax and the source rate. Label
+current, cumulative and remaining quantities/net and the source rate. Show quoted
+tax, actual previously billed tax, current invoice tax and tax estimated for billing
+the remaining net together. Never label quoted tax minus billed tax as a tax debt
+or remaining entitlement. Cumulative gross uses actual posted installment taxes. Label
 percentages by their original-scope basis. Readable quantity fractions have quoted
 quantity context. Column visibility for quantity/rate and percentage is preserved
 in the page URL. Financial completion does not claim physical fulfillment.
@@ -192,7 +213,9 @@ Both seeds append independent progress examples, preserving every old command
 prefix, source record/history/file and net/reference balance. New financial examples
 end voided. Independent arithmetic witnesses cover small/tied net and component
 amounts, one-microunit sources, nonterminating quantities, mixed selection modes,
-fragmented gaps, late void/rebill in different orders, and full telescoping sums.
+fragmented gaps, late void/rebill in different orders, and full net telescoping sums.
+Tax witnesses cover half-cent ties, different installment groupings and quote/actual
+rounding differences, with ordinary per-line/component tax and no tax-only spans.
 Tests include legacy keys after cache expiry/upgrades, two concurrent partial writes,
 retained-proof correction/no-op, source edits before/after consumption, readonly/
 cross-company replay denial, required custom fields and original source bytes,
