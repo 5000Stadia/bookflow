@@ -75,6 +75,7 @@ def test_agent_invoice_human_correction_agent_continuation(register_browser, wid
         b.navigate(base + "/update")
         b.wait_for('!!document.querySelector("[data-sales-form]")')
         _fill(b, "c:lines:0:quantity", "1.5")
+        _fill(b, "ctx:reason", "Correct the service quantity")
         _fill(b, "f:memo", "Corrected by human")
         _preview(b)
         _click(b, "submit")

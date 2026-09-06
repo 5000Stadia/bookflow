@@ -77,6 +77,20 @@ separately. Payer edits invalidate executable previews and draft-derived display
 Save & New clears those displays while retaining the documented defaults.
 Stale review renders saved/current money and retained entries, retrieves every
 bounded diagnostic page, and distinguishes change-event actors from latest writers.
+Every receipt-intent construction checks that the visible payer is resolved, even
+when a shared selection already exists. Rejected selection patches remain separate
+from the saved baseline and current shared revision. Review compares all three,
+rebases only those patches onto the explicitly reviewed version, and retains other
+writers' row edits. A second concurrent change requires another review. Pending
+edits cannot be discarded by refresh, clear or suggestion controls. Workbench
+actions serialize with visible busy/queued feedback instead of dropping activation.
+Invoice and funding baselines refresh together in a bounded selection update.
+When the stale graph exceeds that update's public bound, explicit review creates
+a complete recovered shared selection through ordinary bounded preparation
+commands, retains the original selection, and identifies the replacement in the UI.
+Consumed selections cannot enter that copy path. Existing-credit forms distinguish
+the retained allocation budget's unallocated amount from current available payment
+credit; preview continues to use the authoritative settlement projection.
 Invoice correction pages render proposed received/applied/available or gross/applied/due
 balances for each identifiable affected document before Save becomes available.
 

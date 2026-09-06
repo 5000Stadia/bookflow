@@ -18,7 +18,7 @@
 <div id="payment-customer-results" aria-live="polite"></div>
 <label>Received date<input id="payment-date" type="date" required></label>
 <label>Payment number (automatic when blank)<input id="payment-number" maxlength="64"></label>
-<label>Amount received<input id="payment-amount" type="text" inputmode="decimal" data-math-kind="money" autocomplete="off"><span id="payment-amount-origin" class="muted"></span></label>
+<label><span id="payment-amount-label">Amount received</span><input id="payment-amount" type="text" inputmode="decimal" data-math-kind="money" autocomplete="off"><span id="payment-amount-origin" class="muted"></span></label>
 <label>Payment method<select id="payment-method"><option value="">Customer default</option></select></label>
 <label>Reference / check number<input id="payment-reference" maxlength="128"></label>
 <label>Deposit to<select id="payment-destination"><option value="">Company default</option></select></label>
