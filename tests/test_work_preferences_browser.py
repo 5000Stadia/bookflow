@@ -2,7 +2,7 @@
 import base64
 import pytest
 from tests.test_row5_browser_acceptance import CHROME, browser_site
-from tests.test_row8_register_browser import register_browser, _command
+from tests.test_row8_register_browser import register_browser, _command, _key
 from tests.test_service_sales_browser import _fill, _choose, _click, _preview, _saved, _contained
 from tests.test_customer_work_browser import visit
 
@@ -24,6 +24,9 @@ def test_policy_forms_final_bill_and_retained_estimate(register_browser, width, 
         lines=[dict(item=item, quantity='1')]))
     source = command('estimate.update', dict(estimate=source['id'], expected_version=1, status='accepted', decision_note='Agreed'))
     base = f'{env.site.base_url}/c/{env.site.company_id}'
+    b.navigate(base + '/')
+    b.wait_for('!!document.querySelector(".group-grid")')
+    assert b.evaluate('!!document.querySelector(\'a[href$="/estimate/create"]\')')
     visit(b, base + '/company/self/update')
     assert 'Customer work preferences' in b.evaluate('document.body.innerText')
     for field, value in [('estimates_enabled','false'), ('progress_billing_enabled','false'), ('close_estimates_after_billing','true')]:
@@ -33,6 +36,18 @@ def test_policy_forms_final_bill_and_retained_estimate(register_browser, width, 
     _click(b, 'submit')
     b.wait_for('document.body.innerText.includes("Saved successfully")')
     assert not command('company.show', {})['info']['estimates_enabled']
+    b.navigate(base + '/')
+    b.wait_for('!!document.querySelector(".group-grid")')
+    links = b.evaluate('Array.from(document.querySelectorAll("a"), a => a.pathname)')
+    assert not any(path.endswith(('/estimate/create', '/estimate/copy', '/proposal/estimate')) for path in links)
+    assert base.removeprefix(env.site.base_url) + '/estimate' in links
+    assert base.removeprefix(env.site.base_url) + '/work-order/create' in links
+    _contained(b, width)
+    b.evaluate('Array.from(document.querySelectorAll(".noun-row")).find(e => e.querySelector("h3").textContent === "estimate").scrollIntoView({block:"center"})')
+    (tmp_path/f'home-disabled-{width}.png').write_bytes(base64.b64decode(b.call('Page.captureScreenshot', {'format':'png'})['data']))
+    b.evaluate('document.querySelector(\'a[href$="/estimate"]\').focus()')
+    _key(b, 'Enter')
+    b.wait_for('location.pathname.endsWith("/estimate")')
     b.navigate(base + '/estimate')
     b.wait_for('document.readyState === "complete"')
     assert not b.evaluate('Array.from(document.querySelectorAll("a")).some(a=>a.pathname.endsWith("/estimate/create"))')

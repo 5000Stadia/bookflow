@@ -602,6 +602,10 @@ provenance for never-edited fields, separately from allocation/release attributi
 Company show exposes these authorized latest preference changes so blocked browser
 entry routes can render the shared disabled-feature error before displaying a form.
 Settings links remain limited to company administrators.
+Company-home shortcuts use the same new-estimate visibility rules as lists and
+record actions. A rejected recovery form keeps its attempted amount visible;
+an explicit per-line button adopts the displayed current recommendation without
+changing the other draft inputs and invalidates the preview before another save.
 
 Financial fingerprints include progress enablement and effective closure for direct
 estimates. Estimate enablement and dormant close settings are excluded. New estimate

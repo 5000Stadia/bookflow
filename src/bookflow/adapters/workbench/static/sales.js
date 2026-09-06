@@ -66,6 +66,12 @@
   });
   // Reference selection and collection changes set hidden values without input events.
   document.addEventListener('click', event => {
+    const recovery = event.target.closest('[data-billing-recovery-adopt]');
+    if (recovery) {
+      const amount = recovery.closest('.billing-line').querySelector('[data-billing-recovery-amount]');
+      amount.value = recovery.dataset.billingRecoveryAdopt;
+      invalidate(recovery.closest('[data-sales-form]'));
+    }
     if (event.target.closest('[data-ref-clear],[role="option"],[data-collection-add],[data-collection-remove],[data-collection-up],[data-collection-down],[data-custom-adopt]'))
       invalidate(event.target.closest('[data-sales-form]'));
   }, true);

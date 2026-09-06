@@ -529,7 +529,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return page_error(request, e)
         is_hub_admin = credential(request).hub_admin
         nouns = [
-            (n, [cmd for cmd in _verbs(n, "company") if _role_allows(cmd, show, hub_admin=is_hub_admin)])
+            (n, [cmd for cmd in _verbs(n, "company") if _role_allows(cmd, show, hub_admin=is_hub_admin)
+                 and (show.get('info', {}).get('estimates_enabled', True)
+                      or cmd.name not in ('estimate create', 'estimate copy', 'proposal estimate'))])
             for n in _nouns("company")
         ]
         resp = render(
