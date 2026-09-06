@@ -83,3 +83,23 @@ def test_rotation_expiry_and_restart_preserve_unsaved_note(site):
     assert submit(state,client,csrf,'Restart draft').status_code==401
     assert not state.comments.read_text()
     assert login(state,client)
+
+@pytest.mark.parametrize('width',[1280,390])
+def test_real_browser_form_saves_with_origin_and_fits_viewport(site,tmp_path,width):
+    from tests.test_row5_browser_acceptance import _Cdp, CHROME
+    if not CHROME.exists():pytest.skip('Chrome not installed')
+    state,_,_=site
+    browser=_Cdp(tmp_path/f'chrome-{width}')
+    try:
+        browser.viewport(width,900)
+        browser.call('Page.navigate',{'url':state.origin+'/access/'+state.key_file.read_text()})
+        browser.wait_for('!!document.querySelector("#now")')
+        assert browser.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        browser.evaluate('''(() => {const details=document.querySelector('#now .discussion');details.open=true;const form=details.querySelector('form');form.querySelector('[name=text]').value='A browser note';form.requestSubmit()})()''')
+        browser.wait_for('document.body.textContent.includes("A browser note")')
+        browser.evaluate('document.querySelector("#now .discussion").open=true')
+        assert browser.evaluate('document.body.innerText.includes("A browser note")')
+        notes=roadmap.bridge.Project(state.root,state.comments).comments()
+        assert len(notes)==1 and notes[0]['text']=='A browser note'
+    finally:
+        browser.close()

@@ -174,7 +174,7 @@ def handler(state):
             body = content.encode()
             self.send_response(status)
             for k,v in {'Content-Type':'text/html; charset=utf-8','Content-Length':str(len(body)),
-                        'Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff',
+                        'Cache-Control':'no-store','Referrer-Policy':'same-origin','X-Content-Type-Options':'nosniff',
                         'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'", **(extra or {})}.items():
                 self.send_header(k,v)
             self.end_headers()
@@ -189,7 +189,7 @@ def handler(state):
                 token = state.issue(path.removeprefix('/access/'))
                 if not token:
                     return self.send_page(403, draft_page('This access link is not valid.'))
-                return self.send_page(303, '', {'Location':'/', 'Set-Cookie':'bookflow_roadmap=' + token + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400'})
+                return self.send_page(303, '', {'Location':'/', 'Referrer-Policy':'no-referrer', 'Set-Cookie':'bookflow_roadmap=' + token + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400'})
             if path != '/':
                 return self.send_page(404, draft_page('Page not found.'))
             session = state.session(self.headers.get('Cookie',''))
