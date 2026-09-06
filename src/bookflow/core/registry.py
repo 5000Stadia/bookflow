@@ -80,6 +80,7 @@ class Command:
     local_only: bool = False  # acts on the calling process or its OS login; never routed over HTTP
     version_source: tuple[str, str | None, str] | None = None  # (show command, identifying positional or None, output field) for expected_version
     standalone_runner: Callable[..., dict[str, Any]] | None = None  # explicit rootless runner: no data root, lock, actor, or forwarding
+    protocol_stdout: bool = False  # standalone runner owns stdout through shutdown; no CLI result renderer
     transfer: TransferDescriptor | None = None
     authorization: str | None = None  # exact human-readable rule when required_role alone cannot express it
     replay: Callable[..., dict[str, Any]] | None = None  # read-only refresh after normal authorization and matching request-cache lookup
@@ -127,6 +128,7 @@ def command(name: str, *, scope: str, description: str, input_model: type[BaseMo
             clearable: bool = False, streams: bool = False, capability: str | None = None, feature: str | None = None,
             local_only: bool = False, version_source: tuple[str, str | None, str] | None = None,
             standalone_runner: Callable[..., dict[str, Any]] | None = None, authorization: str | None = None,
+            protocol_stdout: bool = False,
             transfer: TransferDescriptor | None = None):
     """Register ``plan`` (and, via ``.apply``, the apply function) under ``name``."""
     bad = set(input_model.model_fields) & CONTEXT_FIELD_NAMES
@@ -156,6 +158,8 @@ def command(name: str, *, scope: str, description: str, input_model: type[BaseMo
         truth = "company" if scope == "company" and "company" in writes else "hub"
     if truth not in ("hub", "company"):
         raise ValueError(f"{name}: bad truth {truth}")
+    if protocol_stdout and standalone_runner is None:
+        raise ValueError(f"{name}: protocol stdout requires a standalone runner")
     if standalone_runner is not None:
         if not bootstrap or not local_only:
             raise ValueError(f"{name}: a standalone command must be bootstrap and local-only")
@@ -179,7 +183,7 @@ def command(name: str, *, scope: str, description: str, input_model: type[BaseMo
                       positional=list(positional or []), error_codes=list(error_codes or []), bootstrap=bootstrap,
                       kind=kind, truth=truth, accepts_idempotency_key=accepts_idempotency_key, clearable=clearable, streams=streams,
                       capability=resolved_capability, feature=feature, local_only=local_only, version_source=version_source,
-                      standalone_runner=standalone_runner, authorization=authorization, transfer=transfer)
+                      standalone_runner=standalone_runner, protocol_stdout=protocol_stdout, authorization=authorization, transfer=transfer)
         REGISTRY[name] = cmd
 
         def applier(apply_fn: Callable[..., Applied]) -> Callable[..., Applied]:
@@ -233,6 +237,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.compact_cmds": ["company"],
     "bookflow.commands.host_cmds": ["serve", "user", "token"],
     "bookflow.commands.docs_cmds": ["docs"],
+    "bookflow.commands.mcp_cmds": ["mcp"],
     "bookflow.commands.account_cmds": ["account"],
     "bookflow.commands.chart_cmds": ["chart"],
     "bookflow.commands.custom_field_cmds": ["custom-field"],

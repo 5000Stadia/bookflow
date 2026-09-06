@@ -152,7 +152,14 @@ def _build_command(cmd: registry.Command):
         is_positional = path in cmd.positional
         text = _help_text(help_, py_t, choices, required, dflt)
         pname = "f__" + path.replace(".", "__")
-        if is_positional:
+        metadata = cmd.input_model.model_fields.get(path)
+        if metadata is not None and isinstance(metadata.json_schema_extra, dict):
+            flag = metadata.json_schema_extra.get("cli_flag", flag)
+        repeated = metadata is not None and isinstance(metadata.json_schema_extra, dict) and metadata.json_schema_extra.get("cli_repeatable")
+        if repeated:
+            default = typer.Option(None, f"--{flag}", help=text, metavar="PATH")
+            annotation = list[str] | None
+        elif is_positional:
             default = typer.Argument(None, help=text, metavar=path.upper())
             annotation = str | None
         elif py_t is bool:
@@ -170,7 +177,8 @@ def _build_command(cmd: registry.Command):
             default = typer.Option(..., "--out", help="Local output file; published atomically after verified completion. Must not already exist.", metavar="PATH")
             pname = "transfer_out"
         params.append(inspect.Parameter(pname, inspect.Parameter.KEYWORD_ONLY, default=default, annotation=str))
-    params.append(inspect.Parameter("json_", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--json", help="Print the output as one JSON object"), annotation=bool))
+    if not cmd.protocol_stdout:
+        params.append(inspect.Parameter("json_", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(False, "--json", help="Print the output as one JSON object"), annotation=bool))
     if not cmd.standalone:
         params.append(inspect.Parameter("data_root", inspect.Parameter.KEYWORD_ONLY, default=typer.Option(None, "--data-root", help="Data root; else BOOKFLOW_DATA_ROOT, else ~/.bookflow", metavar="TEXT"), annotation=str | None))
     if cmd.is_write:
@@ -192,6 +200,8 @@ def _build_command(cmd: registry.Command):
     def run(**kw: Any) -> None:
         ctx_obj = click_globals.get_current_context().obj or {}
         as_json = kw.pop("json_", False) or ctx_obj.get("json", False)
+        if cmd.protocol_stdout and as_json:
+            raise BookflowError("E_USAGE", message=f"--json does not apply to `{cmd.name}`; stdout carries its protocol")
         local_root = kw.pop("data_root", None)
         from bookflow.core import performance
         if performance.enabled():
@@ -324,6 +334,8 @@ def _build_command(cmd: registry.Command):
                 return result
 
             out = guard(transfer_run)
+        if cmd.protocol_stdout:
+            return
         for w_ in (out.get("warnings") or []) if isinstance(out, dict) else []:
             typer.echo(f"warning: {w_}", err=True)
         with span("cli.render"):

@@ -33,7 +33,7 @@ def _command_options(cmd: Any) -> list[tuple[str, str]]:
         if cmd.name == "serve"
         else "Print one JSON object."
     )
-    options = [("`--json`", json_meaning)]
+    options = [] if getattr(cmd, "protocol_stdout", False) else [("`--json`", json_meaning)]
     if cmd.transfer is not None:
         if cmd.transfer.direction == "input":
             options.append(("`PATH`", "Required input file on the calling machine. Original filename defaults to its basename; media type defaults to the guessed MIME type, or application/octet-stream. Explicit metadata options override these defaults."))
@@ -124,6 +124,11 @@ def _transfer_section(cmd: Any) -> list[str]:
          "The output table below describes metadata returned by CLI/Python. HTTP returns raw bytes with download headers; `X-Bookflow-Output` carries this same complete typed metadata. A Python sink can contain partial bytes after an error; accept it only after the call succeeds."), "",
         "See [binary transfers](../transfers.md) for executable file examples, HTTP encoding, limits, dry runs, and local completion verification.", "",
     ]
+
+
+def command_document(cmd: Any) -> str:
+    """The same pure command reference used by generated files and discovery."""
+    return _command_page(cmd.noun, [cmd]).decode("utf-8")
 
 
 def _command_page(noun: str, commands: list[Any]) -> bytes:
