@@ -82,10 +82,12 @@ def validate(plan, s, ctx):
     captured_header = work.facts(rev)
     posted_header = SalesProfile.model_validate_json(data['pending']['sales_profiles'][0]['profile_snapshot'])
     for field in type(captured_header.profile).model_fields:
-        if field == 'origins' or (field == 'terms' and 'terms' in inp.model_fields_set):
+        if field == 'origins' or (field == 'terms' and (dest == 'sales_receipt' or 'terms' in inp.model_fields_set)):
             continue
         require(getattr(posted_header, field) == getattr(captured_header.profile, field),
             'captured commercial header differs: ' + field)
+    if dest == 'sales_receipt':
+        require(posted_header.terms is None, 'paid receipt cannot carry invoice credit terms')
     require(json.loads(created['issuer_snapshot']) == captured_header.issuer_snapshot, 'captured issuer differs')
     roots = set()
     for actual, envelope, (line, root, lf) in zip(allocs, envelopes, selected):

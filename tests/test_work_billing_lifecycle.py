@@ -523,3 +523,16 @@ def test_explicit_line_preview_includes_other_consumed_source_lines(client, sale
         client.run('estimate invoice', dict(data, expected_facts_fingerprint=preview['facts_fingerprint']), company=COMPANY)
     assert err.value.code == 'E_PREVIEW_STALE'
     assert client.run('estimate invoice', data, company=COMPANY)['total_minor_units'] == 1234
+
+
+
+@pytest.mark.parametrize('noun', ['estimate', 'work-order'])
+def test_paid_billing_clears_invoice_terms_but_preserves_source_terms(client, sale, noun):
+    term = client.run('term create', dict(name='Billing Net 30', kind='standard', due_days=30), company=COMPANY)
+    source = accepted(client, sale, terms=term['id']) if noun == 'estimate' else make(client, sale, noun=noun, terms=term['id'])
+    bank = client.account.create(name='Terms receipt bank', type='bank', company=COMPANY)['id']
+    method = client.run('payment-method create', dict(name='Terms receipt cash', kind='cash'), company=COMPANY)['id']
+    receipt = bill(client, source, noun=noun, verb='sales-receipt', deposit_to=bank, payment_method=method, amount_received='24.68')
+    assert receipt['revision']['profile']['terms'] is None
+    assert receipt['revision']['billing_sources'][0]['facts_snapshot']['document']['profile']['terms']['id'] == term['id']
+    assert run(client, noun, 'show', **{noun.replace('-', '_'): source['id']})['revision']['facts']['profile']['terms']['id'] == term['id']
