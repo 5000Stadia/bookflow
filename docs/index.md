@@ -120,6 +120,8 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`company/vendor_expense_accounts`](schema/company/vendor_expense_accounts.md)
 - [`company/vendor_types`](schema/company/vendor_types.md)
 - [`company/vendors`](schema/company/vendors.md)
+- [`company/work_billing_allocations`](schema/company/work_billing_allocations.md)
+- [`company/work_billing_conversions`](schema/company/work_billing_conversions.md)
 - [`company/work_documents`](schema/company/work_documents.md)
 - [`company/work_line_identities`](schema/company/work_line_identities.md)
 - [`company/work_lines`](schema/company/work_lines.md)

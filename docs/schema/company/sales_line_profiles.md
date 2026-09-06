@@ -19,7 +19,8 @@ Database: `company`.
 | `unit_id` | VARCHAR(26) | yes | — | — | — | unit_conversions.id | Captured selected unit conversion; null without a unit. |
 | `unit_factor_nanounits` | BIGINT | no | — | — | — | — | Positive captured base units per selected unit in billionths. |
 | `base_quantity_microunits` | BIGINT | no | — | — | — | — | Positive rounded base quantity in millionths. |
-| `unit_price_minor_units` | BIGINT | no | — | — | — | — | Home-currency price per selected unit. |
+| `unit_price_minor_units` | BIGINT | yes | — | — | — | — | Home-currency price per selected unit; null for amount pricing. |
+| `pricing_basis` | VARCHAR(16) | no | — | — | — | — | Authoritative unit or amount pricing mode. |
 | `net_minor_units` | BIGINT | no | — | — | — | — | Rounded home-currency extended line price before tax. |
 | `tax_minor_units` | BIGINT | no | — | — | — | — | Home-currency sum of this line tax components. |
 | `gross_minor_units` | BIGINT | no | — | — | — | — | Home-currency line net plus tax. |

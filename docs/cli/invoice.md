@@ -10,7 +10,7 @@ Page immutable sale revisions in revision-number order with current header/versi
 |---|---|
 | Scope | company |
 | Kind | read |
-| Required role | member |
+| Required role | member ledger.read; customer-work member before linked source details |
 | Capability | ledger.read |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/invoice.history` |
@@ -118,6 +118,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].batches[].credit_minor_units` | integer | yes | no | — | — |
 | `items[].batches[].currency` | string | yes | no | — | — |
 | `items[].batches[].line_count` | integer | yes | no | — | — |
+| `items[].billing_links` | array[object] | no | no | [] | — |
+| `items[].billing_links[].source_document_id` | string | yes | no | — | — |
+| `items[].billing_links[].source_revision_id` | string | yes | no | — | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -231,6 +234,7 @@ Post a home-currency service sale with captured commercial facts and typed custo
 | `lines[].quantity` | inside `--lines` JSON array | string | no | no | "1" | — |
 | `lines[].unit` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].unit_price` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
+| `lines[].net_amount` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
 | `lines[].description` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].tax_code` | inside `--lines` JSON array | string \| null | no | yes | null | — |
@@ -373,6 +377,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.batches[].credit_minor_units` | integer | yes | no | — | — |
 | `revision.batches[].currency` | string | yes | no | — | — |
 | `revision.batches[].line_count` | integer | yes | no | — | — |
+| `revision.billing_links` | array[object] | no | no | [] | — |
+| `revision.billing_links[].source_document_id` | string | yes | no | — | — |
+| `revision.billing_links[].source_revision_id` | string | yes | no | — | — |
+| `revision.billing_sources` | array[object] | no | no | [] | — |
+| `revision.billing_sources[].id` | string | yes | no | — | — |
+| `revision.billing_sources[].created_at` | string | yes | no | — | — |
+| `revision.billing_sources[].created_by` | string | yes | no | — | — |
+| `revision.billing_sources[].created_via` | string | yes | no | — | — |
+| `revision.billing_sources[].transaction_id` | string | yes | no | — | — |
+| `revision.billing_sources[].revision_id` | string | yes | no | — | — |
+| `revision.billing_sources[].source_document_id` | string | yes | no | — | — |
+| `revision.billing_sources[].source_revision_id` | string | yes | no | — | — |
+| `revision.billing_sources[].source_line_id` | string | yes | no | — | — |
+| `revision.billing_sources[].root_document_id` | string | yes | no | — | — |
+| `revision.billing_sources[].root_line_id` | string | yes | no | — | — |
+| `revision.billing_sources[].document_line_id` | string | yes | no | — | — |
+| `revision.billing_sources[].quantity_microunits` | integer | yes | no | — | — |
+| `revision.billing_sources[].net_minor_units` | integer | yes | no | — | — |
+| `revision.billing_sources[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.billing_sources[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.billing_sources[].facts_snapshot` | dict | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -515,10 +540,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].base_quantity_microunits` | integer | yes | no | — | — |
 | `revision.lines[].unit_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].unit_factor_nanounits` | integer | yes | no | — | — |
-| `revision.lines[].unit_price` | object | yes | no | — | — |
+| `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
 | `revision.lines[].unit_price.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
 | `revision.lines[].net` | object | yes | no | — | — |
 | `revision.lines[].net.amount` | string | yes | no | — | — |
 | `revision.lines[].net.currency` | string | yes | no | — | — |
@@ -531,13 +557,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].gross.amount` | string | yes | no | — | — |
 | `revision.lines[].gross.currency` | string | yes | no | — | — |
 | `revision.lines[].gross.minor_units` | integer | yes | no | — | — |
-| `revision.lines[].unit_price_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].unit_price_minor_units` | integer \| null | yes | yes | — | — |
 | `revision.lines[].net_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].gross_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].currency` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot` | object | yes | no | — | — |
-| `revision.lines[].item_snapshot.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].item_snapshot.schema_version` | literal[1, 2] | no | no | 1 | — |
 | `revision.lines[].item_snapshot.item` | object | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.label` | string | yes | no | — | — |
@@ -583,6 +609,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.origins` | object[string, object] | no | no | {} | — |
+| `revision.lines[].item_snapshot.pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
+| `revision.lines[].item_snapshot.net_amount_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -654,6 +682,8 @@ Example JSON output:
   "revision": {
     "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "batches": [],
+    "billing_links": [],
+    "billing_sources": [],
     "created_at": "2026-01-01T00:00:00Z",
     "created_by": "value",
     "created_via": "cli",
@@ -813,6 +843,7 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 | `E_VERSION_CONFLICT` | The record changed since the version you read. |
+| `E_WORK_DEPENDENCY` | The accepted or linked work prevents this change; inspect the related document. |
 
 ## `invoice query`
 
@@ -962,7 +993,7 @@ Show a sale and its current or selected immutable revision, captured commercial 
 |---|---|
 | Scope | company |
 | Kind | read |
-| Required role | member |
+| Required role | member ledger.read; customer-work member before linked source details |
 | Capability | ledger.read |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/invoice.show` |
@@ -1101,6 +1132,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.batches[].credit_minor_units` | integer | yes | no | — | — |
 | `revision.batches[].currency` | string | yes | no | — | — |
 | `revision.batches[].line_count` | integer | yes | no | — | — |
+| `revision.billing_links` | array[object] | no | no | [] | — |
+| `revision.billing_links[].source_document_id` | string | yes | no | — | — |
+| `revision.billing_links[].source_revision_id` | string | yes | no | — | — |
+| `revision.billing_sources` | array[object] | no | no | [] | — |
+| `revision.billing_sources[].id` | string | yes | no | — | — |
+| `revision.billing_sources[].created_at` | string | yes | no | — | — |
+| `revision.billing_sources[].created_by` | string | yes | no | — | — |
+| `revision.billing_sources[].created_via` | string | yes | no | — | — |
+| `revision.billing_sources[].transaction_id` | string | yes | no | — | — |
+| `revision.billing_sources[].revision_id` | string | yes | no | — | — |
+| `revision.billing_sources[].source_document_id` | string | yes | no | — | — |
+| `revision.billing_sources[].source_revision_id` | string | yes | no | — | — |
+| `revision.billing_sources[].source_line_id` | string | yes | no | — | — |
+| `revision.billing_sources[].root_document_id` | string | yes | no | — | — |
+| `revision.billing_sources[].root_line_id` | string | yes | no | — | — |
+| `revision.billing_sources[].document_line_id` | string | yes | no | — | — |
+| `revision.billing_sources[].quantity_microunits` | integer | yes | no | — | — |
+| `revision.billing_sources[].net_minor_units` | integer | yes | no | — | — |
+| `revision.billing_sources[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.billing_sources[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.billing_sources[].facts_snapshot` | dict | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -1243,10 +1295,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].base_quantity_microunits` | integer | yes | no | — | — |
 | `revision.lines[].unit_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].unit_factor_nanounits` | integer | yes | no | — | — |
-| `revision.lines[].unit_price` | object | yes | no | — | — |
+| `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
 | `revision.lines[].unit_price.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
 | `revision.lines[].net` | object | yes | no | — | — |
 | `revision.lines[].net.amount` | string | yes | no | — | — |
 | `revision.lines[].net.currency` | string | yes | no | — | — |
@@ -1259,13 +1312,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].gross.amount` | string | yes | no | — | — |
 | `revision.lines[].gross.currency` | string | yes | no | — | — |
 | `revision.lines[].gross.minor_units` | integer | yes | no | — | — |
-| `revision.lines[].unit_price_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].unit_price_minor_units` | integer \| null | yes | yes | — | — |
 | `revision.lines[].net_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].gross_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].currency` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot` | object | yes | no | — | — |
-| `revision.lines[].item_snapshot.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].item_snapshot.schema_version` | literal[1, 2] | no | no | 1 | — |
 | `revision.lines[].item_snapshot.item` | object | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.label` | string | yes | no | — | — |
@@ -1311,6 +1364,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.origins` | object[string, object] | no | no | {} | — |
+| `revision.lines[].item_snapshot.pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
+| `revision.lines[].item_snapshot.net_amount_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -1371,6 +1426,8 @@ Example JSON output:
   "revision": {
     "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "batches": [],
+    "billing_links": [],
+    "billing_sources": [],
     "created_at": "2026-01-01T00:00:00Z",
     "created_by": "value",
     "created_via": "cli",
@@ -1528,7 +1585,7 @@ Append an immutable sale correction with an exact old-date reversal and a full n
 |---|---|
 | Scope | company |
 | Kind | write |
-| Required role | standard |
+| Required role | standard ledger.post; customer-work standard when linked work is consumed |
 | Capability | ledger.post |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/invoice.update` |
@@ -1583,6 +1640,7 @@ Append an immutable sale correction with an exact old-date reversal and a full n
 | `lines[].quantity` | inside `--lines` JSON array | string | no | no | "1" | — |
 | `lines[].unit` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].unit_price` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
+| `lines[].net_amount` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
 | `lines[].description` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].tax_code` | inside `--lines` JSON array | string \| null | no | yes | null | — |
@@ -1727,6 +1785,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.batches[].credit_minor_units` | integer | yes | no | — | — |
 | `revision.batches[].currency` | string | yes | no | — | — |
 | `revision.batches[].line_count` | integer | yes | no | — | — |
+| `revision.billing_links` | array[object] | no | no | [] | — |
+| `revision.billing_links[].source_document_id` | string | yes | no | — | — |
+| `revision.billing_links[].source_revision_id` | string | yes | no | — | — |
+| `revision.billing_sources` | array[object] | no | no | [] | — |
+| `revision.billing_sources[].id` | string | yes | no | — | — |
+| `revision.billing_sources[].created_at` | string | yes | no | — | — |
+| `revision.billing_sources[].created_by` | string | yes | no | — | — |
+| `revision.billing_sources[].created_via` | string | yes | no | — | — |
+| `revision.billing_sources[].transaction_id` | string | yes | no | — | — |
+| `revision.billing_sources[].revision_id` | string | yes | no | — | — |
+| `revision.billing_sources[].source_document_id` | string | yes | no | — | — |
+| `revision.billing_sources[].source_revision_id` | string | yes | no | — | — |
+| `revision.billing_sources[].source_line_id` | string | yes | no | — | — |
+| `revision.billing_sources[].root_document_id` | string | yes | no | — | — |
+| `revision.billing_sources[].root_line_id` | string | yes | no | — | — |
+| `revision.billing_sources[].document_line_id` | string | yes | no | — | — |
+| `revision.billing_sources[].quantity_microunits` | integer | yes | no | — | — |
+| `revision.billing_sources[].net_minor_units` | integer | yes | no | — | — |
+| `revision.billing_sources[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.billing_sources[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.billing_sources[].facts_snapshot` | dict | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -1869,10 +1948,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].base_quantity_microunits` | integer | yes | no | — | — |
 | `revision.lines[].unit_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].unit_factor_nanounits` | integer | yes | no | — | — |
-| `revision.lines[].unit_price` | object | yes | no | — | — |
+| `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
 | `revision.lines[].unit_price.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
 | `revision.lines[].net` | object | yes | no | — | — |
 | `revision.lines[].net.amount` | string | yes | no | — | — |
 | `revision.lines[].net.currency` | string | yes | no | — | — |
@@ -1885,13 +1965,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].gross.amount` | string | yes | no | — | — |
 | `revision.lines[].gross.currency` | string | yes | no | — | — |
 | `revision.lines[].gross.minor_units` | integer | yes | no | — | — |
-| `revision.lines[].unit_price_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].unit_price_minor_units` | integer \| null | yes | yes | — | — |
 | `revision.lines[].net_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].gross_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].currency` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot` | object | yes | no | — | — |
-| `revision.lines[].item_snapshot.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].item_snapshot.schema_version` | literal[1, 2] | no | no | 1 | — |
 | `revision.lines[].item_snapshot.item` | object | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.label` | string | yes | no | — | — |
@@ -1937,6 +2017,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.origins` | object[string, object] | no | no | {} | — |
+| `revision.lines[].item_snapshot.pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
+| `revision.lines[].item_snapshot.net_amount_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -2008,6 +2090,8 @@ Example JSON output:
   "revision": {
     "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "batches": [],
+    "billing_links": [],
+    "billing_sources": [],
     "created_at": "2026-01-01T00:00:00Z",
     "created_by": "value",
     "created_via": "cli",
@@ -2167,6 +2251,7 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 | `E_VERSION_CONFLICT` | The record changed since the version you read. |
+| `E_WORK_DEPENDENCY` | The accepted or linked work prevents this change; inspect the related document. |
 
 ## `invoice void`
 
@@ -2176,7 +2261,7 @@ Void a sale with a required context reason and an exact reversal at its current 
 |---|---|
 | Scope | company |
 | Kind | write |
-| Required role | standard |
+| Required role | standard ledger.post; customer-work standard when linked work is consumed |
 | Capability | ledger.post |
 | Feature | — |
 | HTTP | `POST /companies/{company_id}/commands/invoice.void` |
@@ -2327,6 +2412,27 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.batches[].credit_minor_units` | integer | yes | no | — | — |
 | `revision.batches[].currency` | string | yes | no | — | — |
 | `revision.batches[].line_count` | integer | yes | no | — | — |
+| `revision.billing_links` | array[object] | no | no | [] | — |
+| `revision.billing_links[].source_document_id` | string | yes | no | — | — |
+| `revision.billing_links[].source_revision_id` | string | yes | no | — | — |
+| `revision.billing_sources` | array[object] | no | no | [] | — |
+| `revision.billing_sources[].id` | string | yes | no | — | — |
+| `revision.billing_sources[].created_at` | string | yes | no | — | — |
+| `revision.billing_sources[].created_by` | string | yes | no | — | — |
+| `revision.billing_sources[].created_via` | string | yes | no | — | — |
+| `revision.billing_sources[].transaction_id` | string | yes | no | — | — |
+| `revision.billing_sources[].revision_id` | string | yes | no | — | — |
+| `revision.billing_sources[].source_document_id` | string | yes | no | — | — |
+| `revision.billing_sources[].source_revision_id` | string | yes | no | — | — |
+| `revision.billing_sources[].source_line_id` | string | yes | no | — | — |
+| `revision.billing_sources[].root_document_id` | string | yes | no | — | — |
+| `revision.billing_sources[].root_line_id` | string | yes | no | — | — |
+| `revision.billing_sources[].document_line_id` | string | yes | no | — | — |
+| `revision.billing_sources[].quantity_microunits` | integer | yes | no | — | — |
+| `revision.billing_sources[].net_minor_units` | integer | yes | no | — | — |
+| `revision.billing_sources[].tax_minor_units` | integer | yes | no | — | — |
+| `revision.billing_sources[].gross_minor_units` | integer | yes | no | — | — |
+| `revision.billing_sources[].facts_snapshot` | dict | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -2469,10 +2575,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].base_quantity_microunits` | integer | yes | no | — | — |
 | `revision.lines[].unit_id` | string \| null | yes | yes | — | — |
 | `revision.lines[].unit_factor_nanounits` | integer | yes | no | — | — |
-| `revision.lines[].unit_price` | object | yes | no | — | — |
+| `revision.lines[].unit_price` | object \| null | yes | yes | — | — |
 | `revision.lines[].unit_price.amount` | string | yes | no | — | — |
 | `revision.lines[].unit_price.currency` | string | yes | no | — | — |
 | `revision.lines[].unit_price.minor_units` | integer | yes | no | — | — |
+| `revision.lines[].pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
 | `revision.lines[].net` | object | yes | no | — | — |
 | `revision.lines[].net.amount` | string | yes | no | — | — |
 | `revision.lines[].net.currency` | string | yes | no | — | — |
@@ -2485,13 +2592,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].gross.amount` | string | yes | no | — | — |
 | `revision.lines[].gross.currency` | string | yes | no | — | — |
 | `revision.lines[].gross.minor_units` | integer | yes | no | — | — |
-| `revision.lines[].unit_price_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].unit_price_minor_units` | integer \| null | yes | yes | — | — |
 | `revision.lines[].net_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].tax_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].gross_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].currency` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot` | object | yes | no | — | — |
-| `revision.lines[].item_snapshot.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].item_snapshot.schema_version` | literal[1, 2] | no | no | 1 | — |
 | `revision.lines[].item_snapshot.item` | object | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.label` | string | yes | no | — | — |
@@ -2537,6 +2644,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].item_snapshot.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].item_snapshot.origins` | object[string, object] | no | no | {} | — |
+| `revision.lines[].item_snapshot.pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
+| `revision.lines[].item_snapshot.net_amount_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].tax_components` | array[object] | yes | no | — | — |
 | `revision.lines[].tax_components[].id` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].created_at` | string | yes | no | — | — |
@@ -2608,6 +2717,8 @@ Example JSON output:
   "revision": {
     "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "batches": [],
+    "billing_links": [],
+    "billing_sources": [],
     "created_at": "2026-01-01T00:00:00Z",
     "created_by": "value",
     "created_via": "cli",
@@ -2766,3 +2877,4 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 | `E_VERSION_CONFLICT` | The record changed since the version you read. |
+| `E_WORK_DEPENDENCY` | The accepted or linked work prevents this change; inspect the related document. |

@@ -307,7 +307,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.markup_percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.billable` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile` | object | yes | no | — | — |
-| `revision.lines[].facts.profile.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].facts.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
 | `revision.lines[].facts.profile.item` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
@@ -353,6 +353,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.origins` | object[string, object] | no | no | {} | — |
+| `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
+| `revision.lines[].facts.profile.net_amount_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -707,6 +709,7 @@ Create a non-posting customer work document with captured scope, commercial defa
 | `lines[].quantity` | inside `--lines` JSON array | string | no | no | "1" | — |
 | `lines[].unit` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].unit_price` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
+| `lines[].net_amount` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
 | `lines[].description` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].tax_code` | inside `--lines` JSON array | string \| null | no | yes | null | — |
@@ -716,7 +719,6 @@ Create a non-posting customer work document with captured scope, commercial defa
 | `lines[].use_defaults` | inside `--lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "estimated_unit_cost"]] | no | no | [] | — |
 | `lines[].estimated_unit_cost` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
 | `lines[].markup_percent` | inside `--lines` JSON array | string \| null | no | yes | null | — |
-| `lines[].net_amount` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
 | `lines[].completed_quantity` | inside `--lines` JSON array | string | no | no | "0" | — |
 | `lines[].billable` | inside `--lines` JSON array | boolean | no | no | true | — |
 
@@ -994,7 +996,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.markup_percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.billable` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile` | object | yes | no | — | — |
-| `revision.lines[].facts.profile.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].facts.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
 | `revision.lines[].facts.profile.item` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
@@ -1040,6 +1042,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.origins` | object[string, object] | no | no | {} | — |
+| `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
+| `revision.lines[].facts.profile.net_amount_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -1634,7 +1638,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.markup_percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.billable` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile` | object | yes | no | — | — |
-| `revision.lines[].facts.profile.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].facts.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
 | `revision.lines[].facts.profile.item` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
@@ -1680,6 +1684,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.origins` | object[string, object] | no | no | {} | — |
+| `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
+| `revision.lines[].facts.profile.net_amount_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -2542,7 +2548,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.markup_percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.billable` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile` | object | yes | no | — | — |
-| `revision.lines[].facts.profile.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].facts.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
 | `revision.lines[].facts.profile.item` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
@@ -2588,6 +2594,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.origins` | object[string, object] | no | no | {} | — |
+| `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
+| `revision.lines[].facts.profile.net_amount_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
@@ -2924,6 +2932,7 @@ Revise the whole work document using its expected version. Preserve immutable hi
 | `lines[].quantity` | inside `--lines` JSON array | string | no | no | "1" | — |
 | `lines[].unit` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].unit_price` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
+| `lines[].net_amount` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
 | `lines[].description` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].tax_code` | inside `--lines` JSON array | string \| null | no | yes | null | — |
@@ -2933,7 +2942,6 @@ Revise the whole work document using its expected version. Preserve immutable hi
 | `lines[].use_defaults` | inside `--lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level", "estimated_unit_cost"]] | no | no | [] | — |
 | `lines[].estimated_unit_cost` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
 | `lines[].markup_percent` | inside `--lines` JSON array | string \| null | no | yes | null | — |
-| `lines[].net_amount` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
 | `lines[].completed_quantity` | inside `--lines` JSON array | string | no | no | "0" | — |
 | `lines[].billable` | inside `--lines` JSON array | boolean | no | no | true | — |
 | `proposal` | `PROPOSAL` | string | yes | no | — | minimum length 1; maximum length 1004 |
@@ -3213,7 +3221,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.markup_percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.billable` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile` | object | yes | no | — | — |
-| `revision.lines[].facts.profile.schema_version` | literal[1] | no | no | 1 | — |
+| `revision.lines[].facts.profile.schema_version` | literal[1, 2] | no | no | 1 | — |
 | `revision.lines[].facts.profile.item` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.item.label` | string | yes | no | — | — |
@@ -3259,6 +3267,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.profile.cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.price_basis_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.profile.origins` | object[string, object] | no | no | {} | — |
+| `revision.lines[].facts.profile.pricing_basis` | literal["unit", "amount"] | no | no | "unit" | — |
+| `revision.lines[].facts.profile.net_amount_minor_units` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.estimated_cost_origin` | object | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.kind` | literal["explicit", "default"] | yes | no | — | — |
 | `revision.lines[].facts.estimated_cost_origin.source_id` | string \| null | no | yes | null | — |
