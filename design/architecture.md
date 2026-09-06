@@ -639,6 +639,15 @@ AR and Service Income from October2 onward, including annual and second-half tot
 All reference net values remain unchanged. The reference source-effect oracle derives
 these four legs independently; Row18's manifest witness remains scoped to its41commands.
 
+Sale conflict diagnostics resolve an expected header version through its unique,
+valid audit snapshot and transaction-owned revision ID. They compare commercial
+semantics and expected/current status independently of revision numbering, with a
+conservative version marker for otherwise identical headers. Missing or damaged
+history retains unknown-field E_VERSION_CONFLICT. journals.version_meta accepts
+an optional defensive history decoder for sales; other callers retain their
+existing decoder. Diagnostic reads never write, and latest-writer attribution is
+separate from the changes since the expected version.
+
 ## Numeric browser entry
 
 The [numeric entry contract](numeric-entry.md) owns calculator behavior and the

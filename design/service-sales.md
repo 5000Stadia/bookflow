@@ -248,9 +248,16 @@ Update and void use optional positive `expected_version` under the existing
 journal aggregate-concurrency rule: every sale field belongs to one indivisible
 `sale` conflict group. No disjoint financial merge; a stale version returns
 `E_VERSION_CONFLICT` with current writer/name, age and actual changed field paths. Conflict detection
-uses the indivisible group; conflict explanation separately compares saved
-revisions/origins and reports paths such as lines.<line_id>.quantity, customer or
-billing_address, not merely the word sale. A blind
+uses the indivisible group; conflict explanation resolves the expected header
+version from exactly one valid non-migration audit snapshot, then compares its
+owned commercial revision with the current owned revision. Header versions and
+revision numbers need not coincide. Paths include lines.<line_id>.quantity,
+customer and billing_address. Status appears only when it differs from the
+expected header; an otherwise unchanged header advance reports version.
+Missing, ambiguous, malformed or mismatched history retains E_VERSION_CONFLICT
+with unknown fields. Current-writer details identify the latest writer separately
+from changes accumulated since the expected version. Rejection creates no database
+changes. A blind
 write follows existing recent-write warning behavior; the browser always supplies
 the displayed version. Update of a voided sale is `E_VALIDATION`; it cannot revive
 the document. An existing no-op may be inspected despite inactive references;
