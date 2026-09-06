@@ -1767,8 +1767,9 @@ def test_login_lands_in_a_company_without_a_click(hosted):
     assert r.status_code == 303 and r.headers["location"] == f"/c/{hosted.company_id}/", r.headers
 
 
+@pytest.mark.timeout(180)
 def test_every_link_the_workbench_renders_resolves(hosted):
-    """Every internal link emitted by the generated workbench resolves."""
+    """Crawl every seeded document family; the expanded graph has a bounded three-minute deadline."""
     import re
     c = TestClient(hosted.handle.app, follow_redirects=True)
     assert c.post("/login", json={"username": hosted.login, "password": PASSWORD}).status_code == 200
