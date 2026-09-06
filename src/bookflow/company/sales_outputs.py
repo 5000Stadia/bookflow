@@ -140,7 +140,28 @@ class SalesOutput(SalesSummaryOutput):
     revision: SalesRevisionOutput
 
 
+class BillingProgressAmount(StrictModel):
+    quantity: str
+    quantity_fraction: ExactFraction
+    scope_percent: str
+    scope_percent_fraction: ExactFraction
+    net_minor_units: int
+    tax_minor_units: int
+    gross_minor_units: int
+
+
+class BillingProgressLine(StrictModel):
+    line_id: str
+    root_document_id: str
+    root_line_id: str
+    previous: BillingProgressAmount
+    current: BillingProgressAmount
+    cumulative: BillingProgressAmount
+    remaining: BillingProgressAmount
+
+
 class SalesWriteOutput(SalesOutput, WriteOutput):
+    billing_progress: list[BillingProgressLine] = Field(default_factory=list)
     facts_fingerprint: str | None = None
     changed: bool = True
     changed_fields: list[str] = Field(default_factory=list)

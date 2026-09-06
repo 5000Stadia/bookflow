@@ -41,7 +41,10 @@ The editor labels these additional lines separately from captured quoted lines.
 This is an explicit second correcting write with its own preview/version check,
 not a silently appended conversion charge. If no quoted work remains, open an
 existing bill to add a line, or create an ordinary new invoice. Paid-receipt edits
-still require the actual received amount to equal the changed gross. Examples
+with linked-work history require amount_received to equal the changed gross,
+including after their last linked line is removed. Metadata/no-op or same-gross
+edits can omit it; whenever supplied on a receipt update it must match exactly.
+Ordinary receipt corrections retain their existing omission contract. Examples
 show a fully billed quote plus an independently described extra charge; source
 consumption remains100%. Formal change-order approval remains separate future work.
 
@@ -232,6 +235,15 @@ details retain company/source authorization. Dry-run reserves no key, identifier
 span and has no accounting/operational/audit effects.
 
 ## Public shapes
+
+New conversion results carry billing_progress for every current source line,
+keyed by line_id, root_document_id and root_line_id. Its previous, current,
+cumulative and remaining objects expose quantity/quantity_fraction,
+scope_percent/scope_percent_fraction and net_minor_units/tax_minor_units/
+gross_minor_units. Previous is posted allocation state before the proposed bill;
+current is this bill; cumulative includes this bill; remaining is after this bill
+with forecast tax on remaining net. Independent charges are excluded. Replays and
+ordinary sale writes leave this projection empty; billing reads give current state.
 
 New conversion members are selections, percent. They are mutually exclusive with
 line_ids. Omitted members select existing remaining behavior; explicitly null

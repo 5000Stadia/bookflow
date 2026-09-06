@@ -687,6 +687,58 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `billing_progress` | array[object] | no | no | [] | — |
+| `billing_progress[].line_id` | string | yes | no | — | — |
+| `billing_progress[].root_document_id` | string | yes | no | — | — |
+| `billing_progress[].root_line_id` | string | yes | no | — | — |
+| `billing_progress[].previous` | object | yes | no | — | — |
+| `billing_progress[].previous.quantity` | string | yes | no | — | — |
+| `billing_progress[].previous.quantity_fraction` | object | yes | no | — | — |
+| `billing_progress[].previous.quantity_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].previous.quantity_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].previous.scope_percent` | string | yes | no | — | — |
+| `billing_progress[].previous.scope_percent_fraction` | object | yes | no | — | — |
+| `billing_progress[].previous.scope_percent_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].previous.scope_percent_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].previous.net_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].previous.tax_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].previous.gross_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].current` | object | yes | no | — | — |
+| `billing_progress[].current.quantity` | string | yes | no | — | — |
+| `billing_progress[].current.quantity_fraction` | object | yes | no | — | — |
+| `billing_progress[].current.quantity_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].current.quantity_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].current.scope_percent` | string | yes | no | — | — |
+| `billing_progress[].current.scope_percent_fraction` | object | yes | no | — | — |
+| `billing_progress[].current.scope_percent_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].current.scope_percent_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].current.net_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].current.tax_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].current.gross_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].cumulative` | object | yes | no | — | — |
+| `billing_progress[].cumulative.quantity` | string | yes | no | — | — |
+| `billing_progress[].cumulative.quantity_fraction` | object | yes | no | — | — |
+| `billing_progress[].cumulative.quantity_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].cumulative.quantity_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].cumulative.scope_percent` | string | yes | no | — | — |
+| `billing_progress[].cumulative.scope_percent_fraction` | object | yes | no | — | — |
+| `billing_progress[].cumulative.scope_percent_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].cumulative.scope_percent_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].cumulative.net_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].cumulative.tax_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].cumulative.gross_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].remaining` | object | yes | no | — | — |
+| `billing_progress[].remaining.quantity` | string | yes | no | — | — |
+| `billing_progress[].remaining.quantity_fraction` | object | yes | no | — | — |
+| `billing_progress[].remaining.quantity_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].remaining.quantity_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].remaining.scope_percent` | string | yes | no | — | — |
+| `billing_progress[].remaining.scope_percent_fraction` | object | yes | no | — | — |
+| `billing_progress[].remaining.scope_percent_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].remaining.scope_percent_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].remaining.net_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].remaining.tax_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].remaining.gross_minor_units` | integer | yes | no | — | — |
 | `facts_fingerprint` | string \| null | no | yes | null | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
@@ -697,6 +749,7 @@ Example JSON output:
 
 ```json
 {
+  "billing_progress": [],
   "changed": true,
   "changed_fields": [],
   "created_at": "2026-01-01T00:00:00Z",
@@ -1651,7 +1704,7 @@ Example JSON output:
 
 ## `sales-receipt update`
 
-Append an immutable sale correction with an exact old-date reversal and a full new-date replacement; dry-run previews resolved facts for optional expected_facts_fingerprint verification.
+Append an immutable sale correction with an exact old-date reversal and a full new-date replacement; dry-run previews resolved facts for optional expected_facts_fingerprint verification. A gross-changing receipt with linked-work history requires amount_received equal to the new gross; any supplied amount_received must match.
 
 | Contract | Value |
 |---|---|
@@ -1721,6 +1774,7 @@ Append an immutable sale correction with an exact old-date reversal and a full n
 | `lines[].use_defaults` | inside `--lines` JSON array | array[literal["description", "unit", "unit_price", "class_id", "tax_code", "price_level"]] | no | no | [] | — |
 | `sales_receipt` | `SALES_RECEIPT` | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `deposit_to` | `--deposit-to` | string \| null | no | yes | null | — |
+| `amount_received` | `--amount-received` | string \| object \| null | no | yes | null | — |
 
 ### Command and context options
 
@@ -2167,6 +2221,58 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `billing_progress` | array[object] | no | no | [] | — |
+| `billing_progress[].line_id` | string | yes | no | — | — |
+| `billing_progress[].root_document_id` | string | yes | no | — | — |
+| `billing_progress[].root_line_id` | string | yes | no | — | — |
+| `billing_progress[].previous` | object | yes | no | — | — |
+| `billing_progress[].previous.quantity` | string | yes | no | — | — |
+| `billing_progress[].previous.quantity_fraction` | object | yes | no | — | — |
+| `billing_progress[].previous.quantity_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].previous.quantity_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].previous.scope_percent` | string | yes | no | — | — |
+| `billing_progress[].previous.scope_percent_fraction` | object | yes | no | — | — |
+| `billing_progress[].previous.scope_percent_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].previous.scope_percent_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].previous.net_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].previous.tax_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].previous.gross_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].current` | object | yes | no | — | — |
+| `billing_progress[].current.quantity` | string | yes | no | — | — |
+| `billing_progress[].current.quantity_fraction` | object | yes | no | — | — |
+| `billing_progress[].current.quantity_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].current.quantity_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].current.scope_percent` | string | yes | no | — | — |
+| `billing_progress[].current.scope_percent_fraction` | object | yes | no | — | — |
+| `billing_progress[].current.scope_percent_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].current.scope_percent_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].current.net_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].current.tax_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].current.gross_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].cumulative` | object | yes | no | — | — |
+| `billing_progress[].cumulative.quantity` | string | yes | no | — | — |
+| `billing_progress[].cumulative.quantity_fraction` | object | yes | no | — | — |
+| `billing_progress[].cumulative.quantity_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].cumulative.quantity_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].cumulative.scope_percent` | string | yes | no | — | — |
+| `billing_progress[].cumulative.scope_percent_fraction` | object | yes | no | — | — |
+| `billing_progress[].cumulative.scope_percent_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].cumulative.scope_percent_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].cumulative.net_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].cumulative.tax_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].cumulative.gross_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].remaining` | object | yes | no | — | — |
+| `billing_progress[].remaining.quantity` | string | yes | no | — | — |
+| `billing_progress[].remaining.quantity_fraction` | object | yes | no | — | — |
+| `billing_progress[].remaining.quantity_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].remaining.quantity_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].remaining.scope_percent` | string | yes | no | — | — |
+| `billing_progress[].remaining.scope_percent_fraction` | object | yes | no | — | — |
+| `billing_progress[].remaining.scope_percent_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].remaining.scope_percent_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].remaining.net_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].remaining.tax_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].remaining.gross_minor_units` | integer | yes | no | — | — |
 | `facts_fingerprint` | string \| null | no | yes | null | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
@@ -2177,6 +2283,7 @@ Example JSON output:
 
 ```json
 {
+  "billing_progress": [],
   "changed": true,
   "changed_fields": [],
   "created_at": "2026-01-01T00:00:00Z",
@@ -2830,6 +2937,58 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `billing_progress` | array[object] | no | no | [] | — |
+| `billing_progress[].line_id` | string | yes | no | — | — |
+| `billing_progress[].root_document_id` | string | yes | no | — | — |
+| `billing_progress[].root_line_id` | string | yes | no | — | — |
+| `billing_progress[].previous` | object | yes | no | — | — |
+| `billing_progress[].previous.quantity` | string | yes | no | — | — |
+| `billing_progress[].previous.quantity_fraction` | object | yes | no | — | — |
+| `billing_progress[].previous.quantity_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].previous.quantity_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].previous.scope_percent` | string | yes | no | — | — |
+| `billing_progress[].previous.scope_percent_fraction` | object | yes | no | — | — |
+| `billing_progress[].previous.scope_percent_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].previous.scope_percent_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].previous.net_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].previous.tax_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].previous.gross_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].current` | object | yes | no | — | — |
+| `billing_progress[].current.quantity` | string | yes | no | — | — |
+| `billing_progress[].current.quantity_fraction` | object | yes | no | — | — |
+| `billing_progress[].current.quantity_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].current.quantity_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].current.scope_percent` | string | yes | no | — | — |
+| `billing_progress[].current.scope_percent_fraction` | object | yes | no | — | — |
+| `billing_progress[].current.scope_percent_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].current.scope_percent_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].current.net_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].current.tax_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].current.gross_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].cumulative` | object | yes | no | — | — |
+| `billing_progress[].cumulative.quantity` | string | yes | no | — | — |
+| `billing_progress[].cumulative.quantity_fraction` | object | yes | no | — | — |
+| `billing_progress[].cumulative.quantity_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].cumulative.quantity_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].cumulative.scope_percent` | string | yes | no | — | — |
+| `billing_progress[].cumulative.scope_percent_fraction` | object | yes | no | — | — |
+| `billing_progress[].cumulative.scope_percent_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].cumulative.scope_percent_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].cumulative.net_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].cumulative.tax_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].cumulative.gross_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].remaining` | object | yes | no | — | — |
+| `billing_progress[].remaining.quantity` | string | yes | no | — | — |
+| `billing_progress[].remaining.quantity_fraction` | object | yes | no | — | — |
+| `billing_progress[].remaining.quantity_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].remaining.quantity_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].remaining.scope_percent` | string | yes | no | — | — |
+| `billing_progress[].remaining.scope_percent_fraction` | object | yes | no | — | — |
+| `billing_progress[].remaining.scope_percent_fraction.numerator` | string | yes | no | — | — |
+| `billing_progress[].remaining.scope_percent_fraction.denominator` | string | yes | no | — | — |
+| `billing_progress[].remaining.net_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].remaining.tax_minor_units` | integer | yes | no | — | — |
+| `billing_progress[].remaining.gross_minor_units` | integer | yes | no | — | — |
 | `facts_fingerprint` | string \| null | no | yes | null | — |
 | `changed` | boolean | no | no | true | — |
 | `changed_fields` | array[string] | no | no | [] | — |
@@ -2840,6 +2999,7 @@ Example JSON output:
 
 ```json
 {
+  "billing_progress": [],
   "changed": true,
   "changed_fields": [],
   "created_at": "2026-01-01T00:00:00Z",

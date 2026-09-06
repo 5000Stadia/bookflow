@@ -194,8 +194,9 @@ def snapshot(raw):
     return {name: raw.execute(f'SELECT * FROM "{name}" ORDER BY rowid').fetchall() for (name,) in tables}
 
 
-def test_populated_local_columns_generated_values_and_objects_survive(historical_client):
+def test_populated_local_columns_generated_values_and_objects_survive(historical_client, monkeypatch):
     path = old_company(historical_client)
+    monkeypatch.setitem(HEADS,'company','co0011')
     with open_database(path, writable=True) as db:
         before = snapshot(db.raw)
         columns = [r[1] for r in db.raw.execute('PRAGMA table_xinfo(sales_line_profiles)')]
@@ -215,6 +216,7 @@ def test_populated_local_columns_generated_values_and_objects_survive(historical
 @pytest.mark.parametrize('failure', ['unknown', 'late'])
 def test_migration_failure_rolls_back_every_object_and_row(historical_client, monkeypatch, failure):
     path = old_company(historical_client)
+    monkeypatch.setitem(HEADS,'company','co0011')
     with open_database(path, writable=True) as db:
         if failure == 'unknown':
             db.raw.execute("ALTER TABLE sales_line_profiles ADD COLUMN pricing_basis TEXT DEFAULT 'local'")
@@ -240,19 +242,38 @@ def test_migration_failure_rolls_back_every_object_and_row(historical_client, mo
 
 def test_fresh_schema_and_revision_local_ddl(tmp_path):
     with open_database(tmp_path / 'fresh.db', writable=True, create=True) as db:
-        assert migrate_to_head(db, 'company', None) == (None, 'co0011')
+        assert migrate_to_head(db, 'company', None) == (None, 'co0012')
         for table in (c.work_billing_allocations, c.work_billing_conversions):
-            assert {r[1] for r in db.raw.execute(f'PRAGMA table_info({table.name})')} == set(table.c.keys())
-            from sqlalchemy.schema import CreateTable
-            from sqlalchemy.dialects.sqlite import dialect
-            stored = db.raw.execute('SELECT sql FROM sqlite_schema WHERE name=?', (table.name,)).fetchone()[0]
-            assert ' '.join(stored.split()) == ' '.join(str(CreateTable(table).compile(dialect=dialect())).split())
+            # Preserving co0012 appends constraints without reordering old DDL.
+            # Compare their full semantics, not CREATE TABLE clause order.
+            actual = sa.Table(table.name,sa.MetaData(),autoload_with=db.conn)
+            def default(column):
+                if column.server_default is None:
+                    return None
+                arg = column.server_default.arg
+                return str(sa.literal(arg).compile(compile_kwargs={'literal_binds': True})) if isinstance(arg,str) else str(arg)
+            columns = lambda value: [(x.name,str(x.type),x.nullable,x.primary_key,
+                default(x)) for x in value.c]
+            assert columns(actual) == columns(table)
+            def constraints(value):
+                values = set()
+                for constraint in value.constraints:
+                    if isinstance(constraint,sa.CheckConstraint):
+                        body = ' '.join(str(constraint.sqltext).split())
+                    elif isinstance(constraint,sa.ForeignKeyConstraint):
+                        body = (tuple(constraint.column_keys),tuple(e.target_fullname for e in constraint.elements),
+                                constraint.deferrable,constraint.initially)
+                    else:
+                        body = tuple(constraint.columns.keys())
+                    values.add((type(constraint).__name__,constraint.name,body))
+                return values
+            assert constraints(actual) == constraints(table)
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []
     tree = ast.parse(inspect.getsource(MIGRATION))
     ddl = next(n.value for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'DDL' for t in n.targets))
     assert ast.literal_eval(ddl) == MIGRATION.DDL
     assert 'bookflow.company' not in inspect.getsource(MIGRATION)
-    assert HEADS == {'company': 'co0011', 'hub': 'hub0011'}
+    assert HEADS == {'company': 'co0012', 'hub': 'hub0011'}
 
 
 @pytest.mark.parametrize(('basis', 'price', 'valid'), [

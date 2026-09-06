@@ -241,6 +241,8 @@ def prepare(s, ctx, inp, kind, destination):
     sale.preview.revision.billing_sources = query.sale_source_output(s, rev['id'], allocations)
     from bookflow.company.billing_validation import validate
     validate(sale, s, ctx)
+    from bookflow.company.billing_progress import projection
+    sale.preview.billing_progress = projection(s, source, source_rev, allocations)
     return sale
 
 

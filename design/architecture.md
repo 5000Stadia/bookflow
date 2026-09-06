@@ -532,7 +532,7 @@ source revision/version, allocations, permanent conversion and audit in one comp
 transaction. billing_validation.py independently checks the selected roots, source
 scope/provenance and exact destination facts. billing_edits.py freezes consumed
 source economics and retained linked sale lines; corrections carry immutable
-allocation rows and removal or void releases only their own active roots.
+allocation rows and removal or void releases only their own active spans.
 
 billing_queries.py derives consumption from posted transactions' current revisions.
 Billing reads show current ownership, quantities, no-charge/nonbillable states,
@@ -548,11 +548,36 @@ Amount-priced sales retain net_amount and positive descriptive quantity with a
 null unit price. Version2 amount profiles have an explicit pricing basis; version1
 unit-price facts retain their original serialized form. Quantity-only edits retain
 explicit amounts. Explicit amount/rate/default-reset conflicts reject. Captured
-quote tax and income/liability mappings remain authoritative for billing, with
-current eligibility checked before posting.
+quote rates and income/liability mappings remain authoritative for billing, with
+current eligibility checked before posting. Each installment calculates ordinary
+tax once per line/component from its allocated net; quoted tax is informational.
 
 Company co0011 widens the known sales_line_profiles price constraint and adds
 pricing_basis while preserving all prior columns, values and local schema objects.
 Unknown table definitions reject before alteration. Immutable conversion and
 allocation tables use composite ownership keys, permanent-key collision guards and
 active-root guards on allocation insertion and transaction revision activation.
+
+The [progress billing contract](specs/18-progress-billing.md) extends these commands
+with quantity, net amount, original-scope percentage and exact released-allocation
+selection. billing_math.py allocates integer entitlement spans and computes exact
+net endpoint differences; billing_facts.py defines immutable proofs and rational
+quantities. billing_selection.py resolves current source choices. billing_checks.py
+independently reconstructs selection, source economics and pending proof amounts.
+Version3 allocated sales facts retain the original quoted quantity/rate separately
+from exact billed fractions. Receipt corrections that change gross require an exact
+amount_received when any linked-work history exists. Ordinary receipt omissions
+remain compatible; explicit received totals always validate.
+
+billing_progress.py projects previous, current, cumulative and remaining work from
+current posted allocations plus validated pending allocations, before persistence.
+Remaining tax is a forecast on remaining net; cumulative tax/gross use actual
+installment amounts. Replays omit this boundary projection. Billing reads expose
+current consumption and attributed stale-preview errors include real sale releases.
+
+Company co0012 preserves existing column order and local objects while allowing
+nullable raw quantities only for exactly fractional allocated facts. Version2
+allocation rows store basis hashes and bounded canonical spans with 160-bit hex
+coordinates. SQL guards reject malformed proofs, incompatible active bases and
+overlap on allocation insertion or sale revision activation. Version1 allocations
+retain whole-root meaning and existing conversion keys retain their request bytes.

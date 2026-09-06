@@ -119,6 +119,17 @@ def validate(plan, s, ctx):
         return
     require(len(pending['transaction_revisions']) == len(pending['sales_profiles']) == 1, 'wrong revision/profile count')
     revision, row = pending['transaction_revisions'][0], pending['sales_profiles'][0]
+    if document_type == 'sales_receipt' and operation == 'update':
+        from bookflow.company.sales_models import money
+        received = data['input'].amount_received
+        linked = s.company.conn.execute(c.work_billing_allocations.select().with_only_columns(
+            c.work_billing_allocations.c.id).where(
+                c.work_billing_allocations.c.transaction_id == header['id']).limit(1)).first()
+        if linked and revision['total_minor_units'] != data['old_revision']['total_minor_units']:
+            require(received is not None, 'changed linked receipt lacks received total confirmation')
+        if received is not None:
+            require(money(received, currency, 'amount_received').minor_units == revision['total_minor_units'],
+                    'receipt received total differs from gross')
     profile = SalesProfile.model_validate_json(row['profile_snapshot'])
     require(header['status'] == 'posted' and header['current_revision_id'] == revision['id'], 'wrong current header')
     require(revision['revision_number'] == (data['old_revision']['revision_number'] + 1 if old else 1)

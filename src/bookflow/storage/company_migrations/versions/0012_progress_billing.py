@@ -165,7 +165,12 @@ def _rebuild(connection, table):
     if table == 'work_billing_allocations':
         parts.extend([f'\n CONSTRAINT ck_work_billing_allocation_version CHECK ({ALLOCATION_VERSION})',
                       f'\n CONSTRAINT ck_work_billing_proof CHECK ({ALLOCATION_PROOF})'])
-    create = 'CREATE TABLE ' + _quote('_co0012_' + table) + ' (' + ','.join(additions + parts) + suffix
+    # Append new columns after existing columns, before table constraints. Local
+    # SELECT * views retain their existing column prefix and ordinal positions.
+    boundary = next((i for i,part in enumerate(parts) if re.match(
+        r'^(?:CONSTRAINT\s|PRIMARY\s+KEY|UNIQUE\s*\(|CHECK\s*\(|FOREIGN\s+KEY)', part.strip(),re.I)),len(parts))
+    expanded = parts[:boundary] + additions + parts[boundary:]
+    create = 'CREATE TABLE ' + _quote('_co0012_' + table) + ' (' + ','.join(expanded) + suffix
     writable = ','.join(['rowid'] + [_quote(row[1]) for row in columns if row[6] == 0])
     # Quote plus storage class compares exact stored bytes, including blobs and
     # generated values; retaining rowid preserves ordering and row identity.

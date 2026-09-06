@@ -82,3 +82,11 @@ def test_sub_microunit_quantity_and_net_are_not_rounded_substitutes():
 def test_proof_shape_rejects_ambiguous_coordinates(changes):
     with pytest.raises(ValidationError):
         proof(**changes)
+
+
+def test_receipt_update_omission_keeps_legacy_request_shape():
+    from bookflow.company.sales_models import SalesReceiptUpdateInput
+    before = SalesReceiptUpdateInput(sales_receipt='0'*26, expected_version=1)
+    assert 'amount_received' not in before.model_dump(mode='json')
+    confirmed = SalesReceiptUpdateInput(sales_receipt='0'*26, expected_version=1, amount_received='1.04')
+    assert confirmed.model_dump(mode='json')['amount_received'] == '1.04'

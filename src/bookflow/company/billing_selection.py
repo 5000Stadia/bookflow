@@ -53,7 +53,10 @@ def select(s, inp, source, revision, lines, identities):
         requested = set(entered)
     current = {line['line_id'] for line in lines}
     if requested is not None and requested-current:
-        raise _invalid('selections' if entered else 'line_ids', 'select only current stable line identities from this source')
+        field = next((f'selections.{i}.line_id' for key, (i, _) in entered.items() if key not in current), None)
+        if field is None:
+            field = next(f'line_ids.{i}' for i, key in enumerate(inp.line_ids) if key not in current)
+        raise _invalid(field, 'select only current stable line identities from this source')
     selected, span_count = [], 0
     for line in lines:
         key = line['line_id']

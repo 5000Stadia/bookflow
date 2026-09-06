@@ -142,8 +142,8 @@ def test_frozen_ddl_matches_declared_columns_keys_checks(old, tmp_path, monkeypa
             actual = sa.Table(name, sa.MetaData(), autoload_with=db.conn)
             expected = schema.metadata.tables[name]
             if name == 'sales_line_profiles':
-                # co0011 introduced amount pricing; this witness owns co0009.
-                # Undo only that declared delta, retaining every other assertion.
+                # co0011/12 introduced amount/allocated pricing; this owns co0009.
+                # Undo only those declared deltas, retaining every other assertion.
                 expected = expected.to_metadata(sa.MetaData())
                 expected._columns.remove(expected.c.pricing_basis)
                 expected.c.unit_price_minor_units.nullable = False
@@ -153,6 +153,12 @@ def test_frozen_ddl_matches_declared_columns_keys_checks(old, tmp_path, monkeypa
                 expected.append_constraint(sa.CheckConstraint(
                     "typeof(unit_price_minor_units) = 'integer' AND unit_price_minor_units >= 0",
                     name='ck_sales_unit_price_minor_units_nonnegative'))
+                for quantity in ('quantity_microunits','base_quantity_microunits'):
+                    expected.c[quantity].nullable = False
+                    current_check, = (c for c in expected.constraints if c.name == f'ck_sales_{quantity}_positive')
+                    expected.constraints.remove(current_check)
+                    expected.append_constraint(sa.CheckConstraint(
+                        f"typeof({quantity}) = 'integer' AND {quantity} > 0", name=current_check.name))
             assert [(c.name, str(c.type), c.nullable, c.primary_key) for c in actual.c] == [
                 (c.name, str(c.type), c.nullable, c.primary_key) for c in expected.c]
             assert {(tuple(c.column_keys), tuple(e.target_fullname for e in c.elements), c.deferrable, c.initially)

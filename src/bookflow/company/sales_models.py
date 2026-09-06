@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_serializer, model_validator
 
 from bookflow.company.custom_fields import CustomFieldKindExpectations, CustomFieldValuePatch
 from bookflow.company.journal_models import _Date, _Number, _Version
@@ -222,6 +222,20 @@ class InvoiceUpdateInput(SalesUpdateInput, InvoiceFields):
 class SalesReceiptUpdateInput(SalesUpdateInput, ReceiptFields):
     sales_receipt: Selector
     deposit_to: Selector | None = None
+    amount_received: str | SalesMoneyInput | None = None
+
+    @model_serializer(mode='wrap')
+    def legacy_request(self, handler):
+        values = handler(self)
+        if 'amount_received' not in self.model_fields_set:
+            values.pop('amount_received', None)
+        return values
+
+    @model_validator(mode='after')
+    def received_value(self):
+        if 'amount_received' in self.model_fields_set and self.amount_received is None:
+            raise ValueError('amount_received cannot be null; omit it for an unchanged received total')
+        return self
 
 
 class SalesShowInput(StrictModel):

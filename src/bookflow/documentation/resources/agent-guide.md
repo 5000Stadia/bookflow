@@ -401,6 +401,21 @@ To correct an invoice, retain an allocated line using only its sale `line_id` an
 matching `item`. Remove the entire line to release its allocation. Add ordinary
 independent lines for extra charges; they consume no quoted scope. The browser's
 "Add an unlinked line" action opens this separate, previewed correcting write.
+For a receipt with any linked-work history, a correction that changes gross must
+include `amount_received` equal to the new gross, for example `"1.04"` when keeping
+a four-cent installment and adding a one-dollar exempt line. This remains required
+after linked lines are removed. Same-gross and metadata/no-op edits can omit it;
+any supplied received total is checked. Ordinary receipt corrections keep their
+existing omission behavior.
+
+New conversion previews/results include `billing_progress` for every current
+source line: `previous`, `current`, `cumulative`, and `remaining` each expose exact
+quantity/fraction, original-scope percentage/fraction and net/tax/gross minor units.
+Previous and cumulative tax use actual installments; remaining tax forecasts a
+single bill of remaining net. These values describe that conversion's posting
+boundary and exclude independent extra lines. A committed-key replay returns the
+current saved sale with an empty progress list; use the billing read for current
+source consumption.
 Source conversion cannot exceed100% of a quoted line. If fragmentation produces
 `E_VALUE_RANGE`, use its `recommended_net_amount` on that source line and continue
 with remaining work; never silently drop spans to make a request fit.

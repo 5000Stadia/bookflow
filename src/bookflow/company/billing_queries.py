@@ -155,7 +155,7 @@ def billing(s, ctx, inp, kind):
         warnings.append('Tax is calculated on each bill; actual installment tax can differ from quoted tax by rounding.')
     if any(line['remaining_net_minor_units'] == 0 and line['remaining_quantity'] != '0' for line in rendered if line['billable']):
         warnings.append('Unallocated physical scope remains without a charge. Billing does not establish physical completion.')
-    if any(line['state'] == 'no_charge' for line in rendered) and not any(line['state'] == 'unbilled' for line in rendered):
+    if any(line['state'] == 'no_charge' for line in rendered) and not any(line['remaining_net_minor_units'] > 0 for line in rendered):
         warnings.append('No charge remains; zero-price lines were not invoiced.')
     return BillingOutput(source_id=source['id'], source_kind=kind, source_version=source['version'],
         source_revision_id=source['current_revision_id'], owner_id=owner['id'], owner_kind=owner['kind'],

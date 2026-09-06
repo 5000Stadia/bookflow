@@ -269,6 +269,15 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
     total = calc.total((subtotal, tax))
     if total <= 0:
         raise _invalid('total', 'a posted sale must have a positive total')
+    if document_type == 'sales_receipt' and old_revision:
+        from bookflow.company.sales_models import money
+        received = inp.amount_received
+        linked = s.company.conn.execute(sa.select(c.work_billing_allocations.c.id).where(
+            c.work_billing_allocations.c.transaction_id == old_header['id']).limit(1)).first()
+        if received is None and linked and total != old_revision['total_minor_units']:
+            raise _invalid('amount_received', 'confirm the exact new gross received total for this linked receipt correction')
+        if received is not None and money(received, info['home_currency'], 'amount_received').minor_units != total:
+            raise _invalid('amount_received', 'must equal the exact gross amount of the corrected receipt')
     if document_type == 'invoice':
         from bookflow.company.customer_balances import credit_warning
         warning = credit_warning(s.company, profile.customer.id, total,

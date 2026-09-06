@@ -180,7 +180,12 @@ def test_installment_tax_is_ordinary_and_quote_tax_is_not_a_debt(client,sale):
     source = taxed_quote(client,sale)
     assert source['tax_minor_units'] == 1
     first = bill(client,source,percent='50')
+    projected = first['billing_progress'][0]
+    assert projected['current']['tax_minor_units'] == projected['remaining']['tax_minor_units'] == 0
+    assert projected['cumulative']['gross_minor_units'] == 5
     second = bill(client,current(client,source),'finish')
+    assert second['billing_progress'][0]['cumulative']['gross_minor_units'] == 10
+    assert second['billing_progress'][0]['remaining']['tax_minor_units'] == 0
     assert [x['subtotal_minor_units'] for x in (first,second)] == [5,5]
     assert [x['tax_minor_units'] for x in (first,second)] == [0,0]
     state = run(client,'estimate','billing',estimate=source['id'])
@@ -266,3 +271,91 @@ def test_concurrent_partial_requests_serialize_with_source_versions(client,sale)
     assert rejected == 'E_VERSION_CONFLICT'
     state = run(client,'estimate','billing',estimate=source['id'])
     assert state['remaining_net_minor_units'] == 617 and len(state['destinations']) == 1
+
+
+def test_linked_receipt_corrections_confirm_changed_received_total_and_keep_history_guard(client,sale,monkeypatch):
+    source = accepted(client,sale,lines=[dict(item=sale['item'],quantity='1',net_amount='0.10')])
+    payment = dict(deposit_to=client.account.create(name='Correction bank',type='bank',company=COMPANY)['id'],
+        payment_method=client.run('payment-method create',dict(name='Correction cash',kind='cash'),company=COMPANY)['id'])
+    first = bill(client,source,verb='sales-receipt',percent='40',amount_received='0.04',**payment)
+    other = bill(client,current(client,source),'other-installment',percent='60')
+    original = first['revision']['lines'][0]
+    edit = dict(sales_receipt=first['id'],expected_version=1,
+        lines=[dict(line_id=original['line_id'],item=sale['item']),dict(item=sale['item'],net_amount='1')])
+    before = snapshot(client)
+    for confirmation in ({},dict(amount_received='0.04'),dict(amount_received='1.05'),dict(amount_received=None)):
+        with pytest.raises(BookflowError) as err:
+            client.run('sales-receipt update',dict(edit,**confirmation),company=COMPANY)
+        assert err.value.code == 'E_VALIDATION'
+        assert snapshot(client) == before
+    # The independent aggregate check rejects a resolver bypass, even with balanced cash legs.
+    from bookflow.company import sales as service
+    prepare = service.commercial
+    def bypass(s, inp, *args, **kwargs):
+        inp.amount_received = '1.04'
+        resolved = prepare(s, inp, *args, **kwargs)
+        inp.amount_received = None
+        return resolved
+    with monkeypatch.context() as patch:
+        patch.setattr(service, 'commercial', bypass)
+        with pytest.raises(BookflowError) as err:
+            client.run('sales-receipt update',edit,company=COMPANY)
+        assert err.value.code == 'E_INTERNAL'
+        assert snapshot(client) == before
+    corrected = client.run('sales-receipt update',dict(edit,amount_received='1.04'),company=COMPANY)
+    assert corrected['total_minor_units'] == 104
+    assert corrected['revision']['lines'][0]['item_snapshot'] == original['item_snapshot']
+    assert client.run('invoice show',dict(invoice=other['id']),company=COMPANY)['current_revision_id'] == other['current_revision_id']
+    assert run(client,'estimate','billing',estimate=source['id'])['remaining_net_minor_units'] == 0
+    noop = client.run('sales-receipt update',dict(sales_receipt=first['id'],expected_version=2),company=COMPANY)
+    assert not noop['changed']
+    memo = client.run('sales-receipt update',dict(sales_receipt=first['id'],expected_version=2,memo='Confirmed collection'),company=COMPANY)
+    assert memo['total_minor_units'] == 104
+    client.run('sales-receipt update',dict(sales_receipt=first['id'],expected_version=3,
+        lines=[dict(item=sale['item'],net_amount='1')],amount_received='1'),company=COMPANY)
+    before = snapshot(client)
+    with pytest.raises(BookflowError) as err:
+        client.run('sales-receipt update',dict(sales_receipt=first['id'],expected_version=4,
+            lines=[dict(item=sale['item'],net_amount='2')]),company=COMPANY)
+    assert err.value.code == 'E_VALIDATION' and snapshot(client) == before
+
+
+def test_selection_identity_errors_are_indexed_and_do_not_reveal_foreign_sources(client,sale):
+    source = accepted(client,sale)
+    own = scope_line(source)
+    for bad in (own, '0'*26):
+        with pytest.raises(BookflowError) as err:
+            bill(client,source,selections=[dict(line_id=own,percent='25'),dict(line_id=bad,percent='25')])
+        assert err.value.code == 'E_VALIDATION'
+        assert err.value.details['fields'][0]['field'] == 'selections.1.line_id'
+
+
+def test_partial_positive_remaining_with_zero_price_line_does_not_say_no_charge(client,sale):
+    source = accepted(client,sale,lines=[dict(item=sale['item'],net_amount='1'),dict(item=sale['item'],net_amount='0')])
+    bill(client,source,selections=[dict(line_id=scope_line(source),percent='25')])
+    state = run(client,'estimate','billing',estimate=source['id'])
+    assert state['can_invoice'] and state['remaining_net_minor_units'] == 75
+    assert not any('No charge remains' in warning for warning in state['warnings'])
+
+
+def test_preview_progress_projects_exact_cumulative_and_remaining_without_writes(client,sale):
+    source = accepted(client,sale,lines=[dict(item=sale['item'],quantity='0.000001',net_amount='1'),
+        dict(item=sale['item'],quantity='2',net_amount='2')])
+    first = bill(client,source,selections=[dict(line_id=scope_line(source),net_amount='0.40')])
+    before = snapshot(client)
+    preview = client.run('estimate invoice',dict(estimate=source['id'],expected_version=current(client,source)['version'],
+        conversion_key='next-preview',date='2026-01-13',
+        selections=[dict(line_id=scope_line(source),net_amount='0.20')]),company=COMPANY,dry_run=True)
+    assert snapshot(client) == before
+    a,b = preview['billing_progress']
+    assert a['previous']['quantity'] == '1/2500000' and a['previous']['net_minor_units'] == 40
+    assert a['current']['quantity'] == '1/5000000' and a['current']['net_minor_units'] == 20
+    assert a['cumulative']['quantity'] == '3/5000000' and a['cumulative']['scope_percent'] == '60'
+    assert a['remaining']['quantity'] == '1/2500000' and a['remaining']['net_minor_units'] == 40
+    assert b['current']['quantity'] == '0' and b['remaining']['net_minor_units'] == 200
+    posted = bill(client,current(client,source),'next-preview',
+        selections=[dict(line_id=scope_line(source),net_amount='0.20')])
+    assert posted['billing_progress'] == preview['billing_progress']
+    state = run(client,'estimate','billing',estimate=source['id'])
+    assert state['lines'][0]['billed_quantity'] == a['cumulative']['quantity']
+    assert state['lines'][0]['remaining_quantity'] == a['remaining']['quantity']

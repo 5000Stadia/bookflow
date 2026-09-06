@@ -23,7 +23,8 @@ def _write(document_type, verb, model):
             'post': 'Post a home-currency service sale with captured commercial facts and typed custom fields; dry-run previews defaults, which resolve atomically at execution unless expected_facts_fingerprint is supplied. Paying an existing invoice requires the upcoming customer-payment operation.',
             'update': 'Append an immutable sale correction with an exact old-date reversal and a full new-date replacement; dry-run previews resolved facts for optional expected_facts_fingerprint verification.',
             'void': 'Void a sale with a required context reason and an exact reversal at its current accounting date.',
-        }[verb],
+        }[verb] + (' A gross-changing receipt with linked-work history requires amount_received equal to the new gross; any supplied amount_received must match.'
+                   if document_type == 'sales_receipt' and verb == 'update' else ''),
         input_model=model, output_model=SalesWriteOutput, writes={'company'},
         required_role='standard', capability='ledger.post', accepts_idempotency_key=True,
         positional=[] if verb == 'post' else [document_type], clearable=verb == 'update',

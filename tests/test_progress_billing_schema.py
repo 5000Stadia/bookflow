@@ -304,6 +304,7 @@ def test_populated_co11_preserves_both_tables_every_old_row_and_local_object(pri
         for table,data in before.items():
             if table in TABLES:
                 old = raw.execute(f'SELECT rowid,{",".join(columns[table])} FROM {table} ORDER BY rowid').fetchall()
+                assert [r[1] for r in raw.execute(f'PRAGMA table_xinfo({table})')][:len(columns[table])] == columns[table]
                 assert old == data
                 stored = raw.execute('SELECT sql FROM sqlite_schema WHERE name=?',(table,)).fetchone()[0]
                 # Independent preservation oracle for every original definition
@@ -371,8 +372,7 @@ def test_unknown_schema_or_late_failure_rolls_back_atomically(prior, monkeypatch
 def test_fresh_schema_matches_declarations_and_frozen_migration(tmp_path):
     from sqlalchemy.schema import CreateTable
     from sqlalchemy.dialects.sqlite import dialect
-    # SQLite's column order differs intentionally: preservation appends the new
-    # columns before existing definitions. Compare columns and complete named
+    # Preservation appends new columns after existing columns. Compare columns and complete named
     # constraints independently of their order, plus foreign keys and indexes.
     with open_database(tmp_path/'fresh.db',writable=True,create=True) as db, sqlite3.connect(':memory:') as declared:
         assert migrate_to_head(db,'company',None) == (None,'co0012')

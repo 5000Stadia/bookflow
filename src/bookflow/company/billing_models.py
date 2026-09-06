@@ -1,7 +1,7 @@
 """Whole-line work billing intent; source economics are never caller overrides."""
 from typing import Annotated
 import re
-from pydantic import BeforeValidator, Field, model_serializer, model_validator
+from pydantic import BeforeValidator, Field, ValidationError, field_validator, model_serializer, model_validator
 from bookflow.company.sales_models import StrictModel, Selector, Text, Fingerprint, SalesMoneyInput, InvoiceFields, ReceiptFields
 from bookflow.company.journal_models import _Date, _Number, _Version
 from bookflow.company.custom_fields import CustomFieldValuePatch, CustomFieldKindExpectations
@@ -64,17 +64,26 @@ class ConversionInput(StrictModel):
     def refresh_defaults(self):
         return False
 
+    @field_validator('selections', 'line_ids')
+    @classmethod
+    def unique_lines(cls, values, info):
+        seen = set()
+        for index, value in enumerate(values or []):
+            key = value.line_id if info.field_name == 'selections' else value
+            if key in seen:
+                location = (index, 'line_id') if info.field_name == 'selections' else (index,)
+                raise ValidationError.from_exception_data(cls.__name__, [dict(type='value_error',
+                    loc=location, input=key, ctx={'error': ValueError('use distinct current source line identities')})])
+            seen.add(key)
+        return values
+
     @model_validator(mode='after')
     def distinct(self):
         families = self.model_fields_set & {'line_ids', 'selections', 'percent'}
         if len(families) > 1 or any(getattr(self, field) is None for field in families):
             raise ValueError('choose one non-null line_ids, selections or percent family; omit all for remaining work')
-        if self.selections and len({line.line_id for line in self.selections}) != len(self.selections):
-            raise ValueError('selections must use distinct current source line identities')
         if 'due_date' in self.model_fields_set and self.due_date is None:
             raise ValueError('due_date cannot be null; omit it for the captured term default')
-        if self.line_ids is not None and len(self.line_ids) != len(set(self.line_ids)):
-            raise ValueError('line_ids must be distinct current source line identities')
         if 'line_ids' in self.model_fields_set and self.line_ids is None:
             raise ValueError('omit line_ids to select remaining work; null is not a selection')
         return self
