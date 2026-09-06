@@ -8,15 +8,15 @@ Database: `company`.
 
 | Column | SQL type | Nullable | Default | Key | Indexes | References | Meaning |
 |---|---|---|---|---|---|---|---|
-| `revision_id` | VARCHAR(26) | no | — | primary key 1, unique with transaction_id + revision_id | — | transaction_revisions.id | Immutable revision owning this one-to-one sales header. |
+| `revision_id` | VARCHAR(26) | no | — | primary key 1, unique with transaction_id + revision_id | ix_co17_sales_party, ix_co17_sales_revision | transaction_revisions.id | Immutable revision owning this one-to-one sales header. |
 | `transaction_id` | VARCHAR(26) | no | — | unique with transaction_id + revision_id | — | transaction_revisions.transaction_id, transactions.id | Stable sales document owning this revision. |
 | `created_at` | VARCHAR(32) | no | — | — | — | — | UTC time this commercial history was written. |
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Company principal that wrote this commercial history. |
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface that wrote this commercial history. |
 | `type` | VARCHAR(32) | no | — | — | — | transactions.type | Commercial type: invoice or sales_receipt. |
-| `customer_id` | VARCHAR(26) | no | — | — | — | customers.id | Customer or job captured for the sale. |
-| `control_account_id` | VARCHAR(26) | no | — | — | — | accounts.id | Receivable account for an invoice or deposit account for a receipt. |
-| `due_date` | VARCHAR(10) | yes | — | — | — | — | Captured invoice due date; null for a sales receipt. |
+| `customer_id` | VARCHAR(26) | no | — | — | ix_co17_sales_party, ix_co17_sales_revision | customers.id | Customer or job captured for the sale. |
+| `control_account_id` | VARCHAR(26) | no | — | — | ix_co17_sales_party, ix_co17_sales_revision | accounts.id | Receivable account for an invoice or deposit account for a receipt. |
+| `due_date` | VARCHAR(10) | yes | — | — | ix_co17_sales_revision | — | Captured invoice due date; null for a sales receipt. |
 | `subtotal_minor_units` | BIGINT | no | — | — | — | — | Home-currency subtotal before tax. |
 | `tax_minor_units` | BIGINT | no | — | — | — | — | Home-currency sum of captured component taxes. |
 | `profile_snapshot` | TEXT | no | — | — | — | — | Versioned typed JSON object of resolved header facts, rules and input origins. |

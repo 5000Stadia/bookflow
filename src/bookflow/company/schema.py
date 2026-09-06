@@ -1077,3 +1077,6 @@ globals().update(_define_payment_tables(metadata, _column, _table, _common))
 
 from bookflow.company.tax_schema import define_tables as _define_tax_tables
 globals().update(_define_tax_tables(metadata, _column, _table))
+
+from bookflow.company.read_indexes import define_indexes as _define_read_indexes
+_define_read_indexes(metadata)

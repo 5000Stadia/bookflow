@@ -8,15 +8,15 @@ Database: `company`.
 
 | Column | SQL type | Nullable | Default | Key | Indexes | References | Meaning |
 |---|---|---|---|---|---|---|---|
-| `revision_id` | VARCHAR(26) | no | — | primary key 1, unique with transaction_id + revision_id | — | transaction_revisions.id | Payment revision owning this profile. |
+| `revision_id` | VARCHAR(26) | no | — | primary key 1, unique with transaction_id + revision_id | ix_co17_payment_profile | transaction_revisions.id | Payment revision owning this profile. |
 | `transaction_id` | VARCHAR(26) | no | — | unique with transaction_id + revision_id | — | transaction_revisions.transaction_id, transactions.id | Stable payment identity. |
 | `type` | VARCHAR(32) | no | — | — | — | transactions.type | Fixed payment type discriminator. |
-| `payer_id` | VARCHAR(26) | no | — | — | — | customers.id | Customer supplying the new cash. |
+| `payer_id` | VARCHAR(26) | no | — | — | ix_co17_payment_profile | customers.id | Customer supplying the new cash. |
 | `ar_account_id` | VARCHAR(26) | no | — | — | — | accounts.id | Compatible receivable account. |
 | `deposit_account_id` | VARCHAR(26) | no | — | — | — | accounts.id | Cash destination account. |
-| `payment_method_id` | VARCHAR(26) | no | — | — | — | payment_methods.id | Captured payment method. |
-| `reference` | VARCHAR(128) | yes | — | — | — | — | Entered remittance reference. |
-| `profile_snapshot` | TEXT | no | — | — | — | — | Captured payer, lineage, accounts, method and effective preferences. |
+| `payment_method_id` | VARCHAR(26) | no | — | — | ix_co17_payment_profile | payment_methods.id | Captured payment method. |
+| `reference` | VARCHAR(128) | yes | — | — | ix_co17_payment_profile | — | Entered remittance reference. |
+| `profile_snapshot` | TEXT | no | — | — | ix_co17_payment_profile | — | Captured payer, lineage, accounts, method and effective preferences. |
 | `created_at` | VARCHAR(32) | no | — | — | — | — | UTC recorded timestamp. |
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Principal creating this record. |
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface creating this record. |
