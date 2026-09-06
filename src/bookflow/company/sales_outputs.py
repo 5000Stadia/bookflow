@@ -55,6 +55,11 @@ class SalesLineOutput(CreatedOutput):
     tax_components: list[TaxComponentOutput]
 
 
+class BillingSourceLinkOutput(StrictModel):
+    source_document_id: str
+    source_revision_id: str
+
+
 class BillingSourceOutput(CreatedOutput):
     transaction_id: str
     revision_id: str
@@ -90,10 +95,11 @@ class SalesRevisionSummaryOutput(CreatedOutput):
     audit_event_id: str
     line_count: int
     batches: list[JournalBatchOutput]
-    billing_sources: list[BillingSourceOutput] = Field(default_factory=list)
+    billing_links: list[BillingSourceLinkOutput] = Field(default_factory=list)
 
 
 class SalesRevisionOutput(SalesRevisionSummaryOutput):
+    billing_sources: list[BillingSourceOutput] = Field(default_factory=list)
     issuer_snapshot: dict[str, str | None]
     custom_fields_snapshot: dict[str, SnapshotField]
     custom_fields: list[SnapshotField]

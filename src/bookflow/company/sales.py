@@ -99,10 +99,11 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
     values.update(subtotal_minor_units=profile['subtotal_minor_units'], tax_minor_units=profile['tax_minor_units'],
         subtotal=Money(profile['subtotal_minor_units'], currency).to_dict(), tax=Money(profile['tax_minor_units'], currency).to_dict(),
         total=Money(revision['total_minor_units'], currency).to_dict(), line_count=line_count if summary_only else len(lines), batches=summaries)
-    from bookflow.company.billing_queries import sale_source_output
-    values['billing_sources'] = sale_source_output(s, revision['id'])
+    from bookflow.company.billing_queries import sale_source_output, sale_source_links
+    values['billing_links'] = sale_source_links(s, revision['id'])
     if summary_only:
         return SalesRevisionSummaryOutput(**values)
+    values['billing_sources'] = sale_source_output(s, revision['id'])
     rendered = []
     for line in lines:
         taxes = []

@@ -2,7 +2,7 @@
 from typing import Literal
 from pydantic import Field
 from bookflow.company.sales_models import StrictModel
-from bookflow.company.sales_outputs import SalesSummaryOutput
+from bookflow.company.sales_outputs import SalesSummaryOutput, MoneyOutput
 
 
 class BillingLineOutput(StrictModel):
@@ -29,6 +29,11 @@ class BillingLineOutput(StrictModel):
     destination_type: str | None = None
 
 
+class BillingDestinationOutput(SalesSummaryOutput):
+    amount_due_minor_units: int
+    amount_due: MoneyOutput
+
+
 class BillingOutput(StrictModel):
     source_id: str
     source_kind: str
@@ -39,7 +44,7 @@ class BillingOutput(StrictModel):
     owner_version: int
     currency: str
     lines: list[BillingLineOutput]
-    destinations: list[SalesSummaryOutput]
+    destinations: list[BillingDestinationOutput]
     count: int
     has_more: bool
     next_cursor: str | None

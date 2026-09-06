@@ -24,6 +24,8 @@ class ConversionInput(StrictModel):
 
     @model_validator(mode='after')
     def distinct(self):
+        if 'due_date' in self.model_fields_set and self.due_date is None:
+            raise ValueError('due_date cannot be null; omit it for the captured term default')
         if self.line_ids is not None and len(self.line_ids) != len(set(self.line_ids)):
             raise ValueError('line_ids must be distinct current source line identities')
         if 'line_ids' in self.model_fields_set and self.line_ids is None:

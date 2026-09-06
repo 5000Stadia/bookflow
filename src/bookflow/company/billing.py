@@ -71,7 +71,10 @@ def posting_eligibility(s, source, selected):
     if info['sales_tax_liability_basis'] != 'invoice_date':
         raise _invalid('sales_tax_liability_basis', 'posting work requires invoice-date tax recognition')
     if info['sales_tax_enabled'] != profile.preferences.sales_tax_enabled:
-        raise _invalid('sales_tax_enabled', 'current tax policy conflicts with the captured source policy')
+        exempt = profile.customer_tax_code is not None and not profile.customer_tax_code.taxable
+        if any(lf.profile.tax_code and lf.profile.tax_code.taxable and not exempt for _, _, lf in selected):
+            raise _invalid('sales_tax_enabled', 'current tax policy conflicts with the captured taxable source facts')
+        warnings.append('Current tax enablement differs; preserving captured exempt/non-taxable source facts.')
     defaults._row(s.company, 'customer', profile.customer.id)
     if profile.sales_tax_item:
         current = defaults._row(s.company, 'sales_tax_item', profile.sales_tax_item.id)
@@ -81,6 +84,8 @@ def posting_eligibility(s, source, selected):
         item = defaults._row(s.company, 'item', lf.item_id)
         if item['type'] != lf.profile.item_type or not item['sales_enabled']:
             raise _invalid('item', 'current selling-item type differs from the quoted type')
+        if item['type'] == 'other_charge' and item['other_charge_percent_millionths'] is not None:
+            raise _invalid('item', 'percentage charges cannot replace captured fixed-charge work')
         defaults._account(s.company, lf.profile.income_account.id, 'income_account', {'income', 'other_income'})
         if item['income_account_id'] != lf.profile.income_account.id:
             warnings.append(f"{lf.item_id}: retaining captured income account despite current item mapping change")

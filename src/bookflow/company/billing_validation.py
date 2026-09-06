@@ -56,6 +56,10 @@ def validate(plan, s, ctx):
     require(newrev['id'] == wh['current_revision_id'] and newrev['document_id'] == source['id'], 'source revision ownership')
     require(newrev['revision_number'] == rev['revision_number'] + 1 and newrev['supersedes_revision_id'] == rev['id'], 'source revision ancestry')
     require(newrev['audit_event_id'] == data['event'], 'source event')
+    require(set(wp) == {name for name, _ in work.TABLE_KINDS}, 'unexpected source persistence table')
+    for row in wp['work_revisions'] + wp['work_lines']:
+        require(row['created_at'] == header['updated_at'] and row['created_by'] == s.actor.id
+            and row['created_via'] == ctx.interface.value, 'source history provenance')
     unchanged = set(rev) - {'id', 'revision_number', 'supersedes_revision_id', 'audit_event_id', 'created_at', 'created_by', 'created_via'}
     require(all(newrev[k] == rev[k] for k in unchanged), 'billing rewrote source facts')
     old_lines = work.saved_lines(s, rev)

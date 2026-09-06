@@ -48,6 +48,16 @@ def sale_source_output(s, revision_id, pending=None):
     return [BillingSourceOutput(**dict(row, facts_snapshot=json.loads(row['facts_snapshot']))) for row in values]
 
 
+def sale_source_links(s, revision_id):
+    a = c.work_billing_allocations
+    values = [dict(r) for r in s.company.conn.execute(sa.select(a.c.source_document_id,
+        a.c.source_revision_id).where(a.c.revision_id == revision_id).distinct()
+        .order_by(a.c.source_document_id, a.c.source_revision_id)).mappings()]
+    if values:
+        require_resource(s, 'customer-work', 'member')
+    return values
+
+
 def authorize_sale(inp, ctx, s, kind, write):
     selector = getattr(inp, kind, None)
     if not selector:
@@ -100,6 +110,10 @@ def billing(s, ctx, inp, kind):
     found = [dict(r) for r in s.company.conn.execute(query.offset(state.offset).limit(inp.limit + 1)).mappings()]
     more, found = len(found) > inp.limit, found[:inp.limit]
     destinations = [sales.summary(h, sales.journals.revision(s, h), sales.profile_row(s, sales.journals.revision(s, h))) for h in found]
+    from bookflow.core.money import Money
+    for dest in destinations:
+        due = dest['total_minor_units'] if dest['type'] == 'invoice' and dest['status'] == 'posted' else 0
+        dest.update(amount_due_minor_units=due, amount_due=Money(due, dest['currency']).to_dict())
     eligible = owner['active'] and (owner['status'] == 'accepted' if owner['kind'] == 'estimate' else owner['status'] != 'cancelled')
     can_bill = eligible and any(line['state'] == 'unbilled' for line in rendered)
     warnings = []

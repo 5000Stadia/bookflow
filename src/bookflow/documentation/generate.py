@@ -141,6 +141,7 @@ def _command_page(noun: str, commands: list[Any]) -> bytes:
             f"| Kind | {_text(cmd.kind)} |",
             f"| Required role | {_text(cmd.authorization_requirement)} |",
             f"| Capability | {_text(capability)} |",
+            *([f"| Additional resources | {_text(', '.join(cap + ': ' + role for cap, role in cmd.resource_requirements))} |"] if cmd.resource_requirements else []),
             f"| Feature | {_text(cmd.feature)} |",
             f"| HTTP | {_text(_http_route(cmd))} |",
             f"| External binary body | {cmd.transfer.direction if cmd.transfer is not None else 'none'} |",
