@@ -18,6 +18,10 @@ def wait(b):
 
 
 def field(b, identity, value):
+    # A bank assignment is an intentional override of the visible UF-default
+    # workflow; do not inject a value into its hidden chooser.
+    if identity=='destination' and b.evaluate("document.querySelector('#payment-destination-label').hidden"):
+        click(b,'destination-override')
     b.evaluate(f"(()=>{{let x=document.getElementById('payment-'+{json.dumps(identity)});x.value={json.dumps(value)};x.dispatchEvent(new Event('change',{{bubbles:true}}));}})()")
     wait(b)
 

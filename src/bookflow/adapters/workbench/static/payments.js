@@ -513,6 +513,7 @@
     }));
   }
   async function startMode(verb,preserved=null) {
+    $('balances').hidden=true;$('payer-balance').replaceChildren();$('family-balance').replaceChildren();
     mode=verb;invalidate();$('record').hidden=true;$('form').hidden=false;$('history').hidden=true;draft=preserved;selected.clear();key='WB-'+crypto.randomUUID();
     $('title').textContent={receive:'Receive customer payment',apply:'Apply existing payment credit',update:'Correct receipt',unapply:'Unapply recorded applications',void:'Void unapplied receipt'}[mode];
     $('amount-label').textContent=mode==='apply'?'Amount to allocate':'Amount received';
