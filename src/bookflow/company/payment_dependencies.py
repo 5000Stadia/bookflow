@@ -177,6 +177,54 @@ def decode(s, token):
         raise BookflowError('E_PREVIEW_STALE', details={'reason': 'invalid_guard'}) from None
 
 
+def _commercial_snapshot(s, header, event_seq, cache):
+    """Only immutable revisions proven to belong to this event's owner qualify."""
+    key = (header['id'], header['type'], header['current_revision_id'])
+    if key not in cache:
+        revision = s.company.conn.execute(sa.select(c.transaction_revisions, c.audit_events.c.seq.label('recorded_seq'))
+            .join(c.audit_events, c.audit_events.c.id == c.transaction_revisions.c.audit_event_id).where(
+                c.transaction_revisions.c.id == key[2], c.transaction_revisions.c.transaction_id == key[0])).mappings().one_or_none()
+        if revision is None:
+            raise ValueError('unowned commercial revision')
+        if header['type'] == 'invoice':
+            semantic = sales._saved_semantic(s, revision)
+        elif header['type'] == 'payment':
+            profile = s.company.conn.execute(sa.select(c.payment_profiles).where(
+                c.payment_profiles.c.revision_id == key[2])).mappings().one_or_none()
+            if profile is None:
+                raise ValueError('missing payment profile')
+            from bookflow.company.payment_outputs import PaymentProfileOutput
+            semantic = dict(date=revision['date'], number=revision['number'], memo=revision['memo'],
+                amount=revision['total_minor_units'], reference=profile['reference'],
+                profile=PaymentProfileOutput.model_validate_json(profile['profile_snapshot']).model_dump(mode='json'),
+                issuer=json.loads(revision['issuer_snapshot']),
+                custom_fields=sales._custom_semantic(json.loads(revision['custom_fields_snapshot'])))
+        else:
+            raise ValueError('unsupported commercial owner')
+        cache[key] = revision['recorded_seq'], semantic
+    recorded_seq, semantic = cache[key]
+    if recorded_seq > event_seq:
+        raise ValueError('commercial revision recorded after header event')
+    return semantic
+
+
+def _event_fields(s, entry, cache):
+    before, after = audit.decode_snapshot(entry['before']), audit.decode_snapshot(entry['after'])
+    if not isinstance(after, dict) or after.get('id') != entry['record_id'] or after.get('version') != entry['version_after']:
+        raise ValueError('unproven after header')
+    if before is None and entry['version_before'] is None:
+        _commercial_snapshot(s, after, entry['seq'], cache)
+        return ['created']
+    if (not isinstance(before, dict) or before.get('id') != entry['record_id'] or
+        before.get('type') != after.get('type') or before.get('version') != entry['version_before']):
+        raise ValueError('unproven before header')
+    fields = sales._changes(_commercial_snapshot(s, before, entry['seq'], cache),
+                            _commercial_snapshot(s, after, entry['seq'], cache))
+    if before['status'] != after['status']:
+        fields.append('status')
+    return sorted(set(fields))
+
+
 def compare(s, token, *, owner_type=None, owner_id=None, write=False):
     saved = decode(s, token)
     if ((owner_type is not None and saved['owner_type'] != owner_type) or
@@ -195,16 +243,11 @@ def compare(s, token, *, owner_type=None, owner_id=None, write=False):
     ).join(c.audit_events, c.audit_events.c.id == c.audit_entries.c.event_id).where(
         c.audit_events.c.seq > saved['baseline_audit_seq'], c.audit_entries.c.record_type == 'transaction',
         c.audit_entries.c.record_id.in_(ids)).order_by(c.audit_events.c.seq, c.audit_entries.c.id)).mappings()
-    changes = []
+    changes, commercial_cache = [], {}
     for row in entries:
         fields = None
         try:
-            before, after = audit.decode_snapshot(row['before']), audit.decode_snapshot(row['after'])
-            if isinstance(before, dict) and isinstance(after, dict) and before.get('id') == row['record_id'] == after.get('id'):
-                fields = sorted(key for key in set(before) | set(after)
-                    if before.get(key) != after.get(key) and key not in ('version', 'updated_at', 'updated_by', 'updated_via'))
-            elif before is None and row['version_before'] is None and isinstance(after, dict) and after.get('id') == row['record_id']:
-                fields = ['created']
+            fields = _event_fields(s, row, commercial_cache)
         except Exception:
             pass
         changes.append(dict(record_id=row['record_id'], event_id=row['event_id'], at=row['at'], actor_id=row['actor_id'],

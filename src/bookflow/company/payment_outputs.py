@@ -80,7 +80,7 @@ class InvoiceSettlementAmounts(StrictModel):
     applied_minor_units: int
     due_minor_units: int
     currency: str
-    status: Literal['unpaid', 'partial', 'paid', 'voided']
+    status: Literal['unpaid', 'partial', 'paid', 'voided', 'not_effective']
 
 
 class InvoiceSettlementOutput(InvoiceSettlementAmounts):
@@ -269,10 +269,12 @@ class PaymentEffectItemsOutput(StrictModel):
     total_count: int
     next_cursor: str | None
     facts_fingerprint: str
-    projection: Literal['prospective', 'committed', 'current']
+    projection: Literal['prospective', 'committed', 'current', 'effective_date']
 
 
 class PaymentSettlementOutput(PaymentEffectItemsOutput):
+    projection_basis: Literal['all_committed_current', 'all_current_knowledge_effective_date']
+    generated_at: str
     as_of: str | None
     audit_watermark: int
     received_minor_units: int
@@ -298,6 +300,9 @@ class ApplicationRecordOutput(StrictModel):
 
 
 class InvoiceSettlementReadOutput(InvoiceSettlementOutput):
+    projection: Literal['current', 'effective_date']
+    projection_basis: Literal['all_committed_current', 'all_current_knowledge_effective_date']
+    generated_at: str
     applications: list[ApplicationRecordOutput]
     application_count: int
     next_cursor: str | None

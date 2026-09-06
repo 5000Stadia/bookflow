@@ -7,6 +7,12 @@ from bookflow.core.errors import BookflowError
 from bookflow.core.money import Money
 
 
+def lineage_facts(s, parties):
+    from bookflow.company.payments import party_lineage, used_reference_facts
+    return [[party, used_reference_facts(party_lineage(s, defaults._row(s.company, 'customer', party, active=False)))]
+            for party in sorted(set(parties))]
+
+
 def candidates(s, inp):
     context = selection.context(s, inp)
     funding = query.payment_facts(s, context['payment_id']) if context['payment_id'] else None
@@ -42,7 +48,8 @@ def candidates(s, inp):
 def invoices(s, inp):
     context, rows = candidates(s, inp)
     balances = query.payer_balances(s, context['customer_id'])
-    return dict(query.page(s, 'payment invoices', inp, rows, facts=[context, rows, balances]), **balances)
+    lineage = lineage_facts(s, [context['customer_id'], *(row['customer_id'] for row in rows)])
+    return dict(query.page(s, 'payment invoices', inp, rows, facts=[context, rows, balances, lineage]), **balances)
 
 
 def suggest(s, inp):
@@ -72,7 +79,8 @@ def suggest(s, inp):
                     capacity[party] -= units
             if not remaining:
                 break
-    return dict(query.page(s, 'payment suggest', inp, rendered, facts=[context, rows, strategy, rendered]),
+    lineage = lineage_facts(s, [context['customer_id'], *(row['customer_id'] for row in rows)])
+    return dict(query.page(s, 'payment suggest', inp, rendered, facts=[context, rows, strategy, rendered, lineage]),
         amount=Money(amount, context['currency']).to_dict(), amount_origin='entered', unapplied_minor_units=remaining, problems=[])
 
 
@@ -100,8 +108,10 @@ def calculate(s, inp):
                 value = 0
             items.append(dict(invoice_id=facts['header']['id'], ordinal=ordinal, expected_version=row.expected_version,
                 due_minor_units=facts['due'], amount_minor_units=value, amount_origin=row_origin))
+    parties = {context['customer_id']}
     for item in items:
         facts = query.invoice_facts(s, item['invoice_id'])
+        parties.add(facts['profile']['customer_id'])
         sales._version(s, facts['header'], item['expected_version'])
         selection.compatible(s, context, facts)
         if facts['due'] != item['due_minor_units']:
@@ -119,7 +129,7 @@ def calculate(s, inp):
         raise _invalid('applications', str(exc)) from None
     originals = {row['invoice_id']: row for row in items}
     rendered = [dict(originals[row.invoice], amount_minor_units=row.amount, amount_origin=row.origin, currency=context['currency']) for row in result.rows]
-    return dict(query.page(s, 'payment calculate', inp, rendered, facts=[context, manifest, rendered, result.amount, result.amount_origin]),
+    return dict(query.page(s, 'payment calculate', inp, rendered, facts=[context, manifest, rendered, result.amount, result.amount_origin, lineage_facts(s, parties)]),
         amount=Money(result.amount, context['currency']).to_dict() if result.amount is not None else None,
         amount_origin=result.amount_origin, unapplied_minor_units=result.unapplied, problems=list(result.problems))
 

@@ -1,5 +1,7 @@
 """Permanent original-intent receipts and currently authorized exact recovery."""
 import json
+from typing import get_args
+from pydantic import BaseModel
 
 from bookflow.company import schema as c, document_effects as effects
 from bookflow.company import payment_queries as query
@@ -32,19 +34,33 @@ def original_request(inp, ctx, s, command):
 
 
 def request_hash(inp, ctx, s, command):
-    from bookflow.company.sales_models import money
+    from bookflow.company.sales_models import money, SalesMoneyInput
     value = request(inp, ctx, s, command)
     currency = s.company_info_row['home_currency']
-    def normalize(item, key=None):
-        if key == 'amount' and item is not None:
-            parsed = money(item, currency, 'amount')
-            return dict(minor_units=parsed.minor_units, currency=parsed.currency)
-        if isinstance(item, dict):
-            return {key: normalize(value, key) for key, value in item.items()}
+    def owns_money(annotation):
+        return annotation is SalesMoneyInput or any(owns_money(arg) for arg in get_args(annotation))
+    def normalize(item):
+        if isinstance(item, BaseModel):
+            result = item.model_dump(mode='json', exclude_unset=True)
+            # Inspect the owning model, never arbitrary JSON keys: custom fields
+            # named amount remain custom data, while every typed price is money.
+            if isinstance(result, dict):
+                for key, field in type(item).model_fields.items():
+                    if key not in result:
+                        continue
+                    raw = getattr(item, key)
+                    if raw is not None and owns_money(field.annotation):
+                        parsed = money(raw, currency, key)
+                        result[key] = dict(minor_units=parsed.minor_units, currency=parsed.currency)
+                    elif isinstance(raw, (BaseModel, list)):
+                        result[key] = normalize(raw)
+            return result
         if isinstance(item, list):
             return [normalize(value) for value in item]
         return item
-    return query.digest(normalize(value))
+    normalized = normalize(inp)
+    value['input'] = {key: normalized[key] for key in value['input']}
+    return query.digest(value)
 
 
 def recover(inp, ctx, s, command):

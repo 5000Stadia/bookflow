@@ -163,6 +163,8 @@ def invoice_preview_output(s, ctx, inp, output):
             kind=kind, total_count=len(rows), next_cursor=result['next_cursor']))
     output.effect.operation_id = None
     output.effect.audit_event_id = None
+    # This convenience subset shares the complete document_changes channel.
+    output.effect.payment_changes = output.effect.payment_changes[:50]
     if output.changed:
         output.current.revision_id = None
         output.effect.after_header.revision_id = None

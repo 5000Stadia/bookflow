@@ -28,13 +28,16 @@ def prepare(s, ctx, inp):
     profile = PaymentProfileOutput.model_validate_json(saved['profile_snapshot'])
     original_profile = profile.model_dump(mode='json')
     if inp.payment_method is not None:
-        profile.payment_method = defaults._ref(defaults._row(s.company, 'payment_method', inp.payment_method))
+        method = defaults._row(s.company, 'payment_method', inp.payment_method, active=False)
+        if method['id'] != profile.payment_method.id:
+            profile.payment_method = defaults._ref(defaults._active(method, 'payment_method'))
     if inp.deposit_to is not None:
-        account = defaults._account(s.company, inp.deposit_to, 'deposit_to', {'bank', 'other_current_asset'})
-        raw = defaults._row(s.company, 'account', account.id)
-        if account.type != 'bank' and raw['system_role'] != 'undeposited_funds':
-            raise _invalid('deposit_to', 'select a bank or system Undeposited Funds account')
-        profile.deposit_account = account
+        raw = defaults._row(s.company, 'account', inp.deposit_to, active=False)
+        if raw['id'] != profile.deposit_account.id:
+            account = defaults._account(s.company, raw['id'], 'deposit_to', {'bank', 'other_current_asset'})
+            if account.type != 'bank' and raw['system_role'] != 'undeposited_funds':
+                raise _invalid('deposit_to', 'select a bank or system Undeposited Funds account')
+            profile.deposit_account = account
     amount = money(inp.amount, prior['currency'], 'amount').minor_units if inp.amount is not None else prior['total_minor_units']
     if amount <= 0:
         raise _invalid('amount', 'receipt total must remain positive')

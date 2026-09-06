@@ -297,7 +297,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.applied_minor_units` | integer | yes | no | — | — |
 | `settlement_current.due_minor_units` | integer | yes | no | — | — |
 | `settlement_current.currency` | string | yes | no | — | — |
-| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `settlement_current.settlement_guard` | string \| null | no | yes | null | — |
 | `settlement_current.as_of` | string \| null | no | yes | null | — |
 | `settlement_current.audit_watermark` | integer \| null | no | yes | null | — |
@@ -309,7 +309,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.all_committed_current.applied_minor_units` | integer | yes | no | — | — |
 | `settlement_current.all_committed_current.due_minor_units` | integer | yes | no | — | — |
 | `settlement_current.all_committed_current.currency` | string | yes | no | — | — |
-| `settlement_current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `settlement_current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `type` | literal["invoice", "sales_receipt"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
@@ -787,7 +787,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.document_changes[].applied_minor_units` | integer | yes | no | — | — |
 | `settlement.effect.document_changes[].due_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].currency` | string | yes | no | — | — |
-| `settlement.effect.document_changes[].status` | literal["unpaid", "partial", "paid", "voided"] \| literal["posted", "voided"] | yes | no | — | — |
+| `settlement.effect.document_changes[].status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] \| literal["posted", "voided"] | yes | no | — | — |
 | `settlement.effect.document_changes[].settlement_guard` | string \| null | no | yes | null | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].as_of` | string \| null | no | yes | null | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].audit_watermark` | integer \| null | no | yes | null | Present in InvoiceSettlementOutput. |
@@ -799,7 +799,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.document_changes[].all_committed_current.applied_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].all_committed_current.due_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].all_committed_current.currency` | string | no | no | — | Present in InvoiceSettlementOutput. |
-| `settlement.effect.document_changes[].all_committed_current.status` | literal["unpaid", "partial", "paid", "voided"] | no | no | — | Present in InvoiceSettlementOutput. |
+| `settlement.effect.document_changes[].all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | no | no | — | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].payment_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. |
 | `settlement.effect.document_changes[].received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `settlement.effect.document_changes[].effective_received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
@@ -844,7 +844,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.current.applied_minor_units` | integer | yes | no | — | — |
 | `settlement.current.due_minor_units` | integer | yes | no | — | — |
 | `settlement.current.currency` | string | yes | no | — | — |
-| `settlement.current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `settlement.current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `settlement.current.settlement_guard` | string \| null | no | yes | null | — |
 | `settlement.current.as_of` | string \| null | no | yes | null | — |
 | `settlement.current.audit_watermark` | integer \| null | no | yes | null | — |
@@ -856,7 +856,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.current.all_committed_current.applied_minor_units` | integer | yes | no | — | — |
 | `settlement.current.all_committed_current.due_minor_units` | integer | yes | no | — | — |
 | `settlement.current.all_committed_current.currency` | string | yes | no | — | — |
-| `settlement.current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `settlement.current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `settlement.effect_counts` | object | yes | no | — | — |
 | `settlement.effect_counts.source_components` | integer | yes | no | — | — |
 | `settlement.effect_counts.applications` | integer | yes | no | — | — |
@@ -1210,7 +1210,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].settlement_current.applied_minor_units` | integer | yes | no | — | — |
 | `items[].settlement_current.due_minor_units` | integer | yes | no | — | — |
 | `items[].settlement_current.currency` | string | yes | no | — | — |
-| `items[].settlement_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `items[].settlement_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `items[].settlement_current.settlement_guard` | string \| null | no | yes | null | — |
 | `items[].settlement_current.as_of` | string \| null | no | yes | null | — |
 | `items[].settlement_current.audit_watermark` | integer \| null | no | yes | null | — |
@@ -1222,7 +1222,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].settlement_current.all_committed_current.applied_minor_units` | integer | yes | no | — | — |
 | `items[].settlement_current.all_committed_current.due_minor_units` | integer | yes | no | — | — |
 | `items[].settlement_current.all_committed_current.currency` | string | yes | no | — | — |
-| `items[].settlement_current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `items[].settlement_current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `items[].type` | literal["invoice", "sales_receipt"] | yes | no | — | — |
 | `items[].number` | string | yes | no | — | — |
 | `items[].current_revision_id` | string | yes | no | — | — |
@@ -1358,7 +1358,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applied_minor_units` | integer | yes | no | — | — |
 | `due_minor_units` | integer | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
-| `status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `settlement_guard` | string \| null | no | yes | null | — |
 | `as_of` | string \| null | no | yes | null | — |
 | `audit_watermark` | integer \| null | no | yes | null | — |
@@ -1370,7 +1370,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `all_committed_current.applied_minor_units` | integer | yes | no | — | — |
 | `all_committed_current.due_minor_units` | integer | yes | no | — | — |
 | `all_committed_current.currency` | string | yes | no | — | — |
-| `all_committed_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
+| `projection` | literal["current", "effective_date"] | yes | no | — | — |
+| `projection_basis` | literal["all_committed_current", "all_current_knowledge_effective_date"] | yes | no | — | — |
+| `generated_at` | string | yes | no | — | — |
 | `applications` | array[object] | yes | no | — | — |
 | `applications[].id` | string | yes | no | — | — |
 | `applications[].kind` | literal["apply", "unapply"] | yes | no | — | — |
@@ -1404,10 +1407,13 @@ Example JSON output:
   "currency": "USD",
   "due_minor_units": 1,
   "facts_fingerprint": "value",
+  "generated_at": "2026-01-01T00:00:00Z",
   "gross_minor_units": 1,
   "invoice_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "net_applied_minor_units": 1,
   "next_cursor": null,
+  "projection": "current",
+  "projection_basis": "all_committed_current",
   "revision_id": null,
   "settlement_guard": null,
   "status": "unpaid",
@@ -1512,7 +1518,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.applied_minor_units` | integer | yes | no | — | — |
 | `settlement_current.due_minor_units` | integer | yes | no | — | — |
 | `settlement_current.currency` | string | yes | no | — | — |
-| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `settlement_current.settlement_guard` | string \| null | no | yes | null | — |
 | `settlement_current.as_of` | string \| null | no | yes | null | — |
 | `settlement_current.audit_watermark` | integer \| null | no | yes | null | — |
@@ -1524,7 +1530,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.all_committed_current.applied_minor_units` | integer | yes | no | — | — |
 | `settlement_current.all_committed_current.due_minor_units` | integer | yes | no | — | — |
 | `settlement_current.all_committed_current.currency` | string | yes | no | — | — |
-| `settlement_current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `settlement_current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `type` | literal["invoice", "sales_receipt"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
@@ -2226,7 +2232,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.applied_minor_units` | integer | yes | no | — | — |
 | `settlement_current.due_minor_units` | integer | yes | no | — | — |
 | `settlement_current.currency` | string | yes | no | — | — |
-| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `settlement_current.settlement_guard` | string \| null | no | yes | null | — |
 | `settlement_current.as_of` | string \| null | no | yes | null | — |
 | `settlement_current.audit_watermark` | integer \| null | no | yes | null | — |
@@ -2238,7 +2244,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.all_committed_current.applied_minor_units` | integer | yes | no | — | — |
 | `settlement_current.all_committed_current.due_minor_units` | integer | yes | no | — | — |
 | `settlement_current.all_committed_current.currency` | string | yes | no | — | — |
-| `settlement_current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `settlement_current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `type` | literal["invoice", "sales_receipt"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
@@ -2716,7 +2722,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.document_changes[].applied_minor_units` | integer | yes | no | — | — |
 | `settlement.effect.document_changes[].due_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].currency` | string | yes | no | — | — |
-| `settlement.effect.document_changes[].status` | literal["unpaid", "partial", "paid", "voided"] \| literal["posted", "voided"] | yes | no | — | — |
+| `settlement.effect.document_changes[].status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] \| literal["posted", "voided"] | yes | no | — | — |
 | `settlement.effect.document_changes[].settlement_guard` | string \| null | no | yes | null | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].as_of` | string \| null | no | yes | null | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].audit_watermark` | integer \| null | no | yes | null | Present in InvoiceSettlementOutput. |
@@ -2728,7 +2734,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.document_changes[].all_committed_current.applied_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].all_committed_current.due_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].all_committed_current.currency` | string | no | no | — | Present in InvoiceSettlementOutput. |
-| `settlement.effect.document_changes[].all_committed_current.status` | literal["unpaid", "partial", "paid", "voided"] | no | no | — | Present in InvoiceSettlementOutput. |
+| `settlement.effect.document_changes[].all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | no | no | — | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].payment_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. |
 | `settlement.effect.document_changes[].received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `settlement.effect.document_changes[].effective_received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
@@ -2773,7 +2779,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.current.applied_minor_units` | integer | yes | no | — | — |
 | `settlement.current.due_minor_units` | integer | yes | no | — | — |
 | `settlement.current.currency` | string | yes | no | — | — |
-| `settlement.current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `settlement.current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `settlement.current.settlement_guard` | string \| null | no | yes | null | — |
 | `settlement.current.as_of` | string \| null | no | yes | null | — |
 | `settlement.current.audit_watermark` | integer \| null | no | yes | null | — |
@@ -2785,7 +2791,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.current.all_committed_current.applied_minor_units` | integer | yes | no | — | — |
 | `settlement.current.all_committed_current.due_minor_units` | integer | yes | no | — | — |
 | `settlement.current.all_committed_current.currency` | string | yes | no | — | — |
-| `settlement.current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `settlement.current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `settlement.effect_counts` | object | yes | no | — | — |
 | `settlement.effect_counts.source_components` | integer | yes | no | — | — |
 | `settlement.effect_counts.applications` | integer | yes | no | — | — |
@@ -3145,7 +3151,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.applied_minor_units` | integer | yes | no | — | — |
 | `settlement_current.due_minor_units` | integer | yes | no | — | — |
 | `settlement_current.currency` | string | yes | no | — | — |
-| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `settlement_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `settlement_current.settlement_guard` | string \| null | no | yes | null | — |
 | `settlement_current.as_of` | string \| null | no | yes | null | — |
 | `settlement_current.audit_watermark` | integer \| null | no | yes | null | — |
@@ -3157,7 +3163,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.all_committed_current.applied_minor_units` | integer | yes | no | — | — |
 | `settlement_current.all_committed_current.due_minor_units` | integer | yes | no | — | — |
 | `settlement_current.all_committed_current.currency` | string | yes | no | — | — |
-| `settlement_current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `settlement_current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `type` | literal["invoice", "sales_receipt"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
@@ -3635,7 +3641,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.document_changes[].applied_minor_units` | integer | yes | no | — | — |
 | `settlement.effect.document_changes[].due_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].currency` | string | yes | no | — | — |
-| `settlement.effect.document_changes[].status` | literal["unpaid", "partial", "paid", "voided"] \| literal["posted", "voided"] | yes | no | — | — |
+| `settlement.effect.document_changes[].status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] \| literal["posted", "voided"] | yes | no | — | — |
 | `settlement.effect.document_changes[].settlement_guard` | string \| null | no | yes | null | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].as_of` | string \| null | no | yes | null | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].audit_watermark` | integer \| null | no | yes | null | Present in InvoiceSettlementOutput. |
@@ -3647,7 +3653,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.effect.document_changes[].all_committed_current.applied_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].all_committed_current.due_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].all_committed_current.currency` | string | no | no | — | Present in InvoiceSettlementOutput. |
-| `settlement.effect.document_changes[].all_committed_current.status` | literal["unpaid", "partial", "paid", "voided"] | no | no | — | Present in InvoiceSettlementOutput. |
+| `settlement.effect.document_changes[].all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | no | no | — | Present in InvoiceSettlementOutput. |
 | `settlement.effect.document_changes[].payment_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. |
 | `settlement.effect.document_changes[].received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `settlement.effect.document_changes[].effective_received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
@@ -3692,7 +3698,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.current.applied_minor_units` | integer | yes | no | — | — |
 | `settlement.current.due_minor_units` | integer | yes | no | — | — |
 | `settlement.current.currency` | string | yes | no | — | — |
-| `settlement.current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `settlement.current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `settlement.current.settlement_guard` | string \| null | no | yes | null | — |
 | `settlement.current.as_of` | string \| null | no | yes | null | — |
 | `settlement.current.audit_watermark` | integer \| null | no | yes | null | — |
@@ -3704,7 +3710,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.current.all_committed_current.applied_minor_units` | integer | yes | no | — | — |
 | `settlement.current.all_committed_current.due_minor_units` | integer | yes | no | — | — |
 | `settlement.current.all_committed_current.currency` | string | yes | no | — | — |
-| `settlement.current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `settlement.current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `settlement.effect_counts` | object | yes | no | — | — |
 | `settlement.effect_counts.source_components` | integer | yes | no | — | — |
 | `settlement.effect_counts.applications` | integer | yes | no | — | — |

@@ -8,6 +8,13 @@ from bookflow.core.money import Money
 from bookflow.core.errors import BookflowError
 from bookflow.company import document_effects as effects
 from bookflow.company.payment_cancellation import live_allocations
+from bookflow.core import clock
+
+
+def projection_metadata(as_of):
+    return dict(projection='effective_date' if as_of is not None else 'current',
+        projection_basis='all_current_knowledge_effective_date' if as_of is not None else 'all_committed_current',
+        generated_at=clock.now_iso())
 
 
 def dated_applications(s, *, invoice=None, payment=None, as_of=None):
@@ -34,8 +41,12 @@ def invoice(s, inp):
             .join(b, b.c.id == p.c.batch_id).join(a, a.c.id == p.c.account_id).where(
                 p.c.transaction_id == facts['header']['id'], a.c.type == 'accounts_receivable', b.c.effective_date <= inp.as_of)).scalar_one()
         applied = sum(row['amount_minor_units'] for row in dated_applications(s, invoice=facts['header']['id'], as_of=inp.as_of))
+        effective = s.company.conn.execute(sa.select(b.c.id).where(b.c.transaction_id == facts['header']['id'],
+            b.c.kind != 'reversal', b.c.effective_date <= inp.as_of).limit(1)).first() is not None
+        status = ('not_effective' if not effective else 'voided' if facts['header']['status'] == 'voided'
+                  else 'paid' if gross > 0 and gross == applied else 'partial' if applied else 'unpaid')
         out.update(gross_minor_units=gross, applied_minor_units=applied, due_minor_units=gross-applied,
-                   status='paid' if gross == applied else 'partial' if applied else 'unpaid')
+                   status=status)
     apps = effects.rows(s, c.applications, c.applications.c.paid_transaction_id == facts['header']['id'],
         *([c.applications.c.effective_date <= inp.as_of] if inp.as_of else []), order=c.applications.c.effective_date)
     from bookflow.company.payment_authority import authorize
@@ -49,7 +60,7 @@ def invoice(s, inp):
               for kind in ('net', 'tax')}
     mark = watermark(s)
     page = query.page(s, 'invoice settlement', inp, apps, facts=[mark, out, apps])
-    return dict(out, as_of=inp.as_of, audit_watermark=mark, all_committed_current=current,
+    return dict(out, **projection_metadata(inp.as_of), as_of=inp.as_of, audit_watermark=mark, all_committed_current=current,
         applications=page['items'], application_count=page['total_count'], next_cursor=page['next_cursor'],
         facts_fingerprint=page['facts_fingerprint'], net_applied_minor_units=totals['net'], tax_applied_minor_units=totals['tax'])
 
@@ -83,7 +94,7 @@ def payment(s, inp):
     mark = watermark(s)
     page = query.page(s, 'payment settlement', inp, rendered, facts=[mark, current, rendered])
     current['components'] = current['components'][:50]
-    return dict(page, projection='current', committed=True, kind=inp.kind, as_of=inp.as_of,
+    return dict(page, **projection_metadata(inp.as_of), committed=True, kind=inp.kind, as_of=inp.as_of,
         audit_watermark=mark, received_minor_units=sum(capacities.values()), applied_minor_units=sum(applied.values()),
         unapplied_minor_units=sum(capacities.values())-sum(applied.values()), all_committed_current=current)
 

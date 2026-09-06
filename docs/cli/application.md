@@ -291,7 +291,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current_invoice.applied_minor_units` | integer | yes | no | — | — |
 | `current_invoice.due_minor_units` | integer | yes | no | — | — |
 | `current_invoice.currency` | string | yes | no | — | — |
-| `current_invoice.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `current_invoice.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `current_invoice.settlement_guard` | string \| null | no | yes | null | — |
 | `current_invoice.as_of` | string \| null | no | yes | null | — |
 | `current_invoice.audit_watermark` | integer \| null | no | yes | null | — |
@@ -303,7 +303,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current_invoice.all_committed_current.applied_minor_units` | integer | yes | no | — | — |
 | `current_invoice.all_committed_current.due_minor_units` | integer | yes | no | — | — |
 | `current_invoice.all_committed_current.currency` | string | yes | no | — | — |
-| `current_invoice.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided"] | yes | no | — | — |
+| `current_invoice.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
 | `current_allocations` | array[object] | yes | no | — | — |
 | `current_allocations[].id` | string | yes | no | — | — |
 | `current_allocations[].application_id` | string | yes | no | — | — |

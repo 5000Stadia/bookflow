@@ -1087,7 +1087,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].revision_id` | string \| null | no | yes | — | Present in InvoiceSettlementOutput, PaymentCurrentOutput. |
 | `items[].gross_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
 | `items[].due_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
-| `items[].status` | literal["unpaid", "partial", "paid", "voided"] \| literal["posted", "voided"] | no | no | — | Present in InvoiceSettlementOutput, PaymentCurrentOutput. |
+| `items[].status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] \| literal["posted", "voided"] | no | no | — | Present in InvoiceSettlementOutput, PaymentCurrentOutput. |
 | `items[].settlement_guard` | string \| null | no | yes | null | Present in InvoiceSettlementOutput. |
 | `items[].as_of` | string \| null | no | yes | null | Present in InvoiceSettlementOutput. |
 | `items[].audit_watermark` | integer \| null | no | yes | null | Present in InvoiceSettlementOutput. |
@@ -1099,7 +1099,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].all_committed_current.applied_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
 | `items[].all_committed_current.due_minor_units` | integer | no | no | — | Present in InvoiceSettlementOutput. |
 | `items[].all_committed_current.currency` | string | no | no | — | Present in InvoiceSettlementOutput. |
-| `items[].all_committed_current.status` | literal["unpaid", "partial", "paid", "voided"] | no | no | — | Present in InvoiceSettlementOutput. |
+| `items[].all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | no | no | — | Present in InvoiceSettlementOutput. |
 | `items[].payment_id` | string \| null | no | yes | — | Present in PaymentCurrentOutput. |
 | `items[].effective_received_minor_units` | integer | no | no | — | Present in PaymentCurrentOutput. |
 | `items[].components` | array[object] | no | no | — | Present in PaymentCurrentOutput. |
@@ -1118,7 +1118,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total_count` | integer | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
 | `facts_fingerprint` | string | yes | no | — | — |
-| `projection` | literal["prospective", "committed", "current"] | yes | no | — | — |
+| `projection` | literal["prospective", "committed", "current", "effective_date"] | yes | no | — | — |
+| `projection_basis` | literal["all_committed_current", "all_current_knowledge_effective_date"] | yes | no | — | — |
+| `generated_at` | string | yes | no | — | — |
 | `as_of` | string \| null | yes | yes | — | — |
 | `audit_watermark` | integer | yes | no | — | — |
 | `received_minor_units` | integer | yes | no | — | — |
@@ -1168,10 +1170,12 @@ Example JSON output:
   "audit_watermark": 1,
   "committed": false,
   "facts_fingerprint": "value",
+  "generated_at": "2026-01-01T00:00:00Z",
   "items": [],
   "kind": null,
   "next_cursor": null,
   "projection": "prospective",
+  "projection_basis": "all_committed_current",
   "received_minor_units": 1,
   "total_count": 1,
   "unapplied_minor_units": 1

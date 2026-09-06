@@ -31,7 +31,9 @@ implements separate accounting behavior.
 `payment_corrections.py` replaces receipt content with exact old-date reversals and
 new balanced postings, changing only payer capacity while retaining permanent job
 ownership. It restates source attribution at original application dates without
-changing target splits. `payment_invoice_corrections.py` coordinates commercial
+changing target splits. Explicitly retaining a reference preserves its captured
+facts; new assignments require active masters, and replacement posting accounts
+still require activity. `payment_invoice_corrections.py` coordinates commercial
 invoice edits and immutable settlement evidence in the same audit/transaction;
 `payment_restatement.py` compares complete chronological allocations by durable
 line ordinal and semantic net/tax facts. Unchanged allocations keep their old
@@ -40,10 +42,16 @@ allocations and requires explicit unapply before receipt void. A new no-effect
 operation has its own audit receipt; exact permanent replay has no new writes.
 
 `payment_dependencies.py` signs bounded audit-baseline guards and reconstructs
-owned headers in batches. Comparisons distinguish each event's actor/fields from
-the latest writer and mark malformed history unknown. `payment_history.py` exposes
+owned headers in batches. Comparisons resolve each event's owned commercial
+revisions to actual business fields, distinguish its actor from the latest writer,
+and mark malformed or unowned history unknown. `payment_history.py` exposes
 immutable receipt/application/allocation chains and effective-date projections
 under current recorded knowledge, separately from all committed current capacity.
+Projection basis, generation time and audit watermark identify that distinction;
+pre-obligation and voided states are not labelled paid. Permanent request matching
+normalizes exact money through owning input-model types, retaining omissions,
+ordered intent and unrelated custom data. All preparation continuations bind
+relevant payer and selected-party lineage independently of unrelated draft writes.
 Current payment queries aggregate and filter in SQL before bounded delivery;
 prospective cursors instead bind exact original intent, financial fingerprint and
 last logical item identity without persisting a preview.
