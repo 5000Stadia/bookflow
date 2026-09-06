@@ -127,8 +127,19 @@ def application_show(s, inp):
 
 
 def _entry(s, row, kind, **values):
-    sequence = s.company.conn.execute(sa.select(c.audit_events.c.seq).where(c.audit_events.c.id == row['audit_event_id'])).scalar_one()
-    return dict(id=row['id'], audit_event_id=row['audit_event_id'], audit_sequence=sequence, kind=kind, **values)
+    return dict(id=row['id'], audit_event_id=row['audit_event_id'], kind=kind, **values)
+
+
+def _sequences(s, items):
+    ids = sorted({row['audit_event_id'] for row in items})
+    sequences = {}
+    for offset in range(0, len(ids), 200):
+        sequences.update(s.company.conn.execute(sa.select(c.audit_events.c.id, c.audit_events.c.seq).where(
+            c.audit_events.c.id.in_(ids[offset:offset+200]))).all())
+    if set(sequences) != set(ids):
+        raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type':'audit_event'})
+    for row in items:
+        row['audit_sequence'] = sequences[row['audit_event_id']]
 
 
 def application_history(s, inp):
@@ -138,23 +149,34 @@ def application_history(s, inp):
     allocations = effects.rows(s, c.application_allocations, c.application_allocations.c.application_id == original_id)
     items = [_entry(s, row, 'application', application=row) for row in applications]
     items.extend(_entry(s, row, 'allocation', allocation=row) for row in allocations)
+    _sequences(s, items)
     items.sort(key=lambda row: (row['audit_sequence'], row['id']))
     mark = watermark(s)
     return dict(query.page(s, 'application history', inp, items, facts=[mark, items]), audit_watermark=mark)
 
 
 def payment_history(s, inp):
-    from bookflow.company.payment_models import PaymentShowInput
     facts = query.payment_facts(s, inp.payment)
     identifier = facts['header']['id']
     items = []
-    for row in effects.rows(s, c.transaction_revisions, c.transaction_revisions.c.transaction_id == identifier):
-        revision = payments.show(s, PaymentShowInput(payment=identifier, revision=row['revision_number'])).revision.model_dump(mode='json')
+    revisions = effects.rows(s, c.transaction_revisions, c.transaction_revisions.c.transaction_id == identifier)
+    profiles = {}
+    ids = [row['id'] for row in revisions]
+    for offset in range(0, len(ids), 200):
+        profiles.update({row['revision_id']: row for row in effects.rows(s, c.payment_profiles,
+            c.payment_profiles.c.revision_id.in_(ids[offset:offset+200]))})
+    for row in revisions:
+        profile = profiles.get(row['id'])
+        if profile is None or profile['transaction_id'] != identifier:
+            raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type':'payment_profile'})
+        revision = payments.revision_output(row, profile).model_dump(mode='json')
         items.append(_entry(s, row, 'receipt_revision', revision=revision))
-    resolved = sa.func.json_each(c.payment_operations.c.request_snapshot,
+    operations = query.indexed_source(c.payment_operations, 'ix_co17_operations_history',
+        'id', 'audit_event_id', 'operation_key', 'command', 'request_snapshot')
+    resolved = sa.func.json_each(operations.c.request_snapshot,
         '$.resolved_transaction_ids').table_valued('value')
     relevant = sa.exists(sa.select(resolved.c.value).where(resolved.c.value == identifier))
-    for row in effects.rows(s, c.payment_operations, relevant):
+    for row in s.company.conn.execute(sa.select(operations).where(relevant)).mappings():
         captured = json.loads(row['request_snapshot'])
         if identifier in captured['resolved_transaction_ids']:
             from bookflow.company.payment_authority import authorize
@@ -164,6 +186,7 @@ def payment_history(s, inp):
         items.append(_entry(s, row, 'application', application=row))
     for row in effects.rows(s, c.application_allocations, c.application_allocations.c.source_transaction_id == identifier):
         items.append(_entry(s, row, 'allocation', allocation=row))
+    _sequences(s, items)
     items.sort(key=lambda row: (row['audit_sequence'], row['id']))
     mark = watermark(s)
     return dict(query.page(s, 'payment history', inp, items, facts=[mark, items]), audit_watermark=mark)

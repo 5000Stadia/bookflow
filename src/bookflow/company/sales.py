@@ -158,8 +158,17 @@ def page(s, ctx, inp, document_type, *, history=False):
         header = resolve(s, getattr(inp, document_type), document_type)
         query = sa.select(c.transaction_revisions).where(c.transaction_revisions.c.transaction_id == header['id']).order_by(c.transaction_revisions.c.revision_number)
     else:
-        t, r, p = c.transactions, c.transaction_revisions, c.sales_profiles
-        query = sa.select(t).join(r, r.c.id == t.c.current_revision_id).join(p, p.c.revision_id == r.c.id).where(t.c.type == document_type)
+        from bookflow.company.payment_queries import indexed_source, cross_join
+        t = indexed_source(c.transactions,
+            'ix_co17_transactions_current' if inp.customer else 'ix_co17_transactions_type',
+            'current_revision_id', 'type', 'status', 'id', 'version', 'number')
+        r = indexed_source(c.transaction_revisions, 'ix_co17_revisions_read',
+            'id', 'date', 'currency', 'total_minor_units', 'memo')
+        p = indexed_source(c.sales_profiles, 'ix_co17_sales_party' if inp.customer else 'ix_co17_sales_revision',
+            'revision_id', 'customer_id', 'control_account_id')
+        source = (cross_join(cross_join(p, r, r.c.id == p.c.revision_id), t, t.c.current_revision_id == r.c.id)
+            if inp.customer else cross_join(cross_join(t, r, r.c.id == t.c.current_revision_id), p, p.c.revision_id == r.c.id))
+        query = sa.select(t.c.id).select_from(source).where(t.c.type == document_type)
         if inp.customer:
             from bookflow.company.parties import resolve_party
             customer = resolve_party(s.company, 'customer', inp.customer)
@@ -179,6 +188,9 @@ def page(s, ctx, inp, document_type, *, history=False):
     if history:
         return SalesHistoryOutput(**{k: header[k] for k in ('id', 'version', 'current_revision_id', 'number', 'status')},
             items=[revision_output(s, revision, summary_only=True) for revision in found], **shared)
+    headers = {row['id']: dict(row) for row in s.company.conn.execute(sa.select(c.transactions).where(
+        c.transactions.c.id.in_([row['id'] for row in found]))).mappings()} if found else {}
+    found = [headers[row['id']] for row in found]
     revision_ids = [header['current_revision_id'] for header in found]
     revisions = {row['id']: dict(row) for row in s.company.conn.execute(sa.select(c.transaction_revisions).where(
         c.transaction_revisions.c.id.in_(revision_ids))).mappings()} if found else {}
