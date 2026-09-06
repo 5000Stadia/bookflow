@@ -60,13 +60,15 @@ def validate(plan, s, ctx):
     rev = work.revision(s,source)
     identities = query.root_identities(s,source)
     source_lines = work.saved_lines(s,rev)
+    from bookflow.company import work_preferences as policy
+    policy.check_selection(s, inp, source, rev, source_lines, identities)
     selected_ids = checks.selected_identities(s,inp,source_lines,identities)
     selected = [(line,(identities[line['line_id']]['root_document_id'],identities[line['line_id']]['root_line_id']),
                  work.line_facts(line)) for line in source_lines if line['line_id'] in selected_ids]
     header, created = data['header'], data['pending']['transaction_revisions'][0]
     wh, wb, wp = data['work_header'], data['work_before'], data['work_pending']
     require(wb == source and wh['id'] == source['id'] and wh['version'] == source['version'] + 1, 'wrong source/version')
-    require(all(wh[k] == source[k] for k in source if k not in ('version', 'updated_at', 'updated_by', 'updated_via', 'current_revision_id')), 'source header facts changed')
+    require(all(wh[k] == source[k] for k in source if k not in ('active', 'version', 'updated_at', 'updated_by', 'updated_via', 'current_revision_id')), 'source header facts changed')
     require(wh['updated_at'] == header['updated_at'] and wh['updated_by'] == s.actor.id and wh['updated_via'] == ctx.interface.value, 'source provenance')
     require(len(wp['work_revisions']) == 1 and not wp['work_line_identities'] and not wp['work_links'], 'unexpected operational effects')
     newrev = wp['work_revisions'][0]
@@ -77,7 +79,7 @@ def validate(plan, s, ctx):
     for row in wp['work_revisions'] + wp['work_lines']:
         require(row['created_at'] == header['updated_at'] and row['created_by'] == s.actor.id
             and row['created_via'] == ctx.interface.value, 'source history provenance')
-    unchanged = set(rev) - {'id', 'revision_number', 'supersedes_revision_id', 'audit_event_id', 'created_at', 'created_by', 'created_via'}
+    unchanged = set(rev) - {'active', 'id', 'revision_number', 'supersedes_revision_id', 'audit_event_id', 'created_at', 'created_by', 'created_via'}
     require(all(newrev[k] == rev[k] for k in unchanged), 'billing rewrote source facts')
     old_lines = work.saved_lines(s, rev)
     stripline = lambda row: {k: v for k, v in row.items() if k not in ('id', 'revision_id', 'created_at', 'created_by', 'created_via')}
@@ -93,6 +95,19 @@ def validate(plan, s, ctx):
     require(not work.rows(s, c.work_links, c.work_links.c.conversion_key_hash == key) and
         not work.rows(s, c.work_billing_conversions, c.work_billing_conversions.c.conversion_key_hash == key), 'duplicate durable key')
     allocs, envelopes = data['billing_allocations'], data['pending']['document_lines']
+    # Reconstruct required closure from all current roots and pending amounts.
+    # The resolver's closure flag and output are not evidence for this check.
+    remaining = sum(alloc.remaining(s, (identities[line['line_id']]['root_document_id'],
+        identities[line['line_id']]['root_line_id']), work.line_facts(line))[1]
+        for line in source_lines if work.line_facts(line).billable)
+    selected_net = sum(row['net_minor_units'] for row in allocs)
+    settings = s.company.conn.execute(c.company_info.select()).mappings().one()
+    closes = (kind == 'estimate' and source['status'] == 'accepted' and source['active']
+        and not settings['progress_billing_enabled'] and settings['close_estimates_after_billing']
+        and remaining > 0 and selected_net == remaining)
+    require(wh['active'] == (not closes) and newrev['active'] == wh['active'], 'required automatic closure differs')
+    require(plan.preview.source_effect == billing.source_effect(source, rev, newrev, source['version'])
+        and plan.preview.source_current == billing.source_current(wh), 'source effect/current projection differs')
     require(len(allocs) == len(selected) == len(envelopes), 'missing selected allocation')
     profiles = {row['document_line_id']: row for row in data['pending']['sales_line_profiles']}
     captured_header = work.facts(rev)

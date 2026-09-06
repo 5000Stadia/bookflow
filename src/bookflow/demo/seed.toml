@@ -1489,3 +1489,65 @@ input = { "work_order" = "${prog_work_order.id}" }
 [[commands]]
 command = "invoice query"
 input = { "customer" = "${prog_customer.id}", "date_from" = "2026-01-01", "date_to" = "2026-12-31" }
+
+
+# Customer work preference example; every financial effect ends voided.
+[[commands]]
+command = "customer create"
+capture = "pref_customer"
+input = { name = "Preference Example Customer" }
+
+[[commands]]
+command = "estimate create"
+capture = "pref_estimate"
+input = { date = "2026-10-01", number = "DEMO-PREF-EST-1", customer = "${pref_customer.id}", customer_tax_code = "${sale_exempt.id}", title = "Final billing availability", lines = [{ item = "${sale_service.id}", quantity = "1", net_amount = "10.00" }] }
+
+[[commands]]
+command = "estimate update"
+capture = "pref_accepted"
+reason = "Record the customer's acceptance"
+input = { estimate = "${pref_estimate.id}", expected_version = "${pref_estimate.version}", status = "accepted", decision_note = "Accepted for remaining billing" }
+
+[[commands]]
+command = "company update"
+reason = "Demonstrate independent creation and progress controls with final estimate inactivation"
+input = { estimates_enabled = false, progress_billing_enabled = false, close_estimates_after_billing = true }
+
+[[commands]]
+command = "estimate billing"
+input = { estimate = "${pref_estimate.id}" }
+
+[[commands]]
+command = "estimate invoice"
+capture = "pref_invoice"
+reason = "Bill the remaining accepted work and make its estimate inactive"
+input = { estimate = "${pref_estimate.id}", expected_version = "${pref_accepted.version}", date = "2026-10-02", number = "DEMO-PREF-INV-1", conversion_key = "DEMO-PREF remaining" }
+
+[[commands]]
+command = "estimate show"
+capture = "pref_closed"
+input = { estimate = "${pref_estimate.id}" }
+
+[[commands]]
+command = "estimate history"
+input = { estimate = "${pref_estimate.id}" }
+
+[[commands]]
+command = "invoice void"
+reason = "Release the example's financial effect without changing estimate availability"
+input = { invoice = "${pref_invoice.id}", expected_version = "${pref_invoice.version}" }
+
+[[commands]]
+command = "estimate update"
+reason = "Explicitly reactivate the retained accepted estimate after release"
+input = { estimate = "${pref_estimate.id}", expected_version = "${pref_closed.version}", active = true }
+
+[[commands]]
+command = "estimate invoice"
+reason = "Replay retains original inactivation while showing current active availability"
+input = { estimate = "${pref_estimate.id}", expected_version = "${pref_accepted.version}", date = "2026-10-02", number = "DEMO-PREF-INV-1", conversion_key = "DEMO-PREF remaining" }
+
+[[commands]]
+command = "company update"
+reason = "Restore the compatibility defaults"
+input = { estimates_enabled = true, progress_billing_enabled = true, close_estimates_after_billing = false }

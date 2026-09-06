@@ -48,7 +48,8 @@ SR1, INV7 = 5000, 15000                                                    # hal
 @pytest.mark.parametrize("resource", ["seed.toml", "reference.toml"])
 def test_manifests_append_progress_examples_after_the_old_entries(resource):
     commands = tomllib.loads(files("bookflow.demo").joinpath(resource).read_text())["commands"]
-    old, new = commands[:OLD_COUNTS[resource]], commands[OLD_COUNTS[resource]:]
+    # Row18 owns exactly41 appended commands; later examples have their own witness.
+    old, new = commands[:OLD_COUNTS[resource]], commands[OLD_COUNTS[resource]:OLD_COUNTS[resource]+41]
     prefix = ("DEMO" if resource == "seed.toml" else "REF") + "-PROG-"
     assert not [e for e in old if str(e.get("input", {}).get("number", "")).startswith(prefix)]
     assert not [e for e in old if e["command"] in FINANCIAL and ("selections" in e["input"] or "percent" in e["input"])]

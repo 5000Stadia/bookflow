@@ -31,6 +31,7 @@ class CompanyInfoOut(BaseModel):
 
 class CompanyShowOutput(CompanySummary):
     info: dict[str, Any]
+    preference_changes: list[dict[str, Any]]
     info_version: int
     info_created_by_name: str | None
     info_updated_by_name: str | None
@@ -43,6 +44,7 @@ company_show = command("company show", scope="company", description="Show the se
 
 @company_show
 def plan_company_show(inp: Empty, ctx: Context, s: Session) -> Plan:
+    from bookflow.company import work_preferences
     row = s.company_row
     orow = org.get(s, row["organization_id"])
     info = cinfo.read_info(s.company)
@@ -54,6 +56,7 @@ def plan_company_show(inp: Empty, ctx: Context, s: Session) -> Plan:
         info[k] = localize(s, info[k])
     names = cinfo.principal_names(s.company, {info["created_by"], info["updated_by"]})
     return Plan(preview=CompanyShowOutput(**summary.model_dump(), info=info, info_version=info["version"], info_created_by_name=names.get(info["created_by"]), info_updated_by_name=names.get(info["updated_by"]),
+                                          preference_changes=work_preferences.changes(s, work_preferences.FIELDS),
                                           editing_by=_editing_by(s, "company_info", row["id"])))
 
 
@@ -198,6 +201,9 @@ class CompanyUpdateInput(BaseModel):
     default_ship_method_id: str | None = Field(None, description="Active default ship method")
     free_on_board: str | None = Field(None, max_length=128, description="Default free-on-board location")
     order_printable_checks: bool | None = Field(None, description="Company default for ordering printable checks")
+    estimates_enabled: bool = Field(None, strict=True, description="Enable new estimates; omission preserves the saved setting; null rejects")
+    progress_billing_enabled: bool = Field(None, strict=True, description="Enable partial work billing; disabling retains remaining-line and bounded recovery billing; omission preserves, null rejects")
+    close_estimates_after_billing: bool = Field(None, strict=True, description="Make estimates inactive after final positive net billing; effective only while progress billing is disabled; omission preserves, null rejects")
 
     @field_validator("legal_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "closing_date", "free_on_board", mode="before")
     @classmethod
@@ -207,6 +213,7 @@ class CompanyUpdateInput(BaseModel):
 
 SCALARS = [f for f in CompanyUpdateInput.model_fields if f not in ("expected_version", "address", "legal_address", "ship_address")]
 NOT_NULLABLE = {
+    "estimates_enabled", "progress_billing_enabled", "close_estimates_after_billing",
     "legal_name", "tax_id_kind", "entity_type", "income_tax_form", "fiscal_year_start_month",
     "tax_year_start_month", "report_basis", "timezone", "recent_activity_window_seconds",
     "use_account_numbers", "show_lowest_subaccount_only", "required_employee_profile_fields",

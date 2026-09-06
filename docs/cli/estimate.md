@@ -4,7 +4,7 @@
 
 ## `estimate billing`
 
-Show quoted, completed, billed and remaining work, exact partial quantities, original-scope percentages, current billing owner and linked invoices/receipts. Quoted tax is informational; actual installment tax and remaining-tax forecasts use the ordinary per-bill rule. Uncharged physical scope is not a debt.
+Show quoted, completed, billed and remaining work, exact partial quantities, original-scope percentages, current billing owner and linked invoices/receipts. Quoted tax is informational; actual installment tax and remaining-tax forecasts use the ordinary per-bill rule. Uncharged physical scope is not a debt. Company progress preferences preserve remaining-line billing and exact current bounded-recovery recommendations. Disabled ordinary partial modes return E_FEATURE_DISABLED before preview comparison; failed net-only recovery with a fingerprint returns E_PREVIEW_STALE. Authorized matching permanent replay precedes new-work gates. With progress disabled and automatic closure enabled, only final positive net billing directly from an estimate makes it inactive, preserving acceptance. source_effect records the immutable conversion; source_current reports current availability.
 
 | Contract | Value |
 |---|---|
@@ -55,6 +55,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `preferences` | object | yes | no | — | — |
+| `preferences.estimates_enabled` | boolean | yes | no | — | — |
+| `preferences.progress_billing_enabled` | boolean | yes | no | — | — |
+| `preferences.close_estimates_after_billing` | boolean | yes | no | — | — |
+| `preferences.auto_close_effective` | boolean | yes | no | — | — |
+| `closes_on_remaining_bill` | boolean | yes | no | — | — |
 | `source_id` | string | yes | no | — | — |
 | `source_kind` | string | yes | no | — | — |
 | `source_version` | integer | yes | no | — | — |
@@ -64,6 +70,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `owner_version` | integer | yes | no | — | — |
 | `currency` | string | yes | no | — | — |
 | `lines` | array[object] | yes | no | — | — |
+| `lines[].requires_bounded_recovery` | boolean | yes | no | — | — |
+| `lines[].recommended_net_amount` | object \| null | yes | yes | — | — |
+| `lines[].recommended_net_amount.amount` | string | yes | no | — | — |
+| `lines[].recommended_net_amount.currency` | string | yes | no | — | — |
+| `lines[].recommended_net_amount.minor_units` | integer | yes | no | — | — |
 | `lines[].line_id` | string | yes | no | — | — |
 | `lines[].source_line_id` | string | yes | no | — | — |
 | `lines[].root_document_id` | string | yes | no | — | — |
@@ -155,6 +166,7 @@ Example JSON output:
   "audit_watermark": 1,
   "can_invoice": false,
   "can_sales_receipt": false,
+  "closes_on_remaining_bill": false,
   "count": 0,
   "currency": "USD",
   "destinations": [],
@@ -164,6 +176,12 @@ Example JSON output:
   "owner_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "owner_kind": "human",
   "owner_version": 1,
+  "preferences": {
+    "auto_close_effective": false,
+    "close_estimates_after_billing": false,
+    "estimates_enabled": false,
+    "progress_billing_enabled": false
+  },
   "remaining_net_minor_units": 1,
   "remaining_tax_minor_units": 1,
   "source_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -1710,7 +1728,7 @@ Example JSON output:
 
 ## `estimate invoice`
 
-This work is finished; make an invoice for remaining work, selected quantities or net amounts, or percentages of original scope. Rebill a released allocation by its exact allocation ID. Permanent retries preserve the original bill. Extra charges are added as independent unlinked lines through invoice update; quoted scope stays capped at100%. Completion, payment and sending remain separate operations.
+This work is finished; make an invoice for remaining work, selected quantities or net amounts, or percentages of original scope. Rebill a released allocation by its exact allocation ID. Permanent retries preserve the original bill. Extra charges are added as independent unlinked lines through invoice update; quoted scope stays capped at100%. Completion, payment and sending remain separate operations. Company progress preferences preserve remaining-line billing and exact current bounded-recovery recommendations. Disabled ordinary partial modes return E_FEATURE_DISABLED before preview comparison; failed net-only recovery with a fingerprint returns E_PREVIEW_STALE. Authorized matching permanent replay precedes new-work gates. With progress disabled and automatic closure enabled, only final positive net billing directly from an estimate makes it inactive, preserving acceptance. source_effect records the immutable conversion; source_current reports current availability.
 
 | Contract | Value |
 |---|---|
@@ -2195,6 +2213,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `source_effect` | object \| null | no | yes | null | — |
+| `source_effect.source_id` | string | yes | no | — | — |
+| `source_effect.source_kind` | literal["estimate", "work_order"] | yes | no | — | — |
+| `source_effect.version_before` | integer | yes | no | — | — |
+| `source_effect.version_after` | integer | yes | no | — | — |
+| `source_effect.active_before` | boolean | yes | no | — | — |
+| `source_effect.active_after` | boolean | yes | no | — | — |
+| `source_effect.automatically_closed` | boolean | yes | no | — | — |
+| `source_current` | object \| null | no | yes | null | — |
+| `source_current.source_id` | string | yes | no | — | — |
+| `source_current.version` | integer | yes | no | — | — |
+| `source_current.active` | boolean | yes | no | — | — |
+| `source_current.status` | string | yes | no | — | — |
 | `billing_progress` | array[object] | no | no | [] | — |
 | `billing_progress[].line_id` | string | yes | no | — | — |
 | `billing_progress[].root_document_id` | string | yes | no | — | — |
@@ -2371,6 +2402,8 @@ Example JSON output:
     "total_minor_units": 1,
     "transaction_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
   },
+  "source_current": null,
+  "source_effect": null,
   "status": "posted",
   "subtotal": {
     "amount": "value",
@@ -2587,7 +2620,7 @@ Example JSON output:
 
 ## `estimate sales-receipt`
 
-They paid; make a sales receipt for remaining or selected partial work with the exact gross received, payment method and deposit account. Percentages refer to original scope; tax is calculated per bill. Rebill an exact released allocation when entirely free. This creates a paid sale, never payment of an existing invoice.
+They paid; make a sales receipt for remaining or selected partial work with the exact gross received, payment method and deposit account. Percentages refer to original scope; tax is calculated per bill. Rebill an exact released allocation when entirely free. This creates a paid sale, never payment of an existing invoice. Company progress preferences preserve remaining-line billing and exact current bounded-recovery recommendations. Disabled ordinary partial modes return E_FEATURE_DISABLED before preview comparison; failed net-only recovery with a fingerprint returns E_PREVIEW_STALE. Authorized matching permanent replay precedes new-work gates. With progress disabled and automatic closure enabled, only final positive net billing directly from an estimate makes it inactive, preserving acceptance. source_effect records the immutable conversion; source_current reports current availability.
 
 | Contract | Value |
 |---|---|
@@ -3073,6 +3106,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `source_effect` | object \| null | no | yes | null | — |
+| `source_effect.source_id` | string | yes | no | — | — |
+| `source_effect.source_kind` | literal["estimate", "work_order"] | yes | no | — | — |
+| `source_effect.version_before` | integer | yes | no | — | — |
+| `source_effect.version_after` | integer | yes | no | — | — |
+| `source_effect.active_before` | boolean | yes | no | — | — |
+| `source_effect.active_after` | boolean | yes | no | — | — |
+| `source_effect.automatically_closed` | boolean | yes | no | — | — |
+| `source_current` | object \| null | no | yes | null | — |
+| `source_current.source_id` | string | yes | no | — | — |
+| `source_current.version` | integer | yes | no | — | — |
+| `source_current.active` | boolean | yes | no | — | — |
+| `source_current.status` | string | yes | no | — | — |
 | `billing_progress` | array[object] | no | no | [] | — |
 | `billing_progress[].line_id` | string | yes | no | — | — |
 | `billing_progress[].root_document_id` | string | yes | no | — | — |
@@ -3249,6 +3295,8 @@ Example JSON output:
     "total_minor_units": 1,
     "transaction_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
   },
+  "source_current": null,
+  "source_effect": null,
   "status": "posted",
   "subtotal": {
     "amount": "value",

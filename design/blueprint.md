@@ -482,6 +482,9 @@ Table `company_info` in company.db, exactly one row. This table and the rollout 
 | default_ship_method_id | nullable active ship-method default |
 | free_on_board | nullable default free-on-board location text for later sales forms |
 | order_printable_checks | default printable-check ordering preference inherited by accounts whose override is null; default false |
+| estimates_enabled | strict non-null boolean, default true; controls new estimates, preserving existing estimate workflows |
+| progress_billing_enabled | strict non-null boolean, default true; controls partial billing, preserving complete remaining lines and explicit bounded recovery |
+| close_estimates_after_billing | strict non-null boolean, default false; effective only with progress disabled, makes direct estimates inactive on final positive net billing |
 
 `company show` returns every setting above. `company update` accepts every non-derived setting, including the Row 5 flags and employee-requirement array, under the existing company-info version contract. Reference defaults require active targets when set, may be cleared, and retain readable inactive targets until changed. Cross-field validation rejects `prompt_for_class` unless classes are enabled, a default tax item unless sales tax is enabled and the item is a tax item/group, disabling sales tax while a default tax item remains set, or unit defaults inconsistent with the selected mode. Every successful change uses the ordinary company audit event and appears on the generated company workbench form.
 

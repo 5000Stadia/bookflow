@@ -586,15 +586,25 @@ def _fingerprint(s, inp, kind, operation, value, source, warnings):
         content['facts']['actual_end'] = '$command_time'
     token = dict(company=s.company_row['id'], kind=kind, operation=operation,
         source_revision=source['id'] if source else None, value=content, warnings=warnings)
+    new_estimate = operation == 'estimate' or (kind == 'estimate' and operation in ('create', 'copy'))
+    if new_estimate:
+        from bookflow.company import work_preferences as policy
+        token['preferences'] = dict(estimates_enabled=policy.preferences(s).estimates_enabled)
     digest = hashlib.sha256(json_text(token).encode()).hexdigest()
     if inp.expected_facts_fingerprint is not None and inp.expected_facts_fingerprint != digest:
-        raise BookflowError('E_PREVIEW_STALE', details={'facts_fingerprint': digest})
+        details = {'facts_fingerprint': digest}
+        if new_estimate:
+            details['preference_changes'] = policy.changes(s, ['estimates_enabled'])
+        raise BookflowError('E_PREVIEW_STALE', details=details)
     return digest
 
 
 def prepare(s, ctx, inp, kind, operation):
     if operation in ('copy', 'estimate', 'work-order'):
         return _prepare_destination(s, ctx, inp, kind, operation)
+    if kind == 'estimate' and operation == 'create':
+        from bookflow.company.work_preferences import require_estimates
+        require_estimates(s)
     old = resolve(s, getattr(inp, kind), kind) if operation != 'create' else None
     old_rev = revision(s, old) if old else None
     if old:
@@ -676,6 +686,9 @@ def _prepare_destination(s, ctx, inp, kind, operation):
             return Plan(WorkWriteOutput(**output(s, destination, revision(s, destination), ctx=ctx).model_dump(),
                 changed=False, idempotent_replay=True), dict(input=inp, kind=kind, operation=operation, changed=False))
     _version(s, source, inp.expected_version)
+    if destination_kind == 'estimate':
+        from bookflow.company.work_preferences import require_estimates
+        require_estimates(s)
     if relation != 'copy' and not source['active']:
         raise BookflowError('E_INACTIVE_REFERENCE', details={'record_type': kind, 'record_id': source['id']})
     if relation == 'proposal_estimate' and source['status'] not in ('draft', 'open', 'accepted'):

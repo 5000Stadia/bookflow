@@ -30,6 +30,17 @@ def label(field: str) -> str:
     return LABELS.get(field, field.removesuffix("_id").replace("_", " ").replace(".", " · ").capitalize())
 
 
+def company_form_groups(leaves):
+    preferences = {'estimates_enabled', 'progress_billing_enabled', 'close_estimates_after_billing'}
+    labels = dict(estimates_enabled='Create estimates', progress_billing_enabled='Enable progress billing',
+        close_estimates_after_billing='Make estimates inactive after final billing (only with progress billing off)')
+    for leaf in leaves:
+        if leaf['path'] in labels:
+            leaf['label'] = labels[leaf['path']]
+    return [dict(title=title, open=True, leaves=[leaf for leaf in leaves if (leaf['path'] in preferences) == selected])
+        for title, selected in [('Customer work preferences', True), ('Company information', False)]]
+
+
 def customer_form_groups(leaves: list[dict[str, Any]]) -> list[dict[str, Any]]:
     groups: list[dict[str, Any]] = []
     placed: set[str] = set()

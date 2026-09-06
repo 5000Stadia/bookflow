@@ -403,6 +403,9 @@ class CompanyNewInput(BaseModel):
     sales_tax_remittance_frequency: Literal["monthly", "quarterly", "annually"] = "quarterly"
     free_on_board: str | None = Field(None, max_length=128, description="Default free-on-board location for later sales forms")
     order_printable_checks: bool = Field(False, description="Company default for ordering printable checks")
+    estimates_enabled: bool = Field(True, strict=True, description="Enable new estimates; existing estimate workflows remain available")
+    progress_billing_enabled: bool = Field(True, strict=True, description="Enable partial work billing; disabling retains remaining-line and bounded recovery billing")
+    close_estimates_after_billing: bool = Field(False, strict=True, description="Make estimates inactive after final positive net billing; effective only while progress billing is disabled")
 
     @field_validator("display_name", "tax_id", "industry", "contact_name", "phone", "fax", "email", "website", "timezone", "organization", "free_on_board", mode="before")
     @classmethod
@@ -493,6 +496,9 @@ def _info_columns(inp: CompanyNewInput) -> dict[str, Any]:
         "sales_tax_remittance_frequency": inp.sales_tax_remittance_frequency,
         "default_ship_method_id": None, "free_on_board": inp.free_on_board,
         "order_printable_checks": inp.order_printable_checks,
+        "estimates_enabled": inp.estimates_enabled,
+        "progress_billing_enabled": inp.progress_billing_enabled,
+        "close_estimates_after_billing": inp.close_estimates_after_billing,
     }
     for prefix, a in (("address", addr), ("legal_address", legal), ("ship_address", ship)):
         for f in ("line1", "line2", "city", "state", "postal_code", "country"):

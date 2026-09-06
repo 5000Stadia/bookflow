@@ -111,6 +111,9 @@ def source_effects():
     billed('REF-PROG-INV-5', '2026-09-28', 'Accounts Receivable', [('original', line(20000) + line(25) + line(35))])
     billed('REF-PROG-SR-1', '2026-09-24', 'Checking', [('original', line(5000))])
     billed('REF-PROG-INV-7', '2026-09-29', 'Accounts Receivable', [('original', line(15000))])
+    # Preference example: exempt $10 invoice and exact same-date reversal.
+    billed('REF-PREF-INV-1', '2026-10-02', 'Accounts Receivable', [('original',
+        [('{control}', 1000, 0), ('Service Income', 0, 1000)])])
     return rows
 
 

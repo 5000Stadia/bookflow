@@ -13,6 +13,7 @@ from bookflow.core.ids import new_id
 from bookflow.core.errors import BookflowError
 from bookflow.core.registry import Plan, Applied, Touched
 from bookflow.hub.access import require_resource
+from bookflow.company import work_preferences as policy
 
 
 def dependency(problem, **details):
@@ -41,6 +42,7 @@ def source_selection(s, inp, kind):
     rev = work.revision(s, header)
     lines = work.saved_lines(s, rev)
     identities = query.root_identities(s, header)
+    policy.check_selection(s, inp, header, rev, lines, identities)
     from bookflow.company.billing_selection import select
     return header, rev, select(s, inp, header, rev, lines, identities)
 
@@ -168,10 +170,12 @@ def resolve_commercial(s, inp, document_type, *, document_id, kind):
     consumption = consumption_fingerprint(s, source_roots)
     fingerprint = hashlib.sha256(sales.json_text(dict(company=s.company_row['id'], type=document_type,
         source_revision=rev['id'], source_version=header['version'],
-        roots=[root for _, root, _ in selected], consumption=consumption, content=semantic, warnings=warnings)).encode()).hexdigest()
+        roots=[root for _, root, _ in selected], consumption=consumption, content=semantic, warnings=warnings,
+        preferences=policy.financial_projection(s, kind))).encode()).hexdigest()
     if inp.expected_facts_fingerprint and inp.expected_facts_fingerprint != fingerprint:
         raise BookflowError('E_PREVIEW_STALE', details=dict(facts_fingerprint=fingerprint,
-            consumption_changes=query.latest_consumption_changes(s, source_roots)))
+            consumption_changes=query.latest_consumption_changes(s, source_roots),
+            preference_changes=policy.changes(s, policy.financial_fields(s, kind))))
     if document_type == 'sales_receipt' and money(inp.amount_received, rev['currency'], 'amount_received').minor_units != total:
         raise _invalid('amount_received', 'must equal the exact gross amount of the selected work')
     if document_type == 'invoice':
@@ -193,8 +197,15 @@ def replay_plan(s, ctx, inp, kind, destination):
             raise BookflowError('E_CONVERSION_KEY_REUSED', details={'destination_id': saved['destination_transaction_id']})
         header = sales.resolve(s, saved['destination_transaction_id'], destination)
         revision = sales.journals.revision(s, header)
+        source = work.resolve(s, saved['source_document_id'], kind)
+        before = work.rows(s, c.work_revisions, c.work_revisions.c.id == saved['source_revision_id'])[0]
+        after = work.rows(s, c.work_revisions,
+            c.work_revisions.c.document_id == source['id'],
+            c.work_revisions.c.supersedes_revision_id == before['id'])[0]
         return Plan(SalesWriteOutput(**sales.summary(header, revision, sales.profile_row(s, revision)),
-            revision=sales.revision_output(s, revision), changed=False, idempotent_replay=True),
+            revision=sales.revision_output(s, revision), changed=False, idempotent_replay=True,
+            source_effect=source_effect(source, before, after, saved['source_version']),
+            source_current=source_current(source)),
             dict(changed=False, input=inp, kind=kind, destination=destination))
     if work.rows(s, c.work_links, c.work_links.c.conversion_key_hash == key):
         raise BookflowError('E_CONVERSION_KEY_REUSED', details={'problem': 'key already belongs to an operational conversion'})
@@ -213,7 +224,10 @@ def prepare(s, ctx, inp, kind, destination):
     provenance = dict(created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
     current = dict(source, version=source['version'] + 1, updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
     pending_work = {table: [] for table, _ in work.TABLE_KINDS}
-    work._new_revision(s, ctx, current, work._semantic(source_rev, work.saved_lines(s, source_rev)),
+    source_value = work._semantic(source_rev, work.saved_lines(s, source_rev))
+    if policy.closes(s, source, source_rev, sale.preview.subtotal_minor_units):
+        source_value['active'] = False
+    work._new_revision(s, ctx, current, source_value,
         json.loads(source_rev['custom_fields_snapshot']), source_rev, pending_work, event, at,
         acceptance={key: source_rev[key] for key in ('accepted_revision_id', 'accepted_at', 'accepted_by')})
     key, request = hashes(inp, kind, destination)
@@ -239,11 +253,27 @@ def prepare(s, ctx, inp, kind, destination):
     data.update(kind=kind, destination=destination, billing_allocations=allocations,
         billing_conversion=conversion, work_header=current, work_before=source, work_pending=pending_work)
     sale.preview.revision.billing_sources = query.sale_source_output(s, rev['id'], allocations)
+    sale.preview.source_effect = source_effect(source, source_rev, pending_work['work_revisions'][0], source['version'])
+    sale.preview.source_current = source_current(current)
     from bookflow.company.billing_validation import validate
     validate(sale, s, ctx)
     from bookflow.company.billing_progress import projection
     sale.preview.billing_progress = projection(s, source, source_rev, allocations)
     return sale
+
+
+def source_effect(source, before, after, version):
+    from bookflow.company.sales_outputs import WorkBillingSourceEffect
+    return WorkBillingSourceEffect(source_id=source['id'], source_kind=source['kind'],
+        version_before=version, version_after=version + 1,
+        active_before=before['active'], active_after=after['active'],
+        automatically_closed=before['active'] and not after['active'])
+
+
+def source_current(source):
+    from bookflow.company.sales_outputs import WorkBillingCurrent
+    return WorkBillingCurrent(source_id=source['id'], version=source['version'],
+        active=source['active'], status=source['status'])
 
 
 def replay_conversion(s, ctx, inp, kind, destination, hit):

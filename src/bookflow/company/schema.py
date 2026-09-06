@@ -199,6 +199,9 @@ company_info = _table(
     _column("default_ship_method_id", sa.String(26), "Default active shipping-method id; null when unset.", sa.ForeignKey("ship_methods.id", ondelete="RESTRICT"), nullable=True),
     _column("free_on_board", sa.String(128), "Default free-on-board text for later sales forms; null when unset.", nullable=True),
     _column("order_printable_checks", sa.Boolean, "Company default for ordering printable checks.", nullable=False, default=False),
+    _column("estimates_enabled", sa.Boolean, "Enable new estimates; existing estimate workflows remain available.", nullable=False, server_default="1"),
+    _column("progress_billing_enabled", sa.Boolean, "Enable partial quantity, amount, percentage and exact rebill selections.", nullable=False, server_default="1"),
+    _column("close_estimates_after_billing", sa.Boolean, "Make estimates inactive after final positive net billing, effective only with progress billing disabled.", nullable=False, server_default="0"),
     description="Authoritative company identity, contact, calendar, currency, and accounting settings.",
 )
 

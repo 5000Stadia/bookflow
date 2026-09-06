@@ -93,6 +93,7 @@ def latest_consumption_changes(s, roots):
 
 
 def billing(s, ctx, inp, kind):
+    from bookflow.company import work_preferences as policy
     from bookflow.company.query import page_state, continuation
     source = work.resolve(s, getattr(inp, kind), kind)
     owner = current_owner(s, source)
@@ -115,7 +116,9 @@ def billing(s, ctx, inp, kind):
                  'nonbillable' if not lf.billable else 'no_charge' if free_net == 0 else 'unbilled')
         remaining_net = free_net if lf.billable else 0
         remaining_tax = sum(calc.tax(remaining_net,t.rule.rate_percent_millionths) for t in lf.taxes)
+        recovery, recommendation = policy.recovery(s, root, lf, rev['currency'])
         rendered.append(dict(line_id=line['line_id'], source_line_id=line['id'], root_document_id=root[0],
+            requires_bounded_recovery=recovery, recommended_net_amount=recommendation,
             root_line_id=root[1], item_id=lf.item_id, description=lf.description, billable=lf.billable, state=state,
             quantity=quantity(lf.quantity_microunits), completed_quantity=quantity(lf.completed_quantity_microunits),
             billed_quantity=math.format_fraction(billed_quantity),
@@ -148,6 +151,8 @@ def billing(s, ctx, inp, kind):
     eligible = owner['active'] and (owner['status'] == 'accepted' if owner['kind'] == 'estimate' else owner['status'] != 'cancelled')
     can_bill = eligible and any(line['billable'] and line['remaining_net_minor_units'] > 0 for line in rendered)
     warnings = []
+    if not owner['active'] and any(line['remaining_net_minor_units'] > 0 for line in rendered):
+        warnings.append('Released or remaining work is available, but the inactive source must be explicitly reactivated before rebilling.')
     if source['id'] != owner['id']:
         warnings.append('This estimate has a work order; continue billing from that work order.')
     if any(line['billed_tax_minor_units'] + line['remaining_tax_minor_units'] != line['tax_minor_units']
@@ -158,6 +163,8 @@ def billing(s, ctx, inp, kind):
     if any(line['state'] == 'no_charge' for line in rendered) and not any(line['remaining_net_minor_units'] > 0 for line in rendered):
         warnings.append('No charge remains; zero-price lines were not invoiced.')
     return BillingOutput(source_id=source['id'], source_kind=kind, source_version=source['version'],
+        preferences=policy.preferences(s), closes_on_remaining_bill=bool(can_bill and source['id'] == owner['id']
+            and kind == 'estimate' and policy.preferences(s).auto_close_effective),
         source_revision_id=source['current_revision_id'], owner_id=owner['id'], owner_kind=owner['kind'],
         owner_version=owner['version'], currency=rev['currency'], lines=rendered, destinations=destinations,
         count=len(found), has_more=more, next_cursor=continuation(state, len(found), more), audit_watermark=state.sequence,

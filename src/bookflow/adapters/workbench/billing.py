@@ -29,7 +29,7 @@ def selection(raw, form):
                 if key.startswith('billing-line:') and value == '1']
     if mode == 'percent':
         result['percent'] = form.get('billing-percent', '')
-    elif mode in ('selected', 'partial'):
+    elif mode in ('selected', 'partial', 'recovery'):
         if not selected:
             raise BookflowError('E_VALIDATION', details={'fields': [{'field': 'line_ids',
                 'problem': 'Select at least one source line.'}]})
@@ -38,10 +38,10 @@ def selection(raw, form):
         else:
             result['selections'] = []
             for identity in selected:
-                kind = form.get('billing-mode:' + identity, 'quantity')
+                kind = 'net_amount' if mode == 'recovery' else form.get('billing-mode:' + identity, 'quantity')
                 if kind not in ('quantity', 'net_amount', 'percent', 'rebill_allocation_id'):
                     raise BookflowError('E_VALIDATION', message='Choose quantity, net, scope percent or an earlier allocation.')
-                value = form.get(('billing-rebill:' if kind == 'rebill_allocation_id' else 'billing-value:') + identity, '')
+                value = form.get(('billing-recovery:' if mode == 'recovery' else 'billing-rebill:' if kind == 'rebill_allocation_id' else 'billing-value:') + identity, '')
                 result['selections'].append({'line_id': identity, kind: value})
     elif mode != 'remaining':
         raise BookflowError('E_VALIDATION', message='Choose a billing selection mode.')

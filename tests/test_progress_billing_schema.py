@@ -24,6 +24,12 @@ BASE = '45cfd75e95eccdc41881bea82fbafc17c8e604b9'
 TABLES = ('sales_line_profiles', 'work_billing_allocations')
 
 
+@pytest.fixture(autouse=True)
+def historical_co12_target(monkeypatch):
+    """This module witnesses co0011→co0012, including unchanged unrelated rows."""
+    monkeypatch.setitem(HEADS, 'company', 'co0012')
+
+
 def insert(raw, table, row, replace=False):
     raw.execute(f'INSERT {"OR REPLACE " if replace else ""}INTO {table} ({",".join(row)}) VALUES ({",".join("?" for _ in row)})', tuple(row.values()))
 

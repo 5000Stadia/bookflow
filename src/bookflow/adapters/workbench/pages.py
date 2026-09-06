@@ -400,6 +400,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         company_view = getattr(request.state, "workbench_company", None)
         if company_view and company_view["company_id"] == (ctx.get("company_id") or ctx.get("header_company_id")):
             ctx["company_label"] = company_view["display_name"]
+            if _role_allows(registry.get('company update'), company_view, hub_admin=credential(request).hub_admin):
+                ctx.setdefault('preferences_settings_url', f"/c/{company_view['company_id']}/company/self/update")
         flash_id = request.query_params.get("flash")
         if flash_id:
             try:
@@ -408,6 +410,15 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 pass
             else:
                 ctx.setdefault("flash_result", flashes.take(flash_id, session_token))
+        if ctx.get('flash_result') and ctx['flash_result']['result'].get('source_effect'):
+            saved = ctx['flash_result']['result']
+            source_id = saved['source_effect']['source_id']
+            source_kind = saved['source_effect']['source_kind'].replace('_', '-')
+            # Replay receipt effect is immutable; availability is an authorized current read.
+            latest = run(request, source_kind + ' show', {source_kind.replace('-', '_'): source_id}, ctx.get('company_id'))
+            saved['source_current'] = dict(source_id=source_id, version=latest['version'], active=latest['active'], status=latest['status'])
+            ctx['billing_reactivate_allowed'] = bool(company_view and _role_allows(
+                registry.get(source_kind + ' update'), company_view, hub_admin=credential(request).hub_admin))
         tpl = env.get_template(name)
         response = HTMLResponse(tpl.render(request=request, static_urls=static_urls, hub_nouns=_nouns("hub"), company_nouns=_nouns("company"), json=json, **ctx),
                                 status_code=status_code)
@@ -706,6 +717,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         if role_view is not None:
             page_verbs = [cmd for cmd in page_verbs
                           if not cmd.is_write or _role_allows(cmd, role_view, hub_admin=cred.hub_admin)]
+            if not role_view.get('info', {}).get('estimates_enabled', True):
+                page_verbs = [cmd for cmd in page_verbs if cmd.name not in ('estimate create', 'estimate copy', 'proposal estimate')]
         else:
             page_verbs = [cmd for cmd in page_verbs if _role_allows(cmd, {}, hub_admin=cred.hub_admin)]
         meta = _noun_meta(noun)
@@ -843,6 +856,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return page_error(request, e)
         verbs = [c for c in _verbs(command_noun, "company" if company_id else "hub")
                  if c.verb not in ("list", "show", "new", "create") and _role_allows(c, role_view, hub_admin=cred.hub_admin)]
+        if company_id and not company_view.get('info', {}).get('estimates_enabled', True):
+            verbs = [cmd for cmd in verbs if cmd.name not in ('estimate copy', 'proposal estimate')]
         if command_noun == "customer":
             verbs = [
                 command
@@ -1043,6 +1058,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     return page_error(request, BookflowError('E_VALIDATION', details={'fields': [{'field': 'limit', 'problem': 'must be an integer'}]}))
                 except BookflowError as err:
                     return page_error(request, err, restart_url=request.url.path)
+        if request.method == 'GET' and authorized_company and not authorized_company['info']['estimates_enabled'] and cmd.name in ('estimate create', 'estimate copy', 'proposal estimate'):
+            from bookflow.company.work_preferences import disabled_error
+            return page_error(request, disabled_error('estimates', [change for change in authorized_company['preference_changes']
+                if change['field'] == 'estimates_enabled']), company_id=company_id)
         billing = None
         if noun in ('estimate', 'work-order') and record_id and (verb == 'billing' or Billing.is_conversion(noun, verb)):
             try:
@@ -1356,7 +1375,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       preview=preview, get=F.get_path, form_value=F.form_value,
                       return_context=return_context, workflow_note=workflow_note,
                       reference_values=reference_values,
-                      form_groups=Work.form_groups(described) if noun in Work.NOUNS and cmd.is_write else W.customer_form_groups(described) if noun == "customer" and verb in ("create", "update") else None)
+                      preferences_settings_url=f'/c/{company_id}/company/self/update' if authorized_company and _role_allows(registry.get('company update'), authorized_company, hub_admin=cred.hub_admin) else None,
+                      form_groups=Work.form_groups(described) if noun in Work.NOUNS and cmd.is_write else W.customer_form_groups(described) if noun == "customer" and verb in ("create", "update") else W.company_form_groups(described) if noun == 'company' and verb in ('new', 'update') else None)
 
     def contact_copy_page(
         request: Request,

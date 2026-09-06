@@ -48,6 +48,13 @@ Amounts in the expected file are USD integer minor units, signed debit minus
 credit. `gross_debits_credits` arrays are `[debits, credits]` before netting.
 Read either installed resource through `importlib.resources.files("bookflow.demo")`.
 
+The preference example appends an exempt10.00 invoice on October2 and its exact
+same-date void. Each of Accounts Receivable and Service Income gains1000 in both
+gross debits and gross credits from October onward; all net balances are unchanged.
+The retained accepted estimate is explicitly reactivated and company preferences
+return to their defaults. The example belongs to Preference Example Customer and
+uses the REF-PREF- prefix (DEMO-PREF- in the main demo).
+
 All source dates are in **2026**. These are explicit domestic journals:
 
 | Date | Debit | Credit | USD minor units |

@@ -40,7 +40,7 @@ def _register(kind, prefix):
             positional=[] if verb in ('create', 'query') else [kind], clearable=verb == 'update',
             version_source=(noun + ' show', kind, 'version') if write and verb != 'create' else None,
             error_codes=['E_RECORD_NOT_FOUND'] + (['E_VERSION_CONFLICT', 'E_DUPLICATE_NUMBER', 'E_INACTIVE_REFERENCE',
-                'E_VALUE_RANGE', 'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED', 'E_PREVIEW_STALE', 'E_WORK_DEPENDENCY',
+                'E_VALUE_RANGE', 'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED', 'E_PREVIEW_STALE', 'E_WORK_DEPENDENCY', 'E_FEATURE_DISABLED',
                 'E_CONVERSION_KEY_REUSED'] if write else ['E_QUERY_STALE']),
         )(planner)
         if write:

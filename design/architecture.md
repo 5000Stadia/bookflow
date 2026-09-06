@@ -38,7 +38,7 @@ src/bookflow/
     traced_sqlite.py      capture-enabled per-connection native subclasses; bounded statement classification, execute/fetch/transaction timing, caller factories preserved
     migrate.py           HEADS constants; classify(); backup via sqlite backup API; migrate_to_head(); Alembic loaded only when migrating
     hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection), hub0007 (note capabilities), hub0008 (attachment/activity capabilities), hub0009 (agent principal assignments, authority epochs and credential conversion), hub0010 (ledger and report capabilities), hub0011 (customer-work read/write role defaults)
-    company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit/presence/directives), co0003 (20 supporting lists), co0004 (job delivery inheritance), co0005 (notes), co0006 (attachments, links, collection intent, byte limit), co0007 (journal identities, immutable revisions and postings, numbering prefix, private report cursor key), co0008 (journal header custom ownership), co0009 (commercial sales), co0010 (nonposting customer work and preserving custom scope CHECK widening), co0011 (immutable linked billing and preserving sales amount-price widening), co0012 (exact progress allocation proofs, fractional sales quantities and overlap guards)
+    company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit/presence/directives), co0003 (20 supporting lists), co0004 (job delivery inheritance), co0005 (notes), co0006 (attachments, links, collection intent, byte limit), co0007 (journal identities, immutable revisions and postings, numbering prefix, private report cursor key), co0008 (journal header custom ownership), co0009 (commercial sales), co0010 (nonposting customer work and preserving custom scope CHECK widening), co0011 (immutable linked billing and preserving sales amount-price widening), co0012 (exact progress allocation proofs, fractional sales quantities and overlap guards), co0013 (company work preferences)
     migrate.py           + migrate_company(): the one owner of company migrations: migrate entry by the system user, baseline entry, marker, hub projection entry
   hub/
     schema.py            users, api_tokens, agent_principals, agent_authority, organizations, companies, memberships, role_capabilities, features, audit_events, audit_entries; co-located table and column descriptions
@@ -581,3 +581,50 @@ allocation rows store basis hashes and bounded canonical spans with 160-bit hex
 coordinates. SQL guards reject malformed proofs, incompatible active bases and
 overlap on allocation insertion or sale revision activation. Version1 allocations
 retain whole-root meaning and existing conversion keys retain their request bytes.
+
+## Customer work preferences
+
+Company co0013 appends estimates_enabled=true, progress_billing_enabled=true and
+close_estimates_after_billing=false without rebuilding company_info. Creation and
+versioned company updates expose strict booleans; explicit null rejects.
+company/work_preferences.py projects stored/effective policy, per-setting audit
+provenance, estimate-entry gates and exact bounded-recovery eligibility. Creation
+controls leave existing source history, financial billing and work orders available.
+
+Disabled progress permits remaining work, selected complete remaining lines and
+net-only recovery of the exact current recommendation for roots with more than200
+free spans. Recovery output is current guidance, never a reservation. A failed
+net-only recovery with a fingerprint returns E_PREVIEW_STALE before range resolution;
+without one it returns E_FEATURE_DISABLED. Other partial modes reject disabled
+before fingerprint comparison. Authority and source-version checks precede policy.
+Preference attribution identifies each field's latest actual edit, with creation
+provenance for never-edited fields, separately from allocation/release attribution.
+Company show exposes these authorized latest preference changes so blocked browser
+entry routes can render the shared disabled-feature error before displaying a form.
+Settings links remain limited to company administrators.
+
+Financial fingerprints include progress enablement and effective closure for direct
+estimates. Estimate enablement and dormant close settings are excluded. New estimate
+operations fingerprint estimate enablement alone. Permanent request hashes retain
+their original serialization and committed replay precedes new-work gates.
+
+Final positive billable net billing directly from an accepted active estimate makes
+it inactive only with progress disabled and automatic closure enabled. Billing's
+existing single source revision carries that change atomically. billing_validation.py
+reconstructs required closure from all current roots, current policy and independently
+validated pending allocations; it rejects omitted or spurious closure. Acceptance,
+status and every other captured source fact remain unchanged. Work orders never close
+their upstream estimate. Voiding a bill releases scope without reactivation.
+
+SalesWriteOutput.source_effect is the conversion's immutable before/after availability
+and versions; source_current is separately authorized current availability. Replay
+reconstructs the original effect from adjacent immutable source revisions. Ordinary
+sale writes return null for both. Browser forms show conditional closure and retained
+history, independent of payment and physical completion.
+
+Both seeds retain their exact283/189command prefixes and append12 preference commands.
+Each exempt10.00 invoice ends voided and its estimate is explicitly reactivated;
+settings return to defaults. Reference gross debits and credits each increase1000 on
+AR and Service Income from October2 onward, including annual and second-half totals.
+All reference net values remain unchanged. The reference source-effect oracle derives
+these four legs independently; Row18's manifest witness remains scoped to its41commands.

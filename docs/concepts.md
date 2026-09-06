@@ -264,6 +264,47 @@ workflows and are not performed by these commands.
 
 ## Customer work documents
 
+Company new and company update expose three strict non-null booleans:
+`estimates_enabled` (default true), `progress_billing_enabled` (default true), and
+`close_estimates_after_billing` (default false). Update omission preserves each saved
+value; strings, numbers and explicit null are rejected. Company show returns the
+stored settings. Company updates retain admin authority and info_version concurrency.
+
+Disabling estimates blocks new estimate create/copy and proposal-to-estimate entry
+with E_FEATURE_DISABLED. Existing estimate reads, history, acceptance, corrections,
+availability, work-order conversion and billing retain their usual authority.
+Disabling progress permits all remaining work or complete remaining selected line_ids.
+It rejects ordinary quantity, amount, percentage and exact rebill selections. For a
+root with more than200 free spans, billing reads expose requires_bounded_recovery
+and a positive recommended_net_amount. A net-only selection of that exact current
+recommendation is the explicit bounded recovery exception; additional bills may be
+needed. Each selection remains bounded to200spans and each conversion to2,000.
+
+Automatic closure is effective only with progress disabled and the saved close setting
+true. A direct estimate invoice or paid receipt consuming the final positive billable
+net makes its active accepted estimate inactive in the same source revision and
+transaction. Earlier selected/recovery bills do not close it. Accepted history is
+retained; inactivity does not mean physical completion or invoice payment. Work orders
+never close upstream estimates. A void releases scope without reactivation; explicitly
+reactivate the source before a new bill. Settings changes alone never change documents.
+
+Billing outputs include the stored preferences and auto_close_effective policy, plus
+closes_on_remaining_bill. Conversion preview/results include source_effect (the
+immutable conversion change) and source_current (current availability). Matching
+authorized permanent retries return the original conversion effect and current source
+state before new-work gates, including after manual reactivation. Changed requests
+under old keys still reject; legacy request serialization is unchanged.
+
+Relevant policy changes stale financial previews: fingerprints include progress
+enablement and effective closure only for direct estimates. Estimate enablement and
+dormant saved closure are excluded. Disabled ordinary partial modes reject before
+fingerprint checks. Failed net-only recovery with an expected fingerprint returns
+E_PREVIEW_STALE; without one it returns E_FEATURE_DISABLED with the current recovery
+constraint. Both expose latest relevant preference_changes, attributed to actual
+per-field edits or creation, separately from consumption_changes. These are latest
+authorized facts, not an asserted diff from an opaque preview. Authority/source-version
+checks precede policy; receipt-total confirmation follows eligibility and preview facts.
+
 Proposals and statements of work describe agreed scope. Estimates quote exact
 home-currency service, nonstock and fixed-charge lines. Work orders record planned
 and completed work. These documents do not post revenue, expenses, receivables,

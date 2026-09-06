@@ -160,7 +160,26 @@ class BillingProgressLine(StrictModel):
     remaining: BillingProgressAmount
 
 
+class WorkBillingSourceEffect(StrictModel):
+    source_id: str
+    source_kind: Literal['estimate', 'work_order']
+    version_before: int
+    version_after: int
+    active_before: bool
+    active_after: bool
+    automatically_closed: bool
+
+
+class WorkBillingCurrent(StrictModel):
+    source_id: str
+    version: int
+    active: bool
+    status: str
+
+
 class SalesWriteOutput(SalesOutput, WriteOutput):
+    source_effect: WorkBillingSourceEffect | None = None
+    source_current: WorkBillingCurrent | None = None
     billing_progress: list[BillingProgressLine] = Field(default_factory=list)
     facts_fingerprint: str | None = None
     changed: bool = True

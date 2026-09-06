@@ -687,6 +687,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `source_effect` | object \| null | no | yes | null | — |
+| `source_effect.source_id` | string | yes | no | — | — |
+| `source_effect.source_kind` | literal["estimate", "work_order"] | yes | no | — | — |
+| `source_effect.version_before` | integer | yes | no | — | — |
+| `source_effect.version_after` | integer | yes | no | — | — |
+| `source_effect.active_before` | boolean | yes | no | — | — |
+| `source_effect.active_after` | boolean | yes | no | — | — |
+| `source_effect.automatically_closed` | boolean | yes | no | — | — |
+| `source_current` | object \| null | no | yes | null | — |
+| `source_current.source_id` | string | yes | no | — | — |
+| `source_current.version` | integer | yes | no | — | — |
+| `source_current.active` | boolean | yes | no | — | — |
+| `source_current.status` | string | yes | no | — | — |
 | `billing_progress` | array[object] | no | no | [] | — |
 | `billing_progress[].line_id` | string | yes | no | — | — |
 | `billing_progress[].root_document_id` | string | yes | no | — | — |
@@ -863,6 +876,8 @@ Example JSON output:
     "total_minor_units": 1,
     "transaction_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
   },
+  "source_current": null,
+  "source_effect": null,
   "status": "posted",
   "subtotal": {
     "amount": "value",
@@ -2220,6 +2235,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `source_effect` | object \| null | no | yes | null | — |
+| `source_effect.source_id` | string | yes | no | — | — |
+| `source_effect.source_kind` | literal["estimate", "work_order"] | yes | no | — | — |
+| `source_effect.version_before` | integer | yes | no | — | — |
+| `source_effect.version_after` | integer | yes | no | — | — |
+| `source_effect.active_before` | boolean | yes | no | — | — |
+| `source_effect.active_after` | boolean | yes | no | — | — |
+| `source_effect.automatically_closed` | boolean | yes | no | — | — |
+| `source_current` | object \| null | no | yes | null | — |
+| `source_current.source_id` | string | yes | no | — | — |
+| `source_current.version` | integer | yes | no | — | — |
+| `source_current.active` | boolean | yes | no | — | — |
+| `source_current.status` | string | yes | no | — | — |
 | `billing_progress` | array[object] | no | no | [] | — |
 | `billing_progress[].line_id` | string | yes | no | — | — |
 | `billing_progress[].root_document_id` | string | yes | no | — | — |
@@ -2396,6 +2424,8 @@ Example JSON output:
     "total_minor_units": 1,
     "transaction_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
   },
+  "source_current": null,
+  "source_effect": null,
   "status": "posted",
   "subtotal": {
     "amount": "value",
@@ -2936,6 +2966,19 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].tax_components[].component_snapshot.liability_account.number` | string \| null | yes | yes | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.type` | string | yes | no | — | — |
 | `revision.lines[].tax_components[].component_snapshot.liability_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `source_effect` | object \| null | no | yes | null | — |
+| `source_effect.source_id` | string | yes | no | — | — |
+| `source_effect.source_kind` | literal["estimate", "work_order"] | yes | no | — | — |
+| `source_effect.version_before` | integer | yes | no | — | — |
+| `source_effect.version_after` | integer | yes | no | — | — |
+| `source_effect.active_before` | boolean | yes | no | — | — |
+| `source_effect.active_after` | boolean | yes | no | — | — |
+| `source_effect.automatically_closed` | boolean | yes | no | — | — |
+| `source_current` | object \| null | no | yes | null | — |
+| `source_current.source_id` | string | yes | no | — | — |
+| `source_current.version` | integer | yes | no | — | — |
+| `source_current.active` | boolean | yes | no | — | — |
+| `source_current.status` | string | yes | no | — | — |
 | `billing_progress` | array[object] | no | no | [] | — |
 | `billing_progress[].line_id` | string | yes | no | — | — |
 | `billing_progress[].root_document_id` | string | yes | no | — | — |
@@ -3112,6 +3155,8 @@ Example JSON output:
     "total_minor_units": 1,
     "transaction_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
   },
+  "source_current": null,
+  "source_effect": null,
   "status": "posted",
   "subtotal": {
     "amount": "value",

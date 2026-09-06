@@ -499,6 +499,9 @@ Create a company inside an organization: its folder, database, and company infor
 | `sales_tax_remittance_frequency` | `--sales-tax-remittance-frequency` | literal["monthly", "quarterly", "annually"] | no | no | "quarterly" | — |
 | `free_on_board` | `--free-on-board` | string \| null | no | yes | null | Default free-on-board location for later sales forms |
 | `order_printable_checks` | `--order-printable-checks` | boolean | no | no | false | Company default for ordering printable checks |
+| `estimates_enabled` | `--estimates-enabled` | boolean | no | no | true | Enable new estimates; existing estimate workflows remain available |
+| `progress_billing_enabled` | `--progress-billing-enabled` | boolean | no | no | true | Enable partial work billing; disabling retains remaining-line and bounded recovery billing |
+| `close_estimates_after_billing` | `--close-estimates-after-billing` | boolean | no | no | false | Make estimates inactive after final positive net billing; effective only while progress billing is disabled |
 
 ### Command and context options
 
@@ -769,6 +772,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `path` | string \| null | yes | yes | — | — |
 | `registered_by_name` | string \| null | yes | yes | — | — |
 | `info` | object[string, any] | yes | no | — | — |
+| `preference_changes` | array[object[string, any]] | yes | no | — | — |
 | `info_version` | integer | yes | no | — | — |
 | `info_created_by_name` | string \| null | yes | yes | — | — |
 | `info_updated_by_name` | string \| null | yes | yes | — | — |
@@ -796,6 +800,7 @@ Example JSON output:
   "organization_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "organization_name": "value",
   "path": null,
+  "preference_changes": [],
   "registered_by_name": null,
   "role": null,
   "schema_revision": "current",
@@ -907,6 +912,9 @@ Update the selected company's information; versioned, blind, or merged per the c
 | `default_ship_method_id` | `--default-ship-method-id` | string \| null | no | yes | null | Active default ship method |
 | `free_on_board` | `--free-on-board` | string \| null | no | yes | null | Default free-on-board location |
 | `order_printable_checks` | `--order-printable-checks` | boolean \| null | no | yes | null | Company default for ordering printable checks |
+| `estimates_enabled` | `--estimates-enabled` | boolean | no | no | null | Enable new estimates; omission preserves the saved setting; null rejects |
+| `progress_billing_enabled` | `--progress-billing-enabled` | boolean | no | no | null | Enable partial work billing; disabling retains remaining-line and bounded recovery billing; omission preserves, null rejects |
+| `close_estimates_after_billing` | `--close-estimates-after-billing` | boolean | no | no | null | Make estimates inactive after final positive net billing; effective only while progress billing is disabled; omission preserves, null rejects |
 
 ### Command and context options
 

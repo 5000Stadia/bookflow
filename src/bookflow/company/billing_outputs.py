@@ -4,9 +4,12 @@ from pydantic import Field
 from bookflow.company.sales_models import StrictModel
 from bookflow.company.sales_outputs import SalesSummaryOutput, MoneyOutput
 from bookflow.company.billing_facts import ExactFraction
+from bookflow.company.work_preferences import WorkBillingPreferences
 
 
 class BillingLineOutput(StrictModel):
+    requires_bounded_recovery: bool
+    recommended_net_amount: MoneyOutput | None
     line_id: str
     source_line_id: str
     root_document_id: str
@@ -40,6 +43,8 @@ class BillingDestinationOutput(SalesSummaryOutput):
 
 
 class BillingOutput(StrictModel):
+    preferences: WorkBillingPreferences
+    closes_on_remaining_bill: bool
     source_id: str
     source_kind: str
     source_version: int

@@ -159,6 +159,9 @@ def old_company(client, local=True):
     with open_database(path, writable=True) as db:
         raw = db.raw
         raw.execute('PRAGMA foreign_keys=OFF')
+        # Restore company_info's historical shape too; co0013 owns these columns.
+        for field in ('estimates_enabled', 'progress_billing_enabled', 'close_estimates_after_billing'):
+            raw.execute(f'ALTER TABLE company_info DROP COLUMN {field}')
         objects = raw.execute("SELECT type,name,sql FROM sqlite_schema WHERE type IN ('view','trigger')").fetchall()
         for kind, name, _ in objects:
             raw.execute(f'DROP {kind} "{name}"')
@@ -242,7 +245,7 @@ def test_migration_failure_rolls_back_every_object_and_row(historical_client, mo
 
 def test_fresh_schema_and_revision_local_ddl(tmp_path):
     with open_database(tmp_path / 'fresh.db', writable=True, create=True) as db:
-        assert migrate_to_head(db, 'company', None) == (None, 'co0012')
+        assert migrate_to_head(db, 'company', None) == (None, 'co0013')
         for table in (c.work_billing_allocations, c.work_billing_conversions):
             # Preserving co0012 appends constraints without reordering old DDL.
             # Compare their full semantics, not CREATE TABLE clause order.
@@ -273,7 +276,7 @@ def test_fresh_schema_and_revision_local_ddl(tmp_path):
     ddl = next(n.value for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'DDL' for t in n.targets))
     assert ast.literal_eval(ddl) == MIGRATION.DDL
     assert 'bookflow.company' not in inspect.getsource(MIGRATION)
-    assert HEADS == {'company': 'co0012', 'hub': 'hub0011'}
+    assert HEADS == {'company': 'co0013', 'hub': 'hub0011'}
 
 
 @pytest.mark.parametrize(('basis', 'price', 'valid'), [

@@ -70,3 +70,6 @@ Database: `company`.
 | `default_ship_method_id` | VARCHAR(26) | yes | — | — | ix_company_info_default_ship_method_id | ship_methods.id | Default active shipping-method id; null when unset. |
 | `free_on_board` | VARCHAR(128) | yes | — | — | — | — | Default free-on-board text for later sales forms; null when unset. |
 | `order_printable_checks` | BOOLEAN | no | false | — | — | — | Company default for ordering printable checks. |
+| `estimates_enabled` | BOOLEAN | no | — | — | — | — | Enable new estimates; existing estimate workflows remain available. |
+| `progress_billing_enabled` | BOOLEAN | no | — | — | — | — | Enable partial quantity, amount, percentage and exact rebill selections. |
+| `close_estimates_after_billing` | BOOLEAN | no | — | — | — | — | Make estimates inactive after final positive net billing, effective only with progress billing disabled. |
