@@ -47,6 +47,46 @@ def test_reference_alias_race_has_one_queue_and_one_execution_identity():
     assert store.queue(other)
 
 
+def test_terminal_reservation_does_not_release_active_delivery_capacity():
+    store = Intents()
+    intent = ready(store)
+    store.queue(intent)
+    store.start(intent)
+    store.delivery(intent)
+    recovery = store.reserve_receipt(intent, b'{"ok":true}', {'actor': 'actor'})
+    assert recovery['receipt_available'] and recovery['inspection_available']
+    assert intent.reference in store.active and intent.reference not in store.completed
+    ready(store)
+    with pytest.raises(BookflowError):
+        ready(store)
+    store.finish(intent)
+    assert store.observe(intent.reference, OWNER).receipt == b'{"ok":true}'
+    assert not store.reservations
+
+
+def test_orphaned_result_cleanup_waits_for_actual_callback_and_socket_owner():
+    clock, cleaned = Clock(), []
+    store = Intents(clock=clock)
+    intent = ready(store)
+    intent.cleanup = lambda: cleaned.append(True)
+    store.queue(intent)
+    store.start(intent)
+    clock.now = 1000
+    store.sweep()
+    assert not cleaned and intent.reference in store.active
+    intent.execution_returned = True
+    intent.progress = clock.now
+    store.delivery(intent)
+    intent.workers = 1
+    clock.now += 31
+    store.sweep()
+    assert not cleaned
+    intent.workers = 0
+    store.sweep()
+    assert cleaned == [True]
+    assert store.observe(intent.reference, OWNER).reason == 'execution_result_unavailable'
+
+
 def test_slots_cover_principal_across_tokens_and_companies():
     store = Intents()
     store.admit(OWNER)
@@ -165,7 +205,7 @@ def test_prepared_memory_and_cache_bytes_include_metadata_graphs():
     # The valid direct worker does not park its working model in retained storage.
     intent = store.admit(OWNER)
     store.ready(intent, huge, retain=False)
-    assert intent.prepared_bytes == 0 and intent.frozen is None
+    assert intent.prepared_bytes < 1024 and intent.frozen is None
     store.queue(intent)
     store.start(intent)
     store.finish(intent, receipt=b"x" * (MIB + 1), publication={"guard": "y" * (4 * MIB)})

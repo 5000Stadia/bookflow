@@ -8,6 +8,68 @@ import pytest
 from tests.test_row3_host import hosted, live
 
 
+@pytest.mark.timeout(120)
+def test_real_mcp_receipt_files_preview_upload_download_and_json_artifact(hosted, live, tmp_path):
+    import hashlib
+    import json
+    from mcp import ClientSession
+    from mcp.client.stdio import StdioServerParameters, stdio_client
+    from tests.test_attachment_http import BODY, target
+    record = target(hosted)
+    inbox, outbox = tmp_path / 'inbox', tmp_path / 'outbox'
+    inbox.mkdir(mode=0o700)
+    outbox.mkdir(mode=0o700)
+    receipt = inbox / 'Receipt é.pdf'
+    receipt.write_bytes(BODY)
+    binary = os.environ.get('BOOKFLOW_MCP_TEST_BINARY', str(Path(sys.executable).with_name('bookflow')))
+
+    async def witness():
+        params = StdioServerParameters(command=binary, args=['mcp', '--url', live,
+            '--input-dir', str(inbox), '--output-dir', str(outbox), '--client-name', 'mcp-file-witness'],
+            env={'BOOKFLOW_TOKEN': hosted.secret, 'BOOKFLOW_COMPANY': hosted.company_id,
+                 'BOOKFLOW_DATA_ROOT': str(tmp_path / 'absent')}, cwd=str(tmp_path))
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.discover()
+                async def run(command, data, **options):
+                    reply = await session.call_tool('bookflow_run', {'command': command, 'input': data, **options})
+                    assert not reply.is_error, reply
+                    print('MCP FILE', command, options.get('dry_run', False), 'OK')
+                    return reply
+                data = {'record_type': 'customer', 'record_id': record,
+                        'original_filename': receipt.name, 'media_type': 'application/pdf', 'caption': 'Paid plumbing receipt'}
+                preview = await run('attachment add', data, dry_run=True, reason='Preview receipt',
+                                    transport={'input_file': str(receipt)})
+                assert preview.structured_content['attachment']['sha256'] == hashlib.sha256(BODY).hexdigest()
+                listed = await run('attachment list', {'record_type': 'customer', 'record_id': record})
+                assert listed.structured_content['count'] == 0
+                added = await run('attachment add', data, reason='Save receipt', transport={'input_file': str(receipt)})
+                attachment = added.structured_content['attachment']
+                assert attachment['original_filename'] == receipt.name
+                assert attachment['sha256'] == hashlib.sha256(BODY).hexdigest()
+                destination = outbox / 'retrieved.pdf'
+                downloaded = await run('attachment get', {'attachment': attachment['id']},
+                    transport={'output_file': str(destination)})
+                assert destination.read_bytes() == BODY
+                assert downloaded.structured_content['sha256'] == hashlib.sha256(BODY).hexdigest()
+                assert downloaded.meta['bookflow_delivery']['output_file'] == str(destination)
+                artifact = outbox / 'attachments.json'
+                delivered = await run('attachment list', {'record_type': 'customer', 'record_id': record},
+                                      transport={'result_file': str(artifact)})
+                assert delivered.structured_content['delivery'] == 'complete_json_file'
+                content = artifact.read_bytes()
+                assert hashlib.sha256(content).hexdigest() == delivered.structured_content['sha256']
+                assert json.loads(content)['count'] == 1
+                inspected = await session.call_tool('bookflow_run', {'operation_ref': delivered.structured_content['operation_ref'],
+                    'action': 'inspect', 'pointer': '/count'})
+                assert not inspected.is_error, inspected
+                assert inspected.structured_content['value'] == 1
+                assert not list(outbox.glob('.bookflow-mcp-*'))
+    anyio.run(witness)
+    assert not hosted.handle.host._transfers
+    assert not hosted.handle.host._mcp_runtime.intents.active
+
+
 @pytest.mark.parametrize("protocol", ["legacy", "modern"])
 def test_real_stdio_discovery_help_and_attributed_host_write(hosted, live, tmp_path, protocol):
     from mcp import ClientSession
@@ -40,6 +102,12 @@ def test_real_stdio_discovery_help_and_attributed_host_write(hosted, live, tmp_p
                 full = await call("bookflow_help", {"command": "account list", "view": "full"})
                 assert full["output_schema"]["type"] == "object"
                 assert full["input_schema"] == help_["input_schema"]
+                prepared = await call('bookflow_run', {'command': 'company update', 'input': {'fax': 'frozen intent'},
+                                                      'transport': {'prepare_only': True}})
+                ref = prepared['operation_ref']
+                first = await call('bookflow_run', {'input_ref': ref, 'action': 'execute'})
+                again = await call('bookflow_run', {'operation_ref': ref, 'action': 'execute'})
+                assert again == first
                 accounts = await call("bookflow_run", {"command": "account list", "input": {}, "dry_run": False})
                 assert accounts["count"] == len(accounts["items"]) > 0
                 changed = await call("bookflow_run", {"command": "company update", "input": {"fax": "MCP-witness"}, "reason": "Test installed MCP handoff"})

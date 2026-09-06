@@ -5,6 +5,7 @@
 Start with the agent guide for a complete authenticated HTTP write. Read concepts for the shared behavior behind every command surface, then use the generated references for exact inputs and outputs.
 
 - [Agent guide](agent-guide.md) — install or select the command, start an isolated host, and complete a versioned audited write.
+- [Installed MCP guide](mcp-guide.md) — three-tool discovery, shared business work, receipt files and recovery through the installed launcher.
 - [Reference year](reference-year.md) — opt-in demo reset, source journals and independent report arithmetic.
 - [Concepts](concepts.md) — selection, context, concurrency, audit, identity, money, and error behavior.
 - [Binary transfers](transfers.md) — CLI files, Python streams, HTTP raw bodies, and verified completion.

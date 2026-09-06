@@ -75,6 +75,7 @@ class Intent:
     retained_bytes: int = 0
     reason: str | None = None
     workers: int = 0
+    header: dict = field(default_factory=dict)
 
 
 class Intents:
@@ -86,6 +87,7 @@ class Intents:
         self.lock = threading.RLock()
         self.active = {}
         self.completed = OrderedDict()
+        self.reservations = {}
         self.closed = False
 
     def _expired(self, intent, now):
@@ -95,14 +97,19 @@ class Intents:
         intent = self.active.get(reference) or self.completed.get(reference)
         return intent if intent is not None and intent.owner == owner else None
 
-    def admit(self, owner, *, cleanup=None):
+    def admit(self, owner, *, cleanup=None, header=None):
         self.sweep()
         with self.lock:
             if self.closed or len(self.active) >= 8 or sum(i.owner[2] == owner[2] for i in self.active.values()) >= 2:
                 raise busy()
             now = self.clock()
             intent = Intent(self.generation + "." + secrets.token_urlsafe(24), owner,
-                            now, now, cleanup=cleanup)
+                            now, now, cleanup=cleanup, header=deepcopy(header or {}))
+            intent.prepared_bytes = retained_size(intent.header)
+            total = sum(i.prepared_bytes for i in self.active.values())
+            own = sum(i.prepared_bytes for i in self.active.values() if i.owner[2] == owner[2])
+            if total + intent.prepared_bytes > 64 * MIB or own + intent.prepared_bytes > 8 * MIB:
+                raise busy()
             self.active[intent.reference] = intent
             return intent
 
@@ -137,16 +144,16 @@ class Intents:
 
     def ready(self, intent, frozen, *, retain=True):
         frozen = deepcopy(frozen) if retain else None
-        amount = (retained_size((intent.reference, intent.owner, frozen))
-                  + sys.getsizeof(intent) + sys.getsizeof(intent.__dict__)) if retain else 0
+        amount = (retained_size((intent.reference, intent.owner, intent.header, frozen))
+                  + sys.getsizeof(intent) + sys.getsizeof(intent.__dict__)) if retain else intent.prepared_bytes
         rejected = False
         with self.lock:
             self._preexecution(intent)
             if intent.state not in {"preparing", "receiving"}:
                 raise BookflowError("E_USAGE", details={"reason": "intent_already_sealed"})
             if retain:
-                total = sum(i.prepared_bytes for i in self.active.values())
-                own = sum(i.prepared_bytes for i in self.active.values() if i.owner[2] == intent.owner[2])
+                total = sum(i.prepared_bytes for i in self.active.values() if i is not intent)
+                own = sum(i.prepared_bytes for i in self.active.values() if i is not intent and i.owner[2] == intent.owner[2])
                 if total + amount > 64 * MIB or own + amount > 8 * MIB:
                     intent.abandoned = True
                     intent.reason = "rejected_before_submission"
@@ -189,6 +196,37 @@ class Intents:
             if self.active.get(intent.reference) is not intent or intent.state != "started":
                 raise RuntimeError("Only the execution owner can begin delivery")
             intent.state = "delivering"
+            intent.progress = self.clock()
+
+    def reserve_receipt(self, intent, receipt, publication):
+        """Reserve finite recovery memory before advertising it in a terminal.
+
+        The active delivery slot remains held until finish() after socket cleanup.
+        Reservations cannot be evicted by another delivery or completed-cache trim.
+        """
+        from datetime import datetime, timedelta, timezone
+        unavailable = {"mode": "unavailable", "retained_until": None,
+                       "receipt_available": False, "inspection_available": False}
+        receipt = receipt if isinstance(receipt, bytes) and len(receipt) <= MIB else None
+        values = {"receipt": receipt, "publication": publication}
+        amount = retained_size((intent.header, intent.owner, intent.reference, values)) + 4096
+        if amount > 4 * MIB:
+            return unavailable
+        with self.lock:
+            if self.active.get(intent.reference) is not intent or intent.abandoned or intent.state != "delivering":
+                return unavailable
+            if intent.reference in self.reservations:
+                raise RuntimeError("Delivery recovery is already reserved")
+            self.reservations[intent.reference] = (intent.owner[2], amount, values)
+            self._trim()
+            own = [row for row in self.reservations.values() if row[0] == intent.owner[2]]
+            if (len(self.reservations) > 128 or len(own) > 16
+                    or sum(row[1] for row in self.reservations.values()) > 32 * MIB
+                    or sum(row[1] for row in own) > 4 * MIB):
+                del self.reservations[intent.reference]
+                return unavailable
+            return {"mode": "retained", "retained_until": (datetime.now(timezone.utc) + timedelta(seconds=60)).isoformat().replace('+00:00', 'Z'),
+                    "receipt_available": receipt is not None, "inspection_available": publication is not None}
 
     def finish(self, intent, *, receipt=None, publication=None, reason=None):
         """Actual owner calls after worker/stream cleanup; never on caller timeout."""
@@ -213,6 +251,9 @@ class Intents:
             raise
         with self.lock:
             del self.active[intent.reference]
+            reservation = self.reservations.pop(intent.reference, None)
+            if reservation is not None:
+                receipt, publication = reservation[2]["receipt"], reservation[2]["publication"]
             intent.frozen, intent.prepared_bytes = None, 0
             intent.state, intent.reason = "completed", reason
             intent.completed = intent.progress = self.clock()
@@ -237,10 +278,15 @@ class Intents:
             sizes = Counter()
             for intent in entries:
                 sizes[intent.owner[2]] += intent.retained_bytes
+            for principal, amount, _values in self.reservations.values():
+                counts[principal] += 1
+                sizes[principal] += amount
             over = {key for key in counts if counts[key] > 16 or sizes[key] > 4 * MIB}
-            if len(entries) <= 128 and sum(sizes.values()) <= 32 * MIB and not over:
+            if len(entries) + len(self.reservations) <= 128 and sum(sizes.values()) <= 32 * MIB and not over:
                 break
-            victim = next(i for i in entries if not over or i.owner[2] in over)
+            victim = next((i for i in entries if not over or i.owner[2] in over), None)
+            if victim is None:
+                break  # Active reservations are not evictable.
             self._discard(victim)
 
     def _discard(self, intent):
@@ -280,16 +326,20 @@ class Intents:
                 if now - intent.completed >= 300 or now - intent.progress >= 60:
                     self._discard(intent)
             expired = [i for i in self.active.values() if i.state in {"preparing", "receiving", "ready"} and self._expired(i, now)]
+            orphaned = [i for i in self.active.values() if i.state in {"queued", "started", "delivering"}
+                        and getattr(i, "execution_returned", False) and not i.workers and now - i.progress >= 30]
             retry = [i for i in self.active.values() if i.state == "cleanup_failed"]
-            for intent in expired:
+            for intent in expired + orphaned:
                 intent.abandoned = True
+            for intent in orphaned:
+                intent.reason = "execution_result_unavailable"
         failures = 0
-        for intent in expired + retry:
+        for intent in expired + orphaned + retry:
             with self.lock:
                 pinned = bool(intent.workers)
             if not pinned:
                 try:
-                    self.finish(intent, reason=intent.reason if intent in retry else "expired_before_submission")
+                    self.finish(intent, reason=intent.reason if intent in retry or intent in orphaned else "expired_before_submission")
                 except Exception:
                     # Retry on the next lifecycle tick; failed cleanup retains its slot.
                     failures += 1
@@ -306,3 +356,26 @@ class Intents:
                 self.finish(intent, reason=intent.reason)
             else:
                 self.release(intent.reference, intent.owner)
+
+
+class OwnedIntents(Intents):
+    """Autonomous reaping, tied to the actual host shutdown rather than client polling."""
+
+    def __init__(self, host, *, clock=time.monotonic):
+        super().__init__(clock=clock)
+        self._stop = threading.Event()
+        self._reaper = threading.Thread(target=self._reap, name="bookflow-mcp-intents", daemon=True)
+        host.own_resource(self)
+        self._reaper.start()
+
+    def _reap(self):
+        while not self._stop.wait(0.25):
+            self.sweep()
+
+    def close(self):
+        self._stop.set()
+        super().close()
+        if self._reaper.is_alive():
+            self._reaper.join(timeout=1)
+            if self._reaper.is_alive():
+                raise BookflowError("E_DB_BUSY", message="MCP resource cleanup is still running.")

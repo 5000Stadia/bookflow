@@ -144,7 +144,7 @@ class HostedTransfer:
     """One authorized reader admission followed by leased I/O and optional writer handoff."""
 
     def __init__(self, host, cmd, raw, ctx, user_id, login="", selector=None,
-                 source="option", dry_run=False, authorize_session=None):
+                 source="option", dry_run=False, authorize_session=None, *, defer_output=False):
         from bookflow.core.dispatch import _close, execute
         self.host, self.cmd, self.raw, self.ctx = host, cmd, raw, ctx
         self.user_id, self.login = user_id, login
@@ -170,7 +170,7 @@ class HostedTransfer:
                 self.prepared = prepare(cmd, raw, ctx, s, selector=selector, source=source, dry_run=dry_run)
                 lease = host.acquire_transfer(s.actor.id, s.company_row["id"])
                 self.resource = TransferResource(lease, self.prepared.store, self.prepared.info)
-                if cmd.transfer.direction == "output":
+                if cmd.transfer.direction == "output" and not defer_output:
                     s.transfer = self.resource
                     self.output = self._execute(s, dry_run=False)
             finally:
@@ -199,9 +199,31 @@ class HostedTransfer:
         from bookflow.core.dispatch import execute
         return execute(self.cmd, self.raw, self.ctx, session, **options)
 
+    def start_output(self):
+        """Execute a deferred read once, after its caller has the admitted intent ID."""
+        from bookflow.core.dispatch import _close
+        if self.cmd.transfer.direction != "output":
+            raise BookflowError("E_USAGE", message="Only downloads have deferred read execution.")
+        self.resource.lease.check_io()
+        if self.output is not None:
+            return self.output
+        session = self.host.reader_session(self.user_id, self.login)
+        try:
+            self.authorize_session(session)
+            session.transfer = self.resource
+            self.output = self._execute(session, company_selector=self.selector,
+                                        company_source=self.source, dry_run=False)
+            return self.output
+        finally:
+            try:
+                _close(session)
+            finally:
+                self.host.reader_done()
+
     def finish_input(self):
         from bookflow.core.dispatch import _close, execute
-        self.body.complete()
+        if not self.body.completed:
+            self.body.complete()
 
         def finish(s):
             self.authorize_session(s)

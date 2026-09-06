@@ -1,6 +1,6 @@
 # Agent guide: one safe HTTP write
 
-This is the shortest end-to-end path from a fresh demo to a versioned, audited write. Bookflow currently exposes programmatic remote work over bearer-authenticated HTTP; it does not expose an MCP endpoint.
+This is the shortest end-to-end path from a fresh demo to a versioned, audited HTTP write. The [installed MCP guide](mcp-guide.md) uses the same authenticated host through a three-tool stdio launcher, including receipt files and recovery.
 
 The bootstrap bearer belongs to the human who issued it. The current command registry has no public commands for creating agent identities or assigning principals, so do not describe this token as an independent agent identity.
 

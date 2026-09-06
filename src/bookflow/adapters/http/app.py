@@ -213,7 +213,11 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
 
     @app.exception_handler(BookflowError)
     async def _handle(request: Request, err: BookflowError):
-        return error_response(err)
+        result = error_response(err)
+        if request.url.path.startswith("/adapters/mcp"):
+            from bookflow.adapters.mcp.catalog import BRIDGE_VERSION
+            result.headers["X-Bookflow-MCP-Version"] = str(BRIDGE_VERSION)
+        return result
 
     @app.exception_handler(Exception)
     async def _handle_any(request: Request, exc: Exception):
@@ -443,16 +447,7 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
         return {"ok": True}
 
     from bookflow.adapters.mcp.bridge import mount_mcp
-    from bookflow.adapters.mcp.catalog import BRIDGE_VERSION
-
-    async def mcp_execute(request, cmd, arguments, ctx, cred, selection):
-        if cmd is None or any(arguments.transport.model_dump().values()):
-            raise BookflowError("E_USAGE", message="This transport operation is not ready in this implementation checkpoint.")
-        result = await run_in_threadpool(run_command, cmd, arguments.input, ctx, cred,
-                                        selection["value"], selection["source"], arguments.dry_run)
-        return JSONResponse(result, headers={"X-Bookflow-MCP-Version": str(BRIDGE_VERSION), "Cache-Control": "no-store"})
-
-    mount_mcp(app, host, credential, make_context, mcp_execute)
+    mount_mcp(app, host, credential, make_context)
     from bookflow.adapters.workbench.pages import mount_workbench
     mount_workbench(app, host, credential, make_context, run_command, secure_cookies)
     return app

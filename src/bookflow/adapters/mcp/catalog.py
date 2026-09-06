@@ -48,10 +48,14 @@ def command_help(name, view="usage"):
     from .envelopes import RunArguments
     row = descriptor(cmd)
     context_fields = RunArguments.model_json_schema()["properties"]
+    context_properties = {key: context_fields[key] if key in row["context"] else
+                          {"const": False if key == "dry_run" else None,
+                           "description": "Only this inactive value or omission applies to this command."}
+                          for key in ("company", "dry_run", "reason", "source_ref", "directive", "idempotency_key")}
     result = {
         **row,
         "context_schema": {"type": "object", "additionalProperties": False,
-            "properties": {key: context_fields[key] for key in row["context"]}},
+            "properties": context_properties},
         "context_usage": "Omit optional context or use null; dry_run omitted/false is inactive and null is invalid. Active context applies only where listed. Use a short audit reason naming the trigger (at most 140 characters), not a narrative. Agent writes require reason or an active directive. Company selection: explicit non-null company, then calling-machine environment, then calling-machine configuration; null behaves as omitted.",
         "error_codes": sorted(set(cmd.error_codes) | set(INFRASTRUCTURE_CODES)),
         "bridge_version": BRIDGE_VERSION, "view": view, "available_views": list(HELP_VIEWS),

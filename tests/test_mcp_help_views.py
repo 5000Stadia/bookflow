@@ -21,7 +21,9 @@ def test_every_registry_command_has_complete_views_and_resolvable_schemas():
             assert doc['bridge_version'] == BRIDGE_VERSION == 2
             assert all(doc[key] == value for key, value in descriptor(cmd).items())
             assert set(cmd.error_codes) <= set(doc['error_codes'])
-            assert set(doc['context_schema']['properties']) == set(doc['context'])
+            assert set(doc['context']) <= set(doc['context_schema']['properties'])
+            assert Draft202012Validator(doc['context_schema']).is_valid({'dry_run': False, 'reason': None,
+                'source_ref': None, 'directive': None, 'idempotency_key': None, 'company': None})
             for key, model in [('input_schema', cmd.input_model), ('output_schema', cmd.output_model)]:
                 present = view == 'full' or view == key or (view == 'usage' and key == 'input_schema')
                 assert (key in doc) is present

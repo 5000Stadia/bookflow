@@ -78,7 +78,7 @@ class PublicationPermit:
         """Only owned values enter the bounded receipt cache, never host/registry handles."""
         state = {item.name: getattr(self, item.name) for item in fields(self)
                  if item.name not in {"cmd", "inp", "ctx"}}
-        state.update(command=self.cmd.name, input=self.inp.model_dump(mode="json"),
+        state.update(command=self.cmd.name, input=self.inp.model_dump(mode="json", exclude_unset=True),
                      context=self.ctx.model_dump(mode="json"))
         return deepcopy(state)
 

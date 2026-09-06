@@ -68,11 +68,13 @@ def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_e
     except BookflowError as exc:
         if permit is not None:
             from bookflow.adapters.http.publication import protect
-            protect(PublishedDocument(exc.to_dict(), permit, host, cred))
+            rejected = PublishedDocument(exc.to_dict(), permit, host, cred)
+            protect(rejected)
             try:
                 permit.check(host, cred, original_response=True)
             except BookflowError as denied:
                 raise BookflowError(denied.code, details={"stage": "publication", "outcome": "unknown"}) from None
+            exc.publication_document = rejected
         raise
     document = PublishedDocument(result, permit, host, cred)
     from bookflow.adapters.http.publication import protect

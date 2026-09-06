@@ -8,8 +8,9 @@ from .publication import protect
 
 
 class PublishedTransfer(HostedTransfer):
-    def __init__(self, *args, credential, **kwargs):
+    def __init__(self, *args, credential, before_execute=None, **kwargs):
         self.credential = credential
+        self.before_execute = before_execute
         self._publication_document = None
         super().__init__(*args, **kwargs)
 
@@ -24,6 +25,8 @@ class PublishedTransfer(HostedTransfer):
 
     def _execute(self, session, **options):
         self.credential.revalidate(session.hub)
+        if self.before_execute is not None:
+            self.before_execute(session)
         permit = PublicationPermit.capture(self.cmd, self.raw, self.ctx, session, self.credential,
                                              self.selector, self.source, self.dry_run)
         try:
@@ -32,6 +35,7 @@ class PublishedTransfer(HostedTransfer):
             permit.finish(session, succeeded=False)
             self._publication_document = PublishedDocument(exc.to_dict(), permit, self.host, self.credential)
             protect(self._publication_document)
+            exc.publication_document = self._publication_document
             raise
         try:
             permit.finish(session, result=result)

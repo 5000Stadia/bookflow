@@ -31,7 +31,7 @@ def host_origin(value):
     return value.rstrip("/")
 
 
-async def serve(inp, origin, secret):
+async def serve(inp, origin, secret, inputs, outputs):
     import httpx2
     from mcp.server import Server
     from mcp.server.stdio import stdio_server
@@ -47,6 +47,8 @@ async def serve(inp, origin, secret):
     }
     async with httpx2.AsyncClient(base_url=origin, headers=headers, trust_env=False,
                                   follow_redirects=False, timeout=httpx2.Timeout(30, connect=5)) as client:
+        from .client import Client
+        transport = Client(client, inputs, outputs)
         async def list_tools(_ctx, _params):
             tools = []
             for name, (model, description) in TOOLS.items():
@@ -56,15 +58,17 @@ async def serve(inp, origin, secret):
 
         async def call_tool(_ctx, params):
             submitted = False
+            delivery = None
             try:
                 arguments = validate(params.name, params.arguments or {})
                 preflight = await client.get("/adapters/mcp")
                 if preflight.status_code == 404 or preflight.headers.get("x-bookflow-mcp-version") != str(BRIDGE_VERSION):
                     raise BookflowError("E_VERSION_MISMATCH", details={"supported_bridge_versions": [BRIDGE_VERSION], "received_bridge_version": preflight.headers.get("x-bookflow-mcp-version"), "stage": "preflight", "outcome": "not_submitted"})
                 if preflight.status_code >= 400:
-                    raise BookflowError("E_UNAUTHENTICATED")
+                    transport.document(preflight)
                 payload = {"arguments": arguments.model_dump(exclude_unset=True)}
                 from .envelopes import RunArguments
+                metadata = selection = None
                 if isinstance(arguments, RunArguments):
                     help_response = await client.post("/adapters/mcp/bookflow_help", json={"arguments": {"command": arguments.command}})
                     metadata = help_response.json()
@@ -73,18 +77,22 @@ async def serve(inp, origin, secret):
                     from .selection import company_selection
                     company, source = company_selection(metadata["scope"], arguments.company, selection_root=inp.selection_root)
                     payload["company_selection"] = {"value": company, "source": source}
+                    selection = payload["company_selection"]
                 submitted = params.name == "bookflow_run"
-                response = await client.post("/adapters/mcp/" + params.name,
+                if submitted:
+                    document, is_error, delivery = await transport.run(arguments, metadata=metadata, selection=selection)
+                else:
+                    response = await client.post("/adapters/mcp/" + params.name,
                                              json=payload)
-                if response.headers.get("x-bookflow-mcp-version") != str(BRIDGE_VERSION):
-                    raise BookflowError("E_IO", details={"operation": "mcp_result", "reason": "incompatible_bridge", "stage": "post_submission", "outcome": "unknown"})
-                try:
-                    document = response.json()
-                    if not isinstance(document, dict):
-                        raise ValueError
-                except ValueError:
-                    raise BookflowError("E_IO", details={"operation": "mcp_result", "reason": "invalid_json", "stage": "post_submission", "outcome": "unknown"}) from None
-                is_error = response.status_code >= 400
+                    if response.headers.get("x-bookflow-mcp-version") != str(BRIDGE_VERSION):
+                        raise BookflowError("E_IO", details={"operation": "mcp_result", "reason": "incompatible_bridge", "stage": "post_submission", "outcome": "unknown"})
+                    try:
+                        document = response.json()
+                        if not isinstance(document, dict):
+                            raise ValueError
+                    except ValueError:
+                        raise BookflowError("E_IO", details={"operation": "mcp_result", "reason": "invalid_json", "stage": "post_submission", "outcome": "unknown"}) from None
+                    is_error = response.status_code >= 400
             except BookflowError as exc:
                 document, is_error = exc.to_dict(), True
             except httpx2.HTTPError:
@@ -93,9 +101,14 @@ async def serve(inp, origin, secret):
                 document, is_error = BookflowError("E_IO", details={"operation": "mcp_result", "reason": "invalid_response", "outcome": "unknown" if submitted else "not_submitted"}).to_dict(), True
             try:
                 rendered = json.dumps(document, ensure_ascii=False, allow_nan=False)
-                return types.CallToolResult(content=[types.TextContent(text=rendered)], structured_content=document, is_error=is_error)
+                content = [types.TextContent(text=rendered)]
+                if delivery and delivery.get("output_file"):
+                    content.append(types.TextContent(text="Verified downloaded file: " + delivery["output_file"]))
+                return types.CallToolResult(content=content, structured_content=document, is_error=is_error,
+                                            meta={"bookflow_delivery": delivery} if delivery else None)
             except Exception:
-                document = BookflowError("E_IO", details={"operation": "mcp_result", "reason": "serialization", "outcome": "unknown" if submitted else "not_submitted"}).to_dict()
+                document = BookflowError("E_IO", details={"operation": "mcp_result", "reason": "serialization", "outcome": "unknown" if submitted else "not_submitted",
+                    **({"operation_ref": delivery["operation_ref"]} if delivery else {})}).to_dict()
                 return types.CallToolResult(content=[types.TextContent(text=json.dumps(document))], structured_content=document, is_error=True)
 
         server = Server("bookflow", version="0.0.1", on_list_tools=list_tools, on_call_tool=call_tool)
@@ -120,4 +133,4 @@ def launch(inp):
         resources.callback(inputs.close)
         outputs = Directories(inp.output_dir)
         resources.callback(outputs.close)
-        anyio.run(serve, inp, origin, secret)
+        anyio.run(serve, inp, origin, secret, inputs, outputs)

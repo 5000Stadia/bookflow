@@ -69,7 +69,7 @@ def json_chunks(document):
         yield bytes(pending)
 
 
-def encode(document, *, check, operation_ref, is_error=False, binary=None, recovery=None):
+def encode(document, *, check, operation_ref, is_error=False, binary=None, recovery=None, on_json=None):
     """Check current publication authority before each record, including terminal."""
     if type(is_error) is not bool or not isinstance(operation_ref, str) or not 1 <= len(operation_ref) <= 128:
         raise invalid("invalid_completion")
@@ -84,9 +84,12 @@ def encode(document, *, check, operation_ref, is_error=False, binary=None, recov
                     raise invalid("invalid_channel_chunk")
                 digest.update(chunk)
                 size += len(chunk)
+                if channel == b"J" and on_json is not None:
+                    on_json(chunk)
                 check()
                 yield record(channel, chunk)
         totals[channel.decode()] = {"bytes": size, "sha256": digest.hexdigest()}
+    recovery = recovery() if callable(recovery) else recovery
     recovery = recovery or {"mode": "unavailable", "retained_until": None,
                             "receipt_available": False, "inspection_available": False}
     _recovery(recovery)
