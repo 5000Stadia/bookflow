@@ -8,7 +8,7 @@ from bookflow.core.publication import PublicationPermit
 from bookflow.adapters.http.app import _issue_session,_revoke,Credential
 from bookflow.adapters.http.execution import run_history
 from bookflow.hub.audit_projection import HistorySelection
-from bookflow.hub.credentials import token_hash
+from bookflow.hub.credentials import token_hash,resolve_token
 from tests.conftest import make_actor
 from tests.permission_admin_support import snapshot
 from tests.test_audit_projection_activity import world
@@ -36,7 +36,10 @@ def test_actual_token_producer(token,person):assert token['user_id']==person and
 @pytest.fixture(scope='module')
 def hosted(world,token):
     host=Host(world['root'],version=client_version());host.start()
-    try:yield host,Credential(token['user_id'],token['token_id'],'human',None,secret=token['secret'])
+    try:
+        row=host.submit(lambda:resolve_token(host._hub,token['secret']))
+        yield host,Credential(row['user_id'],row['id'],row['kind'],row['label'],
+            on_behalf_of=row.get('on_behalf_of'),secret=token['secret'])
     finally:host.stop()
 
 
