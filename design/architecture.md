@@ -1925,12 +1925,23 @@ they still require the separately admitted catalog transition.
 
 `deposit_drafts`, immutable full `deposit_draft_revisions`, source/additional rows
 and permanent draft row keys store incomplete composition without financial writes.
-`deposit_selection` owns separate child revisions and atomically accepts only their
+`deposit_selections` owns separate child revisions and atomically accepts only their
 sources into an unchanged parent header/additional/custom/cash-back context.
 B1 requires all reciprocal heads before the final `PRAGMA main.foreign_key_check`
-inside the nonposting rollback boundary. Future financial consumption joins the
-existing C savepoint before its whole-FK check; this writer is never a child of C.
-Co24 also declares consumption links; this increment does not write them.
+inside the nonposting rollback boundary. Financial draft consumption belongs to
+the financial owner: ordinary post/update and coordinate replacement write the
+consumption links before their final whole-main foreign-key check and persisted
+reciprocal validation. Coordinate consumption uses the existing C savepoint; the
+nonposting draft writer is never invoked as its child.
+
+The private draft provider expands a complete owned immutable revision below the
+unchanged bounded inline inputs. Current authority, cash, claims and reference
+eligibility are checked independently from captured display and custom values.
+A consumption receipt binds the original draft revision/hash, exact row identity
+map, financial operation and event. The consumed header advances once without
+rewriting its composition revision. Identical edits still consume once and retain
+a permanent no-effect operation. Exact authorized recovery returns the original
+effect with separately labeled current deposit/draft state and performs no write.
 
 Memo patch omission retains; null and empty text are distinct entered overrides;
 `memo_action: restore_source` is exclusive and restores captured source origin.
@@ -1953,12 +1964,14 @@ source provenance. Copy records the current source header version; copied source
 `captured_header_version` retains the original cash evidence endpoint. Unavailable,
 changed or claimed sources remain visible as stale, never silently removed. The
 original voided transaction, claims and any consumed draft are untouched. Source
-refresh is explicit. Authentic copying of a financial403-member deposit still
-requires stage2 to produce that financial record through a complete manifest.
+refresh is explicit. Financial posting allocates fresh destination identities
+for copied rows; only a genuine edit retains the eligible original financial keys.
+Complete manifests are not limited to a single source page.
 
 Custom values retain typed canonical values, definition/choice snapshots and
 origins; blank required values report incomplete state. Existing definitions lack
 print visibility, so `print_visible=None` records unavailable provenance rather
 than an invented default. The print owner must resolve this before full G3.
-No public commands, financial draft provider/consumption, new grants, source fences,
-reconciliation activation, Delete changes or GUI/MCP release are installed here.
+Public command registration, current full-C publication integration, deposit read
+and print surfaces, GUI/MCP continuation, reconciliation activation and Delete
+remain separately owned requirements.
