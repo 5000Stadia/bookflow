@@ -12,6 +12,38 @@ from bookflow.core.errors import BookflowError
 from bookflow.company.ledger_reports import _cursor_key
 
 
+class _CrossJoin(sa.sql.selectable.Join):
+    inherit_cache = True
+
+
+from sqlalchemy.ext.compiler import compiles
+
+
+@compiles(_CrossJoin, 'sqlite')
+def _compile_cross_join(join, compiler, **kw):
+    return (compiler.process(join.left, asfrom=True, **{k:v for k,v in kw.items() if k != 'asfrom'})
+        + ' CROSS JOIN ' + compiler.process(join.right, asfrom=True, **{k:v for k,v in kw.items() if k != 'asfrom'})
+        + ' ON ' + compiler.process(join.onclause, **kw))
+
+
+def indexed_source(table, index_name, *names, expression=None):
+    """Private fixed owned sources; callers never supply user identifiers."""
+    assert index_name.startswith('ix_co17_') and any(i.name == index_name for i in table.indexes)
+    columns = [table.c[name] for name in names]
+    sql = 'SELECT ' + ', '.join(names)
+    if expression is not None:
+        from bookflow.company.read_indexes import PAYER_LABEL_SQL
+        assert expression == 'payer_label'
+        sql += ', ' + PAYER_LABEL_SQL + ' AS payer_label'
+        columns.append(sa.column('payer_label', sa.Text()))
+    sql += ' FROM ' + table.name + ' INDEXED BY ' + index_name
+    return sa.text(sql).columns(*columns).subquery(table.name)
+
+
+def cross_join(left, right, onclause):
+    return _CrossJoin(left, right, onclause)
+
+
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False)
 
@@ -93,14 +125,19 @@ def payer_balances(s, customer_id):
     # arbitrary-intermediate aggregate and checked Money boundary, never SQLite
     # SUM/REAL or a stored running balance.
     customer_balances.register_functions(s.company)
-    lines = c.posting_lines
-    net = lines.c.debit_minor_units - lines.c.credit_minor_units
-    payer, family_net = s.company.conn.execute(sa.select(
-        sa.func.bookflow_sum_int(net).filter(lines.c.name_id == customer_id),
-        sa.func.bookflow_sum_int(net)).select_from(lines).where(
-            lines.c.name_type == 'customer',
-            lines.c.account_id.in_(sa.select(c.accounts.c.id).where(c.accounts.c.type == 'accounts_receivable')),
-            lines.c.name_id.in_(sa.select(family.c.id)))).one()
+    # Group losslessly; do not reject a party intermediate before cancellation.
+    party_nets = {party: int(amount or '0') for party, amount in s.company.raw.execute("""
+        WITH RECURSIVE balance_family(id) AS (
+            SELECT id FROM customers WHERE id=? UNION
+            SELECT child.id FROM customers AS child JOIN balance_family AS family ON child.parent_id=family.id)
+        SELECT name_id,bookflow_sum_int(debit_minor_units-credit_minor_units)
+        FROM posting_lines INDEXED BY ix_co17_posting_party_ar
+        WHERE name_type='customer'
+            AND account_id IN (SELECT id FROM accounts WHERE type='accounts_receivable')
+            AND name_id IN (SELECT id FROM balance_family)
+        GROUP BY name_id
+        """, (customer_id,)).fetchall()}
+    payer, family_net = party_nets.get(customer_id, 0), sum(party_nets.values())
     return dict(customer_id=customer_id, payer_balance=Money(_require_i64(int(payer or '0'), field='current_balance'), currency).to_dict(),
         family_balance=Money(_require_i64(int(family_net or '0'), field='family_balance'), currency).to_dict())
 

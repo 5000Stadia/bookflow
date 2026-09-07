@@ -1,5 +1,6 @@
 """Complete invoice discovery and shared origin-aware receipt calculations."""
 import json
+from collections import namedtuple
 import sqlalchemy as sa
 from bookflow.company import schema as c, document_effects as effects, sales_defaults as defaults
 from bookflow.company import payment_selection as selection, payment_queries as query, payment_calculations as calc, sales
@@ -37,71 +38,114 @@ def lineage_facts(s, parties):
     return result
 
 
-def _candidate_query(s, inp):
+def _candidate_query(s, inp, *, page_ids=None, resolved=None, projection='identity'):
     from bookflow.company.payment_authority import readable_predicate
-    context = selection.context(s, inp)
-    funding = query.payment_facts(s, context['payment_id']) if context['payment_id'] else None
-    t, r, p, a = c.transactions, c.transaction_revisions, c.sales_profiles, c.applications
-    inverse = a.alias('candidate_inverse')
-    used = sa.func.coalesce(sa.select(sa.func.sum(a.c.amount_minor_units)).where(
-        a.c.paid_transaction_id == t.c.id, a.c.kind == 'apply',
-        ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_application_id == a.c.id))
-    ).correlate(t).scalar_subquery(), 0)
-    statement = sa.select(t.c.id.label('invoice_id'), t.c.version.label('expected_version'), t.c.number,
-        p.c.customer_id, r.c.date, p.c.due_date, r.c.currency, r.c.total_minor_units.label('gross_minor_units'),
-        r.c.id.label('revision_id'),
-        used.label('applied_minor_units'), (r.c.total_minor_units-used).label('due_minor_units')).select_from(t).join(
-        r, r.c.id == t.c.current_revision_id).join(p, p.c.revision_id == r.c.id).where(t.c.type == 'invoice', t.c.status == 'posted',
-        r.c.date <= context['date'], r.c.currency == context['currency'], p.c.control_account_id == context['ar_account_id'],
-        r.c.total_minor_units > used, readable_predicate(s, t.c.id))
+    context, funding = resolved if resolved is not None else (selection.context(s, inp), None)
+    if resolved is None and context['payment_id']:
+        funding = query.payment_facts(s, context['payment_id'])
+
+    # Compile the owner's predicate inside its real outer scope. Compiling an
+    # EXISTS alone would incorrectly introduce an independent header table.
+    header = c.transactions.alias('t')
+    authority = sa.select(sa.literal_column('1')).select_from(header).where(readable_predicate(s, header.c.id))
+    compiled = authority.compile(dialect=s.company.conn.dialect, compile_kwargs={'render_postcompile': True})
+    prefix, separator, predicate = str(compiled).partition('\nWHERE ')
+    assert separator and prefix.strip() == 'SELECT 1 \nFROM transactions AS t'
+    authority_values = [compiled.params[name] for name in compiled.positiontup]
+
     capacities = {}
     if funding:
         for key in funding['keys'].values():
             if key['ar_account_id'] == context['ar_account_id'] and key['currency'] == context['currency']:
                 capacities[key['party_id']] = capacities.get(key['party_id'], 0) + funding['available'][key['id']]
-        statement = statement.where(p.c.customer_id.in_([party for party, amount in capacities.items() if amount > 0]))
+        parties = [party for party, amount in capacities.items() if amount > 0]
+        with_sql, values = '', []
+        party_filter = 'p.customer_id IN (' + ','.join('?' for _ in parties) + ')' if parties else '0'
     else:
-        family = sa.select(c.customers.c.id).where(c.customers.c.id == context['customer_id']).cte('candidate_family', recursive=True)
-        family = family.union(sa.select(c.customers.c.id).join(family, c.customers.c.parent_id == family.c.id))
-        statement = statement.where(p.c.customer_id.in_(sa.select(family.c.id)))
+        with_sql = """WITH RECURSIVE candidate_family(id) AS (
+            SELECT id FROM customers WHERE id=? UNION
+            SELECT child.id FROM customers AS child JOIN candidate_family AS family ON child.parent_id=family.id)
+        """
+        values = [context['customer_id']]
+        party_filter = 'p.customer_id IN (SELECT id FROM candidate_family)'
+        parties = []
+
+    used = """coalesce((SELECT sum(a.amount_minor_units)
+        FROM applications AS a INDEXED BY ix_co17_applications_invoice
+        WHERE a.paid_transaction_id=t.id AND a.kind='apply'
+        AND NOT EXISTS (SELECT 1 FROM applications AS inverse WHERE inverse.reverses_application_id=a.id)),0)"""
+    if page_ids is None:
+        source = """sales_profiles AS p INDEXED BY ix_co17_sales_party
+            CROSS JOIN transaction_revisions AS r INDEXED BY ix_co17_revisions_read ON r.id=p.revision_id
+            CROSS JOIN transactions AS t INDEXED BY ix_co17_transactions_current ON t.current_revision_id=r.id"""
+    else:
+        source = """transactions AS t
+            CROSS JOIN transaction_revisions AS r INDEXED BY ix_co17_revisions_read ON r.id=t.current_revision_id
+            CROSS JOIN sales_profiles AS p INDEXED BY ix_co17_sales_revision ON p.revision_id=r.id"""
+    conditions = ["t.type='invoice'", "t.status='posted'", 'r.date<=?', 'r.currency=?',
+        'p.control_account_id=?', '(' + predicate + ')', party_filter]
+    values.extend([context['date'], context['currency'], context['ar_account_id'], *authority_values, *parties])
+    if page_ids is not None:
+        conditions.append('t.id IN (' + ','.join('?' for _ in page_ids) + ')' if page_ids else '0')
+        values.extend(page_ids)
     if getattr(inp, 'q', None):
         s.company.raw.create_function('payment_casefold', 1, lambda value: (value or '').casefold(), deterministic=True)
-        text = t.c.number + ' ' + sa.func.coalesce(r.c.memo, '')
-        statement = statement.where(sa.func.payment_casefold(text).contains(inp.q.casefold(), autoescape=True))
+        # Match SQLAlchemy contains(autoescape=True), whose escape character is /.
+        escaped = inp.q.casefold().replace('/', '//').replace('%', '/%').replace('_', '/_')
+        conditions.append("payment_casefold(t.number || ' ' || coalesce(r.memo,'')) LIKE '%' || ? || '%' ESCAPE '/'")
+        values.append(escaped)
+    if projection != 'money':
+        conditions.append('r.total_minor_units > ' + used)
     if funding and context['date'] < funding['revision']['date']:
-        statement = statement.where(sa.false())
-    return context, statement.order_by(r.c.date, t.c.id), capacities
+        conditions.append('0')
+
+    identity = 't.id AS invoice_id,t.version AS expected_version,p.customer_id'
+    if projection == 'identity':
+        columns = identity
+    elif projection == 'money':
+        columns = identity + ',r.date,r.currency,r.id AS revision_id,r.total_minor_units AS gross_minor_units,r.total_minor_units-(' + used + ') AS due_minor_units'
+    else:
+        assert projection == 'display'
+        columns = identity + ',t.number,r.date,p.due_date,r.currency,r.total_minor_units AS gross_minor_units,r.id AS revision_id,' + used + ' AS applied_minor_units,r.total_minor_units-(' + used + ') AS due_minor_units,original.id AS original_revision_id,original.total_minor_units AS original_gross_minor_units'
+        source += ' JOIN transaction_revisions AS original ON original.transaction_id=t.id AND original.revision_number=1'
+    sql = 'SELECT ' + columns + ' FROM ' + source + ' WHERE ' + ' AND '.join(conditions)
+    if projection == 'money':
+        # Preserve the complete transient money relation and single evaluation.
+        sql = 'SELECT * FROM (' + sql + ' LIMIT -1) AS candidate_money WHERE due_minor_units>0 ORDER BY date,invoice_id'
+    else:
+        sql += ' ORDER BY r.date,t.id'
+    return context, (with_sql + sql, values), capacities, funding
 
 
-def _original_projection(statement):
-    original = c.transaction_revisions.alias('candidate_original')
-    return statement.add_columns(original.c.id.label('original_revision_id'),
-        original.c.total_minor_units.label('original_gross_minor_units')).join(original,
-        sa.and_(original.c.transaction_id == c.transactions.c.id, original.c.revision_number == 1))
-
+_Candidate = namedtuple('_Candidate', 'invoice_id expected_version customer_id date currency revision_id gross_minor_units due_minor_units available_source_minor_units')
 
 def candidates(s, inp):
-    context, statement, capacities = _candidate_query(s, inp)
-    result = [dict(row, available_source_minor_units=capacities[row['customer_id']] if context['payment_id'] else None)
-        for row in s.company.conn.execute(_original_projection(statement)).mappings()]
+    context, statement, capacities, funding = _candidate_query(s, inp, projection='money')
+    result = [_Candidate(*row, capacities[row[2]] if context['payment_id'] else None)
+        for row in s.company.raw.execute(*statement).fetchall()]
     return context, result
 
 
 def invoices(s, inp):
-    context, statement, capacities = _candidate_query(s, inp)
+    context, statement, capacities, funding = _candidate_query(s, inp)
     # Legal commercial/settlement changes always advance the invoice header.
     # Bind every candidate identity/version and relevant lineage, but materialize
     # the monetary display projection only for the requested delivery page.
-    baseline = [list(row) for row in s.company.conn.execute(statement.with_only_columns(
-        c.transactions.c.id, c.transactions.c.version, c.sales_profiles.c.customer_id))]
+    baseline = [list(row) for row in s.company.raw.execute(*statement).fetchall()]
     balances = query.payer_balances(s, context['customer_id'])
     lineage = lineage_facts(s, [context['customer_id'], *(row[2] for row in baseline)])
     out = query.page(s, 'payment invoices', inp, baseline, facts=[context, baseline, balances, lineage])
     # The pinned baseline already determines delivery identities. Restrict the
     # monetary projection to those IDs rather than rescanning/sorting the family.
     ids = [row[0] for row in out['items']]
-    out['items'] = [dict(row, available_source_minor_units=capacities[row['customer_id']] if context['payment_id'] else None)
-        for row in s.company.conn.execute(_original_projection(statement).where(c.transactions.c.id.in_(ids))).mappings()] if ids else []
+    if ids:
+        _, delivery, _, _ = _candidate_query(s, inp, page_ids=ids, resolved=(context, funding), projection='display')
+        cursor = s.company.raw.execute(*delivery)
+        names = [column[0] for column in cursor.description]
+        out['items'] = [dict(zip(names, row), available_source_minor_units=capacities[row[2]] if context['payment_id'] else None)
+            for row in cursor.fetchall()]
+    else:
+        out['items'] = []
     return dict(out, **balances)
 
 
@@ -113,26 +157,26 @@ def suggest(s, inp):
     strategy = inp.strategy
     if strategy == 'company':
         strategy = 'exact_then_oldest' if defaults._info(s.company)['automatically_apply_payments'] else 'none'
-    exact = next((row for row in rows if row['due_minor_units'] == amount and
-        (row['available_source_minor_units'] is None or row['available_source_minor_units'] >= amount)), None)
+    exact = next((row for row in rows if row.due_minor_units == amount and
+        (row.available_source_minor_units is None or row.available_source_minor_units >= amount)), None)
     chosen = [exact] if exact else rows
     rendered, remaining, capacity = [], amount, {}
     if strategy != 'none':
         for row in chosen:
-            party = row['customer_id']
-            if row['available_source_minor_units'] is not None:
-                capacity.setdefault(party, row['available_source_minor_units'])
-            units = min(row['due_minor_units'], remaining, capacity.get(party, remaining))
+            party = row.customer_id
+            if row.available_source_minor_units is not None:
+                capacity.setdefault(party, row.available_source_minor_units)
+            units = min(row.due_minor_units, remaining, capacity.get(party, remaining))
             if units:
-                rendered.append(dict(invoice_id=row['invoice_id'], expected_version=row['expected_version'],
-                    ordinal=len(rendered) + 1, due_minor_units=row['due_minor_units'], amount_minor_units=units,
+                rendered.append(dict(invoice_id=row.invoice_id, expected_version=row.expected_version,
+                    ordinal=len(rendered) + 1, due_minor_units=row.due_minor_units, amount_minor_units=units,
                     amount_origin='calculated', currency=context['currency']))
                 remaining -= units
                 if party in capacity:
                     capacity[party] -= units
             if not remaining:
                 break
-    lineage = lineage_facts(s, [context['customer_id'], *(row['customer_id'] for row in rows)])
+    lineage = lineage_facts(s, [context['customer_id'], *(row.customer_id for row in rows)])
     return dict(query.page(s, 'payment suggest', inp, rendered, facts=[context, rows, strategy, rendered, lineage]),
         amount=Money(amount, context['currency']).to_dict(), amount_origin='entered', unapplied_minor_units=remaining, problems=[])
 
@@ -199,16 +243,22 @@ def payment_page(s, inp):
         family.update(row[0] for row in s.company.raw.execute("""WITH RECURSIVE family(id) AS (
             SELECT id FROM customers WHERE id=? UNION SELECT c.id FROM customers c JOIN family f ON c.parent_id=f.id)
             SELECT id FROM family""", (customer,)))
-    t, r, p, a = c.transactions, c.transaction_revisions, c.payment_profiles, c.applications
+    t = query.indexed_source(c.transactions, 'ix_co17_transactions_current',
+        'current_revision_id', 'type', 'status', 'id', 'version', 'number')
+    r = query.indexed_source(c.transaction_revisions, 'ix_co17_revisions_read',
+        'id', 'date', 'currency', 'total_minor_units', 'memo')
+    p = query.indexed_source(c.payment_profiles, 'ix_co17_payment_profile',
+        'revision_id', 'payer_id', 'payment_method_id', 'reference', expression='payer_label')
+    a = c.applications
     inverse = a.alias('inverse')
     used = sa.func.coalesce(sa.select(sa.func.sum(a.c.amount_minor_units)).where(
         a.c.paying_transaction_id == t.c.id, a.c.kind == 'apply',
-        ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_application_id == a.c.id))
+        ~sa.exists(sa.select(sa.literal_column("1")).where(inverse.c.reverses_application_id == a.c.id))
     ).correlate(t).scalar_subquery(), 0)
     available = sa.case((t.c.status == 'posted', r.c.total_minor_units-used), else_=0)
     statement = sa.select(t.c.id, t.c.version, t.c.number, r.c.date, t.c.status, p.c.payer_id.label('customer_id'),
-        p.c.payment_method_id, r.c.currency, r.c.total_minor_units.label('received_minor_units')).select_from(t).join(r,
-        r.c.id == t.c.current_revision_id).join(p, p.c.revision_id == r.c.id).where(t.c.type == 'payment')
+        p.c.payment_method_id, r.c.currency, r.c.total_minor_units.label('received_minor_units')).select_from(query.cross_join(query.cross_join(p, r,
+        r.c.id == p.c.revision_id), t, t.c.current_revision_id == r.c.id)).where(t.c.type == 'payment')
     try:
         require_resource(s, 'customer-work', 'member')
     except BookflowError as exc:
@@ -232,19 +282,32 @@ def payment_page(s, inp):
         statement = statement.where(available > 0 if inp.has_available_credit else available <= 0)
     if inp.q:
         s.company.raw.create_function('payment_casefold', 1, lambda value: (value or '').casefold(), deterministic=True)
-        captured = sa.func.coalesce(sa.func.json_extract(p.c.profile_snapshot, '$.payer.label'), '')
+        captured = p.c.payer_label
         text = t.c.number + ' ' + sa.func.coalesce(r.c.memo, '') + ' ' + sa.func.coalesce(p.c.reference, '') + ' ' + captured
         statement = statement.where(sa.func.payment_casefold(text).contains(inp.q.casefold(), autoescape=True))
     order = {'date': r.c.date, 'number': t.c.number, 'received': r.c.total_minor_units, 'unapplied': available}[inp.sort]
     statement = statement.order_by(order.desc() if inp.direction == 'desc' else order.asc(), t.c.id.desc() if inp.direction == 'desc' else t.c.id.asc())
-    out = query.sql_page(s, 'payment query', inp, statement,
+    # Carry only identity through the complete filtered window and sort. The
+    # selected page receives its display fields afterward in the same snapshot.
+    out = query.sql_page(s, 'payment query', inp, statement.with_only_columns(t.c.id),
         count_with_page=bool(inp.q) or inp.has_available_credit is not None)
     # Project settlement only after SQL has selected this page. Computing every
     # receipt's display fields before date sorting defeats bounded delivery.
     ids = [row['id'] for row in out['items']]
+    if ids:
+        # Use primary-key header lookup for bounded display, without repeating
+        # expensive text/capacity predicates over the entire company.
+        headers = c.transactions
+        display = sa.select(headers.c.id, headers.c.version, headers.c.number, r.c.date,
+            headers.c.status, p.c.payer_id.label('customer_id'), p.c.payment_method_id,
+            r.c.currency, r.c.total_minor_units.label('received_minor_units')).select_from(
+                query.cross_join(query.cross_join(headers, r, r.c.id == headers.c.current_revision_id),
+                    p, p.c.revision_id == r.c.id)).where(headers.c.id.in_(ids))
+        by_id = {row['id']: dict(row) for row in s.company.conn.execute(display).mappings()}
+        out['items'] = [by_id[identifier] for identifier in ids]
     amounts = dict(s.company.conn.execute(sa.select(a.c.paying_transaction_id, sa.func.sum(a.c.amount_minor_units)).where(
         a.c.paying_transaction_id.in_(ids), a.c.kind == 'apply',
-        ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_application_id == a.c.id))
+        ~sa.exists(sa.select(sa.literal_column("1")).where(inverse.c.reverses_application_id == a.c.id))
     ).group_by(a.c.paying_transaction_id)).all()) if ids else {}
     for row in out['items']:
         row['applied_minor_units'] = amounts.get(row['id'], 0)

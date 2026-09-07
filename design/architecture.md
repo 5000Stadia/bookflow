@@ -1001,3 +1001,28 @@ this is not a blind-agent or complete custom-filter interaction claim. The six-w
 custom-filter schema group links dedicated text/date chooser cases at1280/390
 while retaining untested operators, malformed-date interactions and generated-form
 branch cases.
+
+Payment discovery uses explicit owned covering sources and a cohort-first SQLite
+join order. Preparation builds fixed parameterized SQL per request; its authority
+fragment is compiled from the owning predicate inside the actual outer header
+scope, retaining correlation and positional bound values. Context and complete
+posting-graph authorization still use their existing owners. Driver-native rows
+preserve the complete typed/canonical baseline and signed continuation contract;
+no statement/result cache or global driver/session change is involved. Invoice delivery starts from its selected identities, retains the
+original revision-one amounts, and leaves the complete candidate/version/lineage
+and funding baseline in the cursor fingerprint. Suggestion baselines contain the
+complete authorized identity/version/current monetary relation as transient tuples;
+no balances or results survive a read snapshot. A transient SQLite flattening
+barrier evaluates each suggestion candidate's live sum once before testing positive
+due. Invoice text filters precede live-sum evaluation, and bounded delivery reuses
+the already-resolved context and funding facts. CP02 aggregates each party once
+with bookflow_sum_int, then combines unbounded Python integers before checking the
+disclosed payer/family totals; even out-of-range party intermediates can cancel.
+Payment searches carry only IDs through their existing window-count/filter/cursor
+contract, then fetch the selected display fields in the same read snapshot. Sales
+query pages fetch headers and revision/profile summaries only for selected IDs.
+Payment history retains complete resolved-participant operation membership, batches
+at most 200 audit identities per lookup, and renders stored commercial revisions
+without constructing discarded current settlement. Missing profiles or audit
+identities fail instead of returning empty history. The full 34-case 10k performance
+gate is not yet satisfied; retained builder measurements include every miss.

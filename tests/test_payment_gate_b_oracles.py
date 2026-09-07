@@ -233,6 +233,15 @@ def test_same_inactive_method_does_not_block_unrelated_correction(client,sale):
 
 
 def test_unapply_two_occurrences_one_invoice_versions_dates_and_key_order(client,sale):
+    # Scope the new graph's assertions while also preserving all seeded history.
+    history_tables = ('transactions', 'transaction_revisions', 'posting_batches', 'posting_lines',
+        'applications', 'application_allocations', 'payment_operations', 'payment_operation_items',
+        'audit_events', 'audit_entries')
+    with sqlite3.connect(database_path(client)) as db:
+        seeded_history = {table: db.execute(f'SELECT rowid,* FROM "{table}" ORDER BY rowid').fetchall()
+            for table in history_tables}
+        assert db.execute("SELECT count(*) FROM applications WHERE kind='unapply'").fetchone()[0] > 0
+
     invoice=posted(client,sale['customer'],sale['item'],'2.00','CRITIC-TWO-APPLICATIONS')
     paid=receive(client,sale,invoice,'1.00')
     run(client,'payment update',dict(payment=paid['id'],expected_version=1,operation_key='critic-increase-two',amount='2.00',invoice_versions=[dict(invoice=invoice['id'],expected_version=2)]),reason='Correct total received')
@@ -252,7 +261,7 @@ def test_unapply_two_occurrences_one_invoice_versions_dates_and_key_order(client
     state=run(client,'invoice settlement',dict(invoice=invoice['id']))
     assert state['version']==5 and state['applied_minor_units']==0 and state['due_minor_units']==200
     with sqlite3.connect(database_path(client)) as db:
-        dates=dict(db.execute("SELECT reverses_application_id,effective_date FROM applications WHERE kind='unapply'"))
+        dates=dict(db.execute("SELECT reverses_application_id,effective_date FROM applications WHERE kind='unapply' AND paying_transaction_id=?", (paid['id'],)))
         assert dates=={first_id:'2026-06-02',second_id:'2026-06-03'}
     stable=allrows(client)
     with pytest.raises(BookflowError) as error:
@@ -260,6 +269,11 @@ def test_unapply_two_occurrences_one_invoice_versions_dates_and_key_order(client
     assert error.value.code=='E_PAYMENT_OPERATION_KEY_REUSED' and allrows(client)==stable
     replay=run(client,'payment unapply',dict(base,applications=refs),reason='Remove allocations')
     assert replay['idempotent_replay'] and allrows(client)==stable
+    with sqlite3.connect(database_path(client)) as db:
+        for table, old in seeded_history.items():
+            assert old, table
+            assert db.execute(f'SELECT rowid,* FROM "{table}" WHERE rowid<=? ORDER BY rowid',
+                (old[-1][0],)).fetchall() == old, table
 
 
 @pytest.mark.parametrize('verb',['invoice update','payment update'])

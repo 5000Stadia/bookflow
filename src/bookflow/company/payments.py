@@ -9,7 +9,7 @@ from bookflow.company import payment_calculations as calc, payment_queries as qu
 from bookflow.company import payment_operations as operations
 from bookflow.company.payment_authority import authorize
 from bookflow.company.payment_models import PaymentContext
-from bookflow.company.payment_outputs import PaymentProfileOutput, PaymentWriteOutput, PaymentOutput
+from bookflow.company.payment_outputs import PaymentProfileOutput, PaymentWriteOutput, PaymentOutput, PaymentRevisionOutput
 from bookflow.company.sales_models import money, _invalid
 from bookflow.core import audit, clock
 from bookflow.core.ids import new_id
@@ -93,11 +93,16 @@ def show(s, inp):
             raise BookflowError('E_RECORD_NOT_FOUND')
         revision = rows[0]
         profile = effects.rows(s, c.payment_profiles, c.payment_profiles.c.revision_id == revision['id'])[0]
-    return PaymentOutput(**header, revision=dict(id=revision['id'], revision_number=revision['revision_number'],
+    return PaymentOutput(**header, revision=revision_output(revision, profile),
+        current=current_output(s, header['id']))
+
+
+def revision_output(revision, profile):
+    """Pure rendering of one stored, already-authorized commercial revision."""
+    return PaymentRevisionOutput(**dict(id=revision['id'], revision_number=revision['revision_number'],
         date=revision['date'], number=revision['number'], memo=revision['memo'], reference=profile['reference'],
         total=Money(revision['total_minor_units'], revision['currency']).to_dict(), audit_event_id=revision['audit_event_id'],
-        profile=json.loads(profile['profile_snapshot']), custom_fields_snapshot=json.loads(revision['custom_fields_snapshot'])),
-        current=current_output(s, header['id']))
+        profile=json.loads(profile['profile_snapshot']), custom_fields_snapshot=json.loads(revision['custom_fields_snapshot'])))
 
 
 def _capacity(side, requested, available, currency, identifier):
