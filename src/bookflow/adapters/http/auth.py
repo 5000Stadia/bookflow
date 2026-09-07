@@ -1,6 +1,7 @@
 """Credentials to user ids: session cookies and bearer tokens (row 3 plan, Authentication)."""
 
 from __future__ import annotations
+from bookflow.core.commit_hooks import CommitHooks
 
 import threading
 from datetime import timedelta
@@ -50,12 +51,15 @@ def needs_refresh(row: dict[str, Any]) -> bool:
     return not last or (clock.now() - clock.parse_iso(last)).total_seconds() > REFRESH_SECONDS
 
 
-def refresh_token(db, token_id: str, kind: str) -> None:
+def refresh_token(db, token_id: str, kind: str, *, commits: CommitHooks | None = None) -> None:
     """Unversioned, unaudited liveness bump (row 3 plan): last_used_at and, for sessions, expires_at."""
-    values: dict[str, Any] = {"last_used_at": clock.now_iso()}
-    if kind == "session":
-        values["expires_at"] = (clock.now() + timedelta(hours=SESSION_HOURS)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-    db.conn.execute(h.api_tokens.update().where(h.api_tokens.c.id == token_id).values(**values))
+    commits = commits if commits is not None else CommitHooks()
+    with commits.operation("http.refresh_token", db):
+        values: dict[str, Any] = {"last_used_at": clock.now_iso()}
+        if kind == "session":
+            values["expires_at"] = (clock.now() + timedelta(hours=SESSION_HOURS)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        with commits.autocommit(db, "http.refresh_token"):
+            db.conn.execute(h.api_tokens.update().where(h.api_tokens.c.id == token_id).values(**values))
 
 
 def throttle_login(source: str) -> None:

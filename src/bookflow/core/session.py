@@ -10,6 +10,7 @@ from typing import Any
 from typing import TYPE_CHECKING
 
 from bookflow.core.config import Config
+from bookflow.core.commit_hooks import CommitHooks
 
 if TYPE_CHECKING:  # pragma: no cover
     from bookflow.storage.engine import Database
@@ -54,6 +55,14 @@ class Session:
     transfer: Any = None  # internal owned binary resource; never command JSON
     company_opener: Any = None  # host hook: (row, writable, db_path) -> a Database the host owns; never closed here
     company_releaser: Any = None  # host hook: called with the company id when the session lets go of it
+
+    _commit_hooks: CommitHooks = field(default_factory=CommitHooks, repr=False)
+
+    @property
+    def commits(self) -> CommitHooks:
+        if self.company_opener is not None and self._commit_hooks.admission is None:
+            raise RuntimeError("Hosted session is missing its commit owner")
+        return self._commit_hooks
 
     def close_company(self, *, release: bool = True) -> None:
         """Let go of the selected company.

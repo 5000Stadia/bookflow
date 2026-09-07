@@ -75,81 +75,82 @@ init_cmd = command("init", scope="hub", description="Create the data root, the s
 
 
 def run_init(cmd, inp: InitInput, ctx: Context, s: Session) -> dict[str, Any]:
-    root = s.data_root
-    username = inp.username or s.os_login
-    display_name = inp.display_name or username
-    if s.dry_run and not (root / "hub.db").exists():
-        out = InitOutput(dry_run=True, data_root=str(root), created=True, user_id=new_id(), hub_admin=True, username=username, display_name=display_name, system_user_id=new_id())
-        return out.model_dump(mode="json")
-    with private_umask():
-        if not s.dry_run:
-            root.mkdir(mode=0o700, parents=True, exist_ok=True)
-            for sub in ("organizations", "backups", "trash"):
-                (root / sub).mkdir(mode=0o700, exist_ok=True)
-                sync_directory(root / sub)
-            # Initialization may create a nested data root. Synchronize its
-            # entire directory lineage, including on retry after an incomplete
-            # initialization, before acknowledging any authoritative files.
-            for directory in (root.absolute(), *root.absolute().parents):
-                sync_directory(directory)
-        with RootLock(root, "init"):
-            from bookflow.core.config import Config
-            cfg_path = root / "config.toml"
-            s.config = Config.load(cfg_path)
-            with engine.open_database(root / "hub.db", writable=not s.dry_run or not (root / "hub.db").exists(), create=not s.dry_run) as hub:
-                s.hub = hub
-                if hub.writable:
-                    migrate.migrate_to_head(hub, "hub", root / "backups")
-                    s.config.flush_pending(hub)
-                system = users.find_user(s, kind="system")
-                humans = [dict(r) for r in hub.conn.execute(sa.select(h.users).where(h.users.c.kind == "human")).mappings().all()]
-                mapped = s.config.user_table(s.os_login)
-                if system and humans:
-                    me = next((u for u in humans if mapped and u["id"] == mapped.get("user_id")), None)
-                    if me is not None:
-                        if inp.username and users.username_key(inp.username) != users.username_key(me["username"]):
-                            raise BookflowError("E_INIT_CONFLICT", details={"username": me["username"]})
-                        out = InitOutput(dry_run=s.dry_run, data_root=str(root), created=False, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
-                        return redact_paths(out.model_dump(mode="json"), me["hub_admin"])
-                    if (not cfg_path.exists() or (mapped and not any(u["id"] == mapped.get("user_id") for u in humans))) and len(humans) == 1:
-                        me = humans[0]
-                        if s.dry_run:
-                            out = InitOutput(dry_run=True, data_root=str(root), created=False, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
-                            return out.model_dump(mode="json")
+    with s.commits.operation("hub.init", s.hub, s.company):
+        root = s.data_root
+        username = inp.username or s.os_login
+        display_name = inp.display_name or username
+        if s.dry_run and not (root / "hub.db").exists():
+            out = InitOutput(dry_run=True, data_root=str(root), created=True, user_id=new_id(), hub_admin=True, username=username, display_name=display_name, system_user_id=new_id())
+            return out.model_dump(mode="json")
+        with private_umask():
+            if not s.dry_run:
+                root.mkdir(mode=0o700, parents=True, exist_ok=True)
+                for sub in ("organizations", "backups", "trash"):
+                    (root / sub).mkdir(mode=0o700, exist_ok=True)
+                    sync_directory(root / sub)
+                # Initialization may create a nested data root. Synchronize its
+                # entire directory lineage, including on retry after an incomplete
+                # initialization, before acknowledging any authoritative files.
+                for directory in (root.absolute(), *root.absolute().parents):
+                    sync_directory(directory)
+            with RootLock(root, "init"):
+                from bookflow.core.config import Config
+                cfg_path = root / "config.toml"
+                s.config = Config.load(cfg_path)
+                with engine.open_database(root / "hub.db", writable=not s.dry_run or not (root / "hub.db").exists(), create=not s.dry_run) as hub:
+                    s.hub = hub
+                    if hub.writable:
+                        migrate.migrate_to_head(hub, "hub", root / "backups", commits=s.commits)
+                        s.config.flush_pending(hub, commits=s.commits)
+                    system = users.find_user(s, kind="system")
+                    humans = [dict(r) for r in hub.conn.execute(sa.select(h.users).where(h.users.c.kind == "human")).mappings().all()]
+                    mapped = s.config.user_table(s.os_login)
+                    if system and humans:
+                        me = next((u for u in humans if mapped and u["id"] == mapped.get("user_id")), None)
+                        if me is not None:
+                            if inp.username and users.username_key(inp.username) != users.username_key(me["username"]):
+                                raise BookflowError("E_INIT_CONFLICT", details={"username": me["username"]})
+                            out = InitOutput(dry_run=s.dry_run, data_root=str(root), created=False, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
+                            return redact_paths(out.model_dump(mode="json"), me["hub_admin"])
+                        if (not cfg_path.exists() or (mapped and not any(u["id"] == mapped.get("user_id") for u in humans))) and len(humans) == 1:
+                            me = humans[0]
+                            if s.dry_run:
+                                out = InitOutput(dry_run=True, data_root=str(root), created=False, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
+                                return out.model_dump(mode="json")
+                            s.config.set_user(s.os_login, me["id"])
+                            hub.raw.execute("BEGIN IMMEDIATE")
+                            try:
+                                audit.write_event(s, ctx, "init", "restored the local login mapping", [], actor_id=me["id"], actor_kind="human")
+                                s.config.stage_pending(hub, request_id=ctx.request_id)
+                                s.commits.commit(hub, "hub.init")
+                            except BaseException:
+                                if hub.raw.in_transaction:
+                                    hub.raw.execute("ROLLBACK")
+                                raise
+                            s.config.flush_pending(hub, commits=s.commits)
+                            out = InitOutput(data_root=str(root), created=False, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
+                            return redact_paths(out.model_dump(mode="json"), me["hub_admin"])
+                        raise BookflowError("E_NO_ACTOR")
+                    if s.dry_run:
+                        out = InitOutput(dry_run=True, data_root=str(root), created=True, user_id=new_id(), hub_admin=True, username=username, display_name=display_name, system_user_id=new_id())
+                        return out.model_dump(mode="json")
+                    if users.username_key(username) == "system" or users.username_matches(hub, username):
+                        raise BookflowError("E_INIT_CONFLICT", details={"username": username})
+                    hub.raw.execute("BEGIN IMMEDIATE")
+                    try:
+                        system = system or users.create_system_user(s, VIA(ctx))
+                        me = users.create_human(s, username=username, display_name=display_name, created_by=system["id"], via=VIA(ctx), hub_admin=True)
+                        touched = [Touched("user", system["id"], "create", None, 1, system), Touched("user", me["id"], "create", None, 1, me)]
+                        audit.write_event(s, ctx, "init", f"initialized data root; first user {username}", touched, actor_id=me["id"], actor_kind="human")
                         s.config.set_user(s.os_login, me["id"])
-                        hub.raw.execute("BEGIN IMMEDIATE")
-                        try:
-                            audit.write_event(s, ctx, "init", "restored the local login mapping", [], actor_id=me["id"], actor_kind="human")
-                            s.config.stage_pending(hub, request_id=ctx.request_id)
-                            hub.raw.execute("COMMIT")
-                        except BaseException:
-                            if hub.raw.in_transaction:
-                                hub.raw.execute("ROLLBACK")
-                            raise
-                        s.config.flush_pending(hub)
-                        out = InitOutput(data_root=str(root), created=False, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=me["username"], display_name=me["display_name"], system_user_id=system["id"])
-                        return redact_paths(out.model_dump(mode="json"), me["hub_admin"])
-                    raise BookflowError("E_NO_ACTOR")
-                if s.dry_run:
-                    out = InitOutput(dry_run=True, data_root=str(root), created=True, user_id=new_id(), hub_admin=True, username=username, display_name=display_name, system_user_id=new_id())
+                        s.config.stage_pending(hub, request_id=ctx.request_id)
+                        s.commits.commit(hub, "hub.init")
+                    except BaseException:
+                        hub.raw.execute("ROLLBACK")
+                        raise
+                    s.config.flush_pending(hub, commits=s.commits)
+                    out = InitOutput(data_root=str(root), created=True, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=username, display_name=display_name, system_user_id=system["id"])
                     return out.model_dump(mode="json")
-                if users.username_key(username) == "system" or users.username_matches(hub, username):
-                    raise BookflowError("E_INIT_CONFLICT", details={"username": username})
-                hub.raw.execute("BEGIN IMMEDIATE")
-                try:
-                    system = system or users.create_system_user(s, VIA(ctx))
-                    me = users.create_human(s, username=username, display_name=display_name, created_by=system["id"], via=VIA(ctx), hub_admin=True)
-                    touched = [Touched("user", system["id"], "create", None, 1, system), Touched("user", me["id"], "create", None, 1, me)]
-                    audit.write_event(s, ctx, "init", f"initialized data root; first user {username}", touched, actor_id=me["id"], actor_kind="human")
-                    s.config.set_user(s.os_login, me["id"])
-                    s.config.stage_pending(hub, request_id=ctx.request_id)
-                    hub.raw.execute("COMMIT")
-                except BaseException:
-                    hub.raw.execute("ROLLBACK")
-                    raise
-                s.config.flush_pending(hub)
-                out = InitOutput(data_root=str(root), created=True, user_id=me["id"], hub_admin=bool(me["hub_admin"]), username=username, display_name=display_name, system_user_id=system["id"])
-                return out.model_dump(mode="json")
 
 
 # ---------------------------------------------------------------- upgrade
@@ -193,27 +194,28 @@ def _may_write(s: Session, row: dict[str, Any]) -> bool:
 
 @upgrade_cmd.applier
 def apply_upgrade(plan: Plan, ctx: Context, s: Session) -> Applied:
-    migrated, skipped, missing, failed = [], [], [], []
-    s.hub.raw.execute("COMMIT")
-    for r in plan.data["rows"]:
-        p = s.abs_path(r["path"]) / "company.db"
-        if not p.exists():
-            missing.append(r["id"]); continue
-        s.release_company(r["id"])
-        try:
-            with engine.open_database(p, writable=True) as db:
-                before, after = migrate.migrate_company(s, ctx, db, s.abs_path(r["path"]), r)
-            if before == after:
-                skipped.append(r["id"]); continue
-            s.hub.raw.execute("BEGIN IMMEDIATE")
-            s.hub.conn.execute(h.companies.update().where(h.companies.c.id == r["id"]).values(schema_revision=after))
-            audit.write_event(s, ctx, "upgrade", f"migrated company {r['display_name']} from {before} to {after}", [t for t in s.hub_touched if t.record_id == r["id"]])
-            s.hub.raw.execute("COMMIT")
-            migrated.append(r["id"])
-        except BookflowError as e:
-            failed.append({"company_id": r["id"], "code": e.code}); break
-    out = UpgradeOutput(hub_migrated=s.hub_migrated is not None, hub_revision=migrate.HEADS["hub"], companies_migrated=migrated, companies_skipped=skipped, companies_missing=missing, companies_failed=failed)
-    return Applied(out, [], "upgrade run", audited=True)
+    with s.commits.operation("hub.upgrade", s.hub, s.company):
+        migrated, skipped, missing, failed = [], [], [], []
+        s.commits.commit(s.hub, "hub.upgrade")
+        for r in plan.data["rows"]:
+            p = s.abs_path(r["path"]) / "company.db"
+            if not p.exists():
+                missing.append(r["id"]); continue
+            s.release_company(r["id"])
+            try:
+                with engine.open_database(p, writable=True) as db:
+                    before, after = migrate.migrate_company(s, ctx, db, s.abs_path(r["path"]), r)
+                if before == after:
+                    skipped.append(r["id"]); continue
+                s.hub.raw.execute("BEGIN IMMEDIATE")
+                s.hub.conn.execute(h.companies.update().where(h.companies.c.id == r["id"]).values(schema_revision=after))
+                audit.write_event(s, ctx, "upgrade", f"migrated company {r['display_name']} from {before} to {after}", [t for t in s.hub_touched if t.record_id == r["id"]])
+                s.commits.commit(s.hub, "hub.upgrade")
+                migrated.append(r["id"])
+            except BookflowError as e:
+                failed.append({"company_id": r["id"], "code": e.code}); break
+        out = UpgradeOutput(hub_migrated=s.hub_migrated is not None, hub_revision=migrate.HEADS["hub"], companies_migrated=migrated, companies_skipped=skipped, companies_missing=missing, companies_failed=failed)
+        return Applied(out, [], "upgrade run", audited=True)
 
 
 # ---------------------------------------------------------------- organizations
@@ -317,25 +319,26 @@ def plan_org_rename(inp: OrgRenameInput, ctx: Context, s: Session) -> Plan:
 
 @org_rename.applier
 def apply_org_rename(plan: Plan, ctx: Context, s: Session) -> Applied:
-    row, name, target = plan.data["row"], plan.data["name"], plan.data["target"]
-    changes: dict[str, Any] = {}
-    if name != row["display_name"]:
-        changes.update(display_name=name, name_key=name_key(name))
-    if plan.data["will_move"] and target != row["path"] and target != row.get("pending_path"):
-        changes["pending_path"] = target
-    if not changes and not row.get("pending_path"):
-        return Applied(OrgRenameOutput(organization_id=row["id"], display_name=row["display_name"], previous_display_name=row["display_name"], path=str(s.abs_path(row["path"])), moved=row["id"] in s.completed_moves), [], "no change", audited=True)
-    new = org.bump(row, s.actor.id, VIA(ctx), **changes) if changes else row
-    if changes:
-        s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == row["id"]).values(**{k: new[k] for k in changes} | {"version": new["version"], "updated_at": new["updated_at"], "updated_by": new["updated_by"], "updated_via": new["updated_via"]}))
-        audit.write_event(s, ctx, "organization rename", f"renamed organization {row['display_name']} to {name}" if name != row["display_name"] else f"move requested for organization {name}", [Touched("organization", row["id"], "update", row["version"], new["version"], new)])
-    s.hub.raw.execute("COMMIT")
-    moved = row["id"] in s.completed_moves
-    if plan.data["will_move"] and new.get("pending_path"):
-        from bookflow.hub.moves import complete_org_move
-        new = complete_org_move(s, ctx, dict(new), VIA(ctx))
-        moved = True
-    return Applied(OrgRenameOutput(organization_id=row["id"], display_name=new["display_name"], previous_display_name=row["display_name"], path=str(s.abs_path(new["path"])), moved=moved), [], "", audited=True)
+    with s.commits.operation("hub.org_rename", s.hub, s.company):
+        row, name, target = plan.data["row"], plan.data["name"], plan.data["target"]
+        changes: dict[str, Any] = {}
+        if name != row["display_name"]:
+            changes.update(display_name=name, name_key=name_key(name))
+        if plan.data["will_move"] and target != row["path"] and target != row.get("pending_path"):
+            changes["pending_path"] = target
+        if not changes and not row.get("pending_path"):
+            return Applied(OrgRenameOutput(organization_id=row["id"], display_name=row["display_name"], previous_display_name=row["display_name"], path=str(s.abs_path(row["path"])), moved=row["id"] in s.completed_moves), [], "no change", audited=True)
+        new = org.bump(row, s.actor.id, VIA(ctx), **changes) if changes else row
+        if changes:
+            s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == row["id"]).values(**{k: new[k] for k in changes} | {"version": new["version"], "updated_at": new["updated_at"], "updated_by": new["updated_by"], "updated_via": new["updated_via"]}))
+            audit.write_event(s, ctx, "organization rename", f"renamed organization {row['display_name']} to {name}" if name != row["display_name"] else f"move requested for organization {name}", [Touched("organization", row["id"], "update", row["version"], new["version"], new)])
+        s.commits.commit(s.hub, "hub.org_rename")
+        moved = row["id"] in s.completed_moves
+        if plan.data["will_move"] and new.get("pending_path"):
+            from bookflow.hub.moves import complete_org_move
+            new = complete_org_move(s, ctx, dict(new), VIA(ctx))
+            moved = True
+        return Applied(OrgRenameOutput(organization_id=row["id"], display_name=new["display_name"], previous_display_name=row["display_name"], path=str(s.abs_path(new["path"])), moved=moved), [], "", audited=True)
 
 
 # ---------------------------------------------------------------- company new
@@ -584,34 +587,35 @@ def plan_company_new(inp: CompanyNewInput, ctx: Context, s: Session) -> Plan:
 
 @company_new.applier
 def apply_company_new(plan: Plan, ctx: Context, s: Session) -> Applied:
-    orow, display, cid = plan.data["org"], plan.data["display"], plan.data["company_id"]
-    if ctx.idempotency_key:
-        # the in-progress row lives in its own hub transaction before the folder exists (row 2 plan, Idempotency)
-        from bookflow.core import idempotency
-        ihash = idempotency.input_hash(plan.data["validated"], None)
-        idempotency.store(s.hub, s.actor.id, ctx.idempotency_key, "company new", ihash, ctx.request_id, {"path": plan.preview.path, "company_id": cid}, state="in_progress")
-        s.hub.raw.execute("COMMIT")
-        s.hub.raw.execute("BEGIN IMMEDIATE")
-    folder = rollout.create_company_folder(
-        s,
-        s.abs_path(orow["path"]),
-        cid,
-        display,
-        plan.data["info"],
-        VIA(ctx),
-        ctx,
-        chart=plan.data["chart"],
-    )
-    try:
-        row, touched = co.register(s, company_id=cid, organization_id=orow["id"], display_name=display, rel_path=s.rel_path(folder),
-                                   legal_name=plan.data["info"]["legal_name"], home_currency=plan.data["info"]["home_currency"],
-                                   schema_revision=migrate.HEADS["company"], via=VIA(ctx))
-    except BaseException as e:  # noqa: BLE001 - the folder exists; the caller must learn that (blueprint 3.1)
-        if isinstance(e, (KeyboardInterrupt, SystemExit)):
-            raise
-        code = getattr(e, "code", None) or engine.io_error("register", e).code
-        raise BookflowError("E_ROLLOUT_INCOMPLETE", details={"state": "unregistered", "path": str(folder), "cause": code}, message="Company creation did not finish; the folder exists but is not registered. `company attach` adopts it.")
-    return Applied(CompanyNewOutput(company_id=cid, organization_id=orow["id"], display_name=display, path=str(folder)), touched, f"created company {display} in {orow['display_name']}")
+    with s.commits.operation("hub.company_new", s.hub, s.company):
+        orow, display, cid = plan.data["org"], plan.data["display"], plan.data["company_id"]
+        if ctx.idempotency_key:
+            # the in-progress row lives in its own hub transaction before the folder exists (row 2 plan, Idempotency)
+            from bookflow.core import idempotency
+            ihash = idempotency.input_hash(plan.data["validated"], None)
+            idempotency.store(s.hub, s.actor.id, ctx.idempotency_key, "company new", ihash, ctx.request_id, {"path": plan.preview.path, "company_id": cid}, state="in_progress")
+            s.commits.commit(s.hub, "hub.company_new")
+            s.hub.raw.execute("BEGIN IMMEDIATE")
+        folder = rollout.create_company_folder(
+            s,
+            s.abs_path(orow["path"]),
+            cid,
+            display,
+            plan.data["info"],
+            VIA(ctx),
+            ctx,
+            chart=plan.data["chart"],
+        )
+        try:
+            row, touched = co.register(s, company_id=cid, organization_id=orow["id"], display_name=display, rel_path=s.rel_path(folder),
+                                       legal_name=plan.data["info"]["legal_name"], home_currency=plan.data["info"]["home_currency"],
+                                       schema_revision=migrate.HEADS["company"], via=VIA(ctx))
+        except BaseException as e:  # noqa: BLE001 - the folder exists; the caller must learn that (blueprint 3.1)
+            if isinstance(e, (KeyboardInterrupt, SystemExit)):
+                raise
+            code = getattr(e, "code", None) or engine.io_error("register", e).code
+            raise BookflowError("E_ROLLOUT_INCOMPLETE", details={"state": "unregistered", "path": str(folder), "cause": code}, message="Company creation did not finish; the folder exists but is not registered. `company attach` adopts it.")
+        return Applied(CompanyNewOutput(company_id=cid, organization_id=orow["id"], display_name=display, path=str(folder)), touched, f"created company {display} in {orow['display_name']}")
 
 
 # ---------------------------------------------------------------- company list / use / attach / detach
@@ -732,29 +736,31 @@ def plan_company_attach(inp: AttachInput, ctx: Context, s: Session) -> Plan:
 
 @company_attach.applier
 def apply_company_attach(plan: Plan, ctx: Context, s: Session) -> Applied:
-    folder, orow, raw, name = plan.data["folder"], plan.data["org"], plan.data["raw"], plan.data["name"]
-    s.release_company(raw["id"])
-    tightened = _tighten_modes(folder)
-    if tightened:
-        s.warnings.append(f"tightened the modes of {tightened} entries in the folder to 0700/0600")
-    # A ready folder may be left by an interrupted rollout whose final
-    # directory synchronization failed after marker replacement.
-    sync_directory(folder)
-    sync_directory(folder.parent)
-    row, touched = co.register(s, company_id=raw["id"], organization_id=orow["id"], display_name=name, rel_path=s.rel_path(folder),
-                               legal_name=raw["legal_name"], home_currency=raw["home_currency"], schema_revision=raw["revision"] or migrate.HEADS["company"],
-                               via=VIA(ctx), owner_membership=False)
-    if plan.data["behind"] or plan.data["rename_copy"]:
-        try:
-            with engine.open_database(folder / "company.db", writable=True) as db:
-                before, after = migrate.migrate_company(s, ctx, db, folder, row)
-                info.write_display_name_copy(db, name)
-            if before != after:
-                s.hub.conn.execute(h.companies.update().where(h.companies.c.id == raw["id"]).values(schema_revision=after))
-            write_company_marker(folder, company_id=raw["id"], state="ready", display_name=name, schema_revision=after or raw["revision"])
-        except BookflowError as e:
-            s.warnings.append(f"registered, but the database was not migrated ({e.code}); run `bookflow upgrade`")
-    return Applied(AttachOutput(company_id=raw["id"], organization_id=orow["id"], display_name=name, path=str(folder)), touched, f"attached company {name} to {orow['display_name']}")
+    with s.commits.operation("hub.attach_projection", s.hub, s.company):
+        folder, orow, raw, name = plan.data["folder"], plan.data["org"], plan.data["raw"], plan.data["name"]
+        s.release_company(raw["id"])
+        tightened = _tighten_modes(folder)
+        if tightened:
+            s.warnings.append(f"tightened the modes of {tightened} entries in the folder to 0700/0600")
+        # A ready folder may be left by an interrupted rollout whose final
+        # directory synchronization failed after marker replacement.
+        sync_directory(folder)
+        sync_directory(folder.parent)
+        row, touched = co.register(s, company_id=raw["id"], organization_id=orow["id"], display_name=name, rel_path=s.rel_path(folder),
+                                   legal_name=raw["legal_name"], home_currency=raw["home_currency"], schema_revision=raw["revision"] or migrate.HEADS["company"],
+                                   via=VIA(ctx), owner_membership=False)
+        if plan.data["behind"] or plan.data["rename_copy"]:
+            try:
+                with engine.open_database(folder / "company.db", writable=True) as db:
+                    before, after = migrate.migrate_company(s, ctx, db, folder, row)
+                    with s.commits.autocommit(db, "hub.attach_projection"):
+                        info.write_display_name_copy(db, name)
+                if before != after:
+                    s.hub.conn.execute(h.companies.update().where(h.companies.c.id == raw["id"]).values(schema_revision=after))
+                write_company_marker(folder, company_id=raw["id"], state="ready", display_name=name, schema_revision=after or raw["revision"])
+            except BookflowError as e:
+                s.warnings.append(f"registered, but the database was not migrated ({e.code}); run `bookflow upgrade`")
+        return Applied(AttachOutput(company_id=raw["id"], organization_id=orow["id"], display_name=name, path=str(folder)), touched, f"attached company {name} to {orow['display_name']}")
 
 
 def _tighten_modes(folder: Path) -> int:
@@ -858,88 +864,89 @@ def plan_demo_reset(inp: DemoResetInput, ctx: Context, s: Session) -> Plan:
 
 @demo_reset.applier
 def apply_demo_reset(plan: Plan, ctx: Context, s: Session) -> Applied:
-    seed, existing, trash_rel = plan.data["seed"], plan.data["existing"], plan.data["trash_rel"]
-    trashed = None
-    if existing:
-        s.release_company(None)
-        company_ids = s.hub.conn.execute(sa.select(h.companies.c.id).where(
-            h.companies.c.organization_id == existing["id"]
-        )).scalars().all()
-        for company_id in company_ids:
-            s.release_company(company_id)
-        pending = existing.get("pending_path") if (existing.get("pending_path") or "").startswith("trash/") else trash_rel
-        if existing.get("pending_path") != pending:
-            s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == existing["id"]).values(pending_path=pending))
-            audit.write_event(s, ctx, "demo reset", "moving the previous demo organization to trash", [Touched("organization", existing["id"], "update", existing["version"], existing["version"], {**existing, "pending_path": pending})])
-        s.hub.raw.execute("COMMIT")
-        src, dst = s.abs_path(existing["path"]), s.abs_path(pending)
-        try:
-            if src.exists():
-                # The persisted pending path is the recovery destination. A
-                # collision must not silently select an unrecorded destination.
-                move_dir(src, dst, company_id=existing["id"])
-            elif dst.exists():
-                marker = read_org_marker(dst)
-                if not marker or marker.get("organization_id") != existing["id"]:
-                    raise BookflowError("E_DEMO_RESET_INCOMPLETE", details={"organization_id": existing["id"], "cause": "E_IO", "path": str(dst)})
-                sync_move_parents(src, dst)
-            else:
-                raise BookflowError("E_COMPANY_MISSING", details={"organization_id": existing["id"], "path": str(dst)})
-        except (BookflowError, OSError) as e:
-            raise BookflowError("E_DEMO_RESET_INCOMPLETE", details={"organization_id": existing["id"], "cause": e.code if isinstance(e, BookflowError) else "E_IO", "path": str(dst)}) from e
-        trashed = str(dst)
-        s.hub.raw.execute("BEGIN IMMEDIATE")
-        touched = co.delete_organization_rows(s, existing["id"])
-        audit.write_event(s, ctx, "demo reset", "removed previous demo organization", touched)
-    orow, t_org = org.create(s, normalize_display_name(seed["organization"]["display_name"]), VIA(ctx), is_demo=True)
-    rows = []
-    touched = [t_org]
-    seeds = [seed] + ([plan.data["reference"]] if plan.data["reference"] else [])
-    for company_seed in seeds:
-        inp = CompanyNewInput.model_validate({k: v for k, v in company_seed["company"].items()} | {"organization": orow["id"]})
-        display = normalize_display_name(inp.display_name or inp.legal_name)
-        if inp.timezone is None:
-            inp = inp.model_copy(update={"timezone": _machine_zone() or "UTC"})
-        cid = new_id()
-        folder = rollout.create_company_folder(
-            s,
-            s.abs_path(orow["path"]),
-            cid,
-            display,
-            _info_columns(inp),
-            VIA(ctx),
-            ctx,
-            chart=inp.chart,
-        )
-        row, t_co = co.register(s, company_id=cid, organization_id=orow["id"], display_name=display, rel_path=s.rel_path(folder), legal_name=inp.legal_name,
-                                home_currency=inp.home_currency, schema_revision=migrate.HEADS["company"], via=VIA(ctx), is_demo=True)
-        rows.append(row)
-        touched.extend(t_co)
-    primary = rows[0]
-    reference = rows[1] if len(rows) > 1 else None
-    out = DemoResetOutput(
-        organization_id=orow["id"], company_id=primary["id"],
-        display_name=primary["display_name"], path=str(s.abs_path(primary["path"])),
-        trashed_path=trashed,
-        reference_company_id=reference["id"] if reference else None,
-        reference_display_name=reference["display_name"] if reference else None,
-    )
-
-    def seed_history() -> None:
-        for company_seed, row in zip(seeds, rows):
+    with s.commits.operation("hub.demo_reset", s.hub, s.company):
+        seed, existing, trash_rel = plan.data["seed"], plan.data["existing"], plan.data["trash_rel"]
+        trashed = None
+        if existing:
+            s.release_company(None)
+            company_ids = s.hub.conn.execute(sa.select(h.companies.c.id).where(
+                h.companies.c.organization_id == existing["id"]
+            )).scalars().all()
+            for company_id in company_ids:
+                s.release_company(company_id)
+            pending = existing.get("pending_path") if (existing.get("pending_path") or "").startswith("trash/") else trash_rel
+            if existing.get("pending_path") != pending:
+                s.hub.conn.execute(h.organizations.update().where(h.organizations.c.id == existing["id"]).values(pending_path=pending))
+                audit.write_event(s, ctx, "demo reset", "moving the previous demo organization to trash", [Touched("organization", existing["id"], "update", existing["version"], existing["version"], {**existing, "pending_path": pending})])
+            s.commits.commit(s.hub, "hub.demo_reset")
+            src, dst = s.abs_path(existing["path"]), s.abs_path(pending)
             try:
-                _apply_seed_history(s, ctx, company_seed, row)
-            except Exception as error:
-                raise BookflowError(
-                    "E_PARTIAL_WRITE",
-                    message="The demo organization and companies were created, but seed history is incomplete. Earlier seed commands remain saved. Rerunning demo reset moves this entire disposable organization to trash.",
-                    details={"command": "demo reset", "durable": ["organization", "company"],
-                             "organization_id": orow["id"], "company_ids": [r["id"] for r in rows],
-                             "incomplete_company_id": row["id"], "request_id": ctx.request_id,
-                             "cause": getattr(error, "code", "E_INTERNAL")},
-                ) from error
+                if src.exists():
+                    # The persisted pending path is the recovery destination. A
+                    # collision must not silently select an unrecorded destination.
+                    move_dir(src, dst, company_id=existing["id"])
+                elif dst.exists():
+                    marker = read_org_marker(dst)
+                    if not marker or marker.get("organization_id") != existing["id"]:
+                        raise BookflowError("E_DEMO_RESET_INCOMPLETE", details={"organization_id": existing["id"], "cause": "E_IO", "path": str(dst)})
+                    sync_move_parents(src, dst)
+                else:
+                    raise BookflowError("E_COMPANY_MISSING", details={"organization_id": existing["id"], "path": str(dst)})
+            except (BookflowError, OSError) as e:
+                raise BookflowError("E_DEMO_RESET_INCOMPLETE", details={"organization_id": existing["id"], "cause": e.code if isinstance(e, BookflowError) else "E_IO", "path": str(dst)}) from e
+            trashed = str(dst)
+            s.hub.raw.execute("BEGIN IMMEDIATE")
+            touched = co.delete_organization_rows(s, existing["id"])
+            audit.write_event(s, ctx, "demo reset", "removed previous demo organization", touched)
+        orow, t_org = org.create(s, normalize_display_name(seed["organization"]["display_name"]), VIA(ctx), is_demo=True)
+        rows = []
+        touched = [t_org]
+        seeds = [seed] + ([plan.data["reference"]] if plan.data["reference"] else [])
+        for company_seed in seeds:
+            inp = CompanyNewInput.model_validate({k: v for k, v in company_seed["company"].items()} | {"organization": orow["id"]})
+            display = normalize_display_name(inp.display_name or inp.legal_name)
+            if inp.timezone is None:
+                inp = inp.model_copy(update={"timezone": _machine_zone() or "UTC"})
+            cid = new_id()
+            folder = rollout.create_company_folder(
+                s,
+                s.abs_path(orow["path"]),
+                cid,
+                display,
+                _info_columns(inp),
+                VIA(ctx),
+                ctx,
+                chart=inp.chart,
+            )
+            row, t_co = co.register(s, company_id=cid, organization_id=orow["id"], display_name=display, rel_path=s.rel_path(folder), legal_name=inp.legal_name,
+                                    home_currency=inp.home_currency, schema_revision=migrate.HEADS["company"], via=VIA(ctx), is_demo=True)
+            rows.append(row)
+            touched.extend(t_co)
+        primary = rows[0]
+        reference = rows[1] if len(rows) > 1 else None
+        out = DemoResetOutput(
+            organization_id=orow["id"], company_id=primary["id"],
+            display_name=primary["display_name"], path=str(s.abs_path(primary["path"])),
+            trashed_path=trashed,
+            reference_company_id=reference["id"] if reference else None,
+            reference_display_name=reference["display_name"] if reference else None,
+        )
 
-    return Applied(out, touched, f"reset demo: {orow['display_name']} / " + ", ".join(r["display_name"] for r in rows), after_commit=seed_history)
+        def seed_history() -> None:
+            for company_seed, row in zip(seeds, rows):
+                try:
+                    _apply_seed_history(s, ctx, company_seed, row)
+                except Exception as error:
+                    raise BookflowError(
+                        "E_PARTIAL_WRITE",
+                        message="The demo organization and companies were created, but seed history is incomplete. Earlier seed commands remain saved. Rerunning demo reset moves this entire disposable organization to trash.",
+                        details={"command": "demo reset", "durable": ["organization", "company"],
+                                 "organization_id": orow["id"], "company_ids": [r["id"] for r in rows],
+                                 "incomplete_company_id": row["id"], "request_id": ctx.request_id,
+                                 "cause": getattr(error, "code", "E_INTERNAL")},
+                    ) from error
+
+        return Applied(out, touched, f"reset demo: {orow['display_name']} / " + ", ".join(r["display_name"] for r in rows), after_commit=seed_history)
 
 
 

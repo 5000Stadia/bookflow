@@ -6,6 +6,7 @@ concurrency, idempotency, and audit events.
 """
 
 from __future__ import annotations
+from bookflow.core.commit_hooks import CommitHooks
 
 import calendar
 from dataclasses import dataclass
@@ -959,34 +960,37 @@ def apply_standard_profile(
     actor_id: str,
     via: str,
     dry_run: bool = False,
+    commits: CommitHooks | None = None,
 ) -> ProfileApplyResult:
     """Insert missing standard rows atomically and preserve every seeded edit."""
-    owns_transaction = not db.raw.in_transaction
-    if owns_transaction and not dry_run:
-        db.raw.execute("BEGIN IMMEDIATE")
-    try:
-        manifest, planned, preserved = plan_standard_profile(
-            db,
-            actor_id=actor_id,
-            via=via,
-        )
-        inserted = {noun: 0 for noun in manifest.lists}
-        for mutation in planned:
-            inserted[mutation.noun] += 1
-        result = ProfileApplyResult(
-            version=manifest.version,
-            inserted_by_list=inserted,
-            preserved_by_list=preserved,
-            dry_run=dry_run,
-        )
-        if dry_run:
-            return result
-        for mutation in planned:
-            persist_profile_mutation(db, mutation)
-        if owns_transaction:
-            db.raw.execute("COMMIT")
-    except BaseException:
-        if owns_transaction and db.raw.in_transaction:
-            db.raw.execute("ROLLBACK")
-        raise
-    return result
+    commits = commits if commits is not None else CommitHooks()
+    with commits.operation("profiles.standard", db):
+        owns_transaction = not db.raw.in_transaction
+        if owns_transaction and not dry_run:
+            db.raw.execute("BEGIN IMMEDIATE")
+        try:
+            manifest, planned, preserved = plan_standard_profile(
+                db,
+                actor_id=actor_id,
+                via=via,
+            )
+            inserted = {noun: 0 for noun in manifest.lists}
+            for mutation in planned:
+                inserted[mutation.noun] += 1
+            result = ProfileApplyResult(
+                version=manifest.version,
+                inserted_by_list=inserted,
+                preserved_by_list=preserved,
+                dry_run=dry_run,
+            )
+            if dry_run:
+                return result
+            for mutation in planned:
+                persist_profile_mutation(db, mutation)
+            if owns_transaction:
+                commits.commit(db, "profiles.standard")
+        except BaseException:
+            if owns_transaction and db.raw.in_transaction:
+                db.raw.execute("ROLLBACK")
+            raise
+        return result

@@ -209,7 +209,7 @@ def _complete_pending_organizations(s: Session, ctx: Context) -> None:
 
 def _migrate_hub(s: Session, ctx: Context) -> None:
     """Migrate the hub after the actor is known (row 2 plan, 'Schema migrations')."""
-    before, after = migrate_to_head(s.hub, "hub", s.data_root / "backups")
+    before, after = migrate_to_head(s.hub, "hub", s.data_root / "backups", commits=s.commits)
     if before != after:
         s.hub_migrated = (before, after)
         _record_migration(s, ctx, s.hub, "hub", before, after)
@@ -258,86 +258,91 @@ def resolve_company_folder(s: Session, ctx: Context, row: dict[str, Any], writab
 
 def open_company(s: Session, ctx: Context, writable: bool) -> None:
     """Open the selected company database, completing pending moves on writable opens."""
-    row = s.company_row
-    assert row is not None and s.hub is not None
-    path = resolve_company_folder(s, ctx, row, writable and s.hub.writable)
-    db_path = path / "company.db"
-    if not db_path.exists():
-        raise BookflowError("E_COMPANY_MISSING", details={"company_id": row["id"], "check": "database", "path": str(db_path)})
-    if s.company_opener is not None:
-        s.company = s.company_opener(row, writable, db_path)
-        s._co_cm = None  # type: ignore[attr-defined]
-    else:
-        s._co_cm = open_database(db_path, writable)  # type: ignore[attr-defined]
-        s.company = s._co_cm.__enter__()  # type: ignore[attr-defined]
-    if not writable:
-        rev = current_revision_open(s.company)
-        state = classify("company", rev)
-        if state == "unknown":
-            raise BookflowError("E_SCHEMA_UNKNOWN", details={"revision": rev, "path": str(db_path)})
-        if state != "head":
-            raise BookflowError("E_SCHEMA_BEHIND", details={"revision": rev, "head": HEADS["company"], "path": str(db_path)}, message="The company database schema is behind this version of Bookflow; run `bookflow upgrade`, or ask a user with write access to.")
-    s.company_id = row["id"]
-    s.company_tz = None
-    from bookflow.company.info import read_info, write_display_name_copy
-    from bookflow.storage.migrate import migrate_company
-    if writable:
-        before, after = migrate_company(s, ctx, s.company, path, row)
-        if before != after:
-            s.hub.raw.execute("BEGIN IMMEDIATE")
-            s.hub.conn.execute(h.companies.update().where(h.companies.c.id == row["id"]).values(schema_revision=after))
-            s.hub.raw.execute("COMMIT")
-        info = read_info(s.company)
-        if info.get("display_name") != row["display_name"]:
-            write_display_name_copy(s.company, row["display_name"])
-    else:
-        info = read_info(s.company)
-    s.company_tz = info.get("timezone")
-    s.company_info_row = info
+    with s.commits.operation("dispatch.open_company", s.hub, s.company):
+        row = s.company_row
+        assert row is not None and s.hub is not None
+        path = resolve_company_folder(s, ctx, row, writable and s.hub.writable)
+        db_path = path / "company.db"
+        if not db_path.exists():
+            raise BookflowError("E_COMPANY_MISSING", details={"company_id": row["id"], "check": "database", "path": str(db_path)})
+        if s.company_opener is not None:
+            s.company = s.company_opener(row, writable, db_path)
+            s._co_cm = None  # type: ignore[attr-defined]
+        else:
+            s._co_cm = open_database(db_path, writable)  # type: ignore[attr-defined]
+            s.company = s._co_cm.__enter__()  # type: ignore[attr-defined]
+        if not writable:
+            rev = current_revision_open(s.company)
+            state = classify("company", rev)
+            if state == "unknown":
+                raise BookflowError("E_SCHEMA_UNKNOWN", details={"revision": rev, "path": str(db_path)})
+            if state != "head":
+                raise BookflowError("E_SCHEMA_BEHIND", details={"revision": rev, "head": HEADS["company"], "path": str(db_path)}, message="The company database schema is behind this version of Bookflow; run `bookflow upgrade`, or ask a user with write access to.")
+        s.company_id = row["id"]
+        s.company_tz = None
+        from bookflow.company.info import read_info, write_display_name_copy
+        from bookflow.storage.migrate import migrate_company
+        if writable:
+            before, after = migrate_company(s, ctx, s.company, path, row)
+            if before != after:
+                s.hub.raw.execute("BEGIN IMMEDIATE")
+                s.hub.conn.execute(h.companies.update().where(h.companies.c.id == row["id"]).values(schema_revision=after))
+                s.commits.commit(s.hub, "dispatch.open_company")
+            info = read_info(s.company)
+            if info.get("display_name") != row["display_name"]:
+                with s.commits.autocommit(s.company, "dispatch.open_company"):
+                    write_display_name_copy(s.company, row["display_name"])
+        else:
+            info = read_info(s.company)
+        s.company_tz = info.get("timezone")
+        s.company_info_row = info
 
 
 def _record_migration(s: Session, ctx: Context, db, chain: str, before: str | None, after: str, record_id: str | None = None, label: str = "hub") -> None:
     """Blueprint 7: a `migrate` entry by the system user with on_behalf_of the triggering actor."""
-    from bookflow.core.registry import Touched
-    from bookflow.hub.users import find_user
-    system = find_user(s, kind="system") if s.hub is not None else None
-    actor_id = system["id"] if system else None
-    on_behalf = s.actor.id if s.actor else None
-    mctx = ctx.model_copy(update={"on_behalf_of": on_behalf})
-    touched = [Touched(chain if chain == "hub" else "company", record_id or "hub", "migrate", None, None, {"schema_revision": after, "from": before})]
-    s.hub.raw.execute("BEGIN IMMEDIATE")
-    write_event(s, mctx, "upgrade", f"migrated {label} from {before} to {after}", touched, actor_id=actor_id, actor_kind="system")
-    s.hub.raw.execute("COMMIT")
+    with s.commits.operation("dispatch.record_migration", s.hub, s.company):
+        from bookflow.core.registry import Touched
+        from bookflow.hub.users import find_user
+        system = find_user(s, kind="system") if s.hub is not None else None
+        actor_id = system["id"] if system else None
+        on_behalf = s.actor.id if s.actor else None
+        mctx = ctx.model_copy(update={"on_behalf_of": on_behalf})
+        touched = [Touched(chain if chain == "hub" else "company", record_id or "hub", "migrate", None, None, {"schema_revision": after, "from": before})]
+        s.hub.raw.execute("BEGIN IMMEDIATE")
+        write_event(s, mctx, "upgrade", f"migrated {label} from {before} to {after}", touched, actor_id=actor_id, actor_kind="system")
+        s.commits.commit(s.hub, "dispatch.record_migration")
 
 
 def _complete_trash(s: Session, row: dict[str, Any], ctx: Context) -> None:
-    from bookflow.hub.companies import delete_company_rows
-    from bookflow.core.durability import sync_move_parents
-    from bookflow.core.moves import move_dir
-    from bookflow.storage.paths import read_company_marker
-    s.release_company(row["id"])
-    source, target = s.abs_path(row["path"]), s.abs_path(row["pending_path"])
-    if source.exists() and target.exists():
-        raise BookflowError("E_IO", details={"operation": "trash recovery", "errno": "EEXIST", "path": str(target)})
-    if not target.exists() and source.exists():
-        move_dir(source, target, company_id=row["id"])
-    if not target.exists() or read_company_marker(target).get("company_id") != row["id"]:
-        raise BookflowError("E_COMPANY_MISSING", details={"company_id": row["id"], "path": str(target)})
-    sync_move_parents(source, target)
-    s.hub.raw.execute("BEGIN IMMEDIATE")
-    touched = delete_company_rows(s, row["id"])
-    write_event(s, ctx, "trash recovery", "completed pending company trash", touched)
-    if s.pending_config:
-        s.config.stage_pending(s.hub, request_id=ctx.request_id)
-    s.hub.raw.execute("COMMIT")
-    if s.pending_config:
-        try:
-            s.config.flush_pending(s.hub)
-        except BookflowError as error:
-            if error.code == "E_PARTIAL_WRITE":
-                error.details["durable"] = sorted({"config", *(entry.record_type for entry in touched)})
-            raise
-        s.pending_config = False
+    with s.commits.operation("dispatch.complete_trash", s.hub, s.company):
+        from bookflow.hub.companies import delete_company_rows
+        from bookflow.core.durability import sync_move_parents
+        from bookflow.core.moves import move_dir
+        from bookflow.storage.paths import read_company_marker
+        s.release_company(row["id"])
+        source, target = s.abs_path(row["path"]), s.abs_path(row["pending_path"])
+        if source.exists() and target.exists():
+            raise BookflowError("E_IO", details={"operation": "trash recovery", "errno": "EEXIST", "path": str(target)})
+        if not target.exists() and source.exists():
+            s.commits.publishing("dispatch.complete_trash")
+            move_dir(source, target, company_id=row["id"])
+        if not target.exists() or read_company_marker(target).get("company_id") != row["id"]:
+            raise BookflowError("E_COMPANY_MISSING", details={"company_id": row["id"], "path": str(target)})
+        sync_move_parents(source, target)
+        s.hub.raw.execute("BEGIN IMMEDIATE")
+        touched = delete_company_rows(s, row["id"])
+        write_event(s, ctx, "trash recovery", "completed pending company trash", touched)
+        if s.pending_config:
+            s.config.stage_pending(s.hub, request_id=ctx.request_id)
+        s.commits.commit(s.hub, "dispatch.complete_trash")
+        if s.pending_config:
+            try:
+                s.config.flush_pending(s.hub, commits=s.commits)
+            except BookflowError as error:
+                if error.code == "E_PARTIAL_WRITE":
+                    error.details["durable"] = sorted({"config", *(entry.record_type for entry in touched)})
+                raise
+            s.pending_config = False
 
 
 @performance.measured("command.close")
@@ -392,7 +397,7 @@ def execute(cmd: Command, raw_input: dict[str, Any], ctx: Context, s: Session, *
             _open_hub(s, True, ctx)
             _migrate_hub(s, ctx)
         if s.hub is not None and s.hub.writable and not dry_run:
-            s.config.flush_pending(s.hub)
+            s.config.flush_pending(s.hub, commits=s.commits)
             _complete_pending_organizations(s, ctx)
         return run_in_session(cmd, inp, ctx, s, company_selector=company_selector, company_source=company_source, dry_run=dry_run, _recovery_checked=True)
     with performance.span("command.execute", command=cmd.name):
@@ -634,98 +639,99 @@ def _accepts_selector(cmd: Command) -> bool:
 
 def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None)):
     """Apply with one transaction per database, events where the touched records live, commits in truth order."""
-    from bookflow.core import idempotency
-    from bookflow.core.audit import write_event_to
-    assert cmd.apply is not None
-    key_db, ihash = key
-    hub_tx = bool(cmd.writes & {"hub", "config"}) or cmd.kind == "advisory"
-    co_tx = s.company is not None and "company" in cmd.writes
-    business_savepoint = co_tx and getattr(cmd, "ledger", False)
-    if hub_tx:
-        s.hub.raw.execute("BEGIN IMMEDIATE")
-    if co_tx:
-        s.company.raw.execute("BEGIN IMMEDIATE")
-        if business_savepoint:
-            s.company.raw.execute("SAVEPOINT bookflow_business")
-    try:
+    with s.commits.operation("dispatch.apply", s.hub, s.company):
+        from bookflow.core import idempotency
+        from bookflow.core.audit import write_event_to
+        assert cmd.apply is not None
+        key_db, ihash = key
+        hub_tx = bool(cmd.writes & {"hub", "config"}) or cmd.kind == "advisory"
+        co_tx = s.company is not None and "company" in cmd.writes
+        business_savepoint = co_tx and getattr(cmd, "ledger", False)
+        if hub_tx:
+            s.hub.raw.execute("BEGIN IMMEDIATE")
         if co_tx:
-            _upsert_principals(s, ctx)
-        with performance.span("command.apply", command=cmd.name):
-            applied = cmd.apply(plan, ctx, s)
-        if applied.finalized:
-            if any(db is not None and db.write_transaction for db in (s.company, s.hub)):
-                raise BookflowError("E_INTERNAL", message="A finalized command left an unfinished transaction.")
-            return applied
-        if s.pending_config:
-            s.config.stage_pending(s.hub, request_id=ctx.request_id)
-        if cmd.kind == "advisory":
-            if s.company.write_transaction:
-                s.company.raw.execute("COMMIT")
-            if s.hub.write_transaction:
-                s.hub.raw.execute("COMMIT")
-            return applied
-        hub_entries = [t for t in applied.touched if t.db == "hub"] + list(s.hub_touched)
-        co_entries = [t for t in applied.touched if t.db == "company"]
-        changed = bool(applied.touched) or applied.audited or bool(s.hub_touched) or s.pending_config
-        output = applied.output.model_dump(mode="json")
-        if not changed:
-            if business_savepoint and s.company is not None and s.company.write_transaction:
-                s.company.raw.execute("ROLLBACK TO bookflow_business")
-                s.company.raw.execute("RELEASE bookflow_business")
-            # A no-op keeps its successful retry result without creating an audit event.
-            if key_db is not None and ihash:
-                idempotency.store(key_db, s.actor.id, ctx.idempotency_key, cmd.name, ihash, ctx.request_id, output)
-            if s.company is not None and s.company.write_transaction:
-                s.company.raw.execute("COMMIT")
-            if s.hub is not None and s.hub.writable:
-                repaired = _repair_projection(s, ctx)
-                if repaired:
-                    from bookflow.core.audit import write_event_to
-                    write_event_to(s.hub, ctx, cmd.name, "repaired the registry copy of company information", repaired, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
+            s.company.raw.execute("BEGIN IMMEDIATE")
+            if business_savepoint:
+                s.company.raw.execute("SAVEPOINT bookflow_business")
+        try:
+            if co_tx:
+                _upsert_principals(s, ctx)
+            with performance.span("command.apply", command=cmd.name):
+                applied = cmd.apply(plan, ctx, s)
+            if applied.finalized:
+                if any(db is not None and db.write_transaction for db in (s.company, s.hub)):
+                    raise BookflowError("E_INTERNAL", message="A finalized command left an unfinished transaction.")
+                return applied
+            if s.pending_config:
+                s.config.stage_pending(s.hub, request_id=ctx.request_id)
+            if cmd.kind == "advisory":
+                if s.company.write_transaction:
+                    s.commits.commit(s.company, "dispatch.apply")
                 if s.hub.write_transaction:
-                    s.hub.raw.execute("COMMIT")
-            return applied
-        if business_savepoint and s.company is not None and s.company.write_transaction:
-            s.company.raw.execute("RELEASE bookflow_business")
-        if s.company is not None and cmd.truth == "company":
-            if co_entries and not applied.audited and s.company.write_transaction:
-                write_event_to(s.company, ctx, cmd.name, applied.summary, co_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
-            if key_db is s.company and ihash and changed:
-                idempotency.store(s.company, s.actor.id, ctx.idempotency_key, cmd.name, ihash, ctx.request_id, output)
-            if s.company.write_transaction:
-                s.company.raw.execute("COMMIT")
-            try:
-                hub_entries += _repair_projection(s, ctx)
-                if hub_tx and hub_entries and not applied.audited and changed:
+                    s.commits.commit(s.hub, "dispatch.apply")
+                return applied
+            hub_entries = [t for t in applied.touched if t.db == "hub"] + list(s.hub_touched)
+            co_entries = [t for t in applied.touched if t.db == "company"]
+            changed = bool(applied.touched) or applied.audited or bool(s.hub_touched) or s.pending_config
+            output = applied.output.model_dump(mode="json")
+            if not changed:
+                if business_savepoint and s.company is not None and s.company.write_transaction:
+                    s.company.raw.execute("ROLLBACK TO bookflow_business")
+                    s.company.raw.execute("RELEASE bookflow_business")
+                # A no-op keeps its successful retry result without creating an audit event.
+                if key_db is not None and ihash:
+                    idempotency.store(key_db, s.actor.id, ctx.idempotency_key, cmd.name, ihash, ctx.request_id, output)
+                if s.company is not None and s.company.write_transaction:
+                    s.commits.commit(s.company, "dispatch.apply")
+                if s.hub is not None and s.hub.writable:
+                    repaired = _repair_projection(s, ctx)
+                    if repaired:
+                        from bookflow.core.audit import write_event_to
+                        write_event_to(s.hub, ctx, cmd.name, "repaired the registry copy of company information", repaired, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
+                    if s.hub.write_transaction:
+                        s.commits.commit(s.hub, "dispatch.apply")
+                return applied
+            if business_savepoint and s.company is not None and s.company.write_transaction:
+                s.company.raw.execute("RELEASE bookflow_business")
+            if s.company is not None and cmd.truth == "company":
+                if co_entries and not applied.audited and s.company.write_transaction:
+                    write_event_to(s.company, ctx, cmd.name, applied.summary, co_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
+                if key_db is s.company and ihash and changed:
+                    idempotency.store(s.company, s.actor.id, ctx.idempotency_key, cmd.name, ihash, ctx.request_id, output)
+                if s.company.write_transaction:
+                    s.commits.commit(s.company, "dispatch.apply")
+                try:
+                    hub_entries += _repair_projection(s, ctx)
+                    if hub_tx and hub_entries and not applied.audited and changed:
+                        write_event_to(s.hub, ctx, cmd.name, applied.summary, hub_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
+                    if key_db is s.hub and ihash and changed:
+                        idempotency.store(s.hub, s.actor.id, ctx.idempotency_key, cmd.name, ihash, ctx.request_id, output)
+                    if s.hub.write_transaction:
+                        s.commits.commit(s.hub, "dispatch.apply")
+                except (BookflowError, OSError, sqlite3.Error, sa.exc.DBAPIError) as e:
+                    if s.hub.write_transaction:
+                        s.hub.raw.execute("ROLLBACK")
+                    durable = sorted({t.record_type for t in co_entries})
+                    raise BookflowError("E_PARTIAL_WRITE", message=f"Saved {', '.join(durable)}; the registry copy was not updated and will be on the next write.", details={"durable": durable, "request_id": ctx.request_id, "cause": getattr(e, "code", "E_IO")})
+            else:
+                if hub_tx and not applied.audited and changed:
                     write_event_to(s.hub, ctx, cmd.name, applied.summary, hub_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
                 if key_db is s.hub and ihash and changed:
                     idempotency.store(s.hub, s.actor.id, ctx.idempotency_key, cmd.name, ihash, ctx.request_id, output)
-                if s.hub.write_transaction:
-                    s.hub.raw.execute("COMMIT")
-            except (BookflowError, OSError, sqlite3.Error, sa.exc.DBAPIError) as e:
-                if s.hub.write_transaction:
-                    s.hub.raw.execute("ROLLBACK")
-                durable = sorted({t.record_type for t in co_entries})
-                raise BookflowError("E_PARTIAL_WRITE", message=f"Saved {', '.join(durable)}; the registry copy was not updated and will be on the next write.", details={"durable": durable, "request_id": ctx.request_id, "cause": getattr(e, "code", "E_IO")})
-        else:
-            if hub_tx and not applied.audited and changed:
-                write_event_to(s.hub, ctx, cmd.name, applied.summary, hub_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
-            if key_db is s.hub and ihash and changed:
-                idempotency.store(s.hub, s.actor.id, ctx.idempotency_key, cmd.name, ihash, ctx.request_id, output)
-            if s.hub is not None and s.hub.write_transaction:
-                s.hub.raw.execute("COMMIT")
-            if s.company is not None and s.company.write_transaction:
-                if co_entries and not applied.audited:
-                    write_event_to(s.company, ctx, cmd.name, applied.summary, co_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
-                s.company.raw.execute("COMMIT")
-    except BaseException:
-        for db in (s.company, s.hub):
-            if db is not None and db.write_transaction:
-                try:
-                    db.raw.execute("ROLLBACK")
-                except sqlite3.OperationalError:
-                    pass
-        raise
+                if s.hub is not None and s.hub.write_transaction:
+                    s.commits.commit(s.hub, "dispatch.apply")
+                if s.company is not None and s.company.write_transaction:
+                    if co_entries and not applied.audited:
+                        write_event_to(s.company, ctx, cmd.name, applied.summary, co_entries, actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=s.directive_code)
+                    s.commits.commit(s.company, "dispatch.apply")
+        except BaseException:
+            for db in (s.company, s.hub):
+                if db is not None and db.write_transaction:
+                    try:
+                        db.raw.execute("ROLLBACK")
+                    except sqlite3.OperationalError:
+                        pass
+            raise
     project_config = s.pending_config
     s.pending_config = False
     # The intent is already committed. Nested demo commands must not inherit
@@ -734,7 +740,7 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
         applied.after_commit()
     if project_config:
         try:
-            s.config.flush_pending(s.hub)
+            s.config.flush_pending(s.hub, commits=s.commits)
         except BookflowError as error:
             if error.code == "E_PARTIAL_WRITE":
                 error.details["durable"] = sorted({"config", *(entry.record_type for entry in applied.touched)})

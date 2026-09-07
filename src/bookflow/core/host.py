@@ -55,6 +55,8 @@ class Host:
             raise ValueError("Host transfer and shutdown limits must be positive and within their ceilings.")
         from bookflow.core.publication_admission import Admission
         self.publication_admission = Admission()
+        from bookflow.core.commit_hooks import CommitHooks
+        self._commit_hooks = CommitHooks(self.publication_admission)
         self.data_root = data_root
         performance.protect_root(data_root)
         self.version = version
@@ -218,6 +220,8 @@ class Host:
             except sqlite3.Error:
                 self._discard(db)
 
+        self._commit_hooks.resolve()
+
     def _discard(self, db: Database) -> None:
         for cid, d in list(self._companies.items()):
             if d is db:
@@ -282,6 +286,7 @@ class Host:
     def _writer_session(self) -> Session:
         self._ensure_hub_on_writer()
         s = Session(data_root=self.data_root, os_login="", config=Config.load(self.data_root / "config.toml"))
+        s._commit_hooks = self._commit_hooks
         s.hub = self._hub
         s.company_opener = self._company_for_writer
         s.company_releaser = self.release_company
@@ -492,7 +497,7 @@ class Host:
         def refresh() -> None:
             try:
                 from bookflow.adapters.http import auth
-                auth.refresh_token(self._ensure_hub_on_writer(), token_id, kind)
+                auth.refresh_token(self._ensure_hub_on_writer(), token_id, kind, commits=self._commit_hooks)
             except BaseException as e:  # noqa: BLE001 - a liveness bump never kills the host
                 log.warning("credential refresh failed: %s", e)
             finally:
@@ -559,36 +564,37 @@ class Host:
         return self.submit(self._sweep_on_writer, _maintenance=True)
 
     def _sweep_on_writer(self) -> int:
-        import sqlalchemy as sa
+        with self._commit_hooks.operation("host.sweep", self._hub):
+            import sqlalchemy as sa
 
-        from bookflow.core import clock
-        from bookflow.core.audit import write_event_to
-        from bookflow.core.registry import Touched
-        from bookflow.hub import schema as h
-        db = self._ensure_hub_on_writer()
-        cutoff = (clock.now() - timedelta(days=1)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-        rows = [dict(r) for r in db.conn.execute(sa.select(h.api_tokens).where(
-            h.api_tokens.c.kind == "session", h.api_tokens.c.expires_at.isnot(None),
-            h.api_tokens.c.expires_at < cutoff)).mappings().all()]
-        if not rows:
-            return 0
-        system = db.conn.execute(sa.select(h.users).where(h.users.c.kind == "system")).mappings().first()
-        touched = [Touched("api_token", r["id"], "delete", r["version"], None, None,
-                           before={k: v for k, v in r.items() if k != "token_hash"}) for r in rows]
-        ctx = self._system_ctx()
-        db.raw.execute("BEGIN IMMEDIATE")
-        try:
-            db.conn.execute(h.api_tokens.delete().where(h.api_tokens.c.id.in_([r["id"] for r in rows])))
-            write_event_to(db, ctx, "session sweep", f"swept {len(rows)} expired browser session(s)", touched,
-                           actor_id=system["id"] if system else None, actor_kind="system")
-            db.raw.execute("COMMIT")
-        except BaseException:
-            if db.write_transaction:
-                db.raw.execute("ROLLBACK")
-            raise
-        log.info("session sweep removed %d expired session token(s)", len(rows))
-        self._after_write()
-        return len(rows)
+            from bookflow.core import clock
+            from bookflow.core.audit import write_event_to
+            from bookflow.core.registry import Touched
+            from bookflow.hub import schema as h
+            db = self._ensure_hub_on_writer()
+            cutoff = (clock.now() - timedelta(days=1)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+            rows = [dict(r) for r in db.conn.execute(sa.select(h.api_tokens).where(
+                h.api_tokens.c.kind == "session", h.api_tokens.c.expires_at.isnot(None),
+                h.api_tokens.c.expires_at < cutoff)).mappings().all()]
+            if not rows:
+                return 0
+            system = db.conn.execute(sa.select(h.users).where(h.users.c.kind == "system")).mappings().first()
+            touched = [Touched("api_token", r["id"], "delete", r["version"], None, None,
+                               before={k: v for k, v in r.items() if k != "token_hash"}) for r in rows]
+            ctx = self._system_ctx()
+            db.raw.execute("BEGIN IMMEDIATE")
+            try:
+                db.conn.execute(h.api_tokens.delete().where(h.api_tokens.c.id.in_([r["id"] for r in rows])))
+                write_event_to(db, ctx, "session sweep", f"swept {len(rows)} expired browser session(s)", touched,
+                               actor_id=system["id"] if system else None, actor_kind="system")
+                self._commit_hooks.commit(db, "host.sweep")
+            except BaseException:
+                if db.write_transaction:
+                    db.raw.execute("ROLLBACK")
+                raise
+            log.info("session sweep removed %d expired session token(s)", len(rows))
+            self._after_write()
+            return len(rows)
 
     # ---------------------------------------------------------------- descriptor
     def write_descriptor(self, bind: str, socket_path: str) -> None:

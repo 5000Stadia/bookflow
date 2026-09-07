@@ -1,6 +1,7 @@
 """OS-login mappings and defaults, with recoverable hub-committed file projection."""
 
 from __future__ import annotations
+from bookflow.core.commit_hooks import CommitHooks
 
 import os
 import sqlite3
@@ -102,41 +103,44 @@ class Config:
             id=1, token=new_id(), request_id=request_id, contents=dump(self.data),
         ))
 
-    def flush_pending(self, hub) -> bool:
+    def flush_pending(self, hub, *, commits: CommitHooks | None = None) -> bool:
         """Project committed settings, then clear their intent in a separate transaction.
 
         A failed file replacement or intent deletion retains recoverable committed
         state. Read-only Config.load overlays that state without changing either
         database or file. The caller must serialize writers and hold no transaction.
         """
-        if not hub.writable or hub.raw.in_transaction:
-            raise RuntimeError("config projection requires an idle writable hub handle")
-        pending = _pending_row(hub.raw)
-        if pending is None:
-            return False
-        from bookflow.hub.schema import pending_config
-        from sqlalchemy.exc import DBAPIError
+        commits = commits if commits is not None else CommitHooks()
+        with commits.operation("config.flush", hub):
+            if not hub.writable or hub.raw.in_transaction:
+                raise RuntimeError("config projection requires an idle writable hub handle")
+            pending = _pending_row(hub.raw)
+            if pending is None:
+                return False
+            from bookflow.hub.schema import pending_config
+            from sqlalchemy.exc import DBAPIError
 
-        try:
-            self.data = _parse(pending["contents"], self.path)
-            self.save()
-            hub.raw.execute("BEGIN IMMEDIATE")
-            hub.conn.execute(pending_config.delete().where(pending_config.c.token == pending["token"]))
-            hub.raw.execute("COMMIT")
-        except BaseException as e:
             try:
-                if hub.raw.in_transaction:
-                    hub.raw.rollback()
-            except sqlite3.Error:
-                pass
-            if not isinstance(e, (BookflowError, OSError, sqlite3.Error, DBAPIError)):
-                raise
-            raise BookflowError(
-                "E_PARTIAL_WRITE",
-                message="The settings change was committed; its config.toml copy is pending. Reads use the committed settings; the next writable command retries the file update.",
-                details={"durable": ["config"], "projection_pending": True, "request_id": pending["request_id"], "cause": getattr(e, "code", "E_IO")},
-            ) from e
-        return True
+                self.data = _parse(pending["contents"], self.path)
+                commits.publishing("config.flush")
+                self.save()
+                hub.raw.execute("BEGIN IMMEDIATE")
+                hub.conn.execute(pending_config.delete().where(pending_config.c.token == pending["token"]))
+                commits.commit(hub, "config.flush")
+            except BaseException as e:
+                try:
+                    if hub.raw.in_transaction:
+                        hub.raw.rollback()
+                except sqlite3.Error:
+                    pass
+                if not isinstance(e, (BookflowError, OSError, sqlite3.Error, DBAPIError)):
+                    raise
+                raise BookflowError(
+                    "E_PARTIAL_WRITE",
+                    message="The settings change was committed; its config.toml copy is pending. Reads use the committed settings; the next writable command retries the file update.",
+                    details={"durable": ["config"], "projection_pending": True, "request_id": pending["request_id"], "cause": getattr(e, "code", "E_IO")},
+                ) from e
+            return True
 
 
 def _parse(contents: str, path: Path) -> dict[str, Any]:
