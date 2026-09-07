@@ -12,3 +12,12 @@ Database: `hub`.
 | `epoch` | INTEGER | no | — | — | — | — | Monotonically increasing authority epoch, starting at one. |
 | `suspended_at` | VARCHAR(32) | yes | — | — | — | — | UTC timestamp of authority suspension; null while authorized. |
 | `suspension_reason` | VARCHAR(140) | yes | — | — | — | — | Reason for the authority suspension; null while authorized. |
+| `version` | INTEGER | no | — | — | — | — | Administration edit version; migrated rows start at one. |
+| `updated_at` | VARCHAR(32) | yes | — | — | — | — | Last administration update time; unknown for migrated rows. |
+| `updated_by` | VARCHAR(26) | yes | — | — | — | — | Last administration actor; unknown for migrated rows. |
+| `updated_via` | VARCHAR(16) | yes | — | — | — | — | Last administration interface; unknown for migrated rows. |
+| `authorized_at` | VARCHAR(32) | yes | — | — | — | — | Explicit authorization time; unknown for migrated rows. |
+| `authorized_by` | VARCHAR(26) | yes | — | — | — | — | Explicit authorization actor; unknown for migrated rows. |
+| `permitted_use_at` | VARCHAR(32) | yes | — | — | — | — | Permitted-use confirmation time; unknown for migrated rows. |
+| `fresh_context_ack_at` | VARCHAR(32) | yes | — | — | — | — | Explicit fresh-context acknowledgment time; unknown for migrated rows. |
+| `fresh_context_required` | BOOLEAN | no | — | — | — | — | Whether subsequent authorization requires fresh-context acknowledgment. |

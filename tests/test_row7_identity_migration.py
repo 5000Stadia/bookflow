@@ -157,7 +157,7 @@ def test_legacy_conversion_preserves_data_backup_and_safe_audit(tmp_path, system
         assert _dump(conn) == original
 
 
-def test_fresh_upgrade_and_live_identity_schema_agree(tmp_path):
+def test_fresh_upgrade_and_legacy_identity_columns_agree(tmp_path):
     fresh, upgraded = tmp_path / "fresh.db", tmp_path / "upgraded.db"
     _make(fresh, "hub0009", populate=False)
     _make(upgraded)
@@ -168,12 +168,15 @@ def test_fresh_upgrade_and_live_identity_schema_agree(tmp_path):
         assert _security_events(db.raw) == []
         for table in (h.api_tokens, h.agent_principals, h.agent_authority):
             reflected = sa.Table(table.name, sa.MetaData(), autoload_with=db.conn)
+            # This fixture deliberately ends at hub0009. Later inert additive
+            # columns do not belong in its frozen physical-schema oracle.
+            legacy = ("agent_user_id", "epoch", "suspended_at", "suspension_reason") if table is h.agent_authority else tuple(table.c.keys())
             assert [(c.name, str(c.type), c.nullable, c.primary_key) for c in reflected.c] == [
-                (c.name, str(c.type), c.nullable, c.primary_key) for c in table.c]
+                (table.c[name].name, str(table.c[name].type), table.c[name].nullable, table.c[name].primary_key) for name in legacy]
             assert {(fk.parent.name, fk.target_fullname) for fk in reflected.foreign_keys} == {
                 (fk.parent.name, fk.target_fullname) for fk in table.foreign_keys}
         assert list(h.agent_principals.c.keys()) == ["agent_user_id", "principal_user_id", "assigned_by", "assigned_at", "revoked_at"]
-        assert list(h.agent_authority.c.keys()) == ["agent_user_id", "epoch", "suspended_at", "suspension_reason"]
+        assert [column["name"] for column in sa.inspect(db.conn).get_columns("agent_authority")] == ["agent_user_id", "epoch", "suspended_at", "suspension_reason"]
         inspector = sa.inspect(db.conn)
         assert inspector.get_pk_constraint("agent_principals")["constrained_columns"] == ["agent_user_id", "principal_user_id"]
         assert inspector.get_pk_constraint("agent_authority")["constrained_columns"] == ["agent_user_id"]

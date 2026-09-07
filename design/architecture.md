@@ -1108,3 +1108,53 @@ operation becomes a frontier edge through the existing operation owner, retainin
 all captured participants. Projected reads retain the200-ID bound and root-local
 errors; facts expire with the current check. Selection/recovery query audit-epoch
 roots remain separate boundaries in grouped publication dispatch.
+
+### Inert permission-administration storage (B1)
+
+Hub `hub0012` follows `hub0011`; company history is unchanged. It adds membership
+and aggregate agent-administration versions/provenance, fresh-context metadata,
+and private singleton `permission_state`, initially generation1 in `legacy` mode
+with no catalog. Migration neither changes capability defaults nor activates A's
+policy evaluator. Historical membership/assignment IDs, authority epochs,
+credentials, raw overrides and audit values remain intact.
+
+Conditional initialization of suspended authorities is admitted on the migration
+runner's locked connection before any new DDL. When that initialization needs an
+UPDATE, any persistent or TEMP trigger attached to `agent_authority` (regardless
+of identifier case or trigger event) rejects the upgrade with a fixed
+`unsupported_authority_backfill_trigger` cause. No local trigger is disabled or
+recreated. With no required backfill, no UPDATE is issued. Failure retains the
+original schema and data through the existing rollback/backup mechanism.
+Every hub0012 admission read, column/table DDL, backfill and singleton INSERT
+explicitly addresses `main`; same-named ordinary TEMP tables retain their entire
+schema and data. Both trigger catalogs are explicitly database-qualified.
+
+`hub.permission_snapshot` is a private read-only dependency. `load_root` accepts
+an already consistent `Database` transaction and an explicitly reviewed
+`CatalogBundle`; it never opens a root or company, imports the registry to infer a
+catalog, installs visibility, or writes policy state. Independent complete SQL
+key/parent projections are checked against typed row materialization on that same
+snapshot. Revoked and inactive rows remain represented; even revoked malformed
+policies fail strict preflight. Root defaults replace shipped defaults before the
+canonical catalog digest is derived. In `policy_v1`, stored catalog, digest,
+version and actual defaults must all agree with the supplied build descriptor.
+Catalog JSON uses strict dataclass decoding and A's normal form, including role
+and threshold rank. Unknown fields, duplicate keys/names and forbidden Delete
+defaults fail with static private error categories rather than supplied values.
+
+`CatalogBundle` is trusted private build provenance supplied by the deployment
+owner, not a user payload or self-attestation of source completeness. Its source
+commit, exclusions and inventory digest remain separate from A's descriptor hash;
+the existing complete catalog tests verify this executable's accepted inventory.
+Metadata-only B1 changes retain the combined recovery build’s reviewed `7b2d4c2` catalog version.
+
+`assemble_pair` constructs every old/new subject, scope, membership, visibility,
+agent and catalog union slot using the actual A types and `validate_comparison`.
+Every organization contributes a future-company scope. Eligible humans come from
+unrevoked explicit assignments to present active humans, never ownership or token
+existence. A provider must explicitly supply complete governed visibility on both
+sides; no production provider or membershipless-administrator decision is included.
+Legacy roots may be read for strict preflight, but policy-to-policy assembly rejects
+legacy mode: the actual legacy-observation/activation bridge remains B3/C work.
+This is not identity administration, token reconciliation, structural writer
+routing, a command/editor activation, or completion of Row7/B2/B3.
