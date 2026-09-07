@@ -69,7 +69,7 @@ def _preparation(verb, model, output, planner):
     @command('payment ' + verb, scope='company',
         description='Read complete compatible payment candidates or calculate shared amount origins; page bounds never limit receipt intent.',
         input_model=model, output_model=output, required_role='member', capability='ledger.read',
-        error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_QUERY_STALE', 'E_APPLICATION_INCOMPATIBLE', 'E_INACTIVE_REFERENCE', 'E_AMOUNT_PRECISION'])
+        error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_QUERY_STALE', 'E_APPLICATION_INCOMPATIBLE', 'E_INACTIVE_REFERENCE', 'E_AMOUNT_PRECISION'] + (['E_PAYMENT_PROFILE_INVALID'] if verb == 'query' else []))
     def plan(inp, ctx, s):
         return Plan(output(**planner(s, inp)))
     return plan

@@ -484,6 +484,8 @@ class PaymentCalculationOutput(SelectionItemsOutput):
 
 
 class PaymentSummaryOutput(StrictModel):
+    payer_label: str
+    method_label: str
     id: str
     version: int
     number: str

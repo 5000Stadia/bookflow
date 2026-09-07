@@ -59,9 +59,6 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
                 raw['has_available_credit'] = True
             result = run(request, 'payment query', dict(raw, limit=25), company_id)
             for row in result['items']:
-                shown = run(request, 'payment show', {'payment': row['id']}, company_id)
-                row['payer_label'] = shown['revision']['profile']['payer']['label']
-                row['method_label'] = shown['revision']['profile']['payment_method']['label']
                 for field in ('received', 'applied', 'unapplied'):
                     row[field] = Money(row[field + '_minor_units'], row['currency']).to_dict()['amount']
             methods = run(request, 'payment-method list', {'include_inactive': True}, company_id)['items']
