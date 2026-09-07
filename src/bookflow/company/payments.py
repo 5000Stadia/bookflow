@@ -116,6 +116,8 @@ def _applications(s, inp, context_, *, amount=None):
     if inp.applications.mode == 'selection':
         selected = selection.resolve(s, inp.applications.selection)
         revision, captured, items = selection.saved(s, selected)
+        from bookflow.company.payment_recovery import require_no_active_recovery
+        require_no_active_recovery(s, selected['id'])
         selection._version(s, selected, inp.applications.expected_version)
         if selected['state'] != 'open':
             raise BookflowError('E_SELECTION_CONSUMED')

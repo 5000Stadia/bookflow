@@ -11,6 +11,17 @@ PAYMENT_COMMANDS = frozenset('''application history
 application show
 invoice settlement
 payment apply
+payment recovery begin
+payment recovery upload
+payment recovery seal
+payment recovery compare
+payment recovery compare-items
+payment recovery apply
+payment recovery abort
+payment recovery replace
+payment recovery show
+payment recovery items
+payment recovery query
 payment calculate
 payment history
 payment invoices
@@ -80,6 +91,13 @@ def capture(cmd, inp, s, result, *, dry_run=False):
                 transaction(value, name, invoice_correction=isinstance(model, InvoiceUpdateInput))
             elif name == 'selection' and isinstance(value, str):
                 add('payment_selection', value)
+            elif name == 'invoice_id' and isinstance(value, str):
+                transaction(value, 'invoice')
+            elif name in {'recovery_id', 'recovery_key'} and isinstance(value, str):
+                from bookflow.company import payment_recovery
+                row = payment_recovery.find(s, **{name: value})
+                if row:
+                    add('payment_selection', row['selection_id'])
             elif name == 'application' and isinstance(value, str):
                 add('application', value)
             elif name == 'operation_key':
@@ -95,6 +113,14 @@ def capture(cmd, inp, s, result, *, dry_run=False):
 
     if cmd.name in PAYMENT_COMMANDS or cmd.name.startswith('invoice '):
         input_roots(inp)
+    if cmd.name.startswith('payment recovery '):
+        if cmd.name == 'payment recovery query':
+            for row in result['items']:
+                add('payment_selection', row['selection_id'])
+            roots.add(('work_access', work_access(s), False))
+        else:
+            identifier = result.get('selection_id') or result.get('current', {}).get('selection_id')
+            add('payment_selection', identifier)
     if cmd.name.startswith('payment selection '):
         if cmd.name == 'payment selection query':
             for row in result['items']:
@@ -114,6 +140,9 @@ def capture(cmd, inp, s, result, *, dry_run=False):
         # Retain the shared permission projection, not merely the returned page
         # and not an unbounded collection of every contributing record ID.
         roots.add(('work_access', work_access(s), False))
+    if cmd.name in {'payment selection query','payment recovery query'}:
+        from bookflow.company.payment_recovery import query_epoch
+        roots.add(('payment_selection_query_epoch',str(query_epoch(s)),False))
     if cmd.name in {'payment invoices', 'payment suggest'}:
         customer = getattr(inp, 'customer', None)
         if customer:
@@ -172,7 +201,11 @@ def check(s, roots):
             payment_authority.authorize_publication_transactions(s, ((identifier, write) for _, identifier, write in group))
             continue
         for kind, identifier, write in group:
-            if kind == 'work_access':
+            if kind == 'payment_selection_query_epoch':
+                from bookflow.company.payment_recovery import query_epoch
+                if str(query_epoch(s)) != identifier:
+                    raise BookflowError('E_QUERY_STALE')
+            elif kind == 'work_access':
                 if work_access(s) != identifier:
                     raise BookflowError('E_PERMISSION', details={'reason': 'payment_projection_changed'})
             elif kind == 'payer':

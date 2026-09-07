@@ -37,7 +37,11 @@ class SelectionItemOutput(StrictModel):
     currency: str
 
 
+from bookflow.company.payment_recovery_outputs import Lifecycle
+
+
 class SelectionOutput(StrictModel):
+    current_lifecycle: Lifecycle
     id: str
     version: int
     revision_id: str

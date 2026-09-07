@@ -65,6 +65,8 @@ def resolve(s, selector):
 
 
 def saved(s, header, version=None):
+    from bookflow.company.payment_recovery import authorize_selection
+    authorize_selection(s,header['id'])
     revisions = effects.rows(s, c.payment_selection_revisions,
         c.payment_selection_revisions.c.selection_id == header['id'],
         c.payment_selection_revisions.c.version == (version if version is not None else header['version']))
@@ -84,11 +86,8 @@ def saved(s, header, version=None):
             items[event['invoice_id']] = {key: event[key] for key in (
                 'invoice_id', 'ordinal', 'expected_version', 'due_minor_units', 'amount_minor_units', 'amount_origin')}
     context_ = json.loads(revision['context_snapshot'])
-    # Historical revision reads retain protection for all draft history, not
-    # only the current selected subset after a clear.
-    historical = s.company.conn.execute(sa.select(i.c.invoice_id).where(
-        i.c.selection_id == header['id'], i.c.invoice_id.is_not(None)).distinct()).scalars().all()
-    authorize(s, [*historical, *([context_['payment_id']] if context_['payment_id'] else [])])
+    # authorize_selection above covers all saved revisions, funding operations
+    # and historical recovery targets before decoding any saved values.
     return revision, context_, sorted(items.values(), key=lambda row: (row['ordinal'], row['invoice_id']))
 
 
@@ -109,14 +108,17 @@ def _rows(items):
     return [calc.DraftRow(row['invoice_id'], row['ordinal'], row['due_minor_units'], row['amount_minor_units'], row['amount_origin']) for row in items]
 
 
-def output(header, revision, context_, items):
+def output(header, revision, context_, items, lifecycle_=None):
     # Rendering a stored revision validates its saved amounts; it must not run
     # a cash-only recalculation that replaces already funded derived amounts.
     stored = [calc.DraftRow(row['invoice_id'], row['ordinal'], row['due_minor_units'], row['amount_minor_units'],
                            'entered' if row['amount_minor_units'] is not None else 'unresolved') for row in items]
     funding = dict(source_capacities=context_['funding_capacities'], source_owners=context_['funding_owners']) if context_.get('funding_owners') is not None else {}
     result = calc.calculate(revision['amount_minor_units'], revision['amount_origin'], stored, **funding)
-    return dict(id=header['id'], version=header['version'], revision_id=revision['id'],
+    if result.amount != revision['amount_minor_units']:
+        raise _invalid('amount', 'stored selection header does not match its derived manifest')
+    return dict(current_lifecycle=lifecycle_ or dict(state=header['state'],selection_id=header['id'],selection_version=header['version'],selection_revision_id=header['current_revision_id']),
+        id=header['id'], version=header['version'], revision_id=revision['id'],
         revision_version=revision['version'], state=header['state'], consumed_operation_id=header['consumed_operation_id'],
         context=context_, amount=Money(result.amount, context_['currency']).to_dict() if result.amount is not None else None,
         amount_origin=result.amount_origin, item_count=len(items), manifest_hash=revision['manifest_hash'],
@@ -127,27 +129,23 @@ def output(header, revision, context_, items):
 def show(s, inp):
     header = resolve(s, inp.selection)
     revision, context_, items = saved(s, header, inp.revision)
-    return SelectionOutput(**output(header, revision, context_, items))
+    from bookflow.company.payment_recovery import lifecycles
+    return SelectionOutput(**output(header, revision, context_, items, lifecycles(s,[header])[header['id']]))
 
 
 def query_page(s, inp):
     """Filter complete historical ownership in SQL, reconstruct only the page."""
-    from bookflow.company.payment_authority import require_resource, work_link_predicate
     h, r, i = c.payment_selections, c.payment_selection_revisions, c.payment_selection_items
     statement = sa.select(h)
-    if inp.state is not None:
+    from bookflow.company.payment_recovery import readable_selection
+    active_recovery = sa.exists(sa.select(c.payment_selection_recovery_active.c.selection_id).where(c.payment_selection_recovery_active.c.selection_id == h.c.id))
+    statement = statement.where(readable_selection(s,h.c.id))
+    if inp.state == 'recovering':
+        statement = statement.where(active_recovery)
+    elif inp.state is not None:
         statement = statement.where(h.c.state == inp.state)
-    try:
-        require_resource(s, 'customer-work', 'member')
-    except BookflowError as exc:
-        if exc.code != 'E_PERMISSION':
-            raise
-        protected_item = sa.exists(sa.select(i.c.id).where(i.c.selection_id == h.c.id,
-            i.c.invoice_id.is_not(None), work_link_predicate(i.c.invoice_id)))
-        payment = sa.func.json_extract(r.c.context_snapshot, '$.payment_id')
-        protected_source = sa.exists(sa.select(r.c.id).where(r.c.selection_id == h.c.id,
-            payment.is_not(None), work_link_predicate(payment)))
-        statement = statement.where(~protected_item, ~protected_source)
+        if inp.state == 'open':
+            statement = statement.where(~active_recovery)
     result = query.sql_page(s, 'payment selection query', inp,
         statement.order_by(h.c.created_at.desc(), h.c.id.desc()))
     headers = result['items']
@@ -171,6 +169,10 @@ def query_page(s, inp):
     result['items'] = [output(header, revisions[header['current_revision_id']],
         json.loads(revisions[header['current_revision_id']]['context_snapshot']),
         sorted(items[header['id']].values(), key=lambda row:(row['ordinal'],row['invoice_id']))) for header in headers]
+    from bookflow.company.payment_recovery import lifecycles
+    current=lifecycles(s,headers)
+    for item in result['items']:
+        item['current_lifecycle'] = current[item['id']]
     return result
 
 
@@ -205,6 +207,8 @@ def prepare(s, ctx, inp, operation):
         amount, origin = None, 'selection_total' if context_['automatically_calculate'] else 'unresolved'
     else:
         before = resolve(s, inp.selection)
+        from bookflow.company.payment_recovery import require_no_active_recovery
+        require_no_active_recovery(s, before['id'])
         previous, context_, items = saved(s, before)
         authorize(s, [row['invoice_id'] for row in items] + ([context_['payment_id']] if context_['payment_id'] else []), write=True)
         _version(s, before, inp.expected_version)
@@ -324,3 +328,25 @@ def apply(plan, ctx, s):
     if data['events']:
         s.company.conn.execute(c.payment_selection_items.insert(), data['events'])
     return Applied(fresh.preview, touched, command, audited=True)
+
+
+def authorize_input(inp, ctx, s):
+    from bookflow.company.payment_recovery import authorize_selection
+    if getattr(inp, 'selection', None):
+        authorize_selection(s, inp.selection, True)
+    else:
+        context_ = context(s, inp)
+        authorize(s, [context_['payment_id']] if context_['payment_id'] else [], write=True)
+    for entry in getattr(inp, 'set_items', []):
+        authorize(s, [sales.resolve(s, entry.invoice, 'invoice')['id']], write=True)
+    for identifier in getattr(inp, 'remove_invoices', []):
+        authorize(s, [sales.resolve(s, identifier, 'invoice')['id']], write=True)
+
+
+def replay(inp, ctx, s, hit):
+    from bookflow.company.payment_recovery import authorize_selection, lifecycle
+    # Generic receipts may disclose a generated identity missing from create input.
+    result = json.loads(hit["output"])
+    authorize_selection(s, result['id'], True)
+    result['current_lifecycle'] = lifecycle(s, result['id'])
+    return result

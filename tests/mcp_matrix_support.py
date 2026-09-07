@@ -19,7 +19,7 @@ from tests.test_row3_host import Hosted, live
 
 
 class Matrix:
-    async def open(self, baseline, directory, *, mcp_args=()):
+    async def open(self, baseline, directory, *, mcp_args=(), mcp_env=None):
         from mcp import ClientSession
         from mcp.client.stdio import StdioServerParameters, stdio_client
         seed = bookflow.connect(data_root=str(baseline))
@@ -44,7 +44,7 @@ class Matrix:
         read, write = await self.stack.enter_async_context(stdio_client(StdioServerParameters(
             command=binary, args=['mcp', '--url', url, *mcp_args], cwd=str(directory),
             env={'BOOKFLOW_TOKEN': issued['secret'], 'BOOKFLOW_COMPANY': self.company,
-                 'BOOKFLOW_DATA_ROOT': str(directory / 'absent')})))
+                 'BOOKFLOW_DATA_ROOT': str(directory / 'absent'), **(mcp_env or {})})))
         self.mcp = await self.stack.enter_async_context(ClientSession(read, write))
         await self.mcp.discover()
         return self

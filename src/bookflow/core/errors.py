@@ -34,6 +34,10 @@ INFRASTRUCTURE_CODES: dict[str, str] = {
 }
 
 COMMAND_CODES: dict[str, str] = {
+    "E_RECOVERY_PENDING": "Resolve the active recovery before editing or recording this selection.",
+    "E_RECOVERY_INCOMPLETE": "The complete attempted edits must be uploaded and reviewed before confirmation.",
+    "E_RECOVERY_KEY_REUSED": "This immutable recovery action belongs to a different request or reason.",
+    "E_RECOVERY_FINALIZED": "This recovery action is finalized; inspect its original receipt and current state.",
     "E_APPLICATION_CAPACITY": "The requested application exceeds the owned source or invoice capacity.",
     "E_APPLICATION_INCOMPATIBLE": "Application source and target must have the same party, receivable account and currency.",
     "E_APPLICATION_INACTIVE": "This application is already unapplied or its payment is voided.",

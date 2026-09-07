@@ -1,0 +1,23 @@
+{
+  "append_count": 43,
+  "base_command_counts": {"seed.toml": 345, "reference.toml": 251},
+  "final_command_counts": {"seed.toml": 388, "reference.toml": 294},
+  "parent_due_minor_units": 1000,
+  "financial_delta_minor_units": {"bank": 0, "accounts_receivable": 0, "income": 0, "expense": 0},
+  "new_rows": {
+    "payment_selections": 3,
+    "payment_selection_revisions": 8,
+    "payment_selection_items": 4,
+    "payment_selection_recoveries": 4,
+    "payment_selection_recovery_chunks": 2,
+    "payment_selection_recovery_items": 2,
+    "payment_selection_recovery_active": 2,
+    "audit_events": 17,
+    "audit_entries": 41
+  },
+  "selections": {
+    "done": {"amount_minor_units": 150, "selected_minor_units": 50, "unapplied_minor_units": 100, "version": 4, "lifecycle": "open"},
+    "uploading": {"amount_minor_units": 150, "selected_minor_units": 100, "unapplied_minor_units": 50, "version": 2, "lifecycle": "recovery_uploading", "received": 0, "declared": 1},
+    "review": {"amount_minor_units": 150, "selected_minor_units": 100, "unapplied_minor_units": 50, "version": 2, "lifecycle": "recovery_review", "received": 1, "declared": 1}
+  }
+}

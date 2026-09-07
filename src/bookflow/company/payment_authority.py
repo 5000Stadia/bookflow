@@ -75,6 +75,10 @@ def authorize_query(s, transaction_ids, *, write=False):
 
 
 PAYMENT_TARGETS = {
+    'payment_selection_recovery': ('payment_selection_recoveries', 'id'),
+    'payment_selection_recovery_chunk': ('payment_selection_recovery_chunks', 'id'),
+    'payment_selection_recovery_item': ('payment_selection_recovery_items', 'id'),
+    'payment_selection_recovery_active': ('payment_selection_recovery_active', 'selection_id'),
     'payment_profile': ('payment_profiles', 'revision_id'),
     'payment_component_key': ('payment_component_keys', 'id'),
     'payment_component': ('payment_components', 'id'),
@@ -122,6 +126,9 @@ def record_transactions(db, record_type, record_id, seen=None, cache=None):
             from bookflow.core.errors import BookflowError
             raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'})
         return {record_id}
+    if record_type == 'payment_selection_recovery_active':
+        # Barrier rows are deliberately removed; their primary identity is S.
+        return record_transactions(db, 'payment_selection', record_id, seen, cache)
     target = PAYMENT_TARGETS.get(record_type)
     if target is None:
         if record_type in ('transaction_revision', 'document_line', 'document_line_identity', 'posting_batch', 'posting_line', 'posting_line_source'):
@@ -155,6 +162,10 @@ def record_transactions(db, record_type, record_id, seen=None, cache=None):
     if record_type.startswith('payment_selection'):
         selection_id = row['id'] if record_type == 'payment_selection' else row['selection_id']
         ids.update(item['invoice_id'] for item in _evidence_rows(db, c.payment_selection_items, 'selection_id', selection_id, cache) if item['invoice_id'])
+        ids.update(item['invoice_id'] for item in _evidence_rows(db, c.payment_selection_recovery_items, 'selection_id', selection_id, cache))
+        headers = [row] if record_type == 'payment_selection' else _evidence_rows(db, c.payment_selections, 'id', selection_id, cache)
+        if headers and headers[0]['consumed_operation_id']:
+            ids.update(record_transactions(db, 'payment_operation', headers[0]['consumed_operation_id'], seen, cache))
         contexts = [revision['context_snapshot'] for revision in _evidence_rows(db, c.payment_selection_revisions, 'selection_id', selection_id, cache)]
         try:
             for context in contexts:
@@ -256,6 +267,11 @@ class _EventCohort:
             for identifier in identifiers:
                 self.nodes[(kind, identifier)] = (set(), [('attachment_link', r['id']) for r in rows.get(identifier, ())])
             return
+        if kind == 'payment_selection_recovery_active':
+            # This identity is persistent S, even after its physical barrier is removed.
+            for identifier in identifiers:
+                self.nodes[(kind, identifier)] = (set(), [('payment_selection', identifier)])
+            return
         target = PAYMENT_TARGETS.get(kind)
         if kind == 'transaction':
             target = ('transactions', 'id')
@@ -272,15 +288,18 @@ class _EventCohort:
         extra = {'payment_operation': ('request_snapshot',), 'payment_operation_item': ('operation_id',),
                  'note': ('record_type', 'record_id'), 'attachment_link': ('record_type', 'record_id')}.get(kind, ())
         if kind.startswith('payment_selection'):
-            extra = ('id',) if kind == 'payment_selection' else ('selection_id',)
+            extra = ('id', 'consumed_operation_id') if kind == 'payment_selection' else ('selection_id',)
         columns = list(dict.fromkeys((*columns, *extra)))
         found = self._read(table, target[1], identifiers, columns)
-        items, revisions = {}, {}
+        items, revisions, attempts, headers = {}, {}, {}, {}
         if kind.startswith('payment_selection'):
             owners = [r['id'] if kind == 'payment_selection' else r['selection_id']
                       for rows in found.values() if len(rows) == 1 for r in rows]
             items = self._read(c.payment_selection_items, 'selection_id', owners, ('selection_id', 'invoice_id'))
             revisions = self._read(c.payment_selection_revisions, 'selection_id', owners, ('selection_id', 'context_snapshot'))
+            attempts = self._read(c.payment_selection_recovery_items, 'selection_id', owners, ('selection_id', 'invoice_id'))
+            headers = found if kind == 'payment_selection' else self._read(
+                c.payment_selections, 'id', owners, ('id', 'consumed_operation_id'))
         # Keep the existing loaded-evidence seam over projected, bounded facts.
         cache = {(table.name, target[1]): found}
         for identifier in identifiers:
@@ -308,6 +327,10 @@ class _EventCohort:
                 if kind.startswith('payment_selection'):
                     owner = row['id'] if kind == 'payment_selection' else row['selection_id']
                     ids.update(r['invoice_id'] for r in items.get(owner, ()) if r['invoice_id'])
+                    ids.update(r['invoice_id'] for r in attempts.get(owner, ()))
+                    selection = headers.get(owner, ())
+                    if selection and selection[0]['consumed_operation_id']:
+                        edges.append(('payment_operation', selection[0]['consumed_operation_id']))
                     try:
                         for revision in revisions.get(owner, ()):
                             payment = json.loads(revision['context_snapshot'])['payment_id']

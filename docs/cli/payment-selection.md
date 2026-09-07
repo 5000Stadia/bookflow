@@ -67,6 +67,21 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
+| `current_lifecycle` | object | yes | no | — | — |
+| `current_lifecycle.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
+| `current_lifecycle.selection_id` | string | yes | no | — | — |
+| `current_lifecycle.selection_version` | integer | yes | no | — | — |
+| `current_lifecycle.selection_revision_id` | string | yes | no | — | — |
+| `current_lifecycle.recovery_id` | string \| null | no | yes | null | — |
+| `current_lifecycle.attempt_generation` | string \| null | no | yes | null | — |
+| `current_lifecycle.recovery_version` | integer \| null | no | yes | null | — |
+| `current_lifecycle.received_entry_count` | integer | no | no | 0 | — |
+| `current_lifecycle.declared_entry_count` | integer | no | no | 0 | — |
+| `current_lifecycle.consumed_operation` | object \| null | no | yes | null | — |
+| `current_lifecycle.consumed_operation.id` | string | yes | no | — | — |
+| `current_lifecycle.consumed_operation.operation_key` | string | yes | no | — | — |
+| `current_lifecycle.consumed_operation.command` | string | yes | no | — | — |
+| `current_lifecycle.consumed_operation.payment_id` | string \| null | yes | yes | — | — |
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
 | `revision_id` | string | yes | no | — | — |
@@ -119,6 +134,18 @@ Example JSON output:
     "mode": "new_receipt",
     "payment_id": null
   },
+  "current_lifecycle": {
+    "attempt_generation": null,
+    "consumed_operation": null,
+    "declared_entry_count": 0,
+    "received_entry_count": 0,
+    "recovery_id": null,
+    "recovery_version": null,
+    "selection_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_version": 1,
+    "state": "open"
+  },
   "dry_run": false,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "item_count": 1,
@@ -162,6 +189,7 @@ Example JSON output:
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_RECORD_NOT_FOUND` | No such record. |
+| `E_RECOVERY_PENDING` | Resolve the active recovery before editing or recording this selection. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_SELECTION_CONSUMED` | This draft was consumed by a successful payment operation; recover that operation or start a new draft. |
@@ -241,6 +269,21 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
+| `current_lifecycle` | object | yes | no | — | — |
+| `current_lifecycle.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
+| `current_lifecycle.selection_id` | string | yes | no | — | — |
+| `current_lifecycle.selection_version` | integer | yes | no | — | — |
+| `current_lifecycle.selection_revision_id` | string | yes | no | — | — |
+| `current_lifecycle.recovery_id` | string \| null | no | yes | null | — |
+| `current_lifecycle.attempt_generation` | string \| null | no | yes | null | — |
+| `current_lifecycle.recovery_version` | integer \| null | no | yes | null | — |
+| `current_lifecycle.received_entry_count` | integer | no | no | 0 | — |
+| `current_lifecycle.declared_entry_count` | integer | no | no | 0 | — |
+| `current_lifecycle.consumed_operation` | object \| null | no | yes | null | — |
+| `current_lifecycle.consumed_operation.id` | string | yes | no | — | — |
+| `current_lifecycle.consumed_operation.operation_key` | string | yes | no | — | — |
+| `current_lifecycle.consumed_operation.command` | string | yes | no | — | — |
+| `current_lifecycle.consumed_operation.payment_id` | string \| null | yes | yes | — | — |
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
 | `revision_id` | string | yes | no | — | — |
@@ -293,6 +336,18 @@ Example JSON output:
     "mode": "new_receipt",
     "payment_id": null
   },
+  "current_lifecycle": {
+    "attempt_generation": null,
+    "consumed_operation": null,
+    "declared_entry_count": 0,
+    "received_entry_count": 0,
+    "recovery_id": null,
+    "recovery_version": null,
+    "selection_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_version": 1,
+    "state": "open"
+  },
   "dry_run": false,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "item_count": 1,
@@ -336,6 +391,7 @@ Example JSON output:
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_RECORD_NOT_FOUND` | No such record. |
+| `E_RECOVERY_PENDING` | Resolve the active recovery before editing or recording this selection. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_SELECTION_CONSUMED` | This draft was consumed by a successful payment operation; recover that operation or start a new draft. |
@@ -473,7 +529,7 @@ Page shared drafts by creation time and identity; protection covers their comple
 |---|---|---|---|---|---|---|
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
-| `state` | `--state` | literal["open", "consumed"] \| null | no | yes | null | — |
+| `state` | `--state` | literal["open", "consumed", "recovering"] \| null | no | yes | null | — |
 
 ### Command and context options
 
@@ -502,6 +558,21 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
 | `items` | array[object] | yes | no | — | — |
+| `items[].current_lifecycle` | object | yes | no | — | — |
+| `items[].current_lifecycle.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
+| `items[].current_lifecycle.selection_id` | string | yes | no | — | — |
+| `items[].current_lifecycle.selection_version` | integer | yes | no | — | — |
+| `items[].current_lifecycle.selection_revision_id` | string | yes | no | — | — |
+| `items[].current_lifecycle.recovery_id` | string \| null | no | yes | null | — |
+| `items[].current_lifecycle.attempt_generation` | string \| null | no | yes | null | — |
+| `items[].current_lifecycle.recovery_version` | integer \| null | no | yes | null | — |
+| `items[].current_lifecycle.received_entry_count` | integer | no | no | 0 | — |
+| `items[].current_lifecycle.declared_entry_count` | integer | no | no | 0 | — |
+| `items[].current_lifecycle.consumed_operation` | object \| null | no | yes | null | — |
+| `items[].current_lifecycle.consumed_operation.id` | string | yes | no | — | — |
+| `items[].current_lifecycle.consumed_operation.operation_key` | string | yes | no | — | — |
+| `items[].current_lifecycle.consumed_operation.command` | string | yes | no | — | — |
+| `items[].current_lifecycle.consumed_operation.payment_id` | string \| null | yes | yes | — | — |
 | `items[].id` | string | yes | no | — | — |
 | `items[].version` | integer | yes | no | — | — |
 | `items[].revision_id` | string | yes | no | — | — |
@@ -568,6 +639,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECOVERY_PENDING` | Resolve the active recovery before editing or recording this selection. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -625,6 +697,21 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `current_lifecycle` | object | yes | no | — | — |
+| `current_lifecycle.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
+| `current_lifecycle.selection_id` | string | yes | no | — | — |
+| `current_lifecycle.selection_version` | integer | yes | no | — | — |
+| `current_lifecycle.selection_revision_id` | string | yes | no | — | — |
+| `current_lifecycle.recovery_id` | string \| null | no | yes | null | — |
+| `current_lifecycle.attempt_generation` | string \| null | no | yes | null | — |
+| `current_lifecycle.recovery_version` | integer \| null | no | yes | null | — |
+| `current_lifecycle.received_entry_count` | integer | no | no | 0 | — |
+| `current_lifecycle.declared_entry_count` | integer | no | no | 0 | — |
+| `current_lifecycle.consumed_operation` | object \| null | no | yes | null | — |
+| `current_lifecycle.consumed_operation.id` | string | yes | no | — | — |
+| `current_lifecycle.consumed_operation.operation_key` | string | yes | no | — | — |
+| `current_lifecycle.consumed_operation.command` | string | yes | no | — | — |
+| `current_lifecycle.consumed_operation.payment_id` | string \| null | yes | yes | — | — |
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
 | `revision_id` | string | yes | no | — | — |
@@ -677,6 +764,18 @@ Example JSON output:
     "mode": "new_receipt",
     "payment_id": null
   },
+  "current_lifecycle": {
+    "attempt_generation": null,
+    "consumed_operation": null,
+    "declared_entry_count": 0,
+    "received_entry_count": 0,
+    "recovery_id": null,
+    "recovery_version": null,
+    "selection_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_version": 1,
+    "state": "open"
+  },
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "item_count": 1,
   "manifest_hash": "value",
@@ -711,6 +810,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_RECORD_NOT_FOUND` | No such record. |
+| `E_RECOVERY_PENDING` | Resolve the active recovery before editing or recording this selection. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -791,6 +891,21 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `dry_run` | boolean | no | no | false | — |
 | `warnings` | array[string] | no | no | [] | — |
+| `current_lifecycle` | object | yes | no | — | — |
+| `current_lifecycle.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
+| `current_lifecycle.selection_id` | string | yes | no | — | — |
+| `current_lifecycle.selection_version` | integer | yes | no | — | — |
+| `current_lifecycle.selection_revision_id` | string | yes | no | — | — |
+| `current_lifecycle.recovery_id` | string \| null | no | yes | null | — |
+| `current_lifecycle.attempt_generation` | string \| null | no | yes | null | — |
+| `current_lifecycle.recovery_version` | integer \| null | no | yes | null | — |
+| `current_lifecycle.received_entry_count` | integer | no | no | 0 | — |
+| `current_lifecycle.declared_entry_count` | integer | no | no | 0 | — |
+| `current_lifecycle.consumed_operation` | object \| null | no | yes | null | — |
+| `current_lifecycle.consumed_operation.id` | string | yes | no | — | — |
+| `current_lifecycle.consumed_operation.operation_key` | string | yes | no | — | — |
+| `current_lifecycle.consumed_operation.command` | string | yes | no | — | — |
+| `current_lifecycle.consumed_operation.payment_id` | string \| null | yes | yes | — | — |
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
 | `revision_id` | string | yes | no | — | — |
@@ -843,6 +958,18 @@ Example JSON output:
     "mode": "new_receipt",
     "payment_id": null
   },
+  "current_lifecycle": {
+    "attempt_generation": null,
+    "consumed_operation": null,
+    "declared_entry_count": 0,
+    "received_entry_count": 0,
+    "recovery_id": null,
+    "recovery_version": null,
+    "selection_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_version": 1,
+    "state": "open"
+  },
   "dry_run": false,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "item_count": 1,
@@ -886,6 +1013,7 @@ Example JSON output:
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_RECORD_NOT_FOUND` | No such record. |
+| `E_RECOVERY_PENDING` | Resolve the active recovery before editing or recording this selection. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_SELECTION_CONSUMED` | This draft was consumed by a successful payment operation; recover that operation or start a new draft. |
