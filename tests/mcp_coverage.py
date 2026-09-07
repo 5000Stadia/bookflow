@@ -405,8 +405,9 @@ def variant_policies():
         ('anyOf', ('null', 'string')): ([boolean], []),
         ('oneOf', ('BoolCriterion', 'ChoiceCriterion', 'DateCriterion', 'NumberCriterion', 'PresenceCriterion', 'TextCriterion')): ([
             'tests/test_list_browsing_browser.py::test_named_columns_filters_and_readable_collections',
-            'tests/test_list_browsing_browser.py::test_reorder_reset_zero_missing_paging_and_stale_restart'],
-            ['Dedicated list chooser witnesses cover selected Boolean/number/choice/presence cases; text/date interactions and all generated-form criterion branches remain open.']),
+            'tests/test_list_browsing_browser.py::test_reorder_reset_zero_missing_paging_and_stale_restart',
+            'tests/test_list_browsing_text_date_browser.py::test_text_date_named_criteria_exact_wire_results_and_retained_identity'],
+            ['Dedicated list chooser witnesses cover representative Boolean/number/choice/presence/text/date cases; untested operators, malformed-date interactions and all generated-form criterion branches remain open.']),
         ('oneOf', ('InlineApplications', 'SelectionReference')): ([payment, 'tests/test_mcp_nested_payment_request_browser.py::test_all_six_nested_preview_request_branches_exact_input_results_and_inactive_controls'], []),
         ('oneOf', ('InlineCalculation', 'SelectionReference')): ([payment, 'tests/test_mcp_calculation_variant_browser.py::test_calculation_inline_null_origin_rejections_and_saved_selection'], ['parent-owned payment-selection workspace/navigation and combined-base acceptance']),
         ('oneOf', ('ApplyPreviewRequest', 'InvoiceUpdatePreviewRequest', 'ReceivePreviewRequest', 'UnapplyPreviewRequest', 'UpdatePreviewRequest', 'VoidPreviewRequest')): (['tests/test_mcp_nested_payment_request_browser.py::test_all_six_nested_preview_request_branches_exact_input_results_and_inactive_controls'], []),

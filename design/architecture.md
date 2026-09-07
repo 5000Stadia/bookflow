@@ -998,5 +998,6 @@ command identities to the explicit MCP execution ledger. The per-master witness
 compares Python, CLI, HTTP and actual SDK replies, complete reference/metadata/child
 pages and unchanged company data. Selected default columns cover their first page;
 this is not a blind-agent or complete custom-filter interaction claim. The six-way
-custom-filter schema group retains explicit unexecuted text/date and generated-form
-branch cases alongside the dedicated list chooser witnesses.
+custom-filter schema group links dedicated text/date chooser cases at1280/390
+while retaining untested operators, malformed-date interactions and generated-form
+branch cases.
