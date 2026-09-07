@@ -212,3 +212,20 @@ def test_dependency_owner_registry_requires_manifest_disposition(monkeypatch,cha
     monkeypatch.setattr(h,'OWNERS',owners)
     with pytest.raises(BookflowError) as caught:manifest.conform()
     assert caught.value.code=='E_DEPOSIT_SOURCE_INVALID'
+
+
+def test_manifest_field_categories_distinguish_disclosure_and_evidence(monkeypatch):
+    from bookflow.company import deposit_read_manifest as manifest
+    assert manifest.FIELDS['accounts']['full_name'][3]=='current_navigation'
+    assert manifest.FIELDS['accounts']['created_at'][3]=='outside_output'
+    assert manifest.FIELDS['deposit_profiles']['bank_total'][3]=='immutable_image'
+    assert manifest.FIELDS['notes']['body'][3]=='outside_output'
+    assert manifest.FIELDS['notes']['id'][3]=='association_identity'
+    assert manifest.FIELDS['attachment_links']['caption'][3]=='association_display'
+    assert manifest.FIELDS['items']['name'][3]=='dependency_field'
+    fields=copy.deepcopy(manifest.FIELDS)
+    prior=fields['accounts']['full_name']
+    fields['accounts']['full_name']=(*prior[:3],'nonempty but unclassified')
+    monkeypatch.setattr(manifest,'FIELDS',fields)
+    with pytest.raises(BookflowError) as caught:manifest.conform()
+    assert caught.value.code=='E_DEPOSIT_SOURCE_INVALID'
