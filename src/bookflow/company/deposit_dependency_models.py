@@ -60,6 +60,7 @@ class InspectionRoot(Frozen):
 
 
 RecordKind = Literal[
+    'deposit_draft', 'deposit_draft_revision', 'deposit_draft_row_key',
     'transaction',
     'deposit_number',
     'source_number',

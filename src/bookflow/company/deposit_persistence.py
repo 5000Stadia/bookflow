@@ -189,13 +189,13 @@ def _bank(s,financial,data,revision,batch,pending,current,created,audited,*,void
         pending['bank_effect_versions'].append(version);current.append(dict(key_id=key['id'],version_id=version['id']))
 
 
-def execute(s,ctx,plan):
+def _execute(s,ctx,plan):
     """Re-resolve and validate inside caller's already-open writer transaction."""
     if not s.company.raw.in_transaction or s.dry_run:
         raise RuntimeError('Private deposit execution requires an owned writer transaction')
     inp=lifecycle.INPUTS[plan.verb].model_validate_json(plan.input_json)
     recovered=lifecycle.recover(s,ctx,inp,plan.verb,plan.binding)
-    if recovered is not None:return recovered
+    if recovered is not None:return recovered,None
     if plan.verb!='post' and getattr(inp,'dependency_guard',None) is None:
         raise BookflowError('E_PREVIEW_STALE',details={'reason':'complete deposit guard required'})
     # Retain the authenticated preview producer, including bearer liveness.
@@ -212,13 +212,15 @@ def execute(s,ctx,plan):
     from bookflow.company import deposits
     reversed_batch=next((b for b in pending['posting_batches'] if b['kind']=='reversal'),None)
     reversal=deposits.inverse(Effect.model_validate_json(q.canonical(data['previous'])),reversed_batch['reverses_batch_id']) if reversed_batch else None
-    original=LifecycleEffect(action=fresh.verb,before=operations.state(s,old['id']) if old else None,after=_state(h,financial),financial=financial,reversal=reversal,
+    from bookflow.company import deposit_draft_consumption as consumption
+    consumed=consumption.build(s,ctx,data,fresh.binding)
+    original=LifecycleEffect(consumed_draft=consumption.receipt(data,financial),action=fresh.verb,before=operations.state(s,old['id']) if old else None,after=_state(h,financial),financial=financial,reversal=reversal,
         batch_ids=tuple(r['id'] for r in pending['posting_batches']),headers=tuple(changes),
         memberships=tuple(MembershipChange(source_id=r['source_transaction_id'],claim_id=r['id'],kind=r['kind'],reverses_membership_id=r['reverses_membership_id'],amount_minor_units=r['amount_minor_units'],currency=r['currency']) for r in pending['deposit_memberships']),
         bank_effects=tuple(bank_effects.BankEffect.model_validate(v) for v in data.get('bank_effects',[])),audit_event_id=data['event'])
-    output=LifecycleOutput(command='deposit '+fresh.verb,operation_key=inp.operation_key,operation_id=data['operation_id'],changed=data['changed'],new_effect=data['changed'],
+    output=LifecycleOutput(current_draft=consumption.projected(consumed),command='deposit '+fresh.verb,operation_key=inp.operation_key,operation_id=data['operation_id'],changed=data['changed'],new_effect=data['changed'],
         facts_fingerprint=fresh.facts_fingerprint,dependency_guard=fresh.dependency_guard,effect=original,current=_state(h,financial))
-    touched=[]
+    touched=consumption.touches(consumed)
     if data['changed']:
         touched.append(Touched('transaction',h['id'],'update' if old else 'create',old['version'] if old else None,h['version'],h,old,db='company'))
     touched.extend(Touched('transaction',a['id'],'update',b['version'],a['version'],a,b,db='company') for b,a in bundle['source_headers'])
@@ -231,6 +233,7 @@ def execute(s,ctx,plan):
         sources=[dict(source=r.source.transaction_id,row=r.row_id) for r in financial.intent.sources],
         additional=[dict(row=r.row_id,account=r.account.id,party=r.dimensions.party_id) for r in financial.intent.additional],
         prospective_ids={token:identity for identity,token in data['mapping'].items()}))
+    if consumed is not None:saved_request['resolved_draft']=data['draft']
     operation=dict(id=data['operation_id'],operation_key=inp.operation_key,command='deposit '+fresh.verb,transaction_id=h['id'],request_hash=q.digest(operations.request(inp,ctx,s,fresh.verb)),
         request_snapshot=q.canonical(saved_request),effect_snapshot=output.model_dump_json(),
         created_at=data['at'],created_by=s.actor.id,created_via=ctx.interface.value,audit_event_id=data['event'])
@@ -265,4 +268,24 @@ def execute(s,ctx,plan):
     for kind,values in collections.items():
         for ordinal,value in enumerate(values):
             s.company.conn.execute(c.deposit_operation_items.insert().values(operation_id=operation['id'],kind=kind,ordinal=ordinal,facts_snapshot=q.canonical(value)))
-    return output
+    consumption.persist(s,consumed)
+    return output,consumed
+
+
+def execute(s,ctx,plan):
+    """One financial rollback boundary, including deferred consumption heads."""
+    if not s.company.raw.in_transaction or s.dry_run:
+        raise RuntimeError('Private deposit execution requires an owned writer transaction')
+    s.company.raw.execute('SAVEPOINT bookflow_deposit_financial')
+    try:
+        output,consumed=_execute(s,ctx,plan)
+        from bookflow.company.deposit_drafts import final_foreign_keys
+        final_foreign_keys(s)
+        from bookflow.company import deposit_draft_consumption as consumption
+        consumption.validate_persisted(s,consumed)
+        s.company.raw.execute('RELEASE bookflow_deposit_financial')
+        return output
+    except BaseException:
+        s.company.raw.execute('ROLLBACK TO bookflow_deposit_financial')
+        s.company.raw.execute('RELEASE bookflow_deposit_financial')
+        raise

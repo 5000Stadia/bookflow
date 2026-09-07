@@ -29,7 +29,8 @@ def admit(s, ctx=None, binding=None, *, sources=(), draft=None, selection=None, 
         if user is None:raise BookflowError('E_UNAUTHENTICATED')
         view=replace(s,actor=Actor(**{k:user[k] for k in ('id','kind','username','display_name','hub_admin','timezone')}),memberships=[])
         access.load_memberships(view)
-        view.memberships=[row for row in view.memberships if row['scope_type']=='company' and row['scope_id']==s.company_row['id']]
+        applicable={('company',s.company_row['id']),('organization',s.company_row['organization_id'])}
+        view.memberships=[row for row in view.memberships if (row['scope_type'],row['scope_id']) in applicable]
         scope,role=access.company_role(view,s.company_row['id'],s.company_row['organization_id'])
         if role is None:raise BookflowError('E_COMPANY_NOT_FOUND')
         if not access.role_satisfies(role,scope,'standard' if write else 'member',False):raise BookflowError('E_PERMISSION')
@@ -127,6 +128,7 @@ def validate_manifest(manifest):
     from bookflow.company import custom_fields as cf
     for key,v in manifest.header.custom_fields.items():
         require(key==v.definition_id)
+        require(v.expected_kind is None or (v.canonical_text is not None and v.expected_kind==v.kind),'custom_kind_expectation')
         if v.canonical_text is not None:
             try:cf.typed_value_from_canonical(v.kind,v.canonical_text)
             except BookflowError:require(False)
@@ -144,28 +146,29 @@ def decode_revision(s, header, revision, kind):
     require(manifest.high_water==revision['high_water'])
     parent=kind+'_id'
     require(revision[parent]==header['id'])
+    from bookflow.company.deposit_draft_history import DraftHistoryProof
+    proof=DraftHistoryProof(s,header,revision,kind)
     st=getattr(c,'deposit_'+kind+'_sources')
     stored=list(s.company.conn.execute(sa.select(st).where(st.c.revision_id==revision['id']).order_by(st.c.ordinal)).mappings())
     require(len(stored)==len(manifest.sources),'source_count')
+    source_graphs=deposit_sources.graph_many(s,[row.source.transaction_id for row in manifest.sources])
     for raw,row in zip(stored,manifest.sources):
         require((raw[parent],raw['row_id'],raw['ordinal'],raw['source_transaction_id'],raw['source_type'],raw['expected_header_version'],raw['source_revision_id'],raw['memo'],raw['memo_origin'])==
             (header['id'],row.row_id,row.ordinal,row.source.transaction_id,row.source.source_type,row.source.expected_header_version,row.source.revision_id,row.memo,row.memo_origin))
         require(json.loads(raw['snapshot'])==row.model_dump(mode='json'),'source_snapshot')
         # Independently reconstruct the captured business revision from real owned
         # rows. A later correction is history, not permission to rewrite the pin.
-        g=deposit_sources.graph(s,row.source.transaction_id)
+        g=source_graphs[row.source.transaction_id]
+        endpoint=proof.source_endpoint(row)
         if row.source.source_type=='payment':
-            version=row.captured_header_version or row.source.expected_header_version
-            endpoint=s.company.conn.execute(sa.select(c.audit_events.c.seq).join(c.audit_entries,c.audit_entries.c.event_id==c.audit_events.c.id).where(
-                c.audit_entries.c.record_type=='transaction',c.audit_entries.c.record_id==row.source.transaction_id,c.audit_entries.c.version_after==version)).scalars().all()
-            require(len(endpoint)==1,'source_version_history')
             keys=c.payment_component_keys
-            allowed=set(s.company.conn.execute(sa.select(keys.c.id).join(c.audit_events,c.audit_events.c.id==keys.c.audit_event_id).where(keys.c.transaction_id==row.source.transaction_id,c.audit_events.c.seq<=endpoint[0])).scalars())
+            allowed=set(s.company.conn.execute(sa.select(keys.c.id).join(c.audit_events,c.audit_events.c.id==keys.c.audit_event_id).where(keys.c.transaction_id==row.source.transaction_id,c.audit_events.c.seq<=endpoint.sequence)).scalars())
             g['payment_component_keys']=[key for key in g['payment_component_keys'] if key['id'] in allowed]
-        g['header']=dict(g['header'],current_revision_id=row.source.revision_id,version=row.source.expected_header_version,status='posted')
+        g['header']=endpoint.header
         g['posting_batches']=[b for b in g['posting_batches'] if b['id']==row.source.business_batch_id]
         actual=deposit_sources.project(g,uf_account=row.source.uf_account,home_currency=manifest.currency)
-        require(actual==row.source,'source_provenance')
+        captured=row.source.model_copy(update={'expected_header_version':endpoint.header['version']})
+        require(actual==captured,'source_provenance')
     if kind=='draft':
         require((revision['bank_account_id'],revision['cashback_account_id'])==(manifest.header.bank.id if manifest.header.bank else None,manifest.header.cash_back.account.id if manifest.header.cash_back and manifest.header.cash_back.account else None))
         at=c.deposit_draft_additional
@@ -187,10 +190,11 @@ def decode_revision(s, header, revision, kind):
 
 def stale_sources(s,manifest,edit=None):
     stale=[]
+    claims=dependencies.active_claims(s,[row.source.transaction_id for row in manifest.sources])
     for row in manifest.sources:
         try:
             actual=deposit_sources.load(s,row.source.transaction_id)
-            claim=dependencies.active_claim(s,row.source.transaction_id)
+            claim=claims.get(row.source.transaction_id)
             invalid=actual!=row.source or (claim is not None and claim['transaction_id']!=edit) or (manifest.header.date is not None and actual.receipt_date>manifest.header.date)
         except BookflowError as error:
             if error.code!='E_DEPOSIT_SOURCE_INELIGIBLE':raise

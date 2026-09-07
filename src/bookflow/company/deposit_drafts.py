@@ -35,13 +35,24 @@ def load(s,identity,revision_number=None,*,kind='draft',ctx=None,binding=None,wr
         v.require(revision['version']==index and revision['previous_revision_id']==prior,'revision_chain')
         v.require(revision['high_water']>=high_water,'ordinal_high_water')
         high_water=revision['high_water'];prior=revision['id']
-    v.require(bool(revisions) and revisions[-1]['id']==header['current_revision_id'] and revisions[-1]['version']==header['version'],'current_revision')
+    consumed=kind=='draft' and header['state']=='consumed'
+    v.require(bool(revisions) and revisions[-1]['id']==header['current_revision_id'] and revisions[-1]['version']+int(consumed)==header['version'],'current_revision')
+    if kind=='draft':
+        if not consumed:
+            v.require(s.company.conn.execute(sa.select(c.deposit_draft_consumptions.c.operation_id).where(c.deposit_draft_consumptions.c.draft_id==identity)).first() is None,'unexpected_consumption')
+    if consumed:
+        from bookflow.company.deposit_draft_consumption import validate_consumed
+        validate_consumed(s,header,revisions[-1])
     revision=next((r for r in revisions if r['version']==revision_number),None) if revision_number else revisions[-1]
     if revision is None:raise BookflowError('E_RECORD_NOT_FOUND')
     if kind=='draft':
         maximum=s.company.conn.execute(sa.select(sa.func.max(c.deposit_draft_row_keys.c.ordinal)).where(c.deposit_draft_row_keys.c.draft_id==identity)).scalar_one() or 0
         v.require(high_water>=maximum,'ordinal_high_water')
     manifest=v.decode_revision(s,header,revision,kind)
+    if kind=='draft':
+        from bookflow.company.deposit_draft_provider import validate_row_origins
+        keys=list(s.company.conn.execute(sa.select(c.deposit_draft_row_keys).where(c.deposit_draft_row_keys.c.draft_id==identity)).mappings())
+        validate_row_origins(s,header,keys)
     return header,dict(revision),manifest,binding
 
 
@@ -51,7 +62,8 @@ def output(s,header,revision,manifest,kind='draft'):
     stale=v.stale_sources(s,manifest,edit)
     common=dict(id=header['id'],version=header['version'],state=header['state'],revision_id=revision['id'],revision_number=revision['version'],
         manifest_hash=revision['manifest_hash'],stale_source_ids=stale)
-    if kind=='draft':return m.DraftOutput(**common,header=manifest.header,summary=manifest.summary,edit_transaction_id=edit,baseline_version=header['baseline_version'],copy_transaction_id=header['copy_transaction_id'])
+    from bookflow.company.deposit_draft_provider import reference_issues
+    if kind=='draft':return m.DraftOutput(**common,posting_issues=manifest.summary.issues+reference_issues(s,manifest,edit),header=manifest.header,summary=manifest.summary,edit_transaction_id=edit,baseline_version=header['baseline_version'],copy_transaction_id=header['copy_transaction_id'])
     return m.SelectionOutput(**common,source_count=len(manifest.sources),source_total=manifest.summary.source_total,
         target_draft_id=header['target_draft_id'],target_revision_id=header['target_revision_id'],accepted_revision_id=header['accepted_revision_id'])
 
@@ -73,11 +85,14 @@ def _version(s,header,expected):
             return result
         versioning.check_update(current_version=header['version'],current_updated_at=header['updated_at'],
             current_writer=versioning.current_writer(s.company,kind,header['id'],header),changes={'composition'},
-            expected_version=expected,history_since=history,actor_id=s.actor.id)
+            expected_version=expected,history_since=history,actor_id=s.actor.id,
+            window_seconds=s.company_info_row.get('recent_activity_window_seconds',60))
     if header['state']!='open':raise BookflowError('E_DEPOSIT_DRAFT_STATE')
 
 
 def _custom(s,previous,patch,expectations,creating=False):
+    from bookflow.company.journal_custom_fields import validate_kinds
+    validate_kinds(s.company,patch,expectations,record_type='deposit')
     result=dict(previous)
     definitions={r['id']:r for r in cf._applicable_definitions(s.company.conn,'deposit')}
     if creating:
@@ -86,19 +101,21 @@ def _custom(s,previous,patch,expectations,creating=False):
     for key in set(keys)|set(patch.root):
         if key not in definitions:raise BookflowError('E_RECORD_NOT_FOUND')
         d=cf.read_definition(s.company,key);old=result.get(key)
-        if key in expectations.root and expectations.root[key]!=d['kind']:raise BookflowError('E_VALIDATION',details={'field':'expected_custom_field_kinds'})
         provided=key in patch.root;value=patch.root[key] if provided else d['default']
         if old and not provided:continue
         canonical=None;choice=None
         if value is not None:
-            if old and old.canonical_text is not None and cf.typed_value_from_canonical(old.kind,old.canonical_text)==value:
-                result[key]=old;continue
+            if old and old.kind==d['kind'] and old.canonical_text is not None:
+                prior_value=cf.typed_value_from_canonical(old.kind,old.canonical_text)
+                if type(prior_value) is type(value) and prior_value==value:
+                    result[key]=old.model_copy(update={'expected_kind':expectations.root[key]}) if key in expectations.root else old
+                    continue
             canonical,_=cf.parse_typed_value(d['kind'],value,choices=cf._active_choice_map(s.company.conn,key) if d['kind']=='choice' else None)
             if d['kind']=='choice':choice=next(x for x in d['choices'] if x['value']==canonical)
-        if not d['active'] and (old is None or old.canonical_text!=canonical):raise BookflowError('E_VALIDATION',details={'field':'custom_fields','reason':'inactive'})
+        if not d['active'] and (old is None or old.kind!=d['kind'] or old.canonical_text!=canonical):raise BookflowError('E_VALIDATION',details={'field':'custom_fields','reason':'inactive'})
         result[key]=m.CustomCapture(definition_id=key,definition_version=d['version'],name=d['name'],kind=d['kind'],required=bool(d['required']),
             print_visible=None,position=d['position'],original_value_id=old.original_value_id if old else None,canonical_text=canonical,choice_id=choice['id'] if choice else None,
-            choice_label=choice['value'] if choice else None,origin='entered' if provided else 'default' if value is not None else 'unresolved')
+            choice_label=choice['value'] if choice else None,expected_kind=expectations.root.get(key),origin='entered' if provided else 'default' if value is not None else 'unresolved')
     return result
 
 

@@ -39,6 +39,37 @@ def graph(s, identity, pending=None, header=None):
     return result
 
 
+def graph_many(s, identities):
+    """Complete stored graphs in bounded SQL batches, with ordinary authority.
+
+    No prospective overlays or cached facts. Every requested owner must exist;
+    all historical owned rows are retained for the unchanged projector.
+    """
+    from bookflow.company.payment_authority import authorize
+    identities=sorted(set(identities))
+    result={}
+    for offset in range(0,len(identities),200):
+        group=identities[offset:offset+200]
+        found=effects.rows(s,c.transactions,c.transactions.c.id.in_(group))
+        if len(found)!=len(group) or any(r['type'] not in ('payment','sales_receipt') for r in found):
+            raise BookflowError('E_RECORD_NOT_FOUND')
+        authorize(s,group)
+        for row in found:result[row['id']]={'header':row,**{name:[] for name in TABLES}}
+        for name in TABLES:
+            table=getattr(c,name)
+            for row in effects.rows(s,table,table.c.transaction_id.in_(group)):
+                result[row['transaction_id']][name].append(row)
+    return result
+
+
+def load_many(s, identities):
+    uf=s.company.conn.execute(sa.select(c.accounts).where(c.accounts.c.system_role=='undeposited_funds')).mappings().all()
+    if len(uf)!=1 or not uf[0]['active'] or uf[0]['currency']!=s.company_info_row['home_currency']:
+        raise BookflowError('E_DEPOSIT_SOURCE_INELIGIBLE')
+    return {identity:project(g,uf_account=uf[0]['id'],home_currency=s.company_info_row['home_currency'])
+            for identity,g in graph_many(s,identities).items()}
+
+
 def _project(g, *, uf_account, home_currency):
     """Validate ownership and exact positive UF partition, independent of SQL."""
     h = g['header']; identity = h['id']; revision = h['current_revision_id']

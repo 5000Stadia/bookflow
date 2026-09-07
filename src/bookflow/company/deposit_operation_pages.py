@@ -152,7 +152,8 @@ def authorized_original(s,saved,binding,*,write=False):
 def authorized_output(s,saved,binding,*,write=False):
     output=authorized_original(s,saved,binding,write=write)
     targets=output.effect.target_ids if output.command=='deposit coordinate' else ()
-    updates=dict(current=operations.state(s,saved['transaction_id']))
+    from bookflow.company import deposit_draft_consumption as consumption
+    updates=dict(current=operations.state(s,saved['transaction_id']),current_draft=consumption.current(s,saved['id'],binding=binding,write=write))
     if output.command=='deposit coordinate':
         if output.effect.target_ids!=targets:raise BookflowError('E_INTERNAL')
         current={}

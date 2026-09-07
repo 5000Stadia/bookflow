@@ -1,6 +1,6 @@
 """Private ordinary deposit aggregate. Caller owns the company writer transaction.
 
-No registry registration, draft provider, nested dispatch, or transaction commit.
+No registry registration, nested dispatch, or transaction commit.
 """
 from __future__ import annotations
 from typing import TYPE_CHECKING
@@ -74,7 +74,7 @@ def recover(s,ctx,inp,verb,binding):
         except BookflowError as error:
             if error.code=='E_PERMISSION':raise BookflowError('E_PERMISSION',details={}) from None
             raise
-    return operations.recover(s,ctx,inp,verb)
+    return operations.recover(s,ctx,inp,verb,binding=binding)
 
 
 def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None):
@@ -93,6 +93,7 @@ def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None):
     supplied_guard = getattr(inp, 'dependency_guard', None)
     if supplied_guard is None:
         supplied_guard = expected_guard
+    comparison = None
     if supplied_guard is not None:
         comparison = history.compare(s, supplied_guard, original_request, binding)
         if not comparison.matches:
@@ -108,7 +109,10 @@ def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None):
         found=effects.rows(s,c.transactions,c.transactions.c.id==inp.deposit,c.transactions.c.type=='deposit')
         if len(found)!=1:raise BookflowError('E_RECORD_NOT_FOUND')
         old=found[0]
-    requested=[] if verb=='void' or inp.document.mode=='draft' else [r.source for r in inp.document.sources]
+    from bookflow.company import deposit_draft_provider as provider
+    document=None if verb=='void' else provider.load(s,ctx,inp.document,binding,
+        target=old['id'] if old else None,expected_target_version=inp.expected_version if old else None)
+    requested=[] if document is None else [r.source for r in document.sources]
     targets=dependencies.authorize(s,old['id'] if old else None,requested,write=True)
     history._authorize_binding_graph(s,binding,targets,write=True)
     if verb!='post' and (not ctx.reason or not ctx.reason.strip() or len(ctx.reason)>140):
@@ -134,12 +138,17 @@ def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None):
         resolved=previous;number=old['number'];memo=prior['memo'];changed=old['status']=='posted'
     else:
         resolved,number,memo,custom_plan,changed,sequence,maximum=resolve_replacement(
-            s,ctx,inp.document,identity=identity,old=old,prior=prior,previous=previous,
+            s,ctx,document,identity=identity,old=old,prior=prior,previous=previous,
             keys=keys,maximum=maximum,mapping=mapping,binding=binding)
     if changed:
         journals.open_dates(s,[resolved.intent.date]+([prior['date']] if prior else []))
         if verb!='void':
-            deposit_validation.validate_current(resolved,s,replacing_deposit=identity,previous=previous)
+            if document.pin is None:
+                deposit_validation.validate_current(resolved,s,replacing_deposit=identity,previous=previous)
+            else:
+                deposit_validation.validate_current_sources(resolved,s,replacing_deposit=identity)
+                from bookflow.company.deposit_draft_models import Manifest
+                provider.validate_references(s,resolved,Manifest.model_validate_json(document.pin.snapshot),old['id'] if old else None)
     claim_rows=effects.rows(s,c.deposit_current_memberships,c.deposit_current_memberships.c.transaction_id==identity)
     current_claims=[effects.rows(s,c.deposit_memberships,c.deposit_memberships.c.id==r['membership_id'])[0] for r in claim_rows]
     source_headers={source:effects.rows(s,c.transactions,c.transactions.c.id==source)[0] for source in sorted(set(requested)|{r['source_transaction_id'] for r in current_claims})}
@@ -157,8 +166,17 @@ def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None):
         resolved=_logical(resolved.model_dump(mode='json'),mapping),number=number,memo=memo,
         custom=sales._custom_semantic(custom_plan.snapshot) if custom_plan else None,
         closing=s.company_info_row.get('closing_date'),schema='co0021')
+    if document is not None and document.pin is not None:facts['draft']=document.pin.model_dump(mode='json')
     fingerprint=q.digest(facts)
-    recipe, readset = history.capture(s, original_request, binding)
+    if document is not None and document.pin is not None and comparison is not None:
+        # compare already proved the complete current and historical relations
+        # in this same writer snapshot. All intervening resolution is read-only;
+        # sealing that exact current readset avoids a duplicate third traversal.
+        # No historical/current proof or fresh binding check is omitted.
+        readset = comparison.current
+        recipe = history.recipe_for_readset(s, original_request, readset, binding)
+    else:
+        recipe, readset = history.capture(s, original_request, binding)
     guard = history.issue(s, recipe, readset, binding)
     if inp.expected_facts_fingerprint is not None and inp.expected_facts_fingerprint!=fingerprint:
         raise BookflowError('E_PREVIEW_STALE',details={'reason':'deposit_facts'})
@@ -168,6 +186,7 @@ def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None):
         source_headers=source_headers,claims=current_claims,targets=targets,sequence=sequence,
         mapping=mapping,at=clock.now_iso(),event=new_id(),operation_id=new_id(),
         issuer=json.loads(prior['issuer_snapshot']) if prior else {**{k:v for k,v in s.company_info_row.items() if k in ('id','legal_name','home_currency') or k.startswith(('address_','legal_address_','ship_address_'))}, 'display_name':readset.issuer.display_name})
+    if document is not None and document.pin is not None:data['draft']=document.pin.model_dump(mode='json')
     return Prepared(verb,inp.model_dump_json(by_alias=True,exclude_unset=True),fingerprint,guard,q.canonical(data),custom_plan,binding)
 
 
@@ -177,14 +196,31 @@ def resolve_replacement(s, ctx, doc, *, identity, old, prior, previous, keys, ma
     if overlay is not None and type(overlay) is not SourceResultOverlay:
         raise BookflowError('E_INTERNAL', message='Expected owned source result overlay.')
     from bookflow.company import deposit_dependency_history as history
-    if doc.mode!='inline':
-        raise BookflowError('E_DEPOSIT_DRAFT_STATE',details={'reason':'private draft provider not allocated'})
+    from bookflow.company import deposit_draft_provider as provider
+    if type(doc) is not provider.ResolvedDepositDocument:
+        doc=provider.load(s,ctx,doc,binding,target=old['id'] if old else None,expected_target_version=old['version'] if old else None)
+    draft_manifest=None;draft_keys={}
+    if doc.pin is not None:
+        _,_,draft_manifest=provider.read_pin(s,ctx,doc.pin,binding)
+        draft_keys={r['id']:r for r in json.loads(doc.pin.keys_json)}
+    def draft_identity(row,token):
+        key=draft_keys[row.row_id]
+        original=key['original_row_id'] if old and key['edit_transaction_id']==identity else None
+        if original is not None:
+            matched=[k for k in keys if k['id']==original]
+            if len(matched)!=1 or matched[0]['ordinal']!=row.ordinal:raise BookflowError('E_VALIDATION')
+            return original,row.ordinal
+        identifier=new_id();mapping[identifier]=token
+        return identifier,row.ordinal
     number,sequence=effects.allocate(s,'deposit',doc.number,identity if old else None)
     memo=doc.memo
     source_rows=[];additional=[]
     oldsources={r.source.transaction_id:r for r in previous.intent.sources} if previous else {}
     oldextras={r.row_id:r for r in previous.intent.additional} if previous else {}
     extra_lines={r['line_id']:oldextras[r['id']] for r in keys if r['id'] in oldextras}
+    from bookflow.company.deposit_coordinate_models import SourceResult
+    current_claims=dependencies.active_claims(s,[v.source for v in doc.sources if not isinstance(v,SourceResult)]) if doc.pin is not None else None
+    current_sources=deposit_sources.load_many(s,[v.source for v in doc.sources if not isinstance(v,SourceResult)]) if doc.pin is not None else None
     for index,value in enumerate(doc.sources):
         from bookflow.company.deposit_coordinate_models import SourceResult
         if isinstance(value, SourceResult):
@@ -192,15 +228,24 @@ def resolve_replacement(s, ctx, doc, *, identity, old, prior, previous, keys, ma
                 raise BookflowError('E_DEPOSIT_SOURCE_INELIGIBLE')
             source_rows.append(overlay.retained_row)
             continue
-        source=deposit_sources.load(s,value.source)
+        source=current_sources[value.source] if current_sources is not None else deposit_sources.load(s,value.source)
         if source.source_type!=value.source_type:raise BookflowError('E_DEPOSIT_SOURCE_INELIGIBLE')
-        claimed=dependencies.active_claim(s,value.source)
+        claimed=current_claims.get(value.source) if current_claims is not None else dependencies.active_claim(s,value.source)
         if claimed and claimed['transaction_id']!=identity:
             raise BookflowError('E_DEPOSIT_SOURCE_CLAIMED',details=dependencies.claim_details(s,value.source,claimed))
         h=effects.rows(s,c.transactions,c.transactions.c.id==value.source)[0]
+        # Drafts carry complete authenticated source facts, unlike an inline
+        # expected-version-only request. Report that owned pin mismatch before
+        # attempting to construct an unrelated inline version-history recipe.
+        if draft_manifest is not None:
+            captured=draft_manifest.sources[index]
+            if source!=captured.source:raise BookflowError('E_PREVIEW_STALE',details={'reason':'draft_source'})
         history.version_meta(s,h,value.expected_version,binding)
         retained=oldsources.get(value.source)
-        if retained:
+        if draft_manifest is not None:
+            row_id,ordinal=draft_identity(captured,f'draft-row-{captured.row_id}')
+            maximum=max(maximum,ordinal)
+        elif retained:
             row_id,ordinal=retained.row_id,retained.ordinal
         else:
             maximum+=1;row_id,ordinal=new_id(),maximum;mapping[row_id]=f'new-source-{index}'
@@ -210,23 +255,44 @@ def resolve_replacement(s, ctx, doc, *, identity, old, prior, previous, keys, ma
         origin='entered' if entered else 'source'
         rowmemo=value.memo_override if entered else source.source_memo
         source_rows.append(SourceRow(row_id=row_id,ordinal=ordinal,source=source,
-            occurrences=deposits.occurrences(source,retained.occurrences if retained else ()),memo=rowmemo,memo_origin=origin))
+            occurrences=deposits.occurrences(source,captured.occurrences if draft_manifest is not None else retained.occurrences if retained else ()),memo=rowmemo,memo_origin=origin))
     for index,value in enumerate(doc.additional):
         retained=extra_lines.get(value.line_id) if value.line_id else None
+        if draft_manifest is not None:
+            captured=draft_manifest.additional[index]
+            row_id,ordinal=draft_identity(captured,f'draft-row-{captured.row_id}')
+            retained=oldextras.get(row_id)
+            maximum=max(maximum,ordinal)
         if value.line_id and retained is None:raise BookflowError('E_VALIDATION',details={'field':'line_id'})
-        if retained:row_id,ordinal=retained.row_id,retained.ordinal
+        if draft_manifest is not None:pass
+        elif retained:row_id,ordinal=retained.row_id,retained.ordinal
         else:
             maximum+=1;row_id,ordinal=new_id(),maximum;mapping[row_id]=f'new-additional-{index}'
-        additional.append(resolve_additional(s,value,row_id,ordinal,retained))
-    bank=resolve_account(s,doc.deposit_to,previous.intent.bank if previous else None)
-    cashback=CashBack(account=resolve_account(s,doc.cash_back.account,previous.intent.cash_back.account if previous and previous.intent.cash_back else None),
+        resolved_row=resolve_additional(s,value,row_id,ordinal,None if draft_manifest is not None else retained)
+        if draft_manifest is not None:
+            resolved_row=Additional(row_id=row_id,ordinal=ordinal,account=captured.account,
+                units=resolved_row.units,memo=resolved_row.memo,check_number=resolved_row.check_number,
+                payment_method=captured.payment_method,dimensions=Dimensions(
+                    party_kind=captured.received_from.kind,party_id=captured.received_from.id,party_name=captured.party_name,
+                    class_id=captured.class_ref.id if captured.class_ref else None,class_name=captured.class_ref.label if captured.class_ref else None))
+        additional.append(resolved_row)
+    bank=resolve_account(s,doc.deposit_to,previous.intent.bank if previous and draft_manifest is None else None)
+    cashback=CashBack(account=resolve_account(s,doc.cash_back.account,previous.intent.cash_back.account if previous and previous.intent.cash_back and draft_manifest is None else None),
         units=amount(doc.cash_back.amount,s.company_info_row['home_currency']),memo=doc.cash_back.memo) if doc.cash_back else None
+    if draft_manifest is not None:
+        bank=draft_manifest.header.bank
+        if cashback:
+            cashback=CashBack(account=draft_manifest.header.cash_back.account,units=cashback.units,memo=cashback.memo)
     resolved=deposits.prepare(Intent(deposit_id=identity,date=doc.date,currency=s.company_info_row['home_currency'],bank=bank,
         sources=tuple(source_rows),additional=tuple(additional),cash_back=cashback))
     custom.validate_kinds(s.company,doc.custom_fields,doc.expected_custom_field_kinds,record_type='deposit')
     from bookflow.company.custom_fields import CustomFieldValuePatch
     old_custom=json.loads(prior['custom_fields_snapshot']) if prior else {}
     full_custom=CustomFieldValuePatch({**{key:None for key in old_custom if key not in doc.custom_fields.root},**doc.custom_fields.root})
-    custom_plan=custom.prepare(s.company,identity,full_custom,old_custom,creating=old is None,record_type='deposit')
+    if draft_manifest is None:
+        custom_plan=custom.prepare(s.company,identity,full_custom,old_custom,creating=old is None,record_type='deposit')
+    else:
+        from bookflow.company import deposit_draft_custom_fields as draft_custom
+        custom_plan=draft_custom.prepare(s,identity,old_custom,draft_manifest,doc.pin.manifest_hash,creating=old is None)
     changed=old is None or _business(resolved)!=_business(previous) or (number,memo)!=(prior['number'],prior['memo']) or custom_plan.changed
     return resolved, number, memo, custom_plan, changed, sequence, maximum

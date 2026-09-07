@@ -33,13 +33,17 @@ def validate(s,ctx,bundle):
     require(bundle.source_rows==typed_source(expected))
     require(source_before(s,resolved.overlay.source_id)==bundle.output.effect.source.before)
     deposit_persistence_validation.validate_rows(s,ctx,bundle.deposit_plan,bundle.deposit_bundle)
+    from bookflow.company.deposit_draft_provider import validate_financial
+    validate_financial(s,ctx,bundle.deposit_bundle['data'],bundle.deposit_bundle['financial'],bundle.prepared.binding,resolved.overlay,custom_plan=bundle.deposit_plan.custom_plan)
     validate_deposit_columns(s,ctx,bundle)
     validate_deposit_business_columns(s,ctx,bundle)
     d=bundle.deposit_bundle;financial=d['financial'];old=d['data']['before'];h=d['header']
     if d['data']['changed'] and bundle.deposit_plan.verb!='void':
         previous=d['data']['previous']
         from bookflow.company.deposit_models import Effect
-        deposit_validation.validate_references(financial,s,previous=Effect.model_validate_json(q.canonical(previous)))
+        if d['data'].get('draft') is None:
+            deposit_validation.validate_references(financial,s,previous=Effect.model_validate_json(q.canonical(previous)))
+        # Draft references were independently checked by validate_financial above.
         from bookflow.company import deposit_sources
         for row in financial.intent.sources:
             if row.source.transaction_id==resolved.overlay.source_id:require(row==resolved.overlay.retained_row)
@@ -131,6 +135,15 @@ def validate(s,ctx,bundle):
     for cp in (data.get('custom_plan'),resolved.deposit_custom_plan if d['data']['changed'] else None):
         if cp:
             for value in custom.touches(cp):touch(value.record_type,value.record_id,value.after,value.before,value.action,value.version_before,value.version_after)
+    from bookflow.company import deposit_draft_consumption as consumption
+    consumed=consumption.build(s,ctx,d['data'],bundle.prepared.binding)
+    require(bundle.output.current_draft==consumption.projected(consumed))
+    require(bundle.output.effect.deposit.consumed_draft==consumption.receipt(d['data'],d['financial']))
+    if consumed is not None:
+        require(json.loads(operation['request_snapshot'])['resolved_draft']==d['data']['draft'])
+        b,a,r=consumed['before'],consumed['after'],consumed['row']
+        touch('deposit_draft',a['id'],a,b,'update',b['version'],a['version'])
+        touch('deposit_draft_consumption',r['operation_id'],r)
     touch('deposit_operation',operation['id'],rows.decoded(operation))
     require(len(event.entries)==len(expected_touches))
     require({(v['record_type'],v['record_id']):(v['before'],v['after'],v['action'],v['version_before'],v['version_after']) for v in event.entries}==expected_touches)
@@ -162,6 +175,7 @@ def validate(s,ctx,bundle):
     request=operations.request(resolved.input,ctx,s,'coordinate',original=True)
     request.update(resolved_transaction_ids=list(bundle.output.effect.target_ids),resolved_identity_map=[v.model_dump(mode='json') for v in identities],
         item_manifests={kind:dict(count=len(items),digest=q.digest(items)) for kind,items in collections(bundle.output).items()})
+    if consumed is not None:request['resolved_draft']=d['data']['draft']
     require(operation==dict(id=d['data']['operation_id'],operation_key=resolved.input.operation_key,command='deposit coordinate',transaction_id=h['id'],
         request_hash=q.digest(operations.request(resolved.input,ctx,s,'coordinate')),request_snapshot=q.canonical(request),effect_snapshot=bundle.output.model_dump_json(),
         created_at=d['data']['at'],created_by=s.actor.id,created_via=ctx.interface.value,audit_event_id=d['data']['event']))
