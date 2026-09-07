@@ -156,3 +156,38 @@ def test_query_epoch_is_an_other_boundary_between_equal_transactions(monkeypatch
     calls.clear()
     with pytest.raises(BookflowError) as caught:pp.check(None,[('transaction','a',False),('payment_selection_query_epoch','6',False),('transaction','a',True)])
     assert caught.value.code=='E_QUERY_STALE' and calls==[('transactions',[('a',False)]),('epoch',)]
+
+
+@pytest.mark.parametrize('reverse',[False,True])
+def test_recovery_error_and_earlier_permission_preserve_occurrence_order(monkeypatch,reverse):
+    rows,_,_=graph(active='removed');rows['payment_operations']=[]
+    rows['audit_entries']=[dict(event_id='plain',record_type='transaction',record_id='saved-old'),
+        dict(event_id='recovery',record_type='payment_selection_recovery_active',record_id='S')]
+    loaded(monkeypatch,rows);s=SimpleNamespace(company=None);calls=[]
+    def deny(session,resource,role):
+        calls.append((resource,role));raise BookflowError('E_PERMISSION',details={'reason':'ordered_gate'})
+    monkeypatch.setattr(pa,'require_resource',deny)
+    events=['plain','recovery'];events=events[::-1] if reverse else events
+    def scalar():
+        for event in events:pa.authorize_event(s,event)
+    old=outcome(scalar);previous=calls[:];calls.clear()
+    new=outcome(lambda:pa.authorize_events(s,events))
+    assert old==new==('error','E_PERMISSION',{'reason':'unresolved_payment_evidence' if reverse else 'ordered_gate'})
+    assert calls==previous==([] if reverse else [('ledger.read','member')])
+
+
+def test_unresolved_attempt_is_not_silently_pruned_and_missing_item_is_local(monkeypatch,tmp_path):
+    rows,roots,expected=graph(active='removed')
+    absent='aborted-remove'
+    rows['transactions']=[r for r in rows['transactions'] if r['id']!=absent]
+    rows['work_billing_allocations']=[dict(transaction_id=absent)]
+    rows['audit_entries'].append(dict(event_id='missing-item',record_type='payment_selection_recovery_item',record_id='absent-item'))
+    loaded(monkeypatch,rows);reader=pa._EventCohort(None,['mixed','missing-item'])
+    for root in roots:assert reader._walk(root)==pa.record_transactions(None,*root)==expected
+    # Existing scalar/audit ownership retains the unresolved referenced ID and
+    # its work requirement; it does not add a new transaction-existence policy.
+    assert reader.resolved['mixed']==expected and absent in reader.resolved['mixed']
+    assert reader.requirements('mixed')==pa.event_requirements(None,'mixed')==(('ledger.read','member'),('customer-work','member'))
+    old=outcome(lambda:pa.event_requirements(None,'missing-item'));new=outcome(lambda:reader.requirements('missing-item'))
+    assert old==new==('error','E_PERMISSION',{'reason':'unresolved_payment_evidence'})
+    (tmp_path/'unresolved-attempt.json').write_text(json.dumps(dict(absent=absent,scalar_and_cohort=sorted(expected),missing_item={'scalar':old,'cohort':new}),indent=2))
