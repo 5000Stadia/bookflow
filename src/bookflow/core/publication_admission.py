@@ -1,4 +1,4 @@
-"""Private host handoff ordering. No production authority commit calls this yet.
+"""Host handoff ordering, shared with actual-owner conservative commit barriers.
 
 Only known nonblocking socket transports may execute inside the mutex. Validation,
 readiness, cancellation cleanup and all filesystem work belong outside it.
@@ -158,6 +158,14 @@ class Admission:
             return self._barrier
 
     def finish_commit(self, barrier, *, committed):
+        """Reopen after the owner has settled its watched transactions.
+
+        ``committed`` is the owner's outcome classification (True also covers
+        durable-partial), retained as an explicit boolean API requirement. It
+        does not select admission behavior: close_for_commit already invalidated
+        every old generation, unconditionally, including on rollback. Finishing
+        never restores that generation and supplies no authority decision.
+        """
         if type(committed) is not bool:
             raise TypeError('transaction outcome required')
         with self._mutex:
