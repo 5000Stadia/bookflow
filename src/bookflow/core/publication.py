@@ -7,6 +7,10 @@ from dataclasses import dataclass, field, fields
 from copy import deepcopy
 from contextlib import contextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from bookflow.core.publication_audit import ProjectionProof
 
 import sqlalchemy as sa
 
@@ -138,6 +142,7 @@ class PublicationPermit:
     targets: dict = field(default_factory=dict)
     projection: dict = field(default_factory=dict)
     input_error: dict | None = None
+    audit_proof: 'ProjectionProof | None' = field(default=None, repr=False)
 
     def retained(self):
         """Only owned values enter the bounded receipt cache, never host/registry handles."""
@@ -156,7 +161,12 @@ class PublicationPermit:
         if cmd is None:
             raise BookflowError("E_QUERY_STALE", details={"reason": "registry_changed"})
         raw = values.pop("input")
-        if values.get("input_error") is not None:
+        if values.get("audit_proof") is not None:
+            from bookflow.core.publication_audit import ProjectionProof
+            if type(values['audit_proof']) is not ProjectionProof or raw is not None:
+                _deny()
+            inp = None
+        elif values.get("input_error") is not None:
             if raw is not None or values.get("execution_succeeded"):
                 raise BookflowError("E_IO", details={"reason": "invalid_rejection_permit"})
             inp = None
@@ -187,8 +197,16 @@ class PublicationPermit:
         return cls(cmd, inp, ctx, _actor(s), frozenset(_membership(row) for row in s.memberships),
                    None, token, None, dry_run, input_error=input_error)
 
-    def finish(self, s, *, succeeded=True, result=None):
+    def finish(self, s, *, succeeded=True, result=None, audit_proof=None):
         """Capture only a committed, same-request audit certificate, after execute."""
+        if audit_proof is not None:
+            from bookflow.core.publication_audit import ProjectionProof
+            if (type(audit_proof) is not ProjectionProof or succeeded!=(audit_proof.failure is None)
+                    or self.cmd.is_write or not audit_proof.matches(result)):
+                _deny()
+            self.audit_proof = audit_proof
+            self.execution_succeeded = succeeded
+            return
         if self.cmd.scope == "company" and s.company_row is not None:
             self.company = s.company_row["id"], s.company_row["organization_id"]
         if succeeded and self.input_error is not None:
@@ -281,6 +299,10 @@ class PublicationPermit:
             _deny()
 
     def _check(self, host, cred, *, original_response=False):
+        if self.audit_proof is not None:
+            from bookflow.core.publication_audit import check_hosted
+            check_hosted(host, cred, self.ctx, self.audit_proof)
+            return
         with publication_reader(host, cred) as s:
             try:
                 cred.revalidate(s.hub)

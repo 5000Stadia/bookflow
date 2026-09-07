@@ -26,7 +26,7 @@ class PublishedDocument(dict):
         return result
 
 
-def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_execute=None):
+def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_execute=None, _semantic_history=None):
     normalize_options(cmd, company=selector, reason=ctx.reason,
                       source_ref=ctx.source_ref, directive=ctx.directive_id,
                       idempotency_key=ctx.idempotency_key, dry_run=dry_run)
@@ -54,7 +54,41 @@ def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_e
         return result
 
     try:
-        if cmd.is_write and not dry_run or cmd.kind == "advisory":
+        if _semantic_history is not None:
+            from bookflow.core.identity_admin_binding import hosted_reader
+            from bookflow.core import publication_audit
+            from bookflow.hub.audit_projection import HistorySelection
+            from bookflow.hub.identity_admin import AdministrationError
+            selection = _semantic_history
+            if type(selection) is not HistorySelection:
+                raise BookflowError('E_VALIDATION')
+            expected = ('hub audit ' if selection.company is None else 'audit ') + selection.mode
+            if selection.mode == 'activity':
+                expected = 'activity'
+            if cmd.name != expected or cmd.is_write or dry_run:
+                raise BookflowError('E_VALIDATION')
+            try:
+                with hosted_reader(host, _reader_binding(host, cred, ctx.request_id),
+                                   request_id=ctx.request_id) as reader:
+                    identity = reader.authenticate()
+                    if ctx.on_behalf_of is not None and ctx.on_behalf_of != identity.principal:
+                        raise BookflowError('E_UNAUTHENTICATED')
+                    session = reader.session
+                    if before_execute is not None:
+                        before_execute(session)
+                        reader.authenticate()
+                    # This private service has its own closed selection model.
+                    # Registered public models remain unchanged until cutover.
+                    permit = PublicationPermit(cmd, None, ctx,
+                        (identity.actor, identity.actor_kind, identity.hub_admin),
+                        frozenset(), None, None)
+                    result, proof = publication_audit.execute_history(reader, selection,ctx=ctx)
+                    finish(session, succeeded=proof.failure is None,result=result, audit_proof=proof)
+                    if proof.failure is not None:
+                        raise proof.failure.error()
+            except AdministrationError:
+                raise BookflowError('E_UNAUTHENTICATED') from None
+        elif cmd.is_write and not dry_run or cmd.kind == "advisory":
             result = host.run_write(cred.user_id, cred.login, authenticated)
         else:
             session = host.reader_session(cred.user_id, cred.login)
@@ -85,3 +119,29 @@ def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_e
         raise BookflowError(exc.code, message=exc.message,
                             details={"stage": "publication", "outcome": "unknown"}) from None
     return document
+
+
+def _reader_binding(host, cred, request_id):
+    """Only server-owned admitted credentials reach this adapter boundary."""
+    from bookflow.core.publication import OSBinding
+    from bookflow.hub.identity_admin import TokenBinding
+    if type(cred) is OSBinding:
+        return cred
+    from bookflow.adapters.http.app import Credential
+    if type(cred) is not Credential:
+        raise BookflowError('E_UNAUTHENTICATED')
+    return TokenBinding(cred._secret, cred.token_id, cred.user_id, cred.kind,
+                        cred.on_behalf_of, host.data_root / 'hub.db', request_id)
+
+
+def run_history(host, selection, ctx, cred):
+    """Private semantic service using actual execution/publication owners.
+
+    No registered endpoint calls this until the inseparable cursor wire cutover.
+    """
+    from bookflow.core import registry
+    name = ('hub audit ' if selection.company is None else 'audit ') + selection.mode
+    if selection.mode == 'activity':
+        name = 'activity'
+    return run_hosted(host, registry.get(name), {}, ctx, cred,
+                      selection.company, 'option', False, _semantic_history=selection)
