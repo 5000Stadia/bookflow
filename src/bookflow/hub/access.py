@@ -87,9 +87,32 @@ def role_satisfies(role: str | None, access: str | None, required: str | None, h
     return ROLE_RANK[role] >= ROLE_FOR_REQUIRED[required]
 
 
+def require_explicit_grant(s: Session, capability: str) -> None:
+    """Live default deny; replaced only by reviewed actor/principal enforcement.
+
+    There is deliberately no configurable provider, context override or role
+    escape here. Tests may monkeypatch this owner in their own process.
+    """
+    from bookflow.core.errors import BookflowError
+    raise BookflowError('E_PERMISSION', details={'reason': 'capability_not_activated'})
+
+
+def require_command_activation(s: Session, cmd) -> None:
+    """Admission before company opening, saved recovery facts or planner reads."""
+    from bookflow.core.registry import EXPLICIT_GRANT_ONLY_CAPABILITIES
+    if cmd.explicit_grant_only or cmd.capability in EXPLICIT_GRANT_ONLY_CAPABILITIES:
+        require_explicit_grant(s, cmd.capability)
+    for capability, _ in cmd.resource_requirements:
+        if capability in EXPLICIT_GRANT_ONLY_CAPABILITIES:
+            require_explicit_grant(s, capability)
+
+
 def require_resource(s: Session, capability: str, required_role: str) -> None:
     """Common company resource check; granular grants/denies remain Row7."""
     from bookflow.core.errors import BookflowError
+    from bookflow.core.registry import EXPLICIT_GRANT_ONLY_CAPABILITIES
+    if capability in EXPLICIT_GRANT_ONLY_CAPABILITIES:
+        require_explicit_grant(s, capability)
     access, role = company_role(s, s.company_row['id'], s.company_row['organization_id'])
     if access is None:
         raise BookflowError('E_COMPANY_NOT_FOUND')

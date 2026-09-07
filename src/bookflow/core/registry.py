@@ -10,6 +10,13 @@ from pydantic import BaseModel
 from bookflow.core.context import CONTEXT_FIELD_NAMES
 from bookflow.core.errors import ALL_CODES
 
+# These capability contracts have no role-default activation. Keep independent
+# from the frozen, pure permission catalog and from command import order.
+EXPLICIT_GRANT_ONLY_CAPABILITIES = frozenset(
+    'transaction.' + family + '.delete'
+    for family in ('journal_entry', 'invoice', 'sales_receipt', 'payment'))
+
+
 Role = str  # "member", "admin", "owner", "hub_admin", or None for any actor
 
 
@@ -92,8 +99,16 @@ class Command:
     replay: Callable[..., dict[str, Any]] | None = None  # read-only refresh after normal authorization and matching request-cache lookup
     permanent_recovery: Callable[..., MatchedRecovery | None] | None = None  # narrowly opted-in exact recovery before new-write reason/directive gates
 
+    explicit_grant_only: bool = False  # unavailable until reviewed live granular admission
+
     resource_requirements: tuple[tuple[str, str], ...] = ()  # additional (capability, role) checks
     authorize_input: Callable[..., None] | None = None  # conditional resources, before replay or plan
+
+    @property
+    def requires_explicit_grant(self) -> bool:
+        return (self.explicit_grant_only or self.capability in EXPLICIT_GRANT_ONLY_CAPABILITIES
+                or any(capability in EXPLICIT_GRANT_ONLY_CAPABILITIES
+                       for capability, _ in self.resource_requirements))
 
     @property
     def is_write(self) -> bool:
@@ -111,7 +126,8 @@ class Command:
     def authorization_requirement(self) -> str:
         if self.standalone:
             return "none"
-        return self.authorization or self.required_role or "authenticated"
+        rule = self.authorization or self.required_role or "authenticated"
+        return rule + "; explicit grant required (not activated)" if self.requires_explicit_grant else rule
 
     @property
     def noun(self) -> str:
@@ -135,9 +151,13 @@ def command(name: str, *, scope: str, description: str, input_model: type[BaseMo
             clearable: bool = False, streams: bool = False, capability: str | None = None, feature: str | None = None,
             local_only: bool = False, version_source: tuple[str, str | None, str] | None = None,
             standalone_runner: Callable[..., dict[str, Any]] | None = None, authorization: str | None = None,
-            protocol_stdout: bool = False,
+            protocol_stdout: bool = False, explicit_grant_only: bool = False,
             transfer: TransferDescriptor | None = None):
     """Register ``plan`` (and, via ``.apply``, the apply function) under ``name``."""
+    if type(explicit_grant_only) is not bool:
+        raise ValueError(f"{name}: explicit_grant_only must be a bool")
+    if (explicit_grant_only or capability in EXPLICIT_GRANT_ONLY_CAPABILITIES) and (scope != "company" or bootstrap or standalone_runner is not None):
+        raise ValueError(f"{name}: explicit grants require a nonbootstrap company command")
     bad = set(input_model.model_fields) & CONTEXT_FIELD_NAMES
     if bad:
         raise ValueError(f"{name}: input model declares context field(s) {sorted(bad)}")
@@ -190,7 +210,8 @@ def command(name: str, *, scope: str, description: str, input_model: type[BaseMo
                       positional=list(positional or []), error_codes=list(error_codes or []), bootstrap=bootstrap,
                       kind=kind, truth=truth, accepts_idempotency_key=accepts_idempotency_key, clearable=clearable, streams=streams,
                       capability=resolved_capability, feature=feature, local_only=local_only, version_source=version_source,
-                      standalone_runner=standalone_runner, protocol_stdout=protocol_stdout, authorization=authorization, transfer=transfer)
+                      standalone_runner=standalone_runner, protocol_stdout=protocol_stdout, authorization=authorization, transfer=transfer,
+                      explicit_grant_only=explicit_grant_only)
         REGISTRY[name] = cmd
 
         def applier(apply_fn: Callable[..., Applied]) -> Callable[..., Applied]:

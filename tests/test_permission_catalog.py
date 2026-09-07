@@ -58,6 +58,9 @@ RESOURCE_PAIRS = {
     'billing_queries.sale_source_links': {('customer-work', 'member')},
     'billing_queries.sale_source_output': {('customer-work', 'member')},
     'payment_authority.authorize': {('ledger.read', 'member'), ('ledger.post', 'standard'), ('customer-work', 'member'), ('customer-work', 'standard')},
+    # _PublicationSelectionCohort.requirements: read/write ledger, plus work
+    # on complete historical selection/operation roots and paid targets.
+    'payment_authority.authorize_publication_selections': {('ledger.read', 'member'), ('ledger.post', 'standard'), ('customer-work', 'member'), ('customer-work', 'standard')},
     'payment_authority.authorize_publication_transactions': {('ledger.read', 'member'), ('ledger.post', 'standard'), ('customer-work', 'member'), ('customer-work', 'standard')},
     'payment_authority.authorize_query': {('ledger.read', 'member'), ('ledger.post', 'standard'), ('customer-work', 'member'), ('customer-work', 'standard')},
     'payment_authority.authorize_event': {('ledger.read', 'member'), ('customer-work', 'member')},
@@ -166,10 +169,10 @@ def test_explicit_admin_grant_only_and_unavailable_delete_contracts():
 
 
 def test_frozen_manifest_digest_and_pure_import_boundary():
-    assert c.FROZEN_CATALOG.version == '7b2d4c2b39201601437e0114f9e5e04164332cb1'
+    assert c.FROZEN_CATALOG.version == '3f926ee62543d308dad8f60e707b4cabd82fc755'
     assert c.catalog_manifest(c.FROZEN_CATALOG, c.FROZEN_MANIFEST.standalone_names) == c.FROZEN_MANIFEST
     raw = json.dumps(asdict(c.FROZEN_CATALOG), sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode()
-    assert hashlib.sha256(raw).hexdigest() == '50b259f886c50e8dddb91e513a2839b41e0ee4f270eb3801622786445f616851'
+    assert hashlib.sha256(raw).hexdigest() == '3a02a194a6d4bc8b392c6af7d57ccc6beb3d090ff61b6aee7c0f7f6d9485258a'
     for name in ('permission_catalog', 'permission_policy'):
         tree = ast.parse((ROOT / f'src/bookflow/hub/{name}.py').read_text())
         modules = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)} | {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
