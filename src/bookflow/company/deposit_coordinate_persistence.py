@@ -41,6 +41,7 @@ class CoordinateRows:
     operation_json: str
     items_json: str
     audit_event: audit.PreparedEvent
+    consumption_json: str
 
 
 def typed_source(values):
@@ -164,7 +165,7 @@ def build(s,ctx,prepared):
     event=audit.prepare_event_to(s.company,ctx,'deposit coordinate','Coordinate source and deposit',touched,
         actor_id=s.actor.id,actor_kind=s.actor.kind,directive_code=getattr(s,'directive_code',None),event_id=data['event'],at=data['at'],entry_ids=entry_ids)
     event=audit.PreparedEvent(dict(event.event,undo_of_event_id=None),event.entries)
-    return CoordinateRows(prepared,plan,bundle,inserted,headers,output,q.canonical(operation),q.canonical(items),event)
+    return CoordinateRows(prepared,plan,bundle,inserted,headers,output,q.canonical(operation),q.canonical(items),event,q.canonical(consumed))
 
 
 def _foreign_keys(s):
@@ -191,6 +192,9 @@ def execute(s,ctx,prepared):
     validate(s,ctx,bundle)
     from bookflow.company import deposit_draft_consumption as consumption
     consumed=consumption.build(s,ctx,bundle.deposit_bundle['data'],prepared.binding)
+    # Bind persistence to the exact consumption value used for audited touches.
+    if q.canonical(consumed)!=bundle.consumption_json:
+        raise BookflowError('E_VALIDATION',details={'reason':'coordinate_consumption_changed'})
     s.company.raw.execute('SAVEPOINT bookflow_deposit_coordinate')
     try:
         audit.insert_prepared_event(s.company,bundle.audit_event)

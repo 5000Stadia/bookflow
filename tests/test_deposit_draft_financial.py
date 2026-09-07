@@ -200,6 +200,14 @@ def test_full_cashback_bank_can_deactivate_then_copy_reports_current_issue(clien
         before=tuple(s.company.raw.iterdump())
         with pytest.raises(BookflowError) as error:lifecycle.prepare(s,ctx,lifecycle.INPUTS['post'].model_validate(dict(operation_key='inactive-copy',document=dict(mode='draft',draft=copied.id,expected_version=1))),'post')
         assert error.value.code=='E_DEPOSIT_DRAFT_STATE'
+        assert error.value.details=={'issues':['deposit_to:unavailable']}
+        # Independently exercise the persistence validator's current-reference
+        # gate; ordinary resolution already rejects earlier and must stay so.
+        from bookflow.company import deposit_draft_provider as provider
+        _,_,manifest,_=drafts.load(s,copied.id,ctx=ctx)
+        with pytest.raises(BookflowError) as validation_error:
+            provider.validate_references(s,posted.effect.financial,manifest)
+        assert validation_error.value.details=={'reason':'draft_references'}
         assert tuple(s.company.raw.iterdump())==before
         assert drafts.show(s,m.DraftShow(draft=d.id),ctx=ctx).state=='consumed'
     run_private(check)
@@ -594,3 +602,67 @@ def test_inline_caps_remain_bounded_and_resolved_documents_are_not_caller_inputs
         with pytest.raises(BookflowError) as error:provider.load(s,ctx,resolved,bound)
         assert error.value.code=='E_VALIDATION'
     run_private(check)
+
+
+def test_persisted_receipt_duplicate_financial_ids_rejected(client,sale,run_private):
+    from bookflow.company import deposit_draft_consumption as consumption
+    from bookflow.core.errors import BookflowError
+    bank=client.account.create(name='Bijection bank',type='bank',company=COMPANY)['id']
+    income=client.account.create(name='Bijection income',type='income',company=COMPANY)['id']
+    draft=run_private(lambda s,ctx:drafts.run(s,ctx,m.DraftCreate(header=m.HeaderPatch(date='2026-06-03',deposit_to=bank)),'create'))
+    draft=run_private(lambda s,ctx:drafts.run(s,ctx,m.DraftUpdate(draft=draft.id,expected_version=draft.version,
+        set_additional=[m.AdditionalPatch(received_from=m.Party(kind='customer',id=sale['customer']),from_account=income,amount=value) for value in ('3','7')]),'update'))
+    posted=financial(run_private,dict(operation_key='bijection-post',document=dict(mode='draft',draft=draft.id,expected_version=draft.version)))
+    assert posted.current.revision_bank_total==1000
+    def check(s,ctx):
+        h,r,_,_=drafts.load(s,draft.id,ctx=ctx)
+        consumption.validate_consumed(s,h,r)
+        old=s.company.raw.execute('SELECT effect_snapshot FROM deposit_operations WHERE id=?',(posted.operation_id,)).fetchone()[0]
+        value=json.loads(old);effect=value['effect'];receipt=effect['consumed_draft']['rows']
+        assert len(receipt)==2 and len({v['financial_row_id'] for v in receipt})==2
+        # Keep ordinal correspondence true by corrupting BOTH copies of the
+        # financial ID in persisted JSON. No claim this is producer-reachable.
+        receipt[1]['financial_row_id']=receipt[0]['financial_row_id']
+        effect['financial']['intent']['additional'][1]['row_id']=receipt[0]['financial_row_id']
+        before=tuple(s.company.raw.iterdump())
+        s.company.raw.execute('SAVEPOINT corrupt_receipt')
+        try:
+            # Deliberate damaged-storage fixture only: restore the immutable
+            # trigger together with the row through this savepoint rollback.
+            triggers=s.company.raw.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='deposit_operations' AND sql LIKE '%BEFORE UPDATE%'").fetchall()
+            assert len(triggers)==1
+            s.company.raw.execute('DROP TRIGGER "'+triggers[0][0].replace('"','""')+'"')
+            s.company.raw.execute('UPDATE deposit_operations SET effect_snapshot=? WHERE id=?',(json.dumps(value),posted.operation_id))
+            with pytest.raises(BookflowError) as error:consumption.validate_consumed(s,h,r)
+            assert error.value.details=={'reason':'consumption_row_bijection'}
+        finally:
+            s.company.raw.execute('ROLLBACK TO corrupt_receipt');s.company.raw.execute('RELEASE corrupt_receipt')
+        assert tuple(s.company.raw.iterdump())==before
+        consumption.validate_consumed(s,h,r)
+    run_private(check)
+
+
+def test_coordinate_consumption_matches_audited_build_before_writes(client,sale,cash,run_private,monkeypatch):
+    from bookflow.company import deposit_coordinate_persistence as cp, deposit_draft_consumption as consumption
+    from bookflow.core.errors import BookflowError
+    execute=cp.execute;build=consumption.build;observed=[]
+    def checked(s,ctx,prepared):
+        calls=[]
+        def diverge(*args,**kwargs):
+            value=build(*args,**kwargs);calls.append(value)
+            if len(calls)==3:
+                return dict(value,row=dict(value['row'],created_at='2001-01-01T00:00:00Z'))
+            return value
+        before=tuple(s.company.raw.iterdump())
+        with monkeypatch.context() as patch:
+            patch.setattr(consumption,'build',diverge)
+            with pytest.raises(BookflowError) as error:execute(s,ctx,prepared)
+        assert len(calls)==3
+        assert error.value.details=={'reason':'coordinate_consumption_changed'}
+        assert tuple(s.company.raw.iterdump())==before
+        observed.append(True)
+        return execute(s,ctx,prepared)
+    with monkeypatch.context() as patch:
+        patch.setattr(cp,'execute',checked)
+        test_coordinate_draft_real_source_action_consumes(client,sale,cash,run_private,True)
+    assert observed==[True]
