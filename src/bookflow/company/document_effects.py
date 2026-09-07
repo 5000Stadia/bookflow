@@ -17,6 +17,8 @@ def rows(s, table, *where, order=None):
         for row in values:
             if row.get('payment_component_id') is None:
                 row.pop('payment_component_id', None)
+            if row.get('deposit_component_id') is None:
+                row.pop('deposit_component_id', None)
     return values
 
 

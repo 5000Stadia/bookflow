@@ -77,9 +77,12 @@ def test_default_resource_denies_all_delete_families_before_role_bypass(role):
 
 
 def test_execute_denies_before_pending_maintenance(commands, monkeypatch):
+    from bookflow.core.commit_hooks import CommitHooks
     cmds, called = commands
     maintenance = []
-    def flush(hub):
+    hooks = CommitHooks()
+    def flush(hub, *, commits):
+        assert commits is hooks
         maintenance.append('config')
     def moves(*args):
         maintenance.append('moves')
@@ -87,7 +90,7 @@ def test_execute_denies_before_pending_maintenance(commands, monkeypatch):
     # A normal command must reach the same maintenance path; stop before its
     # ordinary authorization so this witness requires no database fixture.
     monkeypatch.setattr(dispatch, 'run_in_session', lambda *a, **kw: {'ordinary': True})
-    session = SimpleNamespace(is_hub_admin=True, hub=SimpleNamespace(writable=True),
+    session = SimpleNamespace(is_hub_admin=True, hub=SimpleNamespace(writable=True), commits=hooks,
                               config=SimpleNamespace(flush_pending=flush))
     context = Context.new(Interface.python, 'g0-ordering')
     denied(lambda: dispatch.execute(cmds['delete'], {}, context, session))
