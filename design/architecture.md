@@ -1431,3 +1431,30 @@ The old 7b2 catalog remains a historical receipt, not an exact current source
 inventory. Persisted catalogs are decoded against their own version and digest;
 this correction performs no database rewrite or automatic catalog replacement.
 Any later replacement still belongs to the existing typed administration contract.
+
+### Actual commit-owner routing (private, nonactivating increment)
+
+`core/commit_hooks.py` records operation ownership at the actual transaction and
+filesystem publication owners. `Session.commits` is a typed trusted hook; hosted
+writer sessions receive the host's instance, while standalone sessions retain
+existing exclusive-root ownership. It is not command input or an activation flag.
+No production hook closes publication admission in this increment. F1 response-wide
+release evidence, the send-cycle changes and current local/OS publication must be
+reviewed together before installing closure at these fixed seams.
+
+Dispatch, explicit finalized appliers, login/logout, migration/rollout, structural
+moves/recovery, GC, config projection and maintenance each declare their owner.
+Token refresh's actual autocommit UPDATE is explicitly a nonreducing liveness
+extension. Config mapping becomes effective at the original pending-intent commit;
+file projection is later. Source/work/recovery-changing owners are conservative,
+not classified by command verb or financial amount. No policy resolver changes.
+
+Related commits share an outer operation. Scope exit reports committed, unchanged,
+rolled-back or durable-partial outcomes only after watched transactions settle;
+otherwise the operation stays pending until existing writer cleanup resolves it.
+Old generations will not be restored after rollback. Hooks neither add transactions
+nor own rollback/retry algorithms. The hook notification seam does no event-loop
+waiting, response enumeration, filesystem I/O or admission locking; database
+tracking at each commit is constant work. Independent literal owner inventory and
+real owner-branch tests live in `tests/test_commit_hooks.py`. Their test-only gate
+observer proves routing order; it is not live transport/permission acceptance.

@@ -230,59 +230,61 @@ def _validate_links(s, items):
 
 
 def _finish(s, operation_id, payload):
-    items = payload["candidates"]
-    if not isinstance(items, list) or len(items) > 200:
-        raise _io()
-    store = s.company.path.parent / "attachments"
-    ctx = Context.model_validate(payload["context"])
-    try:
-        _validate_links(s, items)
-        paths = [_candidate_path(store, item) for item in items]
-        # Validate the entire batch before removing its first entry.
-        for path in paths:
-            _entry(path)
-        for path in paths:
-            if _entry(path) is not None:
-                path.unlink()
-        # Missing-on-retry still needs its original parent directory synced.
-        for parent in sorted({path.parent for path in paths}):
-            if _directory(parent):
-                sync_directory(parent)
-        if paths and _directory(store):
-            sync_directory(store)
-        s.company.raw.execute("BEGIN IMMEDIATE")
-        _validate_links(s, items)
-        touched = []
-        for item in items:
-            before = item["before"]
-            if before is None:
-                continue
-            after = dict(before, collected_at=payload["at"], version=before["version"] + 1,
-                         updated_at=payload["at"], updated_by=payload["actor_id"], updated_via=ctx.interface.value)
-            changed = s.company.conn.execute(c.attachments.update().where(
-                c.attachments.c.id == before["id"], c.attachments.c.version == before["version"],
-                c.attachments.c.collected_at.is_(None)).values(**after))
-            if changed.rowcount != 1:
-                raise _io()
-            touched.append(Touched("attachment", before["id"], "update", before["version"], after["version"], after, before, "company"))
-        output = payload["output"]
-        touched.append(Touched("attachment_collection", operation_id, "create", None, 1,
-                               dict(output, scan_cursor=payload["scan_cursor"]), db="company"))
-        audit.write_event_to(s.company, ctx, "company compact", f"collected {output['collected_count']} attachment bodies",
-                            touched, actor_id=payload["actor_id"], actor_kind=payload["actor_kind"],
-                            directive_code=payload["directive_code"])
-        if ctx.idempotency_key:
-            idempotency.store(s.company, payload["actor_id"], ctx.idempotency_key, "company compact",
-                              payload["input_hash"], ctx.request_id, output)
-        s.company.conn.execute(c.attachment_collection.delete().where(c.attachment_collection.c.id == operation_id))
-        s.company.raw.execute("COMMIT")
-        return output
-    except Exception as exc:
-        if s.company.write_transaction:
-            s.company.raw.rollback()
-        if isinstance(exc, BookflowError) and exc.code == "E_IO":
-            raise
-        raise _io() from exc
+    with s.commits.operation("attachments.finish", s.hub, s.company):
+        items = payload["candidates"]
+        if not isinstance(items, list) or len(items) > 200:
+            raise _io()
+        store = s.company.path.parent / "attachments"
+        ctx = Context.model_validate(payload["context"])
+        try:
+            _validate_links(s, items)
+            paths = [_candidate_path(store, item) for item in items]
+            # Validate the entire batch before removing its first entry.
+            for path in paths:
+                _entry(path)
+            for path in paths:
+                if _entry(path) is not None:
+                    s.commits.publishing("attachments.finish")
+                    path.unlink()
+            # Missing-on-retry still needs its original parent directory synced.
+            for parent in sorted({path.parent for path in paths}):
+                if _directory(parent):
+                    sync_directory(parent)
+            if paths and _directory(store):
+                sync_directory(store)
+            s.company.raw.execute("BEGIN IMMEDIATE")
+            _validate_links(s, items)
+            touched = []
+            for item in items:
+                before = item["before"]
+                if before is None:
+                    continue
+                after = dict(before, collected_at=payload["at"], version=before["version"] + 1,
+                             updated_at=payload["at"], updated_by=payload["actor_id"], updated_via=ctx.interface.value)
+                changed = s.company.conn.execute(c.attachments.update().where(
+                    c.attachments.c.id == before["id"], c.attachments.c.version == before["version"],
+                    c.attachments.c.collected_at.is_(None)).values(**after))
+                if changed.rowcount != 1:
+                    raise _io()
+                touched.append(Touched("attachment", before["id"], "update", before["version"], after["version"], after, before, "company"))
+            output = payload["output"]
+            touched.append(Touched("attachment_collection", operation_id, "create", None, 1,
+                                   dict(output, scan_cursor=payload["scan_cursor"]), db="company"))
+            audit.write_event_to(s.company, ctx, "company compact", f"collected {output['collected_count']} attachment bodies",
+                                touched, actor_id=payload["actor_id"], actor_kind=payload["actor_kind"],
+                                directive_code=payload["directive_code"])
+            if ctx.idempotency_key:
+                idempotency.store(s.company, payload["actor_id"], ctx.idempotency_key, "company compact",
+                                  payload["input_hash"], ctx.request_id, output)
+            s.company.conn.execute(c.attachment_collection.delete().where(c.attachment_collection.c.id == operation_id))
+            s.commits.commit(s.company, "attachments.finish")
+            return output
+        except Exception as exc:
+            if s.company.write_transaction:
+                s.company.raw.rollback()
+            if isinstance(exc, BookflowError) and exc.code == "E_IO":
+                raise
+            raise _io() from exc
 
 
 def recover_pending(s, ctx) -> None:
@@ -303,38 +305,39 @@ def recover_pending(s, ctx) -> None:
 
 
 def collect(s, ctx, limit, input_hash):
-    _gate(s, ctx)
-    if pending(s):
-        raise BookflowError("E_DB_BUSY", "Attachment collection requires recovery.")
-    try:
-        s.company.raw.execute("BEGIN IMMEDIATE")
-        from bookflow.core.dispatch import _upsert_principals
-        _upsert_principals(s, ctx)
-        rows, more = metadata_candidates(s, limit)
-        items = metadata_items(s, rows)
-        orphans, cursor, scan_more = discover(s, limit - len(items), _last_cursor(s))
-        items.extend(orphans)
-        operation_id = new_id()
-        output = {"operation_id": operation_id, "collected_count": sum(item["initial_present"] for item in items),
-                  "bytes_collected": sum(item["size_bytes"] for item in items), "has_more": more or scan_more,
-                  "dry_run": False, "warnings": list(s.warnings), "idempotent_replay": False}
-        if scan_more:
-            output["warnings"].append("Orphan discovery is incomplete; run company compact again to continue.")
-        payload = {"candidates": items, "context": ctx.model_dump(mode="json"), "actor_id": s.actor.id,
-                   "actor_kind": s.actor.kind, "directive_code": s.directive_code, "input_hash": input_hash,
-                   "at": now_iso(), "output": output, "scan_cursor": cursor}
-        encoded = json.dumps(payload, ensure_ascii=False)
-        if len(encoded.encode()) > 262144:
-            raise _io()
-        s.company.conn.execute(c.attachment_collection.insert().values(id=operation_id, payload=encoded))
-        s.company.raw.execute("COMMIT")
-        result = _finish(s, operation_id, payload)
-        # run_in_session appends these; they are already part of the durable result.
-        s.warnings.clear()
-        return result
-    except Exception as exc:
-        if s.company.write_transaction:
-            s.company.raw.rollback()
-        if isinstance(exc, BookflowError):
-            raise
-        raise _io() from exc
+    with s.commits.operation("attachments.collect", s.hub, s.company):
+        _gate(s, ctx)
+        if pending(s):
+            raise BookflowError("E_DB_BUSY", "Attachment collection requires recovery.")
+        try:
+            s.company.raw.execute("BEGIN IMMEDIATE")
+            from bookflow.core.dispatch import _upsert_principals
+            _upsert_principals(s, ctx)
+            rows, more = metadata_candidates(s, limit)
+            items = metadata_items(s, rows)
+            orphans, cursor, scan_more = discover(s, limit - len(items), _last_cursor(s))
+            items.extend(orphans)
+            operation_id = new_id()
+            output = {"operation_id": operation_id, "collected_count": sum(item["initial_present"] for item in items),
+                      "bytes_collected": sum(item["size_bytes"] for item in items), "has_more": more or scan_more,
+                      "dry_run": False, "warnings": list(s.warnings), "idempotent_replay": False}
+            if scan_more:
+                output["warnings"].append("Orphan discovery is incomplete; run company compact again to continue.")
+            payload = {"candidates": items, "context": ctx.model_dump(mode="json"), "actor_id": s.actor.id,
+                       "actor_kind": s.actor.kind, "directive_code": s.directive_code, "input_hash": input_hash,
+                       "at": now_iso(), "output": output, "scan_cursor": cursor}
+            encoded = json.dumps(payload, ensure_ascii=False)
+            if len(encoded.encode()) > 262144:
+                raise _io()
+            s.company.conn.execute(c.attachment_collection.insert().values(id=operation_id, payload=encoded))
+            s.commits.commit(s.company, "attachments.collect")
+            result = _finish(s, operation_id, payload)
+            # run_in_session appends these; they are already part of the durable result.
+            s.warnings.clear()
+            return result
+        except Exception as exc:
+            if s.company.write_transaction:
+                s.company.raw.rollback()
+            if isinstance(exc, BookflowError):
+                raise
+            raise _io() from exc

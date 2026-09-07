@@ -318,37 +318,38 @@ def migrate_everything(host) -> tuple[list[str], list[dict[str, str]]]:
     ctx = Context.new(Interface.system, "bookflow-host")
 
     def job(s: Session):
-        from bookflow.core.dispatch import _migrate_hub, resolve_company_folder
-        from bookflow.storage.migrate import migrate_company
-        c2 = ctx.model_copy(update={"actor_id": s.actor.id, "actor_kind": ActorKind(s.actor.kind)})
-        _migrate_hub(s, c2)
-        migrated: list[str] = []
-        failed: list[dict[str, str]] = []
-        rows = [dict(r) for r in s.hub.conn.execute(sa.select(h.companies)).mappings().all()]
-        for row in rows:
-            s.hub_touched = []
-            try:
-                folder = resolve_company_folder(s, c2, dict(row), True)
-                db_path = folder / "company.db"
-                if not db_path.exists():
-                    raise BookflowError("E_COMPANY_MISSING", details={"company_id": row["id"]})
-                db = host._company_for_writer(row, True, db_path)
-                before, after = migrate_company(s, c2, db, folder, row)
-                if before == after:
+        with s.commits.operation("host.migrate_everything", s.hub, s.company):
+            from bookflow.core.dispatch import _migrate_hub, resolve_company_folder
+            from bookflow.storage.migrate import migrate_company
+            c2 = ctx.model_copy(update={"actor_id": s.actor.id, "actor_kind": ActorKind(s.actor.kind)})
+            _migrate_hub(s, c2)
+            migrated: list[str] = []
+            failed: list[dict[str, str]] = []
+            rows = [dict(r) for r in s.hub.conn.execute(sa.select(h.companies)).mappings().all()]
+            for row in rows:
+                s.hub_touched = []
+                try:
+                    folder = resolve_company_folder(s, c2, dict(row), True)
+                    db_path = folder / "company.db"
+                    if not db_path.exists():
+                        raise BookflowError("E_COMPANY_MISSING", details={"company_id": row["id"]})
+                    db = host._company_for_writer(row, True, db_path)
+                    before, after = migrate_company(s, c2, db, folder, row)
+                    if before == after:
+                        host.release_company(row["id"])
+                        continue
+                    s.hub.raw.execute("BEGIN IMMEDIATE")
+                    s.hub.conn.execute(h.companies.update().where(h.companies.c.id == row["id"]).values(schema_revision=after))
+                    audit.write_event(s, c2, "serve", f"migrated company {row['display_name']} from {before} to {after}", list(s.hub_touched))
+                    s.commits.commit(s.hub, "host.migrate_everything")
+                    migrated.append(row["id"])
+                except BookflowError as e:
+                    if s.hub.raw.in_transaction:
+                        s.hub.raw.execute("ROLLBACK")
                     host.release_company(row["id"])
-                    continue
-                s.hub.raw.execute("BEGIN IMMEDIATE")
-                s.hub.conn.execute(h.companies.update().where(h.companies.c.id == row["id"]).values(schema_revision=after))
-                audit.write_event(s, c2, "serve", f"migrated company {row['display_name']} from {before} to {after}", list(s.hub_touched))
-                s.hub.raw.execute("COMMIT")
-                migrated.append(row["id"])
-            except BookflowError as e:
-                if s.hub.raw.in_transaction:
-                    s.hub.raw.execute("ROLLBACK")
-                host.release_company(row["id"])
-                log.warning("serve: company %s was not migrated (%s); it is served as it is", row["id"], e.code)
-                failed.append({"company_id": row["id"], "code": e.code})
-        return migrated, failed
+                    log.warning("serve: company %s was not migrated (%s); it is served as it is", row["id"], e.code)
+                    failed.append({"company_id": row["id"], "code": e.code})
+            return migrated, failed
 
     return host.run_write(table["user_id"], login, job)
 

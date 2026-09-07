@@ -1,6 +1,7 @@
 """Migration runner for the hub and company chains (blueprint 3.2, 3.3)."""
 
 from __future__ import annotations
+from bookflow.core.commit_hooks import CommitHooks
 
 from typing import Any
 
@@ -143,53 +144,56 @@ def restore(path: Path, backup_path: Path) -> None:
         src.close()
 
 
-def migrate_to_head(db: Database, chain: str, backups_dir: Path | None) -> tuple[str | None, str]:
+def migrate_to_head(db: Database, chain: str, backups_dir: Path | None, *, commits: CommitHooks | None = None) -> tuple[str | None, str]:
     """Migrate an open writable database. Returns (revision before, revision after)."""
-    before = current_revision(db)
-    state = classify(chain, before)
-    if state == "unknown":
-        raise BookflowError("E_SCHEMA_UNKNOWN", details={"revision": before, "path": str(db.path)})
-    if state == "head":
-        return before, before
-    saved = None
-    if state == "behind" and backups_dir is not None:
-        saved = backup(db.path, backups_dir, prefix="hub-" if chain == "hub" else "", from_revision=before)
-    from alembic import command
-    # SQLite batch rewrites drop and recreate tables; foreign keys must be off for the duration (the pragma is ignored inside a transaction).
-    # The whole chain runs in one transaction so a failing step leaves nothing behind; the verified backup is the second line.
-    db.raw.execute("PRAGMA foreign_keys=OFF")
-    db.raw.execute("BEGIN IMMEDIATE")
-    try:
-        command.upgrade(_config(chain, db.conn), HEADS[chain])  # HEADS is the target, so the constants are the single truth
-        problems = db.raw.execute("PRAGMA foreign_key_check").fetchall()
-        if problems:
-            raise BookflowError("E_MIGRATION_FAILED", details={"chain": chain, "from": before, "to": HEADS[chain], "cause": "foreign key check", "rows": len(problems)})
-        db.raw.execute("COMMIT")
-    except BaseException as e:
-        recovery: dict[str, Any] = {}
+    commits = commits if commits is not None else CommitHooks()
+    with commits.operation("migration.head", db):
+        before = current_revision(db)
+        state = classify(chain, before)
+        if state == "unknown":
+            raise BookflowError("E_SCHEMA_UNKNOWN", details={"revision": before, "path": str(db.path)})
+        if state == "head":
+            return before, before
+        saved = None
+        if state == "behind" and backups_dir is not None:
+            saved = backup(db.path, backups_dir, prefix="hub-" if chain == "hub" else "", from_revision=before)
+        from alembic import command
+        # SQLite batch rewrites drop and recreate tables; foreign keys must be off for the duration (the pragma is ignored inside a transaction).
+        # The whole chain runs in one transaction so a failing step leaves nothing behind; the verified backup is the second line.
+        db.raw.execute("PRAGMA foreign_keys=OFF")
+        db.raw.execute("BEGIN IMMEDIATE")
         try:
-            if db.raw.in_transaction:
-                db.raw.execute("ROLLBACK")
-        except sqlite3.Error as re:
-            recovery["rollback_failed"] = type(re).__name__
-        if saved is not None:
+            command.upgrade(_config(chain, db.conn), HEADS[chain])  # HEADS is the target, so the constants are the single truth
+            problems = db.raw.execute("PRAGMA foreign_key_check").fetchall()
+            if problems:
+                raise BookflowError("E_MIGRATION_FAILED", details={"chain": chain, "from": before, "to": HEADS[chain], "cause": "foreign key check", "rows": len(problems)})
+            commits.commit(db, "migration.head")
+        except BaseException as e:
+            recovery: dict[str, Any] = {}
             try:
-                restore(db.path, saved)
-                recovery["restored_from_path"] = str(saved)
-            except (sqlite3.Error, OSError) as re:
-                recovery["restore_failed"] = type(re).__name__
-                recovery["backup_path"] = str(saved)
-        details = e.details if isinstance(e, BookflowError) else {"chain": chain, "from": before, "to": HEADS[chain], "cause": type(e).__name__, "path": str(db.path)}
-        details = {**details, **recovery}
-        message = None
-        if "restore_failed" in recovery or "rollback_failed" in recovery:
-            message = ("The migration failed and recovery also failed; the database may be partially migrated. Restore it by hand from the backup in details.backup_path (shown to hub admins) before running again."
-                       if saved else "The migration failed and the rollback also failed; the database may be partially migrated.")
-        code = e.code if isinstance(e, BookflowError) else "E_MIGRATION_FAILED"
-        raise BookflowError(code, message=message, details=details) from (e if not isinstance(e, BookflowError) else None)
-    finally:
-        db.raw.execute("PRAGMA foreign_keys=ON")
-    return before, HEADS[chain]
+                if db.raw.in_transaction:
+                    db.raw.execute("ROLLBACK")
+            except sqlite3.Error as re:
+                recovery["rollback_failed"] = type(re).__name__
+            if saved is not None:
+                try:
+                    commits.publishing("migration.head")
+                    restore(db.path, saved)
+                    recovery["restored_from_path"] = str(saved)
+                except (sqlite3.Error, OSError) as re:
+                    recovery["restore_failed"] = type(re).__name__
+                    recovery["backup_path"] = str(saved)
+            details = e.details if isinstance(e, BookflowError) else {"chain": chain, "from": before, "to": HEADS[chain], "cause": type(e).__name__, "path": str(db.path)}
+            details = {**details, **recovery}
+            message = None
+            if "restore_failed" in recovery or "rollback_failed" in recovery:
+                message = ("The migration failed and recovery also failed; the database may be partially migrated. Restore it by hand from the backup in details.backup_path (shown to hub admins) before running again."
+                           if saved else "The migration failed and the rollback also failed; the database may be partially migrated.")
+            code = e.code if isinstance(e, BookflowError) else "E_MIGRATION_FAILED"
+            raise BookflowError(code, message=message, details=details) from (e if not isinstance(e, BookflowError) else None)
+        finally:
+            db.raw.execute("PRAGMA foreign_keys=ON")
+        return before, HEADS[chain]
 
 
 def require_head_readonly(path: Path, chain: str) -> str:
@@ -210,38 +214,41 @@ def migrate_company(s, ctx, db: Database, folder: Path, row: dict | None) -> tup
     marker, and updates the hub projection with an entry on the caller's hub event (the caller
     records the hub side through ``s.hub_touched``). ``row`` is the hub registry row or None at rollout.
     """
-    from bookflow.core.audit import write_event_to
-    from bookflow.core.registry import Touched
-    from bookflow.storage.paths import write_company_marker
-    before, after = migrate_to_head(db, "company", folder / "backups")
-    if before == after:
+    with s.commits.operation("migration.company", s.hub, s.company):
+        from bookflow.core.audit import write_event_to
+        from bookflow.core.registry import Touched
+        from bookflow.storage.paths import write_company_marker
+        before, after = migrate_to_head(db, "company", folder / "backups", commits=s.commits)
+        if before == after:
+            return before, after
+        system = None
+        if s.hub is not None:
+            from bookflow.hub.users import find_user
+            system = find_user(s, kind="system")
+        from bookflow.company.info import upsert_principal
+        if system is not None:
+            with s.commits.autocommit(db, "migration.company"):
+                upsert_principal(db, user_id=system["id"], username=system["username"], display_name=system["display_name"], kind="system")
+        if s.actor is not None:
+            with s.commits.autocommit(db, "migration.company"):
+                upsert_principal(db, user_id=s.actor.id, username=s.actor.username, display_name=s.actor.display_name, kind=s.actor.kind)
+        actor_id = s.actor.id if s.actor else None
+        mctx = ctx.model_copy(update={"on_behalf_of": actor_id})
+        migration_snapshot = {"schema_revision": after, "from": before}
+        if before is not None and before < "co0015" <= after:
+            from bookflow.company.info import read_info
+            migration_snapshot['sales_tax_calculation'] = read_info(db)['sales_tax_calculation']
+        touched = [Touched("company_info", row["id"] if row else "unknown", "migrate", None, None, migration_snapshot, db="company")]
+        if before is not None and before < "co0002" <= after:
+            from bookflow.company.info import read_info
+            info = read_info(db)
+            if info:
+                snap = {k: v for k, v in info.items() if k != "display_name"}
+                touched.append(Touched("company_info", info["id"], "baseline", None, info["version"], snap, db="company"))
+        db.raw.execute("BEGIN IMMEDIATE") if not db.raw.in_transaction else None
+        write_event_to(db, mctx, "upgrade", f"migrated from {before} to {after}", touched, actor_id=system["id"] if system else None, actor_kind="system")
+        s.commits.commit(db, "migration.company")
+        if row is not None:
+            write_company_marker(folder, company_id=row["id"], state="ready", display_name=row["display_name"], schema_revision=after)
+            s.hub_touched.append(Touched("company", row["id"], "migrate", None, None, {"schema_revision": after, "from": before}, db="hub"))
         return before, after
-    system = None
-    if s.hub is not None:
-        from bookflow.hub.users import find_user
-        system = find_user(s, kind="system")
-    from bookflow.company.info import upsert_principal
-    if system is not None:
-        upsert_principal(db, user_id=system["id"], username=system["username"], display_name=system["display_name"], kind="system")
-    if s.actor is not None:
-        upsert_principal(db, user_id=s.actor.id, username=s.actor.username, display_name=s.actor.display_name, kind=s.actor.kind)
-    actor_id = s.actor.id if s.actor else None
-    mctx = ctx.model_copy(update={"on_behalf_of": actor_id})
-    migration_snapshot = {"schema_revision": after, "from": before}
-    if before is not None and before < "co0015" <= after:
-        from bookflow.company.info import read_info
-        migration_snapshot['sales_tax_calculation'] = read_info(db)['sales_tax_calculation']
-    touched = [Touched("company_info", row["id"] if row else "unknown", "migrate", None, None, migration_snapshot, db="company")]
-    if before is not None and before < "co0002" <= after:
-        from bookflow.company.info import read_info
-        info = read_info(db)
-        if info:
-            snap = {k: v for k, v in info.items() if k != "display_name"}
-            touched.append(Touched("company_info", info["id"], "baseline", None, info["version"], snap, db="company"))
-    db.raw.execute("BEGIN IMMEDIATE") if not db.raw.in_transaction else None
-    write_event_to(db, mctx, "upgrade", f"migrated from {before} to {after}", touched, actor_id=system["id"] if system else None, actor_kind="system")
-    db.raw.execute("COMMIT")
-    if row is not None:
-        write_company_marker(folder, company_id=row["id"], state="ready", display_name=row["display_name"], schema_revision=after)
-        s.hub_touched.append(Touched("company", row["id"], "migrate", None, None, {"schema_revision": after, "from": before}, db="hub"))
-    return before, after

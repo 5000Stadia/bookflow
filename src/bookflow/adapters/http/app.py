@@ -482,31 +482,33 @@ def _reader_hub(host):
 
 def _issue_session(host, user_id: str, *, username: str, expected_password_hash: str) -> str:
     def job(s: Session):
-        from bookflow.core.audit import write_event_to
-        from bookflow.core.registry import Touched
-        s.hub.raw.execute("BEGIN IMMEDIATE")
-        user = users.find_by_username(s.hub, username)
-        if (user is None or user["id"] != user_id or not user["active"] or user["kind"] != "human"
-                or user["password_hash"] != expected_password_hash):
-            raise BookflowError("E_LOGIN_FAILED")
-        row, secret = auth.issue_token(s.hub, user_id=user_id, kind="session", label="browser session", days=None, via="http", actor_id=user_id)
-        ctx = Context(interface=Interface.http, client_name="bookflow-workbench", client_version=host.version, client_host=_socket.gethostname(), session_id=row["id"], request_id=new_id())
-        write_event_to(s.hub, ctx, "login", "logged in", [Touched("api_token", row["id"], "create", None, 1, {k: v for k, v in row.items() if k != "token_hash"})], actor_id=user_id, actor_kind="human")
-        s.hub.raw.execute("COMMIT")
-        return secret
+        with s.commits.operation("http.issue_session", s.hub, s.company):
+            from bookflow.core.audit import write_event_to
+            from bookflow.core.registry import Touched
+            s.hub.raw.execute("BEGIN IMMEDIATE")
+            user = users.find_by_username(s.hub, username)
+            if (user is None or user["id"] != user_id or not user["active"] or user["kind"] != "human"
+                    or user["password_hash"] != expected_password_hash):
+                raise BookflowError("E_LOGIN_FAILED")
+            row, secret = auth.issue_token(s.hub, user_id=user_id, kind="session", label="browser session", days=None, via="http", actor_id=user_id)
+            ctx = Context(interface=Interface.http, client_name="bookflow-workbench", client_version=host.version, client_host=_socket.gethostname(), session_id=row["id"], request_id=new_id())
+            write_event_to(s.hub, ctx, "login", "logged in", [Touched("api_token", row["id"], "create", None, 1, {k: v for k, v in row.items() if k != "token_hash"})], actor_id=user_id, actor_kind="human")
+            s.commits.commit(s.hub, "http.issue_session")
+            return secret
     return host.run_write(user_id, "", job)
 
 
 def _revoke(s: Session, token_id: str, why: str) -> dict[str, Any]:
-    from bookflow.core import clock
-    from bookflow.core.audit import write_event_to
-    from bookflow.core.registry import Touched
-    s.hub.raw.execute("BEGIN IMMEDIATE")
-    s.hub.conn.execute(h.api_tokens.update().where(h.api_tokens.c.id == token_id).values(revoked_at=clock.now_iso()))
-    ctx = Context(interface=Interface.http, client_name="bookflow-workbench", client_version="", client_host=_socket.gethostname(), session_id=token_id, request_id=new_id())
-    write_event_to(s.hub, ctx, why, "logged out" if why == "logout" else "revoked a token", [Touched("api_token", token_id, "update", None, None, {"revoked": True})], actor_id=s.actor.id if s.actor else None, actor_kind=s.actor.kind if s.actor else None)
-    s.hub.raw.execute("COMMIT")
-    return {"ok": True}
+    with s.commits.operation("http.revoke", s.hub, s.company):
+        from bookflow.core import clock
+        from bookflow.core.audit import write_event_to
+        from bookflow.core.registry import Touched
+        s.hub.raw.execute("BEGIN IMMEDIATE")
+        s.hub.conn.execute(h.api_tokens.update().where(h.api_tokens.c.id == token_id).values(revoked_at=clock.now_iso()))
+        ctx = Context(interface=Interface.http, client_name="bookflow-workbench", client_version="", client_host=_socket.gethostname(), session_id=token_id, request_id=new_id())
+        write_event_to(s.hub, ctx, why, "logged out" if why == "logout" else "revoked a token", [Touched("api_token", token_id, "update", None, None, {"revoked": True})], actor_id=s.actor.id if s.actor else None, actor_kind=s.actor.kind if s.actor else None)
+        s.commits.commit(s.hub, "http.revoke")
+        return {"ok": True}
 
 
 def build_openapi(version: str) -> dict[str, Any]:
