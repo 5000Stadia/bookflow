@@ -12,16 +12,16 @@ Database: `company`.
 | `created_at` | VARCHAR(32) | no | — | — | — | — | UTC time this history record was written. |
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Company principal that wrote this history record. |
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface that wrote this history record. |
-| `transaction_id` | VARCHAR(26) | no | — | unique with transaction_id + id | — | posting_batches.transaction_id, posting_lines.transaction_id | Stable document owning this posting line. |
+| `transaction_id` | VARCHAR(26) | no | — | unique with transaction_id + id | ix_co19_posting_party_transactions | posting_batches.transaction_id, posting_lines.transaction_id | Stable document owning this posting line. |
 | `batch_id` | VARCHAR(26) | no | — | unique with batch_id + line_no | ix_posting_lines_account_batch | posting_batches.id | Accounting batch containing this line. |
 | `line_no` | BIGINT | no | — | unique with batch_id + line_no | — | — | One-based line number within the posting batch. |
-| `account_id` | VARCHAR(26) | no | — | — | ix_co17_posting_party_ar, ix_posting_lines_account_batch | accounts.id | Account receiving this accounting effect. |
+| `account_id` | VARCHAR(26) | no | — | — | ix_co17_posting_party_ar, ix_co19_posting_party_transactions, ix_posting_lines_account_batch | accounts.id | Account receiving this accounting effect. |
 | `debit_minor_units` | BIGINT | no | — | — | ix_co17_posting_party_ar | — | Positive home debit, or zero for a credit line. |
 | `credit_minor_units` | BIGINT | no | — | — | ix_co17_posting_party_ar | — | Positive home credit, or zero for a debit line. |
 | `currency` | VARCHAR(3) | no | — | — | — | — | Home currency of the posting. |
 | `account_snapshot` | TEXT | no | — | — | — | — | JSON object of the historical account display facts. |
-| `name_type` | VARCHAR(16) | yes | — | — | ix_co17_posting_party_ar | — | Party type: customer, vendor, employee or other_name; null with name_id. |
-| `name_id` | VARCHAR(26) | yes | — | — | ix_co17_posting_party_ar | — | Company-local party id; null with name_type. |
+| `name_type` | VARCHAR(16) | yes | — | — | ix_co17_posting_party_ar, ix_co19_posting_party_transactions | — | Party type: customer, vendor, employee or other_name; null with name_id. |
+| `name_id` | VARCHAR(26) | yes | — | — | ix_co17_posting_party_ar, ix_co19_posting_party_transactions | — | Company-local party id; null with name_type. |
 | `party_name` | VARCHAR(200) | yes | — | — | — | — | Party label captured for this revision or posting. |
 | `class_id` | VARCHAR(26) | yes | — | — | — | classes.id | Company class id captured for this line. |
 | `class_name` | VARCHAR(200) | yes | — | — | — | — | Class label captured for this revision or posting. |

@@ -10,8 +10,8 @@ Database: `company`.
 |---|---|---|---|---|---|---|---|
 | `id` | VARCHAR(26) | no | — | primary key 1 | ix_applications_invoice, ix_applications_payment, ix_co17_applications_invoice, ix_co17_applications_payment | — | Immutable apply or unapply identity. |
 | `kind` | VARCHAR(16) | no | — | — | ix_co17_applications_invoice, ix_co17_applications_payment | — | apply or unapply. |
-| `paying_transaction_id` | VARCHAR(26) | no | — | — | ix_applications_payment, ix_co17_applications_payment | payment_component_keys.transaction_id | Payment providing capacity. |
-| `paid_transaction_id` | VARCHAR(26) | no | — | — | ix_applications_invoice, ix_co17_applications_invoice | transactions.id | Invoice consuming capacity. |
+| `paying_transaction_id` | VARCHAR(26) | no | — | — | ix_applications_payment, ix_co17_applications_payment, ix_co19_applications_targets | payment_component_keys.transaction_id | Payment providing capacity. |
+| `paid_transaction_id` | VARCHAR(26) | no | — | — | ix_applications_invoice, ix_co17_applications_invoice, ix_co19_applications_targets | transactions.id | Invoice consuming capacity. |
 | `source_component_key_id` | VARCHAR(26) | no | — | — | — | payment_component_keys.id | Exact-party permanent source. |
 | `amount_minor_units` | BIGINT | no | — | — | ix_co17_applications_invoice, ix_co17_applications_payment | — | Positive settlement amount. |
 | `currency` | VARCHAR(3) | no | — | — | — | — | Settlement currency. |
