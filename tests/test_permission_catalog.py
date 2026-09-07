@@ -52,6 +52,8 @@ def test_complete_unfiltered_registry_descriptors_and_action_owners():
 # Hand-disposed conditional resource producers. Graph discovery remains with these
 # owners; no target graph is executed or replaced by static permission admission.
 RESOURCE_PAIRS = {
+    # Accepted G1 private resolver; its literal admission remains ledger.post standard.
+    'deposit_resolution.resolve': {('ledger.post', 'standard')},
     'billing_edits.carry_allocations': {('customer-work', 'standard')},
     'billing_edits.protect_sale': {('customer-work', 'standard')},
     'billing_queries.authorize_sale': {('customer-work', 'member'), ('customer-work', 'standard')},
@@ -169,10 +171,10 @@ def test_explicit_admin_grant_only_and_unavailable_delete_contracts():
 
 
 def test_frozen_manifest_digest_and_pure_import_boundary():
-    assert c.FROZEN_CATALOG.version == '3f926ee62543d308dad8f60e707b4cabd82fc755'
+    assert c.FROZEN_CATALOG.version == 'deposit-lifecycle-co0021-v1'
     assert c.catalog_manifest(c.FROZEN_CATALOG, c.FROZEN_MANIFEST.standalone_names) == c.FROZEN_MANIFEST
     raw = json.dumps(asdict(c.FROZEN_CATALOG), sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode()
-    assert hashlib.sha256(raw).hexdigest() == '3a02a194a6d4bc8b392c6af7d57ccc6beb3d090ff61b6aee7c0f7f6d9485258a'
+    assert hashlib.sha256(raw).hexdigest() == '7e213af6aca70c7836e11c59728ea33542d4528f001d6e1106c9472b414d3bd8'
     for name in ('permission_catalog', 'permission_policy'):
         tree = ast.parse((ROOT / f'src/bookflow/hub/{name}.py').read_text())
         modules = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)} | {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}

@@ -126,7 +126,7 @@ def validate(effect):
     require(sum(leg.signed_debit for leg in effect.legs) == 0)
 
 
-def validate_current(effect, s, *, replacing_deposit=None):
+def validate_current(effect, s, *, replacing_deposit=None, previous=None):
     """Recheck stored source pins/claims in the caller's current company snapshot.
 
     Prospective source actions use their owning full validator and G2's aggregate
@@ -148,21 +148,32 @@ def validate_current(effect, s, *, replacing_deposit=None):
             raise BookflowError('E_DEPOSIT_SOURCE_CLAIMED')
     accounts=[effect.intent.bank]+[r.account for r in effect.intent.additional]
     if effect.intent.cash_back:accounts.append(effect.intent.cash_back.account)
+    retained_accounts = ([previous.intent.bank]+[r.account for r in previous.intent.additional]+([previous.intent.cash_back.account] if previous.intent.cash_back else [])) if previous else []
     for account in accounts:
         actual=s.company.conn.execute(sa.select(c.accounts).where(c.accounts.c.id==account.id)).mappings().first()
         from bookflow.company.sales_defaults import NORMAL_BALANCE
         require(actual is not None and actual['active'])
-        require(all(actual[field]==getattr(account,field) for field in ('id','name','full_name','number','type','system_role','currency')))
+        require(all(actual[field]==getattr(account,field) for field in ('id','type','system_role','currency')))
+        if account not in retained_accounts:
+            require(all(actual[field]==getattr(account,field) for field in ('name','full_name','number')))
         require(account.normal_balance==NORMAL_BALANCE[actual['type']] and account.currency==s.company_info_row['home_currency'])
     parties={'customer':c.customers,'vendor':c.vendors,'employee':c.employees,'other_name':c.other_names}
+    retained_rows = {r.row_id:r for r in previous.intent.additional} if previous else {}
     for row in effect.intent.additional:
+        old = retained_rows.get(row.row_id)
         dimensions=row.dimensions
         table=parties[dimensions.party_kind]
         party=s.company.conn.execute(sa.select(table).where(table.c.id==dimensions.party_id)).mappings().first()
-        require(party is not None and party['active'] and dimensions.party_name==(party.get('full_name') or party.get('name')))
+        require(party is not None)
+        if not (old and (dimensions.party_kind,dimensions.party_id,dimensions.party_name)==(old.dimensions.party_kind,old.dimensions.party_id,old.dimensions.party_name)):
+            require(party['active'] and dimensions.party_name==(party.get('full_name') or party.get('name')))
         if dimensions.class_id is not None:
             cls=s.company.conn.execute(sa.select(c.classes).where(c.classes.c.id==dimensions.class_id)).mappings().first()
-            require(cls is not None and cls['active'] and dimensions.class_name==(cls.get('full_name') or cls['name']))
+            require(cls is not None)
+            if not (old and (dimensions.class_id,dimensions.class_name)==(old.dimensions.class_id,old.dimensions.class_name)):
+                require(cls['active'] and dimensions.class_name==(cls.get('full_name') or cls['name']))
         if row.payment_method is not None:
             method=s.company.conn.execute(sa.select(c.payment_methods).where(c.payment_methods.c.id==row.payment_method.id)).mappings().first()
-            require(method is not None and method['active'] and row.payment_method.label==method['name'] and row.payment_method.version==method['version'])
+            require(method is not None)
+            if not (old and row.payment_method==old.payment_method):
+                require(method['active'] and row.payment_method.label==method['name'] and row.payment_method.version==method['version'])

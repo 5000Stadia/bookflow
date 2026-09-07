@@ -567,6 +567,9 @@ def apply(plan, ctx, s):
     if fresh.data.get('recovered'):
         from bookflow.core.registry import Applied
         return Applied(fresh.preview, [], 'recovered invoice correction')
+    if fresh.data['document_type'] == 'sales_receipt' and fresh.data['operation'] in ('update','void') and fresh.preview.changed:
+        from bookflow.company.deposit_dependencies import require_unclaimed
+        require_unclaimed(s, fresh.data['header']['id'])
     from bookflow.company.sales_validation import validate
     validate(fresh, s, ctx)
     if fresh.data.get('settlement_extension'):

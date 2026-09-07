@@ -1,0 +1,19 @@
+"""Append permanent private deposit operation receipts; preserve all co0020 data."""
+from alembic import op
+revision = 'co0021'
+down_revision = 'co0020'
+branch_labels = None
+depends_on = None
+
+NEW_TABLES = ('deposit_operations', 'deposit_operation_targets', 'deposit_operation_items')
+DDL = ["CREATE TABLE deposit_operations (\n\tid VARCHAR(26) NOT NULL, \n\toperation_key TEXT NOT NULL, \n\tcommand TEXT NOT NULL, \n\ttransaction_id VARCHAR(26) NOT NULL, \n\trequest_hash TEXT NOT NULL, \n\trequest_snapshot TEXT NOT NULL, \n\teffect_snapshot TEXT NOT NULL, \n\tcreated_at TEXT NOT NULL, \n\tcreated_by VARCHAR(26) NOT NULL, \n\tcreated_via TEXT NOT NULL, \n\taudit_event_id VARCHAR(26) NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT ck_deposit_request_snapshot CHECK (CASE WHEN json_valid(request_snapshot) THEN json_type(request_snapshot) = 'object' ELSE 0 END), \n\tCONSTRAINT ck_deposit_effect_snapshot CHECK (CASE WHEN json_valid(effect_snapshot) THEN json_type(effect_snapshot) = 'object' ELSE 0 END), \n\tCONSTRAINT uq_deposit_operation_key UNIQUE (operation_key), \n\tCONSTRAINT uq_deposit_operation_owner UNIQUE (id, transaction_id), \n\tCONSTRAINT ck_deposit_operation_command CHECK (command IN ('deposit post','deposit update','deposit void')), \n\tCONSTRAINT ck_deposit_operation_request CHECK (length(operation_key) BETWEEN 1 AND 128 AND length(request_hash) = 64), \n\tCONSTRAINT fk_deposit_operation_deposit FOREIGN KEY(transaction_id) REFERENCES transactions (id), \n\tFOREIGN KEY(audit_event_id) REFERENCES audit_events (id)\n)", 'CREATE TABLE deposit_operation_targets (\n\toperation_id VARCHAR(26) NOT NULL, \n\ttransaction_id VARCHAR(26) NOT NULL, \n\tPRIMARY KEY (operation_id, transaction_id), \n\tCONSTRAINT fk_deposit_operation_target_receipt FOREIGN KEY(operation_id) REFERENCES deposit_operations (id), \n\tCONSTRAINT fk_deposit_operation_target_transaction FOREIGN KEY(transaction_id) REFERENCES transactions (id)\n)', "CREATE TABLE deposit_operation_items (\n\toperation_id VARCHAR(26) NOT NULL, \n\tkind TEXT NOT NULL, \n\tordinal BIGINT NOT NULL, \n\tfacts_snapshot TEXT NOT NULL, \n\tPRIMARY KEY (operation_id, kind, ordinal), \n\tCONSTRAINT ck_deposit_facts_snapshot CHECK (CASE WHEN json_valid(facts_snapshot) THEN json_type(facts_snapshot) = 'object' ELSE 0 END), \n\tCONSTRAINT ck_deposit_operation_item_ordinal CHECK (typeof(ordinal) = 'integer' AND ordinal >= 0), \n\tCONSTRAINT ck_deposit_operation_item_kind CHECK (kind IN ('request_sources','request_additional','memberships','document_changes','cash_allocations','bank_changes')), \n\tCONSTRAINT fk_deposit_operation_item_receipt FOREIGN KEY(operation_id) REFERENCES deposit_operations (id)\n)"]
+GUARDS = ["CREATE TRIGGER deposit_operations_no_update BEFORE UPDATE ON deposit_operations BEGIN SELECT RAISE(ABORT, 'immutable deposit operation'); END", "CREATE TRIGGER deposit_operations_no_delete BEFORE DELETE ON deposit_operations BEGIN SELECT RAISE(ABORT, 'immutable deposit operation'); END", "CREATE TRIGGER deposit_operation_targets_no_update BEFORE UPDATE ON deposit_operation_targets BEGIN SELECT RAISE(ABORT, 'immutable deposit operation'); END", "CREATE TRIGGER deposit_operation_targets_no_delete BEFORE DELETE ON deposit_operation_targets BEGIN SELECT RAISE(ABORT, 'immutable deposit operation'); END", "CREATE TRIGGER deposit_operation_items_no_update BEFORE UPDATE ON deposit_operation_items BEGIN SELECT RAISE(ABORT, 'immutable deposit operation'); END", "CREATE TRIGGER deposit_operation_items_no_delete BEFORE DELETE ON deposit_operation_items BEGIN SELECT RAISE(ABORT, 'immutable deposit operation'); END"]
+
+def upgrade():
+    connection = op.get_bind()
+    for statement in (*DDL, *GUARDS):
+        connection.exec_driver_sql(statement)
+
+
+def downgrade():
+    raise RuntimeError('Company migrations are forward-only')

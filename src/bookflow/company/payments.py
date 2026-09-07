@@ -421,6 +421,9 @@ def apply(plan, ctx, s):
     fresh = prepare(s, ctx, plan.data['input'], plan.data['operation'])
     if fresh.data.get('recovered'):
         return Applied(fresh.preview, [], 'recovered payment operation')
+    if fresh.data['operation'] in ('update','void') and fresh.preview.changed:
+        from bookflow.company.deposit_dependencies import require_unclaimed
+        require_unclaimed(s, fresh.data['header']['id'])
     if fresh.data['fingerprint'] != plan.data['fingerprint']:
         raise BookflowError('E_PREVIEW_STALE', details={'reason': 'payment_facts'})
     if fresh.data['operation'] in ('unapply', 'void'):
