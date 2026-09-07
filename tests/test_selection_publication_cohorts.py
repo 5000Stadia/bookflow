@@ -167,6 +167,52 @@ def test_driver_failure_forbids_pending_send(monkeypatch,later_send):
     assert checks==['driver'] and not any(b'protected' in m.get('body',b'') for m in sent)
 
 
+
+def test_internal_driver_failure_denies_io_without_pending_send(monkeypatch):
+    import asyncio
+    import sqlite3
+    from bookflow.adapters.http.publication import PublicationMiddleware, protect
+    from bookflow.core.dispatch import guard
+
+    attempted, sent = [], []
+    with facts({'payment_selections': [dict(id='S', consumed_operation_id=None)]}) as s:
+        def fail_execute(statement, *args, **kwargs):
+            attempted.append(statement.get_final_froms()[0].name)
+            raise sa.exc.OperationalError(
+                'private selection SQL', {}, sqlite3.OperationalError('private driver failure'))
+
+        # Leave the actual cohort _read body in place: a fallback that swallows
+        # execute/driver failures must not turn I/O loss into missing evidence.
+        monkeypatch.setattr(s.company.conn, 'execute', fail_execute)
+
+        class Document:
+            credential = SimpleNamespace(token_id='owned')
+
+            def check(self, **kwargs):
+                guard(lambda: pp.check(s, [('payment_selection', 'S', False)]))
+
+        async def app(scope, receive, send):
+            protect(Document())
+            await send({'type': 'http.response.start', 'status': 200, 'headers': []})
+            await send({'type': 'http.response.body', 'body': b'protected selection'})
+
+        async def send(message):
+            sent.append(message)
+
+        async def receive():
+            return {'type': 'http.request'}
+
+        asyncio.run(PublicationMiddleware(app)({'type': 'http', 'path': '/test'}, receive, send))
+
+    assert [m['status'] for m in sent if m['type'] == 'http.response.start'] == [403]
+    body = b''.join(m.get('body', b'') for m in sent)
+    denial = json.loads(body)
+    assert denial['code'] == 'E_IO'
+    assert denial['details'] == {'stage': 'publication', 'outcome': 'unknown'}
+    assert attempted == ['payment_selections']  # abort immediately, no fallback/retry
+    assert b'protected selection' not in body and b'private' not in body
+
+
 @pytest.mark.parametrize('count',[0,1,200,201])
 def test_empty_duplicate_occurrences_keep_write_flags(count,monkeypatch):
     rows,_,_=graph();rows['payment_selections']=[dict(id='plain',consumed_operation_id=None)]
