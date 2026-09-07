@@ -53,12 +53,12 @@ def _parse(raw, field):
         _fail('invalid_json', field)
 
 
-def _decode(value, annotation, field):
+def _decode(value, annotation, field, *, native=False):
     origin, args = get_origin(annotation), get_args(annotation)
     if origin in (Union, UnionType):
         for option in args:
             try:
-                return _decode(value, option, field)
+                return _decode(value, option, field, native=native)
             except SnapshotError:
                 pass
         _fail('invalid_type', field)
@@ -67,15 +67,21 @@ def _decode(value, annotation, field):
             _fail('invalid_type', field)
         return value
     if origin is tuple:
-        if type(value) not in (list, tuple):
+        if type(value) not in ((tuple,) if native else (list, tuple)):
             _fail('invalid_type', field)
         if len(args) == 2 and args[1] is Ellipsis:
-            return tuple(_decode(x, args[0], field) for x in value)
+            return tuple(_decode(x, args[0], field, native=native) for x in value)
         if len(value) != len(args):
             _fail('invalid_type', field)
-        return tuple(_decode(x, kind, field) for x, kind in zip(value, args))
+        return tuple(_decode(x, kind, field, native=native) for x, kind in zip(value, args))
     if is_dataclass(annotation):
         hints = get_type_hints(annotation)
+        if native:
+            if type(value) is not annotation:
+                _fail('invalid_type', field)
+            for key, kind in hints.items():
+                _decode(getattr(value, key), kind, field, native=True)
+            return value
         if type(value) is not dict or set(value) != set(hints):
             _fail('invalid_fields', field)
         return annotation(**{key: _decode(value[key], kind, field) for key, kind in hints.items()})
@@ -223,6 +229,23 @@ class RootFacts:
 
 
 @dataclass(frozen=True, slots=True)
+class ProposalRows:
+    """Complete replacement/upsert rows; omitted identities remain unchanged."""
+    users: tuple[UserRow, ...] = ()
+    memberships: tuple[MembershipRow, ...] = ()
+    assignments: tuple[AssignmentRow, ...] = ()
+    authorities: tuple[AuthorityRow, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class DerivedFacts:
+    """Derived keys, not a SQL observation or authenticated database provenance."""
+    root: RootFacts
+    base_stamp: ReadStamp
+    provenance: Literal['derived_from_loaded_old'] = 'derived_from_loaded_old'
+
+
+@dataclass(frozen=True, slots=True)
 class VisibilityFacts:
     policy_revision: str
     rows: tuple[a.Visibility, ...]
@@ -327,6 +350,10 @@ def _validate(rows, keys, catalog):
         _fail('invalid_facts','authorities')
 
 
+def _rows_digest(rows):
+    return _digest([asdict(x) for group in rows for x in group])
+
+
 def load_root(tx: Database, *, catalog: CatalogBundle) -> RootFacts:
     try:
         return _load_root(tx, catalog=catalog)
@@ -369,22 +396,97 @@ def _load_root(tx: Database, *, catalog: CatalogBundle) -> RootFacts:
         stored = decode_catalog(encoded, version=version, sha256=sha)
         if stored != actual:
             _fail('catalog_mismatch','state')
-    facts_digest = _digest([asdict(x) for group in rows for x in group])
+    facts_digest = _rows_digest(rows)
     return RootFacts(ReadStamp('hub0012',generation,mode,sha,facts_digest,bundle_digest), keys, *rows, actual)
+
+
+def _validated_root(root, bundle):
+    _decode(root, RootFacts, 'root', native=True)
+    if root.stamp.hub_revision != 'hub0012':
+        _fail('schema_mismatch', 'revision')
+    if not 1 <= root.stamp.generation <= 9223372036854775807:
+        _fail('invalid_facts', 'state')
+    if type(root) is not RootFacts or root.stamp.bundle_digest != _bundle(bundle):
+        _fail('catalog_mismatch','bundle')
+    if root.stamp.mode!='policy_v1':
+        _fail('legacy_comparison_unavailable','mode')
+    rows = (root.users,root.organizations,root.companies,root.memberships,root.assignments,root.authorities,root.role_defaults)
+    _validate(rows,root.keys,root.catalog)
+    if _rows_digest(rows) != root.stamp.authority_rows_digest or root.catalog != c._normal_catalog(replace(bundle.descriptor,defaults=root.role_defaults)) or c.catalog_manifest(root.catalog).descriptor_sha256 != root.stamp.catalog_sha256:
+        _fail('source_incomplete','root')
+
+def _patch_rows(original, changes, *, field, key, immutable=(), insert=False):
+    records = {key(row): row for row in original}
+    seen = set()
+    for row in changes:
+        identity = key(row)
+        if identity in seen:
+            _fail('invalid_facts', field)
+        seen.add(identity)
+        previous = records.get(identity)
+        if previous is None:
+            if not insert:
+                _fail('invalid_facts', field)
+        elif any(getattr(previous, name) != getattr(row, name) for name in immutable):
+            _fail('invalid_facts', field)
+        records[identity] = row
+    return tuple(records[identity] for identity in sorted(records))
+
+
+def derive_proposal(old: RootFacts, *, old_catalog: CatalogBundle,
+                    new_catalog: CatalogBundle, changes: ProposalRows,
+                    generation: int,
+                    full_defaults: tuple[c.DefaultEntry, ...] | None = None) -> DerivedFacts:
+    """Pure B2 construction from trusted current-transaction loaded OldFacts.
+
+    Both initiating and final proposals must use that same old anchor. Public
+    constructors/digests do not authenticate it. Admission, semantic increments,
+    visibility, tokens/audit and final SQL observation remain coordinator-owned.
+    """
+    try:
+        _validated_root(old, old_catalog)
+        _decode(changes, ProposalRows, 'changes', native=True)
+        _decode(generation, int, 'generation', native=True)
+        if not 1 <= generation <= 9223372036854775807 or generation not in (old.stamp.generation, old.stamp.generation + 1):
+            _fail('invalid_facts', 'generation')
+        bundle_digest = _bundle(new_catalog)
+        defaults = old.role_defaults if full_defaults is None else _decode(full_defaults, tuple[c.DefaultEntry, ...], 'defaults', native=True)
+        actual = c._normal_catalog(replace(new_catalog.descriptor, defaults=defaults))
+        users = _patch_rows(old.users, changes.users, field='users', key=lambda x: x.id,
+                            immutable=('kind', 'hub_admin', 'owner_user_id'))
+        members = _patch_rows(old.memberships, changes.memberships, field='memberships', key=lambda x: x.id,
+                              immutable=('user_id', 'scope_type', 'scope_id'), insert=True)
+        assignments = _patch_rows(old.assignments, changes.assignments, field='assignments',
+                                 key=lambda x: (x.agent_user_id, x.principal_user_id), insert=True)
+        authorities = _patch_rows(old.authorities, changes.authorities, field='authorities', key=lambda x: x.agent_user_id)
+        # Expected proposal keys start from independently read OLD keys. Only
+        # explicit allowed insertions/default replacement can change this set.
+        member_keys = set(old.keys.memberships)
+        member_ids = {x[0] for x in member_keys}
+        for row in changes.memberships:
+            if row.id not in member_ids:
+                if row.user_id not in old.keys.users or row.scope_id not in (old.keys.organizations if row.scope_type == 'organization' else dict(old.keys.companies)):
+                    _fail('invalid_facts', 'memberships')
+                member_keys.add((row.id, row.user_id, row.scope_type, row.scope_id))
+        keys = replace(old.keys, memberships=tuple(sorted(member_keys)),
+                       assignments=tuple(sorted(set(old.keys.assignments) | {(x.agent_user_id, x.principal_user_id) for x in changes.assignments})),
+                       defaults=tuple(sorted((x.role, x.requirement.capability, x.requirement.threshold) for x in defaults)))
+        rows = (users, old.organizations, old.companies, members, assignments, authorities, actual.defaults)
+        _validate(rows, keys, actual)
+        stamp = ReadStamp(old.stamp.hub_revision, generation, 'policy_v1',
+                          c.catalog_manifest(actual).descriptor_sha256, _rows_digest(rows), bundle_digest)
+        return DerivedFacts(RootFacts(stamp, keys, *rows, actual), old.stamp)
+    except (c.PolicyInputError, ValueError, TypeError, AttributeError, RecursionError) as exc:
+        if isinstance(exc, SnapshotError):
+            raise
+        _fail('invalid_facts', 'proposal')
 
 
 def assemble_pair(old: RootFacts, proposed: RootFacts, *, old_catalog: CatalogBundle,
                   new_catalog: CatalogBundle, visibility: VisibilityProvider | None) -> SnapshotPair:
     """Strict policy-to-policy assembly. Legacy activation needs its later owner."""
     for root,bundle in ((old,old_catalog),(proposed,new_catalog)):
-        if type(root) is not RootFacts or root.stamp.bundle_digest != _bundle(bundle):
-            _fail('catalog_mismatch','bundle')
-        if root.stamp.mode!='policy_v1':
-            _fail('legacy_comparison_unavailable','mode')
-        rows = (root.users,root.organizations,root.companies,root.memberships,root.assignments,root.authorities,root.role_defaults)
-        _validate(rows,root.keys,root.catalog)
-        if _digest([asdict(x) for group in rows for x in group]) != root.stamp.authority_rows_digest or root.catalog != c._normal_catalog(replace(bundle.descriptor,defaults=root.role_defaults)) or c.catalog_manifest(root.catalog).descriptor_sha256 != root.stamp.catalog_sha256:
-            _fail('source_incomplete','root')
+        _validated_root(root, bundle)
     if visibility is None or not callable(getattr(visibility,'facts',None)):
         _fail('visibility_unresolved','visibility')
     orgs = sorted(set(old.keys.organizations)|set(proposed.keys.organizations))

@@ -1129,6 +1129,34 @@ Every hub0012 admission read, column/table DDL, backfill and singleton INSERT
 explicitly addresses `main`; same-named ordinary TEMP tables retain their entire
 schema and data. Both trigger catalogs are explicitly database-qualified.
 
+`ProposalRows` and `derive_proposal(old, *, old_catalog, new_catalog, changes,
+generation, full_defaults=None)` construct complete hypothetical facts without
+SQL or policy admission. `old` must be trusted current-transaction `load_root`
+output. Both initiating and final constructions use that same old anchor;
+public dataclass constructors and matching digests do not authenticate its
+origin or freshness. `DerivedFacts(root, base_stamp, provenance)` labels the
+result `derived_from_loaded_old`, never independently queried proposed SQL.
+
+Patches contain full typed replacement/upsert rows. Unmentioned rows remain
+unchanged. Users/authorities replace existing identities only; user kind,
+owner and hub-admin fields cannot change. Membership identity/user/scope is
+immutable and a new membership requires a new physical and logical identity.
+Assignments upsert by their composite identity; revocation is an explicit row,
+not omission. Scope rosters and company parents cannot be patched. Expected
+keys start from old SQL keys plus permitted insertions/default replacement and
+are cross-checked against full canonical rows. The constructor reuses B1's
+strict validation, catalog normalization and row/bundle digest ownership.
+
+`full_defaults=None` retains actual old defaults, while `()` explicitly empties
+them. Generation is the old value or its in-range successor, never an automatic
+increment. B2 owns deployment admission/full-default requirements for catalog
+replacement, semantic row/counter effects and visibility. Existing
+`assemble_pair`/A own dense old/new comparison. Final SQL observation can compare
+the complete root directly to the prepared root; tokens, audit and state update
+provenance outside RootFacts require B2's separate expected-state checks. Legacy
+activation, new identities/scopes and installed visibility remain outside this
+constructor.
+
 `hub.permission_snapshot` is a private read-only dependency. `load_root` accepts
 an already consistent `Database` transaction and an explicitly reviewed
 `CatalogBundle`; it never opens a root or company, imports the registry to infer a
