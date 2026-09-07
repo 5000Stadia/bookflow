@@ -137,6 +137,11 @@ def test_correction_retains_exact_issuer_without_issuer_history_dependency(root,
         finally:sa.event.remove(s.hub.conn,'before_cursor_execute',query)
     observe(client,monkeypatch,check,company)
     assert _storage(root,path)==saved
+    corrected=driver.run('update',request.input.model_dump(mode='json',by_alias=True,exclude_unset=True),reason=request.context.reason)
+    assert corrected.current.version==2
+    with sqlite3.connect(path) as db:
+        snapshots=db.execute('SELECT issuer_snapshot FROM transaction_revisions WHERE transaction_id=? ORDER BY revision_number',(posted.current.id,)).fetchall()
+        assert snapshots==[(original,),(original,)]
 
 
 def test_all_unrelated_hub_changes_keep_the_name_anchor_and_guard(root,client,sale,monkeypatch):
