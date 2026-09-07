@@ -215,3 +215,18 @@ def test_final_chunk_races_keep_a_complete_barrier_and_immutable_receipt(client,
         assert state['state']=='superseded' and state['received_entry_count']==0
         assert current['version']==draft['version'] and current['current_lifecycle']['state']=='recovery_uploading'
     assert client.run('payment query',dict(customer=sale['customer']),company=COMPANY)['total_count']==0
+
+
+def test_ordinary_agent_reason_and_directive_fail_before_immutable_lookup(client,sale,root,monkeypatch):
+    draft,_,_=setup(client,sale)
+    begin=declaration(draft,[])
+    call(client,'begin',begin)  # Existing reasonless human receipt must not bypass agent policy.
+    company=client.company.show(company=COMPANY)['id']
+    owner=make_actor(root,'recovery-agent-owner',company_role=(company,'standard'))
+    make_actor(root,'recovery-agent',kind='agent',owner_user_id=owner,company_role=(company,'standard'))
+    agent=as_user(root,'recovery-agent')
+    before=raw_books(root)
+    for context,expected in (({},'E_REASON_REQUIRED'),({'directive':'SI-999999'},'E_DIRECTIVE_NOT_FOUND')):
+        with pytest.raises(BookflowError) as caught:call(agent,'begin',begin,**context)
+        assert caught.value.code==expected
+        assert raw_books(root)==before

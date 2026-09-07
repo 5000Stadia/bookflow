@@ -137,3 +137,57 @@ def test_browser_resumes_201_of_403_from_complete_durable_outbox(register_browse
     assert b.evaluate("document.querySelector('#payment-amount').value")==''
     assert b.evaluate("document.querySelector('#payment-recovery-panel')===null")
     (tmp_path/'complete-outbox.json').write_text(json.dumps(dict(manifest=manifest,begin=begin,stage=state,final=final),indent=2))
+
+
+@pytest.mark.timeout(600)
+@pytest.mark.parametrize('width',[1280,390])
+def test_every_acknowledgement_boundary_resumes_original_whole_intent(register_browser,tmp_path,width):
+    """Actual browser fetch loss before/after each durable server boundary."""
+    import json
+    from tests.test_payment_review_gui import invoice_setup
+    from tests.test_payment_recovery import declaration
+    b,run,payer,_,base=setup(register_browser);b.viewport(width,900)
+    invoice,_,_=invoice_setup(run,payer)
+    evidence=[]
+    for boundary in ('begin','upload','seal','apply'):
+        for after in (False,True):
+            draft=run('payment selection create',dict(mode='new_receipt',customer=payer,date='2026-06-01',amount='10'))
+            selection=draft['id']
+            entries=[dict(invoice_id=invoice['id'],observed_invoice_version=1,action='set',amount_minor_units=123,currency='USD',amount_origin='entered')]
+            begin=declaration(draft,entries)
+            manifest=dict(domain='bookflow.payment.recovery.intent',format=1,selection=selection,local_baseline_revision=draft['revision_id'],anchor_revision=draft['revision_id'],attempt_generation=begin['attempt_generation'],header_intent=begin['header_intent'],entries=entries)
+            attempt=dict(begin=begin,entries=entries,manifest=manifest,actions={},done=False)
+            b.navigate(base+'/receive-payments?selection='+selection)
+            b.wait_for("document.querySelector('#payment-workspace')?.dataset.loaded==='true'",timeout=120)
+            b.evaluate('window.boundaryAttempt='+json.dumps(attempt))
+            b.evaluate("(async()=>{const config=BookflowExactJSON.parse(document.querySelector('#payment-config').textContent),a=window.boundaryAttempt;a.scope='payment-recovery:'+config.company+':'+config.actor+':'+a.begin.selection;a.storageKey=a.scope+':'+a.begin.attempt_generation;await new Promise((resolve,reject)=>{const request=indexedDB.open('bookflow-payment-recovery-v1',1);request.onupgradeneeded=()=>request.result.createObjectStore('attempts');request.onsuccess=()=>{const db=request.result,tx=db.transaction('attempts','readwrite');tx.objectStore('attempts').put(BookflowExactJSON.stringify(a),a.storageKey);tx.oncomplete=()=>{db.close();resolve()};tx.onerror=()=>reject(tx.error)};request.onerror=()=>reject(request.error)});})()")
+            b.navigate(base+'/receive-payments?selection='+selection)
+            b.wait_for("document.querySelector('#payment-workspace')?.dataset.loaded==='true'",timeout=120)
+            if boundary=='apply':press(b,'Resolve sharing and resume')
+            b.evaluate('window.lossBoundary='+json.dumps('payment.recovery.'+boundary)+';window.loseAfter='+json.dumps(after))
+            b.evaluate("window.realFetch=window.fetch;window.lossObserved=false;window.fetch=async(url,...args)=>{if(!window.lossObserved&&String(url).includes(window.lossBoundary)){window.lossObserved=true;if(window.loseAfter){const response=await window.realFetch(url,...args);window.lostOriginal=await response.clone().json();}throw new Error('Injected acknowledgement loss');}return window.realFetch(url,...args);}")
+            action='Confirm complete recovery' if boundary=='apply' else 'Resolve sharing and resume'
+            b.evaluate('Array.from(document.querySelectorAll("#payment-recovery-panel button")).find(x=>x.textContent==='+json.dumps(action)+').click()')
+            b.wait_for("!document.querySelector('#payment-workspace').hasAttribute('aria-busy')",timeout=180)
+            assert b.evaluate('window.lossObserved')
+            assert not b.evaluate("document.querySelector('#payment-error').hidden")
+            lost=b.evaluate('window.lostOriginal||null')
+            state=run('payment selection show',dict(selection=selection))
+            assert state['version']==draft['version']+int(boundary=='apply' and after)
+            b.navigate(base+'/receive-payments?selection='+selection)
+            b.wait_for("document.querySelector('#payment-workspace')?.dataset.loaded==='true'",timeout=120)
+            for text in ('Resolve sharing and resume','Resume complete saved attempt'):
+                if b.evaluate('Array.from(document.querySelectorAll("#payment-recovery-panel button")).some(x=>x.textContent==='+json.dumps(text)+')'):press(b,text)
+            if not (boundary=='apply' and after):press(b,'Confirm complete recovery')
+            final=run('payment selection show',dict(selection=selection))
+            assert final['id']==selection and final['version']==draft['version']+1
+            assert final['applied_minor_units']==123 and final['amount']['minor_units']==1000
+            attempts=run('payment recovery query',dict(selection=selection))
+            assert attempts['total_count']==1
+            recovery=run('payment recovery show',dict(recovery_key=begin['recovery_key']))
+            assert recovery['state']=='applied' and recovery['received_entry_count']==1
+            assert run('payment query',dict(customer=payer))['total_count']==0
+            assert b.evaluate('document.documentElement.scrollWidth<=window.innerWidth')
+            evidence.append(dict(boundary=boundary,after_server=after,lost_response=lost,begin=begin,final=final,recovery=recovery))
+            (tmp_path/'all-acknowledgement-boundaries.json').write_text(json.dumps(evidence,indent=2))
+    shot(b,tmp_path,'all-acknowledgement-boundaries-complete',width)

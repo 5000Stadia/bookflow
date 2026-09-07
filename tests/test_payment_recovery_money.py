@@ -119,3 +119,71 @@ def test_live_calculation_preference_does_not_stale_or_replace_captured_policy(c
     confirm(client,identifier,begin,comparison)
     shown=client.run('payment selection show',dict(selection=draft['id']),company=COMPANY)
     assert shown['context']['automatically_calculate']==before_policy and shown['amount']['minor_units']==200 and shown['applied_minor_units']==150
+
+
+@pytest.mark.parametrize('removed',[False,True])
+def test_invoice_date_and_removed_target_stale_all_confirmation_pages(client,sale,root,removed):
+    draft,first,_=setup(client,sale)
+    entries=[dict(invoice_id=first['id'],observed_invoice_version=1,action='remove')] if removed else []
+    begin=declaration(draft,entries);identifier,old=seal_compare(client,begin,entries)
+    client.run('invoice update',dict(invoice=first['id'],expected_version=1,date='2026-06-02'),company=COMPANY,reason='Correct invoice date')
+    before=raw_books(root)
+    with pytest.raises(BookflowError) as caught:confirm(client,identifier,begin,old)
+    assert caught.value.code=='E_PREVIEW_STALE' and raw_books(root)==before
+    current=call(client,'compare',dict(recovery_id=identifier,attempt_generation=begin['attempt_generation'],intent_hash=begin['intent_hash']))
+    assert current['facts_fingerprint']!=old['facts_fingerprint']
+    assert bool(current['hard_blocker_count']) is not removed
+    if removed:
+        confirm(client,identifier,begin,current)
+        rows=client.run('payment selection items',dict(selection=draft['id']),company=COMPANY)['items']
+        assert first['id'] not in {row['invoice_id'] for row in rows}
+    else:
+        with pytest.raises(BookflowError):confirm(client,identifier,begin,current)
+        assert raw_books(root)==before
+
+
+@pytest.mark.parametrize('change',['amount','date','void'])
+def test_source_capacity_date_and_status_are_current_recovery_facts(client,sale,root,change):
+    from tests.test_payment_selection import invoice
+    first=invoice(client,sale,'REC-SOURCE-'+change)
+    payment=client.run('payment receive',dict(customer=sale['customer'],date='2026-06-01',amount='2',payment_method=method(client),operation_key='source-'+change),company=COMPANY)
+    draft=client.run('payment selection create',dict(mode='existing_credit',payment=payment['id'],date='2026-06-01',amount='2'),company=COMPANY)
+    draft=client.run('payment selection update',dict(selection=draft['id'],expected_version=draft['version'],set_items=[dict(invoice=first['id'],expected_version=1,amount='1',amount_origin='entered')]),company=COMPANY)
+    begin=declaration(draft,[]);identifier,old=seal_compare(client,begin,[])
+    shown=client.run('payment show',dict(payment=payment['id']),company=COMPANY)
+    inp=dict(payment=payment['id'],expected_version=1,operation_key='source-change-'+change,settlement_guard=shown['settlement_guard'])
+    if change!='void':inp[change]='0.50' if change=='amount' else '2026-06-02'
+    else:inp.pop('settlement_guard')
+    client.run('payment '+('void' if change=='void' else 'update'),inp,company=COMPANY,reason='Correct original funding')
+    before=raw_books(root)
+    with pytest.raises(BookflowError) as caught:confirm(client,identifier,begin,old)
+    assert caught.value.code=='E_PREVIEW_STALE' and raw_books(root)==before
+    current=call(client,'compare',dict(recovery_id=identifier,attempt_generation=begin['attempt_generation'],intent_hash=begin['intent_hash']))
+    assert current['facts_fingerprint']!=old['facts_fingerprint'] and current['problem_count']>0
+    assert current['selected_minor_units']==100
+    if change=='amount':
+        assert current['hard_blocker_count']==0
+        confirm(client,identifier,begin,current)
+        final=client.run('payment selection show',dict(selection=draft['id']),company=COMPANY)
+        assert final['amount']['minor_units']==200 and final['applied_minor_units']==100
+        with pytest.raises(BookflowError):
+            client.run('payment apply',dict(payment=payment['id'],expected_version=2,date='2026-06-01',operation_key='over-capacity',applications=dict(mode='selection',selection=draft['id'],expected_version=final['version'])),company=COMPANY)
+    else:
+        assert current['hard_blocker_count']>0
+        with pytest.raises(BookflowError):confirm(client,identifier,begin,current)
+        assert raw_books(root)==before
+
+
+def test_relevant_customer_lineage_change_invalidates_whole_confirmation(client,sale,root):
+    draft,_,_=setup(client,sale)
+    begin=declaration(draft,[]);identifier,old=seal_compare(client,begin,[])
+    parent=client.customer.create(name='Recovery lineage parent',company=COMPANY)['id']
+    customer=client.customer.show(customer=sale['customer'],company=COMPANY)
+    client.customer.update(customer=sale['customer'],expected_version=customer['version'],parent_id=parent,company=COMPANY)
+    before=raw_books(root)
+    with pytest.raises(BookflowError) as caught:confirm(client,identifier,begin,old)
+    assert caught.value.code=='E_PREVIEW_STALE' and raw_books(root)==before
+    current=call(client,'compare',dict(recovery_id=identifier,attempt_generation=begin['attempt_generation'],intent_hash=begin['intent_hash']))
+    assert current['facts_fingerprint']!=old['facts_fingerprint']
+    assert current['selected_minor_units']==old['selected_minor_units']==200
+    confirm(client,identifier,begin,current)

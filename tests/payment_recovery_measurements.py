@@ -19,12 +19,13 @@ from bookflow.core.context import client_version
 from bookflow.company.payment_queries import digest
 
 
-def measure(manifest_path,output_path):
+def measure(manifest_path,output_path,changed_count=201):
+    assert changed_count in (201,257,403)
     manifest=json.loads(Path(manifest_path).read_text());root=Path(manifest['root']).resolve()
     assert str(root).startswith('/tmp/bookflow-payment-budget-recovery-')
     assert manifest['target']==len(manifest['records'])==10000 and manifest['commands']==33761
     client=bookflow.connect(data_root=str(root));company=manifest['company']
-    report=dict(source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),loaded_package=bookflow.__file__,root=str(root),fixture_commands=33761,measurements=[],complete=False)
+    report=dict(source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),loaded_package=bookflow.__file__,root=str(root),fixture_commands=33761,changed_count=changed_count,measurements=[],complete=False)
     def save():Path(output_path).write_text(json.dumps(report,indent=2))
     secret=client.token.issue(label='Owned additional recovery measurements')['secret']
     handle=start_serving(root,client_version(),bind='127.0.0.1:8765',secure_cookies=False);api=TestClient(handle.app)
@@ -62,21 +63,23 @@ def measure(manifest_path,output_path):
             draft=write('payment selection update',dict(selection=draft['id'],expected_version=draft['version'],set_items=[dict(invoice=r['invoice'],expected_version=r['invoice_version'],amount='0.01',amount_origin='entered') for r in records[offset:offset+200]]))
         # Observed1 claims resolve through actual existing application/unapply
         # history. The fingerprint still includes every current invoice fact.
-        entries=sorted([dict(invoice_id=r['invoice'],observed_invoice_version=1,action='set',amount_minor_units=2,currency='USD',amount_origin='entered') for r in records[:201]],key=lambda r:r['invoice_id'])
+        entries=sorted([dict(invoice_id=r['invoice'],observed_invoice_version=1,action='set',amount_minor_units=2,currency='USD',amount_origin='entered') for r in records[:changed_count]],key=lambda r:r['invoice_id'])
         generation=str(uuid4());header=dict(action='keep')
         intent=dict(domain='bookflow.payment.recovery.intent',format=1,selection=draft['id'],local_baseline_revision=draft['revision_id'],anchor_revision=draft['revision_id'],attempt_generation=generation,header_intent=header,entries=entries)
-        begin=dict(recovery_key='measurement-'+generation,selection=draft['id'],expected_version=draft['version'],local_baseline_revision=draft['revision_id'],attempt_generation=generation,declared_entry_count=201,intent_hash=digest(intent),header_intent=header)
+        begin=dict(recovery_key='measurement-'+generation,selection=draft['id'],expected_version=draft['version'],local_baseline_revision=draft['revision_id'],attempt_generation=generation,declared_entry_count=changed_count,intent_hash=digest(intent),header_intent=header)
         identifier=write('payment recovery begin',begin)['original_receipt']['recovery_id']
         write('payment recovery upload',dict(recovery_id=identifier,chunk_index=0,entries=entries[:200]))
         read('active.header','payment recovery show',dict(recovery_id=identifier))
         read('active.missing','payment recovery items',dict(recovery_id=identifier,kind='missing_ranges',limit=200))
         read('active.entries','payment recovery items',dict(recovery_id=identifier,limit=200))
         read('active.query','payment recovery query',dict(state='uploading',limit=50))
-        write('payment recovery upload',dict(recovery_id=identifier,chunk_index=1,entries=entries[200:]))
-        write('payment recovery seal',dict(recovery_id=identifier,expected_recovery_version=3))
+        for offset in range(200,changed_count,200):
+            write('payment recovery upload',dict(recovery_id=identifier,chunk_index=offset//200,entries=entries[offset:offset+200]))
+        staged_version=1+(changed_count+199)//200
+        write('payment recovery seal',dict(recovery_id=identifier,expected_recovery_version=staged_version))
         request=dict(recovery_id=identifier,attempt_generation=generation,intent_hash=begin['intent_hash'])
         comparison=read('sealed.history-rich.compare','payment recovery compare',request)
-        assert comparison['selected_minor_units']==604 and comparison['unapplied_minor_units']==396
+        assert comparison['selected_minor_units']==403+changed_count and comparison['unapplied_minor_units']==597-changed_count
         for kind in ('changes','problems'):
             cursor=None;seen=0;page_index=0
             while True:
@@ -84,7 +87,7 @@ def measure(manifest_path,output_path):
                 seen+=len(page['items']);cursor=page['next_cursor'];page_index+=1
                 if not cursor:break
             assert seen==comparison['change_count' if kind=='changes' else 'problem_count']
-        published=write('payment recovery apply',dict(**request,expected_recovery_version=4,expected_selection_version=draft['version'],expected_facts_fingerprint=comparison['facts_fingerprint']))
+        published=write('payment recovery apply',dict(**request,expected_recovery_version=staged_version+1,expected_selection_version=draft['version'],expected_facts_fingerprint=comparison['facts_fingerprint']))
         assert published['current']['selection_id']==draft['id'] and published['current']['selection_version']==draft['version']+1
         read('published.original-receipt','payment recovery show',dict(recovery_id=identifier))
         report['financial_after']=finance();assert report['financial_after']==before
@@ -92,4 +95,4 @@ def measure(manifest_path,output_path):
     finally:handle.stop()
 
 
-if __name__=='__main__':measure(sys.argv[1],sys.argv[2])
+if __name__=='__main__':measure(sys.argv[1],sys.argv[2],int(sys.argv[3]) if len(sys.argv)>3 else 201)
