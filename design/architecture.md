@@ -862,8 +862,14 @@ join order. Invoice delivery starts from its selected identities, retains the
 original revision-one amounts, and leaves the complete candidate/version/lineage
 and funding baseline in the cursor fingerprint. Suggestion baselines contain the
 complete authorized identity/version/current monetary relation as transient tuples;
-no balances or results survive a read snapshot. Payment searches use the captured
-payer-label expression and existing window-count/filter/cursor contract. Sales
+no balances or results survive a read snapshot. A transient SQLite flattening
+barrier evaluates each suggestion candidate's live sum once before testing positive
+due. Invoice text filters precede live-sum evaluation, and bounded delivery reuses
+the already-resolved context and funding facts. CP02 aggregates each party once
+with bookflow_sum_int, then combines unbounded Python integers before checking the
+disclosed payer/family totals; even out-of-range party intermediates can cancel.
+Payment searches carry only IDs through their existing window-count/filter/cursor
+contract, then fetch the selected display fields in the same read snapshot. Sales
 query pages fetch headers and revision/profile summaries only for selected IDs.
 Payment history retains complete resolved-participant operation membership, batches
 at most 200 audit identities per lookup, and renders stored commercial revisions
