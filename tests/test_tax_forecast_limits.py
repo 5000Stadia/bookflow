@@ -4,7 +4,10 @@ from bookflow import BookflowError
 from tests.test_tax_policy_sales import sale,tax_sale,request,COMPANY
 from tests.test_customer_work_lifecycle import run
 from tests.test_work_billing_lifecycle import accepted,bill
-from tests.test_progress_billing_lifecycle import current
+
+
+def current(client, source):
+    return client.run('estimate show', dict(estimate=source['id']), company=COMPANY)
 
 
 @pytest.mark.timeout(1200)
@@ -19,7 +22,7 @@ def test_complete_forecast_above_execution_caps(client,tax_sale,count,installmen
     for invoice in bills[::2]:
         client.run('invoice void',dict(invoice=invoice['id'],expected_version=1),company=COMPANY,reason='Release alternating exact scope')
     run(client,'company','update',progress_billing_enabled=False)
-    state=run(client,'estimate','billing',estimate=source['id'])
+    state=client.run('estimate billing',dict(estimate=source['id']),company=COMPANY)
     assert state['remaining_net_minor_units']==remaining_net
     assert state['remaining_tax_minor_units']==remaining_tax
     assert not state['can_bill_together']
@@ -36,10 +39,10 @@ def test_complete_forecast_above_execution_caps(client,tax_sale,count,installmen
     else:
         first=bill(client,source,'bounded-lines',line_ids=line_ids[:19])
         assert first['subtotal_minor_units']==1938 and first['tax_minor_units']==194
-    state=run(client,'estimate','billing',estimate=source['id'])
+    state=client.run('estimate billing',dict(estimate=source['id']),company=COMPANY)
     assert state['can_bill_together']
     second=bill(client,current(client,source),'finish-bounded')
     assert second['revision']['tax_calculation_details']['attribution']==state['forecast_tax_attribution']
-    done=run(client,'estimate','billing',estimate=source['id'])
+    done=client.run('estimate billing',dict(estimate=source['id']),company=COMPANY)
     assert done['remaining_net_minor_units']==done['remaining_tax_minor_units']==0
     assert first['subtotal_minor_units']+second['subtotal_minor_units']==remaining_net
