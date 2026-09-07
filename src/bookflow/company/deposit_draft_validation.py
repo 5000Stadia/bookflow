@@ -128,6 +128,7 @@ def validate_manifest(manifest):
     from bookflow.company import custom_fields as cf
     for key,v in manifest.header.custom_fields.items():
         require(key==v.definition_id)
+        require(v.expected_kind is None or (v.canonical_text is not None and v.expected_kind==v.kind),'custom_kind_expectation')
         if v.canonical_text is not None:
             try:cf.typed_value_from_canonical(v.kind,v.canonical_text)
             except BookflowError:require(False)

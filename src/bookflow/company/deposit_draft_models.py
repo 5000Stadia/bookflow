@@ -1,6 +1,6 @@
 """Strict private G3 inputs and immutable complete composition snapshots."""
 from typing import Annotated, Literal
-from pydantic import Field, model_validator
+from pydantic import Field, model_validator, model_serializer
 from bookflow.company.sales_models import StrictModel, Selector, Fingerprint
 from bookflow.company.journal_models import _Date, _Number, _Version
 from bookflow.company.deposit_models import CashSource, ComponentOccurrence, Account, Amount, Party, Text
@@ -144,6 +144,16 @@ class CustomCapture(StrictModel):
     choice_id: ID | None = None
     choice_label: str | None = None
     origin: Origin
+    # Caller assertion provenance, not an inferred definition kind. Absent in
+    # legacy captures and when no assertion accompanied the captured value.
+    expected_kind: CustomFieldKind | None = None
+
+    @model_serializer(mode='wrap')
+    def serialize_capture(self, handler):
+        value = handler(self)
+        if self.expected_kind is None:
+            value.pop('expected_kind', None)
+        return value
 
 class CashBack(StrictModel):
     account: Account | None = None

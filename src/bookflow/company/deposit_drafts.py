@@ -78,6 +78,8 @@ def _version(s,header,expected):
 
 
 def _custom(s,previous,patch,expectations,creating=False):
+    from bookflow.company.journal_custom_fields import validate_kinds
+    validate_kinds(s.company,patch,expectations,record_type='deposit')
     result=dict(previous)
     definitions={r['id']:r for r in cf._applicable_definitions(s.company.conn,'deposit')}
     if creating:
@@ -86,19 +88,21 @@ def _custom(s,previous,patch,expectations,creating=False):
     for key in set(keys)|set(patch.root):
         if key not in definitions:raise BookflowError('E_RECORD_NOT_FOUND')
         d=cf.read_definition(s.company,key);old=result.get(key)
-        if key in expectations.root and expectations.root[key]!=d['kind']:raise BookflowError('E_VALIDATION',details={'field':'expected_custom_field_kinds'})
         provided=key in patch.root;value=patch.root[key] if provided else d['default']
         if old and not provided:continue
         canonical=None;choice=None
         if value is not None:
-            if old and old.canonical_text is not None and cf.typed_value_from_canonical(old.kind,old.canonical_text)==value:
-                result[key]=old;continue
+            if old and old.kind==d['kind'] and old.canonical_text is not None:
+                prior_value=cf.typed_value_from_canonical(old.kind,old.canonical_text)
+                if type(prior_value) is type(value) and prior_value==value:
+                    result[key]=old.model_copy(update={'expected_kind':expectations.root[key]}) if key in expectations.root else old
+                    continue
             canonical,_=cf.parse_typed_value(d['kind'],value,choices=cf._active_choice_map(s.company.conn,key) if d['kind']=='choice' else None)
             if d['kind']=='choice':choice=next(x for x in d['choices'] if x['value']==canonical)
-        if not d['active'] and (old is None or old.canonical_text!=canonical):raise BookflowError('E_VALIDATION',details={'field':'custom_fields','reason':'inactive'})
+        if not d['active'] and (old is None or old.kind!=d['kind'] or old.canonical_text!=canonical):raise BookflowError('E_VALIDATION',details={'field':'custom_fields','reason':'inactive'})
         result[key]=m.CustomCapture(definition_id=key,definition_version=d['version'],name=d['name'],kind=d['kind'],required=bool(d['required']),
             print_visible=None,position=d['position'],original_value_id=old.original_value_id if old else None,canonical_text=canonical,choice_id=choice['id'] if choice else None,
-            choice_label=choice['value'] if choice else None,origin='entered' if provided else 'default' if value is not None else 'unresolved')
+            choice_label=choice['value'] if choice else None,expected_kind=expectations.root.get(key),origin='entered' if provided else 'default' if value is not None else 'unresolved')
     return result
 
 
