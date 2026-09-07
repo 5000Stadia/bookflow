@@ -197,7 +197,9 @@ def run_serve(cmd, inp: ServeInput, ctx: Context, s: Session) -> dict[str, Any]:
             )
         handle.host.write_descriptor(inp.bind, str(handle.socket))
         log.warning("bookflow host listening on %s (socket %s)", inp.bind, handle.socket)
-        server = uvicorn.Server(uvicorn.Config(handle.app, log_level="warning", access_log=False))
+        from bookflow.adapters.http.admission import AdmissionProtocol
+        server = uvicorn.Server(uvicorn.Config(handle.app, http=AdmissionProtocol, loop="asyncio",
+                                               log_level="warning", access_log=False))
         import signal
         import threading
         from contextlib import nullcontext

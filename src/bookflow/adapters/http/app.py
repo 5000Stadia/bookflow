@@ -127,7 +127,7 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
     app = FastAPI(title="Bookflow", version=host.version, docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(CookieRenewalMiddleware, secure_cookies=secure_cookies)
     from bookflow.adapters.http.publication import PublicationMiddleware
-    app.add_middleware(PublicationMiddleware)
+    app.add_middleware(PublicationMiddleware, host=host)
 
     # ------------------------------------------------------------ credentials
     def credential(request: Request, *, renew_cookie: bool = True, publication: bool = True) -> Credential:
@@ -346,13 +346,19 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
                 if auth.needs_refresh(row):
                     host.enqueue_token_refresh(row["id"], row["kind"])
 
-        def drain(start: int | None) -> tuple[list[str], int, str, bool]:
+        def drain(start: int | None):
             frames: list[str] = []
             next_cursor = start
             s = host.reader_session(cred.user_id, cred.login)
             try:
                 command_input = {**values, **({"after": next_cursor} if next_cursor is not None else {}), "limit": 100, "scan_limit": 100}
+                from bookflow.core.publication import PublicationPermit
+                from bookflow.adapters.http.execution import PublishedDocument
+                cred.revalidate(s.hub)
+                permit = PublicationPermit.capture(cmd, command_input, ctx, s, cred, selector, "option", False)
                 out = execute(cmd, command_input, ctx, s, company_selector=selector, company_source="option")
+                permit.finish(s, result=out)
+                document = PublishedDocument(out, permit, host, cred)
                 for item in out["items"]:
                     frames.append(f"id: {item['seq']}\nevent: audit\ndata: {json.dumps(item, default=str)}\n\n")
                 if out["next_after"] is not None:
@@ -365,18 +371,22 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
                 finally:
                     host.reader_done()
             canonical_key = s.company_row["id"] if s.company_row is not None else "hub"
-            return frames, next_cursor or 0, canonical_key, out["scan_more"]
+            return frames, next_cursor or 0, canonical_key, out["scan_more"], document
 
         async def gen():
             nonlocal cursor
             event = asyncio.Event()
             subscription = None
             ready_announced = False
+            batch = None
+            from bookflow.adapters.http.publication import replace_guard
             try:
                 try:
-                    frames, cursor, key, more = await run_in_threadpool(drain, cursor)
+                    frames, cursor, key, more, document = await run_in_threadpool(drain, cursor)
+                    replace_guard(batch, document)
+                    batch = document
                 except BookflowError as e:
-                    yield f"event: error\ndata: {json.dumps(e.to_dict())}\n\n"
+                    yield f"event: error\ndata: {json.dumps(BookflowError(e.code, details={'stage': 'publication', 'outcome': 'unknown'}).to_dict())}\n\n"
                     return
                 subscription, _ = host.subscribe(key, asyncio.get_running_loop(), event)
                 for frame in frames:
@@ -391,9 +401,11 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
                     before = host.stream_sequence(key)
                     try:
                         await run_in_threadpool(resolve_again)
-                        frames, cursor, canonical_key, more = await run_in_threadpool(drain, cursor)
+                        frames, cursor, canonical_key, more, document = await run_in_threadpool(drain, cursor)
+                        replace_guard(batch, document)
+                        batch = document
                     except BookflowError as e:
-                        yield f"event: error\ndata: {json.dumps(e.to_dict())}\n\n"
+                        yield f"event: error\ndata: {json.dumps(BookflowError(e.code, details={'stage': 'publication', 'outcome': 'unknown'}).to_dict())}\n\n"
                         return
                     if canonical_key != key:  # pragma: no cover - ids are immutable while a route is open
                         raise RuntimeError("the event stream's company identity changed")

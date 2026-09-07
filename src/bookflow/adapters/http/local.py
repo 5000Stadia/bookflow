@@ -104,6 +104,7 @@ class LocalListener:
         from bookflow.core.transfer_resources import TransferLease
         import time
 
+        wire_socket = None
         with conn, TransferLease("", "", lambda lease: None) as lease:
             binary = False
             try:
@@ -123,8 +124,12 @@ class LocalListener:
                     transfer = getattr(self.handler, "transfer", None)
                     if transfer is None:
                         raise BookflowError("E_USAGE", message="Binary forwarding is unavailable.")
-                    transfer(login, envelope, conn, check=lease.check_io)
+                    wire_socket = (AdmittedSocket(conn, self.host.publication_admission, lease.check_io)
+                                   if self.host is not None else conn)
+                    transfer(login, envelope, wire_socket, check=lease.check_io)
                     return
+                wire_socket = (AdmittedSocket(conn, self.host.publication_admission, lease.check_io)
+                                   if self.host is not None else conn)
                 reply = {"output": self.handler(login, envelope)}
             except BookflowError as e:
                 reply = {"error": e.to_dict()}
@@ -132,10 +137,19 @@ class LocalListener:
                 reply = {"error": BookflowError("E_INTERNAL", message="host failure", details={"cause": type(e).__name__}).to_dict()}
             try:
                 if binary:
-                    send_json(conn, reply, check=lease.check_io)
+                    if wire_socket is None:
+                        wire_socket = (AdmittedSocket(conn, self.host.publication_admission, lease.check_io)
+                                   if self.host is not None else conn)
+                    send_json(wire_socket, reply, check=lease.check_io)
                 else:
                     payload = json.dumps(reply, default=str).encode("utf-8")
-                    conn.sendall(len(payload).to_bytes(4, "big") + payload)
+                    if wire_socket is None:
+                        wire_socket = (AdmittedSocket(conn, self.host.publication_admission, lease.check_io)
+                                   if self.host is not None else conn)
+                    if self.host is None:
+                        conn.sendall(len(payload).to_bytes(4, "big") + payload)
+                    else:
+                        wire.write(wire_socket, len(payload).to_bytes(4, "big") + payload)
             except (OSError, BookflowError):
                 pass
 
@@ -179,3 +193,59 @@ def context_from_envelope(envelope: dict[str, Any]) -> Context:
         raw.pop(k, None)
     raw["interface"] = Interface.cli.value
     return Context.model_validate(raw)
+
+
+class AdmittedSocket:
+    """Operation-owned nonblocking socket; caller-stream callbacks stay outside gate.
+
+    The generation precedes execution/staging. This private conservative envelope
+    cancels the operation on any barrier; future commit wiring must supply fresh
+    OS publication authority for supported own-effect responses.
+    """
+    def __init__(self, conn, gate, check):
+        self.conn, self.gate, self.check = conn, gate, check
+        self.timeout = conn.gettimeout()
+        conn.setblocking(False)
+        self.generation = gate.begin_validation()
+
+    def gettimeout(self):
+        return self.timeout
+
+    def settimeout(self, value):
+        self.timeout = value
+
+    def _wait(self, *, writing):
+        import select
+        import time
+        deadline = None if self.timeout is None else time.monotonic() + self.timeout
+        while True:
+            self.check()
+            # A fresh comparison acknowledges cancellation even with no peer I/O.
+            frame = self.gate.admit(self.generation, 'local readiness')
+            self.gate.finish(frame)
+            remaining = .05 if deadline is None else min(.05, deadline - time.monotonic())
+            if remaining <= 0:
+                raise socket.timeout()
+            r, w, _ = select.select([] if writing else [self.conn], [self.conn] if writing else [], [], remaining)
+            if r or w:
+                return
+
+    def recv(self, n):
+        while True:
+            self._wait(writing=False)
+            try:
+                return self.conn.recv(n)
+            except BlockingIOError:
+                pass
+
+    def send(self, data):
+        from bookflow.core.publication_admission import FRAME_BYTES
+        self.check()
+        frame = self.gate.admit(self.generation, 'local bytes')
+        chunk = bytes(data[:FRAME_BYTES])
+        while True:
+            count = self.gate.socket_send(frame, self.conn, chunk)
+            if count:
+                self.gate.finish(frame)
+                return count
+            self._wait(writing=True)

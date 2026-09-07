@@ -36,12 +36,16 @@ def protect(document, *, original_response=True):
 
 
 class PublicationMiddleware:
-    def __init__(self, app):
+    def __init__(self, app, *, host=None):
         self.app = app
+        self.host = host
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
+        from .admission import bounded_messages, send_frame
+        gate = self.host.publication_admission if self.host is not None else None
+        integrated = gate is not None and scope.get("bookflow.transport_admission", False)
         guards = []
         token = _guards.set(guards)
         denied, started = False, False
@@ -58,13 +62,23 @@ class PublicationMiddleware:
                         exc.publication_auth_only = True
                     raise
 
+        async def release(message, *, validate=True):
+            for part in bounded_messages(message):
+                generation = gate.begin_validation() if integrated else None
+                if validate:
+                    await run_in_threadpool(check)
+                if integrated:
+                    await send_frame(send, part, gate, generation)
+                else:
+                    await send(part)
+
         async def checked_send(message):
             nonlocal denied, started
             if denied:
                 return
             if message["type"] in {"http.response.start", "http.response.body"}:
                 try:
-                    await run_in_threadpool(check)
+                    await release(message)
                 except BookflowError as exc:
                     if started:
                         # Headers/bytes cannot be recalled. Closing the response
@@ -75,9 +89,12 @@ class PublicationMiddleware:
                                 BookflowError(exc.code, details={"stage": "publication", "outcome": "unknown"}).to_dict())
                     response = JSONResponse(document, status_code=401 if exc.code == "E_UNAUTHENTICATED" else 403,
                         headers={"Cache-Control": "no-store", **({"X-Bookflow-MCP-Version": str(BRIDGE_VERSION)} if scope["path"].startswith("/adapters/mcp") else {})})
-                    await response(scope, receive, send)
+                    async def safe_send(part):
+                        await release(part, validate=False)
+                    await response(scope, receive, safe_send)
                     return
-            await send(message)
+            else:
+                raise ValueError("unsupported response frame")
             if message["type"] == "http.response.start":
                 started = True
 
@@ -85,3 +102,11 @@ class PublicationMiddleware:
             await self.app(scope, receive, checked_send)
         finally:
             _guards.reset(token)
+
+
+def replace_guard(previous, document):
+    """Keep only the current SSE batch certificate, including idle heartbeats."""
+    pending = _guards.get()
+    if pending is not None:
+        pending[:] = [(item, original) for item, original in pending if item is not previous]
+    protect(document)
