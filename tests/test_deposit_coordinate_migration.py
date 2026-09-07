@@ -112,7 +112,7 @@ with open_database(Path(sys.argv[1]),writable=sys.argv[2]=='write') as db:
     (tmp_path/'preservation.json').write_text(json.dumps(dict(before=before,attachments=files),indent=2))
 
 
-@pytest.mark.parametrize('problem',['reserved_case','temp_shadow','temp_trigger','attached_shadow','unknown_guard','copy','raw_mismatch','recreate','fk','publish'])
+@pytest.mark.parametrize('problem',['reserved_case','temp_shadow','temp_trigger','attached_shadow','unknown_guard','copy','raw_mismatch','recreate','external_reference','fk','publish'])
 def test_rejection_preserves_complete_state(old_co22,tmp_path,monkeypatch,problem):
     _,original,_=old_co22
     root=tmp_path/'root';shutil.copytree(original,root)
@@ -133,6 +133,8 @@ def test_rejection_preserves_complete_state(old_co22,tmp_path,monkeypatch,proble
         attached=db.raw.execute('SELECT * FROM owned_aux.deposit_operations').fetchall() if problem=='attached_shadow' else None
         original_exec=db.conn.exec_driver_sql
         def fault(statement,*args,**kw):
+            if problem=='external_reference' and statement.startswith('CREATE VIEW local_coordinate_view'):
+                return original_exec('CREATE VIEW local_coordinate_view AS SELECT id FROM deposit_operation_items')
             if problem=='raw_mismatch' and statement.startswith('INSERT INTO main."_co0023_deposit_operations"'):
                 return original_exec(statement+" WHERE operation_key <> 'C-legacy'",*args,**kw)
             if ((problem=='copy' and statement.startswith('INSERT INTO main."_co0023_')) or
@@ -157,3 +159,26 @@ def test_rejection_preserves_complete_state(old_co22,tmp_path,monkeypatch,proble
         assert tuple(db.raw.iterdump())==before
         assert db.raw.execute('SELECT * FROM temp.sqlite_schema').fetchall()==temp
         if problem=='attached_shadow':assert db.raw.execute('SELECT * FROM owned_aux.deposit_operations').fetchall()==attached
+
+
+def test_only_dependency_closure_ddl_and_external_reference_inspection(old_co22,tmp_path,monkeypatch):
+    _,original,_=old_co22
+    root=tmp_path/'root';shutil.copytree(original,root)
+    path=next(root.glob('organizations/*/Demo Plumbing Co/company.db'))
+    with open_database(path,writable=True) as db:
+        db.raw.execute('CREATE VIEW local_transitive AS SELECT * FROM local_coordinate_view')
+        db.raw.execute('CREATE VIEW unrelated_view AS SELECT * FROM local_raw')
+        db.raw.execute('CREATE TRIGGER unrelated_guard BEFORE DELETE ON local_raw BEGIN SELECT RAISE(ABORT,\'retained\'); END')
+        before=raw(db.raw);commands=[];execute=db.conn.exec_driver_sql
+        def observe(sql,*args,**kw):commands.append(sql);return execute(sql,*args,**kw)
+        with monkeypatch.context() as patch:
+            patch.setattr(db.conn,'exec_driver_sql',observe)
+            migrate_to_head(db,'company',tmp_path/'backups')
+        assert raw(db.raw)==before
+        drops=[s for s in commands if s.startswith('DROP ')]
+        assert 'DROP VIEW main."local_transitive"' in drops
+        assert 'DROP VIEW main."local_coordinate_view"' in drops
+        assert not any('unrelated_' in s or 'posting_lines_no_' in s for s in drops)
+        assert sum(s=='PRAGMA main.foreign_key_list("local_external")' for s in commands)==2
+        assert db.raw.execute('PRAGMA foreign_key_list(local_external)').fetchone()[2]=='deposit_operations'
+        assert db.raw.execute('SELECT count(*) FROM local_transitive').fetchone()[0]==1

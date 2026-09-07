@@ -94,7 +94,10 @@ PAYMENT_TARGETS = {
 }
 
 
-# Private coordinate audit rows are evidence owners, not new annotation targets.
+# Evidence-owner completion applies to historical events too: these fifteen
+# preexisting row kinds now contribute their full transaction roots/current
+# resource requirements. This can deny previously under-authorized history.
+# They are not new public annotation targets or new permission capabilities.
 _COORDINATE_TARGETS = {
     'deposit_profile': ('deposit_profiles','revision_id'),
     'deposit_row_key': ('deposit_row_keys','id'),

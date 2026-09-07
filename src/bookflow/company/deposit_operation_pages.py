@@ -1,7 +1,7 @@
 """Private complete immutable operation collections and binding-owned pages."""
 import json
 from typing import Literal, Generic, TypeVar
-from pydantic import TypeAdapter, JsonValue
+from pydantic import TypeAdapter, JsonValue, ValidationError
 from bookflow.company import schema as c, document_effects as rows, payment_queries as q
 from bookflow.company import deposit_operations as operations, deposit_dependency_history as history
 from bookflow.company.deposit_models import Frozen
@@ -17,6 +17,19 @@ PREVIEW_DOMAIN=b'deposit-coordinate-preview-page-v1\0'
 
 
 Item=TypeVar('Item')
+
+
+class PreviewPage(Frozen):
+    """Logical-reference wire projection of validated per-kind typed items.
+
+    Logical IDs and aggregate/at intentionally are not stored ID/date values;
+    consumers must not parse this projection as an original operation receipt.
+    """
+    kind: Kind
+    items: tuple[dict[str,JsonValue], ...]
+    total_count: int
+    digest: str
+    next_cursor: str | None
 
 
 class OperationPage(Frozen,Generic[Item]):
@@ -98,15 +111,38 @@ def authorized_original(s,saved,binding,*,write=False):
     history.execution_binding(s,binding)
     indexed=rows.rows(s,c.deposit_operation_targets,c.deposit_operation_targets.c.operation_id==saved['id'])
     targets=tuple(sorted(v['transaction_id'] for v in indexed))
-    request=json.loads(saved['request_snapshot'])
-    if not targets or saved['transaction_id'] not in targets or list(targets)!=sorted(request['resolved_transaction_ids']):
-        raise BookflowError('E_INTERNAL',message='Incomplete operation evidence.')
+    # Admit the independently indexed/root evidence before inspecting corrupt
+    # saved JSON. Completeness never becomes a hidden-history disclosure oracle.
+    def admit(ids):
+        try:
+            history._authorize_binding_graph(s,binding,tuple(sorted(set(ids))),write=write)
+        except BookflowError as error:
+            if error.code=='E_PERMISSION':raise BookflowError('E_PERMISSION',details={}) from None
+            raise
+    admit((*targets,saved['transaction_id']))
+    malformed=False
+    resolved=[]
     try:
-        history._authorize_binding_graph(s,binding,targets,write=write)
-    except BookflowError as error:
-        if error.code=='E_PERMISSION':raise BookflowError('E_PERMISSION',details={}) from None
-        raise
-    output=operations.decode_output(saved['effect_snapshot'],saved['command'])
+        request=json.loads(saved['request_snapshot'])
+        resolved=request['resolved_transaction_ids']
+        if type(resolved) is not list or any(type(v) is not str or not v for v in resolved):raise ValueError()
+    except (ValueError,KeyError,TypeError):
+        malformed=True;resolved=[]
+    output=None
+    try:
+        output=operations.decode_output(saved['effect_snapshot'],saved['command'])
+    except (ValueError,TypeError,ValidationError):
+        malformed=True
+    # Admit every recoverable root before diagnosing inconsistent evidence,
+    # including effect roots when request JSON itself is corrupt. Equal roots
+    # need no second check in this same binding/snapshot; this is no cross-read
+    # permission cache and the next page starts with fresh admission.
+    available=set(resolved)
+    if output is not None and output.command=='deposit coordinate':available.update(output.effect.target_ids)
+    admitted=set(targets)|{saved['transaction_id']}
+    if available-admitted:admit((*admitted,*available))
+    if malformed or not targets or saved['transaction_id'] not in targets or list(targets)!=sorted(resolved):
+        raise BookflowError('E_INTERNAL',message='Incomplete operation evidence.')
     if output.operation_id!=saved['id'] or output.current.id!=saved['transaction_id']:
         raise BookflowError('E_INTERNAL')
     if output.command=='deposit coordinate' and output.effect.target_ids!=targets:raise BookflowError('E_INTERNAL')
@@ -143,7 +179,7 @@ def _page(s,values,kind,page,binding,recipe,domain,*,codec=None):
         start=prior['last']+1
     selected=values[start:start+page.limit]
     cursor=history._encode(s,dict(recipe,last=start+len(selected)-1),binding,domain=domain) if start+len(selected)<len(values) else None
-    model=OperationPage[codec] if codec is not None else OperationPage[dict[str,JsonValue]]
+    model=OperationPage[codec] if codec is not None else PreviewPage
     return model.model_validate_json(q.canonical(dict(kind=kind,items=selected,total_count=len(values),digest=recipe['digest'],next_cursor=cursor)))
 
 
@@ -170,6 +206,9 @@ def preview_items(s,ctx,prepared,kind,page):
     # Replace only explicit owner-typed generated references for stable preview
     # continuation. The final receipt retains the physical IDs.
     from bookflow.company.deposit_coordinate_validation import logical_collections
+    # Validate the full physical per-kind codec before the closed logical rewrite.
+    for value in collections(output)[kind]:
+        TypeAdapter(item_type(kind,output)).validate_json(q.canonical(value))
     values=logical_collections(output)[kind]
     return _page(s,values,kind,page,prepared.binding,
         dict(company=s.company_row['id'],fingerprint=prepared.facts_fingerprint,guard=q.digest(prepared.dependency_guard)),PREVIEW_DOMAIN)

@@ -74,9 +74,26 @@ def upgrade():
     if any(name.lower() in names or owner.lower() in names or _mentions(sql, names) for name, owner, sql in temp):
         raise RuntimeError('co0023 temporary operation dependency')
     plans = {table: _plan(connection, table) for table in CHANGES}
-    retained = connection.exec_driver_sql("SELECT type,name,tbl_name,sql FROM main.sqlite_schema WHERE sql IS NOT NULL AND (type IN ('view','trigger') OR (type='index' AND tbl_name IN ('deposit_operations','deposit_operation_items'))) ORDER BY CASE type WHEN 'view' THEN 0 WHEN 'index' THEN 1 ELSE 2 END,name").all()
+    schema_before = connection.exec_driver_sql("SELECT type,name,tbl_name,sql FROM main.sqlite_schema WHERE sql IS NOT NULL").all()
+    # SQLite validates view/trigger references during ALTER TABLE. Include the
+    # transitive view/trigger closure, not unrelated guards. Lexical recognition
+    # is conservative: a literal/comment mention is retained too, since rejecting
+    # an extension SQL dialect is safer than silently missing a real dependency.
+    dependent = set(CHANGES)
+    while True:
+        added = {name.lower() for kind,name,owner,sql in schema_before
+                 if kind in ('view','trigger') and
+                 (owner.lower() in dependent or _mentions(sql,dependent))}
+        if added <= dependent:break
+        dependent.update(added)
+    retained = sorted((row for row in schema_before
+        if (row[0] in ('view','trigger') and row[1].lower() in dependent) or
+           (row[0]=='index' and row[2] in CHANGES)),
+        key=lambda row:({'view':0,'index':1,'trigger':2}[row[0]],row[1]))
+    external_fks = {name: connection.exec_driver_sql(f'PRAGMA main.foreign_key_list({_quote(name)})').all()
+                    for kind,name,_,_ in schema_before if kind=='table'}
     previous = importlib.import_module('bookflow.storage.company_migrations.versions.0021_deposit_operations')
-    guards = {name: sql for kind, name, owner, sql in retained if kind == 'trigger'}
+    guards = {name: sql for kind, name, owner, sql in schema_before if kind == 'trigger'}
     for statement in previous.GUARDS:
         if guards.get(statement.split()[2]) != statement:
             raise RuntimeError('co0023 unknown operation history guard')
@@ -97,6 +114,14 @@ def upgrade():
         connection.exec_driver_sql(f'ALTER TABLE main.{_quote(temporary)} RENAME TO {_quote(table)}')
     for _, _, _, statement in retained:
         connection.exec_driver_sql(statement)
+    schema_after = {(kind,name):(owner,sql) for kind,name,owner,sql in
+        connection.exec_driver_sql("SELECT type,name,tbl_name,sql FROM main.sqlite_schema WHERE sql IS NOT NULL").all()}
+    for kind,name,owner,sql in schema_before:
+        if not (kind=='table' and name in CHANGES) and schema_after.get((kind,name)) != (owner,sql):
+            raise RuntimeError('co0023 changed external schema reference')
+    for name,expected in external_fks.items():
+        if connection.exec_driver_sql(f'PRAGMA main.foreign_key_list({_quote(name)})').all()!=expected:
+            raise RuntimeError('co0023 changed external foreign key reference')
     if connection.exec_driver_sql('PRAGMA main.foreign_key_check').fetchone() is not None:
         raise RuntimeError('co0023 final foreign key check failed')
 

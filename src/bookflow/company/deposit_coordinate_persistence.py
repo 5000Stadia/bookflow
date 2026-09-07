@@ -242,3 +242,13 @@ def recover(s,ctx,inp,binding):
     if saved['command']!='deposit coordinate' or saved['request_hash']!=q.digest(operations.request(inp,ctx,s,'coordinate')):
         return None
     return output.model_copy(update={'changed':False,'new_effect':False,'idempotent_replay':True})
+
+
+def execute_applied(s,ctx,prepared):
+    """Private adapter contract: audit is already written, outer commit is not.
+
+    No registry uses this yet. The caller must not add a second audit event or
+    mark the aggregate finalized before its own transaction has committed.
+    """
+    from bookflow.core.registry import Applied
+    return Applied(output=execute(s,ctx,prepared),touched=[],summary='Coordinate deposit and source',audited=True)

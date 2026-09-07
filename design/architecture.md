@@ -1732,3 +1732,44 @@ remain separate prerequisites.
 Coordinate v2 receipts retain typed complete source before/inserted rows, source-owner effect collections, deposit effects, the generated identity manifest and full transaction authority targets. Recovery revalidates the actual execution binding and the complete saved graph before comparing intent; original effects are immutable and current states are loaded separately. Permanent item pages use explicit per-kind models and authenticated actor/principal-bound cursors. Preview pages apply only declared typed generated-reference substitutions to those collections. Immutable pages authorize the full saved graph on every call and do not reload unused current-state payloads. Coordinate audit row kinds have private scalar/cohort evidence mappings, without adding public annotation target types. Ordinary v1 history and audit encoding remain supported; coordinate history is selected by command/version before decoding.
 
 Company co0023, parent co0022, rebuilds only the two deposit operation tables to extend their command/item CHECKs, retaining raw values and supported local DDL. Shared audit preparation uses the existing encoder and preserves the ordinary writer's default behavior. No public deposit coordinator, draft/provider, Delete, reconciliation activation or permission/publication activation is supplied by these private owners.
+
+Private coordinate persistence exposes `execute_applied` for a future owned adapter:
+its `Applied` is audited and not finalized, since the caller still owns commit.
+No registered command consumes it. Original pages decode complete per-kind models;
+preview pages expose a distinct `PreviewPage` logical-reference projection after
+validating those same complete per-kind models. Logical IDs and `aggregate/at`
+are not stored ID/date values. Saved root/index authority precedes inspecting
+request corruption, and every available request/effect root is admitted before
+reporting completeness differences. This does not activate publication or an API.
+
+co0023 drops/recreates only the transitive dependent view/trigger closure and the
+two rebuilt tables' indexes. Conservative literal/comment identifier mentions
+remain dependencies when SQL syntax cannot disambiguate them. Unrelated guards
+stay installed. Final unchanged external SQL and full foreign-key declarations
+are compared against their original values, in addition to raw-value and FK checks.
+Ordinary deposit validation retains financial/identity checks, the original
+validated no-effect return, then changed-source admission before remaining row
+checks. Ordinary preparation/execution still rejects stale unchanged requests.
+
+The coordinate evidence-owner completion also protects pre-existing audit events;
+it can add roots and deny history previously admitted with incomplete authority.
+It adds these mappings to the private evidence catalog, with no new public target
+or capability and no pure permission-catalog pin refresh:
+
+| Evidence kind | Table | Identity field |
+|---|---|---|
+| deposit_profile | deposit_profiles | revision_id |
+| deposit_row_key | deposit_row_keys | id |
+| deposit_component_key | deposit_component_keys | id |
+| deposit_component | deposit_components | id |
+| deposit_cash_cell | deposit_cash_cells | id |
+| deposit_membership | deposit_memberships | id |
+| bank_effect_key | bank_effect_keys | id |
+| bank_effect_version | bank_effect_versions | id |
+| work_billing_allocation | work_billing_allocations | id |
+| sales_profile | sales_profiles | revision_id |
+| sales_line_profile | sales_line_profiles | document_line_id |
+| sales_tax_component | sales_tax_components | id |
+| sales_tax_line_key | sales_tax_line_keys | line_id |
+| sales_tax_attribution | sales_tax_attributions | revision_id |
+| sales_tax_attribution_line | sales_tax_attribution_lines | document_line_id |
