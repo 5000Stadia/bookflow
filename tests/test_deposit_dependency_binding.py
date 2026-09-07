@@ -215,6 +215,14 @@ def test_private_writer_retains_the_actual_bearer_and_revalidates_before_dml(roo
         body=lifecycle.INPUTS['post'].model_validate(dict(operation_key=key,document=document))
         return lifecycle.prepare(s,ctx,body,'post',binding=credential),s
     plan,admitted=observe(people['bot'],monkeypatch,lambda s:prepare(s,'bound-live'),people['company'])
+    before=_storage(root,database_path(client))
+    wrong_context=Context.new(Interface.http,'wrong fixed principal',on_behalf_of=people['second'])
+    with pytest.raises(BookflowError) as mismatch:
+        with driver.session() as writer_session:
+            s=replace(writer_session,actor=admitted.actor,os_login=admitted.os_login,memberships=admitted.memberships)
+            persistence.execute(s,wrong_context,plan)
+    assert mismatch.value.code=='E_UNAUTHENTICATED'
+    assert _storage(root,database_path(client))==before
     with driver.session() as writer_session:
         s=replace(writer_session,actor=admitted.actor,os_login=admitted.os_login,memberships=admitted.memberships)
         output=persistence.execute(s,ctx,plan)

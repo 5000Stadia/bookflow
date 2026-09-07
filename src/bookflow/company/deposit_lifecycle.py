@@ -64,6 +64,8 @@ def recover(s,ctx,inp,verb,binding):
     """Exact business replay skips its old guard, never current admission."""
     from bookflow.company import deposit_dependency_history as history
     history._authorize_binding_graph(s,binding,(),write=True)
+    if ctx.on_behalf_of != binding.on_behalf_of:
+        raise BookflowError('E_UNAUTHENTICATED')
     saved=operations.find(s,inp.operation_key)
     if saved is not None:
         targets=effects.rows(s,c.deposit_operation_targets,c.deposit_operation_targets.c.operation_id==saved['id'])
