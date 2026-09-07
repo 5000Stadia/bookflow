@@ -94,17 +94,24 @@ def test_preparation_authority_fragment_stays_correlated_and_bound(client, sale,
 
 def test_preparation_ar_currency_and_funding_edges(client, sale, monkeypatch):
     invoice=posted(client,sale['customer'],sale['item'],'10','SQL-FUNDING')
+    posted(client,sale['customer'],sale['item'],'3','SQL-FUNDING-SECOND')
     other=client.account.create(name='SQL other AR',type='accounts_receivable',company=COMPANY)['id']
     request=dict(mode='new_receipt',customer=sale['customer'],date='2026-06-02')
     assert client.run('payment invoices',dict(request,ar_account=other),company=COMPANY)['total_count']==0
     paid=client.run('payment receive',dict(customer=sale['customer'],date='2026-06-03',amount='20',payment_method=method(client),operation_key='sql-funding'),company=COMPANY)
-    credit=dict(mode='existing_credit',payment=paid['id'],date='2026-06-02')
+    credit=dict(mode='existing_credit',payment=paid['id'],date='2026-06-02',limit=1)
     assert client.run('payment suggest',dict(credit,amount='20'),company=COMPANY)['total_count']==0
     page=client.run('payment suggest',dict(credit,date='2026-06-03',amount='20',strategy='exact_then_oldest'),company=COMPANY)
     assert page['items'][0]['amount_minor_units']==1000
+    cursor=page['next_cursor'];assert cursor and page['total_count']==2
     client.run('payment update',dict(payment=paid['id'],expected_version=1,amount='5',operation_key='sql-funding-revised'),company=COMPANY,reason='Correct received amount')
+    with pytest.raises(BookflowError) as error:
+        client.run('payment suggest',dict(credit,date='2026-06-03',amount='20',strategy='exact_then_oldest',cursor=cursor),company=COMPANY)
+    assert error.value.code=='E_QUERY_STALE'
     page=client.run('payment suggest',dict(credit,date='2026-06-03',amount='20',strategy='exact_then_oldest'),company=COMPANY)
     assert page['items'][0]['amount_minor_units']==500
+    client.run('payment update',dict(payment=paid['id'],expected_version=2,date='2026-06-04',operation_key='sql-funding-redated'),company=COMPANY,reason='Correct receipt date')
+    assert client.run('payment suggest',dict(credit,date='2026-06-03',amount='20',strategy='exact_then_oldest'),company=COMPANY)['total_count']==0
     # Currency mismatch is a read-context equivalence witness, not a foreign
     # currency posting claim; production only posts the owning home currency.
     owning=payment_selection.context
