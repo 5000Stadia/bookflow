@@ -140,6 +140,7 @@ class UserRow:
 class OrganizationRow:
     id: str
     version: int
+    pending_path: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +148,7 @@ class CompanyRow:
     id: str
     organization_id: str
     version: int
+    pending_path: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,6 +266,59 @@ class SnapshotPair:
     visibility_policy_revision: str
 
 
+@dataclass(frozen=True, slots=True)
+class ScopeRows:
+    organizations: tuple[OrganizationRow, ...] = ()
+    companies: tuple[CompanyRow, ...] = ()
+    remove_organizations: tuple[str, ...] = ()
+    remove_companies: tuple[str, ...] = ()
+    remove_memberships: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ScopeObservation:
+    scope: c.ScopeKey
+    raw_present: bool
+    logical_present: bool
+    raw_parent: str | None
+    pending_path: str | None
+    retirement: Literal['none', 'own', 'parent', 'own_and_parent']
+
+
+@dataclass(frozen=True, slots=True)
+class LogicalObservation:
+    source_stamp: ReadStamp
+    scopes: tuple[ScopeObservation, ...]
+    memberships: tuple[a.MembershipSlot, ...]
+    live_organizations: tuple[str, ...]
+    live_companies: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedPair:
+    snapshot: SnapshotPair
+    old_observation: LogicalObservation
+    new_observation: LogicalObservation
+
+
+def _retired(pending):
+    """Platform-independent lexical classification, preserving the raw value."""
+    if pending is None:
+        return False
+    if type(pending) is not str or not pending or '\x00' in pending or re.match(r'^[A-Za-z]:', pending):
+        _fail('invalid_facts', 'pending_path')
+    parts = re.split(r'[\\/]', pending)
+    if any(part in ('', '.', '..') for part in parts) or parts == ['trash']:
+        _fail('invalid_facts', 'pending_path')
+    return parts[0] == 'trash'
+
+
+def _retirement_sets(orgs, companies):
+    retired_orgs = {x.id for x in orgs if _retired(x.pending_path)}
+    retired_companies = {x.id for x in companies if _retired(x.pending_path) or x.organization_id in retired_orgs}
+    return retired_orgs, retired_companies
+
+
 # Independently selected key/parent projections, not extracted from the row query.
 _KEY_SQL = (
     ('users', 'SELECT id FROM main.users ORDER BY id'),
@@ -333,6 +388,8 @@ def _validate(rows, keys, catalog):
             for name in ('version','epoch'):
                 if hasattr(row,name) and not (type(getattr(row,name)) is int and 1 <= getattr(row,name) <= 9223372036854775807):
                     _fail('invalid_facts','version')
+    for row in (*orgs, *companies):
+        _retired(row.pending_path)
     member_keys = set()
     for row in members:
         key = (row.user_id,row.scope_type,row.scope_id)
@@ -433,16 +490,70 @@ def _patch_rows(original, changes, *, field, key, immutable=(), insert=False):
     return tuple(records[identity] for identity in sorted(records))
 
 
+def _scope_rows(old, scopes, changes):
+    if scopes is None:
+        return old.organizations, old.companies, old.memberships, old.keys
+    _decode(scopes, ScopeRows, 'scopes', native=True)
+    removals = (scopes.remove_organizations, scopes.remove_companies, scopes.remove_memberships)
+    originals = (old.keys.organizations, tuple(x[0] for x in old.keys.companies), tuple(x[0] for x in old.keys.memberships))
+    patches = (scopes.organizations, scopes.companies, changes.memberships)
+    for removed, original, patch in zip(removals, originals, patches):
+        if len(set(removed)) != len(removed) or not set(removed) <= set(original) or set(removed) & {x.id for x in patch}:
+            _fail('invalid_facts', 'scope_removals')
+    removed_orgs, removed_companies, removed_members = map(set, removals)
+    if any(x.organization_id in removed_orgs and x.id not in removed_companies for x in old.companies):
+        _fail('invalid_facts', 'scope_removals')
+    expected_members = {x.id for x in old.memberships if x.scope_id in (removed_orgs if x.scope_type == 'organization' else removed_companies)}
+    if removed_members != expected_members:
+        _fail('invalid_facts', 'scope_removals')
+    orgs = _patch_rows(tuple(x for x in old.organizations if x.id not in removed_orgs), scopes.organizations,
+                       field='organizations', key=lambda x: x.id, insert=True)
+    companies = _patch_rows(tuple(x for x in old.companies if x.id not in removed_companies), scopes.companies,
+                            field='companies', key=lambda x: x.id, immutable=('organization_id',), insert=True)
+    retired_orgs, retired_companies = _retirement_sets(old.organizations, old.companies)
+    new_retired_orgs, new_retired_companies = _retirement_sets(orgs, companies)
+    for original, patch, retired, new_retired in (
+        (old.organizations, scopes.organizations, retired_orgs, new_retired_orgs),
+        (old.companies, scopes.companies, retired_companies, new_retired_companies)):
+        prior = {x.id: x for x in original}
+        for row in patch:
+            previous = prior.get(row.id)
+            if previous is None and row.id in new_retired:
+                _fail('invalid_facts', 'retirement')
+            if previous is not None and row.id in retired and row.pending_path != previous.pending_path:
+                _fail('invalid_facts', 'retirement')
+    # Transform OLD independently selected keys separately from row materialization.
+    org_keys = (set(old.keys.organizations) - removed_orgs) | {x.id for x in scopes.organizations}
+    company_keys = {i: parent for i, parent in old.keys.companies if i not in removed_companies}
+    company_keys.update((x.id, x.organization_id) for x in scopes.companies)
+    keys = replace(old.keys, organizations=tuple(sorted(org_keys)), companies=tuple(sorted(company_keys.items())),
+                   memberships=tuple(x for x in old.keys.memberships if x[0] not in removed_members))
+    return orgs, companies, tuple(x for x in old.memberships if x.id not in removed_members), keys
+
+
 def derive_proposal(old: RootFacts, *, old_catalog: CatalogBundle,
                     new_catalog: CatalogBundle, changes: ProposalRows,
                     generation: int,
                     full_defaults: tuple[c.DefaultEntry, ...] | None = None) -> DerivedFacts:
-    """Pure B2 construction from trusted current-transaction loaded OldFacts.
+    """Pure ordinary proposal; scope rosters and pending paths remain unchanged."""
+    return _derive(old, old_catalog, new_catalog, changes, generation, full_defaults, None)
 
-    Both initiating and final proposals must use that same old anchor. Public
-    constructors/digests do not authenticate it. Admission, semantic increments,
-    visibility, tokens/audit and final SQL observation remain coordinator-owned.
+
+def derive_scope_proposal(old: RootFacts, *, old_catalog: CatalogBundle,
+                          new_catalog: CatalogBundle, scopes: ScopeRows,
+                          changes: ProposalRows, generation: int,
+                          full_defaults: tuple[c.DefaultEntry, ...] | None = None) -> DerivedFacts:
+    """Pure structural projection, never operation admission or SQL observation.
+
+    Initiating and final effects must both use the same trusted loaded old root.
+    No public dataclass or matching digest authenticates that origin/freshness.
     """
+    if type(scopes) is not ScopeRows:
+        _fail('invalid_type', 'scopes')
+    return _derive(old, old_catalog, new_catalog, changes, generation, full_defaults, scopes)
+
+
+def _derive(old, old_catalog, new_catalog, changes, generation, full_defaults, scopes):
     try:
         _validated_root(old, old_catalog)
         _decode(changes, ProposalRows, 'changes', native=True)
@@ -452,27 +563,36 @@ def derive_proposal(old: RootFacts, *, old_catalog: CatalogBundle,
         bundle_digest = _bundle(new_catalog)
         defaults = old.role_defaults if full_defaults is None else _decode(full_defaults, tuple[c.DefaultEntry, ...], 'defaults', native=True)
         actual = c._normal_catalog(replace(new_catalog.descriptor, defaults=defaults))
+        orgs, companies, original_members, original_keys = _scope_rows(old, scopes, changes)
         users = _patch_rows(old.users, changes.users, field='users', key=lambda x: x.id,
                             immutable=('kind', 'hub_admin', 'owner_user_id'))
-        members = _patch_rows(old.memberships, changes.memberships, field='memberships', key=lambda x: x.id,
+        members = _patch_rows(original_members, changes.memberships, field='memberships', key=lambda x: x.id,
                               immutable=('user_id', 'scope_type', 'scope_id'), insert=True)
         assignments = _patch_rows(old.assignments, changes.assignments, field='assignments',
                                  key=lambda x: (x.agent_user_id, x.principal_user_id), insert=True)
         authorities = _patch_rows(old.authorities, changes.authorities, field='authorities', key=lambda x: x.agent_user_id)
         # Expected proposal keys start from independently read OLD keys. Only
         # explicit allowed insertions/default replacement can change this set.
-        member_keys = set(old.keys.memberships)
+        member_keys = set(original_keys.memberships)
         member_ids = {x[0] for x in member_keys}
         for row in changes.memberships:
             if row.id not in member_ids:
-                if row.user_id not in old.keys.users or row.scope_id not in (old.keys.organizations if row.scope_type == 'organization' else dict(old.keys.companies)):
+                if row.user_id not in old.keys.users or row.scope_id not in (original_keys.organizations if row.scope_type == 'organization' else dict(original_keys.companies)):
                     _fail('invalid_facts', 'memberships')
                 member_keys.add((row.id, row.user_id, row.scope_type, row.scope_id))
-        keys = replace(old.keys, memberships=tuple(sorted(member_keys)),
+        keys = replace(original_keys, memberships=tuple(sorted(member_keys)),
                        assignments=tuple(sorted(set(old.keys.assignments) | {(x.agent_user_id, x.principal_user_id) for x in changes.assignments})),
                        defaults=tuple(sorted((x.role, x.requirement.capability, x.requirement.threshold) for x in defaults)))
-        rows = (users, old.organizations, old.companies, members, assignments, authorities, actual.defaults)
+        rows = (users, orgs, companies, members, assignments, authorities, actual.defaults)
         _validate(rows, keys, actual)
+        if scopes is not None:
+            retired_orgs, retired_companies = _retirement_sets(orgs, companies)
+            prior = {x.id: x for x in old.memberships}
+            for row in changes.memberships:
+                previous = prior.get(row.id)
+                if previous is None or (previous.revoked_at is not None and row.revoked_at is None):
+                    if row.scope_id in (retired_orgs if row.scope_type == 'organization' else retired_companies):
+                        _fail('invalid_facts', 'memberships')
         stamp = ReadStamp(old.stamp.hub_revision, generation, 'policy_v1',
                           c.catalog_manifest(actual).descriptor_sha256, _rows_digest(rows), bundle_digest)
         return DerivedFacts(RootFacts(stamp, keys, *rows, actual), old.stamp)
@@ -482,38 +602,92 @@ def derive_proposal(old: RootFacts, *, old_catalog: CatalogBundle,
         _fail('invalid_facts', 'proposal')
 
 
+def _observe(root, scopes, subjects):
+    orgs = {x.id: x for x in root.organizations}
+    companies = {x.id: x for x in root.companies}
+    retired_orgs, retired_companies = _retirement_sets(root.organizations, root.companies)
+    observed = []
+    for scope in scopes:
+        if scope.kind == 'hub':
+            observed.append(ScopeObservation(scope, True, True, None, None, 'none'))
+            continue
+        row = (companies if scope.kind == 'company' else orgs).get(scope.id)
+        own = bool(row and _retired(row.pending_path))
+        parent = bool(row and scope.kind == 'company' and row.organization_id in retired_orgs)
+        reason = 'own_and_parent' if own and parent else 'own' if own else 'parent' if parent else 'none'
+        observed.append(ScopeObservation(scope, row is not None, row is not None and not (own or parent),
+                        row.organization_id if row and scope.kind == 'company' else None,
+                        row.pending_path if row else None, reason))
+    live = {x.scope for x in observed if x.logical_present}
+    members = {(x.user_id, c.ScopeKey(x.scope_type, x.scope_id)): x for x in root.memberships if x.revoked_at is None}
+    slots = tuple(a.MembershipSlot(who, scope,
+        a.Membership(members[who, scope].role, _policy(members[who, scope], root.catalog))
+        if who in root.keys.users and scope in live and (who, scope) in members else None)
+        for who in subjects for scope in scopes if scope.kind in ('organization', 'company'))
+    live_orgs = tuple(sorted(set(orgs) - retired_orgs))
+    live_companies = tuple(sorted((x.id, x.organization_id) for x in root.companies if x.id not in retired_companies))
+    if {x.scope.id for x in observed if x.scope.kind == 'organization' and x.logical_present} != set(live_orgs) or {
+            (x.scope.id, x.raw_parent) for x in observed if x.scope.kind == 'company' and x.logical_present} != set(live_companies):
+        _fail('source_incomplete', 'observation')
+    return LogicalObservation(root.stamp, tuple(observed), slots, live_orgs, live_companies)
+
+
+def observe_pair(old: RootFacts, proposed: RootFacts, *, old_catalog: CatalogBundle,
+                 new_catalog: CatalogBundle, visibility: VisibilityProvider | None) -> ObservedPair:
+    """Complete raw-union observations and the supported live-union A comparison."""
+    for root, bundle in ((old, old_catalog), (proposed, new_catalog)):
+        _validated_root(root, bundle)
+    if visibility is None or not callable(getattr(visibility, 'facts', None)):
+        _fail('visibility_unresolved', 'visibility')
+    raw_orgs = set(old.keys.organizations) | set(proposed.keys.organizations)
+    raw_companies = {x[0] for root in (old, proposed) for x in root.keys.companies}
+    subjects = tuple(sorted(set(old.keys.users) | set(proposed.keys.users)))
+    agents = sorted({x.id for root in (old, proposed) for x in root.users if x.kind == 'agent'})
+    raw_scopes = tuple(sorted((c.ScopeKey('hub', 'root'),
+        *(c.ScopeKey('organization', x) for x in raw_orgs),
+        *(c.ScopeKey('future_company', x) for x in raw_orgs),
+        *(c.ScopeKey('company', x) for x in raw_companies)), key=c._scope_key))
+    observations = tuple(_observe(root, raw_scopes, subjects) for root in (old, proposed))
+    orgs = sorted({x for obs in observations for x in obs.live_organizations})
+    companies = sorted({x[0] for obs in observations for x in obs.live_companies})
+    scopes = {c.ScopeKey('hub', 'root'), *(c.ScopeKey('organization', x) for x in orgs),
+              *(c.ScopeKey('future_company', x) for x in orgs), *(c.ScopeKey('company', x) for x in companies)}
+    manifests = []; phases = []; revisions = []
+    for root, bundle, obs in zip((old, proposed), (old_catalog, new_catalog), observations):
+        supplied = visibility.facts(root, raw_scopes, subjects)
+        if (type(supplied) is not VisibilityFacts or type(supplied.policy_revision) is not str
+                or not supplied.policy_revision or type(supplied.rows) is not tuple):
+            _fail('visibility_unresolved', 'visibility')
+        _decode(supplied, VisibilityFacts, 'visibility', native=True)
+        values = {(x.subject, x.scope): x for x in supplied.rows}
+        present = {x.scope for x in obs.scopes if x.logical_present}
+        if len(values) != len(supplied.rows) or set(values) != {(who, scope) for who in subjects for scope in raw_scopes}:
+            _fail('visibility_unresolved', 'visibility')
+        if any(x.visible and (x.subject not in root.keys.users or x.scope not in present) for x in supplied.rows):
+            _fail('visibility_unresolved', 'visibility')
+        revisions.append(supplied.policy_revision)
+        manifests.append(a.PhaseManifest(obs.live_organizations, obs.live_companies,
+            tuple((x.id, x.kind) for x in root.users), c.catalog_manifest(root.catalog, bundle.exclusions)))
+        uu = {x.id: x for x in root.users}; cc = dict(obs.live_companies); aa = {x.agent_user_id: x for x in root.authorities}
+        phases.append(a.Phase(root.catalog,
+            tuple(a.OrganizationSlot(x, x in obs.live_organizations) for x in orgs),
+            tuple(a.CompanySlot(x, x in cc, cc.get(x)) for x in companies),
+            tuple(a.SubjectSlot(x, a.Subject(uu[x].kind, uu[x].active, uu[x].hub_admin) if x in uu else None) for x in subjects),
+            tuple(x for x in obs.memberships if x.scope in scopes),
+            tuple(x for x in supplied.rows if x.scope in scopes),
+            tuple(a.AgentSlot(x, a.AgentState(aa[x].suspended_at is not None,
+                tuple(sorted(y.principal_user_id for y in root.assignments if y.agent_user_id == x and y.revoked_at is None and uu[y.principal_user_id].active))) if x in aa else None) for x in agents)))
+    if revisions[0] != revisions[1]:
+        _fail('visibility_unresolved', 'visibility')
+    try:
+        comparison = a.validate_comparison(a.ComparisonInput(a.Expected(*manifests), *phases))
+    except c.PolicyInputError as exc:
+        _fail('invalid_comparison', exc.field)
+    return ObservedPair(SnapshotPair(old, proposed, comparison, revisions[0]), *observations)
+
+
 def assemble_pair(old: RootFacts, proposed: RootFacts, *, old_catalog: CatalogBundle,
                   new_catalog: CatalogBundle, visibility: VisibilityProvider | None) -> SnapshotPair:
-    """Strict policy-to-policy assembly. Legacy activation needs its later owner."""
-    for root,bundle in ((old,old_catalog),(proposed,new_catalog)):
-        _validated_root(root, bundle)
-    if visibility is None or not callable(getattr(visibility,'facts',None)):
-        _fail('visibility_unresolved','visibility')
-    orgs = sorted(set(old.keys.organizations)|set(proposed.keys.organizations))
-    companies = sorted({x[0] for root in (old,proposed) for x in root.keys.companies})
-    subjects = tuple(sorted(set(old.keys.users)|set(proposed.keys.users)))
-    agents = sorted({x.id for root in (old,proposed) for x in root.users if x.kind=='agent'})
-    scopes = tuple(sorted((c.ScopeKey('hub','root'), *(c.ScopeKey('organization',x) for x in orgs), *(c.ScopeKey('future_company',x) for x in orgs), *(c.ScopeKey('company',x) for x in companies)),key=c._scope_key))
-    manifests=[]; phases=[]; revisions=[]
-    for root,bundle in ((old,old_catalog),(proposed,new_catalog)):
-        supplied = visibility.facts(root,scopes,subjects)
-        if type(supplied) is not VisibilityFacts or type(supplied.policy_revision) is not str or not supplied.policy_revision or type(supplied.rows) is not tuple:
-            _fail('visibility_unresolved','visibility')
-        revisions.append(supplied.policy_revision)
-        manifests.append(a.PhaseManifest(root.keys.organizations,root.keys.companies,tuple((x.id,x.kind) for x in root.users),c.catalog_manifest(root.catalog,bundle.exclusions)))
-        uu={x.id:x for x in root.users}; cc=dict(root.keys.companies); mm={(x.user_id,c.ScopeKey(x.scope_type,x.scope_id)):x for x in root.memberships if x.revoked_at is None}
-        aa={x.agent_user_id:x for x in root.authorities}
-        phases.append(a.Phase(root.catalog,
-            tuple(a.OrganizationSlot(x,x in root.keys.organizations) for x in orgs),
-            tuple(a.CompanySlot(x,x in cc,cc.get(x)) for x in companies),
-            tuple(a.SubjectSlot(x,a.Subject(uu[x].kind,uu[x].active,uu[x].hub_admin) if x in uu else None) for x in subjects),
-            tuple(a.MembershipSlot(x,s,a.Membership(mm[x,s].role,_policy(mm[x,s],root.catalog)) if (x,s) in mm else None) for x in subjects for s in scopes if s.kind in ('organization','company')),
-            supplied.rows,
-            tuple(a.AgentSlot(x,a.AgentState(aa[x].suspended_at is not None,tuple(sorted(y.principal_user_id for y in root.assignments if y.agent_user_id==x and y.revoked_at is None and uu[y.principal_user_id].active))) if x in aa else None) for x in agents)))
-    if revisions[0]!=revisions[1]:
-        _fail('visibility_unresolved','visibility')
-    try:
-        comparison=a.validate_comparison(a.ComparisonInput(a.Expected(*manifests),*phases))
-    except c.PolicyInputError as exc:
-        _fail('invalid_comparison',exc.field)
-    return SnapshotPair(old,proposed,comparison,revisions[0])
+    """Strict policy comparison; legacy activation and live governance remain external."""
+    return observe_pair(old, proposed, old_catalog=old_catalog, new_catalog=new_catalog,
+                        visibility=visibility).snapshot
