@@ -143,7 +143,7 @@ def decode_recipe(s, token, original_request, binding):
         raise invalid_guard()
     if isinstance(original, InspectionRoot) and recipe.root != original:
         raise invalid_guard()
-    needs_issuer = not isinstance(original, InspectionRoot) and original.command == 'deposit post'
+    needs_issuer = _needs_issuer(original)
     if needs_issuer != (recipe.issuer_entry is not None):
         raise invalid_guard()
     return recipe
@@ -327,8 +327,29 @@ def _project(kind, value, fields=None):
                 decoded = SnapshotField.model_validate_json(canonical(captured))
                 if decoded.definition_id != key:
                     raise MissingHistory('foreign captured custom value')
+        if kind=='source_customer' and 'contacts' in (fields or ()):
+            # parties._plan_contacts inserts sparse new contacts; its owning
+            # SQL columns below default to NULL. Old audit images retain that
+            # sparse input while current reads contain the materialized NULLs.
+            optional=('salutation','middle_name','last_name','job_title','work_phone','home_phone',
+                      'mobile_phone','other_phone','work_fax','home_fax','primary_email',
+                      'secondary_email','website','external_handle','first_name')
+            contacts=value.get('contacts')
+            if type(contacts) is not list:raise MissingHistory('malformed source contacts')
+            normalized=[]
+            for row in contacts:
+                if type(row) is not dict or type(row.get('points')) is not list:
+                    raise MissingHistory('malformed source contact points')
+                normalized.append({**dict.fromkeys(optional),**row,'points':[
+                    {'custom_label':None,**point} if type(point) is dict else point for point in row['points']]})
+            value={**value,'contacts':normalized}
         if kind in SOURCE_OWNERS:
             _source_image_types(kind,value,fields)
+        if kind == 'source_unit':
+            value = dict(value)
+            for field in fields or ():
+                if field.startswith('unit_selector:'):
+                    value[field] = _unit_matches(value, field[len('unit_selector:'):])
         table = c.metadata.tables[owner.table]
         required = fields or owner.fields or tuple(column.name for column in table.c if column.name not in _PROVENANCE)
         result = {}
@@ -426,7 +447,7 @@ class History:
         table = c.metadata.tables[owner.table]
         self.raw[kind] = {row[owner.key]: dict(row) for row in self.s.company.conn.execute(sa.select(table)).mappings()}
         if kind in SOURCE_OWNERS:
-            self.raw[kind] = {key:_source_owner_image(self.s, kind, value) for key,value in self.raw[kind].items()}
+            self.raw[kind] = {key:json.loads(canonical(_source_owner_image(self.s, kind, value))) for key,value in self.raw[kind].items()}
         self.entries[kind] = {}
         # No unbounded ID binding list. These per-kind scans include historical
         # identities that no longer have a projection; only selected dependencies
@@ -472,7 +493,7 @@ class History:
 
     def chain(self, kind, identity):
         self.load(kind)
-        result = []; previous = None; seen = set(); version = None
+        result = []; previous = None; seen = set(); version = None; unit_children = {}
         if kind=='source_price_version':self._price_chain_fields=self.source_fields[kind,identity]
         for entry in self.entries[kind].get(identity, ()):
             if self.cutoff is not None and entry['seq'] > self.cutoff:
@@ -484,6 +505,10 @@ class History:
             seen.add(entry['event_id'])
             after = _audit_image(entry['after'])
             before = _audit_image(entry['before'])
+            if kind == 'source_unit' and any(field.startswith('unit_selector:') for field in self.source_fields.get((kind,identity),())):
+                if before is not None:
+                    before = _complete_unit_image(before, dict(unit_children))
+                after = _complete_unit_image(after, unit_children)
             projected = self.project(kind, after)
             if kind == 'transaction':
                 projected['commercial'] = self.commercial(after, entry['seq'])
@@ -588,6 +613,15 @@ class History:
 
 
 from bookflow.company.deposit_dependency_models import ReadSet, RelationAnchor
+
+
+def _needs_issuer(original):
+    if isinstance(original, InspectionRoot):
+        return False
+    return (original.command == 'deposit post' or
+            isinstance(original, CoordinateRequest) and
+            original.input.source_action.kind == 'sales_receipt_update' and
+            original.input.source_action.input.refresh_defaults)
 
 
 def _readset(s, original, *, endpoint=None, historical=False, allow_missing_selectors=False, issuer_entry=None):
@@ -775,7 +809,7 @@ def _readset(s, original, *, endpoint=None, historical=False, allow_missing_sele
     if document is not None:
         _number_dependencies(history, original, relation, transactions)
     issuer = None
-    if new_post:
+    if _needs_issuer(original):
         try:
             issuer, history.issuer_events = _issuer(s, issuer_entry, historical=historical)
         except MissingHistory:
@@ -1140,8 +1174,8 @@ def _source_update_dependencies(history, inp, select, relation):
     controls=['use_classes','prompt_for_class','enable_price_levels','units_of_measure_mode']
     if refresh:
         controls.extend(Preferences.model_fields)
-        # The owning refresh copies these audited issuer facts. display_name is
-        # the separately unresolved source-copy/hub-anchor seam (U2).
+        # The owning refresh copies these audited issuer facts. The pinned
+        # display name is covered separately by the selected hub-name anchor.
         controls.extend(column.name for column in c.company_info.c
                         if column.name in ('legal_name', 'home_currency')
                         or column.name.startswith(('address_', 'legal_address_', 'ship_address_')))
@@ -1282,8 +1316,55 @@ def _source_owner_image(s, kind, row):
         return pricing.aggregate_snapshot(row,pricing._children(s.company,row['id']))
     if kind=='source_unit':
         from bookflow.company import units
-        return units.aggregate_snapshot(row,units._children(s.company,row['id']))
+        children=units._children(s.company,row['id'])
+        result=units.aggregate_snapshot(row,children)
+        result['_unit_selector_rows']=[units._child_output(child).model_dump(mode='python') for child in children]
+        return result
     return row
+
+
+def _complete_unit_image(value, known):
+    if not isinstance(value,dict) or type(value.get('units')) is not list or type(value.get('_units_identities')) is not list:
+        raise MissingHistory('missing complete unit identities')
+    for row in value['units']:
+        if type(row) is not dict or type(row.get('id')) is not str:
+            raise MissingHistory('malformed unit history')
+        known[row['id']]=row
+    rows=[];seen=set()
+    for identity in value['_units_identities']:
+        if (type(identity) is not dict or set(identity)!={'id','active'} or
+            type(identity['id']) is not str or type(identity['active']) is not bool or
+            identity['id'] in seen or identity['id'] not in known):
+            raise MissingHistory('incomplete retired unit history')
+        seen.add(identity['id'])
+        rows.append({**known[identity['id']],'active':identity['active']})
+    return {**value,'_unit_selector_rows':rows}
+
+
+def _unit_matches(value, selector):
+    from bookflow.company.units import UnitConversionOutput
+    from bookflow.company.list_service import normalize_lookup_key
+    try:
+        rows=[UnitConversionOutput.model_validate(row) for row in value.get('_unit_selector_rows',value['units'])]
+        if len({row.id for row in rows})!=len(rows):
+            raise MissingHistory('duplicate unit identity')
+    except (KeyError, TypeError, ValidationError) as exc:
+        raise MissingHistory('malformed unit selector history') from exc
+    return sorted(row.id for row in rows if selector in
+                  (normalize_lookup_key(row.name),normalize_lookup_key(row.abbreviation)))
+
+
+def _source_raw_child(table, row, owner_field, owner_id):
+    if type(row) is not dict or row.get(owner_field)!=owner_id:
+        raise MissingHistory('foreign source child owner')
+    for column in table.c:
+        if column.name not in row:
+            raise MissingHistory('missing source child field')
+        value=row[column.name]
+        if value is None:
+            if not column.nullable:raise MissingHistory('null source child field')
+        elif column.type.python_type in (str,int,bool) and type(value) is not column.type.python_type:
+            raise MissingHistory('malformed source child scalar')
 
 
 def _source_image_types(kind,value,fields):
@@ -1306,6 +1387,37 @@ def _source_image_types(kind,value,fields):
             if type(item) is not list or any(type(row) is not dict or type(row.get('id')) is not str for row in item):
                 raise MissingHistory('malformed source child collection')
             if len({row['id'] for row in item})!=len(item):raise MissingHistory('duplicate source child identity')
+            if key in ('shipping_addresses','contacts'):
+                table=c.customer_addresses if key=='shipping_addresses' else c.customer_contacts
+                for row in item:
+                    _source_raw_child(table,row,'customer_id',value['id'])
+                    if key=='contacts':
+                        points=row.get('points')
+                        if type(points) is not list or len({point.get('id') for point in points if type(point) is dict})!=len(points):
+                            raise MissingHistory('malformed source contact points')
+                        for point in points:_source_raw_child(c.customer_contact_points,point,'contact_id',row['id'])
+            if key in ('items','members'):
+                expected={'id','position','active','item_id','price','percent','adjustment_basis'} if key=='items' else {'id','position','active','component_item_id','quantity','unit_id'}
+                for row in item:
+                    if set(row)!=expected or type(row['position']) is not int or row['position']<0 or type(row['active']) is not bool:
+                        raise MissingHistory('malformed source logical child')
+                    identity=row['item_id'] if key=='items' else row['component_item_id']
+                    from bookflow.core.ids import is_ulid
+                    if not is_ulid(identity):raise MissingHistory('malformed source child target')
+                    if key=='items':
+                        if row['adjustment_basis'] not in ('standard_price','cost','current_custom_price'):
+                            raise MissingHistory('malformed source price basis')
+                        _source_image_types(kind,row,('price','percent'))
+                    else:
+                        from bookflow.core.exact import parse_quantity_micro_units
+                        try:parse_quantity_micro_units(row['quantity'])
+                        except (TypeError,ValueError,BookflowError) as exc:raise MissingHistory('malformed source member quantity') from exc
+                        if row['unit_id'] is not None and not is_ulid(row['unit_id']):raise MissingHistory('malformed source member unit')
+            if key=='units':
+                from bookflow.company.units import UnitConversionOutput
+                try:
+                    for row in item:UnitConversionOutput.model_validate(row)
+                except ValidationError as exc:raise MissingHistory('malformed source unit child') from exc
 
 
 class SourceReads:
@@ -1390,10 +1502,17 @@ def _source_line_dependencies(reads, select, inp, old, old_header, header, info,
     if fields.needs('description',changed) and 'description' not in fields.supplied:
         reads.read('source_item',identity,'description')
     if fields.needs('unit',changed) or refresh:
-        same=old is not None and old.unit is not None and inp.unit==old.unit.id
+        saved_unit=old.unit if old else None
+        selector=inp.unit if 'unit' in fields.supplied else None if fields.needs('unit',changed) else saved_unit.id if saved_unit else None
+        same=saved_unit is not None and selector==saved_unit.id
+        if saved_unit and selector is not None and not same:
+            from bookflow.company.list_service import normalize_lookup_key
+            field='unit_selector:'+normalize_lookup_key(selector)
+            value=reads.read('source_unit',saved_unit.set_id,field)
+            same=value is not None and value[field]==[saved_unit.id]
         if info['units_of_measure_mode']!='disabled' and not (same and not changed and not refresh and 'unit' not in fields.defaults):
             value=reads.read('source_item',identity,'unit_of_measure_set_id')
-            if value and value['unit_of_measure_set_id'] and info['units_of_measure_mode']!='disabled':
+            if value and value['unit_of_measure_set_id']:
                 unit=value['unit_of_measure_set_id'];image=reads.image('source_unit',unit)
                 if image is None:reads.read('source_unit',unit,'units')
                 else:reads.read('source_unit',unit,*[key for key in image if key not in _PROVENANCE and not key.startswith('_')])

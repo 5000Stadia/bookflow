@@ -337,6 +337,9 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
               or k.startswith(('address_', 'legal_address_', 'ship_address_'))}
     if old_revision and not inp.refresh_defaults:
         issuer = json.loads(old_revision['issuer_snapshot'])
+    else:
+        # Dispatch pins the authorized name for preparation and validation.
+        issuer['display_name'] = s.company_row['display_name']
     old_lines = saved_lines(s, old_revision) if old_revision else []
     prior = {line['line_id']: line for line in old_lines}
     entered = inp.lines if inp.lines is not None else [SalesLineInput(item=line['item_id'], line_id=line['line_id']) for line in old_lines]

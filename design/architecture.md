@@ -1640,5 +1640,29 @@ has explicit negative relations. The private persister retains the existing
 preview credential and revalidates its produced guard without inserting internal
 guard fields into original request provenance. These readers do not write or
 repair company copies. Full-C audience/publication integration, public deposit
-commands, source coordination/all-active cancellation and performance acceptance
+commands, aggregate source persistence and performance acceptance
 remain separate; no alternate identity binding or live permission policy is added.
+
+
+Private deposit source coordination prepares one typed source action and a complete
+deposit replacement or void. Keyless payment correction/cancellation cores retain
+full owning Plan.data; public wrappers retain their permanent payment envelopes.
+The all-active cancellation set includes every application, allocation and affected
+invoice without a transport-page cap. Source effects, current claims, prospective
+cash, work/tax/custom facts and bank redirections are independently validated;
+header changes coalesce once. Explicit typed identity maps preserve persistent
+component/row identities and arbitrary memo/custom values. Ordinary writers still
+reject claimed sources. This preparation performs no child DML or aggregate write.
+
+Coordinate guards bind the complete submitted intent and current actor/principal
+through the existing execution binding. Source selectors, captured price versions,
+unit aliases including retired children, and refreshed source defaults reconstruct
+from their actual immutable owner histories. Sparse new-contact audit images decode
+the existing contact producer's nullable fields; missing required fields and wrong
+child ownership remain unknown history. Shared sales fresh issuer capture uses the
+dispatch-pinned authorized company name; nonrefresh corrections retain their saved
+issuer. Only coordinated refreshed-source guards additionally carry the selected
+hub name-changing/create anchor, coherent with that pin. Deposit correction issuers
+stay immutable. Aggregate persistence, permanent coordinate recovery, preserving
+operation-schema extension, Delete/drafts, public workflows and full-C publication
+remain separate prerequisites.

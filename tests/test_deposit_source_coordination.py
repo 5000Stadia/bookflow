@@ -342,6 +342,19 @@ def test_captured_price_version_survives_later_rules_with_complete_guard(client,
         assert first.facts_fingerprint==second.facts_fingerprint
     assert driver.dump()==before
 
+    later=dict(percent='30') if kind=='fixed_percent' else dict(items=[dict(item_id=sale['item'],price='35.00',adjustment_basis='standard_price')])
+    client.run('price-level update',dict(price_level=level['id'],expected_version=2,**later),company=COMPANY)
+    saved=driver.dump()
+    with driver.session() as s:
+        binding=OSBinding.from_session(s)
+        original=history.request(dict(command='deposit coordinate',input=inp.model_dump(mode='json',by_alias=True,exclude_unset=True),context=dict(reason=ctx.reason)))
+        compared=history.compare(s,first.dependency_guard,original,binding)
+        assert compared.matches and not compared.unknown_history and not compared.changes
+        again=coordinator.prepare(s,ctx,anchored,binding=binding)
+        assert [row.unit_price_minor_units for row in again.resolution.source.plan.preview.revision.lines]==[first_price,first_price]
+        assert canonical_source_data(first.resolution.source.plan,payment=False)==canonical_source_data(again.resolution.source.plan,payment=False)
+    assert driver.dump()==saved
+
 
 def test_same_tax_identity_new_agency_and_default_class_restates_source_and_deposit(client,tax_sale,driver):
     import json
@@ -620,7 +633,11 @@ def test_source_refresh_issuer_rename_requires_complete_guard_change(client,sale
         binding=OSBinding.from_session(s)
         original=history.request(dict(command='deposit coordinate',input=anchored.model_dump(mode='json',by_alias=True,exclude_unset=True),context={'reason':ctx.reason}))
         compared=history.compare(s,first.dependency_guard,original,binding)
-        fresh=coordinator.prepare(s,ctx,anchored,binding=binding)
+        with pytest.raises(BookflowError) as stale:
+            coordinator.prepare(s,ctx,anchored,binding=binding)
+        assert stale.value.code=='E_PREVIEW_STALE'
+        fresh=coordinator.prepare(s,ctx,inp,binding=binding)
+        assert fresh.dependency_guard!=first.dependency_guard
         assert fresh.resolution.source.plan.preview.revision.issuer_snapshot['display_name']=='B refreshed source issuer'
         assert old_name!='B refreshed source issuer'
         assert json.loads(fresh.resolution.deposit_data_json)['issuer']['display_name']==old_name
@@ -629,3 +646,105 @@ def test_source_refresh_issuer_rename_requires_complete_guard_change(client,sale
     comparison=binding_observe(client,monkeypatch,inspect,company)
     with sqlite3.connect(path) as db:assert tuple(db.iterdump())==before
     assert not comparison.matches, 'A source issuer changed without company history; complete coordinate guard incorrectly still matches'
+    assert not comparison.unknown_history
+    assert len(comparison.changes)==1
+    assert comparison.changes[0].fields==('issuer.display_name',)
+    assert comparison.changes[0].storage=='hub'
+
+def test_retained_unit_alias_ignores_unrelated_children_but_tracks_alias_loss(client,sale,driver):
+    import json
+    from bookflow.company import deposit_coordination as coordinator,sales
+    from bookflow.company.deposit_coordinate_models import CoordinateInput
+    from bookflow.core.context import Context,Interface
+    from bookflow.core.publication import OSBinding
+    client.company.update(units_of_measure_mode='multiple_related_units',company=COMPANY)
+    units=client.run('unit-of-measure create',dict(name='B actual units',units=[dict(name='Each',abbreviation='ea',is_base=True,base_factor='1'),
+        dict(name='Half',abbreviation='hf',base_factor='0.5')]),company=COMPANY)
+    client.run('item update',dict(item=sale['item'],expected_version=1,unit_of_measure_set_id=units['id']),company=COMPANY)
+    receipt=client.run('sales-receipt post',dict(customer=sale['customer'],date='2026-06-02',deposit_to=uf(client),payment_method=method(client),
+        lines=[dict(item=sale['item'],unit='ea')]),company=COMPANY)
+    doc=additional_document(client,sale,'1');doc['sources']=[dict(source_type='sales_receipt',source=receipt['id'],expected_version=1)]
+    deposited=driver.run('post',dict(operation_key='B-unit-seed',document=doc))
+    body=replacement(deposited,doc);body['sources']=[dict(source_result=True,source=receipt['id'])]
+    inp=CoordinateInput(deposit=deposited.current.id,expected_version=1,operation_key='B-unit-coordinate',
+        source_action=dict(kind='sales_receipt_update',input=dict(sales_receipt=receipt['id'],expected_version=2,
+            lines=[dict(item=sale['item'],line_id=receipt['revision']['lines'][0]['line_id'],unit='ea',quantity='2')])),replacement=dict(mode='document',document=body))
+    before=driver.dump()
+    with driver.session() as s:
+        ctx=Context.new(Interface.python,'B units',reason='Use two half units with captured exact pricing')
+        prepared=coordinator.prepare(s,ctx,inp,binding=OSBinding.from_session(s))
+        line=prepared.resolution.source.plan.preview.revision.lines[0]
+        assert (line.unit_factor_nanounits,line.unit_price_minor_units,line.net_minor_units)==(1000000000,1234,2468)
+        ordinary=sales.prepare(s,ctx,inp.source_action.input,'sales_receipt','update',provenance=prepared.resolution.source.provenance)
+        assert canonical_source_data(ordinary,payment=False)==canonical_source_data(prepared.resolution.source.plan,payment=False)
+        facts=json.loads(prepared.readset_json)
+        assert not facts['unknown'] and any(row['kind']=='source_unit' and row['id']==units['id'] for row in facts['records'])
+        coordinator.validate(s,ctx,prepared)
+    assert driver.dump()==before
+
+    children=[dict(id=row['id'],name=row['name'],abbreviation=row['abbreviation'],is_base=row['is_base'],base_factor=row['base_factor']) for row in units['units']]
+    children[1]['base_factor']='0.25'
+    client.run('unit-of-measure update',dict(unit_of_measure=units['id'],expected_version=1,units=children),company=COMPANY)
+    saved=driver.dump()
+    from bookflow.company import deposit_dependency_history as history
+    original=history.request(dict(command='deposit coordinate',input=inp.model_dump(mode='json',by_alias=True,exclude_unset=True),context=dict(reason=ctx.reason)))
+    with driver.session() as s:
+        binding=OSBinding.from_session(s)
+        assert history.compare(s,prepared.dependency_guard,original,binding).matches
+        again=coordinator.prepare(s,ctx,inp.model_copy(update={'dependency_guard':prepared.dependency_guard,'expected_facts_fingerprint':prepared.facts_fingerprint}),binding=binding)
+        assert canonical_source_data(again.resolution.source.plan,payment=False)==canonical_source_data(prepared.resolution.source.plan,payment=False)
+    assert driver.dump()==saved
+    children[0]['abbreviation']='each-new'
+    client.run('unit-of-measure update',dict(unit_of_measure=units['id'],expected_version=2,units=children),company=COMPANY)
+    saved=driver.dump()
+    with driver.session() as s:
+        compared=history.compare(s,prepared.dependency_guard,original,OSBinding.from_session(s))
+        assert not compared.matches and not compared.unknown_history
+        assert any(change.kind=='source_unit' and change.record_id==units['id'] for change in compared.changes)
+    assert driver.dump()==saved
+
+
+def test_retired_captured_unit_alias_reconstructs_complete_sql_membership(client,sale,driver):
+    import json
+    from bookflow.company import deposit_coordination as coordinator,sales
+    from bookflow.company.deposit_coordinate_models import CoordinateInput
+    from bookflow.core.context import Context,Interface
+    from bookflow.core.publication import OSBinding
+    client.company.update(units_of_measure_mode='multiple_related_units',company=COMPANY)
+    units=client.run('unit-of-measure create',dict(name='B actual units',units=[dict(name='Each',abbreviation='ea',is_base=True,base_factor='1'),
+        dict(name='Half',abbreviation='hf',base_factor='0.5')]),company=COMPANY)
+    client.run('item update',dict(item=sale['item'],expected_version=1,unit_of_measure_set_id=units['id']),company=COMPANY)
+    receipt=client.run('sales-receipt post',dict(customer=sale['customer'],date='2026-06-02',deposit_to=uf(client),payment_method=method(client),
+        lines=[dict(item=sale['item'],unit='hf')]),company=COMPANY)
+    doc=additional_document(client,sale,'1');doc['sources']=[dict(source_type='sales_receipt',source=receipt['id'],expected_version=1)]
+    deposited=driver.run('post',dict(operation_key='B-unit-seed',document=doc))
+    body=replacement(deposited,doc);body['sources']=[dict(source_result=True,source=receipt['id'])]
+    inp=CoordinateInput(deposit=deposited.current.id,expected_version=1,operation_key='B-unit-coordinate',
+        source_action=dict(kind='sales_receipt_update',input=dict(sales_receipt=receipt['id'],expected_version=2,
+            lines=[dict(item=sale['item'],line_id=receipt['revision']['lines'][0]['line_id'],unit='hf',quantity='2')])),replacement=dict(mode='document',document=body))
+    before=driver.dump()
+    with driver.session() as s:
+        ctx=Context.new(Interface.python,'B units',reason='Use two half units with captured exact pricing')
+        prepared=coordinator.prepare(s,ctx,inp,binding=OSBinding.from_session(s))
+        line=prepared.resolution.source.plan.preview.revision.lines[0]
+        assert (line.unit_factor_nanounits,line.unit_price_minor_units,line.net_minor_units)==(500000000,617,1234)
+        ordinary=sales.prepare(s,ctx,inp.source_action.input,'sales_receipt','update',provenance=prepared.resolution.source.provenance)
+        assert canonical_source_data(ordinary,payment=False)==canonical_source_data(prepared.resolution.source.plan,payment=False)
+        facts=json.loads(prepared.readset_json)
+        assert not facts['unknown'] and any(row['kind']=='source_unit' and row['id']==units['id'] for row in facts['records'])
+        coordinator.validate(s,ctx,prepared)
+    assert driver.dump()==before
+
+    children=[dict(id=row['id'],name=row['name'],abbreviation=row['abbreviation'],is_base=row['is_base'],base_factor=row['base_factor']) for row in units['units'] if row['is_base']]
+    client.run('unit-of-measure update',dict(unit_of_measure=units['id'],expected_version=1,units=children),company=COMPANY)
+    saved=driver.dump()
+    from bookflow.company import deposit_dependency_history as history
+    original=history.request(dict(command='deposit coordinate',input=inp.model_dump(mode='json',by_alias=True,exclude_unset=True),context=dict(reason=ctx.reason)))
+    with driver.session() as s:
+        binding=OSBinding.from_session(s)
+        compared=history.compare(s,prepared.dependency_guard,original,binding)
+        assert compared.matches and not compared.unknown_history
+        again=coordinator.prepare(s,ctx,inp.model_copy(update={'dependency_guard':prepared.dependency_guard,'expected_facts_fingerprint':prepared.facts_fingerprint}),binding=binding)
+        ordinary=sales.prepare(s,ctx,inp.source_action.input,'sales_receipt','update',provenance=again.resolution.source.provenance)
+        assert canonical_source_data(ordinary,payment=False)==canonical_source_data(again.resolution.source.plan,payment=False)==canonical_source_data(prepared.resolution.source.plan,payment=False)
+    assert driver.dump()==saved

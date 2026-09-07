@@ -150,8 +150,8 @@ def prepare_source_overlay(s, ctx, inp, source, binding):
     """Prove the current claim and source slice before deriving the retained row.
 
     Does not issue a coordinate guard or prepare the complete deposit replacement.
-    The A request/overlay seam must be integrated before a complete coordinator
-    can consume this result. No current source validation is bypassed.
+    The coordinator consumes this proof through the shared replacement resolver.
+    No current source validation is bypassed.
     """
     from bookflow.company import schema as c, deposit_dependencies as dependencies
     from bookflow.company import deposit_dependency_history as history, document_effects as effects
@@ -511,7 +511,7 @@ def validate(s, ctx, prepared):
     return fresh
 
 
-PREVIEW_ID_FIELDS=frozenset('id operation_id audit_event_id event_id revision_id current_revision_id posting_batch_id business_batch_id batch_id void_posting_batch_id document_line_id line_id source_revision_id target_revision_id source_posting_source_id source_component_id application_id allocation_id component_key_id component_id posting_line_id posting_source_id'.split())
+PREVIEW_ID_FIELDS=frozenset('id value_id operation_id audit_event_id event_id revision_id current_revision_id posting_batch_id business_batch_id batch_id void_posting_batch_id document_line_id line_id source_revision_id target_revision_id source_posting_source_id source_component_id application_id allocation_id component_key_id component_id posting_line_id posting_source_id'.split())
 
 
 def canonical_source_preview(source):
