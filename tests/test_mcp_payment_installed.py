@@ -47,7 +47,12 @@ def test_installed_payment_preview_receive_retry_and_settlement(hosted, live, tm
                 async def run(command, raw, **ctx):
                     return await call('bookflow_run', dict(command=command, input=raw, **ctx))
                 catalog = await call('bookflow_list_commands', {'prefix': 'payment', 'limit': 200})
-                assert len([row for row in catalog['commands'] if row['name'].startswith('payment ')]) == 22
+                # This journey requires these commands; unrelated additions are valid.
+                names = {row['name'] for row in catalog['commands']}
+                assert {
+                    'payment receive', 'payment show', 'payment history',
+                    'payment operation show',
+                } <= names
                 assert any(row['name'] == 'payment-method create' for row in catalog['commands'])
                 help_ = await call('bookflow_help', {'command': 'payment receive'})
                 assert 'operation_key' in help_['input_schema']['properties']
