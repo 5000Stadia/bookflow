@@ -126,3 +126,47 @@ def test_io_failure_is_never_absence(client,cash,run_private,monkeypatch):
         with pytest.raises(OSError,match='owned injected'):
             q.show(s,m.ShowInput(deposit=posted.current.id),binding=OSBinding.from_session(s))
     run_private(read)
+
+
+@pytest.mark.parametrize('stage',['draft','operation','consumption'])
+def test_inner_owner_denial_is_not_corrupt_books(client,cash,run_private,monkeypatch,stage):
+    posted,_=make_posted(client,cash,run_private)
+    owner,name={'draft':(facts.deposit_drafts,'load'),
+                'operation':(facts.opages,'authorized_original'),
+                'consumption':(facts.deposit_draft_consumption,'current')}[stage]
+    calls=[]
+    def denied(*args,**kwargs):
+        # Inject an owning reader's denied outcome after real outer admission;
+        # this tests error conversion, not a substitute permission evaluator.
+        calls.append(stage)
+        raise BookflowError('E_PERMISSION')
+    monkeypatch.setattr(owner,name,denied)
+    def read(s,ctx):
+        before=tuple(s.company.raw.iterdump())
+        with pytest.raises(BookflowError) as caught:
+            q.show(s,m.ShowInput(deposit=posted.current.id),binding=OSBinding.from_session(s))
+        assert caught.value.code=='E_PERMISSION' and not caught.value.details
+        assert tuple(s.company.raw.iterdump())==before
+    run_private(read)
+    assert calls==[stage]
+
+
+def test_discovered_groups_are_admitted_before_expansion(client,cash,run_private,monkeypatch):
+    from bookflow.company import deposit_read_authority as authority,schema as c
+    posted,_=make_posted(client,cash,run_private)
+    admitted=set();expansions=[]
+    original_admit=authority.h._authorize_binding_graph;original_select=authority.select
+    def admit(s,binding,identities,*args,**kwargs):
+        result=original_admit(s,binding,identities,*args,**kwargs)
+        admitted.update(identities)
+        return result
+    def select(s,table,column,identities):
+        values=tuple(identities)
+        if table is c.deposit_memberships:
+            assert set(values)<=admitted
+            expansions.append(set(values))
+        return original_select(s,table,column,values)
+    monkeypatch.setattr(authority.h,'_authorize_binding_graph',admit)
+    monkeypatch.setattr(authority,'select',select)
+    run_private(lambda s,ctx:authority.admit(s,[posted.current.id],binding=OSBinding.from_session(s)))
+    assert {posted.current.id} in expansions and {cash['source']} in expansions
