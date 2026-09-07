@@ -133,7 +133,7 @@ class SelectionItemsInput(SelectionShowInput, Page):
 
 
 class SelectionQueryInput(Page):
-    state: Literal['open', 'consumed'] | None = None
+    state: Literal['open', 'consumed', 'recovering'] | None = None
 
 
 class PaymentReceiveInput(StrictModel):

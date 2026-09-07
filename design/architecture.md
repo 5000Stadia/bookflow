@@ -2,6 +2,35 @@
 
 What is built, module by module: package skeleton, registry, data root, hub, organizations, companies, demo, CLI, company audit, versioned writes, presence, idempotency, directives, record notes, the event feed, the host process, HTTP routes, tokens, the POSIX local hand-off, the workbench, immutable domestic journals, accrual trial balance and general ledger reports, and generated command and schema documentation.
 
+## F14 durable payment recovery (implementation candidate; independent review pending)
+
+The company-only co0018 migration follows co0017 and adds four recovery tables.
+`payment_recovery_models.py` defines a complete canonical attempted edit, including
+immutable local A and shared B baselines. `payment_recovery.py` owns upload, seal,
+comparison, publication, abandonment and replacement. Eleven ordinary registry
+commands expose these operations through every adapter. The active pointer blocks
+ordinary selection mutation and fresh financial consumption until the entire
+attempt is applied or explicitly discarded. Publication produces one next revision
+of the original selection; recovery never creates a replacement cash intent.
+
+Immutable per-action request/receipt snapshots include ordinary reason identity.
+Current complete-graph authorization precedes both transport-cache and permanent
+receipt recovery. A writer that loses an exact-action race rolls back its transaction,
+including principal/cache maintenance, before returning the original receipt. The
+historical authority registry includes received attempted invoice targets even when
+removed, aborted or superseded, and follows the original consumed operation.
+
+Comparison uses the existing exact calculator only for explicit new calculate
+entries. Entered and authenticated A/B calculated amounts remain fixed; derived
+headers are stored as the final resolved sum or null. Every current fact page and
+publication binds the complete generation and relevant dependency fingerprint.
+The workbench commits the whole intent to IndexedDB before begin, resumes immutable
+acknowledgements, and requires explicit complete comparison confirmation. Main and
+reference seeds append three active nonfinancial workflow examples, preserving the
+original command prefixes and financial deltas. F14/Row22 closure still requires the
+full timing, interruption and independent artifact acceptance recorded in the
+Builder handoff; this section does not claim that review has passed.
+
 ## Row22 receipt and settlement increment (implementation candidate)
 
 The co0014 migration preserves existing raw rows and local schema extensions while

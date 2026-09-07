@@ -20,17 +20,18 @@
   let selectedApplications = new Set();
   let destinationOverride = !config.preferences.use_undeposited_funds_for_payments, defaultDestination = null;
   let key = 'WB-' + crypto.randomUUID();
-  let customerPending = false, reviewedPayment = null, draftAttempt = null, reviewedDraft = null, activeAction = null;
+  let customerPending = false, reviewedPayment = null, draftAttempt = null, reviewedDraft = null, activeAction = null, reviewEpoch = 0;
   const busyStatus=el('p');busyStatus.id='payment-busy-status';busyStatus.setAttribute('role','status');busyStatus.hidden=true;root.prepend(busyStatus);
   function resetDraftView() {
     draft=null;draftAttempt=null;reviewedDraft=null;selected.clear();candidates=[];nextCursor=null;
+    recoveryView=null;recoveryConfirmed=null;document.getElementById('payment-recovery-panel')?.remove();
     $('invoices').replaceChildren();$('more').hidden=true;$('balances').hidden=true;
     for(const id of ['totals','selection-status','amount-origin']) $(id).replaceChildren();
-    const url=new URL(location.href);url.searchParams.delete('selection');history.replaceState(null,'',url);
+    const url=new URL(location.href);url.searchParams.delete('selection');url.searchParams.delete('recovery');history.replaceState(null,'',url);
   }
   function note(text) { $('message').textContent = text; }
   function button(text, fn) { const n=el('button',text); n.type='button'; n.addEventListener('click',()=>perform(fn)); return n; }
-  function invalidate() { preview=null; $('save').disabled=true; $('save-new').disabled=true; $('preview-result').hidden=true; }
+  function invalidate() { reviewEpoch++;recoveryConfirmed=null;document.querySelectorAll('[data-recovery-confirm]').forEach(button=>{button.disabled=true;});preview=null; $('save').disabled=true; $('save-new').disabled=true; $('preview-result').hidden=true; }
   function lockSubmitted(locked) {
     for(const control of $('form').querySelectorAll('input,select,textarea,button')) {
       if(locked) {if(control.dataset.beforePending===undefined) control.dataset.beforePending=String(control.disabled);control.disabled=true;}
@@ -47,14 +48,14 @@
     }
     if (err.details?.fields) for (const field of err.details.fields) area.append(el('p', `${field.field}: ${field.problem}`));
     $('retry').hidden=!submitted; $('review').hidden=!!submitted; $('review').disabled=false;
-    if (!submitted && (['E_VERSION_CONFLICT','E_PREVIEW_STALE','E_QUERY_STALE'].includes(err.code) || err.details?.review?.command==='payment settlement changes')) {
+    if (!submitted && (['E_VERSION_CONFLICT','E_PREVIEW_STALE','E_QUERY_STALE','E_RECOVERY_PENDING'].includes(err.code) || err.details?.review?.command==='payment settlement changes')) {
       $('review').disabled=true;
       try {
         if(draft) {
           const current=await command('payment selection show',{selection:draft.id});
           const currentRows=(await pages('payment selection items',{selection:current.id,revision:current.version})).items;
           reviewedDraft={header:current,rows:currentRows};
-          if(currentRows.length>200) area.append(el('p','Review may create a complete recovered shared draft for this large selection. The original will remain available.'));
+          area.append(el('p','Recovery keeps this shared selection and reviews your entire attempted edit before recording can resume.'));
           const baseline=draftAttempt?.baseline||draft, baselineRows=draftAttempt?.rows||[...selected.values()];
           const attempted=new Map(baselineRows.map(row=>[row.invoice_id,{...row}]));
           const touched=new Set();
@@ -166,6 +167,8 @@
       el('p',(mode==='apply'?'Unallocated draft amount':'Unapplied cash retained by '+(customer?.full_name||customer?.name||'payer'))+': '+(draft.unapplied_minor_units===null?'unresolved':units(draft.unapplied_minor_units)+' '+config.currency)));
     if(mode==='apply') totals.append(el('p','Current available payment credit: '+units(payment.current.available_minor_units)+' '+config.currency));
     for (const problem of draft.problems) totals.append(el('p',problem));
+    if(draft.current_lifecycle?.state?.startsWith('recovery_')) $('selection-status').append(' Recovery pending: '+draft.current_lifecycle.received_entry_count+' of '+draft.current_lifecycle.declared_entry_count+' attempted edits shared.');
+    if(draft.current_lifecycle?.consumed_operation) totals.append(button('Original recorded operation',()=>recoverOperation(draft.current_lifecycle.consumed_operation.operation_key)));
     drawCandidates();
   }
   async function changeDraft(patch) {
@@ -176,7 +179,7 @@
       draft=await command('payment selection update',{selection:draft.id,expected_version:draft.version,...patch});await reloadDraft();
     }
     catch(err) {
-      if(['E_VERSION_CONFLICT','E_PREVIEW_STALE','E_QUERY_STALE'].includes(err.code)) {
+      if(['E_VERSION_CONFLICT','E_PREVIEW_STALE','E_QUERY_STALE','E_RECOVERY_PENDING'].includes(err.code)) {
         draftAttempt ||= {baseline:structuredClone(draft),rows:structuredClone([...selected.values()]),patches:[]};
         draftAttempt.patches.push(structuredClone(patch));
         if(Object.hasOwn(patch,'amount')) draftAttempt.cashText=$('amount').value;
@@ -218,24 +221,30 @@
   }
   async function makeDraft() {
     if(draftAttempt) throw {code:'E_VERSION_CONFLICT',message:'Review the retained edits before replacing this shared draft.'};
-    const previous=[...selected.values()];
-    const created=await command('payment selection create',{...context(),...($('amount').value?{amount:$('amount').value}:{}),
-      ...(draft?{amount_origin:draft.amount_origin}:{}),label:'Workbench payment draft'});
-    draft=created;saveDraftUrl();
-    for (let offset=0;offset<previous.length;offset+=200) {
-      const items=previous.slice(offset,offset+200).map(row=>({invoice:row.invoice_id,expected_version:row.expected_version,
-        amount_origin:row.amount_origin,...(row.amount_minor_units!==null?{amount:asMoney(row.amount_minor_units)}:{})}));
-      draft=await command('payment selection update',{selection:draft.id,expected_version:draft.version,set_items:items});
+    if(draft) {
+      if(draft.state==='consumed') throw {code:'E_SELECTION_CONSUMED',message:'This selection is already recorded. Open its original operation or explicitly start a blank new payment.'};
+      await reloadDraft();return;
     }
-    await reloadDraft();
+    draft=await command('payment selection create',{...context(),...($('amount').value?{amount:$('amount').value}:{}),label:'Workbench payment draft'});
+    saveDraftUrl();await reloadDraft();
+  }
+  async function completeDraftChanges(patches) {
+    const baseline=structuredClone(draft),rows=structuredClone([...selected.values()]);
+    try {for(const patch of patches) await changeDraft(patch);}
+    catch(err) {
+      if(['E_VERSION_CONFLICT','E_PREVIEW_STALE','E_QUERY_STALE','E_RECOVERY_PENDING'].includes(err.code))
+        draftAttempt={baseline,rows,patches:structuredClone(patches),cashText:$('amount').value};
+      throw err;
+    }
   }
   async function calculate() {
     if (!draft) await makeDraft();
     const calculation=await pages('payment calculate',{...context(),applications:selectionRef(),amount_mode:'selection_total'});
     const items=calculation.items.map(row=>({invoice:row.invoice_id,expected_version:row.expected_version,amount_origin:row.amount_origin,
       ...(row.amount_minor_units!==null?{amount:asMoney(row.amount_minor_units)}:{})}));
-    for(let i=0;i<items.length;i+=200) await changeDraft({set_items:items.slice(i,i+200)});
-    await changeDraft({amount:calculation.amount,amount_origin:calculation.amount_origin});
+    const patches=[];for(let i=0;i<items.length;i+=200) patches.push({set_items:items.slice(i,i+200)});
+    patches.push({amount:calculation.amount,amount_origin:calculation.amount_origin});
+    await completeDraftChanges(patches);
     note('Calculation saved in the shared selection. Entered cash and manually fixed rows remain authoritative.');
   }
   async function autoApply() {
@@ -243,11 +252,14 @@
     if (!$('amount').value) throw {message:'Enter the actual cash amount before asking for matching/oldest suggestions.'};
     if (!draft) await makeDraft();
     const out=await pages('payment suggest',{...context(),amount:$('amount').value,strategy:'exact_then_oldest'});
-    draft=await command('payment selection clear',{selection:draft.id,expected_version:draft.version});
+    const patches=[];
+    const removals=[...selected.keys()];
+    for(let i=0;i<removals.length;i+=200) patches.push({remove_invoices:removals.slice(i,i+200)});
     for(let i=0;i<out.items.length;i+=200) {
       const items=out.items.slice(i,i+200).map(row=>({invoice:row.invoice_id,expected_version:row.expected_version,amount:asMoney(row.amount_minor_units),amount_origin:'calculated'}));
-      draft=await command('payment selection update',{selection:draft.id,expected_version:draft.version,set_items:items});
+      patches.push({set_items:items});
     }
+    await completeDraftChanges(patches);
     invalidate();await reloadDraft();note('Suggestions saved to the draft; no payment has been recorded.');
   }
   function customInput() {
@@ -268,6 +280,7 @@
       context();
       if(draftAttempt) throw {message:'Review the rejected shared-draft edits before previewing this payment.'};
       if (!draft) await makeDraft();
+      if (draft.current_lifecycle?.state?.startsWith('recovery_')) throw {code:'E_RECOVERY_PENDING',message:'Finish or explicitly discard the shared recovery before recording.'};
       if (draft.state!=='open') throw {message:'This selection is already recorded. Open its operation or start a new payment.'};
     }
     const input={operation_key:key};
@@ -394,58 +407,188 @@
       payment=current;reviewedPayment=null;
     }
     if(draft) {
-      context();
-      const current=await command('payment selection show',{selection:draft.id});
-      if(current.state!=='open') throw {code:'E_SELECTION_CONSUMED',message:'This shared selection was already recorded. Open its recorded payment to recover the original operation; it cannot be copied into another remittance.'};
-      if(reviewedDraft&&current.version!==reviewedDraft.header.version)
-        throw {code:'E_VERSION_CONFLICT',message:'The shared draft changed again while you were reviewing. Review its new values first.'};
-      const rows=(await pages('payment selection items',{selection:current.id,revision:current.version})).items;
-      const retained=draftAttempt, patches=structuredClone(retained?.patches||[]), touched=new Set();
-      const desired=new Map(rows.map(row=>[row.invoice_id,{invoice:row.invoice_id,expected_version:row.expected_version,
-        amount_origin:row.amount_origin,...(row.amount_minor_units!==null?{amount:asMoney(row.amount_minor_units)}:{})}]));
-      const headerPatch={amount:current.amount?asMoney(current.amount.minor_units,current.amount.currency):null,amount_origin:current.amount_origin};
-      for(const patch of patches) {
-        for(const id of patch.remove_invoices||[]) desired.delete(id);
-        for(const row of patch.set_items||[]) {desired.set(row.invoice,{...row});touched.add(row.invoice);}
-        if(Object.hasOwn(patch,'amount')) {headerPatch.amount=patch.amount;delete headerPatch.amount_origin;}
-        if(Object.hasOwn(patch,'amount_origin')) headerPatch.amount_origin=patch.amount_origin;
-      }
-      const refreshed=[], updates=[];
-      for(const row of desired.values()) {
-        const version=(await command('invoice show',{invoice:row.invoice})).version;
-        const next={...row,expected_version:version};refreshed.push(next);
-        if(version!==row.expected_version||touched.has(row.invoice)) updates.push(next);
-      }
-      const removes=rows.filter(row=>!desired.has(row.invoice_id)).map(row=>row.invoice_id);
-      const again=await command('payment selection show',{selection:current.id});
-      if(again.version!==current.version) throw {code:'E_VERSION_CONFLICT',message:'The shared draft changed again while preparing its reviewed entries. Review the new comparison.'};
-      // One bounded update refreshes all affected retained dependencies together.
-      // Larger stale graphs need a fresh preparation manifest, never a partial
-      // financial operation or a higher public command limit.
-      if(updates.length<=200&&removes.length<=200) {
-        draft=await command('payment selection update',{selection:current.id,expected_version:current.version,
-          ...headerPatch,set_items:updates,remove_invoices:removes,...(mode==='apply'?{adopt_funding_version:payment.version}:{})});
-      } else {
-        const savedContext=current.context;
-        let copy=await command('payment selection create',{mode:savedContext.mode,date:savedContext.date,
-          ...(savedContext.payment_id?{payment:savedContext.payment_id}:{customer:savedContext.customer_id,ar_account:savedContext.ar_account_id}),
-          ...headerPatch,label:'Recovered shared selection '+current.id});
-        try {
-          copy=await command('payment selection update',{selection:copy.id,expected_version:copy.version,
-            adopt_calculation_policy:savedContext.automatically_calculate,...(mode==='apply'?{adopt_funding_version:payment.version}:{})});
-          for(let i=0;i<refreshed.length;i+=200) copy=await command('payment selection update',{
-            selection:copy.id,expected_version:copy.version,set_items:refreshed.slice(i,i+200)});
-          if((await command('payment selection show',{selection:current.id})).version!==current.version)
-            throw {code:'E_VERSION_CONFLICT',message:'The original draft changed again during recovery. Review its new values before using the copy.'};
-        } catch(err) {err.message=(err.message||'Recovery could not finish')+' A preparation copy is retained in Saved selections: '+copy.id+'.';throw err;}
-        draft=copy;saveDraftUrl();reviewed.append(el('p','A complete recovered shared draft is now open. The original remains in Saved selections: '+current.id+'.'));
-      }
-      draftAttempt=null;reviewedDraft=null;
-      await reloadDraft();await loadInvoices();
-      if(retained?.cashText!==undefined&&draft.amount_origin==='entered') $('amount').value=retained.cashText;
+      await shareRecovery();
+      return;
     }
     if(mode==='unapply') await loadApplications();
     note('Current versions reviewed. Your entered amounts are retained; calculate suggestions explicitly if needed, then preview again.');
+  }
+  // The complete intent is committed locally before the first begin/replace request.
+  // Outbox state assists transport; only public server receipts establish sharing.
+  const recoveryScope='payment-recovery:'+config.company+':'+config.actor+':';
+  let recoveryView=null, recoveryConfirmed=null;
+  async function outbox(action,key,value) {
+    const db=await new Promise((resolve,reject)=>{
+      const request=indexedDB.open('bookflow-payment-recovery-v1',1);
+      request.onupgradeneeded=()=>request.result.createObjectStore('attempts');
+      request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);
+    });
+    try {return await new Promise((resolve,reject)=>{
+      const tx=db.transaction('attempts',action==='get'||action==='all'?'readonly':'readwrite');
+      const store=tx.objectStore('attempts');
+      const request=action==='get'?store.get(key):action==='all'?store.getAll():store.put(exact.stringify(value),key);
+      let result;request.onsuccess=()=>{result=request.result;};
+      tx.oncomplete=()=>resolve(action==='get'?(result?exact.parse(result):null):action==='all'?result.map(exact.parse):result);
+      tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
+    });} finally {db.close();}
+  }
+  function canonical(value) {
+    if(value===null||typeof value!=='object') return exact.stringify(value);
+    if(Array.isArray(value)) return '['+value.map(canonical).join(',')+']';
+    return '{'+Object.keys(value).filter(key=>value[key]!==undefined).sort((a,b)=>{const x=Array.from(a,c=>c.codePointAt(0)),y=Array.from(b,c=>c.codePointAt(0));for(let i=0;i<Math.min(x.length,y.length);i++) if(x[i]!==y[i]) return x[i]-y[i];return x.length-y.length;}).map(key=>JSON.stringify(key)+':'+canonical(value[key])).join(',')+'}';
+  }
+  async function digest(value) {
+    const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonical(value)));
+    return [...new Uint8Array(bytes)].map(value=>value.toString(16).padStart(2,'0')).join('');
+  }
+  function exactUnits(value) {
+    if(value&&typeof value==='object') return value.minor_units;
+    const scale=JSON.parse(document.querySelector('#math-currencies').textContent)[config.currency]??2;
+    const match=/^(\d+)(?:\.(\d*))?$/.exec(String(value).trim());
+    if(!match||(match[2]||'').length>scale) throw {message:'Enter exact money before sharing recovery.'};
+    return BigInt(match[1])*10n**BigInt(scale)+BigInt((match[2]||'').padEnd(scale,'0')||'0');
+  }
+  async function persistAttempt(attempt) {
+    try {await outbox('put',attempt.storageKey,attempt);}
+    catch (_) {throw {message:attempt.recovery_id?'This browser could not save its latest acknowledgement. Recovery is shared and remains blocked; resolve the original recovery before continuing.':'The complete attempted edits could not be saved in this browser. This new attempt has not been shared; keep this tab open and retry.'};}
+  }
+  function recoveryPanel() {
+    let panel=document.getElementById('payment-recovery-panel');
+    if(!panel) {panel=el('section');panel.id='payment-recovery-panel';$('form').before(panel);}
+    panel.style.overflowWrap='anywhere';panel.replaceChildren(el('h2','Recover this shared payment selection'));
+    return panel;
+  }
+  async function shareRecovery() {
+    const current=await command('payment selection show',{selection:draft.id});
+    if(current.state!=='open') throw {code:'E_SELECTION_CONSUMED',message:'This selection is already recorded. Recover its original operation.'};
+    if(reviewedDraft&&current.version!==reviewedDraft.header.version) throw {code:'E_VERSION_CONFLICT',message:'The shared draft changed again while you reviewed. Read its new values before sharing recovery.'};
+    const local=draftAttempt?.baseline||draft;
+    const changes=new Map();let header={action:'keep'};
+    for(const patch of draftAttempt?.patches||[]) {
+      for(const id of patch.remove_invoices||[]) {
+        const old=(draftAttempt?.rows||[...selected.values()]).find(row=>row.invoice_id===id);
+        changes.set(id,{invoice_id:id,observed_invoice_version:old?.expected_version||1,action:'remove'});
+      }
+      for(const row of patch.set_items||[]) {
+        const common={invoice_id:row.invoice,observed_invoice_version:row.expected_version};
+        const origin=row.amount_origin||(row.amount!==undefined&&row.amount!==null?'entered':'unresolved');
+        if(origin==='calculated') changes.set(row.invoice,{...common,action:'calculate',...(row.amount!=null?{attempted_calculated_minor_units:exactUnits(row.amount)}:{})});
+        else changes.set(row.invoice,{...common,action:'set',amount_origin:origin,currency:config.currency,amount_minor_units:origin==='unresolved'?null:exactUnits(row.amount)});
+      }
+      if(Object.hasOwn(patch,'amount')||Object.hasOwn(patch,'amount_origin')) {
+        const origin=patch.amount_origin||(patch.amount!=null?'entered':current.context.automatically_calculate?'selection_total':'unresolved');
+        header=origin==='entered'?{action:'set',amount_origin:origin,amount_minor_units:exactUnits(patch.amount??current.amount),currency:config.currency}:{action:'set',amount_origin:origin};
+      }
+    }
+    const generation=crypto.randomUUID(),entries=[...changes.values()].sort((a,b)=>a.invoice_id<b.invoice_id?-1:a.invoice_id>b.invoice_id?1:0);
+    const manifest={domain:'bookflow.payment.recovery.intent',format:1,selection:current.id,local_baseline_revision:local.revision_id,
+      anchor_revision:current.revision_id,attempt_generation:generation,header_intent:header,entries};
+    const begin={recovery_key:'WB-REC-'+generation,selection:current.id,expected_version:current.version,local_baseline_revision:local.revision_id,
+      attempt_generation:generation,declared_entry_count:entries.length,intent_hash:await digest(manifest),header_intent:header};
+    const attempt={scope:recoveryScope+current.id,storageKey:recoveryScope+current.id+':'+generation,manifest,begin,entries,actions:{},done:false};
+    const active=current.current_lifecycle;
+    if(active?.recovery_id) {
+      if(!window.confirm(`Replace the ENTIRE prior attempt (${active.received_entry_count} of ${active.declared_entry_count} edits shared) with these ${entries.length} complete edits? All prior edits absent from this replacement are discarded, including any missing edits.`)) return;
+      attempt.replacement={recovery_id:active.recovery_id,expected_recovery_version:active.recovery_version,replacement:begin};
+    }
+    await persistAttempt(attempt);
+    note('Complete attempted edits saved in this browser; not yet shared.');
+    await resumeRecovery(attempt);
+  }
+  async function resumeRecovery(attempt) {
+    invalidate();recoveryConfirmed=null;
+    if(!attempt.recovery_id) {
+      let shared;
+      try {shared=await command('payment recovery show',{recovery_key:attempt.begin.recovery_key});}
+      catch(err) {if(err.code!=='E_RECORD_NOT_FOUND') throw err;}
+      if(!shared) {
+        const result=await command('payment recovery '+(attempt.replacement?'replace':'begin'),attempt.replacement||attempt.begin);
+        attempt.recovery_id=result.original_receipt.replacement_recovery_id||result.original_receipt.recovery_id;
+      } else attempt.recovery_id=shared.id;
+      await persistAttempt(attempt);
+    }
+    let state=await command('payment recovery show',{recovery_id:attempt.recovery_id});
+    if(state.state==='uploading') {
+      for(let offset=0;offset<attempt.entries.length;offset+=200) {
+        await command('payment recovery upload',{recovery_id:state.id,chunk_index:offset/200,entries:attempt.entries.slice(offset,offset+200)});
+      }
+      state=await command('payment recovery show',{recovery_id:state.id});
+      attempt.actions.seal ||= {recovery_id:state.id,expected_recovery_version:state.version};
+      await persistAttempt(attempt);
+      await command('payment recovery seal',attempt.actions.seal);
+    }
+    await showRecovery(attempt.recovery_id,attempt);
+  }
+  async function discoverRecovery() {
+    if(!draft) return;
+    const attempts=(await outbox('all')).filter(row=>row.scope===recoveryScope+draft.id&&!row.done);
+    const active=draft.current_lifecycle;
+    if(active?.recovery_id) return showRecovery(active.recovery_id,attempts.find(row=>row.recovery_id===active.recovery_id||row.begin.attempt_generation===active.attempt_generation));
+    if(attempts.length) {
+      const panel=recoveryPanel();panel.append(el('p','This browser holds attempted edits with an unresolved sharing acknowledgement.'));
+      for(const attempt of attempts) panel.append(button('Resolve sharing and resume',()=>resumeRecovery(attempt)));
+    }
+  }
+  async function showRecovery(identifier,attempt=null) {
+    recoveryConfirmed=null;invalidate();
+    const epoch=reviewEpoch;
+    const state=await command('payment recovery show',{recovery_id:identifier});recoveryView=state;
+    const panel=recoveryPanel();
+    const url=new URL(location.href);url.searchParams.set('selection',state.selection_id);url.searchParams.set('recovery',identifier);history.replaceState(null,'',url);
+    panel.append(el('p',`${state.state}: ${state.received_entry_count} of ${state.declared_entry_count} attempted edits shared. Saved selection version ${state.anchor_selection_version}.`));
+    if(['applied','aborted','superseded'].includes(state.state)) {
+      panel.append(el('p',state.state==='applied'?'The complete recovery was applied to this selection. Preview the payment before recording.':state.state==='aborted'?'The entire attempt was discarded. Its evidence remains available.':'This attempt was replaced; inspect the current recovery.'));
+      if(attempt) {attempt.done=true;await persistAttempt(attempt);}
+      draftAttempt=null;reviewedDraft=null;await reloadDraft();
+      if(draft.current_lifecycle?.recovery_id) panel.append(button('Open current recovery',()=>showRecovery(draft.current_lifecycle.recovery_id)));
+      return;
+    }
+    if(state.state==='uploading') {
+      const missing=await pages('payment recovery items',{recovery_id:identifier,kind:'missing_ranges'});
+      panel.append(el('p',`${state.missing_chunk_count} parts are still missing. Recording remains blocked, including after closing this tab.`));
+      if(attempt) panel.append(button('Resume complete saved attempt',()=>resumeRecovery(attempt)));
+      else panel.append(el('p','The remaining edits are not stored in this browser. Resume from the original browser, or explicitly discard the entire attempt.'));
+    } else {
+      const request={recovery_id:identifier,attempt_generation:state.attempt_generation,intent_hash:state.intent_hash};
+      const comparison=await command('payment recovery compare',request);
+      const changes=await pages('payment recovery compare-items',{...request,facts_fingerprint:comparison.facts_fingerprint,kind:'changes'});
+      const problems=await pages('payment recovery compare-items',{...request,facts_fingerprint:comparison.facts_fingerprint,kind:'problems'});
+      const latest=await command('payment recovery show',{recovery_id:identifier});
+      if(epoch!==reviewEpoch||latest.version!==state.version||latest.state!=='sealed'||changes.total_count!==comparison.change_count||problems.total_count!==comparison.problem_count)
+        throw {code:'E_QUERY_STALE',message:'Recovery changed during review. Reload the complete comparison.'};
+      const showAmount=value=>value===null?'unresolved':units(value);
+      panel.append(el('p',`Proposed cash: ${showAmount(comparison.amount_minor_units)} ${comparison.currency}; selected: ${showAmount(comparison.selected_minor_units)}; unapplied: ${showAmount(comparison.unapplied_minor_units)}.`));
+      const hc=comparison.header_comparison;
+      panel.append(el('p',`Cash: your saved value ${showAmount(hc.local_baseline.amount_minor_units)} (${hc.local_baseline.amount_origin}); current saved value ${showAmount(hc.anchor.amount_minor_units)} (${hc.anchor.amount_origin}); requested ${hc.attempted.action==='keep'?'keep the saved mode':hc.attempted.amount_origin}; proposed ${showAmount(hc.proposed.amount_minor_units)}${hc.derived?' calculated from the final selected rows':''}.`));
+      for(const row of changes.items) {
+        const details=el('details');details.append(el('summary','Invoice '+row.invoice_id));
+        const body=el('div');
+        const describe=value=>!value?'not selected':`${showAmount(value.amount_minor_units)} (${value.amount_origin})`;
+        if(row.history_event_id) body.append(el('p',`${row.actor_id||'Unknown actor'} at ${row.at}: ${row.changed_fields?.join(', ')||'Fields unknown'}; version ${row.version_before} → ${row.version_after}.`));
+        else {
+          body.append(el('p','Your saved selection: '+describe(row.local_baseline)),el('p','Current saved selection: '+describe(row.anchor)),
+            el('p','Attempted edit: '+(!row.attempted?'unchanged':row.attempted.action==='remove'?'remove':row.attempted.action==='calculate'?'calculate from current due'+(row.attempted.attempted_calculated_minor_units!=null?' (previous display '+showAmount(row.attempted.attempted_calculated_minor_units)+')':''):(row.attempted.retained_calculation_revision_id?'restore historical calculation from saved revision '+row.attempted.retained_calculation_revision_id+': ':'')+describe(row.attempted))),
+            el('p','Proposed selection: '+describe(row.proposed)),el('p',row.current?`Current invoice version ${row.current.version}; due ${showAmount(row.current.due)}; ${row.current.status}.`:'Current invoice facts unavailable.'));
+        }
+        details.append(body);panel.append(details);
+      }
+      for(const row of problems.items) panel.append(el('p',row.code));
+      recoveryConfirmed={recovery_id:identifier,expected_recovery_version:state.version,attempt_generation:state.attempt_generation,
+        intent_hash:state.intent_hash,expected_selection_version:state.anchor_selection_version,expected_facts_fingerprint:comparison.facts_fingerprint};
+      if(!comparison.hard_blocker_count) {const confirmButton=button('Confirm complete recovery',async()=>{
+        const confirmed=recoveryConfirmed;if(!confirmed) throw {message:'Read the complete comparison again.'};
+        if(attempt) {attempt.actions.apply=confirmed;await persistAttempt(attempt);}
+        await command('payment recovery apply',confirmed);await showRecovery(identifier,attempt);await loadInvoices();
+      });confirmButton.dataset.recoveryConfirm='true';panel.append(confirmButton);}
+      panel.append(button('Reload complete comparison',()=>showRecovery(identifier,attempt)));
+    }
+    if(draftAttempt) panel.append(button('Replace with my complete attempted edits',()=>shareRecovery()));
+    panel.append(button('Discard entire attempt',async()=>{
+      if(!window.confirm(`Discard ALL ${state.declared_entry_count} attempted edits, including missing edits, and restore saved selection version ${state.anchor_selection_version}?`)) return;
+      const input={recovery_id:identifier,expected_recovery_version:state.version,disposition:'discard_entire_attempt'};
+      if(attempt) {attempt.actions.abort=input;await persistAttempt(attempt);}
+      await command('payment recovery abort',input);await showRecovery(identifier,attempt);await loadInvoices();
+    }));
   }
   async function loadApplications() {
     const result=await pages('payment settlement',{payment:payment.id,kind:'applications'});applicationRows=result.items;
@@ -566,6 +709,7 @@
     const saved=sessionStorage.getItem(storageKey);
     if(saved) {submitted=exact.parse(saved);key=submitted.input.operation_key;lockSubmitted(true);error({message:'An earlier submitted payment has no confirmed result in this tab. Recover that exact request before recording another payment.'});}
     if(config.operation) await recoverOperation(config.operation);
+    if(draft) await discoverRecovery();
     root.dataset.loaded='true';
   }
   $('form').addEventListener('submit',e=>e.preventDefault());

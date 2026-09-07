@@ -210,6 +210,8 @@ def _write(verb, model):
                      'E_APPLICATION_INCOMPATIBLE', 'E_PREVIEW_STALE', 'E_INACTIVE_REFERENCE', 'E_AMOUNT_PRECISION'])(plan)
     cmd.ledger = True
     cmd.applier(selection.apply)
+    cmd.authorize_input = selection.authorize_input
+    cmd.replay = selection.replay
     return cmd
 
 

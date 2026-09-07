@@ -1319,3 +1319,242 @@ input = { "invoice" = "${pay_inv_b.id}" }
 [[commands]]
 command = "payment history"
 input = { "payment" = "${pay_p1.id}" }
+
+# F14 complete nonfinancial recovery examples; all prior seed bytes remain above.
+
+[[commands]]
+command = "invoice show"
+input = { "invoice" = "REF-PAY-INV-CUSTOMER" }
+capture = "rec_invoice"
+
+[[commands]]
+command = "payment selection create"
+input = { "mode" = "new_receipt", "customer" = "${pay_customer.id}", "date" = "2026-10-09", "amount" = { "minor_units" = 150, "currency" = "USD" }, "label" = "REF-PAY-REC-done" }
+capture = "rec_done_created"
+reason = "Prepare an active nonfinancial recovery example"
+
+[[commands]]
+command = "payment selection update"
+input = { "selection" = "${rec_done_created.id}", "expected_version" = "${rec_done_created.version}", "set_items" = [{ "invoice" = "${rec_invoice.id}", "expected_version" = "${rec_invoice.version}", "amount" = { "minor_units" = 100, "currency" = "USD" }, "amount_origin" = "entered" }] }
+capture = "rec_done_base"
+reason = "Retain the exact original entered draft"
+
+[[commands]]
+command = "payment recovery begin"
+input = { "recovery_key" = "REF-PAY-REC-done", "selection" = "${rec_done_base.id}", "expected_version" = "${rec_done_base.version}", "local_baseline_revision" = "${rec_done_base.revision_id}", "attempt_generation" = "c70f869f-e45c-5423-8f66-b4d704a495f5", "declared_entry_count" = 1, "header_intent" = { "action" = "keep" } }
+recovery_intent = { "anchor_revision" = "${rec_done_base.revision_id}", "entries" = [{ "invoice_id" = "${rec_invoice.id}", "observed_invoice_version" = "${rec_invoice.version}", "action" = "set", "amount_minor_units" = 50, "currency" = "USD", "amount_origin" = "entered" }] }
+capture = "rec_done_begin"
+reason = "Share the complete recovery attempt"
+
+[[commands]]
+command = "payment recovery upload"
+input = { "recovery_id" = "${rec_done_begin.original_receipt.recovery_id}", "chunk_index" = 0, "entries" = [{ "invoice_id" = "${rec_invoice.id}", "observed_invoice_version" = "${rec_invoice.version}", "action" = "set", "amount_minor_units" = 50, "currency" = "USD", "amount_origin" = "entered" }] }
+capture = "rec_done_upload"
+reason = "Share the exact attempted fifty-cent edit"
+
+[[commands]]
+command = "payment recovery seal"
+input = { "recovery_id" = "${rec_done_begin.original_receipt.recovery_id}", "expected_recovery_version" = "${rec_done_upload.current.recovery_version}" }
+capture = "rec_done_seal"
+reason = "Verify the complete attempted edit"
+
+[[commands]]
+command = "payment recovery show"
+input = { "recovery_id" = "${rec_done_begin.original_receipt.recovery_id}" }
+capture = "rec_done_shown"
+
+[[commands]]
+command = "payment recovery compare"
+input = { "recovery_id" = "${rec_done_begin.original_receipt.recovery_id}", "attempt_generation" = "${rec_done_shown.attempt_generation}", "intent_hash" = "${rec_done_shown.intent_hash}" }
+capture = "rec_done_compare"
+
+[[commands]]
+command = "payment recovery compare-items"
+input = { "recovery_id" = "${rec_done_begin.original_receipt.recovery_id}", "attempt_generation" = "${rec_done_shown.attempt_generation}", "intent_hash" = "${rec_done_shown.intent_hash}", "facts_fingerprint" = "${rec_done_compare.facts_fingerprint}", "kind" = "changes" }
+capture = "rec_done_changes"
+
+[[commands]]
+command = "payment recovery apply"
+input = { "recovery_id" = "${rec_done_begin.original_receipt.recovery_id}", "attempt_generation" = "${rec_done_shown.attempt_generation}", "intent_hash" = "${rec_done_shown.intent_hash}", "expected_recovery_version" = "${rec_done_shown.version}", "expected_selection_version" = "${rec_done_base.version}", "expected_facts_fingerprint" = "${rec_done_compare.facts_fingerprint}" }
+capture = "rec_done_applied"
+reason = "Confirm the whole nonfinancial recovery"
+
+[[commands]]
+command = "payment recovery begin"
+input = { "recovery_key" = "REF-PAY-REC-done", "selection" = "${rec_done_base.id}", "expected_version" = "${rec_done_base.version}", "local_baseline_revision" = "${rec_done_base.revision_id}", "attempt_generation" = "c70f869f-e45c-5423-8f66-b4d704a495f5", "declared_entry_count" = 1, "header_intent" = { "action" = "keep" } }
+recovery_intent = { "anchor_revision" = "${rec_done_base.revision_id}", "entries" = [{ "invoice_id" = "${rec_invoice.id}", "observed_invoice_version" = "${rec_invoice.version}", "action" = "set", "amount_minor_units" = 50, "currency" = "USD", "amount_origin" = "entered" }] }
+reason = "Share the complete recovery attempt"
+
+[[commands]]
+command = "payment recovery upload"
+input = { "recovery_id" = "${rec_done_begin.original_receipt.recovery_id}", "chunk_index" = 0, "entries" = [{ "invoice_id" = "${rec_invoice.id}", "observed_invoice_version" = "${rec_invoice.version}", "action" = "set", "amount_minor_units" = 50, "currency" = "USD", "amount_origin" = "entered" }] }
+reason = "Share the exact attempted fifty-cent edit"
+
+[[commands]]
+command = "payment recovery seal"
+input = { "recovery_id" = "${rec_done_begin.original_receipt.recovery_id}", "expected_recovery_version" = "${rec_done_upload.current.recovery_version}" }
+reason = "Verify the complete attempted edit"
+
+[[commands]]
+command = "payment recovery apply"
+input = { "recovery_id" = "${rec_done_begin.original_receipt.recovery_id}", "attempt_generation" = "${rec_done_shown.attempt_generation}", "intent_hash" = "${rec_done_shown.intent_hash}", "expected_recovery_version" = "${rec_done_shown.version}", "expected_selection_version" = "${rec_done_base.version}", "expected_facts_fingerprint" = "${rec_done_compare.facts_fingerprint}" }
+reason = "Confirm the whole nonfinancial recovery"
+
+[[commands]]
+command = "payment selection show"
+input = { "selection" = "${rec_done_base.id}" }
+capture = "rec_noeffect_base"
+
+[[commands]]
+command = "payment recovery begin"
+input = { "recovery_key" = "REF-PAY-REC-noeffect", "selection" = "${rec_noeffect_base.id}", "expected_version" = "${rec_noeffect_base.version}", "local_baseline_revision" = "${rec_noeffect_base.revision_id}", "attempt_generation" = "e621a3d8-b88d-556b-b496-570d46343782", "declared_entry_count" = 0, "header_intent" = { "action" = "keep" } }
+recovery_intent = { "anchor_revision" = "${rec_noeffect_base.revision_id}", "entries" = [] }
+capture = "rec_noeffect_begin"
+reason = "Share a complete unchanged recovery"
+
+[[commands]]
+command = "payment recovery seal"
+input = { "recovery_id" = "${rec_noeffect_begin.original_receipt.recovery_id}", "expected_recovery_version" = 1 }
+capture = "rec_noeffect_seal"
+reason = "Verify the complete unchanged recovery"
+
+[[commands]]
+command = "payment recovery show"
+input = { "recovery_id" = "${rec_noeffect_begin.original_receipt.recovery_id}" }
+capture = "rec_noeffect_shown"
+
+[[commands]]
+command = "payment recovery compare"
+input = { "recovery_id" = "${rec_noeffect_begin.original_receipt.recovery_id}", "attempt_generation" = "${rec_noeffect_shown.attempt_generation}", "intent_hash" = "${rec_noeffect_shown.intent_hash}" }
+capture = "rec_noeffect_compare"
+
+[[commands]]
+command = "payment recovery apply"
+input = { "recovery_id" = "${rec_noeffect_begin.original_receipt.recovery_id}", "attempt_generation" = "${rec_noeffect_shown.attempt_generation}", "intent_hash" = "${rec_noeffect_shown.intent_hash}", "expected_recovery_version" = 2, "expected_selection_version" = "${rec_noeffect_base.version}", "expected_facts_fingerprint" = "${rec_noeffect_compare.facts_fingerprint}" }
+capture = "rec_noeffect_applied"
+reason = "Record the first unchanged recovery publication"
+
+[[commands]]
+command = "payment recovery apply"
+input = { "recovery_id" = "${rec_noeffect_begin.original_receipt.recovery_id}", "attempt_generation" = "${rec_noeffect_shown.attempt_generation}", "intent_hash" = "${rec_noeffect_shown.intent_hash}", "expected_recovery_version" = 2, "expected_selection_version" = "${rec_noeffect_base.version}", "expected_facts_fingerprint" = "${rec_noeffect_compare.facts_fingerprint}" }
+reason = "Record the first unchanged recovery publication"
+
+[[commands]]
+command = "payment recovery show"
+input = { "recovery_id" = "${rec_done_begin.original_receipt.recovery_id}" }
+capture = "rec_done_final"
+
+[[commands]]
+command = "payment recovery items"
+input = { "recovery_id" = "${rec_done_begin.original_receipt.recovery_id}", "kind" = "chunks" }
+capture = "rec_done_evidence"
+
+[[commands]]
+command = "payment selection show"
+input = { "selection" = "${rec_done_base.id}" }
+capture = "rec_done_selection"
+
+[[commands]]
+command = "payment selection create"
+input = { "mode" = "new_receipt", "customer" = "${pay_customer.id}", "date" = "2026-10-09", "amount" = { "minor_units" = 150, "currency" = "USD" }, "label" = "REF-PAY-REC-uploading" }
+capture = "rec_uploading_created"
+reason = "Prepare an active nonfinancial recovery example"
+
+[[commands]]
+command = "payment selection update"
+input = { "selection" = "${rec_uploading_created.id}", "expected_version" = "${rec_uploading_created.version}", "set_items" = [{ "invoice" = "${rec_invoice.id}", "expected_version" = "${rec_invoice.version}", "amount" = { "minor_units" = 100, "currency" = "USD" }, "amount_origin" = "entered" }] }
+capture = "rec_uploading_base"
+reason = "Retain the exact original entered draft"
+
+[[commands]]
+command = "payment recovery begin"
+input = { "recovery_key" = "REF-PAY-REC-uploading", "selection" = "${rec_uploading_base.id}", "expected_version" = "${rec_uploading_base.version}", "local_baseline_revision" = "${rec_uploading_base.revision_id}", "attempt_generation" = "0b5055af-3124-55fb-b569-568fc13669f8", "declared_entry_count" = 1, "header_intent" = { "action" = "keep" } }
+recovery_intent = { "anchor_revision" = "${rec_uploading_base.revision_id}", "entries" = [{ "invoice_id" = "${rec_invoice.id}", "observed_invoice_version" = "${rec_invoice.version}", "action" = "set", "amount_minor_units" = 50, "currency" = "USD", "amount_origin" = "entered" }] }
+capture = "rec_uploading_begin"
+reason = "Share the complete recovery attempt"
+
+[[commands]]
+command = "payment recovery show"
+input = { "recovery_id" = "${rec_uploading_begin.original_receipt.recovery_id}" }
+capture = "rec_uploading_final"
+
+[[commands]]
+command = "payment recovery items"
+input = { "recovery_id" = "${rec_uploading_begin.original_receipt.recovery_id}", "kind" = "missing_ranges" }
+capture = "rec_uploading_evidence"
+
+[[commands]]
+command = "payment selection show"
+input = { "selection" = "${rec_uploading_base.id}" }
+capture = "rec_uploading_selection"
+
+[[commands]]
+command = "payment selection create"
+input = { "mode" = "new_receipt", "customer" = "${pay_customer.id}", "date" = "2026-10-09", "amount" = { "minor_units" = 150, "currency" = "USD" }, "label" = "REF-PAY-REC-review" }
+capture = "rec_review_created"
+reason = "Prepare an active nonfinancial recovery example"
+
+[[commands]]
+command = "payment selection update"
+input = { "selection" = "${rec_review_created.id}", "expected_version" = "${rec_review_created.version}", "set_items" = [{ "invoice" = "${rec_invoice.id}", "expected_version" = "${rec_invoice.version}", "amount" = { "minor_units" = 100, "currency" = "USD" }, "amount_origin" = "entered" }] }
+capture = "rec_review_base"
+reason = "Retain the exact original entered draft"
+
+[[commands]]
+command = "payment recovery begin"
+input = { "recovery_key" = "REF-PAY-REC-review", "selection" = "${rec_review_base.id}", "expected_version" = "${rec_review_base.version}", "local_baseline_revision" = "${rec_review_base.revision_id}", "attempt_generation" = "748771a3-06ca-5a21-8233-a525b397be13", "declared_entry_count" = 1, "header_intent" = { "action" = "keep" } }
+recovery_intent = { "anchor_revision" = "${rec_review_base.revision_id}", "entries" = [{ "invoice_id" = "${rec_invoice.id}", "observed_invoice_version" = "${rec_invoice.version}", "action" = "set", "amount_minor_units" = 50, "currency" = "USD", "amount_origin" = "entered" }] }
+capture = "rec_review_begin"
+reason = "Share the complete recovery attempt"
+
+[[commands]]
+command = "payment recovery upload"
+input = { "recovery_id" = "${rec_review_begin.original_receipt.recovery_id}", "chunk_index" = 0, "entries" = [{ "invoice_id" = "${rec_invoice.id}", "observed_invoice_version" = "${rec_invoice.version}", "action" = "set", "amount_minor_units" = 50, "currency" = "USD", "amount_origin" = "entered" }] }
+capture = "rec_review_upload"
+reason = "Share the exact attempted fifty-cent edit"
+
+[[commands]]
+command = "payment recovery seal"
+input = { "recovery_id" = "${rec_review_begin.original_receipt.recovery_id}", "expected_recovery_version" = "${rec_review_upload.current.recovery_version}" }
+capture = "rec_review_seal"
+reason = "Verify the complete attempted edit"
+
+[[commands]]
+command = "payment recovery show"
+input = { "recovery_id" = "${rec_review_begin.original_receipt.recovery_id}" }
+capture = "rec_review_shown"
+
+[[commands]]
+command = "payment recovery compare"
+input = { "recovery_id" = "${rec_review_begin.original_receipt.recovery_id}", "attempt_generation" = "${rec_review_shown.attempt_generation}", "intent_hash" = "${rec_review_shown.intent_hash}" }
+capture = "rec_review_compare"
+
+[[commands]]
+command = "payment recovery compare-items"
+input = { "recovery_id" = "${rec_review_begin.original_receipt.recovery_id}", "attempt_generation" = "${rec_review_shown.attempt_generation}", "intent_hash" = "${rec_review_shown.intent_hash}", "facts_fingerprint" = "${rec_review_compare.facts_fingerprint}", "kind" = "changes" }
+capture = "rec_review_changes"
+
+[[commands]]
+command = "payment recovery show"
+input = { "recovery_id" = "${rec_review_begin.original_receipt.recovery_id}" }
+capture = "rec_review_final"
+
+[[commands]]
+command = "payment recovery items"
+input = { "recovery_id" = "${rec_review_begin.original_receipt.recovery_id}", "kind" = "chunks" }
+capture = "rec_review_evidence"
+
+[[commands]]
+command = "payment selection show"
+input = { "selection" = "${rec_review_base.id}" }
+capture = "rec_review_selection"
+
+[[commands]]
+command = "payment recovery query"
+input = {  }
+capture = "rec_discovery"
+
+[[commands]]
+command = "payment selection query"
+input = { "state" = "recovering" }
+capture = "rec_pending"

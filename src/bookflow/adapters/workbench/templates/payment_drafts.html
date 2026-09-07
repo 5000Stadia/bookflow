@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% block title %}Shared payment selections{% endblock %}{% block body %}
 <h1>Shared payment selections</h1><p>Open a saved human or agent selection. Amount and row origins are retained in the shared draft.</p>
-<a href="/c/{{ company_id }}/receive-payments">New customer payment</a>
-{% for draft in drafts['items'] %}<section class="workspace-card"><h2><a href="/c/{{ company_id }}/receive-payments?selection={{ draft.id }}">{{ draft.customer_label }}</a></h2><p>{{ draft.context.date }} · {{ draft.context.mode.replace('_', ' ') }} · {{ draft.item_count }} invoices · {{ draft.state }}</p><p>Amount: {{ draft.amount.amount if draft.amount else 'unresolved' }} {{ draft.context.currency }} · {{ draft.amount_origin.replace('_', ' ') }}</p></section>{% else %}<p>No open selections.</p>{% endfor %}
-{% if drafts.next_cursor %}<a href="?cursor={{ drafts.next_cursor | urlencode }}">Next page</a>{% endif %}
+<a href="/c/{{ company_id }}/receive-payments">New customer payment</a> <a href="?state=open">Open selections</a> <a href="?state=recovering">Pending recovery</a> <a href="?state=consumed">Recorded selections</a>
+{% for draft in drafts['items'] %}<section class="workspace-card"><h2><a href="/c/{{ company_id }}/receive-payments?selection={{ draft.id }}">{{ draft.customer_label }}</a></h2><p>{{ draft.context.date }} · {{ draft.context.mode.replace('_', ' ') }} · {{ draft.item_count }} invoices · {{ draft.current_lifecycle.state if draft.current_lifecycle else draft.state }}</p><p>Amount: {{ draft.amount.amount if draft.amount else 'unresolved' }} {{ draft.context.currency }} · {{ draft.amount_origin.replace('_', ' ') }}</p></section>{% else %}<p>No selections match this view.</p>{% endfor %}
+{% if drafts.next_cursor %}<a href="?state={{ request.query_params.get("state", "open") | urlencode }}&amp;cursor={{ drafts.next_cursor | urlencode }}">Next page</a>{% endif %}
 {% endblock %}

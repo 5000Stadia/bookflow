@@ -293,3 +293,35 @@ for _name, _payload in _PAYMENT_EXAMPLES.items():
     if _name in ('payment update', 'payment unapply', 'payment void'):
         _args.extend(['--reason', 'Correct recorded remittance'])
     EXAMPLES[_name] = Example(' '.join(_payment_shell.quote(value) for value in _args), _payload)
+
+_RECOVERY_BEGIN = dict(recovery_key='example-recovery', selection=ID, expected_version=2,
+    local_baseline_revision=ID, attempt_generation='11111111-1111-4111-8111-111111111111',
+    declared_entry_count=0, intent_hash='a'*64, header_intent=dict(action='keep'))
+_RECOVERY_COMPARE = dict(recovery_id=ID,attempt_generation=_RECOVERY_BEGIN['attempt_generation'],intent_hash='a'*64)
+_RECOVERY_EXAMPLES = {
+    'begin':_RECOVERY_BEGIN,
+    'upload':dict(recovery_id=ID,chunk_index=0,entries=[dict(invoice_id=ID,observed_invoice_version=1,action='remove')]),
+    'seal':dict(recovery_id=ID,expected_recovery_version=2),
+    'compare':_RECOVERY_COMPARE,
+    'compare-items':dict(**_RECOVERY_COMPARE,facts_fingerprint='b'*64,kind='changes'),
+    'apply':dict(**_RECOVERY_COMPARE,expected_recovery_version=3,expected_selection_version=2,expected_facts_fingerprint='b'*64),
+    'abort':dict(recovery_id=ID,expected_recovery_version=2,disposition='discard_entire_attempt'),
+    'replace':dict(recovery_id=ID,expected_recovery_version=2,replacement=_RECOVERY_BEGIN),
+    'show':dict(recovery_id=ID),
+    'items':dict(recovery_id=ID,kind='missing_ranges',limit=50),
+    'query':dict(state='uploading',limit=50),
+}
+for _verb,_payload in _RECOVERY_EXAMPLES.items():
+    _args=['bookflow','payment','recovery',_verb]
+    def _recovery_flags(value,prefix=''):
+        for key,item in value.items():
+            name=(prefix+'-'+key if prefix else key).replace('_','-')
+            if isinstance(item,dict):
+                _recovery_flags(item,name)
+            else:
+                _args.extend(['--'+name,_payment_json.dumps(item,separators=(',',':')) if isinstance(item,list) else str(item)])
+    _recovery_flags(_payload)
+    _args.extend(['--company','Demo Plumbing Co','--json'])
+    if _verb in {'begin','upload','seal','apply','abort','replace'}:
+        _args.extend(['--reason','Recover the complete intended draft'])
+    EXAMPLES['payment recovery '+_verb]=Example(' '.join(_payment_shell.quote(arg) for arg in _args),_payload)

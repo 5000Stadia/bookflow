@@ -75,6 +75,10 @@ def authorize_query(s, transaction_ids, *, write=False):
 
 
 PAYMENT_TARGETS = {
+    'payment_selection_recovery': ('payment_selection_recoveries', 'id'),
+    'payment_selection_recovery_chunk': ('payment_selection_recovery_chunks', 'id'),
+    'payment_selection_recovery_item': ('payment_selection_recovery_items', 'id'),
+    'payment_selection_recovery_active': ('payment_selection_recovery_active', 'selection_id'),
     'payment_profile': ('payment_profiles', 'revision_id'),
     'payment_component_key': ('payment_component_keys', 'id'),
     'payment_component': ('payment_components', 'id'),
@@ -122,6 +126,9 @@ def record_transactions(db, record_type, record_id, seen=None, cache=None):
             from bookflow.core.errors import BookflowError
             raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'})
         return {record_id}
+    if record_type == 'payment_selection_recovery_active':
+        # Barrier rows are deliberately removed; their primary identity is S.
+        return record_transactions(db, 'payment_selection', record_id, seen, cache)
     target = PAYMENT_TARGETS.get(record_type)
     if target is None:
         if record_type in ('transaction_revision', 'document_line', 'document_line_identity', 'posting_batch', 'posting_line', 'posting_line_source'):
@@ -155,6 +162,10 @@ def record_transactions(db, record_type, record_id, seen=None, cache=None):
     if record_type.startswith('payment_selection'):
         selection_id = row['id'] if record_type == 'payment_selection' else row['selection_id']
         ids.update(item['invoice_id'] for item in _evidence_rows(db, c.payment_selection_items, 'selection_id', selection_id, cache) if item['invoice_id'])
+        ids.update(item['invoice_id'] for item in _evidence_rows(db, c.payment_selection_recovery_items, 'selection_id', selection_id, cache))
+        headers = _evidence_rows(db, c.payment_selections, 'id', selection_id, cache)
+        if headers and headers[0]['consumed_operation_id']:
+            ids.update(record_transactions(db, 'payment_operation', headers[0]['consumed_operation_id'], seen, cache))
         contexts = [revision['context_snapshot'] for revision in _evidence_rows(db, c.payment_selection_revisions, 'selection_id', selection_id, cache)]
         try:
             for context in contexts:

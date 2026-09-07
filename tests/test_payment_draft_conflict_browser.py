@@ -5,6 +5,7 @@ from tests.test_row5_browser_acceptance import browser_site
 from tests.test_row8_register_browser import register_browser
 from tests.test_payment_review_gui import setup, invoice_setup
 from tests.test_customer_payment_browser import click, shot
+from tests.test_payment_recovery_browser import press
 
 
 @pytest.mark.parametrize('width', [1280,390])
@@ -34,6 +35,7 @@ def test_review_rebases_only_attempted_selection_edits(register_browser,tmp_path
     comparison=b.evaluate("document.querySelector('[data-comparisons]').innerText")
     assert 'saved selection' in comparison and 'current selection' in comparison and 'attempted selection' in comparison
     click(b,'review')
+    press(b,'Confirm complete recovery')
     current=run('payment selection show',dict(selection=selection))
     rows=run('payment selection items',dict(selection=selection,revision=current['version']))['items']
     actual={row['invoice_id']:row['amount_minor_units'] for row in rows}
@@ -67,8 +69,9 @@ def test_review_rejects_a_second_shared_writer_without_losing_attempt(register_b
     comparison=b.evaluate("document.querySelector('[data-comparisons]').innerText")
     assert '10.00' in comparison and '13.00' in comparison and '12 USD' in comparison
     click(b,'review')
+    press(b,'Confirm complete recovery')
     assert run('payment selection show',dict(selection=selection))['amount']['minor_units']==1200
-    assert b.evaluate("document.querySelector('#payment-amount').value")=='12'
+    assert b.evaluate("document.querySelector('#payment-amount').value")=='12.00'
     shot(b,tmp_path,'second-writer-attempt-retained',width)
 
 
@@ -103,6 +106,7 @@ def test_rejected_row_review_refreshes_all_retained_dependencies(register_browse
     b.wait_for("!document.querySelector('#payment-workspace').hasAttribute('aria-busy')")
     assert ('E_QUERY_STALE' if payment else 'E_VERSION_CONFLICT') in b.evaluate("document.querySelector('#payment-error').innerText")
     click(b,'review')
+    press(b,'Confirm complete recovery')
     current=run('payment selection show',dict(selection=selection))
     rows=run('payment selection items',dict(selection=selection,revision=current['version']))['items']
     assert {row['invoice_id']:row['amount_minor_units'] for row in rows}=={first['id']:500,second['id']:300}
@@ -125,7 +129,7 @@ def test_rejected_row_review_refreshes_all_retained_dependencies(register_browse
 
 
 @pytest.mark.timeout(600)
-def test_review_recovers_complete_403_stale_rows_without_changing_original(register_browser,tmp_path):
+def test_review_recovers_complete_403_stale_rows_on_same_selection_preserving_history(register_browser,tmp_path):
     b,run,payer,other,base=setup(register_browser)
     first,item,_=invoice_setup(run,payer)
     invoices=[first]+[run('invoice post',dict(customer=payer,date='2026-06-01',number=f'RECOVER-403-{i}',
@@ -136,6 +140,13 @@ def test_review_recovers_complete_403_stale_rows_without_changing_original(regis
         draft=run('payment selection update',dict(selection=selection,expected_version=draft['version'],set_items=[
             dict(invoice=row['id'],expected_version=1,amount='0.01',amount_origin='entered') for row in invoices[offset:offset+200]]))
     original=run('payment selection show',dict(selection=selection))
+    def all_rows(revision):
+        rows=[];cursor=None
+        while True:
+            page=run('payment selection items',dict(selection=selection,revision=revision,limit=200,**({'cursor':cursor} if cursor else {})))
+            rows+=page['items'];cursor=page['next_cursor']
+            if not cursor:return rows
+    original_rows=all_rows(original['version'])
     click(b,'refresh-draft')
     method=b.evaluate("document.querySelector('#payment-method').value")
     # A separate complete remittance advances all403 invoice baselines without
@@ -155,8 +166,11 @@ def test_review_recovers_complete_403_stale_rows_without_changing_original(regis
     b.wait_for("!document.querySelector('#payment-workspace').hasAttribute('aria-busy')",timeout=240)
     assert b.evaluate("document.querySelector('#payment-error').hidden"),b.evaluate("document.querySelector('#payment-error').innerText")
     recovered=b.evaluate("new URL(location.href).searchParams.get('selection')")
-    assert recovered!=selection
-    assert run('payment selection show',dict(selection=selection))==original
+    assert recovered==selection
+    assert run('payment selection show',dict(selection=selection))['version']==original['version']
+    press(b,'Confirm complete recovery')
+    assert run('payment selection show',dict(selection=selection))['version']==original['version']+1
+    assert all_rows(original['version'])==original_rows
     items=[];cursor=None
     while True:
         page=run('payment selection items',dict(selection=recovered,limit=200,**({'cursor':cursor} if cursor else {})))
