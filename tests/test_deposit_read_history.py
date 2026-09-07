@@ -199,3 +199,16 @@ def test_zeroed_component_read_identity_survives_restore(client,sale,run_private
                 assert tuple(pages)==printed.cash_allocations
             assert tuple(s.company.raw.iterdump())==before
         run_private(read)
+
+
+@pytest.mark.parametrize('change',['add','remove','projection'])
+def test_dependency_owner_registry_requires_manifest_disposition(monkeypatch,change):
+    from bookflow.company import deposit_dependency_history as h,deposit_read_manifest as manifest
+    manifest.conform()
+    owners=dict(h.OWNERS)
+    if change=='add':owners['new_dependency']=h.Owner('items','id',('item',))
+    elif change=='remove':del owners['source_item']
+    else:owners['account']=h.Owner('accounts','id',('account',),('id','name'))
+    monkeypatch.setattr(h,'OWNERS',owners)
+    with pytest.raises(BookflowError) as caught:manifest.conform()
+    assert caught.value.code=='E_DEPOSIT_SOURCE_INVALID'

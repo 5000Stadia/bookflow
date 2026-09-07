@@ -8,7 +8,7 @@ their exact history/source owners. No future field is adopted at runtime.
 """
 import hashlib,json
 from bookflow.core.errors import BookflowError
-REQUIRED_TABLES = ('accounts', 'application_allocations', 'applications', 'attachment_links', 'attachments', 'audit_entries', 'audit_events', 'bank_effect_current', 'bank_effect_keys', 'bank_effect_versions', 'classes', 'company_info', 'customers', 'deposit_cash_cells', 'deposit_component_keys', 'deposit_components', 'deposit_current_memberships', 'deposit_draft_additional', 'deposit_draft_consumptions', 'deposit_draft_revisions', 'deposit_draft_row_keys', 'deposit_draft_sources', 'deposit_drafts', 'deposit_memberships', 'deposit_operation_items', 'deposit_operation_targets', 'deposit_operations', 'deposit_profiles', 'deposit_row_keys', 'deposit_selection_revisions', 'deposit_selection_sources', 'deposit_selections', 'document_line_identities', 'document_lines', 'employees', 'notes', 'other_names', 'payment_component_keys', 'payment_components', 'payment_methods', 'payment_profiles', 'posting_batches', 'posting_line_sources', 'posting_lines', 'sales_line_profiles', 'sales_profiles', 'sales_tax_attribution_lines', 'sales_tax_attributions', 'sales_tax_components', 'sales_tax_line_keys', 'settlement_line_keys', 'transaction_revisions', 'transactions', 'vendors', 'work_billing_allocations', 'work_billing_conversions', 'work_line_identities', 'work_lines', 'work_links', 'work_revisions', 'work_tax_attribution_lines', 'work_tax_attributions', 'work_tax_line_keys')
+REQUIRED_TABLES = ('accounts', 'application_allocations', 'applications', 'attachment_links', 'attachments', 'audit_entries', 'audit_events', 'bank_effect_current', 'bank_effect_keys', 'bank_effect_versions', 'classes', 'company_info', 'custom_field_defs', 'customer_messages', 'customers', 'deposit_cash_cells', 'deposit_component_keys', 'deposit_components', 'deposit_current_memberships', 'deposit_draft_additional', 'deposit_draft_consumptions', 'deposit_draft_revisions', 'deposit_draft_row_keys', 'deposit_draft_sources', 'deposit_drafts', 'deposit_memberships', 'deposit_operation_items', 'deposit_operation_targets', 'deposit_operations', 'deposit_profiles', 'deposit_row_keys', 'deposit_selection_revisions', 'deposit_selection_sources', 'deposit_selections', 'document_line_identities', 'document_lines', 'employees', 'items', 'notes', 'other_names', 'payment_component_keys', 'payment_components', 'payment_methods', 'payment_profiles', 'posting_batches', 'posting_line_sources', 'posting_lines', 'price_levels', 'sales_line_profiles', 'sales_profiles', 'sales_reps', 'sales_tax_attribution_lines', 'sales_tax_attributions', 'sales_tax_codes', 'sales_tax_components', 'sales_tax_line_keys', 'settlement_line_keys', 'ship_methods', 'transaction_revisions', 'transactions', 'units_of_measure', 'vendors', 'work_billing_allocations', 'work_billing_conversions', 'work_documents', 'work_line_identities', 'work_lines', 'work_links', 'work_revisions', 'work_tax_attribution_lines', 'work_tax_attributions', 'work_tax_line_keys')
 FIELDS = {
     'accounts': {
         'id': ('str', False, True, 'current navigation id/label/active/version/kind only; all other fields outside projection and never captured substitutions: id'),
@@ -1411,6 +1411,1196 @@ SOURCE_TABLES = ('transaction_revisions', 'posting_batches', 'posting_lines', 'p
 DEPOSIT_TABLES = ('transaction_revisions', 'deposit_profiles', 'document_line_identities', 'deposit_row_keys', 'document_lines', 'deposit_component_keys', 'deposit_components', 'posting_batches', 'posting_lines', 'posting_line_sources', 'deposit_cash_cells', 'deposit_memberships', 'bank_effect_keys', 'bank_effect_versions', 'deposit_current_memberships', 'deposit_operations')
 CODECS = {'Effect': '1e9cd64ad6f6638f1fb6db62c0ce6afc430a27f481bb8bd2d3dc63c2cbe53685', 'LifecycleOutput': '2e393b6123ba315f3e3683b246d9e298dab2f493242ecc25b0490af569c1a845', 'CoordinateOutput': '3c13e1b1d98893c9adedf1ae08d27f20b14259de58730b1fd05cbeb30df75dff', 'Manifest': '5fb41ab8b136e2e3526bc7fc6bd137cf7d1ae6155ef4e44e68c458c7e43dc1e6', 'Issuer': 'fbfded5b9dcadd3e93134d68c9e91ab744039894765f54698ea7f0af33ae2a72', 'SnapshotField': 'd8d4c6aeaf83ab02fe4002eb10c324073381f611dfbeea7a123452e50830bba9'}
 
+# Explicit dependency inspection registry closure, separate from disclosure.
+DEPENDENCY_OWNERS = {'account': ('accounts',
+             'id',
+             ('account',),
+             ('id', 'name', 'full_name', 'number', 'type', 'system_role', 'active', 'currency')),
+ 'application': ('applications', 'id', ('application',), None),
+ 'application_allocation': ('application_allocations', 'id', ('application_allocation',), None),
+ 'bank_effect_key': ('bank_effect_keys', 'id', ('bank_effect_key',), None),
+ 'bank_effect_version': ('bank_effect_versions', 'id', ('bank_effect_version',), None),
+ 'class': ('classes', 'id', ('class',), ('id', 'name', 'full_name', 'active')),
+ 'company_info': ('company_info', 'id', ('company_info',), ('id', 'home_currency', 'closing_date')),
+ 'custom_field': ('custom_field_defs', 'id', ('custom_field',), None),
+ 'customer': ('customers', 'id', ('customer',), ('id', 'name', 'full_name', 'active')),
+ 'deposit_cash_cell': ('deposit_cash_cells', 'id', ('deposit_cash_cell',), None),
+ 'deposit_component': ('deposit_components', 'id', ('deposit_component',), None),
+ 'deposit_component_key': ('deposit_component_keys', 'id', ('deposit_component_key',), None),
+ 'deposit_draft': ('deposit_drafts', 'id', ('deposit_draft',), None),
+ 'deposit_draft_revision': ('deposit_draft_revisions', 'id', ('deposit_draft_revision',), None),
+ 'deposit_draft_row_key': ('deposit_draft_row_keys', 'id', ('deposit_draft_row_key',), None),
+ 'deposit_membership': ('deposit_memberships', 'id', ('deposit_membership',), None),
+ 'deposit_number': ('transactions', 'id', ('transaction',), ('id', 'type', 'number')),
+ 'deposit_number_operation': ('deposit_operations', 'id', ('deposit_operation',), None),
+ 'deposit_profile': ('deposit_profiles', 'revision_id', ('deposit_profile',), None),
+ 'deposit_row_key': ('deposit_row_keys', 'id', ('deposit_row_key',), None),
+ 'document_line': ('document_lines', 'id', ('document_line',), None),
+ 'document_line_identity': ('document_line_identities',
+                            'id',
+                            ('document_line_identity', 'document_line_identitie'),
+                            None),
+ 'employee': ('employees', 'id', ('employee',), ('id', 'name', 'active')),
+ 'other_name': ('other_names', 'id', ('other_name',), ('id', 'name', 'active')),
+ 'payment_component': ('payment_components', 'id', ('payment_component',), None),
+ 'payment_component_key': ('payment_component_keys', 'id', ('payment_component_key',), None),
+ 'payment_method': ('payment_methods', 'id', ('payment_method',), ('id', 'name', 'active')),
+ 'payment_profile': ('payment_profiles', 'revision_id', ('payment_profile',), None),
+ 'posting_batch': ('posting_batches', 'id', ('posting_batch', 'posting_batche'), None),
+ 'posting_line': ('posting_lines', 'id', ('posting_line',), None),
+ 'posting_line_source': ('posting_line_sources', 'id', ('posting_line_source',), None),
+ 'sales_line_profile': ('sales_line_profiles', 'document_line_id', ('sales_line_profile',), None),
+ 'sales_profile': ('sales_profiles', 'revision_id', ('sales_profile',), None),
+ 'sales_tax_attribution': ('sales_tax_attributions', 'revision_id', ('sales_tax_attribution',), None),
+ 'sales_tax_attribution_line': ('sales_tax_attribution_lines',
+                                'document_line_id',
+                                ('sales_tax_attribution_line',),
+                                None),
+ 'sales_tax_component': ('sales_tax_components', 'id', ('sales_tax_component',), None),
+ 'sales_tax_line_key': ('sales_tax_line_keys', 'line_id', ('sales_tax_line_key',), None),
+ 'settlement_line_key': ('settlement_line_keys', 'id', ('settlement_line_key',), None),
+ 'source_company': ('company_info', 'id', ('company_info',), None),
+ 'source_custom_field': ('custom_field_defs', 'id', ('custom_field',), None),
+ 'source_customer': ('customers', 'id', ('customer',), None),
+ 'source_item': ('items', 'id', ('item',), None),
+ 'source_message': ('customer_messages', 'id', ('customer_message',), None),
+ 'source_number': ('transactions', 'id', ('transaction',), ('id', 'type', 'number')),
+ 'source_price_level': ('price_levels', 'id', ('price_level',), None),
+ 'source_price_version': ('price_levels', 'id', ('price_level',), None),
+ 'source_sales_rep': ('sales_reps', 'id', ('sales_rep',), None),
+ 'source_ship_method': ('ship_methods', 'id', ('ship_method',), None),
+ 'source_tax_code': ('sales_tax_codes', 'id', ('sales_tax_code',), None),
+ 'source_unit': ('units_of_measure', 'id', ('unit_of_measure',), None),
+ 'source_vendor': ('vendors', 'id', ('vendor',), None),
+ 'transaction': ('transactions', 'id', ('transaction',), None),
+ 'transaction_revision': ('transaction_revisions', 'id', ('transaction_revision',), None),
+ 'vendor': ('vendors', 'id', ('vendor',), ('id', 'name', 'active')),
+ 'work_billing_allocation': ('work_billing_allocations', 'id', ('work_billing_allocation',), None),
+ 'work_billing_conversion': ('work_billing_conversions', 'id', ('work_billing_conversion',), None),
+ 'work_document': ('work_documents', 'id', ('work_document',), None),
+ 'work_line': ('work_line_identities', 'id', ('work_line',), None),
+ 'work_link': ('work_links', 'id', ('work_link',), None),
+ 'work_revision': ('work_revisions', 'id', ('work_revision',), None),
+ 'work_revision_line': ('work_lines', 'id', ('work_revision_line',), None),
+ 'work_tax_attribution': ('work_tax_attributions', 'revision_id', ('work_tax_attribution',), None),
+ 'work_tax_attribution_line': ('work_tax_attribution_lines',
+                               'work_line_id',
+                               ('work_tax_attribution_line',),
+                               None),
+ 'work_tax_line_key': ('work_tax_line_keys', 'line_id', ('work_tax_line_key',), None)}
+FIELDS.update({'custom_field_defs': {'active': ('bool',
+                                  False,
+                                  False,
+                                  'Dependency inspection owner custom_field_defs.active; validated by its '
+                                  'registered historical owner, not substituted into captured print values.'),
+                       'created_at': ('str',
+                                      False,
+                                      False,
+                                      'Dependency inspection owner custom_field_defs.created_at; validated '
+                                      'by its registered historical owner, not substituted into captured '
+                                      'print values.'),
+                       'created_by': ('str',
+                                      False,
+                                      False,
+                                      'Dependency inspection owner custom_field_defs.created_by; validated '
+                                      'by its registered historical owner, not substituted into captured '
+                                      'print values.'),
+                       'created_via': ('str',
+                                       False,
+                                       False,
+                                       'Dependency inspection owner custom_field_defs.created_via; validated '
+                                       'by its registered historical owner, not substituted into captured '
+                                       'print values.'),
+                       'default_canonical_text': ('str',
+                                                  True,
+                                                  False,
+                                                  'Dependency inspection owner '
+                                                  'custom_field_defs.default_canonical_text; validated by '
+                                                  'its registered historical owner, not substituted into '
+                                                  'captured print values.'),
+                       'id': ('str',
+                              False,
+                              True,
+                              'Dependency inspection owner custom_field_defs.id; validated by its registered '
+                              'historical owner, not substituted into captured print values.'),
+                       'kind': ('str',
+                                False,
+                                False,
+                                'Dependency inspection owner custom_field_defs.kind; validated by its '
+                                'registered historical owner, not substituted into captured print values.'),
+                       'name': ('str',
+                                False,
+                                False,
+                                'Dependency inspection owner custom_field_defs.name; validated by its '
+                                'registered historical owner, not substituted into captured print values.'),
+                       'name_key': ('str',
+                                    False,
+                                    False,
+                                    'Dependency inspection owner custom_field_defs.name_key; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+                       'position': ('int',
+                                    False,
+                                    False,
+                                    'Dependency inspection owner custom_field_defs.position; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+                       'required': ('bool',
+                                    False,
+                                    False,
+                                    'Dependency inspection owner custom_field_defs.required; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+                       'seed_key': ('str',
+                                    True,
+                                    False,
+                                    'Dependency inspection owner custom_field_defs.seed_key; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+                       'updated_at': ('str',
+                                      False,
+                                      False,
+                                      'Dependency inspection owner custom_field_defs.updated_at; validated '
+                                      'by its registered historical owner, not substituted into captured '
+                                      'print values.'),
+                       'updated_by': ('str',
+                                      False,
+                                      False,
+                                      'Dependency inspection owner custom_field_defs.updated_by; validated '
+                                      'by its registered historical owner, not substituted into captured '
+                                      'print values.'),
+                       'updated_via': ('str',
+                                       False,
+                                       False,
+                                       'Dependency inspection owner custom_field_defs.updated_via; validated '
+                                       'by its registered historical owner, not substituted into captured '
+                                       'print values.'),
+                       'version': ('int',
+                                   False,
+                                   False,
+                                   'Dependency inspection owner custom_field_defs.version; validated by its '
+                                   'registered historical owner, not substituted into captured print '
+                                   'values.')},
+ 'customer_messages': {'active': ('bool',
+                                  False,
+                                  False,
+                                  'Dependency inspection owner customer_messages.active; validated by its '
+                                  'registered historical owner, not substituted into captured print values.'),
+                       'created_at': ('str',
+                                      False,
+                                      False,
+                                      'Dependency inspection owner customer_messages.created_at; validated '
+                                      'by its registered historical owner, not substituted into captured '
+                                      'print values.'),
+                       'created_by': ('str',
+                                      False,
+                                      False,
+                                      'Dependency inspection owner customer_messages.created_by; validated '
+                                      'by its registered historical owner, not substituted into captured '
+                                      'print values.'),
+                       'created_via': ('str',
+                                       False,
+                                       False,
+                                       'Dependency inspection owner customer_messages.created_via; validated '
+                                       'by its registered historical owner, not substituted into captured '
+                                       'print values.'),
+                       'display_order': ('int',
+                                         False,
+                                         False,
+                                         'Dependency inspection owner customer_messages.display_order; '
+                                         'validated by its registered historical owner, not substituted into '
+                                         'captured print values.'),
+                       'id': ('str',
+                              False,
+                              True,
+                              'Dependency inspection owner customer_messages.id; validated by its registered '
+                              'historical owner, not substituted into captured print values.'),
+                       'name': ('str',
+                                False,
+                                False,
+                                'Dependency inspection owner customer_messages.name; validated by its '
+                                'registered historical owner, not substituted into captured print values.'),
+                       'name_key': ('str',
+                                    False,
+                                    False,
+                                    'Dependency inspection owner customer_messages.name_key; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+                       'seed_key': ('str',
+                                    True,
+                                    False,
+                                    'Dependency inspection owner customer_messages.seed_key; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+                       'text': ('str',
+                                False,
+                                False,
+                                'Dependency inspection owner customer_messages.text; validated by its '
+                                'registered historical owner, not substituted into captured print values.'),
+                       'updated_at': ('str',
+                                      False,
+                                      False,
+                                      'Dependency inspection owner customer_messages.updated_at; validated '
+                                      'by its registered historical owner, not substituted into captured '
+                                      'print values.'),
+                       'updated_by': ('str',
+                                      False,
+                                      False,
+                                      'Dependency inspection owner customer_messages.updated_by; validated '
+                                      'by its registered historical owner, not substituted into captured '
+                                      'print values.'),
+                       'updated_via': ('str',
+                                       False,
+                                       False,
+                                       'Dependency inspection owner customer_messages.updated_via; validated '
+                                       'by its registered historical owner, not substituted into captured '
+                                       'print values.'),
+                       'version': ('int',
+                                   False,
+                                   False,
+                                   'Dependency inspection owner customer_messages.version; validated by its '
+                                   'registered historical owner, not substituted into captured print '
+                                   'values.')},
+ 'items': {'accumulated_depreciation_account_id': ('str',
+                                                   True,
+                                                   False,
+                                                   'Dependency inspection owner '
+                                                   'items.accumulated_depreciation_account_id; validated by '
+                                                   'its registered historical owner, not substituted into '
+                                                   'captured print values.'),
+           'active': ('bool',
+                      False,
+                      False,
+                      'Dependency inspection owner items.active; validated by its registered historical '
+                      'owner, not substituted into captured print values.'),
+           'assembly_build_point_microunits': ('int',
+                                               True,
+                                               False,
+                                               'Dependency inspection owner '
+                                               'items.assembly_build_point_microunits; validated by its '
+                                               'registered historical owner, not substituted into captured '
+                                               'print values.'),
+           'asset_account_id': ('str',
+                                True,
+                                False,
+                                'Dependency inspection owner items.asset_account_id; validated by its '
+                                'registered historical owner, not substituted into captured print values.'),
+           'asset_number': ('str',
+                            True,
+                            False,
+                            'Dependency inspection owner items.asset_number; validated by its registered '
+                            'historical owner, not substituted into captured print values.'),
+           'barcode': ('str',
+                       True,
+                       False,
+                       'Dependency inspection owner items.barcode; validated by its registered historical '
+                       'owner, not substituted into captured print values.'),
+           'book_basis_currency': ('str',
+                                   True,
+                                   False,
+                                   'Dependency inspection owner items.book_basis_currency; validated by its '
+                                   'registered historical owner, not substituted into captured print '
+                                   'values.'),
+           'book_basis_minor_units': ('int',
+                                      True,
+                                      False,
+                                      'Dependency inspection owner items.book_basis_minor_units; validated '
+                                      'by its registered historical owner, not substituted into captured '
+                                      'print values.'),
+           'category_id': ('str',
+                           True,
+                           False,
+                           'Dependency inspection owner items.category_id; validated by its registered '
+                           'historical owner, not substituted into captured print values.'),
+           'cogs_account_id': ('str',
+                               True,
+                               False,
+                               'Dependency inspection owner items.cogs_account_id; validated by its '
+                               'registered historical owner, not substituted into captured print values.'),
+           'cost_currency': ('str',
+                             True,
+                             False,
+                             'Dependency inspection owner items.cost_currency; validated by its registered '
+                             'historical owner, not substituted into captured print values.'),
+           'cost_minor_units': ('int',
+                                True,
+                                False,
+                                'Dependency inspection owner items.cost_minor_units; validated by its '
+                                'registered historical owner, not substituted into captured print values.'),
+           'created_at': ('str',
+                          False,
+                          False,
+                          'Dependency inspection owner items.created_at; validated by its registered '
+                          'historical owner, not substituted into captured print values.'),
+           'created_by': ('str',
+                          False,
+                          False,
+                          'Dependency inspection owner items.created_by; validated by its registered '
+                          'historical owner, not substituted into captured print values.'),
+           'created_via': ('str',
+                           False,
+                           False,
+                           'Dependency inspection owner items.created_via; validated by its registered '
+                           'historical owner, not substituted into captured print values.'),
+           'default_class_id': ('str',
+                                True,
+                                False,
+                                'Dependency inspection owner items.default_class_id; validated by its '
+                                'registered historical owner, not substituted into captured print values.'),
+           'deposit_account_id': ('str',
+                                  True,
+                                  False,
+                                  'Dependency inspection owner items.deposit_account_id; validated by its '
+                                  'registered historical owner, not substituted into captured print values.'),
+           'depreciation_expense_account_id': ('str',
+                                               True,
+                                               False,
+                                               'Dependency inspection owner '
+                                               'items.depreciation_expense_account_id; validated by its '
+                                               'registered historical owner, not substituted into captured '
+                                               'print values.'),
+           'depreciation_method': ('str',
+                                   True,
+                                   False,
+                                   'Dependency inspection owner items.depreciation_method; validated by its '
+                                   'registered historical owner, not substituted into captured print '
+                                   'values.'),
+           'depth': ('int',
+                     False,
+                     False,
+                     'Dependency inspection owner items.depth; validated by its registered historical owner, '
+                     'not substituted into captured print values.'),
+           'description': ('str',
+                           True,
+                           False,
+                           'Dependency inspection owner items.description; validated by its registered '
+                           'historical owner, not substituted into captured print values.'),
+           'discount_amount_currency': ('str',
+                                        True,
+                                        False,
+                                        'Dependency inspection owner items.discount_amount_currency; '
+                                        'validated by its registered historical owner, not substituted into '
+                                        'captured print values.'),
+           'discount_amount_minor_units': ('int',
+                                           True,
+                                           False,
+                                           'Dependency inspection owner items.discount_amount_minor_units; '
+                                           'validated by its registered historical owner, not substituted '
+                                           'into captured print values.'),
+           'discount_percent_millionths': ('int',
+                                           True,
+                                           False,
+                                           'Dependency inspection owner items.discount_percent_millionths; '
+                                           'validated by its registered historical owner, not substituted '
+                                           'into captured print values.'),
+           'disposal_costs_currency': ('str',
+                                       True,
+                                       False,
+                                       'Dependency inspection owner items.disposal_costs_currency; validated '
+                                       'by its registered historical owner, not substituted into captured '
+                                       'print values.'),
+           'disposal_costs_minor_units': ('int',
+                                          True,
+                                          False,
+                                          'Dependency inspection owner items.disposal_costs_minor_units; '
+                                          'validated by its registered historical owner, not substituted '
+                                          'into captured print values.'),
+           'disposal_date': ('str',
+                             True,
+                             False,
+                             'Dependency inspection owner items.disposal_date; validated by its registered '
+                             'historical owner, not substituted into captured print values.'),
+           'disposal_proceeds_currency': ('str',
+                                          True,
+                                          False,
+                                          'Dependency inspection owner items.disposal_proceeds_currency; '
+                                          'validated by its registered historical owner, not substituted '
+                                          'into captured print values.'),
+           'disposal_proceeds_minor_units': ('int',
+                                             True,
+                                             False,
+                                             'Dependency inspection owner '
+                                             'items.disposal_proceeds_minor_units; validated by its '
+                                             'registered historical owner, not substituted into captured '
+                                             'print values.'),
+           'disposal_status': ('str',
+                               True,
+                               False,
+                               'Dependency inspection owner items.disposal_status; validated by its '
+                               'registered historical owner, not substituted into captured print values.'),
+           'expense_account_id': ('str',
+                                  True,
+                                  False,
+                                  'Dependency inspection owner items.expense_account_id; validated by its '
+                                  'registered historical owner, not substituted into captured print values.'),
+           'full_name': ('str',
+                         False,
+                         False,
+                         'Dependency inspection owner items.full_name; validated by its registered '
+                         'historical owner, not substituted into captured print values.'),
+           'full_name_key': ('str',
+                             False,
+                             False,
+                             'Dependency inspection owner items.full_name_key; validated by its registered '
+                             'historical owner, not substituted into captured print values.'),
+           'gain_loss_account_id': ('str',
+                                    True,
+                                    False,
+                                    'Dependency inspection owner items.gain_loss_account_id; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+           'id': ('str',
+                  False,
+                  True,
+                  'Dependency inspection owner items.id; validated by its registered historical owner, not '
+                  'substituted into captured print values.'),
+           'income_account_id': ('str',
+                                 True,
+                                 False,
+                                 'Dependency inspection owner items.income_account_id; validated by its '
+                                 'registered historical owner, not substituted into captured print values.'),
+           'liability_account_id': ('str',
+                                    True,
+                                    False,
+                                    'Dependency inspection owner items.liability_account_id; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+           'location': ('str',
+                        True,
+                        False,
+                        'Dependency inspection owner items.location; validated by its registered historical '
+                        'owner, not substituted into captured print values.'),
+           'manufacturer_part_number': ('str',
+                                        True,
+                                        False,
+                                        'Dependency inspection owner items.manufacturer_part_number; '
+                                        'validated by its registered historical owner, not substituted into '
+                                        'captured print values.'),
+           'name': ('str',
+                    False,
+                    False,
+                    'Dependency inspection owner items.name; validated by its registered historical owner, '
+                    'not substituted into captured print values.'),
+           'name_key': ('str',
+                        False,
+                        False,
+                        'Dependency inspection owner items.name_key; validated by its registered historical '
+                        'owner, not substituted into captured print values.'),
+           'notes': ('str',
+                     True,
+                     False,
+                     'Dependency inspection owner items.notes; validated by its registered historical owner, '
+                     'not substituted into captured print values.'),
+           'original_cost_currency': ('str',
+                                      True,
+                                      False,
+                                      'Dependency inspection owner items.original_cost_currency; validated '
+                                      'by its registered historical owner, not substituted into captured '
+                                      'print values.'),
+           'original_cost_minor_units': ('int',
+                                         True,
+                                         False,
+                                         'Dependency inspection owner items.original_cost_minor_units; '
+                                         'validated by its registered historical owner, not substituted into '
+                                         'captured print values.'),
+           'other_charge_percent_millionths': ('int',
+                                               True,
+                                               False,
+                                               'Dependency inspection owner '
+                                               'items.other_charge_percent_millionths; validated by its '
+                                               'registered historical owner, not substituted into captured '
+                                               'print values.'),
+           'parent_id': ('str',
+                         True,
+                         False,
+                         'Dependency inspection owner items.parent_id; validated by its registered '
+                         'historical owner, not substituted into captured print values.'),
+           'path': ('str',
+                    False,
+                    False,
+                    'Dependency inspection owner items.path; validated by its registered historical owner, '
+                    'not substituted into captured print values.'),
+           'payment_method_id': ('str',
+                                 True,
+                                 False,
+                                 'Dependency inspection owner items.payment_method_id; validated by its '
+                                 'registered historical owner, not substituted into captured print values.'),
+           'preferred_vendor_id': ('str',
+                                   True,
+                                   False,
+                                   'Dependency inspection owner items.preferred_vendor_id; validated by its '
+                                   'registered historical owner, not substituted into captured print '
+                                   'values.'),
+           'price_currency': ('str',
+                              True,
+                              False,
+                              'Dependency inspection owner items.price_currency; validated by its registered '
+                              'historical owner, not substituted into captured print values.'),
+           'price_minor_units': ('int',
+                                 True,
+                                 False,
+                                 'Dependency inspection owner items.price_minor_units; validated by its '
+                                 'registered historical owner, not substituted into captured print values.'),
+           'print_members': ('bool',
+                             True,
+                             False,
+                             'Dependency inspection owner items.print_members; validated by its registered '
+                             'historical owner, not substituted into captured print values.'),
+           'purchase_date': ('str',
+                             True,
+                             False,
+                             'Dependency inspection owner items.purchase_date; validated by its registered '
+                             'historical owner, not substituted into captured print values.'),
+           'purchase_description': ('str',
+                                    True,
+                                    False,
+                                    'Dependency inspection owner items.purchase_description; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+           'purchase_enabled': ('bool',
+                                False,
+                                False,
+                                'Dependency inspection owner items.purchase_enabled; validated by its '
+                                'registered historical owner, not substituted into captured print values.'),
+           'reorder_point_max_microunits': ('int',
+                                            True,
+                                            False,
+                                            'Dependency inspection owner items.reorder_point_max_microunits; '
+                                            'validated by its registered historical owner, not substituted '
+                                            'into captured print values.'),
+           'reorder_point_min_microunits': ('int',
+                                            True,
+                                            False,
+                                            'Dependency inspection owner items.reorder_point_min_microunits; '
+                                            'validated by its registered historical owner, not substituted '
+                                            'into captured print values.'),
+           'sales_enabled': ('bool',
+                             False,
+                             False,
+                             'Dependency inspection owner items.sales_enabled; validated by its registered '
+                             'historical owner, not substituted into captured print values.'),
+           'sales_tax_code_id': ('str',
+                                 True,
+                                 False,
+                                 'Dependency inspection owner items.sales_tax_code_id; validated by its '
+                                 'registered historical owner, not substituted into captured print values.'),
+           'seed_key': ('str',
+                        True,
+                        False,
+                        'Dependency inspection owner items.seed_key; validated by its registered historical '
+                        'owner, not substituted into captured print values.'),
+           'serial_number': ('str',
+                             True,
+                             False,
+                             'Dependency inspection owner items.serial_number; validated by its registered '
+                             'historical owner, not substituted into captured print values.'),
+           'tax_agency_vendor_id': ('str',
+                                    True,
+                                    False,
+                                    'Dependency inspection owner items.tax_agency_vendor_id; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+           'tax_basis_currency': ('str',
+                                  True,
+                                  False,
+                                  'Dependency inspection owner items.tax_basis_currency; validated by its '
+                                  'registered historical owner, not substituted into captured print values.'),
+           'tax_basis_minor_units': ('int',
+                                     True,
+                                     False,
+                                     'Dependency inspection owner items.tax_basis_minor_units; validated by '
+                                     'its registered historical owner, not substituted into captured print '
+                                     'values.'),
+           'tax_percent_millionths': ('int',
+                                      True,
+                                      False,
+                                      'Dependency inspection owner items.tax_percent_millionths; validated '
+                                      'by its registered historical owner, not substituted into captured '
+                                      'print values.'),
+           'type': ('str',
+                    False,
+                    False,
+                    'Dependency inspection owner items.type; validated by its registered historical owner, '
+                    'not substituted into captured print values.'),
+           'unit_of_measure_set_id': ('str',
+                                      True,
+                                      False,
+                                      'Dependency inspection owner items.unit_of_measure_set_id; validated '
+                                      'by its registered historical owner, not substituted into captured '
+                                      'print values.'),
+           'updated_at': ('str',
+                          False,
+                          False,
+                          'Dependency inspection owner items.updated_at; validated by its registered '
+                          'historical owner, not substituted into captured print values.'),
+           'updated_by': ('str',
+                          False,
+                          False,
+                          'Dependency inspection owner items.updated_by; validated by its registered '
+                          'historical owner, not substituted into captured print values.'),
+           'updated_via': ('str',
+                           False,
+                           False,
+                           'Dependency inspection owner items.updated_via; validated by its registered '
+                           'historical owner, not substituted into captured print values.'),
+           'use_undeposited_funds': ('bool',
+                                     True,
+                                     False,
+                                     'Dependency inspection owner items.use_undeposited_funds; validated by '
+                                     'its registered historical owner, not substituted into captured print '
+                                     'values.'),
+           'useful_life_months': ('int',
+                                  True,
+                                  False,
+                                  'Dependency inspection owner items.useful_life_months; validated by its '
+                                  'registered historical owner, not substituted into captured print values.'),
+           'vendor_id': ('str',
+                         True,
+                         False,
+                         'Dependency inspection owner items.vendor_id; validated by its registered '
+                         'historical owner, not substituted into captured print values.'),
+           'version': ('int',
+                       False,
+                       False,
+                       'Dependency inspection owner items.version; validated by its registered historical '
+                       'owner, not substituted into captured print values.'),
+           'warranty_expiration': ('str',
+                                   True,
+                                   False,
+                                   'Dependency inspection owner items.warranty_expiration; validated by its '
+                                   'registered historical owner, not substituted into captured print '
+                                   'values.')},
+ 'price_levels': {'active': ('bool',
+                             False,
+                             False,
+                             'Dependency inspection owner price_levels.active; validated by its registered '
+                             'historical owner, not substituted into captured print values.'),
+                  'created_at': ('str',
+                                 False,
+                                 False,
+                                 'Dependency inspection owner price_levels.created_at; validated by its '
+                                 'registered historical owner, not substituted into captured print values.'),
+                  'created_by': ('str',
+                                 False,
+                                 False,
+                                 'Dependency inspection owner price_levels.created_by; validated by its '
+                                 'registered historical owner, not substituted into captured print values.'),
+                  'created_via': ('str',
+                                  False,
+                                  False,
+                                  'Dependency inspection owner price_levels.created_via; validated by its '
+                                  'registered historical owner, not substituted into captured print values.'),
+                  'currency': ('str',
+                               True,
+                               False,
+                               'Dependency inspection owner price_levels.currency; validated by its '
+                               'registered historical owner, not substituted into captured print values.'),
+                  'id': ('str',
+                         False,
+                         True,
+                         'Dependency inspection owner price_levels.id; validated by its registered '
+                         'historical owner, not substituted into captured print values.'),
+                  'kind': ('str',
+                           False,
+                           False,
+                           'Dependency inspection owner price_levels.kind; validated by its registered '
+                           'historical owner, not substituted into captured print values.'),
+                  'name': ('str',
+                           False,
+                           False,
+                           'Dependency inspection owner price_levels.name; validated by its registered '
+                           'historical owner, not substituted into captured print values.'),
+                  'name_key': ('str',
+                               False,
+                               False,
+                               'Dependency inspection owner price_levels.name_key; validated by its '
+                               'registered historical owner, not substituted into captured print values.'),
+                  'percent_millionths': ('int',
+                                         True,
+                                         False,
+                                         'Dependency inspection owner price_levels.percent_millionths; '
+                                         'validated by its registered historical owner, not substituted into '
+                                         'captured print values.'),
+                  'rounding_increment_currency': ('str',
+                                                  False,
+                                                  False,
+                                                  'Dependency inspection owner '
+                                                  'price_levels.rounding_increment_currency; validated by '
+                                                  'its registered historical owner, not substituted into '
+                                                  'captured print values.'),
+                  'rounding_increment_minor_units': ('int',
+                                                     False,
+                                                     False,
+                                                     'Dependency inspection owner '
+                                                     'price_levels.rounding_increment_minor_units; validated '
+                                                     'by its registered historical owner, not substituted '
+                                                     'into captured print values.'),
+                  'rounding_mode': ('str',
+                                    False,
+                                    False,
+                                    'Dependency inspection owner price_levels.rounding_mode; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+                  'rounding_offset_currency': ('str',
+                                               False,
+                                               False,
+                                               'Dependency inspection owner '
+                                               'price_levels.rounding_offset_currency; validated by its '
+                                               'registered historical owner, not substituted into captured '
+                                               'print values.'),
+                  'rounding_offset_minor_units': ('int',
+                                                  False,
+                                                  False,
+                                                  'Dependency inspection owner '
+                                                  'price_levels.rounding_offset_minor_units; validated by '
+                                                  'its registered historical owner, not substituted into '
+                                                  'captured print values.'),
+                  'seed_key': ('str',
+                               True,
+                               False,
+                               'Dependency inspection owner price_levels.seed_key; validated by its '
+                               'registered historical owner, not substituted into captured print values.'),
+                  'updated_at': ('str',
+                                 False,
+                                 False,
+                                 'Dependency inspection owner price_levels.updated_at; validated by its '
+                                 'registered historical owner, not substituted into captured print values.'),
+                  'updated_by': ('str',
+                                 False,
+                                 False,
+                                 'Dependency inspection owner price_levels.updated_by; validated by its '
+                                 'registered historical owner, not substituted into captured print values.'),
+                  'updated_via': ('str',
+                                  False,
+                                  False,
+                                  'Dependency inspection owner price_levels.updated_via; validated by its '
+                                  'registered historical owner, not substituted into captured print values.'),
+                  'version': ('int',
+                              False,
+                              False,
+                              'Dependency inspection owner price_levels.version; validated by its registered '
+                              'historical owner, not substituted into captured print values.')},
+ 'sales_reps': {'active': ('bool',
+                           False,
+                           False,
+                           'Dependency inspection owner sales_reps.active; validated by its registered '
+                           'historical owner, not substituted into captured print values.'),
+                'created_at': ('str',
+                               False,
+                               False,
+                               'Dependency inspection owner sales_reps.created_at; validated by its '
+                               'registered historical owner, not substituted into captured print values.'),
+                'created_by': ('str',
+                               False,
+                               False,
+                               'Dependency inspection owner sales_reps.created_by; validated by its '
+                               'registered historical owner, not substituted into captured print values.'),
+                'created_via': ('str',
+                                False,
+                                False,
+                                'Dependency inspection owner sales_reps.created_via; validated by its '
+                                'registered historical owner, not substituted into captured print values.'),
+                'id': ('str',
+                       False,
+                       True,
+                       'Dependency inspection owner sales_reps.id; validated by its registered historical '
+                       'owner, not substituted into captured print values.'),
+                'initials': ('str',
+                             False,
+                             False,
+                             'Dependency inspection owner sales_reps.initials; validated by its registered '
+                             'historical owner, not substituted into captured print values.'),
+                'initials_key': ('str',
+                                 False,
+                                 False,
+                                 'Dependency inspection owner sales_reps.initials_key; validated by its '
+                                 'registered historical owner, not substituted into captured print values.'),
+                'name': ('str',
+                         False,
+                         False,
+                         'Dependency inspection owner sales_reps.name; validated by its registered '
+                         'historical owner, not substituted into captured print values.'),
+                'name_id': ('str',
+                            False,
+                            False,
+                            'Dependency inspection owner sales_reps.name_id; validated by its registered '
+                            'historical owner, not substituted into captured print values.'),
+                'name_key': ('str',
+                             False,
+                             False,
+                             'Dependency inspection owner sales_reps.name_key; validated by its registered '
+                             'historical owner, not substituted into captured print values.'),
+                'name_type': ('str',
+                              False,
+                              False,
+                              'Dependency inspection owner sales_reps.name_type; validated by its registered '
+                              'historical owner, not substituted into captured print values.'),
+                'seed_key': ('str',
+                             True,
+                             False,
+                             'Dependency inspection owner sales_reps.seed_key; validated by its registered '
+                             'historical owner, not substituted into captured print values.'),
+                'updated_at': ('str',
+                               False,
+                               False,
+                               'Dependency inspection owner sales_reps.updated_at; validated by its '
+                               'registered historical owner, not substituted into captured print values.'),
+                'updated_by': ('str',
+                               False,
+                               False,
+                               'Dependency inspection owner sales_reps.updated_by; validated by its '
+                               'registered historical owner, not substituted into captured print values.'),
+                'updated_via': ('str',
+                                False,
+                                False,
+                                'Dependency inspection owner sales_reps.updated_via; validated by its '
+                                'registered historical owner, not substituted into captured print values.'),
+                'version': ('int',
+                            False,
+                            False,
+                            'Dependency inspection owner sales_reps.version; validated by its registered '
+                            'historical owner, not substituted into captured print values.')},
+ 'sales_tax_codes': {'active': ('bool',
+                                False,
+                                False,
+                                'Dependency inspection owner sales_tax_codes.active; validated by its '
+                                'registered historical owner, not substituted into captured print values.'),
+                     'code': ('str',
+                              False,
+                              False,
+                              'Dependency inspection owner sales_tax_codes.code; validated by its registered '
+                              'historical owner, not substituted into captured print values.'),
+                     'code_key': ('str',
+                                  False,
+                                  False,
+                                  'Dependency inspection owner sales_tax_codes.code_key; validated by its '
+                                  'registered historical owner, not substituted into captured print values.'),
+                     'created_at': ('str',
+                                    False,
+                                    False,
+                                    'Dependency inspection owner sales_tax_codes.created_at; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+                     'created_by': ('str',
+                                    False,
+                                    False,
+                                    'Dependency inspection owner sales_tax_codes.created_by; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+                     'created_via': ('str',
+                                     False,
+                                     False,
+                                     'Dependency inspection owner sales_tax_codes.created_via; validated by '
+                                     'its registered historical owner, not substituted into captured print '
+                                     'values.'),
+                     'description': ('str',
+                                     True,
+                                     False,
+                                     'Dependency inspection owner sales_tax_codes.description; validated by '
+                                     'its registered historical owner, not substituted into captured print '
+                                     'values.'),
+                     'id': ('str',
+                            False,
+                            True,
+                            'Dependency inspection owner sales_tax_codes.id; validated by its registered '
+                            'historical owner, not substituted into captured print values.'),
+                     'seed_key': ('str',
+                                  True,
+                                  False,
+                                  'Dependency inspection owner sales_tax_codes.seed_key; validated by its '
+                                  'registered historical owner, not substituted into captured print values.'),
+                     'taxable': ('bool',
+                                 False,
+                                 False,
+                                 'Dependency inspection owner sales_tax_codes.taxable; validated by its '
+                                 'registered historical owner, not substituted into captured print values.'),
+                     'updated_at': ('str',
+                                    False,
+                                    False,
+                                    'Dependency inspection owner sales_tax_codes.updated_at; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+                     'updated_by': ('str',
+                                    False,
+                                    False,
+                                    'Dependency inspection owner sales_tax_codes.updated_by; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+                     'updated_via': ('str',
+                                     False,
+                                     False,
+                                     'Dependency inspection owner sales_tax_codes.updated_via; validated by '
+                                     'its registered historical owner, not substituted into captured print '
+                                     'values.'),
+                     'version': ('int',
+                                 False,
+                                 False,
+                                 'Dependency inspection owner sales_tax_codes.version; validated by its '
+                                 'registered historical owner, not substituted into captured print values.')},
+ 'ship_methods': {'active': ('bool',
+                             False,
+                             False,
+                             'Dependency inspection owner ship_methods.active; validated by its registered '
+                             'historical owner, not substituted into captured print values.'),
+                  'created_at': ('str',
+                                 False,
+                                 False,
+                                 'Dependency inspection owner ship_methods.created_at; validated by its '
+                                 'registered historical owner, not substituted into captured print values.'),
+                  'created_by': ('str',
+                                 False,
+                                 False,
+                                 'Dependency inspection owner ship_methods.created_by; validated by its '
+                                 'registered historical owner, not substituted into captured print values.'),
+                  'created_via': ('str',
+                                  False,
+                                  False,
+                                  'Dependency inspection owner ship_methods.created_via; validated by its '
+                                  'registered historical owner, not substituted into captured print values.'),
+                  'display_order': ('int',
+                                    False,
+                                    False,
+                                    'Dependency inspection owner ship_methods.display_order; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+                  'id': ('str',
+                         False,
+                         True,
+                         'Dependency inspection owner ship_methods.id; validated by its registered '
+                         'historical owner, not substituted into captured print values.'),
+                  'name': ('str',
+                           False,
+                           False,
+                           'Dependency inspection owner ship_methods.name; validated by its registered '
+                           'historical owner, not substituted into captured print values.'),
+                  'name_key': ('str',
+                               False,
+                               False,
+                               'Dependency inspection owner ship_methods.name_key; validated by its '
+                               'registered historical owner, not substituted into captured print values.'),
+                  'seed_key': ('str',
+                               True,
+                               False,
+                               'Dependency inspection owner ship_methods.seed_key; validated by its '
+                               'registered historical owner, not substituted into captured print values.'),
+                  'updated_at': ('str',
+                                 False,
+                                 False,
+                                 'Dependency inspection owner ship_methods.updated_at; validated by its '
+                                 'registered historical owner, not substituted into captured print values.'),
+                  'updated_by': ('str',
+                                 False,
+                                 False,
+                                 'Dependency inspection owner ship_methods.updated_by; validated by its '
+                                 'registered historical owner, not substituted into captured print values.'),
+                  'updated_via': ('str',
+                                  False,
+                                  False,
+                                  'Dependency inspection owner ship_methods.updated_via; validated by its '
+                                  'registered historical owner, not substituted into captured print values.'),
+                  'version': ('int',
+                              False,
+                              False,
+                              'Dependency inspection owner ship_methods.version; validated by its registered '
+                              'historical owner, not substituted into captured print values.')},
+ 'units_of_measure': {'active': ('bool',
+                                 False,
+                                 False,
+                                 'Dependency inspection owner units_of_measure.active; validated by its '
+                                 'registered historical owner, not substituted into captured print values.'),
+                      'created_at': ('str',
+                                     False,
+                                     False,
+                                     'Dependency inspection owner units_of_measure.created_at; validated by '
+                                     'its registered historical owner, not substituted into captured print '
+                                     'values.'),
+                      'created_by': ('str',
+                                     False,
+                                     False,
+                                     'Dependency inspection owner units_of_measure.created_by; validated by '
+                                     'its registered historical owner, not substituted into captured print '
+                                     'values.'),
+                      'created_via': ('str',
+                                      False,
+                                      False,
+                                      'Dependency inspection owner units_of_measure.created_via; validated '
+                                      'by its registered historical owner, not substituted into captured '
+                                      'print values.'),
+                      'default_purchase_unit_id': ('str',
+                                                   True,
+                                                   False,
+                                                   'Dependency inspection owner '
+                                                   'units_of_measure.default_purchase_unit_id; validated by '
+                                                   'its registered historical owner, not substituted into '
+                                                   'captured print values.'),
+                      'default_sales_unit_id': ('str',
+                                                True,
+                                                False,
+                                                'Dependency inspection owner '
+                                                'units_of_measure.default_sales_unit_id; validated by its '
+                                                'registered historical owner, not substituted into captured '
+                                                'print values.'),
+                      'default_shipping_unit_id': ('str',
+                                                   True,
+                                                   False,
+                                                   'Dependency inspection owner '
+                                                   'units_of_measure.default_shipping_unit_id; validated by '
+                                                   'its registered historical owner, not substituted into '
+                                                   'captured print values.'),
+                      'id': ('str',
+                             False,
+                             True,
+                             'Dependency inspection owner units_of_measure.id; validated by its registered '
+                             'historical owner, not substituted into captured print values.'),
+                      'name': ('str',
+                               False,
+                               False,
+                               'Dependency inspection owner units_of_measure.name; validated by its '
+                               'registered historical owner, not substituted into captured print values.'),
+                      'name_key': ('str',
+                                   False,
+                                   False,
+                                   'Dependency inspection owner units_of_measure.name_key; validated by its '
+                                   'registered historical owner, not substituted into captured print '
+                                   'values.'),
+                      'seed_key': ('str',
+                                   True,
+                                   False,
+                                   'Dependency inspection owner units_of_measure.seed_key; validated by its '
+                                   'registered historical owner, not substituted into captured print '
+                                   'values.'),
+                      'updated_at': ('str',
+                                     False,
+                                     False,
+                                     'Dependency inspection owner units_of_measure.updated_at; validated by '
+                                     'its registered historical owner, not substituted into captured print '
+                                     'values.'),
+                      'updated_by': ('str',
+                                     False,
+                                     False,
+                                     'Dependency inspection owner units_of_measure.updated_by; validated by '
+                                     'its registered historical owner, not substituted into captured print '
+                                     'values.'),
+                      'updated_via': ('str',
+                                      False,
+                                      False,
+                                      'Dependency inspection owner units_of_measure.updated_via; validated '
+                                      'by its registered historical owner, not substituted into captured '
+                                      'print values.'),
+                      'version': ('int',
+                                  False,
+                                  False,
+                                  'Dependency inspection owner units_of_measure.version; validated by its '
+                                  'registered historical owner, not substituted into captured print '
+                                  'values.')},
+ 'work_documents': {'active': ('bool',
+                               False,
+                               False,
+                               'Dependency inspection owner work_documents.active; validated by its '
+                               'registered historical owner, not substituted into captured print values.'),
+                    'created_at': ('str',
+                                   False,
+                                   False,
+                                   'Dependency inspection owner work_documents.created_at; validated by its '
+                                   'registered historical owner, not substituted into captured print '
+                                   'values.'),
+                    'created_by': ('str',
+                                   False,
+                                   False,
+                                   'Dependency inspection owner work_documents.created_by; validated by its '
+                                   'registered historical owner, not substituted into captured print '
+                                   'values.'),
+                    'created_via': ('str',
+                                    False,
+                                    False,
+                                    'Dependency inspection owner work_documents.created_via; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+                    'current_revision_id': ('str',
+                                            False,
+                                            False,
+                                            'Dependency inspection owner work_documents.current_revision_id; '
+                                            'validated by its registered historical owner, not substituted '
+                                            'into captured print values.'),
+                    'estimate_group_id': ('str',
+                                          True,
+                                          False,
+                                          'Dependency inspection owner work_documents.estimate_group_id; '
+                                          'validated by its registered historical owner, not substituted '
+                                          'into captured print values.'),
+                    'id': ('str',
+                           False,
+                           True,
+                           'Dependency inspection owner work_documents.id; validated by its registered '
+                           'historical owner, not substituted into captured print values.'),
+                    'kind': ('str',
+                             False,
+                             False,
+                             'Dependency inspection owner work_documents.kind; validated by its registered '
+                             'historical owner, not substituted into captured print values.'),
+                    'number': ('str',
+                               False,
+                               False,
+                               'Dependency inspection owner work_documents.number; validated by its '
+                               'registered historical owner, not substituted into captured print values.'),
+                    'status': ('str',
+                               False,
+                               False,
+                               'Dependency inspection owner work_documents.status; validated by its '
+                               'registered historical owner, not substituted into captured print values.'),
+                    'updated_at': ('str',
+                                   False,
+                                   False,
+                                   'Dependency inspection owner work_documents.updated_at; validated by its '
+                                   'registered historical owner, not substituted into captured print '
+                                   'values.'),
+                    'updated_by': ('str',
+                                   False,
+                                   False,
+                                   'Dependency inspection owner work_documents.updated_by; validated by its '
+                                   'registered historical owner, not substituted into captured print '
+                                   'values.'),
+                    'updated_via': ('str',
+                                    False,
+                                    False,
+                                    'Dependency inspection owner work_documents.updated_via; validated by '
+                                    'its registered historical owner, not substituted into captured print '
+                                    'values.'),
+                    'version': ('int',
+                                False,
+                                False,
+                                'Dependency inspection owner work_documents.version; validated by its '
+                                'registered historical owner, not substituted into captured print values.')}})
+EDGES.update({'custom_field_defs': [],
+ 'customer_messages': [],
+ 'items': [(('accumulated_depreciation_account_id',), ('accounts.id',)),
+           (('asset_account_id',), ('accounts.id',)),
+           (('category_id',), ('item_categories.id',)),
+           (('cogs_account_id',), ('accounts.id',)),
+           (('default_class_id',), ('classes.id',)),
+           (('deposit_account_id',), ('accounts.id',)),
+           (('depreciation_expense_account_id',), ('accounts.id',)),
+           (('expense_account_id',), ('accounts.id',)),
+           (('gain_loss_account_id',), ('accounts.id',)),
+           (('income_account_id',), ('accounts.id',)),
+           (('liability_account_id',), ('accounts.id',)),
+           (('parent_id',), ('items.id',)),
+           (('payment_method_id',), ('payment_methods.id',)),
+           (('preferred_vendor_id',), ('vendors.id',)),
+           (('sales_tax_code_id',), ('sales_tax_codes.id',)),
+           (('tax_agency_vendor_id',), ('vendors.id',)),
+           (('unit_of_measure_set_id',), ('units_of_measure.id',)),
+           (('vendor_id',), ('vendors.id',))],
+ 'price_levels': [],
+ 'sales_reps': [],
+ 'sales_tax_codes': [],
+ 'ship_methods': [],
+ 'units_of_measure': [(('default_purchase_unit_id',), ('unit_conversions.id',)),
+                      (('default_sales_unit_id',), ('unit_conversions.id',)),
+                      (('default_shipping_unit_id',), ('unit_conversions.id',))],
+ 'work_documents': [(('estimate_group_id',), ('work_documents.id',)),
+                    (('id', 'current_revision_id'), ('work_revisions.document_id', 'work_revisions.id'))]})
+
 def conform():
     from bookflow.company import schema as c, deposit_dependency_history as h, deposit_sources as sources
     from bookflow.company.deposit_read_facts import TABLES
@@ -1420,6 +2610,8 @@ def conform():
     def require(ok):
         if not ok:raise BookflowError('E_DEPOSIT_SOURCE_INVALID')
     require(h._IMMUTABLE==IMMUTABLE_OWNERS and sources.TABLES==SOURCE_TABLES and TABLES==DEPOSIT_TABLES)
+    require({key:(o.table,o.key,o.audit_kinds,o.fields) for key,o in h.OWNERS.items()}==DEPENDENCY_OWNERS)
+    require({o.table for o in h.OWNERS.values()}<=set(FIELDS))
     require(set(FIELDS)==set(EDGES)==set(REQUIRED_TABLES))
     require(set(TABLES)|{x[0] for x in h._IMMUTABLE}|set(sources.TABLES)<=set(FIELDS))
     for name,fields in FIELDS.items():
