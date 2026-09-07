@@ -39,9 +39,9 @@ Read prospective receipt/application effect pages by pure recomputation of exact
 | `request.input.applications.expected_version` | `--request-input-applications-expected-version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest.; minimum 1 |
 | `request.input.payment_method` | `--request-input-payment-method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `request.input.ar_account` | `--request-input-ar-account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
-| `request.input.deposit_to` | `--request-input-deposit-to` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
-| `request.input.number` | `--request-input-number` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
-| `request.input.reference` | `--request-input-reference` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `request.input.deposit_to` | `--request-input-deposit-to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `request.input.number` | `--request-input-number` | string \| null | no | yes | null | Internal receipt number Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `request.input.reference` | `--request-input-reference` | string \| null | no | yes | null | Customer check or payment reference; not the internal receipt number Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `request.input.memo` | `--request-input-memo` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `request.input.custom_fields` | `--request-input-custom-fields` | object[string, any \| null] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `request.input.expected_custom_field_kinds` | `--request-input-expected-custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
