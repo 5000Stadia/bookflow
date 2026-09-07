@@ -26,7 +26,11 @@ def _state(h,financial):
         active_source_ids=tuple(sorted(r.source.transaction_id for r in financial.intent.sources)) if h['status']=='posted' else ())
 
 
-def build(s,ctx,plan):
+def build(s,ctx,plan,*,source_overlay=None):
+    if source_overlay is not None:
+        from bookflow.company.deposit_coordinate_models import SourceResultOverlay
+        if type(source_overlay) is not SourceResultOverlay:
+            raise BookflowError('E_INTERNAL')
     data=json.loads(plan.data_json);financial=Effect.model_validate_json(q.canonical(data['financial']))
     old=data['before'];prior=data['prior'];identity=data['identity'];event=data['event'];at=data['at']
     pending={name:[] for name in TABLES}
@@ -58,7 +62,7 @@ def build(s,ctx,plan):
             batch=dict(**created(),transaction_id=identity,revision_id=revision['id'],kind='replacement' if old else 'original',
                 effective_date=financial.intent.date,reverses_batch_id=None,replaces_batch_id=batches[0]['id'] if old else None,audit_event_id=event)
             pending['posting_batches'].append(batch)
-            _business(s,financial,data,revision,batch,pending,created,audited)
+            _business(s,financial,data,revision,batch,pending,created,audited,source_overlay)
         for claim in data['claims']:
             release=dict(claim,**created(),audit_event_id=event,kind='release',reverses_membership_id=claim['id'])
             pending['deposit_memberships'].append(release)
@@ -78,7 +82,7 @@ def build(s,ctx,plan):
         data=data,financial=financial,revision=revision)
 
 
-def _business(s,financial,data,revision,batch,pending,created,audited):
+def _business(s,financial,data,revision,batch,pending,created,audited,source_overlay=None):
     identity=data['identity'];currency=financial.intent.currency
     oldkeys={r['id']:r for r in effects.rows(s,c.deposit_row_keys,c.deposit_row_keys.c.transaction_id==identity)}
     oldcomponents={(r['row_id'],r['ordinal']):r for r in effects.rows(s,c.deposit_component_keys,c.deposit_component_keys.c.transaction_id==identity)}
@@ -136,7 +140,17 @@ def _business(s,financial,data,revision,batch,pending,created,audited):
         else:
             # UF must retain the source's captured account facts, not today's labels.
             source=next(r.source for r in financial.intent.sources if r.row_id==rowid)
-            raw=effects.rows(s,c.posting_lines,c.posting_lines.c.id==next(v.posting_line_id for v in source.components if v.key==next(o.key for o in next(r for r in financial.intent.sources if r.row_id==rowid).occurrences if o.ordinal==component_order)))[0]
+            component=next(v for v in source.components if v.key==next(o.key for o in next(r for r in financial.intent.sources if r.row_id==rowid).occurrences if o.ordinal==component_order))
+            candidates=effects.rows(s,c.posting_lines,c.posting_lines.c.id==component.posting_line_id)
+            if source_overlay is not None and source.transaction_id==source_overlay.source_id:
+                if source_overlay.deposit_id!=identity or source_overlay.source.cash!=source:
+                    raise BookflowError('E_DEPOSIT_SOURCE_INVALID')
+                candidates += [r for r in source_overlay.source.plan.data.get('pending',{}).get('posting_lines',()) if r['id']==component.posting_line_id]
+            if len(candidates)!=1:
+                raise BookflowError('E_DEPOSIT_SOURCE_INVALID')
+            raw=candidates[0]
+            if (raw['transaction_id'],raw['batch_id'],raw['account_id'])!=(source.transaction_id,source.business_batch_id,leg.account_id):
+                raise BookflowError('E_DEPOSIT_SOURCE_INVALID')
             account=json.loads(raw['account_snapshot'])
         dimensions=leg.dimensions
         posted=dict(**created(),transaction_id=identity,batch_id=batch['id'],line_no=order,account_id=leg.account_id,

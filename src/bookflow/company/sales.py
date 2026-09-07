@@ -21,7 +21,7 @@ from bookflow.core.errors import BookflowError
 from bookflow.core.exact import format_quantity_micro_units
 from bookflow.core.ids import new_id, is_ulid
 from bookflow.core.money import Money
-from bookflow.core.registry import Plan
+from bookflow.core.registry import Plan, Touched
 from bookflow.hub.users import common
 
 TABLE_KINDS = (
@@ -465,7 +465,7 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
             raise BookflowError('E_VALIDATION')
         at, event = provenance.at, provenance.event_id
     created = lambda: dict(id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
-    provenance = dict(created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
+    row_provenance = dict(created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
     header = dict(old_header) if old_header else dict(id=new_id(), **common(s.actor.id, ctx.interface.value, at),
         type=document_type, status='posted', voided_at=None, voided_by=None, void_reason=None, void_posting_batch_id=None)
     pending = {table: [] for table, _, _ in TABLE_KINDS}
@@ -490,14 +490,14 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
             issuer_snapshot=json_text(resolved['issuer']), custom_fields_snapshot=json_text(custom_plan.snapshot), audit_event_id=event)
         header.update(number=revision['number'], current_revision_id=revision['id'])
         pending['transaction_revisions'].append(revision)
-        pending['sales_profiles'].append(dict(transaction_id=header['id'], revision_id=revision['id'], **provenance, type=document_type,
+        pending['sales_profiles'].append(dict(transaction_id=header['id'], revision_id=revision['id'], **row_provenance, type=document_type,
             customer_id=profile.customer.id, control_account_id=profile.control_account.id, due_date=profile.due_date,
             subtotal_minor_units=resolved['subtotal'], tax_minor_units=resolved['tax'], profile_snapshot=json_text(profile.model_dump())))
         if 'tax_attribution' in resolved:
             pending['sales_tax_attributions'].append(dict(transaction_id=header['id'], revision_id=revision['id'],
-                **provenance, facts_snapshot=json_text(resolved['tax_attribution'].model_dump(mode='json'))))
+                **row_provenance, facts_snapshot=json_text(resolved['tax_attribution'].model_dump(mode='json'))))
             pending['sales_tax_line_keys'].extend(dict(transaction_id=header['id'], line_id=key,
-                tax_ordinal=ordinal, **provenance) for key, ordinal in resolved['tax_keys'].items())
+                tax_ordinal=ordinal, **row_provenance) for key, ordinal in resolved['tax_keys'].items())
         for position, line in enumerate(resolved['lines'], 1):
             identity = line['line_id']
             if identity is None:
@@ -514,11 +514,11 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
             if 'tax_attribution' in resolved:
                 if line['line_id'] is None:
                     pending['sales_tax_line_keys'].append(dict(transaction_id=header['id'], line_id=identity,
-                        tax_ordinal=line['tax_ordinal'], **provenance))
+                        tax_ordinal=line['tax_ordinal'], **row_provenance))
                 pending['sales_tax_attribution_lines'].append(dict(transaction_id=header['id'], revision_id=revision['id'],
-                    document_line_id=envelope['id'], line_id=identity, tax_ordinal=line['tax_ordinal'], **provenance))
+                    document_line_id=envelope['id'], line_id=identity, tax_ordinal=line['tax_ordinal'], **row_provenance))
             pending['sales_line_profiles'].append(dict(document_line_id=envelope['id'], transaction_id=header['id'],
-                revision_id=revision['id'], **provenance, **{k: line[k] for k in ('item_id', 'quantity_microunits', 'unit_id',
+                revision_id=revision['id'], **row_provenance, **{k: line[k] for k in ('item_id', 'quantity_microunits', 'unit_id',
                     'unit_factor_nanounits', 'base_quantity_microunits', *MONEY_COLUMNS)}, item_snapshot=json_text(facts.model_dump()), pricing_basis=facts.pricing_basis))
             for tax_position, component in enumerate(line['taxes'], 1):
                 rule = component['rule']
@@ -611,3 +611,19 @@ def apply(plan, ctx, s):
         from bookflow.company.billing import persist
         return persist(fresh, ctx, s, command_name=plan.data['document_type'].replace('_', '-') + ' ' + plan.data['operation'])
     return effects.persist(fresh, ctx, s, command_name=plan.data['document_type'].replace('_', '-') + ' ' + plan.data['operation'], table_kinds=TABLE_KINDS)
+
+
+def coordinate_rows_and_touches(plan):
+    """Closed sales-receipt edit rows including their carried work allocations."""
+    from bookflow.company.deposit_coordination import source_identity_map
+    from bookflow.company import billing
+    source_identity_map(plan, payment=False)
+    data = plan.data
+    if data['document_type'] != 'sales_receipt' or data['operation'] not in ('update', 'void'):
+        raise BookflowError('E_INTERNAL')
+    if not data['changed']:
+        if 'pending' in data:raise BookflowError('E_INTERNAL')
+        return tuple((table,(),()) for table,_,_ in TABLE_KINDS)+(billing.coordinate_rows_and_touches(plan),)
+    return tuple((table, tuple(data['pending'][table]), tuple(
+        Touched(kind, row[key], 'create', None, 1, effects.decoded(row), db='company')
+        for row in data['pending'][table])) for table, kind, key in TABLE_KINDS) + (billing.coordinate_rows_and_touches(plan),)

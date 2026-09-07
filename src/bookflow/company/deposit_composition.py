@@ -13,7 +13,9 @@ class PreparedSource:
 
 
 def prepare(s, ctx, inp, action, *, expected_fingerprint):
-    """Re-resolve the original typed source intent and retain every owning fact.
+    """Historical G1 test scaffolding, not a coordinate runtime entry.
+
+    Re-resolve the original typed source intent and retain every owning fact.
 
     The caller must supply the fingerprint of its earlier source preview. This
     is not an apply hook: G2 must still validate the complete aggregate, reconcile

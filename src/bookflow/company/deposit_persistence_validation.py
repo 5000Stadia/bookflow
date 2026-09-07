@@ -7,6 +7,16 @@ from bookflow.company.deposit_models import Effect
 
 
 def validate(s,ctx,plan,bundle):
+    """Preserve ordinary financial/no-op/current-source precedence."""
+    _validate_rows(s,ctx,plan,bundle,current_sources=True)
+
+
+def validate_rows(s,ctx,plan,bundle):
+    """Row equations for a coordinator that independently admits its overlay."""
+    _validate_rows(s,ctx,plan,bundle,current_sources=False)
+
+
+def _validate_rows(s,ctx,plan,bundle,*,current_sources):
     require=validation.require
     data=bundle['data'];pending=bundle['pending'];h=bundle['header'];old=data['before'];financial=bundle['financial']
     validation.validate(financial)
@@ -16,7 +26,8 @@ def validate(s,ctx,plan,bundle):
         require(plan.custom_plan is None or not plan.custom_plan.changed)
         return
     previous=Effect.model_validate_json(json.dumps(data['previous'])) if data['previous'] else None
-    if plan.verb!='void':validation.validate_current(financial,s,replacing_deposit=h['id'],previous=previous)
+    if current_sources and plan.verb!='void':
+        validation.validate_current(financial,s,replacing_deposit=h['id'],previous=previous)
     require(h['version']==(old['version']+1 if old else 1))
     before_by_id=data['source_headers']
     require(len(bundle['source_headers'])==len(before_by_id))

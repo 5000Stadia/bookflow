@@ -316,11 +316,12 @@ def _project(kind, value, fields=None):
             except (ValueError, BookflowError) as exc:
                 raise MissingHistory('malformed owned allocation proof') from exc
         if kind == 'deposit_number_operation':
-            from bookflow.company.deposit_lifecycle_models import LifecycleOutput
-            saved = LifecycleOutput.model_validate_json(canonical(value['effect_snapshot']))
-            if saved.operation_id != value['id'] or saved.effect.audit_event_id != value['audit_event_id'] or saved.current.id != value['transaction_id']:
+            from bookflow.company.deposit_operations import decode_output
+            saved = decode_output(canonical(value['effect_snapshot']), value['command'])
+            effect = saved.effect.deposit if saved.command == 'deposit coordinate' else saved.effect
+            if saved.operation_id != value['id'] or effect.audit_event_id != value['audit_event_id'] or saved.current.id != value['transaction_id']:
                 raise MissingHistory('foreign automatic-number receipt')
-            return {'id':value['id'],'transaction_id':value['transaction_id'],'number':saved.effect.after.number}
+            return {'id':value['id'],'transaction_id':value['transaction_id'],'number':effect.after.number}
         if kind == 'transaction_revision':
             from bookflow.company.journal_custom_fields import SnapshotField
             for key, captured in value['custom_fields_snapshot'].items():

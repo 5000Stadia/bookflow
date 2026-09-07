@@ -69,7 +69,11 @@ def recover(s,ctx,inp,verb,binding):
     saved=operations.find(s,inp.operation_key)
     if saved is not None:
         targets=effects.rows(s,c.deposit_operation_targets,c.deposit_operation_targets.c.operation_id==saved['id'])
-        history._authorize_binding_graph(s,binding,[row['transaction_id'] for row in targets],write=True)
+        try:
+            history._authorize_binding_graph(s,binding,[row['transaction_id'] for row in targets],write=True)
+        except BookflowError as error:
+            if error.code=='E_PERMISSION':raise BookflowError('E_PERMISSION',details={}) from None
+            raise
     return operations.recover(s,ctx,inp,verb)
 
 
@@ -169,6 +173,9 @@ def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None):
 
 def resolve_replacement(s, ctx, doc, *, identity, old, prior, previous, keys, maximum, mapping, binding, overlay=None):
     """Shared complete replacement resolution; coordinator supplies proven overlay."""
+    from bookflow.company.deposit_coordinate_models import SourceResultOverlay
+    if overlay is not None and type(overlay) is not SourceResultOverlay:
+        raise BookflowError('E_INTERNAL', message='Expected owned source result overlay.')
     from bookflow.company import deposit_dependency_history as history
     if doc.mode!='inline':
         raise BookflowError('E_DEPOSIT_DRAFT_STATE',details={'reason':'private draft provider not allocated'})
