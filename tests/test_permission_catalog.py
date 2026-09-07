@@ -66,7 +66,7 @@ RESOURCE_PAIRS = {
     'payment_authority.denied_events': {('ledger.read', 'member'), ('customer-work', 'member')},
     'payment_authority.readable_predicate': {('customer-work', 'member')},
     'payment_preparation.payment_page': {('customer-work', 'member')},
-    'payment_selection.query_page': {('customer-work', 'member')},
+    'payment_recovery.readable_selection': {('customer-work', 'member')},
 }
 
 
@@ -166,10 +166,10 @@ def test_explicit_admin_grant_only_and_unavailable_delete_contracts():
 
 
 def test_frozen_manifest_digest_and_pure_import_boundary():
-    assert c.FROZEN_CATALOG.version == 'e75ddcfde26bed66da93ae7834db2dad30ef9f5d'
+    assert c.FROZEN_CATALOG.version == '7b2d4c2b39201601437e0114f9e5e04164332cb1'
     assert c.catalog_manifest(c.FROZEN_CATALOG, c.FROZEN_MANIFEST.standalone_names) == c.FROZEN_MANIFEST
     raw = json.dumps(asdict(c.FROZEN_CATALOG), sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode()
-    assert hashlib.sha256(raw).hexdigest() == '4a7fd58170de37550f556841e92524e117964a76983492e9f54cb12767a9150f'
+    assert hashlib.sha256(raw).hexdigest() == '50b259f886c50e8dddb91e513a2839b41e0ee4f270eb3801622786445f616851'
     for name in ('permission_catalog', 'permission_policy'):
         tree = ast.parse((ROOT / f'src/bookflow/hub/{name}.py').read_text())
         modules = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)} | {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
