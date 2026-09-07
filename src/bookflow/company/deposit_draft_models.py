@@ -207,6 +207,7 @@ class Manifest(StrictModel):
     high_water: int = Field(ge=0,le=9223372036854775807)
     summary: Summary
 class DraftOutput(StrictModel):
+    posting_issues: tuple[str,...] = ()
     id: ID
     version: _Version
     state: Literal['open','consumed','abandoned']

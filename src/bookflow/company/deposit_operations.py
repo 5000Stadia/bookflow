@@ -61,7 +61,7 @@ def state(s, identity):
         active_source_ids=tuple(sorted(r['source_transaction_id'] for r in claims)))
 
 
-def recover(s, ctx, inp, verb):
+def recover(s, ctx, inp, verb, *, binding=None):
     """Read-only; no default resolution, maintenance, event, or principal upsert."""
     saved=find(s,inp.operation_key)
     if saved is None:
@@ -72,10 +72,12 @@ def recover(s, ctx, inp, verb):
     except BookflowError as error:
         if error.code=='E_PERMISSION':raise BookflowError('E_PERMISSION',details={}) from None
         raise
+    from bookflow.company import deposit_draft_consumption as consumption
+    current_draft=consumption.current(s,saved['id'],ctx=ctx,binding=binding,write=True)
     if saved['command']!='deposit '+verb or saved['request_hash']!=q.digest(request(inp,ctx,s,verb)):
         return None
     output=LifecycleOutput.model_validate_json(saved['effect_snapshot'])
-    return output.model_copy(update={'changed':False,'new_effect':False,'idempotent_replay':True,'current':state(s,saved['transaction_id'])})
+    return output.model_copy(update={'changed':False,'new_effect':False,'idempotent_replay':True,'current':state(s,saved['transaction_id']),'current_draft':current_draft})
 
 
 def permanent_recovery(inp, ctx, s, verb):

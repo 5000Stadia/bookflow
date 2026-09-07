@@ -133,6 +133,12 @@ def validate_current(effect, s, *, replacing_deposit=None, previous=None):
     comparison instead. This function never treats supplied captured facts as
     proof of current authority or eligibility.
     """
+    validate_current_sources(effect,s,replacing_deposit=replacing_deposit)
+    validate_references(effect, s, previous=previous)
+
+
+def validate_current_sources(effect,s,*,replacing_deposit=None):
+    """Complete current cash/claim proof; callers also own reference validation."""
     import sqlalchemy as sa
     from bookflow.company import schema as c, deposit_sources, journals
     validate(effect)
@@ -146,7 +152,6 @@ def validate_current(effect, s, *, replacing_deposit=None, previous=None):
             c.deposit_current_memberships.c.source_transaction_id==actual.transaction_id)).mappings().first()
         if claimed is not None and claimed['transaction_id']!=replacing_deposit:
             raise BookflowError('E_DEPOSIT_SOURCE_CLAIMED')
-    validate_references(effect, s, previous=previous)
 
 
 def validate_references(effect, s, *, previous=None):

@@ -1,6 +1,6 @@
 """Private ordinary lifecycle contracts; no command or draft-provider activation."""
 from typing import Literal
-from pydantic import Field
+from pydantic import Field, model_serializer
 from bookflow.company.deposit_models import Frozen, ID, Positive, Effect, ReplaceInput, PostInput as SourcePostInput
 from bookflow.company.sales_models import Fingerprint, StrictModel
 from bookflow.company.payment_models import OperationKey
@@ -54,7 +54,39 @@ class MembershipChange(Frozen):
     currency: str
 
 
+class ConsumedDraftState(Frozen):
+    id: ID
+    version: Positive
+    state: Literal['consumed']
+    revision_id: ID
+    manifest_hash: str
+    operation_id: ID
+
+
+class DraftRowIdentity(Frozen):
+    draft_row_id: ID
+    financial_row_id: ID
+    ordinal: Positive
+
+
+class DraftConsumptionReceipt(Frozen):
+    draft_id: ID
+    version: Positive
+    revision_id: ID
+    manifest_hash: str
+    snapshot: str
+    rows: tuple[DraftRowIdentity,...]
+
+
 class LifecycleEffect(Frozen):
+    consumed_draft: DraftConsumptionReceipt | None = None
+
+    @model_serializer(mode='wrap')
+    def optional_draft(self,handler):
+        result=handler(self)
+        if self.consumed_draft is None:result.pop('consumed_draft',None)
+        return result
+
     action: Literal['post','update','void']
     before: DocumentState | None
     after: DocumentState
@@ -68,6 +100,14 @@ class LifecycleEffect(Frozen):
 
 
 class LifecycleOutput(Frozen):
+    current_draft: ConsumedDraftState | None = None
+
+    @model_serializer(mode='wrap')
+    def optional_draft(self,handler):
+        result=handler(self)
+        if self.current_draft is None:result.pop('current_draft',None)
+        return result
+
     schema_version: Literal[1] = 1
     command: Literal['deposit post','deposit update','deposit void']
     operation_key: str

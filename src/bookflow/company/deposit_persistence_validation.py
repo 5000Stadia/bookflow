@@ -9,6 +9,8 @@ from bookflow.company.deposit_models import Effect
 def validate(s,ctx,plan,bundle):
     """Preserve ordinary financial/no-op/current-source precedence."""
     _validate_rows(s,ctx,plan,bundle,current_sources=True)
+    from bookflow.company.deposit_draft_provider import validate_financial
+    validate_financial(s,ctx,bundle['data'],bundle['financial'],plan.binding,custom_plan=plan.custom_plan)
 
 
 def validate_rows(s,ctx,plan,bundle):
@@ -27,7 +29,11 @@ def _validate_rows(s,ctx,plan,bundle,*,current_sources):
         return
     previous=Effect.model_validate_json(json.dumps(data['previous'])) if data['previous'] else None
     if current_sources and plan.verb!='void':
-        validation.validate_current(financial,s,replacing_deposit=h['id'],previous=previous)
+        if data.get('draft') is None:
+            validation.validate_current(financial,s,replacing_deposit=h['id'],previous=previous)
+        else:
+            # Independently decoded captured-reference proof follows below.
+            validation.validate_current_sources(financial,s,replacing_deposit=h['id'])
     require(h['version']==(old['version']+1 if old else 1))
     before_by_id=data['source_headers']
     require(len(bundle['source_headers'])==len(before_by_id))
@@ -46,10 +52,12 @@ def _validate_rows(s,ctx,plan,bundle,*,current_sources):
     require(claims==bundle['claims'])
     expected={} if plan.verb=='void' else {r.source.transaction_id:r for r in financial.intent.sources}
     require(len(claims)==len(expected))
+    # Aggregate equality is independent of individual claims; decoding the
+    # complete effect once preserves the proof without quadratic work.
+    require(Effect.model_validate_json(json.dumps(data['financial']))==financial)
     for claim in claims:
         source=expected[claim['source_transaction_id']]
         require(claim['row_id']==source.row_id and claim['amount_minor_units']==source.source.cash_minor_units)
-        require(Effect.model_validate_json(json.dumps(data['financial']))==financial)
         require(json.loads(claim['facts_snapshot'])==source.source.model_dump(mode='json'))
     batches={r['id']:r for r in pending['posting_batches']};sums=defaultdict(int)
     lines={r['id']:r for r in pending['posting_lines']}
@@ -103,7 +111,12 @@ def _validate_rows(s,ctx,plan,bundle,*,current_sources):
         revision=pending['transaction_revisions'][0]
         require(revision['total_minor_units']==financial.posting_total and revision['date']==financial.intent.date)
         require(json.loads(pending['deposit_profiles'][0]['facts_snapshot'])==financial.model_dump(mode='json'))
-        custom.validate(s.company,plan.custom_plan,h['id'],json.loads(revision['custom_fields_snapshot']),record_type='deposit')
+        if data.get('draft') is None:
+            custom.validate(s.company,plan.custom_plan,h['id'],json.loads(revision['custom_fields_snapshot']),record_type='deposit')
+        else:
+            # The full draft validator below proves immutable captured metadata
+            # and exact current slot mutations independently.
+            require(json.loads(revision['custom_fields_snapshot'])==plan.custom_plan.snapshot)
     if plan.verb!='void':
         expected_components={}
         for row in financial.intent.sources:

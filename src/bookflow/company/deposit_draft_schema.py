@@ -49,6 +49,9 @@ def define_tables(metadata, C, T, common):
             ck("(version=1 AND previous_revision_id IS NULL) OR (version>1 AND previous_revision_id IS NOT NULL)"),
             ck("json_valid(snapshot) AND json_type(snapshot)='object' AND length(manifest_hash)=64"))
     table('draft_row_keys',[col('id'),col('draft_id'),col('kind','text'),col('ordinal','int'),
+        # Original-row provenance owner, discriminated by the mutually exclusive
+        # header edit/copy fields. For copy this is NOT a destination/edit pin:
+        # a later financial post allocates fresh destination row identities.
         col('edit_transaction_id',nullable=True),col('original_row_id',nullable=True),*created()],
         uq('draft_id','id'),uq('draft_id','ordinal'),uq('draft_id','id','ordinal','kind'),owner('draft_id','drafts','id'),
         owner('edit_transaction_id original_row_id','row_keys','transaction_id id'),

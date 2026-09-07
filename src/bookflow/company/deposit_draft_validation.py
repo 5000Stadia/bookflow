@@ -151,13 +151,14 @@ def decode_revision(s, header, revision, kind):
     st=getattr(c,'deposit_'+kind+'_sources')
     stored=list(s.company.conn.execute(sa.select(st).where(st.c.revision_id==revision['id']).order_by(st.c.ordinal)).mappings())
     require(len(stored)==len(manifest.sources),'source_count')
+    source_graphs=deposit_sources.graph_many(s,[row.source.transaction_id for row in manifest.sources])
     for raw,row in zip(stored,manifest.sources):
         require((raw[parent],raw['row_id'],raw['ordinal'],raw['source_transaction_id'],raw['source_type'],raw['expected_header_version'],raw['source_revision_id'],raw['memo'],raw['memo_origin'])==
             (header['id'],row.row_id,row.ordinal,row.source.transaction_id,row.source.source_type,row.source.expected_header_version,row.source.revision_id,row.memo,row.memo_origin))
         require(json.loads(raw['snapshot'])==row.model_dump(mode='json'),'source_snapshot')
         # Independently reconstruct the captured business revision from real owned
         # rows. A later correction is history, not permission to rewrite the pin.
-        g=deposit_sources.graph(s,row.source.transaction_id)
+        g=source_graphs[row.source.transaction_id]
         endpoint=proof.source_endpoint(row)
         if row.source.source_type=='payment':
             keys=c.payment_component_keys
@@ -189,10 +190,11 @@ def decode_revision(s, header, revision, kind):
 
 def stale_sources(s,manifest,edit=None):
     stale=[]
+    claims=dependencies.active_claims(s,[row.source.transaction_id for row in manifest.sources])
     for row in manifest.sources:
         try:
             actual=deposit_sources.load(s,row.source.transaction_id)
-            claim=dependencies.active_claim(s,row.source.transaction_id)
+            claim=claims.get(row.source.transaction_id)
             invalid=actual!=row.source or (claim is not None and claim['transaction_id']!=edit) or (manifest.header.date is not None and actual.receipt_date>manifest.header.date)
         except BookflowError as error:
             if error.code!='E_DEPOSIT_SOURCE_INELIGIBLE':raise

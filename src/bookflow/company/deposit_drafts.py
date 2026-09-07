@@ -35,13 +35,24 @@ def load(s,identity,revision_number=None,*,kind='draft',ctx=None,binding=None,wr
         v.require(revision['version']==index and revision['previous_revision_id']==prior,'revision_chain')
         v.require(revision['high_water']>=high_water,'ordinal_high_water')
         high_water=revision['high_water'];prior=revision['id']
-    v.require(bool(revisions) and revisions[-1]['id']==header['current_revision_id'] and revisions[-1]['version']==header['version'],'current_revision')
+    consumed=kind=='draft' and header['state']=='consumed'
+    v.require(bool(revisions) and revisions[-1]['id']==header['current_revision_id'] and revisions[-1]['version']+int(consumed)==header['version'],'current_revision')
+    if kind=='draft':
+        if not consumed:
+            v.require(s.company.conn.execute(sa.select(c.deposit_draft_consumptions.c.operation_id).where(c.deposit_draft_consumptions.c.draft_id==identity)).first() is None,'unexpected_consumption')
+    if consumed:
+        from bookflow.company.deposit_draft_consumption import validate_consumed
+        validate_consumed(s,header,revisions[-1])
     revision=next((r for r in revisions if r['version']==revision_number),None) if revision_number else revisions[-1]
     if revision is None:raise BookflowError('E_RECORD_NOT_FOUND')
     if kind=='draft':
         maximum=s.company.conn.execute(sa.select(sa.func.max(c.deposit_draft_row_keys.c.ordinal)).where(c.deposit_draft_row_keys.c.draft_id==identity)).scalar_one() or 0
         v.require(high_water>=maximum,'ordinal_high_water')
     manifest=v.decode_revision(s,header,revision,kind)
+    if kind=='draft':
+        from bookflow.company.deposit_draft_provider import validate_row_origins
+        keys=list(s.company.conn.execute(sa.select(c.deposit_draft_row_keys).where(c.deposit_draft_row_keys.c.draft_id==identity)).mappings())
+        validate_row_origins(s,header,keys)
     return header,dict(revision),manifest,binding
 
 
@@ -51,7 +62,8 @@ def output(s,header,revision,manifest,kind='draft'):
     stale=v.stale_sources(s,manifest,edit)
     common=dict(id=header['id'],version=header['version'],state=header['state'],revision_id=revision['id'],revision_number=revision['version'],
         manifest_hash=revision['manifest_hash'],stale_source_ids=stale)
-    if kind=='draft':return m.DraftOutput(**common,header=manifest.header,summary=manifest.summary,edit_transaction_id=edit,baseline_version=header['baseline_version'],copy_transaction_id=header['copy_transaction_id'])
+    from bookflow.company.deposit_draft_provider import reference_issues
+    if kind=='draft':return m.DraftOutput(**common,posting_issues=manifest.summary.issues+reference_issues(s,manifest,edit),header=manifest.header,summary=manifest.summary,edit_transaction_id=edit,baseline_version=header['baseline_version'],copy_transaction_id=header['copy_transaction_id'])
     return m.SelectionOutput(**common,source_count=len(manifest.sources),source_total=manifest.summary.source_total,
         target_draft_id=header['target_draft_id'],target_revision_id=header['target_revision_id'],accepted_revision_id=header['accepted_revision_id'])
 
@@ -73,7 +85,8 @@ def _version(s,header,expected):
             return result
         versioning.check_update(current_version=header['version'],current_updated_at=header['updated_at'],
             current_writer=versioning.current_writer(s.company,kind,header['id'],header),changes={'composition'},
-            expected_version=expected,history_since=history,actor_id=s.actor.id)
+            expected_version=expected,history_since=history,actor_id=s.actor.id,
+            window_seconds=s.company_info_row.get('recent_activity_window_seconds',60))
     if header['state']!='open':raise BookflowError('E_DEPOSIT_DRAFT_STATE')
 
 
