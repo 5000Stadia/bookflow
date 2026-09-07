@@ -1559,9 +1559,8 @@ remains available unchanged to the future atomic coordinator.
 
 This increment does not activate deposit public commands, drafts, Delete,
 coordination/all-active-unapply, granular permission setup, reconciliation,
-full-C delivery, or G3 queries/UI. Dependency mismatch reports unknown history;
-authoritative baseline attribution and paged conflict presentation remain an
-explicit unfinished seam, not a claim of complete G2. Complete replacement
+full-C delivery, or G3 queries/UI. Private deposit history A supplies authenticated immutable baselines and
+attributed, paged business conflicts; this is not a claim of complete G2. Complete replacement
 source-memo omission selects the captured source memo; explicit null retains
 G1's entered blank. Account activity remains required for fresh postings;
 exact historical inverses do not re-admit those accounts.
@@ -1620,3 +1619,26 @@ Persistent reconciliation links, opening coverage, drafts, certificates,
 amendments, undo, reports, public interfaces and foreign statement/FX units remain
 separate required ownership and acceptance gates. No certificate membership or
 clearing decision transfers implicitly to a replacement version.
+
+
+Private deposit history A (`deposit_dependency_models/history/pages`) reconstructs
+complete owner and negative-relation facts from company audit entries and owned
+immutable revisions, including receipt settlement, work ancestry, claims, bank
+versions and original selector/default choices. Opaque recipes bind the exact
+original input/context, relevant immutable endpoint and existing actor/principal
+execution binding using the database-owned report key. No global audit position
+is serialized. Every capture/issue/reconstruction/comparison/page rechecks current
+resource admission; pages follow complete comparison, default50/max200. Ordinary
+owner-version errors use the same proven history and an explicit inspection recipe.
+New-post issuer names use the authorized selected hub company row with its latest
+name-changing/create entry in one read snapshot; corrections retain their original
+issuer and do not read hub name history. Missing/contradictory owned evidence is
+unknown history; ordinary changes, invalid recipes and authority loss are distinct.
+Automatic deposit numbering is reconstructed from co21 permanent automatic-post
+receipts, with the live series checked against those effects, and number occupancy
+has explicit negative relations. The private persister retains the existing
+preview credential and revalidates its produced guard without inserting internal
+guard fields into original request provenance. These readers do not write or
+repair company copies. Full-C audience/publication integration, public deposit
+commands, source coordination/all-active cancellation and performance acceptance
+remain separate; no alternate identity binding or live permission policy is added.

@@ -1,10 +1,14 @@
 """Private ordinary lifecycle contracts; no command or draft-provider activation."""
 from typing import Literal
 from pydantic import Field
-from bookflow.company.deposit_models import Frozen, ID, Positive, Effect, ReplaceInput
+from bookflow.company.deposit_models import Frozen, ID, Positive, Effect, ReplaceInput, PostInput as SourcePostInput
 from bookflow.company.sales_models import Fingerprint, StrictModel
 from bookflow.company.payment_models import OperationKey
 from bookflow.company.bank_effects import BankEffect
+
+
+class PostInput(SourcePostInput):
+    dependency_guard: str | None = Field(default=None, max_length=2048)
 
 
 class UpdateInput(ReplaceInput):

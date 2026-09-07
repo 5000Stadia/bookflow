@@ -2,6 +2,11 @@
 
 No registry registration, draft provider, nested dispatch, or transaction commit.
 """
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from bookflow.core.publication import OSBinding
+    from bookflow.adapters.http.app import Credential
 from dataclasses import dataclass
 import hashlib
 import hmac
@@ -11,9 +16,9 @@ from bookflow.company import schema as c, deposits, deposit_sources, deposit_val
 from bookflow.company import deposit_dependencies as dependencies, deposit_operations as operations
 from bookflow.company import document_effects as effects, journals, sales, sales_defaults as defaults
 from bookflow.company import journal_custom_fields as custom, payment_queries as q
-from bookflow.company.deposit_models import (PostInput, ReplacementDocument, InlineDocument, Account,
+from bookflow.company.deposit_models import (ReplacementDocument, InlineDocument, Account,
     SourceRow, Additional, CashBack, Dimensions, Intent, Effect, amount)
-from bookflow.company.deposit_lifecycle_models import UpdateInput, VoidInput
+from bookflow.company.deposit_lifecycle_models import PostInput, UpdateInput, VoidInput
 from bookflow.company.deposit_resolution import resolve_account, resolve_additional
 from bookflow.core import clock
 from bookflow.core.errors import BookflowError
@@ -29,6 +34,7 @@ class Prepared:
     dependency_guard: str
     data_json: str
     custom_plan: custom.JournalCustomFieldPlan | None
+    binding: OSBinding | Credential
 
 
 INPUTS={'post':PostInput,'update':UpdateInput,'void':VoidInput}
@@ -53,17 +59,46 @@ def _logical(value, mapping):
     return value
 
 
-def _guard(s, fingerprint):
-    from bookflow.company.ledger_reports import _cursor_key
-    return hmac.new(_cursor_key(s.company),b'deposit-dependencies-v1\0'+fingerprint.encode(),hashlib.sha256).hexdigest()
+
+def recover(s,ctx,inp,verb,binding):
+    """Exact business replay skips its old guard, never current admission."""
+    from bookflow.company import deposit_dependency_history as history
+    history._authorize_binding_graph(s,binding,(),write=True)
+    if ctx.on_behalf_of != binding.on_behalf_of:
+        raise BookflowError('E_UNAUTHENTICATED')
+    saved=operations.find(s,inp.operation_key)
+    if saved is not None:
+        targets=effects.rows(s,c.deposit_operation_targets,c.deposit_operation_targets.c.operation_id==saved['id'])
+        history._authorize_binding_graph(s,binding,[row['transaction_id'] for row in targets],write=True)
+    return operations.recover(s,ctx,inp,verb)
 
 
-def prepare(s,ctx,inp,verb):
+def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None):
     """Complete snapshot resolution without DML; prospective IDs remain private."""
     if verb not in INPUTS:raise ValueError('unsupported private deposit action')
     inp=INPUTS[verb].model_validate_json(inp.model_dump_json(by_alias=True,exclude_unset=True))
-    recovered=operations.recover(s,ctx,inp,verb)
+    from bookflow.company import deposit_dependency_history as history
+    from bookflow.core.publication import OSBinding
+    if binding is None:
+        binding = OSBinding.from_session(s, ctx.on_behalf_of)
+    recovered=recover(s,ctx,inp,verb,binding)
     if recovered is not None:return recovered
+    original_request = history.request(dict(command='deposit '+verb,
+        input=inp.model_dump(mode='json', by_alias=True, exclude_unset=True),
+        context={key: value for key, value in {'reason': ctx.reason, 'directive_id': ctx.directive_id}.items() if value is not None}))
+    supplied_guard = getattr(inp, 'dependency_guard', None)
+    if supplied_guard is None:
+        supplied_guard = expected_guard
+    if supplied_guard is not None:
+        comparison = history.compare(s, supplied_guard, original_request, binding)
+        if not comparison.matches:
+            from bookflow.company.deposit_dependency_models import PageInput
+            from bookflow.company.deposit_dependency_pages import changes_page
+            page = changes_page(s, supplied_guard, original_request, PageInput(), binding)
+            raise BookflowError('E_PREVIEW_STALE', details={'reason': 'deposit_dependencies',
+                'history': 'unknown_history' if comparison.unknown_history else 'known_stale',
+                'changes': page.model_dump(mode='json'),
+                'original_request': original_request.model_dump(mode='json', by_alias=True, exclude_unset=True)})
     old=None;prior=None;previous=None
     if verb!='post':
         found=effects.rows(s,c.transactions,c.transactions.c.id==inp.deposit,c.transactions.c.type=='deposit')
@@ -71,12 +106,13 @@ def prepare(s,ctx,inp,verb):
         old=found[0]
     requested=[] if verb=='void' or inp.document.mode=='draft' else [r.source for r in inp.document.sources]
     targets=dependencies.authorize(s,old['id'] if old else None,requested,write=True)
+    history._authorize_binding_graph(s,binding,targets,write=True)
     if verb!='post' and (not ctx.reason or not ctx.reason.strip() or len(ctx.reason)>140):
         raise BookflowError('E_REASON_REQUIRED')
     if operations.find(s, inp.operation_key) is not None:
         raise BookflowError('E_DEPOSIT_OPERATION_KEY_REUSED')
     if old:
-        journals.version_meta(s,old,inp.expected_version)
+        history.version_meta(s,old,inp.expected_version,binding)
         prior=effects.rows(s,c.transaction_revisions,c.transaction_revisions.c.id==old['current_revision_id'])[0]
         profile=effects.rows(s,c.deposit_profiles,c.deposit_profiles.c.revision_id==prior['id'])[0]
         previous=Effect.model_validate_json(profile['facts_snapshot'])
@@ -109,7 +145,7 @@ def prepare(s,ctx,inp,verb):
             if claimed and claimed['transaction_id']!=identity:
                 raise BookflowError('E_DEPOSIT_SOURCE_CLAIMED',details=dependencies.claim_details(s,value.source,claimed))
             h=effects.rows(s,c.transactions,c.transactions.c.id==value.source)[0]
-            journals.version_meta(s,h,value.expected_version)
+            history.version_meta(s,h,value.expected_version,binding)
             retained=oldsources.get(value.source)
             if retained:
                 row_id,ordinal=retained.row_id,retained.ordinal
@@ -161,9 +197,9 @@ def prepare(s,ctx,inp,verb):
         resolved=_logical(resolved.model_dump(mode='json'),mapping),number=number,memo=memo,
         custom=sales._custom_semantic(custom_plan.snapshot) if custom_plan else None,
         closing=s.company_info_row.get('closing_date'),schema='co0021')
-    fingerprint=q.digest(facts);guard=_guard(s,fingerprint)
-    if getattr(inp,'dependency_guard',None) is not None and not hmac.compare_digest(inp.dependency_guard,guard):
-        raise BookflowError('E_PREVIEW_STALE',details={'reason':'deposit_dependencies','history':'unknown_history'})
+    fingerprint=q.digest(facts)
+    recipe, readset = history.capture(s, original_request, binding)
+    guard = history.issue(s, recipe, readset, binding)
     if inp.expected_facts_fingerprint is not None and inp.expected_facts_fingerprint!=fingerprint:
         raise BookflowError('E_PREVIEW_STALE',details={'reason':'deposit_facts'})
     data=dict(before=old,prior=prior,previous=previous.model_dump(mode='json') if previous else None,
@@ -171,5 +207,5 @@ def prepare(s,ctx,inp,verb):
         header_ordinal=headers[0]['ordinal'] if headers else maximum+1,number=number,memo=memo,
         source_headers=source_headers,claims=current_claims,targets=targets,sequence=sequence,
         mapping=mapping,at=clock.now_iso(),event=new_id(),operation_id=new_id(),
-        issuer=json.loads(prior['issuer_snapshot']) if prior else {k:v for k,v in s.company_info_row.items() if k in ('id','legal_name','display_name','home_currency') or k.startswith(('address_','legal_address_','ship_address_'))})
-    return Prepared(verb,inp.model_dump_json(by_alias=True,exclude_unset=True),fingerprint,guard,q.canonical(data),custom_plan)
+        issuer=json.loads(prior['issuer_snapshot']) if prior else {**{k:v for k,v in s.company_info_row.items() if k in ('id','legal_name','home_currency') or k.startswith(('address_','legal_address_','ship_address_'))}, 'display_name':readset.issuer.display_name})
+    return Prepared(verb,inp.model_dump_json(by_alias=True,exclude_unset=True),fingerprint,guard,q.canonical(data),custom_plan,binding)
