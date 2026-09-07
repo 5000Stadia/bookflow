@@ -146,3 +146,56 @@ def test_coordinate_retains_original_cash_and_all_current_knowledge_dates(client
         assert original.captured.source.receipt_date=='2026-06-02' and current.captured.source.receipt_date=='2026-06-08'
         assert any(v.kind=='coordinated_source_change' for v in q.history(s,m.HistoryInput(deposit=posted.current.id),binding=b).items)
     run_private(read)
+
+
+def test_zeroed_component_read_identity_survives_restore(client,sale,run_private):
+    from tests.test_deposit_sources import uf
+    from tests.test_payment_receipts import method
+    from bookflow.company import deposit_coordination as coordinate,deposit_coordinate_persistence as cp
+    from bookflow.company.deposit_coordinate_models import CoordinateInput
+    receipt=client.run('sales-receipt post',dict(customer=sale['customer'],date='2026-06-02',
+        deposit_to=uf(client),payment_method=method(client),lines=[dict(item=sale['item'],quantity='1',unit_price='1') for _ in range(2)]),company=COMPANY)
+    doc=additional_document(client,sale);doc['additional']=[]
+    doc['sources']=[dict(source_type='sales_receipt',source=receipt['id'],expected_version=1)]
+    posted=financial(run_private,dict(operation_key='read-presence-post',document=doc))
+    original=posted.effect.financial.intent.sources[0]
+    ordinals={v.key:v.ordinal for v in original.occurrences}
+    line_ids=[v['line_id'] for v in receipt['revision']['lines']]
+    for step,price,total in [(1,'0',100),(2,'1',200)]:
+        body=replacement(posted,doc);body['sources']=[dict(source_result=True,source=receipt['id'])]
+        inp=CoordinateInput.model_validate(dict(deposit=posted.current.id,expected_version=step,operation_key='read-presence-'+str(step),
+            source_action=dict(kind='sales_receipt_update',input=dict(sales_receipt=receipt['id'],expected_version=step+1,amount_received=str(total//100),
+                lines=[dict(line_id=line_ids[0],item=sale['item'],quantity='1',unit_price=price),dict(line_id=line_ids[1],item=sale['item'],quantity='1',unit_price='1')])),
+            replacement=dict(mode='document',document=body)))
+        def change(s,ctx):
+            b=OSBinding.from_session(s);preview=coordinate.prepare(s,ctx,inp,binding=b)
+            return cp.execute(s,ctx,coordinate.prepare(s,ctx,inp.model_copy(update={'dependency_guard':preview.dependency_guard}),binding=b))
+        run_private(change)
+        def read(s,ctx):
+            b=OSBinding.from_session(s);before=tuple(s.company.raw.iterdump())
+            for revision,expected_total in [(1,200),(2,100)]+([(3,200)] if step==2 else []):
+                printed=deposit_print_data.print_data(s,m.PrintDataInput(deposit=posted.current.id,revision_number=revision),binding=b)
+                row=next(r for r in printed.rows if isinstance(r,m.SourceItem)).captured
+                assert row.row_id==original.row_id and {v.key:v.ordinal for v in row.occurrences}==ordinals
+                # Present means the semantic line still exists, even at zero capacity.
+                assert len(row.occurrences)==2 and all(v.present for v in row.occurrences)
+                assert row.source.semantic_presence==original.source.semantic_presence
+                assert printed.document.totals.bank_total.minor_units==expected_total
+                capacities={v.key:v.capacity for v in row.source.components}
+                assert {key:capacities.get(key,0) for key in row.source.semantic_presence}=={
+                    key:(0 if revision==2 and key.identity==line_ids[0] else 100)
+                    for key in original.source.semantic_presence}
+                assert sum(capacities.values())==expected_total
+                assert {(v.captured.row_id,v.captured.component_ordinal,v.captured.bucket,v.captured.units)
+                        for v in printed.cash_allocations}=={
+                    (original.row_id,ordinals[key],'main_bank',100)
+                    for key in original.source.semantic_presence
+                    if not (revision==2 and key.identity==line_ids[0])}
+                pages=[];cursor=None
+                while True:
+                    page=q.items(s,m.ItemsInput(deposit=posted.current.id,revision_number=revision,kind='cash_allocations',page=m.PageInput(limit=1,cursor=cursor)),binding=b)
+                    pages.extend(page.items);cursor=page.next_cursor
+                    if cursor is None:break
+                assert tuple(pages)==printed.cash_allocations
+            assert tuple(s.company.raw.iterdump())==before
+        run_private(read)

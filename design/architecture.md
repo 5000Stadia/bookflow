@@ -1972,6 +1972,34 @@ Custom values retain typed canonical values, definition/choice snapshots and
 origins; blank required values report incomplete state. Existing definitions lack
 print visibility, so `print_visible=None` records unavailable provenance rather
 than an invented default. The print owner must resolve this before full G3.
-Public command registration, current full-C publication integration, deposit read
-and print surfaces, GUI/MCP continuation, reconciliation activation and Delete
-remain separately owned requirements.
+Public command registration, current full-C publication integration, GUI/MCP
+continuation, reconciliation activation and Delete remain separately owned
+requirements.
+
+### Private stored deposit reads
+
+`deposit_queries` supplies typed `show`, `query`, `items` and `history`;
+`deposit_print_data` supplies complete captured print data without rendering.
+These functions require an existing authenticated binding and caller-owned read
+snapshot. They are not registered public commands or hosted publication routes.
+
+`deposit_read_authority` admits historical transaction, operation and draft roots
+before sensitive decoding. `deposit_read_facts` loads complete stored graphs and
+`deposit_read_validation` checks captured source endpoints, immutable row evidence,
+financial equations and lifecycle projections. `deposit_read_manifest` pins the
+owned field, edge and codec inventory. Repeated draft references reuse validated
+results only within one `load_complete` invocation; consumption validation remains
+independent. No result survives the call or crosses snapshots.
+
+Selected immutable revisions remain separate from freshly observed current
+metadata. Dated states sum recorded effects through the supplied effective date.
+Items continuations pin the selected revision while rechecking current authority.
+Query and history continuations bind their complete authorized result relation;
+an authorized malformed aggregate fails the complete query. Company-keyed tokens
+use separate read domains without exposing audit sequence or permission epochs.
+
+Print data includes every selected row and cash allocation, captured issuer and
+custom values. Unknown historical print visibility stays null. A line reduced to
+zero retains its semantic occurrence and ordinal, with no invented zero-value
+cash allocation; restoring its amount restores funding under that identity.
+Reports and public GUI/MCP integration remain separate consumers.
