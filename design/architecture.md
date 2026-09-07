@@ -1329,21 +1329,48 @@ defaults and update provenance. Credential/password hashes, labels and liveness
 fields never enter prepared audit payloads. Encoding/insertion and final-state
 failures roll back all service effects. Preview allocates no durable IDs/times.
 
-OS binding remains a conditional producer contract, not an installed authenticator.
-A B3/C coordinator must obtain kernel identity, continuously hold root serialization
-from captured file configuration through the transaction, prefer same-transaction
-pending_config after dequeue, and reject changed/missing admitted mappings. B2
-reads no config file or second connection. Its `OSOperation` lifetime savepoint
-binds the supplied evidence to the exact Database/root/request/purpose and expires
-on operation exit or transaction end, including COMMIT/ROLLBACK followed by BEGIN
-on the same Database. The guard proves lifetime only, not kernel/config provenance.
+`core.identity_admin_binding` produces private operation-bound inputs for B2 and
+current company authority. `offline_operation` obtains process OS identity and
+holds RootLock from file capture through transaction exit. `hosted_operation`
+requires the actual Host writer Thread and held root lock; it consumes an existing
+peer-derived OSBinding or secret-bearing internal TokenBinding after dequeue.
+It captures file configuration before BEGIN, then gives main.pending_config on
+that exact connection precedence. Changed/missing admitted mapping, root, actor,
+principal eligibility or epoch rejects. No Config.load/second connection enters
+this transaction producer. Preview uses a consistent read transaction; apply
+starts BEGIN IMMEDIATE. Ordinary readonly opens' existing transaction is retained.
+
+The invocation reauthenticates before every preview/apply/resource decision.
+B2's OSOperation lifetime guard associates Database/root/request/purpose and
+expires on scope exit or transaction end. The enclosing actual command owner
+still owns commit; these scopes never commit and roll back outstanding work on
+exit. BoundOperation returns private B2 prepared/effect records, not publishable
+responses. No registered command, editor or legacy-mode activation consumes it.
+
+`hub.permission_runtime` supplies complete membership-governed visibility across
+the raw old/new subject/scope union, reusing snapshot's retirement classifier.
+Inactive/absent subjects and retired scopes are false. Company visibility requires
+applicable organization/exact-company membership, including for installation
+administrators. Exact-company membership permits parent discovery but does not
+create organization membership, sibling or future-company authority. Existing A
+role/default/administrative contracts are unchanged. Current company requirements
+use A's actor/bound-human intersection after credential validation; conditional
+source/record graph checks remain with their existing owners.
+
+Its explicit build bundle retains the frozen capabilities/defaults/actions and
+adds current reconciliation source declarations and payment source positions.
+It does not replace persisted defaults or auto-adopt a catalog on a root. Legacy
+activation and a catalog transition remain separately admitted operations. The
+runtime bridge is not wired into legacy access, audit, recovery or publication;
+complete projection/cursor cutover and retirement continuation remain required.
+
 The producer must not leave coordinator savepoints open between entering
 `OSOperation` and calling preview/apply: validation rotates the operation savepoint
 with RELEASE, which also releases every savepoint nested after it. Coordinator
 savepoints must enclose the operation or finish before validation; the B2 service
 savepoint is created after validation.
-There is no production mapping factory or permissive default. Test-only supplied
-producers do not establish live safety.
+There is no configurable visibility supplier or public mapping factory. Private
+producer evidence does not establish live projection or activation safety.
 
 Prepared effects are private and cannot authorize a later apply. The visible
 portion omits hidden agents/tokens, global generations and catalog digests; even
@@ -1885,3 +1912,11 @@ or capability and no pure permission-catalog pin refresh:
 | sales_tax_line_key | sales_tax_line_keys | line_id |
 | sales_tax_attribution | sales_tax_attributions | revision_id |
 | sales_tax_attribution_line | sales_tax_attribution_lines | document_line_id |
+
+The private runtime catalog bundle's `SOURCE_COMMIT` identifies the verified
+accepted resource-inventory base `3990636d2a2d3c683a0e806e6635a4a64c0075b0`,
+not the final commit containing the bridge. Union review checks full actual
+resource call-site parity. Changing this provenance changes the bundle identity
+digest, even when the policy descriptor and inventory digest are unchanged.
+Existing historical descriptors are not automatically adopted or rewritten;
+they still require the separately admitted catalog transition.
