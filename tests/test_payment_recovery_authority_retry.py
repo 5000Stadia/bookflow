@@ -225,8 +225,51 @@ def test_ordinary_agent_reason_and_directive_fail_before_immutable_lookup(client
     owner=make_actor(root,'recovery-agent-owner',company_role=(company,'standard'))
     make_actor(root,'recovery-agent',kind='agent',owner_user_id=owner,company_role=(company,'standard'))
     agent=as_user(root,'recovery-agent')
+    directive=client.run('directive add',dict(text='Recovery ordinary directive witness'),company=COMPANY)['directive']['code']
+    client.run('directive deactivate',dict(directive=directive),company=COMPANY)
     before=raw_books(root)
-    for context,expected in (({},'E_REASON_REQUIRED'),({'directive':'SI-999999'},'E_DIRECTIVE_NOT_FOUND')):
+    for context,expected in (({},'E_REASON_REQUIRED'),({'directive':'SI-999999'},'E_DIRECTIVE_NOT_FOUND'),({'directive':directive},'E_DIRECTIVE_INACTIVE')):
         with pytest.raises(BookflowError) as caught:call(agent,'begin',begin,**context)
         assert caught.value.code==expected
         assert raw_books(root)==before
+
+
+@pytest.mark.timeout(300)
+def test_complete_403_graph_protects_off_page_work_on_every_recovery_surface(client,sale,root,monkeypatch):
+    from tests.test_payment_selection import invoice
+    invoices=[invoice(client,sale,'AUTH-403-'+str(index)) for index in range(402)]
+    protected=bill(client,accepted(client,sale));invoices.append(protected)
+    draft=client.run('payment selection create',dict(mode='new_receipt',customer=sale['customer'],date='2026-06-01',amount='10'),company=COMPANY)
+    for offset in range(0,403,200):
+        draft=client.run('payment selection update',dict(selection=draft['id'],expected_version=draft['version'],set_items=[dict(invoice=row['id'],expected_version=row['version'],amount='0.01',amount_origin='entered') for row in invoices[offset:offset+200]]),company=COMPANY)
+    # Protected final row is beyond every first200-item page, and is not in the
+    # 201 staged changes. Whole S ownership must still protect the entire attempt.
+    edits=sorted([dict(invoice_id=row['id'],observed_invoice_version=row['version'],action='set',amount_minor_units=2,currency='USD',amount_origin='entered') for row in invoices[:201]],key=lambda row:row['invoice_id'])
+    begin=declaration(draft,edits)
+    begun=call(client,'begin',begin,idempotency_key='whole403-begin')
+    identifier=begun['original_receipt']['recovery_id']
+    first=dict(recovery_id=identifier,chunk_index=0,entries=edits[:200])
+    call(client,'upload',first,idempotency_key='whole403-upload')
+    call(client,'upload',dict(recovery_id=identifier,chunk_index=1,entries=edits[200:]))
+    seal=dict(recovery_id=identifier,expected_recovery_version=3)
+    call(client,'seal',seal)
+    request=dict(recovery_id=identifier,attempt_generation=begin['attempt_generation'],intent_hash=begin['intent_hash'])
+    comparison=call(client,'compare',request)
+    assert comparison['item_count']==403 and comparison['selected_minor_units']==604
+    first_page=client.run('payment selection items',dict(selection=draft['id'],limit=200),company=COMPANY)
+    assert protected['id'] not in {row['invoice_id'] for row in first_page['items']}
+    apply=dict(**request,expected_recovery_version=4,expected_selection_version=draft['version'],expected_facts_fingerprint=comparison['facts_fingerprint'])
+    import bookflow.hub.access as access
+    original=payment_authority.require_resource
+    def denied(s,capability,role):
+        if capability=='customer-work':raise BookflowError('E_PERMISSION')
+        return original(s,capability,role)
+    monkeypatch.setattr(payment_authority,'require_resource',denied)
+    monkeypatch.setattr(access,'require_resource',denied)
+    before=raw_books(root)
+    for verb,inp,context in [('begin',begin,dict(idempotency_key='whole403-begin')),('upload',first,dict(idempotency_key='whole403-upload')),('seal',seal,{}),('show',dict(recovery_id=identifier),{}),('items',dict(recovery_id=identifier),{}),('compare',request,{}),('compare-items',dict(**request,facts_fingerprint=comparison['facts_fingerprint']),{}),('apply',apply,dict(dry_run=True)),('apply',apply,{})]:
+        with pytest.raises(BookflowError) as caught:call(client,verb,inp,**context)
+        assert caught.value.code=='E_PERMISSION' and raw_books(root)==before
+    assert call(client,'query',dict(selection=draft['id'],limit=1))['total_count']==0
+    assert draft['id'] not in {row['id'] for row in client.run('payment selection query',dict(limit=200),company=COMPANY)['items']}
+    assert raw_books(root)==before
