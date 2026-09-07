@@ -1565,3 +1565,10 @@ explicit unfinished seam, not a claim of complete G2. Complete replacement
 source-memo omission selects the captured source memo; explicit null retains
 G1's entered blank. Account activity remains required for fresh postings;
 exact historical inverses do not re-admit those accounts.
+
+
+### Captured account use admission
+
+`company/accounts.py` treats immutable typed commercial account references as permanent uses when an account's type or currency changes. Fixed SQL paths cover sales profiles/lines/tax components, work revisions/lines, payment profiles and deposit Effect profiles. Actual Alembic feature ancestry controls which queries exist on the current snapshot; unavailable old-schema families are skipped, unknown schemas are not interpreted as empty. The private revision view exposes the existing connection's driver only for marker admission, including the conn-only undo domain wrapper. No document visibility filter or count enters this business integrity predicate. Existing posting/master error precedence remains, followed by generic captured-use errors.
+
+`company/sales.py` validates current mapped-account role eligibility at its existing replacement admission seam. Saved labels/mappings remain immutable: an already-ineligible capture requires an explicit eligible refresh/remap for a new effect. Historical reads, exact no-ops and exact original-date void inverses are preserved. Neither check repairs old postings or alters reconciliation identity. The query inventory covers accepted co20 deposit Effect storage; a future deposit lifecycle/draft shape must be checked at integration.
