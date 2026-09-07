@@ -185,7 +185,9 @@ def test_zero_final_waiters_use_no_validation_pool_slot(owner_host, monkeypatch)
         (issued['token_id'],)).fetchone()[0]) is not None
 
 
-def test_truncated_local_reply_never_returns_fallback(tmp_path):
+@pytest.mark.parametrize('reply', [b'', b'\x00', b'\x00\x00\x00', (30).to_bytes(4,'big')+b'{"output":'],
+                         ids=['no-header', 'one-header-byte', 'three-header-bytes', 'partial-body'])
+def test_truncated_local_reply_never_returns_fallback(tmp_path, reply):
     from bookflow.core.forward import call_host
     from bookflow.core.errors import BookflowError
     import tempfile
@@ -195,13 +197,21 @@ def test_truncated_local_reply_never_returns_fallback(tmp_path):
     def respond():
         conn,_=server.accept()
         with conn:
-            received.append(conn.recv(65536))
-            conn.sendall((30).to_bytes(4,'big')+b'{"output":')
+            def read_exact(size):
+                result=b''
+                while len(result)<size:
+                    chunk=conn.recv(size-len(result))
+                    assert chunk
+                    result+=chunk
+                return result
+            size=int.from_bytes(read_exact(4),'big')
+            received.append(read_exact(size))
+            if reply:conn.sendall(reply)
     thread=threading.Thread(target=respond);thread.start()
     try:
         with pytest.raises(BookflowError) as exc:call_host(path,{'command':'durable'})
         assert exc.value.code=='E_IO' and exc.value.details['outcome']=='unknown'
-        assert received
+        assert len(received)==1 and __import__('json').loads(received[0])=={'command':'durable'}
     finally:thread.join(2);server.close();directory.cleanup()
 
 
