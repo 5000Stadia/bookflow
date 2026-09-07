@@ -1374,8 +1374,8 @@ with BINARY collation. Old rows and local objects are not rewritten.
 ### Private transport admission prerequisite
 
 `Host.publication_admission` orders private validation generations and bounded
-HTTP/local handoffs. No production authority commit closes this gate yet; this
-primitive does not activate B2, retirement or full permission publication.
+HTTP/local handoffs. Conservative actual-owner commits close this gate; transport
+ordering does not activate B2, retirement or full permission publication.
 `serve` selects the owned h11 protocol and asyncio loop. Middleware validates
 outside the mutex, then supplies a generation-bound frame to every ASGI send.
 The actual asyncio selector transport's outgoing buffer accepts each bounded
@@ -1431,15 +1431,16 @@ inventory. Persisted catalogs are decoded against their own version and digest;
 this correction performs no database rewrite or automatic catalog replacement.
 Any later replacement still belongs to the existing typed administration contract.
 
-### Actual commit-owner routing (private, nonactivating increment)
+### Actual commit-owner transport ordering
 
 `core/commit_hooks.py` records operation ownership at the actual transaction and
 filesystem publication owners. `Session.commits` is a typed trusted hook; hosted
 writer sessions receive the host's instance, while standalone sessions retain
 existing exclusive-root ownership. It is not command input or an activation flag.
-No production hook closes publication admission in this increment. F1 response-wide
-release evidence, the send-cycle changes and current local/OS publication must be
-reviewed together before installing closure at these fixed seams.
+Conservative production commits close the host admission gate before visibility.
+One barrier belongs to the outer operation, including nested finalizers; it reopens
+only after all related stores resolve. Existing F1 response-wide release evidence,
+staged h11 bytes and current local/OS permits govern retries and interruption.
 
 Dispatch, explicit finalized appliers, login/logout, migration/rollout, structural
 moves/recovery, GC, config projection and maintenance each declare their owner.
@@ -1451,7 +1452,7 @@ not classified by command verb or financial amount. No policy resolver changes.
 Related commits share an outer operation. Scope exit reports committed, unchanged,
 rolled-back or durable-partial outcomes only after watched transactions settle;
 otherwise the operation stays pending until existing writer cleanup resolves it.
-Old generations will not be restored after rollback. Hooks neither add transactions
+Old generations are never restored after rollback. Hooks neither add transactions
 nor own rollback/retry algorithms. The hook notification seam does no event-loop
 waiting, response enumeration, filesystem I/O or admission locking; database
 tracking at each commit is constant work. Independent literal owner inventory and
@@ -1489,7 +1490,7 @@ records that reconciliation persistence is not yet installed. Its owner must
 install revision metadata and the resolver together with its feature migration;
 there is no active-feature empty fallback.
 
-### Response-wide F1 (nonactivating transport increment)
+### Response-wide F1 with actual commit ordering
 
 `ResponseRelease` counts final/business bytes across headers, chunks, SSE and
 terminal frames in the same mutex as their actual bounded socket/buffer handoff.
@@ -1527,12 +1528,14 @@ caller sink under the original deadline. Hosted client relay, SDK complete-messa
 verification and link-based destination publication retain their D1 ownership.
 This is not remote recall or an overwrite-semantics change.
 
-Production commit hooks remain nonactivating. Their shared depth/operation/outcome
-state is **writer-thread confined**, deliberately without a lock. Installation of
-closure must retain that confinement; reader sessions must never commit through
-the shared hook. FullC projector/granular/retirement policy, minimal authority-losing
-own-effect acknowledgments, opaque cursors and membershipless-admin policy remain
-separate acceptance gates. Later deposit integration must preserve its
+Production commit hooks close conservative operations and retain the classified
+nonreducing refresh/projection/expired-cleanup exceptions. Their shared
+depth/operation/outcome state is bound to the actual host writer Thread before
+startup; wrong/missing writer ownership rejects before state mutation. Readers
+never commit through the shared hook. FullC projector/granular/retirement policy,
+minimal authority-losing own-effect acknowledgments and opaque cursors remain
+separate acceptance gates. The chosen explicit company-membership policy is not
+activated by transport ordering. Later deposit integration must preserve its
 `feature_admission` changes and run the exact metadata/admission witness.
 
 ### Private ordinary deposit lifecycle (G2 increment)

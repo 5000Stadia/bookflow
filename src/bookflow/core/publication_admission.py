@@ -1,4 +1,4 @@
-"""Private host handoff ordering. No production authority commit calls this yet.
+"""Host handoff ordering, shared with actual-owner conservative commit barriers.
 
 Only known nonblocking socket transports may execute inside the mutex. Validation,
 readiness, cancellation cleanup and all filesystem work belong outside it.

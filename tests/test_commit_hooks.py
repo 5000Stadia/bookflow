@@ -1,8 +1,4 @@
-"""Actual commit owners, with a test-only observer at the nonactivating seams.
-
-The manual inventory is independent of OWNERS. No transport or live permission
-activation is inferred from these routing witnesses.
-"""
+"""Actual commit owners; observers delegate to production admission closure."""
 import ast
 from pathlib import Path
 import sqlite3
@@ -121,21 +117,22 @@ def command(owner_host, name, data, *, company=True, key=None):
 
 def observe(monkeypatch, host, *, fail_owner=None):
     events, barriers = [], {}
+    real_before, real_after = CommitHooks._before, CommitHooks._after
     def before(self, operation, owner, impact):
+        real_before(self, operation, owner, impact)
         if self is not host._commit_hooks:
             return
-        if impact is Impact.CONSERVATIVE and id(operation) not in barriers:
-            barriers[id(operation)] = host.publication_admission.close_for_commit()
+        if operation.barrier is not None:
+            barriers[id(operation)] = operation.barrier
         events.append(('before', operation, owner, operation.committed))
         if owner == fail_owner:
             raise sqlite3.OperationalError('injected before actual commit')
     def after(self, operation, outcome):
+        real_after(self, operation, outcome)
         if self is not host._commit_hooks:
             return
         events.append(('after', operation, outcome, operation.committed))
-        barrier = barriers.pop(id(operation), None)
-        if barrier is not None:
-            host.publication_admission.finish_commit(barrier, committed=outcome in (Outcome.COMMITTED, Outcome.PARTIAL))
+        barriers.pop(id(operation), None)
     monkeypatch.setattr(CommitHooks, '_before', before)
     monkeypatch.setattr(CommitHooks, '_after', after)
     return events, barriers
@@ -246,11 +243,14 @@ def test_refresh_autocommit_extends_liveness_without_invalidation(owner_host, mo
     assert not barriers
 
 
-def test_default_host_hooks_do_not_close_gate(owner_host):
+def test_default_host_hooks_close_gate_at_actual_commit(owner_host):
     host = owner_host[0]
     generation = host.publication_admission.begin_validation()
     command(owner_host, 'company update', {'fax': 'nonactivating increment'})
-    host.publication_admission.finish(host.publication_admission.admit(generation, 'unchanged-generation'))
+    with pytest.raises(AdmissionCancelled):
+        host.publication_admission.admit(generation, 'old-generation')
+    current=host.publication_admission.begin_validation()
+    host.publication_admission.finish(host.publication_admission.admit(current, 'reopened'))
     assert host._commit_hooks._operation is None
 
 
@@ -310,3 +310,14 @@ def test_existing_host_cleanup_resolves_failed_commit(owner_host, monkeypatch):
     assert host.submit(lambda: host._hub.raw.execute('SELECT revoked_at FROM api_tokens WHERE id=?', (issued['token_id'],)).fetchone()[0]) is None
     assert [(e[2], e[3]) for e in events if e[0] == 'after'] == [(Outcome.ROLLED_BACK, 0)]
     assert not barriers and host._commit_hooks._operation is None
+
+
+def test_hosted_owner_refuses_wrong_or_missing_writer_before_operation(owner_host):
+    host=owner_host[0]
+    for hooks in (host._commit_hooks,CommitHooks(host.publication_admission)):
+        with pytest.raises(RuntimeError,match='owning writer thread'):
+            with hooks.operation('dispatch.apply'):
+                pytest.fail('wrong writer entered')
+        assert hooks._operation is None and hooks._depth==0
+    current=host.publication_admission.begin_validation()
+    host.publication_admission.finish(host.publication_admission.admit(current,'still-open'))

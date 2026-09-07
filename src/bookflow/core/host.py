@@ -56,7 +56,6 @@ class Host:
         from bookflow.core.publication_admission import Admission
         self.publication_admission = Admission()
         from bookflow.core.commit_hooks import CommitHooks
-        self._commit_hooks = CommitHooks(self.publication_admission)
         self.data_root = data_root
         performance.protect_root(data_root)
         self.version = version
@@ -70,6 +69,7 @@ class Host:
         self._lock: RootLock | None = None
         self._queue: "queue.Queue[_Job | None]" = queue.Queue()
         self._writer = threading.Thread(target=self._writer_loop, name="bookflow-writer", daemon=True)
+        self._commit_hooks = CommitHooks(self.publication_admission, writer=self._writer)
         self._hub: Database | None = None  # writer's writable hub
         self._hub_cm = None  # the context manager that owns the hub connection; it closes the database when it is released
         self._companies: dict[str, Database] = {}  # writer's writable company connections by id

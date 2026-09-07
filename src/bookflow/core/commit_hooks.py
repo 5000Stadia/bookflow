@@ -1,13 +1,12 @@
-"""Private actual-owner routing; admission closure is deliberately not installed yet.
+"""Actual-owner commit ordering against the host's bounded transport admission.
 
-The host supplies one writer-owned hook. Offline sessions use their exclusive
-root lifecycle. No command input, environment setting or activation switch can
-select a different publication policy. Increment 2 will bind these fixed seams
-only together with response-wide F1 and current local publication.
+Offline operations retain their exclusive root lifecycle. This is transport
+ordering, not granular policy activation or a projected-output authority proof.
 """
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
+from threading import current_thread
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -67,17 +66,20 @@ class CommitOperation:
     committed: int = 0
     external: bool = False
     failed: bool = False
+    barrier: object | None = None
 
 
 class CommitHooks:
-    def __init__(self, admission: "Admission | None" = None):
+    def __init__(self, admission: "Admission | None" = None, *, writer=None):
         self.admission = admission
         self._operation: CommitOperation | None = None
         self._depth = 0
+        self._writer_thread = writer
 
     @contextmanager
     def operation(self, owner: str, *databases: "Database | None"):
         OWNERS[owner]
+        self._confined()
         if self._operation is not None and self._depth == 0:
             raise RuntimeError("Previous commit outcome is unresolved")
         outer = self._operation is None
@@ -98,13 +100,27 @@ class CommitHooks:
             if outer:
                 self.resolve()
 
+    def _confined(self):
+        if self.admission is not None:
+            if self._writer_thread is None or current_thread() is not self._writer_thread:
+                raise RuntimeError("Hosted commit hooks require their owning writer thread")
+
     def _before(self, operation: CommitOperation, owner: str, impact: Impact):
-        """Fixed increment-2 seam, before visibility; currently nonactivating."""
+        self._confined()
+        if operation is not self._operation or self._depth == 0:
+            raise RuntimeError("Commit lost its outer owner")
+        if self.admission is not None and impact is Impact.CONSERVATIVE and operation.barrier is None:
+            operation.barrier = self.admission.close_for_commit()
 
     def _after(self, operation: CommitOperation, outcome: Outcome):
-        """Fixed increment-2 outcome seam; never requires event-loop progress."""
+        self._confined()
+        if operation.barrier is not None:
+            self.admission.finish_commit(operation.barrier,
+                committed=outcome in (Outcome.COMMITTED, Outcome.PARTIAL))
+            operation.barrier = None
 
     def _watch(self, db: "Database"):
+        self._confined()
         operation = self._operation
         if operation is None or self._depth == 0:
             raise RuntimeError("Commit has no active actual owner")
@@ -136,6 +152,7 @@ class CommitHooks:
 
     def resolve(self):
         """Called at scope exit and after the host's existing rollback cleanup."""
+        self._confined()
         operation = self._operation
         if operation is None or self._depth:
             return
