@@ -1620,3 +1620,40 @@ Persistent reconciliation links, opening coverage, drafts, certificates,
 amendments, undo, reports, public interfaces and foreign statement/FX units remain
 separate required ownership and acceptance gates. No certificate membership or
 clearing decision transfers implicitly to a replacement version.
+
+### Private reconciliation storage N (co0022; activation OFF)
+
+`company/reconciliation_schema.py` describes 44 additive company tables. The
+frozen co0022 migration creates empty storage, preflights every planned object
+name across attached/local namespaces before DDL, and leaves existing objects
+and rows untouched. It adds no index to an existing table. Reciprocal deferred
+FKs admit complete effect/attempt subtypes in one transaction; immutable evidence
+rejects update/delete. Mutable chains, revisions, claims and attempt barriers
+have explicit transition guards. An attempt's `audit_event_id` identifies its
+latest admitted state event; its `created_*` fields retain original attribution.
+
+`reconciliation_storage_validation.validate` accepts complete explicit new-table
+rows, referenced old-table rows, an already authorized source Graph, and explicit
+historical capture Graphs for openings/certificates. It performs no database read,
+backfill, repair or authorization. It checks ownership even when a migration has
+FKs disabled, proves physical source history/current heads, and checks captured
+populations, whole movements, arithmetic, lineage, claims, receipt tails/hashes,
+and staged intent subtypes/chunks. Canonical-intent data is separate from original
+request evidence. Storage envelopes are not future public command admission
+models. Statement side counts count movements; sums count all component amounts.
+
+N is **not full acceptance** pending clarification of the planned
+`event_effects.local_signed_impact`: its row has no account/cutoff or certificate,
+but the specified local report impact requires that context. A real account move
+has two distinct local impacts. The private validator explicitly rejects this
+currently unprovable event population instead of validating a guessed scalar.
+The proposed resolution is to retain raw old/new facts here and derive local
+impact per account/certificate, or add explicit projection context in the owning
+plan before accepting N. No source rows or financial effects are repaired.
+
+`deposit_dependencies.RECONCILIATION` remains None. A separately reserved future
+activation revision must rebuild/backfill authoritative history, install the real
+resolver and all five source-writer fences coherently, and meet its old-binary,
+full-C, public contract and interface gates. This increment supplies none of those
+behaviors. The accepted source has no public `company verify` command; private
+validation and SQLite integrity/FK checks do not claim to implement that command.
