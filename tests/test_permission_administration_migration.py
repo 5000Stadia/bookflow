@@ -18,6 +18,20 @@ REV=importlib.import_module('bookflow.storage.hub_migrations.versions.0012_permi
 @pytest.mark.parametrize('suspended',[False,True])
 def test_full_old_storage_and_custom_objects_survive_inert_upgrade(tmp_path,suspended):
     path=tmp_path/'hub.db';create_hub(path,suspended=suspended,malformed=True)
+    # Populate the old audit through its ordinary writer, including compressed
+    # and raw snapshots; the full raw-table oracle below must preserve both.
+    from bookflow.core.audit import write_event_to, decode_snapshot
+    from bookflow.core.context import Context, Interface
+    from bookflow.core.registry import Touched
+    with open_database(path,writable=True) as db:
+        write_event_to(db,Context.new(Interface.cli,'b1-preservation'),
+                       'user update','Existing audit before hub0012',
+                       [Touched('user','H','update',6,7,{'display_name':'H'*300},before={'display_name':'old\0name'})],
+                       actor_id='H',actor_kind='human')
+        assert db.raw.execute('SELECT count(*) FROM main.audit_events').fetchone()==(1,)
+        old,new=db.raw.execute('SELECT before,after FROM main.audit_entries').fetchone()
+        assert decode_snapshot(old)=={'display_name':'old\0name'}
+        assert decode_snapshot(new)=={'display_name':'H'*300}
     config=tmp_path/'config.toml';config.write_bytes(b'custom = "untouched"\n')
     company=tmp_path/'company.db'
     with open_database(company,writable=True,create=True) as db:migrate_to_head(db,'company',None)
@@ -83,7 +97,7 @@ def test_no_backfill_or_unrelated_trigger_preserves_all_old_data(tmp_path,attach
         assert before['tables']['local_counter']==after['tables']['local_counter']
         assert before['tables']['agent_authority']==after['tables']['agent_authority']
         assert before['tables']['memberships']==after['tables']['memberships']
-        if not suspended:assert not any(x.startswith('UPDATE agent_authority') for x in statements)
+        if not suspended:assert not any(x.startswith('UPDATE main.agent_authority') for x in statements)
 
 
 @pytest.mark.parametrize('step',range(1,17))
@@ -92,7 +106,7 @@ def test_every_add_backfill_and_state_step_rolls_back(tmp_path,monkeypatch,step)
     with open_database(path,writable=True) as db:
         before=snapshot(db.raw);seen=[]
         def fail(connection,cursor,statement,parameters,context,executemany):
-            if statement.lstrip().upper().startswith(('ALTER TABLE','UPDATE AGENT_AUTHORITY','CREATE TABLE PERMISSION_STATE','INSERT INTO PERMISSION_STATE')):
+            if statement.lstrip().upper().replace('MAIN.', '').startswith(('ALTER TABLE','UPDATE AGENT_AUTHORITY','CREATE TABLE PERMISSION_STATE','INSERT INTO PERMISSION_STATE')):
                 seen.append(statement)
                 if len(seen)==step:raise RuntimeError('controlled boundary failure')
         sa.event.listen(db.engine,'before_cursor_execute',fail)
@@ -152,3 +166,55 @@ def test_real_reserved_name_collision_rolls_back_earlier_additions(tmp_path):
         before=snapshot(db.raw)
         with pytest.raises(BookflowError) as caught:migrate_to_head(db,'hub',tmp_path/'backups')
         assert caught.value.code=='E_MIGRATION_FAILED' and snapshot(db.raw)==before
+
+
+@pytest.mark.parametrize('target', ['agent_authority', 'memberships', 'permission_state', 'all'])
+@pytest.mark.parametrize('suspended', [False, True])
+def test_temp_names_preserved_and_complete_main_upgrade(tmp_path, target, suspended):
+    path=tmp_path/'hub.db'; create_hub(path, suspended=suspended)
+    with open_database(path,writable=True) as db:
+        targets=('agent_authority','memberships','permission_state') if target=='all' else (target,)
+        for name in targets:
+            # Ordinary local objects deliberately disagree with main's backfill facts.
+            db.raw.execute('CREATE TEMP TABLE "'+name.upper()+'" (agent_user_id TEXT, suspended_at TEXT, payload BLOB)')
+            db.raw.execute('INSERT INTO temp."'+name+'"(rowid,agent_user_id,suspended_at,payload) VALUES (77,?,?,?)',
+                           ('local\0suffix',None if suspended else 'local-suspension',b'\0\xff'))
+        main_before=snapshot(db.raw); temp_before=snapshot(db.raw,schema='temp')
+        statements=[]; db.raw.set_trace_callback(statements.append)
+        result=migrate_to_head(db,'hub',None)
+        db.raw.set_trace_callback(None)
+        main_after=snapshot(db.raw,main_before['columns']);temp_after=snapshot(db.raw,schema='temp')
+        # Persist the actual raw outcome even if the assertions expose a regression.
+        (tmp_path/'temp-preservation.txt').write_text(repr(dict(result=result,main_before=main_before,main_after=main_after,temp_before=temp_before,temp_after=temp_after,statements=statements)))
+        assert result==('hub0011','hub0012')
+        assert temp_after==temp_before
+        assert {k:v for k,v in main_after['tables'].items() if k!='alembic_version'}=={k:v for k,v in main_before['tables'].items() if k!='alembic_version'}
+        assert db.raw.execute('SELECT version_num FROM main.alembic_version').fetchall()==[('hub0012',)]
+        for name in ('agent_authority','memberships'):
+            actual={row[1] for row in db.raw.execute('PRAGMA main.table_info('+name+')')}
+            assert set(h.metadata.tables[name].c.keys()) <= actual
+        assert db.raw.execute('SELECT version,updated_at,updated_by,updated_via FROM main.memberships').fetchall()==[(1,None,None,None)]*4
+        assert db.raw.execute('SELECT epoch,version,updated_at,updated_by,updated_via,authorized_at,authorized_by,permitted_use_at,fresh_context_ack_at,fresh_context_required FROM main.agent_authority ORDER BY agent_user_id').fetchall()==[(9,1,None,None,None,None,None,None,None,int(suspended)),(2,1,None,None,None,None,None,None,None,int(suspended))]
+        assert db.raw.execute('SELECT * FROM main.permission_state').fetchall()==[(1,1,'legacy',None,None,None,None,None,None)]
+        assert statements.index('BEGIN IMMEDIATE') < next(i for i,v in enumerate(statements) if 'SELECT EXISTS(SELECT 1 FROM' in v and 'suspended_at' in v)
+        alters=[v for v in statements if v.startswith('ALTER TABLE')]
+        assert len(alters)==13 and all(v.startswith(('ALTER TABLE main.agent_authority ', 'ALTER TABLE main.memberships ')) for v in alters)
+        assert any(v.lstrip().startswith('CREATE TABLE main.permission_state') for v in statements)
+        assert "INSERT INTO main.permission_state(id,generation,mode) VALUES (1,1,'legacy')" in statements
+        assert ('UPDATE main.agent_authority SET fresh_context_required=1 WHERE suspended_at IS NOT NULL' in statements)==suspended
+        if suspended:
+            assert all(any('FROM '+catalog in v for v in statements) for catalog in ('main.sqlite_master','temp.sqlite_master'))
+
+
+
+@pytest.mark.parametrize('temporary', [False,True])
+def test_shadow_does_not_bypass_main_backfill_trigger_admission(tmp_path,temporary):
+    path=tmp_path/'hub.db';create_hub(path)
+    with open_database(path,writable=True) as db:
+        db.raw.execute('CREATE '+('TEMP ' if temporary else '')+'TRIGGER local_guard AFTER INSERT ON main.AgEnT_AuThOrItY BEGIN SELECT 1; END')
+        db.raw.execute('CREATE TEMP TABLE agent_authority (suspended_at TEXT)')
+        db.raw.execute('INSERT INTO temp.agent_authority VALUES (NULL)')
+        before=snapshot(db.raw);local=snapshot(db.raw,schema='temp')
+        with pytest.raises(BookflowError) as caught:migrate_to_head(db,'hub',None)
+        assert caught.value.details['cause']=='unsupported_authority_backfill_trigger'
+        assert snapshot(db.raw)==before and snapshot(db.raw,schema='temp')==local

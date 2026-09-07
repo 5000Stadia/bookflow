@@ -1064,6 +1064,9 @@ of identifier case or trigger event) rejects the upgrade with a fixed
 `unsupported_authority_backfill_trigger` cause. No local trigger is disabled or
 recreated. With no required backfill, no UPDATE is issued. Failure retains the
 original schema and data through the existing rollback/backup mechanism.
+Every hub0012 admission read, column/table DDL, backfill and singleton INSERT
+explicitly addresses `main`; same-named ordinary TEMP tables retain their entire
+schema and data. Both trigger catalogs are explicitly database-qualified.
 
 `hub.permission_snapshot` is a private read-only dependency. `load_root` accepts
 an already consistent `Database` transaction and an explicitly reviewed

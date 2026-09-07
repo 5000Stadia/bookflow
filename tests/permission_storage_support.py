@@ -44,15 +44,16 @@ def create_hub(path, revision='hub0011', *, suspended=True, malformed=False):
 def quote(name):return '"'+name.replace('"','""')+'"'
 
 
-def snapshot(raw, columns=None):
-    ddl=tuple(raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name'))
-    selected=columns or {name:tuple(x[1] for x in raw.execute('PRAGMA table_xinfo('+quote(name)+')')) for kind,name,_,_ in ddl if kind=='table'}
+def snapshot(raw, columns=None, *, schema="main"):
+    assert schema in ("main", "temp")
+    ddl=tuple(raw.execute('SELECT type,name,tbl_name,sql FROM '+schema+'.sqlite_master ORDER BY type,name'))
+    selected=columns or {name:tuple(x[1] for x in raw.execute('PRAGMA '+schema+'.table_xinfo('+quote(name)+')')) for kind,name,_,_ in ddl if kind=='table'}
     tables={}
     for name,cols in selected.items():
         expressions=['rowid']
         for col in cols:expressions.extend(('typeof('+quote(col)+')',quote(col),'CAST('+quote(col)+' AS BLOB)'))
         rows=[]
-        for row in raw.execute('SELECT '+','.join(expressions)+' FROM '+quote(name)+' ORDER BY rowid'):
+        for row in raw.execute('SELECT '+','.join(expressions)+' FROM '+schema+'.'+quote(name)+' ORDER BY rowid'):
             rows.append(tuple(('float64',struct.pack('>d',x)) if type(x) is float else x for x in row))
         tables[name]=tuple(rows)
     return dict(ddl=ddl,columns=selected,tables=tables)
