@@ -37,6 +37,22 @@ def historical_root(tmp_path_factory):
     return root
 
 
+@pytest.fixture(scope='module')
+def frozen_co14(tmp_path_factory):
+    source = tmp_path_factory.mktemp('frozen-co14-source')
+    archive = subprocess.check_output(['git', 'archive',
+        '38891355d31ea379f4d1f76797523e17471e289e', 'src'], cwd=Path(__file__).resolve().parents[1])
+    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+        tar.extractall(source, filter='data')
+    return source
+
+
+@pytest.fixture(autouse=True)
+def historical_target(monkeypatch):
+    # This module owns co13→co14. New head/full-chain acceptance is separate.
+    monkeypatch.setitem(HEADS, 'company', 'co0014')
+
+
 def raw_snapshot(raw, table):
     columns = [row[1] for row in raw.execute(f'PRAGMA table_xinfo("{table}")')]
     expressions = ['rowid']
@@ -46,7 +62,7 @@ def raw_snapshot(raw, table):
     return columns, ','.join(expressions), raw.execute(f'SELECT {",".join(expressions)} FROM "{table}" ORDER BY rowid').fetchall()
 
 
-def test_documented_cli_upgrade_preserves_every_old_raw_column(historical_root, tmp_path):
+def test_documented_cli_upgrade_preserves_every_old_raw_column(historical_root, tmp_path, frozen_co14):
     root = tmp_path / 'data'
     shutil.copytree(historical_root, root)
     path = next(root.glob('organizations/*/Demo Plumbing Co/company.db'))
@@ -63,7 +79,8 @@ def test_documented_cli_upgrade_preserves_every_old_raw_column(historical_root, 
         objects = raw.execute("SELECT type,name,sql FROM sqlite_schema WHERE name LIKE 'local_%' ORDER BY type,name").fetchall()
     files = {str(p.relative_to(root)): p.read_bytes() for p in root.rglob('*') if p.is_file() and 'attachments' in p.parts}
     result = subprocess.run([str(Path(sys.executable).parent / 'bookflow'), 'upgrade', '--data-root', str(root),
-                             '--reason', 'Disposable co14 preserving witness', '--json'], capture_output=True, text=True)
+                             '--reason', 'Disposable co14 preserving witness', '--json'], capture_output=True, text=True,
+                             env=dict(os.environ, PYTHONPATH=str(frozen_co14 / 'src')))
     assert result.returncode == 0, result.stdout + result.stderr
     with sqlite3.connect(path) as raw:
         assert raw.execute('SELECT version_num FROM alembic_version').fetchone() == ('co0014',)
@@ -104,17 +121,29 @@ def test_documented_cli_upgrade_preserves_every_old_raw_column(historical_root, 
     assert {name: (root / name).read_bytes() for name in files} == files
 
 
-def test_frozen_new_ddl_matches_metadata_and_guards(tmp_path):
+def test_frozen_new_ddl_matches_metadata_and_guards(tmp_path, frozen_co14):
     from sqlalchemy.schema import CreateTable, CreateIndex
     from sqlalchemy.dialects.sqlite import dialect
     from bookflow.company.payment_guards import statements
-    expected = []
-    for name in MIGRATION.NEW_TABLES:
-        table = schema.metadata.tables[name]
-        expected.append(str(CreateTable(table).compile(dialect=dialect())).strip())
-        expected.extend(str(CreateIndex(i).compile(dialect=dialect())) for i in sorted(table.indexes, key=lambda i: i.name))
+    import json
+    script = """
+import importlib,json
+from bookflow.company import schema
+from bookflow.company.payment_guards import statements
+from sqlalchemy.schema import CreateTable,CreateIndex
+from sqlalchemy.dialects.sqlite import dialect
+m=importlib.import_module('bookflow.storage.company_migrations.versions.0014_customer_payments')
+expected=[]
+for name in m.NEW_TABLES:
+    table=schema.metadata.tables[name]
+    expected.append(str(CreateTable(table).compile(dialect=dialect())).strip())
+    expected.extend(str(CreateIndex(i).compile(dialect=dialect())) for i in sorted(table.indexes,key=lambda i:i.name))
+print(json.dumps([expected,list(statements())]))
+"""
+    expected, guards = json.loads(subprocess.check_output([sys.executable, '-c', script],
+        cwd=frozen_co14, env=dict(os.environ, PYTHONPATH=str(frozen_co14 / 'src')), text=True))
     assert tuple(expected) == MIGRATION.DDL
-    assert tuple(statements()) == MIGRATION.GUARDS
+    assert tuple(guards) == MIGRATION.GUARDS
     with open_database(tmp_path / 'company.db', writable=True, create=True) as db:
         assert migrate_to_head(db, 'company', None) == (None, 'co0014')
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []

@@ -964,3 +964,13 @@ Permanent recovery may close its company reader; dependency capture reopens
 read-only without re-running recovery, planning or write maintenance. Original
 rejections retain the shared error-publication path. Full Row9 acceptance remains
 open; installed SDK workflows are not blind-agent acceptance.
+
+Company revision co0017 adds ten nonunique, nonpartial BINARY indexes declared in
+`company/read_indexes.py`. The frozen migration checks every reserved name and
+required column affinity/expression/collation before creating any persistent
+index. Existing table definitions, rows, local objects and statistics are retained.
+No migration, seed or read runs ANALYZE or PRAGMA optimize. The captured payer-label
+expression uses the fixed `$.payer.label` path and empty-string default. Indexes
+are maintained by SQLite on ordinary writes; they store no derived balances.
+Historical co13→co14 tests use their frozen co14 schema and public command source;
+co16→co17 preservation and fresh-chain checks live in `test_payment_read_indexes.py`.

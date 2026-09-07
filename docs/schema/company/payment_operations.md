@@ -8,15 +8,15 @@ Database: `company`.
 
 | Column | SQL type | Nullable | Default | Key | Indexes | References | Meaning |
 |---|---|---|---|---|---|---|---|
-| `id` | VARCHAR(26) | no | — | primary key 1 | — | — | Permanent successful operation receipt. |
-| `operation_key` | VARCHAR(128) | no | — | unique | — | — | Company-unique caller intent key. |
-| `command` | VARCHAR(64) | no | — | — | — | — | Canonical participating financial command. |
+| `id` | VARCHAR(26) | no | — | primary key 1 | ix_co17_operations_history | — | Permanent successful operation receipt. |
+| `operation_key` | VARCHAR(128) | no | — | unique | ix_co17_operations_history | — | Company-unique caller intent key. |
+| `command` | VARCHAR(64) | no | — | — | ix_co17_operations_history | — | Canonical participating financial command. |
 | `request_schema_version` | BIGINT | no | — | — | — | — | Canonical request envelope version. |
 | `request_hash` | VARCHAR(64) | no | — | — | — | — | SHA256 of canonical original intent. |
-| `request_snapshot` | TEXT | no | — | — | — | — | Replayable original request, omission state and resolved ownership. |
+| `request_snapshot` | TEXT | no | — | — | ix_co17_operations_history | — | Replayable original request, omission state and resolved ownership. |
 | `effect_snapshot` | TEXT | no | — | — | — | — | Typed original effect, with large collections stored as operation items. |
 | `execution_snapshot` | TEXT | no | — | — | — | — | Original execution provenance, distinct from canonical business intent. |
 | `created_at` | VARCHAR(32) | no | — | — | — | — | UTC recorded timestamp. |
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Principal creating this record. |
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface creating this record. |
-| `audit_event_id` | VARCHAR(26) | no | — | — | — | audit_events.id | Owned creation audit event. |
+| `audit_event_id` | VARCHAR(26) | no | — | — | ix_co17_operations_history | audit_events.id | Owned creation audit event. |
