@@ -72,20 +72,30 @@ class OSBinding:
             raise BookflowError('E_UNAUTHENTICATED')
         session = host.reader_session(table['user_id'], login)
         try:
-            epoch = None
-            if principal is not None:
-                eligible, epoch = credentials._binding(session.hub, session.actor.id, principal)
-                if not eligible:
-                    raise BookflowError('E_UNAUTHENTICATED')
-            # OS mappings use the existing active-user resolver, not token
-            # issuance eligibility. Do not invent a human-only OS policy.
-            return cls(host.data_root, session.actor.id, login, session.actor.kind,
-                       session.is_hub_admin, principal, epoch)
+            return cls.from_session(session, principal)
         finally:
             try:
                 _close(session)
             finally:
                 host.reader_done()
+
+    @classmethod
+    def from_session(cls, session, principal=None):
+        """Same OS binding under the caller's RootLock/authenticated session."""
+        from bookflow.core.config import Config
+        table = Config.load(session.data_root / 'config.toml').user_table(session.os_login)
+        if (session.actor is None or not isinstance(table, dict)
+                or table.get('user_id') != session.actor.id):
+            raise BookflowError('E_UNAUTHENTICATED')
+        epoch = None
+        if principal is not None:
+            eligible, epoch = credentials._binding(session.hub, session.actor.id, principal)
+            if not eligible:
+                raise BookflowError('E_UNAUTHENTICATED')
+        result = cls(session.data_root, session.actor.id, session.os_login,
+                     session.actor.kind, session.is_hub_admin, principal, epoch)
+        result.revalidate(session.hub)
+        return result
 
     def revalidate_current(self, host):
         with publication_reader(host, self) as session:

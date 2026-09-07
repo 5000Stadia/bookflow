@@ -35,11 +35,16 @@ def historical_sources(s, deposit):
 
 
 def authorize(s, deposit=None, sources=(), *, write=False):
-    from bookflow.company.payment_authority import authorize as require_sources
+    from bookflow.company.payment_authority import authorize_query
+    from bookflow.company import schema as c
+    import sqlalchemy as sa
     identifiers = set(sources)
     if deposit:
         identifiers.update(historical_sources(s, deposit))
-    require_sources(s, identifiers, write=write)
+    ordered = sorted(identifiers)
+    for offset in range(0, max(1, len(ordered)), 200):
+        selected = sa.select(c.transactions.c.id.label('transaction_id')).where(c.transactions.c.id.in_(ordered[offset:offset+200]))
+        authorize_query(s, selected, write=write)
     return tuple(sorted(identifiers))
 
 

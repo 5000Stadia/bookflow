@@ -53,17 +53,32 @@ def _logical(value, mapping):
     return value
 
 
-def _guard(s, fingerprint):
-    from bookflow.company.ledger_reports import _cursor_key
-    return hmac.new(_cursor_key(s.company),b'deposit-dependencies-v1\0'+fingerprint.encode(),hashlib.sha256).hexdigest()
 
-
-def prepare(s,ctx,inp,verb):
+def prepare(s,ctx,inp,verb, *, binding=None):
     """Complete snapshot resolution without DML; prospective IDs remain private."""
     if verb not in INPUTS:raise ValueError('unsupported private deposit action')
     inp=INPUTS[verb].model_validate_json(inp.model_dump_json(by_alias=True,exclude_unset=True))
     recovered=operations.recover(s,ctx,inp,verb)
     if recovered is not None:return recovered
+    from bookflow.company import deposit_dependency_history as history
+    from bookflow.core.publication import OSBinding
+    if binding is None:
+        binding = OSBinding.from_session(s, ctx.on_behalf_of)
+    history.execution_binding(s, binding)
+    original_request = history.request(dict(command='deposit '+verb,
+        input=inp.model_dump(mode='json', by_alias=True, exclude_unset=True),
+        context={key: value for key, value in {'reason': ctx.reason, 'directive_id': ctx.directive_id}.items() if value is not None}))
+    supplied_guard = getattr(inp, 'dependency_guard', None)
+    if supplied_guard is not None:
+        comparison = history.compare(s, supplied_guard, original_request, binding)
+        if not comparison.matches:
+            from bookflow.company.deposit_dependency_models import PageInput
+            from bookflow.company.deposit_dependency_pages import changes_page
+            page = changes_page(s, supplied_guard, original_request, PageInput(), binding)
+            raise BookflowError('E_PREVIEW_STALE', details={'reason': 'deposit_dependencies',
+                'history': 'unknown_history' if comparison.unknown_history else 'known_stale',
+                'changes': page.model_dump(mode='json'),
+                'original_request': original_request.model_dump(mode='json', by_alias=True, exclude_unset=True)})
     old=None;prior=None;previous=None
     if verb!='post':
         found=effects.rows(s,c.transactions,c.transactions.c.id==inp.deposit,c.transactions.c.type=='deposit')
@@ -161,9 +176,9 @@ def prepare(s,ctx,inp,verb):
         resolved=_logical(resolved.model_dump(mode='json'),mapping),number=number,memo=memo,
         custom=sales._custom_semantic(custom_plan.snapshot) if custom_plan else None,
         closing=s.company_info_row.get('closing_date'),schema='co0021')
-    fingerprint=q.digest(facts);guard=_guard(s,fingerprint)
-    if getattr(inp,'dependency_guard',None) is not None and not hmac.compare_digest(inp.dependency_guard,guard):
-        raise BookflowError('E_PREVIEW_STALE',details={'reason':'deposit_dependencies','history':'unknown_history'})
+    fingerprint=q.digest(facts)
+    recipe, readset = history.capture(s, original_request, binding)
+    guard = history.issue(s, recipe, readset, binding)
     if inp.expected_facts_fingerprint is not None and inp.expected_facts_fingerprint!=fingerprint:
         raise BookflowError('E_PREVIEW_STALE',details={'reason':'deposit_facts'})
     data=dict(before=old,prior=prior,previous=previous.model_dump(mode='json') if previous else None,

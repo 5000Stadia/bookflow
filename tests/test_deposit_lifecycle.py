@@ -28,8 +28,9 @@ def driver(client,monkeypatch):
     class Driver:
         @contextmanager
         def session(self):
-            with open_database(path,writable=True) as db:
-                s=copy.copy(seed);s.company=db;s.dry_run=False
+            from bookflow.core.locks import RootLock
+            with RootLock(seed.data_root, 'owned-private-deposit'), open_database(seed.data_root/'hub.db', writable=False) as hub, open_database(path,writable=True) as db:
+                s=copy.copy(seed);s.company=db;s.hub=hub;s.dry_run=False
                 db.raw.execute('BEGIN IMMEDIATE')
                 s.company_info_row=dict(db.conn.execute(sa.select(c.company_info)).mappings().one())
                 try:
