@@ -38,10 +38,11 @@ def lineage_facts(s, parties):
     return result
 
 
-def _candidate_query(s, inp, *, page_ids=None):
+def _candidate_query(s, inp, *, page_ids=None, resolved=None):
     from bookflow.company.payment_authority import readable_predicate
-    context = selection.context(s, inp)
-    funding = query.payment_facts(s, context['payment_id']) if context['payment_id'] else None
+    context, funding = resolved if resolved is not None else (selection.context(s, inp), None)
+    if resolved is None and context['payment_id']:
+        funding = query.payment_facts(s, context['payment_id'])
     t = query.indexed_source(c.transactions, 'ix_co17_transactions_current',
         'current_revision_id', 'type', 'status', 'id', 'version', 'number')
     r = query.indexed_source(c.transaction_revisions, 'ix_co17_revisions_read',
@@ -61,7 +62,7 @@ def _candidate_query(s, inp, *, page_ids=None):
     inverse = c.applications.alias('candidate_inverse')
     used = sa.func.coalesce(sa.select(sa.func.sum(a.c.amount_minor_units)).where(
         a.c.paid_transaction_id == t.c.id, a.c.kind == 'apply',
-        ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_application_id == a.c.id))
+        ~sa.exists(sa.select(sa.literal_column("1")).where(inverse.c.reverses_application_id == a.c.id))
     ).correlate(t).scalar_subquery(), 0)
     statement = sa.select(t.c.id.label('invoice_id'), t.c.version.label('expected_version'), t.c.number,
         p.c.customer_id, r.c.date, due_date.label('due_date'), r.c.currency, r.c.total_minor_units.label('gross_minor_units'),
@@ -87,7 +88,7 @@ def _candidate_query(s, inp, *, page_ids=None):
         statement = statement.where(sa.func.payment_casefold(text).contains(inp.q.casefold(), autoescape=True))
     if funding and context['date'] < funding['revision']['date']:
         statement = statement.where(sa.false())
-    return context, statement.order_by(r.c.date, t.c.id), capacities
+    return context, statement.order_by(r.c.date, t.c.id), capacities, funding
 
 
 def _original_projection(statement):
@@ -100,7 +101,7 @@ def _original_projection(statement):
 _Candidate = namedtuple('_Candidate', 'invoice_id expected_version customer_id date currency revision_id gross_minor_units due_minor_units available_source_minor_units')
 
 def candidates(s, inp):
-    context, statement, capacities = _candidate_query(s, inp)
+    context, statement, capacities, funding = _candidate_query(s, inp)
     # Suggestions bind the complete candidate relation and exact current money.
     # Original display fields are projected only by invoice delivery; immutable
     # revision identity/header version bind commercial history on this baseline.
@@ -114,7 +115,7 @@ def candidates(s, inp):
 
 
 def invoices(s, inp):
-    context, statement, capacities = _candidate_query(s, inp)
+    context, statement, capacities, funding = _candidate_query(s, inp)
     # Legal commercial/settlement changes always advance the invoice header.
     # Bind every candidate identity/version and relevant lineage, but materialize
     # the monetary display projection only for the requested delivery page.
@@ -127,7 +128,7 @@ def invoices(s, inp):
     # monetary projection to those IDs rather than rescanning/sorting the family.
     ids = [row[0] for row in out['items']]
     if ids:
-        _, delivery, _ = _candidate_query(s, inp, page_ids=ids)
+        _, delivery, _, _ = _candidate_query(s, inp, page_ids=ids, resolved=(context, funding))
         out['items'] = [dict(row, available_source_minor_units=capacities[row['customer_id']] if context['payment_id'] else None)
             for row in s.company.conn.execute(_original_projection(delivery)).mappings()]
     else:
@@ -239,7 +240,7 @@ def payment_page(s, inp):
     inverse = a.alias('inverse')
     used = sa.func.coalesce(sa.select(sa.func.sum(a.c.amount_minor_units)).where(
         a.c.paying_transaction_id == t.c.id, a.c.kind == 'apply',
-        ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_application_id == a.c.id))
+        ~sa.exists(sa.select(sa.literal_column("1")).where(inverse.c.reverses_application_id == a.c.id))
     ).correlate(t).scalar_subquery(), 0)
     available = sa.case((t.c.status == 'posted', r.c.total_minor_units-used), else_=0)
     statement = sa.select(t.c.id, t.c.version, t.c.number, r.c.date, t.c.status, p.c.payer_id.label('customer_id'),
@@ -273,14 +274,27 @@ def payment_page(s, inp):
         statement = statement.where(sa.func.payment_casefold(text).contains(inp.q.casefold(), autoescape=True))
     order = {'date': r.c.date, 'number': t.c.number, 'received': r.c.total_minor_units, 'unapplied': available}[inp.sort]
     statement = statement.order_by(order.desc() if inp.direction == 'desc' else order.asc(), t.c.id.desc() if inp.direction == 'desc' else t.c.id.asc())
-    out = query.sql_page(s, 'payment query', inp, statement,
+    # Carry only identity through the complete filtered window and sort. The
+    # selected page receives its display fields afterward in the same snapshot.
+    out = query.sql_page(s, 'payment query', inp, statement.with_only_columns(t.c.id),
         count_with_page=bool(inp.q) or inp.has_available_credit is not None)
     # Project settlement only after SQL has selected this page. Computing every
     # receipt's display fields before date sorting defeats bounded delivery.
     ids = [row['id'] for row in out['items']]
+    if ids:
+        # Use primary-key header lookup for bounded display, without repeating
+        # expensive text/capacity predicates over the entire company.
+        headers = c.transactions
+        display = sa.select(headers.c.id, headers.c.version, headers.c.number, r.c.date,
+            headers.c.status, p.c.payer_id.label('customer_id'), p.c.payment_method_id,
+            r.c.currency, r.c.total_minor_units.label('received_minor_units')).select_from(
+                query.cross_join(query.cross_join(headers, r, r.c.id == headers.c.current_revision_id),
+                    p, p.c.revision_id == r.c.id)).where(headers.c.id.in_(ids))
+        by_id = {row['id']: dict(row) for row in s.company.conn.execute(display).mappings()}
+        out['items'] = [by_id[identifier] for identifier in ids]
     amounts = dict(s.company.conn.execute(sa.select(a.c.paying_transaction_id, sa.func.sum(a.c.amount_minor_units)).where(
         a.c.paying_transaction_id.in_(ids), a.c.kind == 'apply',
-        ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_application_id == a.c.id))
+        ~sa.exists(sa.select(sa.literal_column("1")).where(inverse.c.reverses_application_id == a.c.id))
     ).group_by(a.c.paying_transaction_id)).all()) if ids else {}
     for row in out['items']:
         row['applied_minor_units'] = amounts.get(row['id'], 0)
