@@ -211,3 +211,21 @@ def test_only_added_X_due_100_to_50_invalidates_paged_comparison(client,sale,roo
     confirm(client,identifier,begin,fresh)
     shown=client.run('payment selection show',dict(selection=draft['id']),company=COMPANY)
     assert shown['version']==draft['version']+1 and shown['applied_minor_units']==250
+
+
+def test_foreign_fabricated_and_altered_saved_calculation_never_enter_stage(client,sale,root):
+    from bookflow.core.ids import new_id
+    first=client.run('invoice post',dict(customer=sale['customer'],date='2026-06-01',number='SAVED-CALC-AUTH',lines=[dict(item=sale['item'],quantity='1',unit_price='1')]),company=COMPANY)
+    foreign=client.run('payment selection create',dict(mode='new_receipt',customer=sale['customer'],date='2026-06-01',amount='1.50'),company=COMPANY)
+    for case in ('foreign','fabricated','altered_amount','altered_origin'):
+        draft=client.run('payment selection create',dict(mode='new_receipt',customer=sale['customer'],date='2026-06-01',amount='1.50'),company=COMPANY)
+        draft=client.run('payment selection update',dict(selection=draft['id'],expected_version=1,set_items=[dict(invoice=first['id'],expected_version=1,amount_origin='entered' if case=='altered_origin' else 'calculated',**({'amount':'1'} if case=='altered_origin' else {}))]),company=COMPANY)
+        ref=foreign['revision_id'] if case=='foreign' else new_id() if case=='fabricated' else draft['revision_id']
+        entries=[dict(invoice_id=first['id'],observed_invoice_version=1,action='set',amount_minor_units=101 if case=='altered_amount' else 100,currency='USD',amount_origin='calculated',retained_calculation_revision_id=ref)]
+        begin=declaration(draft,entries);identifier=call(client,'begin',begin)['original_receipt']['recovery_id']
+        before=raw_books(root)
+        with pytest.raises(BookflowError) as caught:call(client,'upload',dict(recovery_id=identifier,chunk_index=0,entries=entries))
+        assert caught.value.code=='E_VALIDATION' and raw_books(root)==before
+        state=call(client,'show',dict(recovery_id=identifier))
+        assert state['received_entry_count']==0 and state['state']=='uploading'
+        call(client,'abort',dict(recovery_id=identifier,expected_recovery_version=1,disposition='discard_entire_attempt'))
