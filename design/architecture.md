@@ -1001,3 +1001,24 @@ this is not a blind-agent or complete custom-filter interaction claim. The six-w
 custom-filter schema group links dedicated text/date chooser cases at1280/390
 while retaining untested operators, malformed-date interactions and generated-form
 branch cases.
+
+
+### Explicit audit publication cohorts
+
+`company.payment_authority.authorize_events` checks supplied event occurrences in
+cohorts of at most 200 using `_EventCohort` projected facts. It performs the scalar
+permission sequence for every occurrence, including duplicates and explicit events
+outside the audit filter's trigger enumeration. `authorize_event` remains the scalar
+entry point. Empty input performs no reads or checks; missing entry sets retain the
+scalar outcome. Complete historical graphs and deferred graph errors use the same
+owning traversal rules.
+
+`core.publication_payment.check` batches only consecutive audit-event roots. Every
+intervening non-event root completes before the next event run loads. Cohort facts
+live only within that check's fresh publication snapshot; command snapshot caches
+and earlier permit checks confer no authority. Deferred graph and permission
+failures occur in occurrence order. A genuine operational prefetch failure may
+preempt an earlier permission failure and aborts without fallback or a pending
+send. Existing transport checks prevent the failed pending send; previously
+successfully authorized bytes cannot be recalled. No transport buffering is added.
+The 200-event/ID bound does not bound total graph size or establish a latency SLO.

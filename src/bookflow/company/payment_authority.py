@@ -354,6 +354,22 @@ def authorize_event(s, event_id, resolved=None):
         require_resource(s, resource, role)
 
 
+def authorize_events(s, event_ids):
+    """Check explicit event occurrences in order within this snapshot only.
+
+    Deferred graph errors and permissions retain scalar order. Operational
+    prefetch errors may precede an earlier denial; they abort without fallback.
+    """
+    from itertools import islice
+    events = iter(event_ids)
+    while cohort := list(islice(events, _BATCH_SIZE)):
+        reader = _EventCohort(s.company, cohort)
+        for event in cohort:
+            for resource, role in reader.requirements(event):
+                require_resource(s, resource, role)
+        del reader
+
+
 def denied_events(s, resolved=None):
     from bookflow.core.errors import BookflowError
     events = s.company.conn.execute(sa.select(c.audit_entries.c.event_id).where(
