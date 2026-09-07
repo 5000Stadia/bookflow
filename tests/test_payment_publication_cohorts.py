@@ -69,15 +69,16 @@ def test_mixed_root_runs_keep_every_boundary(monkeypatch):
     monkeypatch.setattr(pa,'authorize_events',lambda s,ids:calls.append(('audit',list(ids))))
     monkeypatch.setattr(pa,'authorize_publication_payer',lambda s,i,write=False:calls.append(('payer',i,write)))
     monkeypatch.setattr(pp,'work_access',lambda s:calls.append(('work_access',)) or False)
+    monkeypatch.setattr(pa,'authorize_publication_selections',lambda s,ids:calls.append(('selections',list(ids))))
     def disclosure(db,kind,identifier):calls.append(('scalar',kind,identifier));return set()
     monkeypatch.setattr(pa,'disclosure_transactions',disclosure)
     monkeypatch.setattr(pa,'authorize',lambda s,ids,write=False:calls.append(('scalar_gate',write)))
     roots=[('transaction','a',False),('transaction','a',True),('audit_event','e',False),('transaction','a',False),
-           ('payer','p',True),('transaction','a',False),('note','n',False),('transaction','a',True),('work_access',False,False),('customer','n',False),
+           ('payer','p',True),('transaction','a',False),('note','n',False),('payment_selection','S',False),('payment_selection','S',True),('transaction','a',True),('work_access',False,False),('customer','n',False),
            ('payment_history','h',False),('invoice_settlement','i',False)]
     pp.check(SimpleNamespace(company=None),iter(roots))
     assert calls==[('transactions',[('a',False),('a',True)]),('audit',['e']),('transactions',[('a',False)]),
-        ('payer','p',True),('transactions',[('a',False)]),('scalar','note','n'),('transactions',[('a',True)]),('work_access',),('scalar','customer','n'),
+        ('payer','p',True),('transactions',[('a',False)]),('scalar','note','n'),('selections',[('S',False),('S',True)]),('transactions',[('a',True)]),('work_access',),('scalar','customer','n'),
         ('scalar','payment_history','h'),('scalar_gate',False),('scalar','invoice_settlement','i'),('scalar_gate',False)]
 
 

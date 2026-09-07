@@ -1067,7 +1067,7 @@ entry point. Empty input performs no reads or checks; missing entry sets retain 
 scalar outcome. Complete historical graphs and deferred graph errors use the same
 owning traversal rules.
 
-`core.publication_payment.check` batches only consecutive audit-event roots. Every
+For audit roots, `core.publication_payment.check` batches consecutive events. Every
 intervening non-event root completes before the next event run loads. Cohort facts
 live only within that check's fresh publication snapshot; command snapshot caches
 and earlier permit checks confer no authority. Deferred graph and permission
@@ -1077,14 +1077,31 @@ send. Existing transport checks prevent the failed pending send; previously
 successfully authorized bytes cannot be recalled. No transport buffering is added.
 The 200-event/ID bound does not bound total graph size or establish a latency SLO.
 
-Payment publication checks group contiguous audit-event, transaction and other
-root occurrences. Audit events retain their owning cohort; transaction runs
+Payment publication checks group contiguous audit-event, transaction, exact
+payment-selection and other root occurrences. Audit events retain their owning cohort; transaction runs
 load at most 200 occurrences at a time on the current publication reader.
 Unique IDs bound the projected root facts; duplicate occurrences retain their
 original order and read/write gates. Each occurrence validates its root and all
 one-step historical application targets before ledger and conditional work
 permission. Known missing facts are raised at that occurrence; a database/I/O
 failure during the cohort load aborts immediately without fallback or retry.
+
+Selection publication reads complete saved-item, recovery-attempt, revision-funding
+and consumed-operation ownership in cohorts of at most 200 root occurrences.
+Projected facts are shared only inside the current publication reader; every fence
+reloads them. Duplicate occurrences retain their ledger/work gates and write flags,
+known content failures remain root-ordered, and clear-event null invoice references
+are skipped. Complete D references must exist; work linkage uses D plus one historical
+application step, without extending transaction/payer R1 validation to selection H.
+Driver failures during current-cohort reads abort without fallback or pending send.
+Query pre-count filtering, epoch/work-access fences, rendering and accounting remain
+unchanged. SQL-growth and compatibility evidence accompany this increment; the
+original 34-case under-100ms performance gate remains separate and open.
+
+The empty/no-operation 201-selection HTTP witness recorded82 statements/64 SELECTs
+at both limits10 and200, versus190/172 and2470/2452 with the frozen scalar checker.
+Every response retained its three fresh publication checks. This SQL-count result
+is not a measured under-100ms performance pass.
 
 Payer publication builds a recursive `UNION` customer family and distinct
 historical customer AR posting contributors B, including inactive descendants
