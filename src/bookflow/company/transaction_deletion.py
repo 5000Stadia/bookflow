@@ -1,7 +1,7 @@
 """Unregistered four-family Delete preparation. No persistence or public activation."""
 from bookflow.company import document_effects
 from bookflow.company import transaction_deletion_facts as facts
-from bookflow.company.transaction_deletion_models import DeleteIntent, PreparedDelete, Tombstone, WorkRelease
+from bookflow.company.transaction_deletion_models import DeleteIntent, PreparedDelete, Tombstone, WorkRelease, BlockedDelete
 from bookflow.company.payment_models import EffectProvenance
 from bookflow.core.ids import new_id
 from bookflow.core.session import now_iso
@@ -16,6 +16,11 @@ def prepare_delete(s, ctx, intent, *, provenance=None, binding=None):
         require_explicit_grant(s, 'transaction.' + intent.family + '.delete')
         binding = binding if binding is not None else OSBinding.from_session(s, ctx.on_behalf_of)
         evidence, identity = facts.load(s, ctx, intent, binding)
+        if evidence.blockers:
+            return BlockedDelete(intent=intent,actor_id=identity[0],actor_kind=identity[1],principal_id=identity[2],
+                interface=str(ctx.interface),reason=facts.normalized_reason(ctx),facts=evidence)
+        # Caller-provided provenance is trusted private aggregate input. Future
+        # persistence must issue its own writer-owned stamp, not public input.
         provenance = (EffectProvenance(at=now_iso(), event_id=new_id(), operation_id=new_id())
             if provenance is None else EffectProvenance.model_validate(provenance.model_dump()))
         header = evidence.header.values()
@@ -55,7 +60,21 @@ def prepare_delete(s, ctx, intent, *, provenance=None, binding=None):
                 before_version=header['version'], after_version=header['version']+1,
                 current_revision_id=header['current_revision_id'], number=header['number'],
                 deleted_from_status=header['status'], deleted_at=provenance.at, deleted_by=identity[0],
-                delete_reason=ctx.reason, delete_audit_event_id=provenance.event_id,
+                delete_reason=facts.normalized_reason(ctx), delete_audit_event_id=provenance.event_id,
                 delete_posting_batch_id=inverse['id'] if inverse else None,
                 retained_void_batch_id=prior.values()['id'] if prior else None),
             inverse_rows=tuple(proposed), work_releases=tuple(releases))
+
+
+def require_ready(result):
+    """Standalone caller's actionable error; never discharges an obligation."""
+    from bookflow.core.errors import BookflowError
+    if isinstance(result,BlockedDelete):
+        facts.require(bool(result.facts.blockers))
+        blocker=result.facts.blockers[0]
+        if blocker.kind=='applications':
+            raise BookflowError('E_HAS_APPLICATIONS',details={blocker.family+'_id':blocker.transaction_id,
+                'action':'unapply_first','next':'Inspect '+blocker.family+' settlement dependencies and unapply first.'})
+        raise BookflowError('E_DEPOSIT_DEPENDENCY',details={'source':blocker.source_id,'deposit':blocker.deposit_id,
+            'reason':'A claimed source requires atomic source and deposit cancellation.'})
+    return result

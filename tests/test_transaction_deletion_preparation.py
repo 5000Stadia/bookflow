@@ -2,7 +2,7 @@
 import pytest
 from bookflow import BookflowError
 from bookflow.core import registry
-from bookflow.company.transaction_deletion import prepare_delete
+from bookflow.company.transaction_deletion import prepare_delete, require_ready
 from bookflow.company.transaction_deletion_validation import validate_delete
 from bookflow.company.transaction_deletion_models import DeleteIntent
 from bookflow.hub import access
@@ -190,7 +190,7 @@ def test_payment_application_block_then_complete_unapply_history(client,sale,jou
         for family,record in [('invoice',invoice),('payment',payment)]:
             version=s.company.raw.execute('SELECT version FROM transactions WHERE id=?',(record['id'],)).fetchone()[0]
             with pytest.raises(BookflowError) as e:
-                prepare_delete(s,ctx,DeleteIntent(family=family,transaction_id=record['id'],expected_version=version))
+                require_ready(prepare_delete(s,ctx,DeleteIntent(family=family,transaction_id=record['id'],expected_version=version)))
             assert e.value.code=='E_HAS_APPLICATIONS'
     session_call(client,monkeypatch,blocked)
     application=payment['effect']['applications'][0]['application_id']
@@ -274,7 +274,7 @@ def test_current_deposit_claim_blocks_without_post_and_unauthorized_disclosure(c
         before=raw(s)
         version=s.company.raw.execute('SELECT version FROM transactions WHERE id=?',(record['id'],)).fetchone()[0]
         with pytest.raises(BookflowError) as e:
-            prepare_delete(s,ctx,DeleteIntent(family=family,transaction_id=record['id'],expected_version=version))
+            require_ready(prepare_delete(s,ctx,DeleteIntent(family=family,transaction_id=record['id'],expected_version=version)))
         assert e.value.code=='E_DEPOSIT_DEPENDENCY' and e.value.details['deposit']==deposited.current.id
         assert 'next' not in e.value.details and raw(s)==before
     session_call(client,monkeypatch,check)

@@ -48,6 +48,20 @@ class StoredRow(Frozen):
     def values(self):
         return dict(self.cells)
 
+class DepositClaimBlocker(Frozen):
+    kind: Literal['deposit_claim'] = 'deposit_claim'
+    source_id: str
+    deposit_id: str
+    membership_id: str
+
+class ApplicationsBlocker(Frozen):
+    kind: Literal['applications'] = 'applications'
+    family: Literal['invoice', 'payment']
+    transaction_id: str
+    application_ids: tuple[str, ...]
+
+Blocker = Annotated[DepositClaimBlocker | ApplicationsBlocker, Field(discriminator='kind')]
+
 class DeleteFacts(Frozen):
     company_id: str
     transaction_id: str
@@ -61,6 +75,7 @@ class DeleteFacts(Frozen):
     work_allocation_ids: tuple[str, ...]
     current_work_allocation_ids: tuple[str, ...]
     required_resources: tuple[tuple[str, str], ...]
+    blockers: tuple[Blocker, ...]
 
 class Tombstone(Frozen):
     transaction_id: str
@@ -96,3 +111,14 @@ class PreparedDelete(Frozen):
     tombstone: Tombstone
     inverse_rows: tuple[StoredRow, ...]
     work_releases: tuple[WorkRelease, ...]
+
+
+class BlockedDelete(Frozen):
+    """Unresolved owner obligations, never a cancellable/persistable effect."""
+    intent: DeleteIntent
+    actor_id: str
+    actor_kind: str
+    principal_id: str | None
+    interface: str
+    reason: str
+    facts: DeleteFacts

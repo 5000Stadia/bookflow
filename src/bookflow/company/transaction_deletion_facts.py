@@ -1,14 +1,12 @@
 """Real-snapshot four-family evidence. No writes, policy provider or void producer."""
 from contextlib import contextmanager
 from dataclasses import replace
-import json
 import sqlalchemy as sa
 from bookflow.company import schema as c, document_effects, journals, billing_allocations
 from bookflow.company import deposit_dependencies, payment_authority, reconciliation_adapters
 from bookflow.company.deposit_dependency_history import execution_binding
-from bookflow.company.transaction_deletion_models import DeleteFacts, StoredRow
+from bookflow.company.transaction_deletion_models import DeleteFacts, StoredRow, DepositClaimBlocker, ApplicationsBlocker
 from bookflow.core.errors import BookflowError
-from bookflow.core.publication import OSBinding
 from bookflow.core.session import Session, Actor
 from bookflow.hub import access, schema as h
 
@@ -21,7 +19,7 @@ OWNED = ('transaction_revisions', 'document_line_identities', 'document_lines',
     'work_billing_allocations', 'deposit_profiles', 'deposit_row_keys', 'deposit_component_keys',
     'deposit_components', 'deposit_cash_cells', 'deposit_memberships', 'deposit_current_memberships')
 EXTRA = ('transactions', 'applications', 'application_allocations', 'custom_field_values',
-    'work_documents', 'work_revisions', 'work_lines', 'work_line_identities', 'audit_events', 'audit_entries')
+    'work_documents', 'work_revisions', 'work_lines', 'work_line_identities', 'audit_events', 'audit_entries', 'sequences', 'notes', 'attachment_links', 'attachments')
 HISTORY = ('payment_operations','payment_operation_items','payment_selections',
     'payment_selection_revisions','payment_selection_items','payment_selection_recoveries',
     'payment_selection_recovery_chunks','payment_selection_recovery_items','payment_selection_recovery_active',
@@ -94,7 +92,8 @@ def actors(s, ctx, binding):
 
 def admit(s, ctx, family, binding):
     if family not in FAMILIES: raise BookflowError('E_VALIDATION')
-    # Gate BEFORE company record lookup, including a guessed identity.
+    # Registry-backed require_resource also denies these capabilities by default.
+    # This explicit gate guarantees ordering before binding/record disclosure.
     access.require_explicit_grant(s, 'transaction.'+family+'.delete')
     views, identity = actors(s, ctx, binding)
     for view in views:
@@ -121,7 +120,7 @@ def verify_fks(s, rows):
             predicate = [e.column == values[e.parent.name] for e in elements]
             require(s.company.conn.execute(sa.select(sa.literal(1)).select_from(target).where(*predicate).limit(1)).first() is not None)
 
-def inverse_matches(original, inverse, *, stored=False):
+def inverse_matches(original, inverse):
     """Full-value reversal bijection, independently of document_effects.reverse."""
     before = {r.values()['id']:r for r in original}
     require(len(before) == len(original) and len(original) == len(inverse))
@@ -151,17 +150,24 @@ def load(s, ctx, intent, binding):
         payment_authority.authorize(view, participants)
         if payment_authority.linked_work_required(s.company,participants):
             access.require_resource(view,'customer-work','standard')
-    claim=deposit_dependencies.active_claim(s,intent.transaction_id)
-    if claim is not None:
-        # Entire closure is already disclosed under read/work authority; no post
-        # right is requested merely to disclose a claim or construct an inverse.
-        raise BookflowError('E_DEPOSIT_DEPENDENCY', details={'source':intent.transaction_id,
-            'deposit':claim['transaction_id'], 'reason':'A claimed source requires atomic source and deposit cancellation.'})
     deposit_dependencies.reconciliation_status(s.company)
     require(hv['status'] in ('posted','voided'))
-    if hv['version'] != intent.expected_version: raise BookflowError('E_VERSION_CONFLICT')
-    if not ctx.reason or not ctx.reason.strip() or len(ctx.reason)>140: raise BookflowError('E_REASON_REQUIRED')
+    from bookflow.company import sales, payment_dependencies
+    version_owner=(journals.version_meta if intent.family=='journal_entry' else
+        payment_dependencies.payment_version if intent.family=='payment' else sales._version)
+    version_owner(s,hv,intent.expected_version)
+    normalized_reason(ctx)
     if hv['version'] >= 9223372036854775807: raise BookflowError('E_VALUE_RANGE')
+    blockers=[]
+    from bookflow.company.payment_queries import active_applications
+    applications=active_applications(s, **{intent.family:intent.transaction_id}) if intent.family in ('payment','invoice') else []
+    if applications:
+        blockers.append(ApplicationsBlocker(family=intent.family,transaction_id=intent.transaction_id,
+            application_ids=tuple(sorted(r['id'] for r in applications))))
+    claim=deposit_dependencies.active_claim(s,intent.transaction_id)
+    if claim is not None:
+        blockers.append(DepositClaimBlocker(source_id=intent.transaction_id,
+            deposit_id=claim['transaction_id'],membership_id=claim['membership_id']))
     rows=list(read(s,'transactions','id',participants))
     for table in OWNED: rows.extend(read(s,table,'transaction_id',participants))
     apps={r.values()['id']:r for field in ('paying_transaction_id','paid_transaction_id') for r in read(s,'applications',field,participants)}
@@ -183,9 +189,6 @@ def load(s, ctx, intent, binding):
         prior=one(current_inverses); pv=prior.values()
         require(pv['id']==hv['void_posting_batch_id'] and pv['kind']=='reversal' and pv['revision_id']==revision.values()['id'] and pv['effective_date']==bv['effective_date'])
         require(hv['voided_at']==pv['created_at'] and hv['voided_by']==pv['created_by'] and bool(hv['void_reason'].strip()))
-    from bookflow.company.payment_queries import active_applications
-    if intent.family in ('payment','invoice') and active_applications(s, **{intent.family:intent.transaction_id}):
-        raise BookflowError('E_HAS_APPLICATIONS')
     work_rows=[r for r in owned if r.table=='work_billing_allocations']
     for table, field, ids in (
         ('work_documents','id',{r.values()[key] for r in work_rows for key in ('source_document_id','root_document_id')}),
@@ -210,6 +213,7 @@ def load(s, ctx, intent, binding):
         and intent.transaction_id in {r.values().get(k) for k in ('paying_transaction_id','paid_transaction_id',
             'source_transaction_id','target_transaction_id')}]
     audit_evidence(rows, audited_owned, header, prior)
+    rows.extend(preservation(s,intent,owned))
 
     unique={(r.table,r.cells):r for r in rows}
     ordered=tuple(sorted(unique.values(),key=lambda r:(r.table,repr(r.cells))))
@@ -227,20 +231,20 @@ def load(s, ctx, intent, binding):
         require(sum(r.values()['amount_minor_units'] for r in sources if r.values()['posting_line_id']==lv['id'])==lv['debit_minor_units']+lv['credit_minor_units'])
     if prior:
         inverted=[r for r in owned if r.table=='posting_lines' and r.values()['batch_id']==prior.values()['id']]
-        inverse_matches(legs,inverted,stored=True)
+        inverse_matches(legs,inverted)
         invsources=[r for r in owned if r.table=='posting_line_sources' and r.values()['posting_line_id'] in {v.values()['id'] for v in inverted}]
-        inverse_matches(sources,invsources,stored=True)
+        inverse_matches(sources,invsources)
         linkage={r.values()['id']:r.values()['reversed_line_id'] for r in inverted}
         oldsources={r.values()['id']:r.values() for r in sources}
         for item in invsources: require(linkage[item.values()['posting_line_id']]==oldsources[item.values()['reversed_source_id']]['posting_line_id'])
-    else: journals.open_dates(s,[bv['effective_date']])
+    elif not applications: journals.open_dates(s,[bv['effective_date']])
     required=[('transaction.'+intent.family+'.delete','standard'),('ledger.read','member')]
     if payment_authority.linked_work_required(s.company,participants): required.append(('customer-work','standard'))
     return DeleteFacts(company_id=s.company_row['id'],transaction_id=intent.transaction_id,family=intent.family,
         header=header,revision=revision,business_batch=business,prior_void_batch=prior,rows=ordered,participants=tuple(participants),
         work_allocation_ids=tuple(sorted(r.values()['id'] for r in work_rows)),
         current_work_allocation_ids=tuple(sorted(r.values()['id'] for r in work_rows if r.values()['revision_id']==hv['current_revision_id'])),
-        required_resources=tuple(required)), identity
+        required_resources=tuple(required),blockers=tuple(blockers)), identity
 
 
 def audit_evidence(rows, owned, header, prior):
@@ -328,7 +332,7 @@ def validate_history(owned, header):
             require(cancellation['revision_id']==rev['id'] and cancellation['effective_date']==business['effective_date'])
             old=[r for r in owned if r.table=='posting_lines' and r.values()['batch_id']==business['id']]
             new=[r for r in owned if r.table=='posting_lines' and r.values()['batch_id']==cancellation['id']]
-            inverse_matches(old,new,stored=True)
+            inverse_matches(old,new)
         else: require(not cancellations)
         previous=rev['id']
 
@@ -359,3 +363,32 @@ def work_ancestry(s, rows, allocations):
                 require((cursor['document_id'],cursor['id'])==(value['root_document_id'],value['root_line_id']))
                 break
             cursor=identities[lines[cursor['source_line_id']]['line_id']]
+
+
+def normalized_reason(ctx):
+    reason=(ctx.reason or '').strip()
+    if not reason: raise BookflowError('E_REASON_REQUIRED')
+    if len(reason)>140:
+        raise BookflowError('E_VALIDATION',details={'fields':[{'field':'reason','problem':'must be at most 140 characters'}]})
+    return reason
+
+
+# Closed direct annotation inventory from company.records. No unrelated family
+# counters, global annotation state, annotation-of-annotation traversal, body
+# filesystem or collection-operation claim is made by this preservation slice.
+PRESERVATION_TARGETS=(('transaction_revisions','transaction_revision','id'),
+    ('document_line_identities','document_line_identity','id'),('document_lines','document_line','id'),
+    ('posting_batches','posting_batch','id'),('posting_lines','posting_line','id'),
+    ('posting_line_sources','posting_line_source','id'),
+    *((table,kind,key) for kind,(table,key) in payment_authority.PAYMENT_TARGETS.items() if table in OWNED))
+
+def preservation(s,intent,owned):
+    result=list(read(s,'sequences','name',(intent.family,)))
+    targets={('transaction',intent.transaction_id)}
+    for table,kind,key in PRESERVATION_TARGETS:
+        targets.update((kind,r.values()[key]) for r in owned if r.table==table)
+    for table in ('notes','attachment_links'):
+        result.extend(r for r in read(s,table,'record_id',{identity for _,identity in targets})
+            if (r.values()['record_type'],r.values()['record_id']) in targets)
+    result.extend(read(s,'attachments','id',{r.values()['attachment_id'] for r in result if r.table=='attachment_links'}))
+    return result

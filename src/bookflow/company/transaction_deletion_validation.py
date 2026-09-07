@@ -5,13 +5,13 @@ This module never invokes preparation or any ordinary void planner.
 import sqlalchemy as sa
 from bookflow.company import schema as c
 from bookflow.company import transaction_deletion_facts as f
-from bookflow.company.transaction_deletion_models import PreparedDelete
+from bookflow.company.transaction_deletion_models import PreparedDelete, BlockedDelete
 from bookflow.core.publication import OSBinding
 from bookflow.core.ids import is_ulid
 
 
 def validate_delete(s, ctx, prepared, *, binding=None):
-    p = PreparedDelete.model_validate(prepared.model_dump())
+    p = (BlockedDelete if isinstance(prepared,BlockedDelete) else PreparedDelete).model_validate(prepared.model_dump())
     with f.snapshot(s):
         from bookflow.hub.access import require_explicit_grant
         require_explicit_grant(s, 'transaction.' + p.intent.family + '.delete')
@@ -19,11 +19,15 @@ def validate_delete(s, ctx, prepared, *, binding=None):
         fresh, identity = f.load(s, ctx, p.intent, binding)
         f.require(fresh == p.facts)
         f.require(identity == (p.actor_id, p.actor_kind, p.principal_id) and p.interface == str(ctx.interface))
+        if isinstance(p,BlockedDelete):
+            f.require(bool(fresh.blockers) and p.reason==f.normalized_reason(ctx))
+            return p
+        f.require(not fresh.blockers)
         h, b, t, provenance = fresh.header.values(), fresh.business_batch.values(), p.tombstone, p.provenance
         f.require((t.transaction_id,t.family,t.before_version,t.after_version,t.current_revision_id,t.number,
             t.status,t.deleted_from_status,t.deleted_at,t.deleted_by,t.delete_reason,t.delete_audit_event_id) ==
             (h['id'],p.intent.family,h['version'],h['version']+1,h['current_revision_id'],h['number'],
-             'deleted',h['status'],provenance.at,identity[0],ctx.reason,provenance.event_id))
+             'deleted',h['status'],provenance.at,identity[0],f.normalized_reason(ctx),provenance.event_id))
         rows = p.inverse_rows
         f.require(all(r.table in ('posting_batches','posting_lines','posting_line_sources') for r in rows))
         for r in rows: f.require(f.row(r.table,r.values()) == r)
