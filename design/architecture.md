@@ -1878,3 +1878,45 @@ or capability and no pure permission-catalog pin refresh:
 | sales_tax_line_key | sales_tax_line_keys | line_id |
 | sales_tax_attribution | sales_tax_attributions | revision_id |
 | sales_tax_attribution_line | sales_tax_attribution_lines | document_line_id |
+
+### Private G3 durable deposit composition (co0024)
+
+`deposit_drafts`, immutable full `deposit_draft_revisions`, source/additional rows
+and permanent draft row keys store incomplete composition without financial writes.
+`deposit_selection` owns separate child revisions and atomically accepts only their
+sources into an unchanged parent header/additional/custom/cash-back context.
+B1 requires all reciprocal heads before the final `PRAGMA main.foreign_key_check`
+inside the nonposting rollback boundary. Future financial consumption joins the
+existing C savepoint before its whole-FK check; this writer is never a child of C.
+Co24 also declares consumption links; this increment does not write them.
+
+Memo patch omission retains; null and empty text are distinct entered overrides;
+`memo_action: restore_source` is exclusive and restores captured source origin.
+Ordinals are persistent display/paging identities; newly added sources appear last.
+Select-matching resolves the complete authorized match set atomically with no
+aggregate cap. Full immutable snapshots cost O(manifest) storage per edit and
+full authority/source validation costs are not a responsiveness waiver.
+
+Private draft/source query admission requires explicit current company membership
+for actor and actual fixed principal, using existing role helpers without the
+legacy hub-admin escape. It additionally runs the existing complete resource
+checks. Shared discovery/publication/full-C cutover remains separately owned.
+Historical draft/child/member/operation roots are authorized before JSON decode,
+filtering, counts or pages. Opaque company-keyed candidate tokens exclude destination
+writes and unrelated audit changes; item tokens bind their exact immutable revision.
+
+`DraftCreate.copy_from_voided` is distinct from editing a posted deposit: a new
+unconsumed identity with no edit pin or reused number, retaining original row and
+source provenance. Copy records the current source header version; copied source
+`captured_header_version` retains the original cash evidence endpoint. Unavailable,
+changed or claimed sources remain visible as stale, never silently removed. The
+original voided transaction, claims and any consumed draft are untouched. Source
+refresh is explicit. Authentic copying of a financial403-member deposit still
+requires stage2 to produce that financial record through a complete manifest.
+
+Custom values retain typed canonical values, definition/choice snapshots and
+origins; blank required values report incomplete state. Existing definitions lack
+print visibility, so `print_visible=None` records unavailable provenance rather
+than an invented default. The print owner must resolve this before full G3.
+No public commands, financial draft provider/consumption, new grants, source fences,
+reconciliation activation, Delete changes or GUI/MCP release are installed here.
