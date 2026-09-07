@@ -342,3 +342,12 @@ def apply(plan, ctx, s):
     from bookflow.company.billing_validation import validate
     validate(fresh, s, ctx)
     return persist(fresh, ctx, s, command_name=plan.data['kind'].replace('_', '-') + ' ' + plan.data['destination'].replace('_', '-'))
+
+
+def coordinate_rows_and_touches(plan):
+    """Only correction-carried allocations, never conversion or work writes."""
+    if any(key in plan.data for key in ('billing_conversion', 'work_header', 'work_before', 'work_pending')):
+        raise BookflowError('E_INTERNAL')
+    rows = tuple(plan.data.get('billing_allocations', ()))
+    return ('work_billing_allocations', rows, tuple(Touched('work_billing_allocation', row['id'],
+        'create', None, 1, effects.decoded(row), db='company') for row in rows))

@@ -498,3 +498,15 @@ def apply(plan, ctx, s):
         stmt = insert(c.sequences).values(**data['sequence'])
         s.company.conn.execute(stmt.on_conflict_do_update(index_elements=['name'], set_=data['sequence']))
     return Applied(fresh.preview, touched, operation['command'], audited=True)
+
+
+def coordinate_rows_and_touches(plan):
+    """Closed keyless correction/cancellation rows; no operation/selection DML."""
+    from bookflow.company.deposit_coordination import source_identity_map
+    source_identity_map(plan, payment=True)
+    data = plan.data
+    if data['operation'] not in ('update', 'void', 'all_active_void') or data.get('selected') is not None:
+        raise BookflowError('E_INTERNAL')
+    return tuple((table, tuple(data['pending'][table]), tuple(
+        Touched(kind, row[key], 'create', None, 1, effects.decoded(row), db='company')
+        for row in data['pending'][table])) for table, kind, key in TABLE_KINDS)

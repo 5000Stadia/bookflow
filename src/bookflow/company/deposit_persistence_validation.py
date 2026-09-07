@@ -7,6 +7,15 @@ from bookflow.company.deposit_models import Effect
 
 
 def validate(s,ctx,plan,bundle):
+    """Ordinary admission always checks every current stored source."""
+    if bundle['data']['changed'] and plan.verb!='void':
+        previous=Effect.model_validate_json(json.dumps(bundle['data']['previous'])) if bundle['data']['previous'] else None
+        validation.validate_current(bundle['financial'],s,replacing_deposit=bundle['header']['id'],previous=previous)
+    validate_rows(s,ctx,plan,bundle)
+
+
+def validate_rows(s,ctx,plan,bundle):
+    """Pure row equations; current source admission remains each caller's duty."""
     require=validation.require
     data=bundle['data'];pending=bundle['pending'];h=bundle['header'];old=data['before'];financial=bundle['financial']
     validation.validate(financial)
@@ -16,7 +25,6 @@ def validate(s,ctx,plan,bundle):
         require(plan.custom_plan is None or not plan.custom_plan.changed)
         return
     previous=Effect.model_validate_json(json.dumps(data['previous'])) if data['previous'] else None
-    if plan.verb!='void':validation.validate_current(financial,s,replacing_deposit=h['id'],previous=previous)
     require(h['version']==(old['version']+1 if old else 1))
     before_by_id=data['source_headers']
     require(len(bundle['source_headers'])==len(before_by_id))

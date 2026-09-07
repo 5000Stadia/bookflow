@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from bookflow.adapters.http.app import Credential
 from typing import Annotated, Literal
 
-from pydantic import Field, model_validator, field_validator
+from pydantic import Field, model_validator, field_validator, field_serializer
 
 from bookflow.company.deposit_models import CashSource, ReplacementDocument, SourceInput, SourceRow
 from bookflow.company.payment_models import PaymentUpdateIntent, OperationKey, EffectProvenance
@@ -162,3 +162,451 @@ class PreparedCoordinate:
     readset_json: str
     # Existing authenticated adapter object, never a caller identity dictionary.
     binding: OSBinding | Credential
+
+
+# Closed physical source receipt schemas at co0023; explicit fields are retained
+# on disk. These models do not authorize a table or validate financial equations.
+from bookflow.company.deposit_models import Frozen
+from bookflow.company.deposit_lifecycle_models import LifecycleEffect, DocumentState
+from bookflow.company.payment_outputs import PaymentSourceOutput
+
+
+class CoordinateApplicationAllocationsRow(Frozen):
+    id: str
+    application_id: str
+    kind: str
+    reverses_allocation_id: str | None
+    source_transaction_id: str
+    source_revision_id: str
+    source_component_id: str
+    source_posting_source_id: str
+    target_transaction_id: str
+    target_revision_id: str
+    target_document_line_id: str
+    target_line_id: str
+    target_ordinal: int
+    logical_kind: str
+    tax_item_id: str | None
+    tax_component_id: str | None
+    target_ar_source_id: str
+    target_recognition_source_id: str
+    recognition_role: str
+    amount_minor_units: int
+    currency: str
+    effective_date: str
+    facts_snapshot: str
+    created_at: str
+    created_by: str
+    created_via: str
+    audit_event_id: str
+
+
+class CoordinateApplicationsRow(Frozen):
+    id: str
+    kind: str
+    paying_transaction_id: str
+    paid_transaction_id: str
+    source_component_key_id: str
+    amount_minor_units: int
+    currency: str
+    effective_date: str
+    reverses_application_id: str | None
+    created_at: str
+    created_by: str
+    created_via: str
+    audit_event_id: str
+
+
+class CoordinateDocumentLineIdentitiesRow(Frozen):
+    id: str
+    created_at: str
+    created_by: str
+    created_via: str
+    transaction_id: str
+
+
+class CoordinateDocumentLinesRow(Frozen):
+    id: str
+    created_at: str
+    created_by: str
+    created_via: str
+    transaction_id: str
+    revision_id: str
+    line_id: str
+    position: int
+    kind: str
+    account_id: str | None
+    side: str | None
+    amount_minor_units: int | None
+    currency: str
+    account_snapshot: str | None
+    name_type: str | None
+    name_id: str | None
+    party_name: str | None
+    class_id: str | None
+    class_name: str | None
+    description: str | None
+    original_minor_units: int | None
+    original_currency: str | None
+    rate_used: str | None
+    rate_source: str | None
+
+
+class CoordinatePaymentComponentKeysRow(Frozen):
+    id: str
+    transaction_id: str
+    line_id: str
+    party_id: str
+    ar_account_id: str
+    currency: str
+    created_at: str
+    created_by: str
+    created_via: str
+    audit_event_id: str
+
+
+class CoordinatePaymentComponentsRow(Frozen):
+    id: str
+    transaction_id: str
+    revision_id: str
+    document_line_id: str
+    component_key_id: str
+    amount_minor_units: int
+    currency: str
+    component_snapshot: str
+    created_at: str
+    created_by: str
+    created_via: str
+    audit_event_id: str
+
+
+class CoordinatePaymentProfilesRow(Frozen):
+    revision_id: str
+    transaction_id: str
+    type: str
+    payer_id: str
+    ar_account_id: str
+    deposit_account_id: str
+    payment_method_id: str
+    reference: str | None
+    profile_snapshot: str
+    created_at: str
+    created_by: str
+    created_via: str
+    audit_event_id: str
+
+
+class CoordinatePostingBatchesRow(Frozen):
+    id: str
+    created_at: str
+    created_by: str
+    created_via: str
+    transaction_id: str
+    revision_id: str
+    kind: str
+    effective_date: str
+    reverses_batch_id: str | None
+    replaces_batch_id: str | None
+    audit_event_id: str
+
+
+class CoordinatePostingLineSourcesRow(Frozen):
+    id: str
+    created_at: str
+    created_by: str
+    created_via: str
+    transaction_id: str
+    posting_line_id: str
+    revision_id: str
+    document_line_id: str
+    amount_minor_units: int
+    currency: str
+    reversed_source_id: str | None
+    tax_component_id: str | None
+    payment_component_id: str | None
+    deposit_component_id: str | None
+
+
+class CoordinatePostingLinesRow(Frozen):
+    id: str
+    created_at: str
+    created_by: str
+    created_via: str
+    transaction_id: str
+    batch_id: str
+    line_no: int
+    account_id: str
+    debit_minor_units: int
+    credit_minor_units: int
+    currency: str
+    account_snapshot: str
+    name_type: str | None
+    name_id: str | None
+    party_name: str | None
+    class_id: str | None
+    class_name: str | None
+    description: str | None
+    original_minor_units: int | None
+    original_currency: str | None
+    rate_used: str | None
+    rate_source: str | None
+    reversed_line_id: str | None
+
+
+class CoordinateSalesLineProfilesRow(Frozen):
+    document_line_id: str
+    transaction_id: str
+    revision_id: str
+    created_at: str
+    created_by: str
+    created_via: str
+    item_id: str
+    quantity_microunits: int | None
+    unit_id: str | None
+    unit_factor_nanounits: int
+    base_quantity_microunits: int | None
+    unit_price_minor_units: int | None
+    pricing_basis: str
+    net_minor_units: int
+    tax_minor_units: int
+    gross_minor_units: int
+    item_snapshot: str
+
+
+class CoordinateSalesProfilesRow(Frozen):
+    revision_id: str
+    transaction_id: str
+    created_at: str
+    created_by: str
+    created_via: str
+    type: str
+    customer_id: str
+    control_account_id: str
+    due_date: str | None
+    subtotal_minor_units: int
+    tax_minor_units: int
+    profile_snapshot: str
+
+
+class CoordinateSalesTaxAttributionLinesRow(Frozen):
+    document_line_id: str
+    transaction_id: str
+    revision_id: str
+    line_id: str
+    tax_ordinal: int
+    created_at: str
+    created_by: str
+    created_via: str
+
+
+class CoordinateSalesTaxAttributionsRow(Frozen):
+    revision_id: str
+    transaction_id: str
+    created_at: str
+    created_by: str
+    created_via: str
+    facts_snapshot: str
+
+
+class CoordinateSalesTaxComponentsRow(Frozen):
+    id: str
+    transaction_id: str
+    revision_id: str
+    document_line_id: str
+    created_at: str
+    created_by: str
+    created_via: str
+    tax_item_id: str
+    agency_id: str
+    liability_account_id: str
+    rate_percent_millionths: int
+    taxable_minor_units: int
+    tax_minor_units: int
+    component_snapshot: str
+
+
+class CoordinateSalesTaxLineKeysRow(Frozen):
+    line_id: str
+    transaction_id: str
+    tax_ordinal: int
+    created_at: str
+    created_by: str
+    created_via: str
+
+
+class CoordinateSettlementLineKeysRow(Frozen):
+    id: str
+    transaction_id: str
+    line_id: str
+    ordinal: int
+    created_at: str
+    created_by: str
+    created_via: str
+    audit_event_id: str
+
+
+class CoordinateTransactionRevisionsRow(Frozen):
+    id: str
+    created_at: str
+    created_by: str
+    created_via: str
+    transaction_id: str
+    revision_number: int
+    supersedes_revision_id: str | None
+    date: str
+    number: str
+    name_type: str | None
+    name_id: str | None
+    memo: str | None
+    total_minor_units: int
+    currency: str
+    issuer_snapshot: str
+    custom_fields_snapshot: str
+    audit_event_id: str
+
+
+class CoordinateTransactionsRow(Frozen):
+    id: str
+    version: int
+    created_at: str
+    created_by: str
+    created_via: str
+    updated_at: str
+    updated_by: str
+    updated_via: str
+    type: str
+    number: str
+    current_revision_id: str
+    status: str
+    voided_at: str | None
+    voided_by: str | None
+    void_reason: str | None
+    void_posting_batch_id: str | None
+
+
+class CoordinateWorkBillingAllocationsRow(Frozen):
+    id: str
+    transaction_id: str
+    revision_id: str
+    document_line_id: str
+    source_document_id: str
+    source_revision_id: str
+    source_line_id: str
+    root_document_id: str
+    root_line_id: str
+    quantity_microunits: int | None
+    net_minor_units: int
+    tax_minor_units: int
+    gross_minor_units: int
+    facts_snapshot: str
+    created_at: str
+    created_by: str
+    created_via: str
+    allocation_version: int
+    source_basis_hash: str | None
+    denominator_hex: str | None
+    spans_json: str | None
+
+
+class SourceRows(Frozen):
+    application_allocations: tuple[CoordinateApplicationAllocationsRow, ...] = ()
+    applications: tuple[CoordinateApplicationsRow, ...] = ()
+    document_line_identities: tuple[CoordinateDocumentLineIdentitiesRow, ...] = ()
+    document_lines: tuple[CoordinateDocumentLinesRow, ...] = ()
+    payment_component_keys: tuple[CoordinatePaymentComponentKeysRow, ...] = ()
+    payment_components: tuple[CoordinatePaymentComponentsRow, ...] = ()
+    payment_profiles: tuple[CoordinatePaymentProfilesRow, ...] = ()
+    posting_batches: tuple[CoordinatePostingBatchesRow, ...] = ()
+    posting_line_sources: tuple[CoordinatePostingLineSourcesRow, ...] = ()
+    posting_lines: tuple[CoordinatePostingLinesRow, ...] = ()
+    sales_line_profiles: tuple[CoordinateSalesLineProfilesRow, ...] = ()
+    sales_profiles: tuple[CoordinateSalesProfilesRow, ...] = ()
+    sales_tax_attribution_lines: tuple[CoordinateSalesTaxAttributionLinesRow, ...] = ()
+    sales_tax_attributions: tuple[CoordinateSalesTaxAttributionsRow, ...] = ()
+    sales_tax_components: tuple[CoordinateSalesTaxComponentsRow, ...] = ()
+    sales_tax_line_keys: tuple[CoordinateSalesTaxLineKeysRow, ...] = ()
+    settlement_line_keys: tuple[CoordinateSettlementLineKeysRow, ...] = ()
+    transaction_revisions: tuple[CoordinateTransactionRevisionsRow, ...] = ()
+    work_billing_allocations: tuple[CoordinateWorkBillingAllocationsRow, ...] = ()
+
+
+class CoordinateIdentity(Frozen):
+    owner_kind: str
+    logical_key: str
+    physical_id: str
+
+
+class CoordinateHeader(Frozen):
+    before: CoordinateTransactionsRow
+    after: CoordinateTransactionsRow
+
+
+class SourceEvidence(Frozen):
+    @field_serializer('action')
+    def original_action(self, value):
+        # Input presence is business meaning; filling omitted optional fields
+        # with null would make valid captured edits invalid on replay.
+        return value.model_dump(mode='json',by_alias=True,exclude_unset=True)
+
+    action: SourceAction
+    before_header: CoordinateTransactionsRow
+    after_header: CoordinateTransactionsRow
+    before: SourceRows
+    inserted: SourceRows
+    payment_effect: PaymentSourceOutput | None
+    bank_changes: ChangedEffects | UnsupportedPopulation
+
+
+class CoordinateEffect(Frozen):
+    source: SourceEvidence
+    deposit: LifecycleEffect
+    headers: tuple[CoordinateHeader, ...]
+    identities: tuple[CoordinateIdentity, ...]
+    target_ids: tuple[str, ...]
+
+
+class CoordinateOutput(Frozen):
+    schema_version: Literal[2] = 2
+    command: Literal['deposit coordinate'] = 'deposit coordinate'
+    operation_key: str
+    operation_id: str
+    changed: bool
+    new_effect: bool
+    idempotent_replay: bool = False
+    facts_fingerprint: str
+    dependency_guard: str
+    effect: CoordinateEffect
+    current: DocumentState
+    current_headers: tuple[CoordinateTransactionsRow, ...]
+
+
+class SalesComponentItem(Frozen):
+    kind: Literal['sale_net','sale_tax']
+    line_id: str
+    tax_item_id: str | None
+    revision_id: str
+    document_line_id: str
+    physical_component_id: str | None
+    capacity: int
+
+
+class SalesHeaderItem(Frozen):
+    kind: Literal['header']
+    before: CoordinateTransactionsRow
+    after: CoordinateTransactionsRow
+    revisions: tuple[CoordinateTransactionRevisionsRow, ...]
+    profiles: tuple[CoordinateSalesProfilesRow, ...]
+    tax_attributions: tuple[CoordinateSalesTaxAttributionsRow, ...]
+
+
+class SalesLineItem(Frozen):
+    kind: Literal['line']
+    line: CoordinateDocumentLinesRow
+    profile: CoordinateSalesLineProfilesRow
+    tax_components: tuple[CoordinateSalesTaxComponentsRow, ...]
+    tax_keys: tuple[CoordinateSalesTaxAttributionLinesRow, ...]
+
+
+class SalesWorkItem(Frozen):
+    kind: Literal['work']
+    allocation: CoordinateWorkBillingAllocationsRow

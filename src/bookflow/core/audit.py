@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import json
 import zlib
@@ -58,28 +59,58 @@ def next_seq(db, events_table) -> int:
     return (current or 0) + 1
 
 
-@measured("command.audit")
-def write_event_to(db, ctx: Context, command: str, summary: str, touched: list[Touched], *, actor_id: str | None,
-                   actor_kind: str | None, directive_code: str | None = None, event_id: str | None = None) -> str:
-    """Insert one event and its entries into ``db`` inside the caller's open transaction."""
-    events, entries = _tables(db)
+@dataclass(frozen=True)
+class PreparedEvent:
+    """Encoded owned audit rows, prepared inside the caller's writer snapshot."""
+    event: dict[str, Any]
+    entries: tuple[dict[str, Any], ...]
+
+
+def prepare_event_to(db, ctx: Context, command: str, summary: str, touched: list[Touched], *,
+                     actor_id: str | None, actor_kind: str | None,
+                     directive_code: str | None = None, event_id: str | None = None,
+                     at: str | None = None) -> PreparedEvent:
+    """Encode one event without DML; uses the ordinary snapshot codec and ID order."""
+    events, _ = _tables(db)
     event_id = event_id or new_id()
-    db.conn.execute(events.insert().values(
-        id=event_id, seq=next_seq(db, events), at=now_iso(), command=command,
+    seq = next_seq(db, events)
+    if seq > 9223372036854775807:
+        from bookflow.core.errors import BookflowError
+        raise BookflowError('E_VALUE_RANGE')
+    event = dict(
+        id=event_id, seq=seq, at=now_iso() if at is None else at, command=command,
         actor_id=actor_id, actor_kind=actor_kind,
         on_behalf_of=ctx.on_behalf_of, interface=ctx.interface.value, client_name=ctx.client_name,
         client_version=ctx.client_version, client_host=ctx.client_host, session_id=ctx.session_id,
         request_id=ctx.request_id, idempotency_key=ctx.idempotency_key, reason=ctx.reason,
         directive_id=ctx.directive_id, directive_code=directive_code, source_ref=ctx.source_ref, summary=summary[:512],
-    ))
-    rows = [dict(
+    )
+    rows = tuple(dict(
         id=new_id(), event_id=event_id, record_type=t.record_type, record_id=t.record_id, action=t.action,
         version_before=t.version_before, version_after=t.version_after,
         after=encode_snapshot(t.after), before=encode_snapshot(t.before),
-    ) for t in touched]
-    if rows:
-        db.conn.execute(entries.insert(), rows)
-    return event_id
+    ) for t in touched)
+    return PreparedEvent(event, rows)
+
+
+def insert_prepared_event(db, prepared: PreparedEvent) -> str:
+    """Insert previously encoded audit rows in the caller's transaction."""
+    if type(prepared) is not PreparedEvent:
+        raise TypeError('Expected prepared audit event')
+    events, entries = _tables(db)
+    db.conn.execute(events.insert().values(**prepared.event))
+    if prepared.entries:
+        db.conn.execute(entries.insert(), list(prepared.entries))
+    return prepared.event['id']
+
+
+@measured("command.audit")
+def write_event_to(db, ctx: Context, command: str, summary: str, touched: list[Touched], *, actor_id: str | None,
+                   actor_kind: str | None, directive_code: str | None = None, event_id: str | None = None) -> str:
+    """Insert one event and its entries into ``db`` inside the caller's open transaction."""
+    prepared = prepare_event_to(db, ctx, command, summary, touched, actor_id=actor_id,
+        actor_kind=actor_kind, directive_code=directive_code, event_id=event_id)
+    return insert_prepared_event(db, prepared)
 
 
 def write_event(s: Session, ctx: Context, command: str, summary: str, touched: list[Touched], actor_id: str | None = None,

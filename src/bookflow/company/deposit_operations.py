@@ -18,13 +18,16 @@ def request(inp, ctx, s, verb, *, original=False):
                 if key not in result:
                     continue
                 raw = getattr(value, name)
-                if name == 'amount' and isinstance(value, (AdditionalInput, CashBackInput)):
+                if verb == 'coordinate' and raw is not None and _source_money_field(type(value), name):
+                    from bookflow.company.sales_models import money
+                    result[key] = money(raw, s.company_info_row['home_currency'], key).to_dict()
+                elif name == 'amount' and isinstance(value, (AdditionalInput, CashBackInput)):
                     result[key] = dict(minor_units=amount(raw, s.company_info_row['home_currency']), currency=s.company_info_row['home_currency'])
                 elif isinstance(raw, (BaseModel, list)):
                     result[key] = typed(raw)
             return result
         return [typed(item) for item in value] if isinstance(value, list) else value
-    return dict(schema_version=1, command='deposit '+verb, company_id=s.company_row['id'],
+    return dict(schema_version=2 if verb=='coordinate' else 1, command='deposit '+verb, company_id=s.company_row['id'],
         input={k:v for k,v in (inp.model_dump(mode='json',by_alias=True,exclude_unset=True) if original else typed(inp)).items() if k not in excluded},
         provided_fields=sorted(inp.model_fields_set-excluded),
         context={'reason':ctx.reason} if ctx.reason is not None else {},
@@ -64,7 +67,11 @@ def recover(s, ctx, inp, verb):
     if saved is None:
         return None
     targets=rows.rows(s,c.deposit_operation_targets,c.deposit_operation_targets.c.operation_id==saved['id'])
-    dependencies.authorize(s,saved['transaction_id'],[r['transaction_id'] for r in targets],write=True)
+    try:
+        dependencies.authorize(s,saved['transaction_id'],[r['transaction_id'] for r in targets],write=True)
+    except BookflowError as error:
+        if error.code=='E_PERMISSION':raise BookflowError('E_PERMISSION',details={}) from None
+        raise
     if saved['command']!='deposit '+verb or saved['request_hash']!=q.digest(request(inp,ctx,s,verb)):
         return None
     output=LifecycleOutput.model_validate_json(saved['effect_snapshot'])
@@ -76,3 +83,18 @@ def permanent_recovery(inp, ctx, s, verb):
     from bookflow.core.registry import MatchedRecovery
     output = recover(s, ctx, inp, verb)
     return MatchedRecovery(output) if output is not None else None
+
+
+def _source_money_field(model, field):
+    """Only declared source Money unions; arbitrary custom properties stay literal."""
+    from typing import get_args
+    from bookflow.company.sales_models import SalesMoneyInput
+    annotation = model.model_fields[field].annotation
+    return SalesMoneyInput in get_args(annotation)
+
+
+def decode_output(snapshot, command):
+    if command == 'deposit coordinate':
+        from bookflow.company.deposit_coordinate_models import CoordinateOutput
+        return CoordinateOutput.model_validate_json(snapshot)
+    return LifecycleOutput.model_validate_json(snapshot)

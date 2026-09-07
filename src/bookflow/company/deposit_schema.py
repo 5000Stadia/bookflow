@@ -144,7 +144,7 @@ def define_tables(metadata, column, table, common):
         *created(), obj('request_snapshot'), obj('effect_snapshot'),
         sa.UniqueConstraint('operation_key', name='uq_deposit_operation_key'),
         sa.UniqueConstraint('id','transaction_id', name='uq_deposit_operation_owner'),
-        check("command IN ('deposit post','deposit update','deposit void')", 'operation_command'),
+        check("command IN ('deposit post','deposit update','deposit void','deposit coordinate')", 'operation_command'),
         check("length(operation_key) BETWEEN 1 AND 128 AND length(request_hash) = 64", 'operation_request'),
         fk(['transaction_id'], ['transactions.id'], 'operation_deposit'),
         description='Permanent exact request/effect receipts, including first successful no-effect operations.')
@@ -157,7 +157,7 @@ def define_tables(metadata, column, table, common):
         text('kind', 'Typed complete effect or request collection.'), integer('ordinal', 'Zero-based position in the immutable collection.'),
         text('facts_snapshot', 'One complete object in the original collection.'), obj('facts_snapshot'),
         check("typeof(ordinal) = 'integer' AND ordinal >= 0", 'operation_item_ordinal'),
-        check("kind IN ('request_sources','request_additional','memberships','document_changes','cash_allocations','bank_changes')", 'operation_item_kind'),
+        check("kind IN ('request_sources','request_additional','memberships','document_changes','cash_allocations','bank_changes','source_components','source_applications','source_allocations','source_document_changes')", 'operation_item_kind'),
         sa.PrimaryKeyConstraint('operation_id','kind','ordinal'),
         fk(['operation_id'], ['deposit_operations.id'], 'operation_item_receipt'),
         description='All immutable request/effect rows, independent of mutable drafts and current labels.')
