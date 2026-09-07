@@ -1184,5 +1184,83 @@ existence. A provider must explicitly supply complete governed visibility on bot
 sides; no production provider or membershipless-administrator decision is included.
 Legacy roots may be read for strict preflight, but policy-to-policy assembly rejects
 legacy mode: the actual legacy-observation/activation bridge remains B3/C work.
-This is not identity administration, token reconciliation, structural writer
-routing, a command/editor activation, or completion of Row7/B2/B3.
+This dependency does not itself implement administration, token reconciliation,
+structural writer routing, command/editor activation, or completion of Row7/B3.
+
+
+### Private permission administration (B2)
+
+`hub.identity_admin` owns six conditional private intents: put/revoke membership,
+set user activity, replace the whole unrevoked principal assignment set, explicitly
+authorize an agent, and replace a trusted deployment catalog with complete actual
+root defaults. Public dataclass constructors authenticate neither build provenance
+nor actors. These services have no command, editor, dispatch or structural-writer
+connection. Legacy mode rejects; activation remains B3/C/D work.
+
+Every preview/apply resolves a token binding through the existing credential owner
+on the supplied current hub transaction, compares its admitted identity and then
+checks the current active human and required scoped/admin role. TEMP tables/views
+shadowing hub names reject before that owner's unqualified queries can run.
+Scoped visibility is established before target disclosure. Editing/revoking an
+active owner or granting owner requires scoped owner; a revoked historical owner
+can be restored into a lower role by an administrator. Business Delete permission
+is not delegation authority. System targets and removal of the last active human
+hub administrator reject. Expected target versions/epochs are checked even for
+semantic no-ops; NULL/empty spelling and all raw rows remain unchanged on no-op.
+
+The coordinator supplies an already-open consistent transaction; apply requires
+its BEGIN IMMEDIATE serialization guarantee. `Database.write_transaction` alone
+is not proof of that lock mode. The service uses a savepoint and never commits.
+It loads one complete OldFacts, derives InitiatingProposal and FinalExpected from
+that same old anchor using B1's public constructor, and delegates dense comparison
+to `assemble_pair`/A. Visibility is explicitly supplied and complete on both sides;
+unknown predicates fail closed. No production visibility supplier is installed.
+Generation and all row/token/authority increments, safe audit bytes and the exact
+allowed main-storage image are prepared before DML. Final independent root, token,
+user/state provenance and raw rowid/type/value fingerprints must match that
+expectation. Unanticipated local main-table side effects reject and roll back;
+this is not a policy recomputation after writing. The service opens no company,
+configuration or attachment and performs no filesystem/network side effect.
+
+`hub.agent_authority` materializes A's complete union-agent results. Binding,
+principal or own loss and changed inequality suspend as specified, bump epoch
+once, and revoke every still-unrevoked credential for that agent, including expired
+credentials, both kinds, all principals and null/old issuance epochs. Existing
+revocations, hashes, issuance/creation fields and unrelated rows stay exact.
+Assignment state plus suspension has one aggregate version effect. Retained
+inactive assignments remain stored; only additions/reactivations require active
+humans, equal proposed signatures and confirmation. Removals remain admissible
+with unequal or empty survivors. Restoration never authorizes implicitly; only
+explicit authorization with required permitted-use/fresh-context assertions clears
+suspension, retaining epoch and never reviving tokens. Further real losses while
+suspended still reconcile. User deactivation separately invalidates that user's
+credentials; an already-inactive no-op does not repair stray credentials.
+
+`hub.permission_admin_audit` prepares event/entry ULIDs, sequence, one supplied
+validated operation timestamp and whitelisted encoded envelopes before DML, using
+the existing codec and sequence semantics. It inserts exactly that manifest with
+bound main-qualified SQL. One private event includes all derived entries. State
+entries use record_id `1` and generation versions with full canonical catalog,
+defaults and update provenance. Credential/password hashes, labels and liveness
+fields never enter prepared audit payloads. Encoding/insertion and final-state
+failures roll back all service effects. Preview allocates no durable IDs/times.
+
+OS binding remains a conditional producer contract, not an installed authenticator.
+A B3/C coordinator must obtain kernel identity, continuously hold root serialization
+from captured file configuration through the transaction, prefer same-transaction
+pending_config after dequeue, and reject changed/missing admitted mappings. B2
+reads no config file or second connection. Its `OSOperation` lifetime savepoint
+binds the supplied evidence to the exact Database/root/request/purpose and expires
+on operation exit or transaction end, including COMMIT/ROLLBACK followed by BEGIN
+on the same Database. The guard proves lifetime only, not kernel/config provenance.
+There is no production mapping factory or permissive default. Test-only supplied
+producers do not establish live safety.
+
+Prepared effects are private and cannot authorize a later apply. The visible
+portion omits hidden agents/tokens, global generations and catalog digests; even
+event IDs and summaries require C's future projection. Existing audit readers are
+not safe for these compound events. C must implement entry/summary/cursor filtering
+and authority-commit/publication fencing before any live route is connected.
+These modules do not complete B3 structural integration, C/D activation or Row7.
+No command/resource-owner inventory changed; the accepted `7b2d4c2` catalog and
+`50b259f8` descriptor remain unchanged.
