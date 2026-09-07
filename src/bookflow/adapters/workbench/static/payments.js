@@ -529,6 +529,19 @@
       for(const attempt of attempts) panel.append(button('Resolve sharing and resume',()=>resumeRecovery(attempt)));
     }
   }
+  async function receivedRecoveryEvidence(panel,state,kind,title,render) {
+    const section=el('section');section.dataset.recoveryEvidence=kind;
+    const heading=el('h4',title),rows=el('div'),progress=el('p');let cursor=null,received=0;
+    const more=button('Next '+title.toLowerCase(),load);more.dataset.recoveryMore=kind;
+    section.append(heading,progress,rows,more);panel.append(section);
+    async function load() {
+      const page=await command('payment recovery items',{recovery_id:state.id,kind,limit:50,...(cursor?{cursor}:{})});
+      for(const row of page.items) rows.append(render(row));
+      received+=page.items.length;cursor=page.next_cursor;more.hidden=!cursor;
+      progress.textContent=`Showing ${received} of ${page.total_count}. These are acknowledged server records.`;
+    }
+    await load();
+  }
   async function showRecovery(identifier,attempt=null) {
     recoveryConfirmed=null;invalidate();
     const epoch=reviewEpoch;
@@ -544,10 +557,29 @@
       return;
     }
     if(state.state==='uploading') {
-      const missing=await pages('payment recovery items',{recovery_id:identifier,kind:'missing_ranges'});
       panel.append(el('p',`${state.missing_chunk_count} parts are still missing. Recording remains blocked, including after closing this tab.`));
+      await receivedRecoveryEvidence(panel,state,'missing_ranges','Missing ranges',row=>{
+        const first=BigInt(row.first_chunk_index),last=BigInt(row.last_chunk_index),end=(last+1n)*200n,declared=BigInt(state.declared_entry_count);
+        return el('p',`Parts ${first+1n}–${last+1n}: missing attempted edits ${first*200n+1n}–${end<declared?end:declared}. Their values have not been received by the server.`);
+      });
+      await receivedRecoveryEvidence(panel,state,'entries','Received edits',row=>{
+        const item=el('details');item.dataset.recoveryEntry=row.invoice_id;
+        item.append(el('summary',`Edit ${row.entry_index}: invoice ${row.invoice_id}`));
+        const action=row.action==='remove'?'Remove from selection':row.action==='calculate'?'Request a new calculation from current facts':`${row.amount_origin==='unresolved'?'Unresolved amount':units(row.amount_minor_units,row.currency)+' '+row.currency} (${row.amount_origin})`;
+        item.append(el('p',action),el('p',`Submitted observed invoice version: ${row.observed_invoice_version}. This is the attempt's version claim.`));
+        if(row.retained_calculation_revision_id) item.append(el('p','Restore saved calculation from revision '+row.retained_calculation_revision_id));
+        if(row.attempted_calculated_minor_units!==null) item.append(el('p','Previous local calculation display (not authoritative): '+units(row.attempted_calculated_minor_units)));
+        return item;
+      });
+      await receivedRecoveryEvidence(panel,state,'chunks','Chunk acknowledgements',row=>{
+        const receipt=exact.parse(row.receipt_snapshot),item=el('details');
+        item.append(el('summary','Part '+(BigInt(row.chunk_index)+1n)+' acknowledged'));
+        item.append(el('p',`${receipt.actor_id||'Unknown actor'} at ${receipt.recorded_at||'unknown time'}; ${receipt.received_entry_count} of ${receipt.declared_entry_count} edits received at this original acknowledgement.`));
+        return item;
+      });
       if(attempt) panel.append(button('Resume complete saved attempt',()=>resumeRecovery(attempt)));
       else panel.append(el('p','The remaining edits are not stored in this browser. Resume from the original browser, or explicitly discard the entire attempt.'));
+      panel.append(button('Reload shared recovery',()=>showRecovery(identifier,attempt)));
     } else {
       const request={recovery_id:identifier,attempt_generation:state.attempt_generation,intent_hash:state.intent_hash};
       const comparison=await command('payment recovery compare',request);

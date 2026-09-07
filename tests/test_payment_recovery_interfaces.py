@@ -6,18 +6,17 @@ import pytest
 from tests.mcp_matrix_support import Matrix
 from tests.test_service_sales_lifecycle import sale
 from tests.test_payment_recovery import setup,declaration
+from tests.payment_recovery_support import launcher,provenance,source_environment
 
 @pytest.mark.timeout(600)
 def test_complete_recovery_contract_on_all_four_interfaces(client,sale,root,tmp_path,monkeypatch):
     draft,first,_=setup(client,sale)
-    binary=Path(__file__).parents[1]/'.cache/recovery/bin/bookflow'
-    monkeypatch.setenv('BOOKFLOW_MCP_TEST_BINARY',str(binary))
-    import tests.conftest
-    monkeypatch.setattr(tests.conftest,'BIN',binary)
+    binary=launcher(monkeypatch)
+    (tmp_path/'source-provenance.json').write_text(json.dumps(provenance(binary),indent=2))
     async def witness():
         matrix=Matrix()
         try:
-            await matrix.open(root,tmp_path)
+            await matrix.open(root,tmp_path,mcp_env=source_environment())
             for surface in matrix.documents:
                 async def call(verb,inp,**context):
                     return await matrix.call(surface,'payment recovery '+verb,inp,**context)
@@ -80,14 +79,12 @@ def test_full_403_201_barrier_and_single_receipt_on_every_adapter(client,sale,ro
     begin=declaration(draft,entries);identifier=call(client,'begin',begin)['original_receipt']['recovery_id']
     call(client,'upload',dict(recovery_id=identifier,chunk_index=0,entries=entries[:200]))
     method=client.run('payment-method list',{},company=COMPANY)['items'][0]['id']
-    binary=Path(__file__).parents[1]/'.cache/recovery/bin/bookflow'
-    monkeypatch.setenv('BOOKFLOW_MCP_TEST_BINARY',str(binary))
-    import tests.conftest
-    monkeypatch.setattr(tests.conftest,'BIN',binary)
+    binary=launcher(monkeypatch)
+    (tmp_path/'source-provenance.json').write_text(json.dumps(provenance(binary),indent=2))
     async def witness():
         matrix=Matrix()
         try:
-            await matrix.open(root,tmp_path)
+            await matrix.open(root,tmp_path,mcp_env=source_environment())
             for surface in matrix.documents:
                 async def recovery(verb,inp,**context):return await matrix.call(surface,'payment recovery '+verb,inp,**context)
                 receive=dict(customer=sale['customer'],date='2026-06-01',amount='10.00',payment_method=method,operation_key='403-201-'+surface,applications=dict(mode='selection',selection=draft['id'],expected_version=draft['version']))

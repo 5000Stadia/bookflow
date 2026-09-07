@@ -84,6 +84,29 @@ def test_browser_resumes_201_of_403_from_complete_durable_outbox(register_browse
     b.evaluate("(async()=>{const config=BookflowExactJSON.parse(document.querySelector('#payment-config').textContent);const a=window.originalAttempt;a.scope='payment-recovery:'+config.company+':'+config.actor+':'+a.begin.selection;a.storageKey=a.scope+':'+a.begin.attempt_generation;await new Promise((resolve,reject)=>{const request=indexedDB.open('bookflow-payment-recovery-v1',1);request.onupgradeneeded=()=>request.result.createObjectStore('attempts');request.onsuccess=()=>{const db=request.result,tx=db.transaction('attempts','readwrite');tx.objectStore('attempts').put(BookflowExactJSON.stringify(a),a.storageKey);tx.oncomplete=()=>{db.close();resolve()};tx.onerror=()=>reject(tx.error)};request.onerror=()=>reject(request.error)});})()")
     begun=run('payment recovery begin',begin);identifier=begun['original_receipt']['recovery_id']
     run('payment recovery upload',dict(recovery_id=identifier,chunk_index=0,entries=edits[:200]))
+    from tests.test_row5_browser_acceptance import _Cdp,PASSWORD
+    other_browser=_Cdp(tmp_path/'independent-recovery-browser')
+    try:
+        other_browser.navigate(register_browser.site.base_url+'/login')
+        other_browser.evaluate("(()=>{document.querySelector('[name=username]').value="+json.dumps(register_browser.site.login)+";document.querySelector('[name=password]').value="+json.dumps(PASSWORD)+";document.querySelector('form[hx-post=\"/login\"]').requestSubmit();})()")
+        other_browser.wait_for("!!document.querySelector('.group-grid')")
+        for width in (1280,390):
+            other_browser.viewport(width,900);other_browser.navigate(base+'/receive-payments?selection='+selection)
+            other_browser.wait_for("document.querySelector('#payment-workspace')?.dataset.loaded==='true'",timeout=180)
+            panel=other_browser.evaluate("document.querySelector('#payment-recovery-panel').textContent")
+            assert 'Parts 2–2' in panel and '201–201' in panel and 'not stored in this browser' in panel
+            assert 'Resume complete saved attempt' not in panel and 'Confirm complete recovery' not in panel
+            assert 'Part 1 acknowledged' in panel and '200 of 201 edits received' in panel
+            for _ in range(3):
+                other_browser.evaluate("document.querySelector('[data-recovery-more=entries]').click()")
+                other_browser.wait_for("!document.querySelector('#payment-workspace').hasAttribute('aria-busy')",timeout=180)
+            shown=other_browser.evaluate("Array.from(document.querySelectorAll('[data-recovery-entry]')).map(x=>x.dataset.recoveryEntry)")
+            assert shown==[entry['invoice_id'] for entry in edits[:200]]
+            assert edits[200]['invoice_id'] not in shown
+            assert other_browser.evaluate("document.querySelector('[data-recovery-more=entries]').hidden")
+            assert other_browser.evaluate("document.documentElement.scrollWidth<=window.innerWidth")
+            shot(other_browser,tmp_path,'second-browser-200-received-one-unknown',width)
+    finally:other_browser.close()
     for width in (1280,390):
         b.viewport(width,900);b.navigate(base+'/receive-payments?selection='+selection)
         b.wait_for("document.querySelector('#payment-workspace')?.dataset.loaded==='true'",timeout=180)
@@ -104,7 +127,12 @@ def test_browser_resumes_201_of_403_from_complete_durable_outbox(register_browse
     final=run('payment selection show',dict(selection=selection))
     assert final['id']==selection and final['version']==draft['version']+1 and final['applied_minor_units']==604
     assert final['amount']['minor_units']==1000 and final['unapplied_minor_units']==396
-    click(b,'preview');click(b,'save-new')
+    from tests.test_customer_payment_browser import field
+    field(b,'method',run('payment-method list',{})['items'][0]['id'])
+    for action in ('preview','save-new'):
+        b.evaluate("document.querySelector('#payment-"+action+"').click()")
+        b.wait_for("!document.querySelector('#payment-workspace').hasAttribute('aria-busy')",timeout=240)
+        assert b.evaluate("document.querySelector('#payment-error').hidden"),b.evaluate("document.querySelector('#payment-error').innerText")
     assert [row['received_minor_units'] for row in run('payment query',dict(customer=payer))['items']]==[1000]
     assert b.evaluate("document.querySelector('#payment-amount').value")==''
     assert b.evaluate("document.querySelector('#payment-recovery-panel')===null")

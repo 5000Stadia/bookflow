@@ -73,3 +73,49 @@ def test_unresolved_header_new_calculation_stays_null(client,sale):
     confirm(client,identifier,begin,comparison)
     rows=client.run('payment selection items',dict(selection=draft['id']),company=COMPANY)['items']
     assert next(r for r in rows if r['invoice_id']==first['id'])['amount_minor_units'] is None
+
+
+def test_saved_calculated_100_50_remain_fixed_after_due_falls(client,sale):
+    first,second=[client.run('invoice post',dict(customer=sale['customer'],date='2026-06-01',number='FIXED-DUE-'+str(i),lines=[dict(item=sale['item'],quantity='1',unit_price='1.00')]),company=COMPANY) for i in range(2)]
+    draft=client.run('payment selection create',dict(mode='new_receipt',customer=sale['customer'],date='2026-06-01',amount='1.50'),company=COMPANY)
+    draft=client.run('payment selection update',dict(selection=draft['id'],expected_version=draft['version'],set_items=[dict(invoice=r['id'],expected_version=1,amount_origin='calculated') for r in (first,second)]),company=COMPANY)
+    original=client.run('payment selection items',dict(selection=draft['id']),company=COMPANY)['items']
+    assert [r['amount_minor_units'] for r in original]==[100,50]
+    client.run('payment receive',dict(customer=sale['customer'],date='2026-06-01',amount='0.50',payment_method=method(client),operation_key='lower-fixed-due',applications=dict(mode='inline',items=[dict(invoice=first['id'],expected_version=1,amount='0.50')])),company=COMPANY)
+    begin=declaration(draft,[]);identifier,comparison=seal_compare(client,begin,[])
+    assert comparison['amount_minor_units']==150 and comparison['selected_minor_units']==150 and comparison['problem_count']>0 and comparison['hard_blocker_count']==0
+    confirm(client,identifier,begin,comparison)
+    rows=client.run('payment selection items',dict(selection=draft['id']),company=COMPANY)['items']
+    assert [r['amount_minor_units'] for r in rows]==[100,50] and {r['amount_origin'] for r in rows}=={'calculated'}
+    assert rows[0]['due_minor_units']==50 and rows[0]['expected_version']==2
+    shown=client.run('payment selection show',dict(selection=draft['id']),company=COMPANY)
+    with pytest.raises(BookflowError):
+        client.run('payment receive',dict(customer=sale['customer'],date='2026-06-01',amount='1.50',payment_method=method(client),operation_key='invalid-fixed-due',applications=dict(mode='selection',selection=draft['id'],expected_version=shown['version'])),company=COMPANY)
+    assert client.run('payment query',dict(customer=sale['customer']),company=COMPANY)['total_count']==1
+
+
+def test_new_entered_header_above_js_safe_integer_is_exact_in_storage(client,sale):
+    draft,_,_=setup(client,sale)
+    units=9007199254740993
+    begin=declaration(draft,[],dict(action='set',amount_origin='entered',currency='USD',amount_minor_units=units))
+    identifier,comparison=seal_compare(client,begin,[])
+    assert comparison['amount_minor_units']==units and comparison['unapplied_minor_units']==units-200
+    confirm(client,identifier,begin,comparison)
+    shown=client.run('payment selection show',dict(selection=draft['id']),company=COMPANY)
+    assert shown['amount']['minor_units']==units
+    with sqlite3.connect(Path(client.company.show(company=COMPANY)['path'])/'company.db') as db:
+        assert db.execute('SELECT typeof(amount_minor_units),amount_minor_units FROM payment_selection_revisions WHERE id=?',(shown['revision_id'],)).fetchone()==('integer',units)
+
+
+def test_live_calculation_preference_does_not_stale_or_replace_captured_policy(client,sale):
+    draft,first,_=setup(client,sale)
+    before_policy=draft['context']['automatically_calculate']
+    entries=[dict(invoice_id=first['id'],observed_invoice_version=1,action='set',amount_minor_units=50,currency='USD',amount_origin='entered')]
+    begin=declaration(draft,entries);identifier,comparison=seal_compare(client,begin,entries)
+    info=client.run('company show',{},company=COMPANY)
+    client.run('company update',dict(expected_version=info['info_version'],automatically_calculate_payments=not before_policy),company=COMPANY)
+    after=call(client,'compare',dict(recovery_id=identifier,attempt_generation=begin['attempt_generation'],intent_hash=begin['intent_hash']))
+    assert after['facts_fingerprint']==comparison['facts_fingerprint']
+    confirm(client,identifier,begin,comparison)
+    shown=client.run('payment selection show',dict(selection=draft['id']),company=COMPANY)
+    assert shown['context']['automatically_calculate']==before_policy and shown['amount']['minor_units']==200 and shown['applied_minor_units']==150

@@ -15,7 +15,7 @@ from bookflow import BookflowError
 from bookflow.company import schema
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import migrate_to_head
-from tests.test_payment_migration import raw_snapshot
+from tests.payment_raw_evidence import table as raw_snapshot
 
 BASE='2dbce6683dcdd968b8c950c86f4c5e8321567027'
 M=importlib.import_module('bookflow.storage.company_migrations.versions.0018_payment_recovery')
@@ -27,7 +27,7 @@ def co17(tmp_path_factory):
     archive=subprocess.check_output(['git','archive',BASE,'src'],cwd=Path(__file__).parents[1])
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:tar.extractall(source,filter='data')
     root=parent/'root'
-    result=subprocess.run([sys.executable,'-c','import bookflow,sys;c=bookflow.connect(data_root=sys.argv[1]);c.init();c.demo.reset()',str(root)],
+    result=subprocess.run([sys.executable,'-c','import bookflow,sys,io;c=bookflow.connect(data_root=sys.argv[1]);c.init();c.demo.reset();co=c.company.list()["items"][0]["company_id"];party=c.customer.create(name="Migration attachment witness",company=co);c.attachment.add(record_type="customer",record_id=party["id"],original_filename="raw-witness.bin",input_stream=io.BytesIO(b"before\\x00after\\x80\\xff"),company=co)',str(root)],
         cwd=source,env=dict(os.environ,PYTHONPATH=str(source/'src'),BOOKFLOW_DATA_ROOT=str(root)),capture_output=True,text=True)
     assert result.returncode==0,result.stderr
     return root

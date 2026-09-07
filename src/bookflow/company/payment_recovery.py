@@ -584,18 +584,38 @@ def apply(plan,ctx,s):
 
 def readable_selection(s,selection_id):
     """Historical secondary ownership predicate, applied before page counts."""
-    from bookflow.hub.access import require_resource
+    work_allowed=True
     try:
-        require_resource(s,'customer-work','member')
+        authority.require_resource(s,'customer-work','member')
     except BookflowError as exc:
         if exc.code!='E_PERMISSION':
             raise
+        work_allowed=False
+    # A consumed new-receipt selection has no funding ID in its context.
+    # Its permanent operation owns P, including P's later historical links to
+    # invoices that were never S items. Match that scalar ownership before count.
+    h=c.payment_selections.alias('recovery_visibility_selection')
+    op=c.payment_operations.alias('recovery_visibility_operation')
+    safe=sa.case((sa.func.json_valid(op.c.request_snapshot),op.c.request_snapshot),else_='{}')
+    array=sa.func.json_type(safe,'$.resolved_transaction_ids')=='array'
+    values=sa.func.json_each(sa.case((array,sa.func.json_extract(safe,'$.resolved_transaction_ids')),else_='[]')).table_valued('value','type').alias('recovery_visibility_ids')
+    missing=sa.exists(sa.select(values.c.value).where(sa.or_(values.c.type!='text',~sa.exists(sa.select(c.transactions.c.id).where(c.transactions.c.id==values.c.value)))))
+    operation=sa.select(op.c.id).where(op.c.id==h.c.consumed_operation_id,array,~missing)
+    if not work_allowed:
+        operation=operation.where(~sa.exists(sa.select(values.c.value).where(authority.work_link_predicate(values.c.value))))
+    consumed=~sa.exists(sa.select(h.c.id).where(h.c.id==selection_id,h.c.consumed_operation_id.is_not(None),~sa.exists(operation)))
+    if not work_allowed:
         i=c.payment_selection_items;r=c.payment_selection_revisions
         payment=sa.func.json_extract(r.c.context_snapshot,'$.payment_id')
-        return ~sa.or_(sa.exists(sa.select(i.c.id).where(i.c.selection_id==selection_id,i.c.invoice_id.is_not(None),authority.work_link_predicate(i.c.invoice_id))),
+        return sa.and_(consumed,~sa.or_(sa.exists(sa.select(i.c.id).where(i.c.selection_id==selection_id,i.c.invoice_id.is_not(None),authority.work_link_predicate(i.c.invoice_id))),
             sa.exists(sa.select(I.c.id).where(I.c.selection_id==selection_id,authority.work_link_predicate(I.c.invoice_id))),
-            sa.exists(sa.select(r.c.id).where(r.c.selection_id==selection_id,payment.is_not(None),authority.work_link_predicate(payment))))
-    return sa.true()
+            sa.exists(sa.select(r.c.id).where(r.c.selection_id==selection_id,payment.is_not(None),authority.work_link_predicate(payment)))))
+    return consumed
+
+
+def query_epoch(s):
+    """Compact publication fence for off-page count dependencies, as for cursors."""
+    return s.company.conn.execute(sa.select(sa.func.coalesce(sa.func.max(c.audit_events.c.seq),0))).scalar_one()
 
 
 def history_changes(s,ids,attempted,prior):

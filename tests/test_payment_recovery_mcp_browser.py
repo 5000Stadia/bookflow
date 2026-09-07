@@ -16,6 +16,7 @@ from tests.test_row8_register_browser import register_browser
 from tests.test_payment_review_gui import setup,invoice_setup
 from tests.test_customer_payment_browser import click,field,shot
 from tests.test_payment_recovery_browser import press
+from tests.payment_recovery_support import launcher,provenance,source_environment
 
 @pytest.mark.timeout(420)
 @pytest.mark.parametrize('width',[1280,390])
@@ -33,9 +34,11 @@ def test_actual_mcp_recovery_human_confirmation_and_original_operation(register_
         db.conn.execute(h.agent_principals.insert().values(agent_user_id=agent,principal_user_id=principal,assigned_by=principal,assigned_at=clock.now_iso()))
     issuance=b.evaluate("fetch('/commands/token.issue',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-Bookflow-Workbench':'1'},body:JSON.stringify("+json.dumps(dict(user=agent,principal=principal,label='Disposable recovery MCP'))+")}).then(r=>r.json())",await_promise=True)
     calls=[]
+    binary=launcher()
+    (tmp_path/'source-provenance.json').write_text(json.dumps(provenance(binary),indent=2))
     async def witness():
-        params=StdioServerParameters(command=str(Path(__file__).parents[1]/'.cache/recovery/bin/bookflow'),
-            args=['mcp','--url',register_browser.site.base_url],env={'BOOKFLOW_TOKEN':issuance['secret'],'BOOKFLOW_COMPANY':register_browser.site.company_id,
+        params=StdioServerParameters(command=str(binary),
+            args=['mcp','--url',register_browser.site.base_url],env={**source_environment(),'BOOKFLOW_TOKEN':issuance['secret'],'BOOKFLOW_COMPANY':register_browser.site.company_id,
                 'BOOKFLOW_DATA_ROOT':str(tmp_path/'absent')},cwd=str(tmp_path))
         async with stdio_client(params) as (read,write):
             async with ClientSession(read,write) as session:

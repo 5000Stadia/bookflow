@@ -383,6 +383,7 @@ Example JSON output:
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_RECORD_NOT_FOUND` | No such record. |
+| `E_RECOVERY_PENDING` | Resolve the active recovery before editing or recording this selection. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_SELECTION_CONSUMED` | This draft was consumed by a successful payment operation; recover that operation or start a new draft. |
@@ -1373,6 +1374,7 @@ Example JSON output:
 | `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
 | `E_RECORD_NOT_FOUND` | No such record. |
+| `E_RECOVERY_PENDING` | Resolve the active recovery before editing or recording this selection. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_SELECTION_CONSUMED` | This draft was consumed by a successful payment operation; recover that operation or start a new draft. |

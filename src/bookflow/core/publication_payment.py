@@ -140,6 +140,9 @@ def capture(cmd, inp, s, result, *, dry_run=False):
         # Retain the shared permission projection, not merely the returned page
         # and not an unbounded collection of every contributing record ID.
         roots.add(('work_access', work_access(s), False))
+    if cmd.name in {'payment selection query','payment recovery query'}:
+        from bookflow.company.payment_recovery import query_epoch
+        roots.add(('payment_selection_query_epoch',str(query_epoch(s)),False))
     if cmd.name in {'payment invoices', 'payment suggest'}:
         customer = getattr(inp, 'customer', None)
         if customer:
@@ -190,7 +193,11 @@ def work_access(s):
 def check(s, roots):
     from bookflow.company import payment_authority
     for kind, identifier, write in roots:
-        if kind == 'work_access':
+        if kind == 'payment_selection_query_epoch':
+            from bookflow.company.payment_recovery import query_epoch
+            if str(query_epoch(s))!=identifier:
+                raise BookflowError('E_QUERY_STALE')
+        elif kind == 'work_access':
             if work_access(s) != identifier:
                 raise BookflowError('E_PERMISSION', details={'reason': 'payment_projection_changed'})
         elif kind == 'audit_event':

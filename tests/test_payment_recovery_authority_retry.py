@@ -178,3 +178,40 @@ def test_competing_terminal_actions_publish_at_most_one_whole_revision(client,sa
     else:
         assert current['version']==draft['version']+1 and current['current_lifecycle']['state']=='open'
         assert current['item_count']==(1 if terminal['state']=='applied' else 2)
+
+
+@pytest.mark.parametrize('opponent',['abort','replace','seal'])
+def test_final_chunk_races_keep_a_complete_barrier_and_immutable_receipt(client,sale,root,opponent):
+    import bookflow
+    draft,first,_=setup(client,sale)
+    entries=[dict(invoice_id=first['id'],observed_invoice_version=1,action='remove')]
+    begin=declaration(draft,entries);identifier=call(client,'begin',begin)['original_receipt']['recovery_id']
+    upload=dict(recovery_id=identifier,chunk_index=0,entries=entries)
+    other=dict(recovery_id=identifier,expected_recovery_version=1)
+    if opponent=='abort':other['disposition']='discard_entire_attempt'
+    if opponent=='replace':other['replacement']=declaration(draft,[])
+    def attempt(verb,inp):
+        try:return call(bookflow.connect(data_root=str(root)),verb,inp)
+        except BookflowError as exc:return dict(error=exc.code)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a=pool.submit(attempt,'upload',upload);b=pool.submit(attempt,opponent,other);results=[a.result(),b.result()]
+    assert sum('error' not in r for r in results)==1,results
+    assert next(r['error'] for r in results if 'error' in r) in {'E_RECOVERY_FINALIZED','E_RECOVERY_INCOMPLETE','E_VERSION_CONFLICT','E_DB_BUSY'}
+    state=call(client,'show',dict(recovery_id=identifier))
+    current=client.run('payment selection show',dict(selection=draft['id']),company=COMPANY)
+    if 'error' not in results[0]:
+        assert state['state']=='uploading' and state['received_entry_count']==1 and current['version']==draft['version']
+        assert current['current_lifecycle']['state']=='recovery_uploading'
+        before=raw_books(root)
+        assert call(client,'upload',upload)['original_receipt']==results[0]['original_receipt']
+        assert raw_books(root)==before
+        if opponent=='seal':
+            call(client,'seal',dict(recovery_id=identifier,expected_recovery_version=2))
+            assert call(client,'show',dict(recovery_id=identifier))['state']=='sealed'
+    elif opponent=='abort':
+        assert state['state']=='aborted' and state['received_entry_count']==0
+        assert current['version']==draft['version']+1 and current['item_count']==2 and current['current_lifecycle']['state']=='open'
+    else:
+        assert state['state']=='superseded' and state['received_entry_count']==0
+        assert current['version']==draft['version'] and current['current_lifecycle']['state']=='recovery_uploading'
+    assert client.run('payment query',dict(customer=sale['customer']),company=COMPANY)['total_count']==0

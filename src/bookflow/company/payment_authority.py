@@ -163,7 +163,7 @@ def record_transactions(db, record_type, record_id, seen=None, cache=None):
         selection_id = row['id'] if record_type == 'payment_selection' else row['selection_id']
         ids.update(item['invoice_id'] for item in _evidence_rows(db, c.payment_selection_items, 'selection_id', selection_id, cache) if item['invoice_id'])
         ids.update(item['invoice_id'] for item in _evidence_rows(db, c.payment_selection_recovery_items, 'selection_id', selection_id, cache))
-        headers = _evidence_rows(db, c.payment_selections, 'id', selection_id, cache)
+        headers = [row] if record_type == 'payment_selection' else _evidence_rows(db, c.payment_selections, 'id', selection_id, cache)
         if headers and headers[0]['consumed_operation_id']:
             ids.update(record_transactions(db, 'payment_operation', headers[0]['consumed_operation_id'], seen, cache))
         contexts = [revision['context_snapshot'] for revision in _evidence_rows(db, c.payment_selection_revisions, 'selection_id', selection_id, cache)]

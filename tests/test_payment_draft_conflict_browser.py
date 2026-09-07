@@ -147,6 +147,9 @@ def test_review_recovers_complete_403_stale_rows_on_same_selection_preserving_hi
             rows+=page['items'];cursor=page['next_cursor']
             if not cursor:return rows
     original_rows=all_rows(original['version'])
+    captured_policy=original['context']['automatically_calculate']
+    info=run('company show',{})
+    run('company update',dict(expected_version=info['info_version'],automatically_calculate_payments=not captured_policy))
     click(b,'refresh-draft')
     method=b.evaluate("document.querySelector('#payment-method').value")
     # A separate complete remittance advances all403 invoice baselines without
@@ -185,6 +188,7 @@ def test_review_recovers_complete_403_stale_rows_on_same_selection_preserving_hi
     for width in (1280,390):
         b.viewport(width,900);shot(b,tmp_path,'complete-403-recovered-selection',width)
     recovered_header=run('payment selection show',dict(selection=recovered))
+    assert recovered_header['context']['automatically_calculate']==captured_policy
     run('payment receive',dict(customer=payer,date='2026-06-02',amount='10',payment_method=method,
         deposit_to=register_browser.bank['id'],operation_key='403-recovered-remittance',
         applications=dict(mode='selection',selection=recovered,expected_version=recovered_header['version'])))
@@ -196,3 +200,15 @@ def test_review_recovers_complete_403_stale_rows_on_same_selection_preserving_hi
     assert 'E_SELECTION_CONSUMED' in b.evaluate("document.querySelector('#payment-error').innerText")
     assert run('payment selection query',{})==selections_before
     assert sorted(row['received_minor_units'] for row in run('payment query',dict(customer=payer))['items'])==[403,1000]
+    # Reopen ORIGINAL after consumption in each viewport and a new page context.
+    # Load cannot silently create an alias of the already-recorded cash intent.
+    for width in (1280,390):
+        b.viewport(width,900);b.navigate(base+'/receive-payments?selection='+selection)
+        b.wait_for("document.querySelector('#payment-workspace')?.dataset.loaded==='true'",timeout=180)
+        b.evaluate("document.querySelector('#payment-load').click()")
+        b.wait_for("!document.querySelector('#payment-workspace').hasAttribute('aria-busy')",timeout=180)
+        assert 'E_SELECTION_CONSUMED' in b.evaluate("document.querySelector('#payment-error').innerText")
+        assert run('payment selection query',{})==selections_before
+        assert sorted(row['received_minor_units'] for row in run('payment query',dict(customer=payer))['items'])==[403,1000]
+        assert all_rows(original['version'])==original_rows
+        shot(b,tmp_path,'original-consumed-selection-reopened',width)

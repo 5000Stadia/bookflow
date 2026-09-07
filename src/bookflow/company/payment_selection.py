@@ -86,11 +86,8 @@ def saved(s, header, version=None):
             items[event['invoice_id']] = {key: event[key] for key in (
                 'invoice_id', 'ordinal', 'expected_version', 'due_minor_units', 'amount_minor_units', 'amount_origin')}
     context_ = json.loads(revision['context_snapshot'])
-    # Historical revision reads retain protection for all draft history, not
-    # only the current selected subset after a clear.
-    historical = s.company.conn.execute(sa.select(i.c.invoice_id).where(
-        i.c.selection_id == header['id'], i.c.invoice_id.is_not(None)).distinct()).scalars().all()
-    authorize(s, [*historical, *([context_['payment_id']] if context_['payment_id'] else [])])
+    # authorize_selection above covers all saved revisions, funding operations
+    # and historical recovery targets before decoding any saved values.
     return revision, context_, sorted(items.values(), key=lambda row: (row['ordinal'], row['invoice_id']))
 
 
@@ -132,13 +129,12 @@ def output(header, revision, context_, items, lifecycle_=None):
 def show(s, inp):
     header = resolve(s, inp.selection)
     revision, context_, items = saved(s, header, inp.revision)
-    from bookflow.company.payment_recovery import lifecycle
-    return SelectionOutput(**output(header, revision, context_, items, lifecycle(s,header['id'])))
+    from bookflow.company.payment_recovery import lifecycles
+    return SelectionOutput(**output(header, revision, context_, items, lifecycles(s,[header])[header['id']]))
 
 
 def query_page(s, inp):
     """Filter complete historical ownership in SQL, reconstruct only the page."""
-    from bookflow.company.payment_authority import require_resource, work_link_predicate
     h, r, i = c.payment_selections, c.payment_selection_revisions, c.payment_selection_items
     statement = sa.select(h)
     from bookflow.company.payment_recovery import readable_selection
@@ -150,17 +146,6 @@ def query_page(s, inp):
         statement = statement.where(h.c.state == inp.state)
         if inp.state == 'open':
             statement = statement.where(~active_recovery)
-    try:
-        require_resource(s, 'customer-work', 'member')
-    except BookflowError as exc:
-        if exc.code != 'E_PERMISSION':
-            raise
-        protected_item = sa.exists(sa.select(i.c.id).where(i.c.selection_id == h.c.id,
-            i.c.invoice_id.is_not(None), work_link_predicate(i.c.invoice_id)))
-        payment = sa.func.json_extract(r.c.context_snapshot, '$.payment_id')
-        protected_source = sa.exists(sa.select(r.c.id).where(r.c.selection_id == h.c.id,
-            payment.is_not(None), work_link_predicate(payment)))
-        statement = statement.where(~protected_item, ~protected_source)
     result = query.sql_page(s, 'payment selection query', inp,
         statement.order_by(h.c.created_at.desc(), h.c.id.desc()))
     headers = result['items']

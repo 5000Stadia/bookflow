@@ -91,19 +91,8 @@ def test_complete_publish_derives_header_and_retains_identity(client,sale):
 
 
 def raw_books(root):
-    result={}
-    for path in sorted(root.rglob('*.db')):
-        with sqlite3.connect(f'file:{path}?mode=ro',uri=True) as db:
-            db.execute('PRAGMA query_only=ON')
-            tables=db.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall()
-            values={}
-            for (table,) in tables:
-                quoted='"'+table.replace('"','""')+'"'
-                columns=[r[1] for r in db.execute('PRAGMA table_info('+quoted+')')]
-                projection=','.join('typeof("'+name.replace('"','""')+'"),quote("'+name.replace('"','""')+'")' for name in columns)
-                values[table]=db.execute('SELECT '+projection+' FROM '+quoted).fetchall()
-            result[str(path.relative_to(root))]=values
-    return result
+    from tests.payment_raw_evidence import books
+    return books(root)
 
 
 def test_every_exact_action_is_raw_readonly_and_reason_identity(client,sale,root):

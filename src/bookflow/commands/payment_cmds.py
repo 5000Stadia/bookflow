@@ -36,7 +36,7 @@ def _financial(verb, model):
         error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_APPLICATION_CAPACITY', 'E_APPLICATION_INCOMPATIBLE',
             'E_APPLICATION_INACTIVE', 'E_PAYMENT_OPERATION_KEY_REUSED', 'E_SELECTION_CONSUMED', 'E_PREVIEW_STALE',
             'E_PERIOD_CLOSED', 'E_INACTIVE_REFERENCE', 'E_DUPLICATE_NUMBER', 'E_AMOUNT_PRECISION', 'E_VALUE_RANGE',
-            'E_REASON_REQUIRED', 'E_HAS_APPLICATIONS'])(planner)
+            'E_REASON_REQUIRED', 'E_HAS_APPLICATIONS']+(['E_RECOVERY_PENDING'] if verb in ('receive','apply') else []))(planner)
     cmd.ledger = True
     cmd.permanent_recovery = lambda inp, ctx, s: payment_operations.recover(inp, ctx, s, 'payment ' + verb)
     cmd.applier(payments.apply)
@@ -207,7 +207,7 @@ def _write(verb, model):
         positional=[] if verb == 'create' else ['selection'],
         version_source=None if verb == 'create' else ('payment selection show', 'selection', 'version'),
         error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_SELECTION_CONSUMED',
-                     'E_APPLICATION_INCOMPATIBLE', 'E_PREVIEW_STALE', 'E_INACTIVE_REFERENCE', 'E_AMOUNT_PRECISION'])(plan)
+                     'E_APPLICATION_INCOMPATIBLE', 'E_PREVIEW_STALE', 'E_INACTIVE_REFERENCE', 'E_AMOUNT_PRECISION', 'E_RECOVERY_PENDING'])(plan)
     cmd.ledger = True
     cmd.applier(selection.apply)
     cmd.authorize_input = selection.authorize_input
@@ -222,7 +222,7 @@ selection_clear = _write('clear', SelectionClearInput)
 
 @command('payment selection show', scope='company', description='Read a shared payment draft or an exact immutable revision with saved amount origins.',
     input_model=SelectionShowInput, output_model=SelectionOutput, required_role='member', capability='ledger.read',
-    positional=['selection'], error_codes=['E_RECORD_NOT_FOUND'])
+    positional=['selection'], error_codes=['E_RECORD_NOT_FOUND', 'E_RECOVERY_PENDING'])
 def selection_show(inp, ctx, s):
     return Plan(selection.show(s, inp))
 
@@ -239,6 +239,6 @@ def selection_items(inp, ctx, s):
 
 @command('payment selection query', scope='company', description='Page shared drafts by creation time and identity; protection covers their complete history.',
     input_model=SelectionQueryInput, output_model=SelectionPageOutput, required_role='member', capability='ledger.read',
-    error_codes=['E_QUERY_STALE'])
+    error_codes=['E_QUERY_STALE', 'E_RECOVERY_PENDING'])
 def selection_query(inp, ctx, s):
     return Plan(SelectionPageOutput(**selection.query_page(s, inp)))
