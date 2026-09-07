@@ -1762,3 +1762,47 @@ manifest for future persistence; staging never certifies zero or posts money.
 Financial amendment preparation additionally proves whole selection, authentic
 opening partition and exact per-statement zero using derived adjacency.
 No resolver, backfill, public capability, live draft writer or activation is added.
+
+### Private reconciliation review corrections (F1–F5)
+
+Proposal preview binds supplied revision IDs exactly to the draft's saved set,
+with no omissions, extras, substitutions or duplicate IDs, before statement
+arithmetic. Explicit force proposals also belong to that saved revision set;
+preview has no unsaved-proposal exemption. Ordinary Plan identity, prospective
+owner validation, current period and full authority remain required.
+
+Every private report/query/component/history/draft-show/attempt-item/progress/
+operation-item/recovery reader takes a Snapshot and explicit current authority
+participants. Read admission checks complete retained/current graph coverage
+before account support/proof, content, filters, totals and paging. Snapshot
+construction alone is not authority for a later read. The actual runtime owner
+must obtain these participants from current authority and supply the complete
+required graph, including historical attempts/operations and captured worlds;
+there is no Boolean permission or synthetic Session. This private whole-snapshot
+proof is not a paging latency claim or the future publication fence.
+
+ReconciliationError now derives from the project's BookflowError. Existing
+shared codes (including query/preview/version staleness) retain their exact codes
+and serialization. Until public registration, private closed reconciliation
+reasons use E_VALIDATION with a fixed reason field, or E_INTERNAL for invalid
+owned source. Activation must register the planned domain codes/statuses and
+query-only factory path; this increment does not mutate the public error catalog.
+Known adapter Unsupported/Corrupt and owning content-format failures convert to
+these typed outcomes; IO/DB failures and existing BookflowErrors propagate through
+their existing owners. No raw source exception text becomes returned details.
+
+Seal explicitly checks the current edit barrier, allowing its own attempt only.
+Missing-range inspection validates contiguous chunk indices, receipts and hashes,
+and returns the exact unreceived ordinal suffix (zero ranges when complete),
+without a 200-item aggregate cap. Terminal sealed/applied attempts must be complete.
+Proposal removal is an immutable draft-link revision; cancellation is the parent
+draft's terminal revision/operation. Proposal headers have no terminal column in N.
+Thus unconsumed proposal availability is derived from current parent state and
+revision links; historical revisions and consumption records remain intact.
+No schema contradiction or new proposal-state column is introduced.
+
+Semantic attempt-target uniqueness has **no database constraint behind it**:
+it is enforced only by the aggregate validator and seal. SQL still independently
+checks typed ownership/shape and the final active account/date projection, but
+cannot enforce the joined draft-header date key. Future persistence must run the
+aggregate checks before DML; no co0022 rewrite or activation is included here.

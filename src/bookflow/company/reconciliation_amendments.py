@@ -2,7 +2,7 @@
 from pydantic import model_validator
 from typing import Literal
 from bookflow.company import reconciliation_commands_models as m
-from bookflow.company.reconciliation_preparation import require,chain,claimed,_statement,certify,opening
+from bookflow.company.reconciliation_preparation import require,chain,claimed,_statement,certify,opening,adapter_errors
 from bookflow.company import reconciliation_adapters as adapters
 from bookflow.company.reconciliation_proof import prove
 
@@ -24,10 +24,11 @@ class Closure(m.Model):
 
 def derive(s,seeds, *, before_source,authority_transactions):
     require({r['id'] for r in before_source.rows['transactions']}<=set(authority_transactions),'E_PERMISSION')
-    old_history,old=adapters.enumerate_graph(before_source);new_history,new=adapters.enumerate_graph(s.source)
-    for account in {v.account_id for v in old+new}:
-        prove(before_source,old_history,old,account,'9999-12-31')
-        prove(s.source,new_history,new,account,'9999-12-31')
+    with adapter_errors():
+        old_history,old=adapters.enumerate_graph(before_source);new_history,new=adapters.enumerate_graph(s.source)
+        for account in {v.account_id for v in old+new}:
+            prove(before_source,old_history,old,account,'9999-12-31')
+            prove(s.source,new_history,new,account,'9999-12-31')
     old={v.ref:v for v in old};new={v.ref:v for v in new}
     changed={ref for ref in old.keys()|new.keys() if old.get(ref)!=new.get(ref)}
     keys={adapters.StatementEffectRef(producer=v['producer'],transaction_id=v['transaction_id'],component_id=v['deposit_key_id'] or v['commercial_line_id'],role=v['role']):v['id'] for v in s.rows['keys']}

@@ -10,7 +10,7 @@ from pydantic import JsonValue, model_validator
 from bookflow.company import reconciliation_commands_models as m
 from bookflow.company.reconciliation_schema import COMMANDS
 from bookflow.company.reconciliation_storage_validation import digest,RequestEnvelope,Envelope,Collection
-from bookflow.company.reconciliation_preparation import require
+from bookflow.company.reconciliation_preparation import require,read_admission
 
 class Request(m.Model):
     schema_version: Literal[1]=1
@@ -64,7 +64,8 @@ def envelopes(receipt):
     return request,effect,digest(receipt.request.intent())
 
 
-def recover(receipt,request, *, authority_transactions,current_targets,current_state):
+def recover(s,receipt,request, *, authority_transactions,current_targets,current_state):
+    read_admission(s,authority_transactions,extra_transactions=({v.id for v in receipt.targets if v.kind=='transactions'}|set(current_targets)),extra_accounts=(v.id for v in receipt.targets if v.kind=='accounts'))
     required={v.id for v in receipt.targets if v.kind=='transactions'}|set(current_targets)
     require(required<=set(authority_transactions),'E_PERMISSION')
     # Caller supplies exact saved capture interpretation, never fresh aliases or
@@ -74,7 +75,8 @@ def recover(receipt,request, *, authority_transactions,current_targets,current_s
         original_effect=copy.deepcopy(receipt.original_effect),current=copy.deepcopy(current_state))
 
 
-def items(receipt,kind, *, limit=50,offset=0,expected_fingerprint=None):
+def items(s,receipt,kind, *, authority_transactions,limit=50,offset=0,expected_fingerprint=None):
+    read_admission(s,authority_transactions,extra_transactions=(v.id for v in receipt.targets if v.kind=='transactions'),extra_accounts=(v.id for v in receipt.targets if v.kind=='accounts'))
     require(kind in receipt.items and type(limit) is int and 1<=limit<=200,'E_VALIDATION')
     values=receipt.items[kind]
     require(type(offset) is int and 0<=offset<=len(values),'E_QUERY_STALE')

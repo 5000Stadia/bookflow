@@ -7,7 +7,7 @@ from bookflow.company.reconciliation_adapters import Graph
 from bookflow.company.reconciliation_storage_validation import Header
 from pydantic import Field
 from bookflow.company import reconciliation_commands_models as m
-from bookflow.company.reconciliation_preparation import require,whole_selection
+from bookflow.company.reconciliation_preparation import require,whole_selection,read_admission
 from bookflow.company.reconciliation_storage_validation import digest,ChunkReceipt
 from bookflow.company.reconciliation_drafts import editable,revised
 
@@ -132,6 +132,7 @@ def manifest_order(s,items,context):
 
 
 def seal(s,draft,attempt, *, expected_version,manifest_context=None):
+    editable(s,draft,draft.version,attempt_id=attempt.id)
     require(attempt.version==expected_version,'E_VERSION_CONFLICT')
     require(attempt.state=='uploading' and attempt.draft_id==draft.id and attempt.base_revision_id==draft.current_revision_id and draft.state=='open','E_RECONCILIATION_ATTEMPT_STATE')
     require([c.index for c in attempt.chunks]==list(range(len(attempt.chunks))),'E_RECONCILIATION_MANIFEST')
@@ -171,8 +172,35 @@ def abort(attempt, *, expected_version,superseded=False):
     return Attempt.model_validate(dict(attempt.model_dump(),state='superseded' if superseded else 'aborted',version=attempt.version+1))
 
 
-def items(attempt, *, limit=50,offset=0,expected_fingerprint=None):
+def items(s,attempt, *, authority_transactions,limit=50,offset=0,expected_fingerprint=None):
+    read_admission(s,authority_transactions)
     require(type(limit) is int and 1<=limit<=200 and type(offset) is int and 0<=offset<=len(attempt.items),'E_QUERY_STALE')
     token=digest(dict(attempt=attempt.id,version=attempt.version,state=attempt.state,items=payload(attempt.items)))
     require(expected_fingerprint in (None,token),'E_QUERY_STALE')
     return m.AttemptPage(items=attempt.items[offset:offset+limit],count=len(attempt.items),next_offset=offset+limit if offset+limit<len(attempt.items) else None,fingerprint=token)
+
+
+class MissingRange(m.Model):
+    first_ordinal: m.Count
+    count: m.Count
+
+class AttemptProgress(m.Model):
+    attempt_id: m.ID
+    declared_count: m.Count
+    received_count: m.Count
+    next_chunk_index: m.Count
+    missing: tuple[MissingRange,...]
+
+
+def missing_ranges(s,attempt, *, authority_transactions):
+    """Contiguous immutable uploads leave exactly one missing ordinal suffix."""
+    read_admission(s,authority_transactions)
+    offset=0
+    for index,chunk in enumerate(attempt.chunks):
+        require(chunk.index==index and chunk.receipt.chunk_index==index and chunk.receipt.first_ordinal==offset and chunk.receipt.count==len(chunk.items),'E_RECONCILIATION_SOURCE_INVALID')
+        require(chunk.receipt.request_hash==digest(dict(format=1,items=payload(chunk.items))),'E_RECONCILIATION_SOURCE_INVALID')
+        offset+=len(chunk.items)
+    require(offset<=attempt.declared_count,'E_RECONCILIATION_SOURCE_INVALID')
+    require(attempt.state not in ('sealed','applied') or offset==attempt.declared_count,'E_RECONCILIATION_SOURCE_INVALID')
+    return AttemptProgress(attempt_id=attempt.id,declared_count=attempt.declared_count,received_count=offset,next_chunk_index=len(attempt.chunks),
+        missing=(MissingRange(first_ordinal=offset,count=attempt.declared_count-offset),) if offset<attempt.declared_count else ())

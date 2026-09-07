@@ -3,12 +3,14 @@ import json
 from bookflow.company import reconciliation_commands_models as m
 from bookflow.company.reconciliation_storage_validation import Header, Evidence, Preferences
 from bookflow.company.reconciliation_preparation import (
-    require,groups,group_fingerprint,whole_selection,account_population,claimed,fingerprint,
+    require,read_admission,groups,group_fingerprint,whole_selection,account_population,claimed,fingerprint,
 )
 
 DEFAULT_PREFERENCES=Preferences(format=1,columns=['date','number','payee','amount','status'],sort='date',descending=False,hide_after_date=True,view='as_certified')
 
-def load(s,identity):
+def load(s,identity, *, authority_transactions):
+    read_admission(s,authority_transactions)
+    require(identity in s.by('drafts'),'E_RECORD_NOT_FOUND')
     h=s.by('drafts')[identity];r=s.by('draft_revisions')[h['current_revision_id']]
     first=min((v for v in s.rows['draft_revisions'] if v['draft_id']==identity),key=lambda v:v['revision_number'])
     event=next(v for v in s.rows['events'] if v['audit_event_id']==first['audit_event_id'])

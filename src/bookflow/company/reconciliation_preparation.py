@@ -13,10 +13,32 @@ from bookflow.company.reconciliation_proof import prove
 from bookflow.company.reconciliation_storage_validation import validate, canonical, digest
 from bookflow.company import reconciliation_commands_models as m
 
-class ReconciliationError(ValueError):
-    def __init__(self,code):
-        self.code=code
-        super().__init__(code)
+# Private domain reasons travel the existing typed pipeline without registering
+# public reconciliation codes before activation. Shared codes remain unchanged.
+from bookflow.core.errors import BookflowError, ALL_CODES
+from contextlib import contextmanager
+
+PRIVATE_REASONS=frozenset({'E_RECONCILIATION_ATTEMPT_STATE','E_RECONCILIATION_CHAIN_STALE','E_RECONCILIATION_DATE','E_RECONCILIATION_DEPENDENCY','E_RECONCILIATION_DIFFERENCE','E_RECONCILIATION_DRAFT_STATE','E_RECONCILIATION_MANIFEST','E_RECONCILIATION_MEMBERSHIP_CONFLICT','E_RECONCILIATION_OPENING_UNPROVEN','E_RECONCILIATION_OPERATION_KEY_REUSED','E_RECONCILIATION_SELECTION_STALE','E_RECONCILIATION_SOURCE_INVALID','E_RECONCILIATION_UNSUPPORTED'})
+
+class ReconciliationError(BookflowError):
+    def __init__(self,rule):
+        if rule not in ALL_CODES and rule not in PRIVATE_REASONS:raise ValueError('unknown private reconciliation rule')
+        self.rule=rule
+        if rule in ALL_CODES:
+            super().__init__(rule)
+        else:
+            code='E_INTERNAL' if rule=='E_RECONCILIATION_SOURCE_INVALID' else 'E_VALIDATION'
+            super().__init__(code,message=rule,details={'reason':rule})
+
+@contextmanager
+def adapter_errors():
+    """Convert only the owning adapter's known content/unsupported failures."""
+    try:yield
+    except adapters.Unsupported as exc:
+        raise ReconciliationError('E_RECONCILIATION_UNSUPPORTED') from exc
+    except (adapters.Corrupt,KeyError,ValueError,TypeError,IndexError,StopIteration) as exc:
+        raise ReconciliationError('E_RECONCILIATION_SOURCE_INVALID') from exc
+
 
 def require(condition,code):
     if not condition:raise ReconciliationError(code)
@@ -24,6 +46,28 @@ def require(condition,code):
 def bounded(value):
     require(type(value) is int and -(2**63)<=value<2**63,'E_VALUE_RANGE')
     return value
+
+def authority_required(rows,source,captured_graphs):
+    required={r['id'] for r in source.rows['transactions']}
+    required.update(r['transaction_id'] for r in rows['operation_transactions'])
+    required.update(r['id'] for g in captured_graphs.values() for r in g.rows['transactions'])
+    return required
+
+
+def read_admission(s,authority_transactions, *, extra_transactions=(),extra_accounts=()):
+    """Caller supplies a fresh real authority result, not a capability flag.
+
+    Check retained/current identity coverage before all content, filters or page
+    diagnostics. A previously constructed Snapshot does not grant a later read.
+    """
+    extra_transactions=set(extra_transactions)
+    require(authority_required(s.rows,s.source,s.captured_graphs)|extra_transactions<=set(authority_transactions),'E_PERMISSION')
+    require(extra_transactions<={v['id'] for v in s.source.rows['transactions']},'E_RECONCILIATION_SOURCE_INVALID')
+    # Complete snapshot scope, including old/canceled/aborted account owners.
+    accounts={v['account_id'] for name in ('accounts','drafts','certificates','openings','effect_versions') for v in s.rows[name]}
+    accounts.update(extra_accounts)
+    for account in sorted(accounts):account_population(s,account,'9999-12-31')
+
 
 @dataclass(frozen=True)
 class Snapshot:
@@ -46,23 +90,23 @@ def snapshot(rows, *, source: adapters.Graph, captured_graphs, referenced_rows, 
     Never converts an absent source/authority input to an empty successful world.
     Checks authority coverage before content diagnostics, including history.
     """
-    required={r['id'] for r in source.rows['transactions']}
-    required.update(r['transaction_id'] for r in rows['operation_transactions'])
-    required.update(r['id'] for g in captured_graphs.values() for r in g.rows['transactions'])
-    require(required<=set(authority_transactions),'E_PERMISSION')
+    require(authority_required(rows,source,captured_graphs)<=set(authority_transactions),'E_PERMISSION')
     values=copy.deepcopy((rows,source,captured_graphs,referenced_rows))
-    validate(values[0],source=values[1],captured_graphs=values[2],referenced_rows=values[3])
+    with adapter_errors():
+        validate(values[0],source=values[1],captured_graphs=values[2],referenced_rows=values[3])
     return Snapshot(*values,tuple(sorted(set(authority_transactions))))
 
 def account_population(s,account,cutoff):
-    a=s.source.accounts[account]
-    home=s.referenced_rows['company_info'][0]['home_currency']
-    require(a['type'] in ('bank','credit_card') and a['currency']==home,'E_RECONCILIATION_UNSUPPORTED')
-    history,current=adapters.enumerate_graph(s.source)
-    total,gl=prove(s.source,history,current,account,cutoff)
-    values=tuple(v for v in s.current.values() if v['account_id']==account and v['active'])
-    require(sum(v['signed_debit'] for v in values if v['effective_date']<=cutoff)==total,'E_RECONCILIATION_SOURCE_INVALID')
-    return values,(-gl if a['type']=='credit_card' else gl)
+    require(authority_required(s.rows,s.source,s.captured_graphs)<=set(s.authority_transactions),'E_PERMISSION')
+    with adapter_errors():
+        a=s.source.accounts[account]
+        home=s.referenced_rows['company_info'][0]['home_currency']
+        require(a['type'] in ('bank','credit_card') and a['currency']==home,'E_RECONCILIATION_UNSUPPORTED')
+        history,current=adapters.enumerate_graph(s.source)
+        total,gl=prove(s.source,history,current,account,cutoff)
+        values=tuple(v for v in s.current.values() if v['account_id']==account and v['active'])
+        require(sum(v['signed_debit'] for v in values if v['effective_date']<=cutoff)==total,'E_RECONCILIATION_SOURCE_INVALID')
+        return values,(-gl if a['type']=='credit_card' else gl)
 
 def statement_amount(v):return -v['signed_debit'] if v['account_type']=='credit_card' else v['signed_debit']
 

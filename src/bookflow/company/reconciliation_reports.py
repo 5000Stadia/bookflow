@@ -1,9 +1,11 @@
 """Three distinct pure projections over validated historical/current facts."""
 from bookflow.company import reconciliation_commands_models as m
-from bookflow.company.reconciliation_preparation import account_population,statement_amount,totals,require,bounded
+from bookflow.company.reconciliation_preparation import read_admission,account_population,statement_amount,totals,require,bounded
 
-def project(s,certificate_id):
-    certificates=s.by('certificates');cert=certificates[certificate_id]
+def project(s,certificate_id, *, authority_transactions):
+    read_admission(s,authority_transactions)
+    certificates=s.by('certificates');cert=certificates.get(certificate_id)
+    require(cert is not None,'E_RECORD_NOT_FOUND')
     members=[v for v in s.rows['certificate_members'] if v['certificate_id']==certificate_id]
     selected=[s.versions[v['version_id']] for v in members if v['classification']=='selected']
     historical=totals(cert['beginning_balance'],cert['ending_balance'],selected)

@@ -10,7 +10,7 @@ from bookflow.hub import access
 from bookflow.company import reconciliation_adapters as adapters
 from bookflow.company import reconciliation_commands_models as m
 from bookflow.company.reconciliation_drafts import journal_input
-from bookflow.company.reconciliation_preparation import statement,require,bounded
+from bookflow.company.reconciliation_preparation import statement,require,bounded,adapter_errors
 
 class Preview(m.Model):
     contract: Literal['reconciliation.private.v1']='reconciliation.private.v1'
@@ -36,22 +36,28 @@ def preview(session,ctx,s,draft,proposals,plans, *, opening_draft=None):
     """Current source admission precedes disclosure and exact Plan comparison."""
     access.require_resource(session,'ledger.post','standard')
     adapters.authority(session,s.authority_transactions)
-    current=adapters.graph(session,[v['id'] for v in s.source.rows['transactions']])
+    with adapter_errors():
+        current=adapters.graph(session,[v['id'] for v in s.source.rows['transactions']])
     require(current.rows==s.source.rows,'E_PREVIEW_STALE')
+    revisions=[v.revision_id for v in proposals]
+    require(len(revisions)==len(set(revisions)) and len(draft.proposal_revision_ids)==len(set(draft.proposal_revision_ids)) and set(revisions)==set(draft.proposal_revision_ids),'E_RECONCILIATION_MANIFEST')
+    require(all(v.draft_id==draft.id for v in proposals),'E_RECONCILIATION_MANIFEST')
+    require(len(proposals)==len(plans) and len({v.id for v in proposals})==len(proposals),'E_RECONCILIATION_MANIFEST')
+    require(len([v for v in proposals if v.role=='force_adjustment'])<=1,'E_RECONCILIATION_MANIFEST')
     for account in {draft.account_id}|{v.input.offset_account_id for v in proposals}:
         require(current.accounts[account]==s.source.accounts[account],'E_PREVIEW_STALE')
     from bookflow.company import journals
     journals.open_dates(session,[v.input.date for v in proposals])
     base=statement(s,draft,opening_draft=opening_draft)
-    require(len(proposals)==len(plans) and len({v.id for v in proposals})==len(proposals),'E_RECONCILIATION_MANIFEST')
-    require(len([v for v in proposals if v.role=='force_adjustment'])<=1,'E_RECONCILIATION_MANIFEST')
     positive=base.positive_sum;negative=base.negative_sum;pc=base.positive_count;nc=base.negative_count
     identities=[];adjustment_amount=None
     for proposal,plan in zip(proposals,plans):
         require(type(plan) is Plan and plan.data.get('before') is None,'E_RECONCILIATION_MANIFEST')
         expected=journal_input(s,draft,proposal)
         require(type(plan.data.get('input')) is type(expected) and plan.data['input']==expected,'E_RECONCILIATION_MANIFEST')
-        projected=adapters.prepare_prospective(session,ctx,plan)
+        with adapter_errors():
+            projected=adapters.prepare_prospective(session,ctx,plan)
+        require(not isinstance(projected.changes,adapters.UnsupportedPopulation),'E_RECONCILIATION_UNSUPPORTED')
         require(projected.aggregate is plan,'E_RECONCILIATION_MANIFEST')
         identity=plan.data['header']['id'];require(identity not in identities,'E_RECONCILIATION_MANIFEST');identities.append(identity)
         effects=[v for v in projected.changes.after if v.active and v.account_id==draft.account_id]

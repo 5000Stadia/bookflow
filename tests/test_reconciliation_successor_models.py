@@ -100,7 +100,7 @@ def test_403_components_whole_movements_paging_mark_all_and_chunks(client,sale,d
         doc=run(client,'sales-receipt post',dict(customer=sale['customer'],date='2026-01-10',deposit_to=bank,payment_method=payment_method,lines=[dict(item=sale['item'],unit_price='1') for _ in range(count)]));ids.append(doc['id'])
     s=context(driver,ids);assert len(s.current)==403
     dr=draft(bank,ending=40300)
-    pages=[q.candidates(s,dr,m.CandidateFilter(),limit=1,offset=i) for i in range(3)]
+    pages=[q.candidates(s,dr,m.CandidateFilter(),limit=1,offset=i,authority_transactions=s.authority_transactions) for i in range(3)]
     assert [v.items[0].component_count for v in pages]==[199,199,5] or sorted(v.items[0].component_count for v in pages)==[5,199,199]
     assert all(v.count==3 and v.component_count==403 and v.positive_sum==40300 for v in pages)
     full=q.mark_all(s,dr,m.MarkAll(operation_key='all',draft=dr.id,expected_version=1,filters=m.CandidateFilter(),query_fingerprint=pages[0].fingerprint,action='mark'),revision_id=new_id())
@@ -145,12 +145,12 @@ def test_seal_semantic_targets_hash_tail_and_immutable_abort(certificate_world):
 
 
 def test_saved_selection_metadata_date_move_void_and_report_history(client,driver,certificate_world):
-    old,bank,equity,doc=certificate_world;cert=old.rows['certificates'][0];captured_bytes=r.project(old,cert['id']).model_dump_json()
+    old,bank,equity,doc=certificate_world;cert=old.rows['certificates'][0];captured_bytes=r.project(old,cert['id'],authority_transactions=old.authority_transactions).model_dump_json()
     run(client,'journal update',dict(journal=doc['id'],expected_version=1,memo='metadata'))
     with driver.session() as session:g=adapters.graph(session,[doc['id']]);refs=references(session);authority=adapters.authority(session,[doc['id']])
     now=p.snapshot(extend(old.rows,g),source=g,captured_graphs=old.captured_graphs,referenced_rows=refs,authority_transactions=authority)
-    report=r.project(now,cert['id']);assert report.local_replacement_impact==0 and report.cumulative_difference==0
-    assert report.as_certified==r.project(old,cert['id']).as_certified
+    report=r.project(now,cert['id'],authority_transactions=now.authority_transactions);assert report.local_replacement_impact==0 and report.cumulative_difference==0
+    assert report.as_certified==r.project(old,cert['id'],authority_transactions=old.authority_transactions).as_certified
     dr=draft(bank,selections=select(old),state=old.rows['accounts'][0]);before=dr.model_dump_json()
     with pytest.raises(p.ReconciliationError,match='SELECTION_STALE'):p.whole_selection(now,dr)
     oldgroup=next(iter(p.groups(old.current.values()).values()));newgroup=next(iter(p.groups(now.current.values()).values()))
@@ -159,12 +159,12 @@ def test_saved_selection_metadata_date_move_void_and_report_history(client,drive
     run(client,'journal update',dict(journal=doc['id'],expected_version=2,date='2026-02-10'))
     with driver.session() as session:g=adapters.graph(session,[doc['id']]);refs=references(session)
     dated=p.snapshot(extend(old.rows,g),source=g,captured_graphs=old.captured_graphs,referenced_rows=refs,authority_transactions=authority)
-    report=r.project(dated,cert['id']);assert (report.local_replacement_impact,report.cumulative_difference)==(-1000,1000)
+    report=r.project(dated,cert['id'],authority_transactions=dated.authority_transactions);assert (report.local_replacement_impact,report.cumulative_difference)==(-1000,1000)
     run(client,'journal void',dict(journal=doc['id'],expected_version=3))
     with driver.session() as session:g=adapters.graph(session,[doc['id']]);refs=references(session)
     void=p.snapshot(extend(old.rows,g),source=g,captured_graphs=old.captured_graphs,referenced_rows=refs,authority_transactions=authority)
-    assert r.project(void,cert['id']).cumulative_reconstruction==0
-    assert r.project(old,cert['id']).model_dump_json()==captured_bytes
+    assert r.project(void,cert['id'],authority_transactions=void.authority_transactions).cumulative_reconstruction==0
+    assert r.project(old,cert['id'],authority_transactions=old.authority_transactions).model_dump_json()==captured_bytes
     # The real R0 inverse proof runs for every report population; corrupting an
     # inverse amount is detected, not hidden by the zero current total.
     bad=copy.deepcopy(void.source);inverse=next(v for v in bad.rows['posting_lines'] if v['reversed_line_id']);inverse['credit_minor_units']+=1
@@ -181,11 +181,11 @@ def test_authority_before_content_and_recovery_original_intent(certificate_world
     request,effect,hash_=op.envelopes(receipt);assert hash_==digest(req.intent()) and request.document['context']=={'reason':'retained'}
     refreshed=dict(original,dependency_guard='new',expected_facts_fingerprint='2'*64)
     retry=req.model_copy(update={'original_input':refreshed,'canonical_input':refreshed})
-    replay=op.recover(receipt,retry,authority_transactions=s.authority_transactions,current_targets=(doc['id'],),current_state={'state':'later'})
+    replay=op.recover(s,receipt,retry,authority_transactions=s.authority_transactions,current_targets=(doc['id'],),current_state={'state':'later'})
     assert replay.original_effect==receipt.original_effect and replay.current=={'state':'later'} and replay.idempotent_replay and not replay.new_effect
-    with pytest.raises(p.ReconciliationError,match='E_PERMISSION'):op.recover(receipt,retry,authority_transactions=(),current_targets=(),current_state={})
+    with pytest.raises(p.ReconciliationError,match='E_PERMISSION'):op.recover(s,receipt,retry,authority_transactions=(),current_targets=(),current_state={})
     changed=req.model_copy(update={'context':{'reason':'different'}})
-    assert op.recover(receipt,changed,authority_transactions=s.authority_transactions,current_targets=(),current_state={}) is None
+    assert op.recover(s,receipt,changed,authority_transactions=s.authority_transactions,current_targets=(),current_state={}) is None
 
 
 def two_statements(client,driver,prefix="F3"):
@@ -229,11 +229,11 @@ def two_statements(client,driver,prefix="F3"):
 
 def test_f3_distinct_reports_suffix_manifest_adjacency_and_undo(client,driver):
     old,bank,equity,negative,ids=two_statements(client,driver)
-    jan,feb=old.rows['certificates'];assert [r.project(old,c['id']).cumulative_reconstruction for c in (jan,feb)]==[6000,8000]
+    jan,feb=old.rows['certificates'];assert [r.project(old,c['id'],authority_transactions=old.authority_transactions).cumulative_reconstruction for c in (jan,feb)]==[6000,8000]
     run(client,'journal update',dict(journal=negative['id'],expected_version=1,lines=[dict(line,line_id=old_line['line_id']) for line,old_line in zip(pair(equity,bank,'45'),negative['revision']['lines'])]))
     with driver.session() as session:g=adapters.graph(session,ids);refs=references(session);authority=adapters.authority(session,ids)
     now=p.snapshot(extend(old.rows,g),source=g,captured_graphs=old.captured_graphs,referenced_rows=refs,authority_transactions=authority)
-    reports=[r.project(now,c['id']) for c in (jan,feb)]
+    reports=[r.project(now,c['id'],authority_transactions=now.authority_transactions) for c in (jan,feb)]
     assert [v.local_replacement_impact for v in reports]==[-500,0]
     assert [v.cumulative_reconstruction for v in reports]==[5500,7500]
     assert [v.cumulative_difference for v in reports]==[500,500]
@@ -356,6 +356,7 @@ def test_exact_fee_preview_force_and_no_money_until_owning_execution(client,driv
     s,bank,equity,_=certificate_world;dr=draft(bank,ending=850,cutoff='2026-02-28',state=s.rows['accounts'][0])
     body=m.ProposalInput(format=1,date='2026-02-10',amount_minor_units=100,currency='USD',offset_account_id=equity,class_id=None,memo='Fee',number=None,reason='fee')
     proposal=m.Proposal(id=new_id(),draft_id=dr.id,version=1,revision_id=new_id(),role='charge',input=body)
+    dr=dr.model_copy(update={'proposal_revision_ids':(proposal.revision_id,)})
     original=driver.dump()
     with driver.session() as session:
         ctx=Context.new(Interface.python,'ii preview',reason='fee')
@@ -365,7 +366,7 @@ def test_exact_fee_preview_force_and_no_money_until_owning_execution(client,driv
         force=fees.adjustment(dr,prepared.output.final,m.Adjustment(date='2026-02-10',offset_account_id=equity,reason='explicit correction'),identity=new_id(),revision_id=new_id(),currency='USD')
         assert force.input.amount_minor_units==-50
         adjustment_plan=registry.get('journal post').plan(d.journal_input(s,dr,force),ctx,session)
-        final=fees.preview(session,ctx,s,dr,(proposal,force),(plan,adjustment_plan))
+        final=fees.preview(session,ctx,s,dr.model_copy(update={'proposal_revision_ids':(proposal.revision_id,force.revision_id)}),(proposal,force),(plan,adjustment_plan))
         assert final.output.final.difference==0 and final.output.final.selected_sum==-150
         with pytest.raises(p.ReconciliationError,match='MANIFEST'):fees.preview(session,ctx,s,dr,(proposal,proposal),(plan,plan))
     assert driver.dump()==original
@@ -373,14 +374,14 @@ def test_exact_fee_preview_force_and_no_money_until_owning_execution(client,driv
 
 def test_query_output_history_pages_stale_fingerprint_and_proposal_revisions(certificate_world):
     s,bank,equity,_=certificate_world
-    doc=q.certificates(s,m.CertificateQuery(account=bank,limit=1)).items[0]
-    items=q.certificate_items(s,doc.id,limit=1);assert items.count==1 and items.items[0].amount==1000
-    assert items.items[0].display.number==q.certificate_items(s,doc.id,limit=200).items[0].display.number
-    saved=d.load(s,s.rows['drafts'][0]['id']);history=q.draft_history(s,saved.id,limit=25)
+    doc=q.certificates(s,m.CertificateQuery(account=bank,limit=1),authority_transactions=s.authority_transactions).items[0]
+    items=q.certificate_items(s,doc.id,limit=1,authority_transactions=s.authority_transactions);assert items.count==1 and items.items[0].amount==1000
+    assert items.items[0].display.number==q.certificate_items(s,doc.id,limit=200,authority_transactions=s.authority_transactions).items[0].display.number
+    saved=d.load(s,s.rows['drafts'][0]['id'],authority_transactions=s.authority_transactions);history=q.draft_history(s,saved.id,limit=25,authority_transactions=s.authority_transactions)
     assert history.items[0].header==saved.header and history.items[0].id==saved.current_revision_id
-    dr=draft(bank,ending=1000,cutoff='2026-02-28',state=s.rows['accounts'][0]);page=q.candidates(s,dr,m.CandidateFilter())
+    dr=draft(bank,ending=1000,cutoff='2026-02-28',state=s.rows['accounts'][0]);page=q.candidates(s,dr,m.CandidateFilter(),authority_transactions=s.authority_transactions)
     changed=d.update(s,dr,m.DraftUpdate(operation_key='header',draft=dr.id,expected_version=1,statement_date='2026-03-31'),revision_id=new_id())
-    with pytest.raises(p.ReconciliationError,match='QUERY_STALE'):q.candidates(s,changed,m.CandidateFilter(),expected_fingerprint=page.fingerprint)
+    with pytest.raises(p.ReconciliationError,match='QUERY_STALE'):q.candidates(s,changed,m.CandidateFilter(),expected_fingerprint=page.fingerprint,authority_transactions=s.authority_transactions)
     body=m.ProposalInput(format=1,date='2026-02-10',amount_minor_units=100,currency='USD',offset_account_id=equity,class_id=None,memo=None,number=None,reason=None)
     request=m.ProposalSet(operation_key='new',draft=dr.id,expected_version=1,role='charge',input=body)
     first,proposal=d.set_proposal(s,dr,request,identity=new_id(),proposal_revision_id=new_id(),draft_revision_id=new_id())
@@ -403,8 +404,8 @@ def test_current_payment_invoice_and_persisted_g2_anchors(client,sale,driver):
     s=context(driver,[inv['id'],paid['id'],deposit.current.id])
     assert set(v['producer'] for v in s.rows['keys'])=={'payment','deposit'}
     assert {v['id'] for v in s.source.rows['transactions']}=={inv['id'],paid['id'],deposit.current.id}
-    payment=q.candidates(s,draft(bank,ending=1000),m.CandidateFilter());assert payment.count==1 and payment.positive_sum==1000
-    deposit_bank=body['deposit_to'];page=q.candidates(s,draft(deposit_bank,ending=1000,cutoff='2026-06-30'),m.CandidateFilter())
+    payment=q.candidates(s,draft(bank,ending=1000),m.CandidateFilter(),authority_transactions=s.authority_transactions);assert payment.count==1 and payment.positive_sum==1000
+    deposit_bank=body['deposit_to'];page=q.candidates(s,draft(deposit_bank,ending=1000,cutoff='2026-06-30'),m.CandidateFilter(),authority_transactions=s.authority_transactions)
     assert page.count==1 and page.items[0].movement.producer=='deposit'
     version=next(v for v in s.current.values() if v['producer']=='deposit')
     assert version['source_version']==s.rows['deposit_versions'][0]['bank_version_id']
@@ -446,6 +447,7 @@ def test_card_fee_force_mirror_and_current_period_owner(client,driver):
     opening=draft(card,kind='opening',ending=0,cutoff='2026-01-01');dr=draft(card,ending=0,cutoff='2026-01-31')
     body=m.ProposalInput(format=1,date='2026-01-15',amount_minor_units=100,currency='USD',offset_account_id=equity,class_id=None,memo=None,number=None,reason='card fee')
     proposal=m.Proposal(id=new_id(),draft_id=dr.id,version=1,revision_id=new_id(),role='charge',input=body)
+    dr=dr.model_copy(update={'proposal_revision_ids':(proposal.revision_id,)})
     before=driver.dump()
     with driver.session() as session:
         ctx=Context.new(Interface.python,'ii card preview',reason='card fee')
@@ -455,7 +457,7 @@ def test_card_fee_force_mirror_and_current_period_owner(client,driver):
         force=fees.adjustment(dr,prepared.output.final,m.Adjustment(date='2026-01-15',offset_account_id=equity,reason='explicit card correction'),identity=new_id(),revision_id=new_id(),currency='USD')
         force_input=d.journal_input(s,dr,force);assert force_input.lines[0].side=='debit'
         force_plan=registry.get('journal post').plan(force_input,ctx,session)
-        assert fees.preview(session,ctx,s,dr,(proposal,force),(plan,force_plan),opening_draft=opening).output.final.difference==0
+        assert fees.preview(session,ctx,s,dr.model_copy(update={'proposal_revision_ids':(proposal.revision_id,force.revision_id)}),(proposal,force),(plan,force_plan),opening_draft=opening).output.final.difference==0
         # An isolated transaction seam changes the real company period after the
         # ordinary Plan was prepared. Existing owning open_dates must reject.
         session.company.raw.execute('SAVEPOINT period_change')

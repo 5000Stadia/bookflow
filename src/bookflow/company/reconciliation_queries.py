@@ -6,7 +6,7 @@ binding and release admission must wrap this core at activation.
 import json
 from bookflow.company import reconciliation_commands_models as m
 from bookflow.company.reconciliation_preparation import (
-    account_population,groups,group_fingerprint,statement_amount,claimed,require,bounded,fingerprint,
+    read_admission,account_population,groups,group_fingerprint,statement_amount,claimed,require,bounded,fingerprint,
 )
 from bookflow.company.reconciliation_storage_validation import digest
 
@@ -19,7 +19,8 @@ def matches(row,f):
         and (f.memo is None or f.memo.casefold() in (row.memo or '').casefold())
         and (f.amount is None or row.amount==f.amount) and (not f.hide_after_date or row.eligible))
 
-def candidates(s,draft,filters, *, limit=50,offset=0,expected_fingerprint=None):
+def candidates(s,draft,filters, *, authority_transactions, limit=50,offset=0,expected_fingerprint=None):
+    read_admission(s,authority_transactions)
     require(type(limit) is int and 1<=limit<=200 and type(offset) is int and offset>=0,'E_VALIDATION')
     cutoff=draft.header.statement_date or draft.header.opening_date
     values,_=account_population(s,draft.account_id,cutoff)
@@ -42,7 +43,8 @@ def candidates(s,draft,filters, *, limit=50,offset=0,expected_fingerprint=None):
     return m.CandidatePage(items=tuple(result[offset:offset+limit]),count=len(result),component_count=sum(v.component_count for v in result),
         positive_sum=bounded(sum(v.amount for v in result if v.amount>0 and not v.stale)),negative_sum=bounded(sum(v.amount for v in result if v.amount<0 and not v.stale)),fingerprint=token,next_offset=offset+limit if offset+limit<len(result) else None)
 
-def component_items(s,movement,group_hash, *, limit=50,offset=0):
+def component_items(s,movement,group_hash, *, authority_transactions, limit=50,offset=0):
+    read_admission(s,authority_transactions,extra_transactions=(movement.transaction_id,),extra_accounts=(movement.account_id,))
     require(type(limit) is int and 1<=limit<=200 and type(offset) is int and offset>=0,'E_VALIDATION')
     values=next((v for v in groups(s.versions.values()).values() if json.loads(v[0]['movement_snapshot'])==movement.model_dump(mode='json')),None)
     require(values is not None and group_fingerprint(values)==group_hash,'E_QUERY_STALE')
@@ -52,10 +54,10 @@ def component_items(s,movement,group_hash, *, limit=50,offset=0):
 def mark_all(s,draft,inp, *, revision_id):
     from bookflow.company.reconciliation_drafts import editable,revised
     editable(s,draft,inp.expected_version);require(inp.draft==draft.id and draft.kind!='opening','E_RECONCILIATION_MANIFEST')
-    first=candidates(s,draft,inp.filters,limit=200,expected_fingerprint=inp.query_fingerprint)
+    first=candidates(s,draft,inp.filters,authority_transactions=s.authority_transactions,limit=200,expected_fingerprint=inp.query_fingerprint)
     result=list(first.items);offset=first.next_offset
     while offset is not None:
-        page=candidates(s,draft,inp.filters,limit=200,offset=offset,expected_fingerprint=first.fingerprint)
+        page=candidates(s,draft,inp.filters,authority_transactions=s.authority_transactions,limit=200,offset=offset,expected_fingerprint=first.fingerprint)
         result.extend(page.items);offset=page.next_offset
     choices={v.key_id:v for v in draft.selections}
     allgroups={group_fingerprint(v):v for v in groups(s.current.values()).values()}
@@ -76,9 +78,10 @@ def _slice(values, *, limit,offset,expected_fingerprint):
     return dict(items=tuple(values[offset:offset+limit]),count=len(values),next_offset=offset+limit if offset+limit<len(values) else None,fingerprint=token)
 
 
-def certificate_items(s,identity, *, kind='coverage',limit=50,offset=0,expected_fingerprint=None):
+def certificate_items(s,identity, *, authority_transactions, kind='coverage',limit=50,offset=0,expected_fingerprint=None):
+    read_admission(s,authority_transactions)
     require(kind in ('selected','outstanding','coverage'),'E_VALIDATION')
-    cert=s.by('certificates')[identity];values=[]
+    cert=s.by('certificates').get(identity);require(cert is not None,'E_RECORD_NOT_FOUND');values=[]
     for member in sorted(s.rows['certificate_members'],key=lambda v:v['ordinal']):
         if member['certificate_id']!=identity or (kind!='coverage' and member['classification']!=kind):continue
         v=s.versions[member['version_id']];amount=bounded(statement_amount(v))
@@ -86,7 +89,8 @@ def certificate_items(s,identity, *, kind='coverage',limit=50,offset=0,expected_
     return m.MemberPage(**_slice(values,limit=limit,offset=offset,expected_fingerprint=expected_fingerprint))
 
 
-def certificates(s,filters, *, offset=0,expected_fingerprint=None):
+def certificates(s,filters, *, authority_transactions, offset=0,expected_fingerprint=None):
+    read_admission(s,authority_transactions)
     require(filters.cursor is None,'E_QUERY_STALE')
     active={v['certificate_id'] for v in s.rows['active_certificates']};values=[]
     for c in sorted(s.rows['certificates'],key=lambda v:(v['statement_date'],v['generation'],v['id'])):
@@ -98,7 +102,9 @@ def certificates(s,filters, *, offset=0,expected_fingerprint=None):
     return m.CertificatePage(**_slice(values,limit=filters.limit,offset=offset,expected_fingerprint=expected_fingerprint))
 
 
-def draft_history(s,identity, *, limit=50,offset=0,expected_fingerprint=None):
+def draft_history(s,identity, *, authority_transactions, limit=50,offset=0,expected_fingerprint=None):
+    read_admission(s,authority_transactions)
+    require(identity in s.by('drafts'),'E_RECORD_NOT_FOUND')
     values=[]
     for r in sorted(s.rows['draft_revisions'],key=lambda v:v['revision_number']):
         if r['draft_id']!=identity:continue
