@@ -1,5 +1,10 @@
 """Immutable bounded chunks, complete seal and nonposting attempt transitions."""
 from typing import Literal
+from dataclasses import dataclass
+from pydantic import ValidationError
+from bookflow.company import reconciliation_amendments as amendments
+from bookflow.company.reconciliation_adapters import Graph
+from bookflow.company.reconciliation_storage_validation import Header
 from pydantic import Field
 from bookflow.company import reconciliation_commands_models as m
 from bookflow.company.reconciliation_preparation import require,whole_selection
@@ -45,17 +50,42 @@ def upload(attempt,inp):
     chunk=SavedChunk(index=inp.chunk_index,items=inp.items,receipt=receipt)
     return Attempt.model_validate(dict(attempt.model_dump(),version=attempt.version+1,chunks=attempt.chunks+(chunk,))),receipt
 
-def semantic_key(item):
+@dataclass(frozen=True)
+class ManifestContext:
+    # Supplied by the future owning preparation from its coherent authorized
+    # before/current source snapshots, never a public caller credential.
+    before_source: Graph
+    authority_transactions: tuple[str,...]
+    account_versions: dict[str,int]
+    opening_actions: tuple[amendments.OpeningAction,...]=()
+
+
+def owned_revision(s,identity,account):
+    revision=s.by('draft_revisions').get(identity)
+    require(revision is not None and revision['account_id']==account,'E_RECONCILIATION_MANIFEST')
+    owner=s.by('drafts').get(revision['draft_id'])
+    require(owner is not None and owner['account_id']==account,'E_RECONCILIATION_MANIFEST')
+    try: header=Header.model_validate_json(revision['header_snapshot'])
+    except (ValidationError,ValueError,TypeError):
+        require(False,'E_RECONCILIATION_MANIFEST')
+    return owner,revision,header
+
+
+def semantic_key(item, *, snapshot=None):
     p=item.payload
     if item.kind=='member':return ('member',p.key_id)
     if item.kind=='proposal':return ('proposal',p.proposal_id)
     if item.kind=='seed':return ('seed',p.account_id,p.kind,p.opening_id,p.certificate_id,p.date)
-    return ('certificate',p.account_id,p.certificate_id,p.predecessor_id)
+    if p.certificate_id is not None:return ('certificate',p.certificate_id)
+    require(snapshot is not None,'E_RECONCILIATION_MANIFEST')
+    _,_,header=owned_revision(snapshot,p.replacement_draft_revision_id,p.account_id)
+    require(header.statement_date is not None,'E_RECONCILIATION_MANIFEST')
+    return ('insertion',p.account_id,header.statement_date)
 
 def validate_items(s,draft,items, *, current):
     seen=set();versions=s.versions
     for item in items:
-        key=semantic_key(item);require(key not in seen,'E_RECONCILIATION_MANIFEST');seen.add(key)
+        key=semantic_key(item,snapshot=s);require(key not in seen,'E_RECONCILIATION_MANIFEST');seen.add(key)
         p=item.payload
         if item.kind=='member':
             require(p.draft_id==draft.id and p.account_id==draft.account_id,'E_RECONCILIATION_MANIFEST')
@@ -79,7 +109,29 @@ def validate_items(s,draft,items, *, current):
                     row=s.by(table).get(identity)
                     require(row is not None and row['account_id']==p.account_id,'E_RECONCILIATION_MANIFEST')
 
-def seal(s,draft,attempt, *, expected_version):
+def manifest_order(s,items,context):
+    targets=tuple(v.payload for v in items if v.kind=='certificate')
+    seeds=tuple(v.payload for v in items if v.kind=='seed')
+    if not targets and not seeds and context is None:return ()
+    require(isinstance(context,ManifestContext),'E_RECONCILIATION_MANIFEST')
+    closure=amendments.derive(s,seeds,before_source=context.before_source,authority_transactions=context.authority_transactions)
+    manifest=m.Manifest(seeds=seeds,certificates=targets,account_versions=context.account_versions)
+    replacements={}
+    for target in (*targets,*context.opening_actions):
+        identity=target.replacement_draft_revision_id
+        if identity is None:continue
+        owner,revision,header=owned_revision(s,identity,target.account_id)
+        require(owner['state']=='open' and owner['current_revision_id']==identity,'E_RECONCILIATION_CHAIN_STALE')
+        # Reconstruct from the exact owned immutable revision, never a supplied
+        # replacement model whose date/selection could disagree with storage.
+        replacements[identity]=m.Draft(**{k:owner[k] for k in ('id','account_id','kind','version','current_revision_id','state','terminal_operation_id')},header=header,
+            **{k:revision[k] for k in ('base_chain_version','base_opening_id','base_head_id','repair_of_opening_id','repair_of_certificate_id')},
+            selections=tuple(m.Selection(key_id=v['key_id'],version_id=v['version_id'],action=v['action']) for v in sorted(s.rows['draft_members'],key=lambda v:v['ordinal']) if v['revision_id']==identity),
+            proposal_revision_ids=tuple(v['proposal_revision_id'] for v in s.rows['draft_proposals'] if v['draft_revision_id']==identity))
+    return amendments.topology(s,closure,manifest,context.opening_actions,replacement_drafts=replacements)
+
+
+def seal(s,draft,attempt, *, expected_version,manifest_context=None):
     require(attempt.version==expected_version,'E_VERSION_CONFLICT')
     require(attempt.state=='uploading' and attempt.draft_id==draft.id and attempt.base_revision_id==draft.current_revision_id and draft.state=='open','E_RECONCILIATION_ATTEMPT_STATE')
     require([c.index for c in attempt.chunks]==list(range(len(attempt.chunks))),'E_RECONCILIATION_MANIFEST')
@@ -88,13 +140,15 @@ def seal(s,draft,attempt, *, expected_version):
         require(c.receipt.first_ordinal==offset and c.receipt.count==len(c.items) and c.receipt.chunk_index==c.index and c.receipt.request_hash==digest(dict(format=1,items=payload(c.items))),'E_RECONCILIATION_MANIFEST');offset+=len(c.items)
     require(len(attempt.items)==attempt.declared_count and digest(payload(attempt.items))==attempt.intent_hash,'E_RECONCILIATION_MANIFEST')
     validate_items(s,draft,attempt.items,current=False)
+    manifest_order(s,attempt.items,manifest_context)
     return Attempt.model_validate(dict(attempt.model_dump(),version=attempt.version+1,state='sealed'))
 
-def apply(s,draft,attempt, *, expected_version,expected_draft_version,revision_id):
+def apply(s,draft,attempt, *, expected_version,expected_draft_version,revision_id,manifest_context=None):
     require(attempt.version==expected_version,'E_VERSION_CONFLICT')
     editable(s,draft,expected_draft_version,attempt_id=attempt.id)
     require(attempt.state=='sealed' and attempt.base_revision_id==draft.current_revision_id and attempt.draft_id==draft.id,'E_RECONCILIATION_ATTEMPT_STATE')
     validate_items(s,draft,attempt.items,current=True)
+    manifest_order(s,attempt.items,manifest_context)
     members={v.key_id:v for v in draft.selections};proposals=set(draft.proposal_revision_ids)
     for item in attempt.items:
         p=item.payload
@@ -107,8 +161,8 @@ def apply(s,draft,attempt, *, expected_version,expected_draft_version,revision_i
         elif item.kind=='proposal':proposals.add(p.proposal_revision_id)
     result=revised(draft,revision_id,selections=tuple(members[k] for k in sorted(members)),proposal_revision_ids=tuple(sorted(proposals)))
     whole_selection(s,result)
-    # Seed/certificate leaves remain the exact immutable manifest, validated by
-    # amendment preparation before financial apply; this transition posts nothing.
+    # Full structurally validated seed/certificate intent remains in the returned
+    # immutable attempt. Financial preparation additionally proves exact zero.
     return result,Attempt.model_validate(dict(attempt.model_dump(),state='applied',version=attempt.version+1))
 
 def abort(attempt, *, expected_version,superseded=False):

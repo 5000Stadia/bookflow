@@ -127,13 +127,19 @@ def test_seal_semantic_targets_hash_tail_and_immutable_abort(certificate_world):
         out=a.begin(s,dr,m.AttemptBegin(operation_key='begin',draft=dr.id,expected_version=1,base_revision_id=dr.current_revision_id,attempt_generation='g',declared_count=declared if declared is not None else len(entries),intent_hash=hash_ or digest(a.payload(entries))),identity=new_id())
         for i,start in enumerate(range(0,len(entries),200)):out,_=a.upload(out,m.AttemptUpload(operation_key='up',attempt=out.id,chunk_index=i,items=entries[start:start+200]))
         return out
-    attempt=build(seeds);sealed=a.seal(s,dr,attempt,expected_version=attempt.version);aborted=a.abort(sealed,expected_version=sealed.version)
-    assert aborted.chunks==sealed.chunks and len(aborted.items)==403
+    from tests.test_reconciliation_insertion_targets import owned
+    replacements=tuple(draft(bank,kind='amendment',cutoff=v.payload.date,state=s.rows['accounts'][0]) for v in seeds)
+    s=owned(s,replacements)
+    certs=tuple(m.CertificateItem(kind='certificate',payload=m.CertificateTarget(account_id=bank,mode='insert',predecessor_id=s.rows['certificates'][0]['id'],replacement_draft_revision_id=v.current_revision_id)) for v in replacements)
+    entries=seeds+certs;ctx=a.ManifestContext(s.source,s.authority_transactions,{bank:s.rows['accounts'][0]['version']})
+    attempt=build(entries);sealed=a.seal(s,dr,attempt,expected_version=attempt.version,manifest_context=ctx);aborted=a.abort(sealed,expected_version=sealed.version)
+    assert aborted.chunks==sealed.chunks and len(aborted.items)==806
+    assert len(a.manifest_order(s,entries,ctx))==403
     for bad in (build(seeds[:-1],declared=403),build(seeds,hash_='0'*64),build((seeds[0],seeds[0]))):
         with pytest.raises(p.ReconciliationError,match='MANIFEST'):a.seal(s,dr,bad,expected_version=bad.version)
     with pytest.raises(p.ReconciliationError,match='ATTEMPT_STATE'):a.abort(aborted,expected_version=aborted.version)
     with pytest.raises(p.ReconciliationError,match='KEY_REUSED'):a.upload(attempt,m.AttemptUpload(operation_key='changed',attempt=attempt.id,chunk_index=0,items=(seeds[1],)))
-    with pytest.raises(p.ReconciliationError,match='ATTEMPT_STATE'):a.upload(aborted,m.AttemptUpload(operation_key='extra',attempt=aborted.id,chunk_index=3,items=(seeds[0],)))
+    with pytest.raises(p.ReconciliationError,match='ATTEMPT_STATE'):a.upload(aborted,m.AttemptUpload(operation_key='extra',attempt=aborted.id,chunk_index=len(aborted.chunks),items=(seeds[0],)))
     # Identical numeric IDs in distinct typed target families are not duplicates.
     assert a.semantic_key(seeds[0])[0]=='seed'
 
@@ -474,12 +480,7 @@ def test_real_shared_input_validation_accepts_json_arrays_without_public_registr
 
 
 def test_retained_N_multiple_insert_same_gap_constraint_witness(client,driver):
-    """Known contract gap, NOT acceptance of complete multiple-insert support.
-
-    Distinct dated replacement drafts share one old predecessor. Their typed
-    links fit existing SQL columns, but N's aggregate semantic-key check treats
-    both (account, NULL certificate, NULL predecessor) as the same target.
-    """
+    """Regression for the frozen original gap, retaining ordinary source proof."""
     from tests.test_reconciliation_storage_validation import staged
     from bookflow.company.reconciliation_storage_validation import validate,InvalidStorage
     bank=account(client,'ii insertion witness');equity=account(client,'ii insertion offset','equity')
@@ -501,10 +502,21 @@ def test_retained_N_multiple_insert_same_gap_constraint_witness(client,driver):
     rows['attempt_chunks']=[chunk(items)]
     one=copy.deepcopy(rows);one['attempt_items']=one['attempt_items'][:1];one['attempt_certificates']=one['attempt_certificates'][:1];one['attempt_chunks']=[chunk(items[:1])]
     validate(one,source=g,referenced_rows=refs)
-    with pytest.raises(InvalidStorage,match='attempt_duplicate_target'):validate(rows,source=g,referenced_rows=refs)
+    validate(rows,source=g,referenced_rows=refs)
+    duplicate=copy.deepcopy(rows)
+    header=json.loads(duplicate['draft_revisions'][-1]['header_snapshot']);header['statement_date']='2026-01-15';duplicate['draft_revisions'][-1]['header_snapshot']=canonical(header)
+    with pytest.raises(InvalidStorage,match='attempt_duplicate_target'):validate(duplicate,source=g,referenced_rows=refs)
     left,right=(m.ITEM.validate_json(json.dumps(v)) for v in items)
     assert left.payload.replacement_draft_revision_id!=right.payload.replacement_draft_revision_id
-    assert a.semantic_key(left)==a.semantic_key(right)
+    for field,value in (('replacement_draft_revision_id',new_id()),('account_id',equity)):
+        bad=copy.deepcopy(rows);bad['attempt_certificates'][0][field]=value
+        with pytest.raises(InvalidStorage,match='foreign_owner'):validate(bad,source=g,referenced_rows=refs)
+    bad=copy.deepcopy(rows);bad['draft_revisions'][-1]['header_snapshot']='{}'
+    with pytest.raises(InvalidStorage,match='snapshot_format'):validate(bad,source=g,referenced_rows=refs)
+    bad=copy.deepcopy(rows);header=json.loads(bad['draft_revisions'][-1]['header_snapshot']);header['statement_date']=None;bad['draft_revisions'][-1]['header_snapshot']=canonical(header)
+    with pytest.raises(InvalidStorage,match='draft_statement_date'):validate(bad,source=g,referenced_rows=refs)
+    state=p.snapshot(rows,source=g,captured_graphs={},referenced_rows=refs,authority_transactions=(doc['id'],))
+    assert a.semantic_key(left,snapshot=state)!=a.semantic_key(right,snapshot=state)
 
 
 def test_backdated_insertion_uses_retained_predecessor_guard_and_new_adjacency(client,driver):

@@ -61,7 +61,71 @@ def derive(s,seeds, *, before_source,authority_transactions):
     return Closure(opening_ids=tuple(sorted(openings)),certificate_ids=certs,account_versions={a:accounts[a]['version'] for a in sorted(starts)})
 
 
+def topology(s,closure,manifest,opening_actions, *, replacement_drafts):
+    """Derive complete output order; observed IDs never assert new adjacency.
+
+    This is the nonposting seal boundary. Balances/whole selection are proved
+    separately by validate_manifest at financial preparation.
+    """
+    accounts={v['account_id']:v for v in s.rows['accounts']}
+    require(manifest.account_versions==closure.account_versions and all(
+        a in accounts and accounts[a]['version']==version
+        for a,version in manifest.account_versions.items()),'E_RECONCILIATION_CHAIN_STALE')
+    actual=[v.certificate_id for v in manifest.certificates if v.mode!='insert']
+    require(len(actual)==len(set(actual)) and set(actual)==set(closure.certificate_ids),'E_RECONCILIATION_MANIFEST')
+    require(len(opening_actions)==len(closure.opening_ids) and {v.opening_id for v in opening_actions}==set(closure.opening_ids),'E_RECONCILIATION_MANIFEST')
+    for action in opening_actions:
+        old=s.by('openings').get(action.opening_id)
+        require(old is not None and old['account_id']==action.account_id,'E_RECONCILIATION_MANIFEST')
+        if action.mode=='replace':
+            dr=replacement_drafts.get(action.replacement_draft_revision_id)
+            require(dr is not None and dr.account_id==action.account_id and dr.current_revision_id==action.replacement_draft_revision_id and dr.kind=='opening' and dr.repair_of_opening_id==action.opening_id,'E_RECONCILIATION_MANIFEST')
+    outputs=[];insertions=[];seen=set()
+    for target in manifest.certificates:
+        account=target.account_id
+        require(account in closure.account_versions,'E_RECONCILIATION_MANIFEST')
+        old=s.by('certificates').get(target.certificate_id)
+        if target.certificate_id:
+            require(old is not None and old['account_id']==account,'E_RECONCILIATION_MANIFEST')
+        if target.mode=='invalidate':
+            require(target.predecessor_id==old['previous_certificate_id'],'E_RECONCILIATION_MANIFEST')
+            continue
+        dr=replacement_drafts.get(target.replacement_draft_revision_id)
+        require(dr is not None and dr.current_revision_id==target.replacement_draft_revision_id and dr.account_id==account and dr.kind!='opening' and dr.state=='open' and dr.header.statement_date is not None,'E_RECONCILIATION_MANIFEST')
+        state=accounts[account]
+        require((dr.base_chain_version,dr.base_opening_id,dr.base_head_id)==(state['version'],state['opening_id'],state['head_certificate_id']),'E_RECONCILIATION_CHAIN_STALE')
+        day=dr.header.statement_date
+        if target.mode=='insert':
+            require(dr.repair_of_certificate_id is None,'E_RECONCILIATION_MANIFEST')
+            insertions.append((account,day))
+            retained=next((v['id'] for v in reversed(chain(s,account)) if v['statement_date']<day),None)
+        else:
+            require(dr.repair_of_certificate_id==target.certificate_id,'E_RECONCILIATION_MANIFEST')
+            retained=old['previous_certificate_id']
+        require(target.predecessor_id==retained,'E_RECONCILIATION_MANIFEST')
+        key=(account,day)
+        require(key not in seen,'E_RECONCILIATION_MANIFEST');seen.add(key)
+        outputs.append((account,day,target))
+    seeds=[(v.account_id,v.date) for v in manifest.seeds if v.kind=='insert']
+    require(len(seeds)==len(set(seeds)) and len(insertions)==len(set(insertions)) and set(insertions)==set(seeds),'E_RECONCILIATION_MANIFEST')
+    for account in closure.account_versions:
+        retained=[v for v in chain(s,account) if v['id'] not in closure.certificate_ids]
+        produced=[(day,target) for a,day,target in outputs if a==account]
+        # Replacements cannot jump ahead of an unaffected prefix or collide
+        # with any retained date. All affected descendants must be explicit.
+        floor=retained[-1]['statement_date'] if retained else None
+        opening_action=next((v for v in opening_actions if v.account_id==account),None)
+        if opening_action and opening_action.mode=='invalidate':require(not produced,'E_RECONCILIATION_MANIFEST')
+        else:
+            opening_date=(replacement_drafts[opening_action.replacement_draft_revision_id].header.opening_date if opening_action else s.by('openings')[accounts[account]['opening_id']]['opening_date'])
+            require(all(day>(floor or opening_date) for day,_ in produced),'E_RECONCILIATION_DATE')
+        invalid_dates=[s.by('certificates')[v.certificate_id]['statement_date'] for v in manifest.certificates if v.account_id==account and v.mode=='invalidate']
+        require(not invalid_dates or all(day<min(invalid_dates) for day,_ in produced),'E_RECONCILIATION_MANIFEST')
+    return tuple(target for _,_,target in sorted(outputs,key=lambda v:(v[0],v[1])))
+
+
 def validate_manifest(s,closure,manifest,opening_actions, *, replacement_drafts):
+    topology(s,closure,manifest,opening_actions,replacement_drafts=replacement_drafts)
     require(manifest.account_versions==closure.account_versions,'E_RECONCILIATION_CHAIN_STALE')
     for v in manifest.certificates:
         require(v.account_id in closure.account_versions,'E_RECONCILIATION_MANIFEST')

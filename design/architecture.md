@@ -1741,13 +1741,24 @@ coverage. Actual original-action admission and storage lookup remain runtime
 obligations. Source-action arms retain present owning input types only; they do
 not implement deposit B/C's keyless compound persistence or its permission gates.
 
-One confirmed N/model seam remains unresolved: two distinct inserted statement
-drafts at the same retained predecessor collide in N's aggregate attempt target
-key `(account_id, certificate_id, predecessor_id)`. The new seal currently retains
-that fail-closed rule rather than silently accepting incompatible storage. A
-focused witness proves one prefix passes and the two distinct dated targets fail.
-Full step(ii) completion needs an independently reviewed semantic-target correction
-shared with the existing N validator (no DDL change appears necessary). Existing
-certificate duplicate targets must still reject regardless of supplied predecessor;
-insertions need account/date identity derived from their owned replacement draft.
+Insertion targets now use the exact owned decoded replacement revision's
+account/date; existing certificate identity is certificate ID alone, independent
+of mode/account/predecessor. This joined semantic key is enforced by N's private
+validator and attempt seal, **not SQL UNIQUE**. SQL retains typed owner/revision
+FKs, discriminator shapes and final active account/date uniqueness. No co0022
+DDL/metadata change is made; future persistence must validate before DML.
+
+Certificate/seed attempts require an explicit ManifestContext containing the
+owning before-source graph, current authorized participants, captured chain
+versions and opening actions. Seal derives mandatory plus explicit seeded closure,
+loads exact owned open draft revisions and reconstructs the complete dated suffix.
+Observed predecessor IDs guard retained topology; they never dictate output
+adjacency. Seal rejects all resulting account/date collisions, including insertion
+versus replacement and two replacements, plus missing/extra suffix and stale
+revision/chain facts. Apply repeats these checks against the current snapshot.
+Member/proposal-only attempts keep their whole-selection/current checks and need
+no invented source-change context. Returned immutable attempts retain the complete
+manifest for future persistence; staging never certifies zero or posts money.
+Financial amendment preparation additionally proves whole selection, authentic
+opening partition and exact per-statement zero using derived adjacency.
 No resolver, backfill, public capability, live draft writer or activation is added.
