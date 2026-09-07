@@ -2553,6 +2553,10 @@ def decode_company_snapshot(*, producer: str, record_type: str, action: str,
                             snapshot: Mapping[str,object]):
     if type(snapshot) is not dict:_format()
     model=_list_model(producer,record_type,action,snapshot)
+    if record_type=='payment_operation_item':
+        if producer not in _OPERATION_COMMANDS or action!='create':_format()
+        model=_OPERATION_ITEM_MODELS.get(snapshot.get('kind'))
+        if model is None:_format()
     if record_type in _SELECTION_MODELS:
         if producer not in _SELECTION_COMMANDS or action not in ('create','update'):
             _format()
@@ -2824,3 +2828,116 @@ _SELECTION_COMMANDS=('payment selection create','payment selection update','paym
 _REFERENCE_GROUPS.update({SelectionContextView: (
     (('customer_id','funding_capacities','funding_owners'),'customer'),
     (('ar_account_id',),'account'),)})
+
+
+class RequestApplicationView(View):
+    invoice: str
+    expected_version: int = Field(ge=1)
+    amount: CapturedMoney
+
+
+class SourceComponentResultView(View):
+    component_key_id: str | None
+    component_id: str | None
+    party_id: str | None
+    party_name: str | None
+    ar_account_id: str | None
+    currency: str
+    received_minor_units: int
+    applied_minor_units: int
+    available_minor_units: int
+
+
+class ApplicationResultView(View):
+    kind: Literal['apply','unapply']='apply'
+    reverses_application_id: str | None = None
+    application_id: str | None
+    invoice_id: str
+    invoice_version: int
+    source_component_key_id: str | None
+    party_id: str | None
+    amount: CapturedMoney
+    effective_date: str
+
+
+class AllocationResultView(View):
+    kind: Literal['allocation','reversal']='allocation'
+    reverses_allocation_id: str | None = None
+    allocation_id: str | None
+    application_id: str | None
+    invoice_id: str
+    target_ordinal: int
+    logical_kind: Literal['net','tax']
+    tax_item_id: str | None
+    amount: CapturedMoney
+
+
+class InvoiceAmountsResultView(View):
+    invoice_id: str
+    version: int
+    revision_id: str | None
+    gross_minor_units: int
+    applied_minor_units: int
+    due_minor_units: int
+    currency: str
+    status: Literal['unpaid','partial','paid','voided','not_effective']
+
+
+class InvoiceSettlementResultView(InvoiceAmountsResultView):
+    _internal: ClassVar[frozenset[str]]=frozenset({'settlement_guard','audit_watermark'})
+    settlement_guard: str | None = None
+    as_of: str | None = None
+    audit_watermark: int | None = None
+    all_committed_current: InvoiceAmountsResultView | None = None
+
+
+class OperationItemView(View):
+    tag: Literal['payment_operation_item']='payment_operation_item'
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(('created_at','created_by','created_via'))
+    id: str
+    operation_id: str
+    ordinal: int = Field(ge=1)
+    created_at: str | None
+    created_by: str | None
+    created_via: str | None
+    audit_event_id: str
+
+
+class RequestApplicationItemView(OperationItemView):
+    kind: Literal['request_applications']
+    item_snapshot: RequestApplicationView
+
+
+class SourceComponentItemView(OperationItemView):
+    kind: Literal['source_components']
+    item_snapshot: SourceComponentResultView
+
+
+class ApplicationItemView(OperationItemView):
+    kind: Literal['effect_applications']
+    item_snapshot: ApplicationResultView
+
+
+class AllocationItemView(OperationItemView):
+    kind: Literal['allocations']
+    item_snapshot: AllocationResultView
+
+
+class DocumentChangeItemView(OperationItemView):
+    kind: Literal['document_changes']
+    item_snapshot: InvoiceSettlementResultView
+
+
+_OPERATION_ITEM_MODELS={
+    'request_applications':RequestApplicationItemView,
+    'source_components':SourceComponentItemView,
+    'effect_applications':ApplicationItemView,
+    'allocations':AllocationItemView,
+    'document_changes':DocumentChangeItemView,
+}
+_OPERATION_COMMANDS=('payment receive','payment apply','payment unapply','payment update','payment void','invoice update')
+_REFERENCE_GROUPS.update({
+    SourceComponentResultView: ((('party_id','party_name'),'customer'),(('ar_account_id',),'account')),
+    ApplicationResultView: ((('party_id',),'customer'),),
+    AllocationResultView: ((('tax_item_id',),'item'),),
+})
