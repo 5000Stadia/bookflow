@@ -1253,6 +1253,11 @@ reads no config file or second connection. Its `OSOperation` lifetime savepoint
 binds the supplied evidence to the exact Database/root/request/purpose and expires
 on operation exit or transaction end, including COMMIT/ROLLBACK followed by BEGIN
 on the same Database. The guard proves lifetime only, not kernel/config provenance.
+The producer must not leave coordinator savepoints open between entering
+`OSOperation` and calling preview/apply: validation rotates the operation savepoint
+with RELEASE, which also releases every savepoint nested after it. Coordinator
+savepoints must enclose the operation or finish before validation; the B2 service
+savepoint is created after validation.
 There is no production mapping factory or permissive default. Test-only supplied
 producers do not establish live safety.
 

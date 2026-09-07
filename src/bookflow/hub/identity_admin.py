@@ -393,7 +393,7 @@ def _prepare(tx,*,actor_id,intent,catalog,visibility,context=None):
         key=tuple(zip(('role','capability','required_role'),values))
         mutations.append(Mutation('role_capabilities',key,(),key,insert=True))
     if semantic:mutations.append(_mutation('permission_state',old_state,final_state,('id',)))
-    if target_id in {x.agent_user_id for x in final.root.authorities}:version=next(x.version for x in final.root.authorities if x.agent_user_id==target_id)
+    if type(intent) in (SetAssignments,AuthorizeAgent):version=next(x.version for x in final.root.authorities if x.agent_user_id==target_id)
     kind={PutMembership:'membership put',RevokeMembership:'membership revoke',SetUserActive:'user active',SetAssignments:'assignments set',AuthorizeAgent:'agent authorize',ReplaceCatalog:'catalog replace'}[type(intent)]
     prepared_audit=None
     if semantic and not preview:
