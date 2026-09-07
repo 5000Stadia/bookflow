@@ -10,7 +10,8 @@ Database: `company`.
 |---|---|---|---|---|---|---|---|
 | `opening_id` | TEXT | no | — | primary key 1 | — | reconciliation_openings.id | opening id. |
 | `ordinal` | BIGINT | no | — | primary key 2 | — | — | ordinal. |
-| `transaction_id` | TEXT | yes | — | — | ix_reconciliation_opening_evidence_transaction_id | transactions.id | transaction id. |
+| `kind` | TEXT | no | — | — | — | — | kind. |
+| `transaction_id` | TEXT | no | — | — | ix_reconciliation_opening_evidence_transaction_id | transactions.id | transaction id. |
 | `attachment_id` | TEXT | yes | — | — | ix_reconciliation_opening_evidence_attachment_id | attachments.id | attachment id. |
 | `attachment_link_id` | TEXT | yes | — | — | ix_reconciliation_opening_evidence_attachment_link_id | attachment_links.id | attachment link id. |
 | `captured_evidence` | TEXT | no | — | — | — | — | captured evidence. |
