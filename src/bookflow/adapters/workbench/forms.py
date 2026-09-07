@@ -92,6 +92,7 @@ def _scalar_descriptor(
         "kind": kind,
         "json_shape": "object" if kind == "json" else None,
         "structured_schema": _structured_schema(annotation),
+        "any_json": base is Any,
         "choices": choices,
         "choice_labels": extra.get("choice_labels", {}) if isinstance(extra, dict) else {},
         "description": description,
@@ -246,6 +247,7 @@ def leaves(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
         out.append({"label": f.title, "path": path, "path_parts": tuple(path.split(".")), "kind": kind,
                     "json_shape": json_shape, "choices": choices, "choice_labels": extra.get("choice_labels", {}),
                     "structured_schema": _structured_schema(f.annotation),
+                    "any_json": base is Any,
                     "description": f.description or "", "default": default,
                     "required": f.is_required(), "nullable": nullable,
                     "annotation": f.annotation, "math": numeric_metadata(name, base, extra)})
@@ -464,6 +466,21 @@ def _collection_prefix(path: tuple[str, ...]) -> str:
     return "c:" + ":".join(path) + ":"
 
 
+def _json_mode(annotation, form, key):
+    return _base(annotation)[0] is Any and form.get("json:" + key) == "1"
+
+
+def _explicit_json(value, key):
+    def reject_constant(_):
+        raise ValueError("non-finite JSON constant")
+    try:
+        return json.loads(value, parse_constant=reject_constant)
+    except (ValueError, RecursionError):
+        raise BookflowError("E_VALIDATION", details={"fields": [{
+            "field": key.removeprefix("f:"), "problem": "must be a complete JSON value",
+        }]}) from None
+
+
 def _coerce_scalar(annotation: Any, value: str) -> Any:
     base, nullable = _base(annotation)
     structured = _model_alternative(annotation) is not None and (
@@ -491,6 +508,40 @@ def _coerce_scalar(annotation: Any, value: str) -> Any:
     return value
 
 
+def _collection_indexes(path, form):
+    prefix = _collection_prefix(path)
+    marker_prefix = "collection:" + ":".join(path) + ":"
+    indexes: list[str] = []
+    for key in form:
+        matching_prefix = prefix if key.startswith(prefix) else marker_prefix if key.startswith(marker_prefix) else None
+        if matching_prefix is None:
+            continue
+        remainder = key[len(matching_prefix):]
+        index = remainder.split(":", 1)[0]
+        if index and index not in indexes:
+            indexes.append(index)
+    return indexes
+
+
+def collection_attempt_key(form, name):
+    """Resolve a rendered ordinal to its submitted DOM identity, including nesting.
+
+    Collection values are rendered in submitted order with fresh ordinal names.
+    Sidecar control state must follow the same row across preview/error rendering.
+    """
+    if not name.startswith("c:"):
+        return name
+    parts = name[2:].split(":")
+    for index, part in enumerate(parts):
+        if not part.isdigit():
+            continue
+        submitted = _collection_indexes(tuple(parts[:index]), form)
+        ordinal = int(part)
+        if ordinal < len(submitted):
+            parts[index] = submitted[ordinal]
+    return "c:" + ":".join(parts)
+
+
 def _read_collection(
     annotation: Any,
     path: tuple[str, ...],
@@ -503,17 +554,7 @@ def _read_collection(
     if found is None:
         return []
     item_annotation, _ = found
-    prefix = _collection_prefix(path)
-    marker_prefix = "collection:" + ":".join(path) + ":"
-    indexes: list[str] = []
-    for key in form:
-        matching_prefix = prefix if key.startswith(prefix) else marker_prefix if key.startswith(marker_prefix) else None
-        if matching_prefix is None:
-            continue
-        remainder = key[len(matching_prefix):]
-        index = remainder.split(":", 1)[0]
-        if index and index not in indexes:
-            indexes.append(index)
+    indexes = _collection_indexes(path, form)
     item_base, _ = _base(item_annotation)
     rows: list[Any] = []
     for index in indexes:
@@ -536,9 +577,11 @@ def _read_collection(
                 if key not in form:
                     continue
                 value = form[key]
-                if value in ("", "unset"):
+                explicit_json = _json_mode(field.annotation, form, key)
+                if value in ("", "unset") and not explicit_json:
                     continue
-                row[name] = _coerce_scalar(field.annotation, value) if coerce else value
+                row[name] = (_explicit_json(value, key) if explicit_json else
+                             _coerce_scalar(field.annotation, value)) if coerce else value
             rows.append(row)
         else:
             key = "c:" + ":".join((*item_path, "value"))
@@ -638,7 +681,15 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
         if clear:
             set_path(raw, path, None)
             continue
+        if (getattr(cmd, "name", "") in {"custom-field create", "custom-field update"}
+                and path == "default" and form.get("empty:default") == "1"
+                and selected_value("kind", originals, form) == "text"):
+            set_path(raw, path, "")
+            continue
         if leaf["kind"] == "collection":
+            if form.get(f"empty:{path}") == "1":
+                set_path(raw, path, [])
+                continue
             marker = f"collection:{path}"
             prefix = f"c:{path}:"
             if marker not in form and not any(key.startswith(prefix) for key in form):
@@ -669,11 +720,14 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
                 continue
             set_path(raw, path, v)
             continue
-        if value is None or value == "":
+        explicit_json = _json_mode(leaf["annotation"], form, f"f:{path}")
+        if value is None or (value == "" and not explicit_json):
             if replacement and value == "" and original == "":
                 set_path(raw, path, "")
             continue
-        if leaf["kind"] == "bool":
+        if explicit_json:
+            v = _explicit_json(value, f"f:{path}")
+        elif leaf["kind"] == "bool":
             if value == "unset":
                 continue
             v: Any = value == "true"
@@ -704,6 +758,11 @@ def translate(cmd: registry.Command, form: dict[str, str], originals: dict[str, 
                 v = value
         else:
             v = _coerce_scalar(leaf["annotation"], value)
+        if path == "default" and getattr(cmd, "name", "") in {"custom-field create", "custom-field update"}:
+            from bookflow.adapters.typed_defaults import decode_definition_default
+            typed = {"default": v, "kind": selected_value("kind", originals, form)}
+            decode_definition_default(cmd, typed, originals)
+            v = typed["default"]
         if (
             originals is not None
             and not replacement

@@ -930,6 +930,23 @@ The actual all-command form check emits schema-path/control/variant/context
 mapping, separate from the still-incomplete browser interaction/output/success
 mapping and parent-owned fresh blind acceptance.
 
+The material-variant ledger groups 1813 hosted schema alternatives into 15
+structural groups; these counts are not browser journeys. Command-specific
+witness links cover authored address/default/payee, definition kinds, calculation,
+line origins, explicit Any JSON, discriminator visibility and hub destinations at
+1280/390. Each reference identifies its actual test scope, not every command that
+shares a schema. Parent-owned payment-selection navigation, newer integrated
+commands, independent review and combined/blind acceptance remain open.
+
+Generated forms expose explicit empty text for text definition defaults and empty
+lists for optional collections. Clear/null takes precedence where the command
+allows clearing; untouched inputs retain omission semantics. Declared Any values
+can use explicit JSON mode, including exact integer money objects, while ordinary
+text mode remains text. Repeated JSON-mode controls retain submitted row identity
+through preview/error ordinal renaming. Numeric entry ignores JSON-mode values and
+rows overridden by an empty-list action. The company picker table owns horizontal
+scrolling within the shared responsive shell.
+
 Generated workbench forms preserve every model branch declared by a Pydantic
 string discriminator. A single discriminator control exposes the combined choices;
 branch fields carry alternatives of conjunctions, including nested payment preview

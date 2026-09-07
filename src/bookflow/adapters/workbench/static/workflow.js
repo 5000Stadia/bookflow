@@ -108,7 +108,13 @@
   function refresh(form) {
     form.querySelectorAll('[data-definition-default]').forEach(wrapper => {
       const previous = wrapper.firstElementChild;
-      const boolean = named(form, 'f:kind')?.value === 'bool';
+      const kind = named(form, 'f:kind')?.value;
+      const empty = wrapper.querySelector('[data-definition-empty]');
+      if (empty) {
+        empty.hidden = kind !== 'text';
+        empty.querySelector('input').disabled = kind !== 'text';
+      }
+      const boolean = kind === 'bool';
       if ((previous.tagName === 'SELECT') === boolean) return;
       const control = document.createElement(boolean ? 'select' : 'input');
       control.name = previous.name; control.id = previous.id;

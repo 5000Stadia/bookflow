@@ -388,20 +388,20 @@ def variant_policies():
     money = 'tests/test_numeric_entry_browser.py::test_generated_sales_math_preview_and_save'
     payment = 'tests/test_mcp_payment_form_browser.py::test_saved_selection_control_previews_real_receipt'
     return {
-        ('anyOf', ('Address', 'null')): ([parent], ['creation/default-origin override coverage']),
-        ('anyOf', ('AddressInput', 'null')): ([parent], ['party-address defaults use a distinct owner model; browser witness required']),
-        ('anyOf', ('RegisterParty', 'null')): ([nested, parent], ['top-level payee default/prefill witness']),
+        ('anyOf', ('Address', 'null')): ([parent, 'tests/test_mcp_address_payee_browser.py::test_sales_address_default_explicit_null_and_return_to_current_default'], []),
+        ('anyOf', ('AddressInput', 'null')): ([parent, 'tests/test_mcp_address_payee_browser.py::test_party_address_create_patch_clear_and_omission'], []),
+        ('anyOf', ('RegisterParty', 'null')): ([nested, parent, 'tests/test_mcp_address_payee_browser.py::test_top_level_register_payee_prefill_null_replacement_and_journal_destination'], []),
         ('anyOf', ('MoneyInput', 'string')): (['tests/test_mcp_nested_gui_browser.py::test_nested_collection_model_object_null_and_full_error', 'tests/test_mcp_money_gui_browser.py::test_structured_integer_money_object_exact_bytes_and_core_rejection'], []),
-        ('anyOf', ('SalesMoneyInput', 'null', 'string')): ([money, 'tests/test_mcp_money_gui_browser.py::test_top_level_money_object_nullable_branch_and_complete_calculation'], ['nullable line-origin overrides']),
+        ('anyOf', ('SalesMoneyInput', 'null', 'string')): ([money, 'tests/test_mcp_money_gui_browser.py::test_top_level_money_object_nullable_branch_and_complete_calculation', 'tests/test_mcp_sales_money_origin_browser.py::test_sales_line_money_object_null_rejection_and_current_default_origin'], []),
         ('anyOf', ('SalesMoneyInput', 'string')): ([money, 'tests/test_mcp_money_gui_browser.py::test_top_level_money_object_nullable_branch_and_complete_calculation'], []),
-        ('anyOf', ('any', 'null')): ([custom], ['definition-default kind overrides beyond boolean']),
+        ('anyOf', ('any', 'null')): ([custom, 'tests/test_mcp_definition_kinds_browser.py::test_definition_all_kinds_default_empty_null_omission_and_choice_visibility', 'tests/test_mcp_any_value_browser.py::test_any_money_top_level_and_nested_json_values_and_unchanged_text'], []),
         ('anyOf', ('array', 'null')): ([custom, 'tests/test_mcp_nested_gui_browser.py::test_optional_nested_collection_order_empty_null_and_omission'], []),
         ('anyOf', ('boolean', 'null')): ([boolean], []),
         ('anyOf', ('integer', 'null')): ([number, 'tests/test_mcp_nested_gui_browser.py::test_optional_nested_collection_order_empty_null_and_omission'], []),
         ('anyOf', ('null', 'object')): ([custom, 'tests/test_mcp_payment_form_browser.py::test_generated_payment_json_object_error_preview_and_saved_false'], []),
         ('anyOf', ('null', 'string')): ([boolean], []),
         ('oneOf', ('InlineApplications', 'SelectionReference')): ([payment, 'tests/test_mcp_nested_payment_request_browser.py::test_all_six_nested_preview_request_branches_exact_input_results_and_inactive_controls'], []),
-        ('oneOf', ('InlineCalculation', 'SelectionReference')): ([payment], ['calculation-specific inline amounts/origins and selection branch']),
+        ('oneOf', ('InlineCalculation', 'SelectionReference')): ([payment, 'tests/test_mcp_calculation_variant_browser.py::test_calculation_inline_null_origin_rejections_and_saved_selection'], ['parent-owned payment-selection workspace/navigation and combined-base acceptance']),
         ('oneOf', ('ApplyPreviewRequest', 'InvoiceUpdatePreviewRequest', 'ReceivePreviewRequest', 'UnapplyPreviewRequest', 'UpdatePreviewRequest', 'VoidPreviewRequest')): (['tests/test_mcp_nested_payment_request_browser.py::test_all_six_nested_preview_request_branches_exact_input_results_and_inactive_controls'], []),
     }
 
@@ -522,6 +522,22 @@ def payment_workspace_row(cmd, url, page_text, config):
             'browser_witness': PAYMENT_WORKSPACE_WITNESSES[cmd.verb]}
 
 
+def command_variant_witnesses(name):
+    """Authored browser branches, not acceptance of every related schema path."""
+    groups = [
+        ({'customer create', 'customer update'}, 'test_mcp_address_payee_browser', 'test_party_address_create_patch_clear_and_omission'),
+        ({'register post', 'register update'}, 'test_mcp_address_payee_browser', 'test_top_level_register_payee_prefill_null_replacement_and_journal_destination'),
+        ({'invoice post', 'invoice update'}, 'test_mcp_address_payee_browser', 'test_sales_address_default_explicit_null_and_return_to_current_default'),
+        ({'invoice post', 'invoice update'}, 'test_mcp_sales_money_origin_browser', 'test_sales_line_money_object_null_rejection_and_current_default_origin'),
+        ({'custom-field update'}, 'test_mcp_definition_kinds_browser', 'test_definition_all_kinds_default_empty_null_omission_and_choice_visibility'),
+        ({'payment calculate'}, 'test_mcp_calculation_variant_browser', 'test_calculation_inline_null_origin_rejections_and_saved_selection'),
+        ({'customer create', 'customer update', 'item create'}, 'test_mcp_any_value_browser', 'test_any_money_top_level_and_nested_json_values_and_unchanged_text'),
+        ({'term create', 'term update', 'account create', 'item create', 'price-level create', 'price-level update'}, 'test_mcp_visibility_browser', 'test_command_visibility_families_exclude_old_controls_and_save_to_exact_record'),
+        ({'organization new', 'organization rename', 'company new', 'company detach', 'company attach', 'chart list', 'demo reset'}, 'test_mcp_hub_destination_browser', 'test_hub_organization_and_company_new_attach_destinations_with_complete_receipts'),
+    ]
+    return ['tests/' + module + '.py::' + test for commands, module, test in groups if name in commands]
+
+
 def workbench_row(cmd, url, page_text):
     """Actual page controls plus schema paths; interaction acceptance is separate."""
     described = forms.describe_fields(cmd.noun, cmd.verb, cmd.input_model, None, None)
@@ -560,6 +576,8 @@ def workbench_row(cmd, url, page_text):
             'representative_limits': limits})
     return {'command': cmd.name, 'url': url, 'input_paths': paths,
             'schema_variants': schema_variants(cmd.input_model.model_json_schema()),
+            'command_variant_witnesses': command_variant_witnesses(cmd.name),
+            'command_variant_limits': 'Authored cases at 1280/390; references are not stored results or exhaustive command acceptance.',
             'form_witness': 'tests/test_row3_host.py::test_every_routed_command_has_a_form_with_one_control_per_input_leaf',
             'context': {'encoding': 'ctx: fields to shared headers; action to dry_run',
                         'fields': [name for name in ('reason', 'source_ref', 'directive', 'idempotency_key') if 'ctx:' + name in controls]},
@@ -585,6 +603,8 @@ def local_workbench_boundaries():
                               'browser_acceptance': 'not_applicable_local_only'}
                              for field in model_fields(cmd.input_model, leaves_only=True)],
              'schema_variants': schema_variants(cmd.input_model.model_json_schema()),
+            'command_variant_witnesses': command_variant_witnesses(cmd.name),
+            'command_variant_limits': 'Authored cases at 1280/390; references are not stored results or exhaustive command acceptance.',
              'local_lifecycle_coverage': 'local_lifecycle_scenario',
              'local_execution_witnesses': LOCAL_VALID_WITNESSES[cmd.name],
              'hosted_rejection_witness': 'tests/test_mcp_local_boundary.py::test_installed_local_boundaries_are_explicit_and_do_not_execute'}

@@ -8,9 +8,11 @@
     // Do not parse their integer fields through JavaScript Number or arithmetic.
     if (input.dataset.mathStructured && (input.value.trimStart().startsWith('{') || input.value.trim() === 'null')) return false;
     const form = input.form || input.closest('form');
+    if (named(form, 'json:' + input.name)?.checked) return false;
     if (named(form, input.dataset.mathClear)?.checked) return false;
     for (let collection = input.closest('[data-collection]'); collection; collection = collection.parentElement?.closest('[data-collection]')) {
-      if (named(form, 'clear:' + collection.dataset.collectionPath)?.checked) return false;
+      if (named(form, 'clear:' + collection.dataset.collectionPath)?.checked ||
+          named(form, 'empty:' + collection.dataset.collectionPath)?.checked) return false;
     }
     if (input.dataset.mathActive) {
       let conditions;
