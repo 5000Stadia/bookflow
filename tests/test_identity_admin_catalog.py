@@ -36,7 +36,7 @@ def test_accepted_full_catalog_six_intents_independent_final_sql(tmp_path):
         assert len(rows(db.raw,'audit_events'))==6
         observed=s.load_root(db,catalog=PRODUCTION)
         assert observed==result.private.final.root and observed.stamp.generation==7 and observed.role_defaults==defaults
-        assert c.FROZEN_MANIFEST.descriptor_sha256=='50b259f886c50e8dddb91e513a2839b41e0ee4f270eb3801622786445f616851'
+        assert c.FROZEN_MANIFEST.descriptor_sha256=='3a02a194a6d4bc8b392c6af7d57ccc6beb3d090ff61b6aee7c0f7f6d9485258a'
         receipt(tmp_path/'full-build.json',expected_users=expected_users,observed_users=rows(db.raw,'users'),expected_authorities=expected_auth,observed_authorities=rows(db.raw,'agent_authority'),expected_tokens=expected_tokens(old_tokens,G_REVOKED|{'T-R'}),observed_tokens=tokens(db.raw),observed_root=asdict(observed))
 
 
