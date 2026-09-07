@@ -1657,3 +1657,11 @@ resolver and all five source-writer fences coherently, and meet its old-binary,
 full-C, public contract and interface gates. This increment supplies none of those
 behaviors. The accepted source has no public `company verify` command; private
 validation and SQLite integrity/FK checks do not claim to implement that command.
+
+Opening evidence has closed `transaction` and `transaction_attachment` kinds.
+Both retain a real transaction FK; attachment evidence additionally retains the
+attachment and link FKs. SQL and private validation compare the link's transaction
+type, retained transaction ID and attachment ID independently. Transaction-only
+evidence has null attachment columns. These checks prove identity, not audience
+admission. Direct opening attachments require later record-owner registration;
+link retirement/collection and current authority remain activation obligations.

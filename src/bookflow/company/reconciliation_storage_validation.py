@@ -292,9 +292,15 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
                 require(account is not None and account['type'] in ('bank','credit_card') and owner['currency']==account['currency']==home,'statement_currency_unsupported')
                 if 'convention' in owner:require(owner['convention']==('card_debt' if account['type']=='credit_card' else 'bank'),'account_convention')
     for evidence in r['opening_evidence']:
-        require((evidence['transaction_id'] is not None and evidence['attachment_id'] is None and evidence['attachment_link_id'] is None) or (evidence['transaction_id'] is None and evidence['attachment_id'] is not None and evidence['attachment_link_id'] is not None),'opening_evidence_shape')
-        if evidence['attachment_id']:
-            require(any(v['id']==evidence['attachment_link_id'] and v['attachment_id']==evidence['attachment_id'] for v in referenced_rows['attachment_links']),'attachment_owner')
+        require(evidence['transaction_id'] is not None and (
+            (evidence['kind']=='transaction' and evidence['attachment_id'] is None and evidence['attachment_link_id'] is None)
+            or (evidence['kind']=='transaction_attachment' and evidence['attachment_id'] is not None and evidence['attachment_link_id'] is not None)), 'opening_evidence_shape')
+        if evidence['kind']=='transaction_attachment':
+            require(any(v['id']==evidence['attachment_link_id']
+                        and v['attachment_id']==evidence['attachment_id']
+                        and v['record_type']=='transaction'
+                        and v['record_id']==evidence['transaction_id']
+                        for v in referenced_rows['attachment_links']), 'attachment_owner')
     keys=by('keys'); versions=by('effect_versions')
     transitions = {}
     if versions:
