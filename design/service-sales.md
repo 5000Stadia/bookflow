@@ -145,9 +145,9 @@ Reject dates outside supported ISO years. With no terms, due date is invoice dat
 
 Existing unchanged fields/lines retain captured labels, unit factors, mappings,
 tax rules and prices even if masters change or become inactive. Every replacement
-business effect still requires its mapped posting accounts active; an inactive
+business effect still requires its mapped posting accounts active and currently eligible for their income, control or tax-liability role; an inactive
 account must be reactivated or explicitly remapped by selecting/refreshing a valid
-item before an edit can post. Exact reversals alone may use inactive accounts. Changed quantity
+item before an edit can post. Already-retyped captured accounts require an explicit eligible item/default refresh or account selection before a replacement; no mapping is silently changed. Exact no-ops and historical reads retain their behavior, and exact reversals alone may use inactive or historically retyped accounts. Changed quantity
 or explicit price recalculates using those saved rules. Newly selected references
 must be active. refresh_defaults reloads default-origin facts for retained selectors and
 requires those references active. Reversals always use exact historical facts.

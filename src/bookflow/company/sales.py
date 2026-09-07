@@ -406,6 +406,29 @@ def _posting_accounts_active(s, resolved):
         if not account['active']:
             raise BookflowError('E_INACTIVE_REFERENCE', details={'record_type': 'account', 'record_id': account['id']})
 
+    current = {account['id']: account for account in accounts}
+
+    def eligible(identifier, allowed, field, remedy, *, role=None):
+        account = current[identifier]
+        if account['type'] not in allowed or (role is not None and account['system_role'] != role):
+            raise BookflowError('E_VALIDATION',
+                message='A saved posting account is no longer eligible. ' + remedy,
+                details={'field': field, 'reason': 'captured_posting_account_type'})
+
+    control = resolved['profile'].control_account
+    if control.type == 'accounts_receivable':
+        eligible(control.id, {'accounts_receivable'}, 'ar_account', 'Select an eligible AR account before posting this correction.')
+    else:
+        eligible(control.id, {'bank', 'other_current_asset'}, 'deposit_to', 'Select bank or system Undeposited Funds before posting this correction.')
+        if current[control.id]['type'] == 'other_current_asset':
+            eligible(control.id, {'other_current_asset'}, 'deposit_to', 'Select bank or system Undeposited Funds before posting this correction.', role='undeposited_funds')
+    for line in resolved['lines']:
+        eligible(line['profile'].income_account.id, {'income', 'other_income'}, 'lines',
+                 "Explicitly refresh the affected item's defaults or select an eligible item before posting this correction.")
+        for tax in line['taxes']:
+            eligible(tax['rule'].liability_account.id, {'other_current_liability'}, 'sales_tax_item',
+                     'Explicitly refresh or select eligible tax defaults before posting this correction.', role='sales_tax_payable')
+
 
 def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _settlement_internal=False):
     if document_type == 'invoice' and operation == 'update' and not _settlement_internal:
