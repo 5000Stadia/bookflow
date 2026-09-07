@@ -76,6 +76,26 @@ def test_default_resource_denies_all_delete_families_before_role_bypass(role):
         denied(lambda: access.require_resource(s, capability, 'standard'))
 
 
+def test_execute_denies_before_pending_maintenance(commands, monkeypatch):
+    cmds, called = commands
+    maintenance = []
+    def flush(hub):
+        maintenance.append('config')
+    def moves(*args):
+        maintenance.append('moves')
+    monkeypatch.setattr(dispatch, '_complete_pending_organizations', moves)
+    # A normal command must reach the same maintenance path; stop before its
+    # ordinary authorization so this witness requires no database fixture.
+    monkeypatch.setattr(dispatch, 'run_in_session', lambda *a, **kw: {'ordinary': True})
+    session = SimpleNamespace(is_hub_admin=True, hub=SimpleNamespace(writable=True),
+                              config=SimpleNamespace(flush_pending=flush))
+    context = Context.new(Interface.python, 'g0-ordering')
+    denied(lambda: dispatch.execute(cmds['delete'], {}, context, session))
+    assert maintenance == [] and called == []
+    assert dispatch.execute(cmds['ordinary'], {}, context, session) == {'ordinary': True}
+    assert maintenance == ['config', 'moves'] and called == []
+
+
 @pytest.mark.parametrize('dry_run', [False, True])
 def test_early_recovery_precedes_saved_facts_and_company_open(commands, monkeypatch, dry_run):
     cmds, called = commands
