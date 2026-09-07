@@ -21,6 +21,10 @@ def test_complete_row_validator_rejects_independent_tampers_before_any_write(cli
         p=prepare(s,ctx,inp);bundle=persistence.build(s,ctx,p);validation.validate(s,ctx,bundle)
         baseline=tuple(s.company.raw.iterdump())
         candidates=[]
+        db=copy.deepcopy(bundle.deposit_bundle);db['pending']['custom_field_values']=[]
+        candidates.append(replace(bundle,deposit_bundle=db))
+        db=copy.deepcopy(bundle.deposit_bundle);db['bank_current'][0]['unclassified_column']=None
+        candidates.append(replace(bundle,deposit_bundle=db))
         source=bundle.source_rows
         lines=list(source.posting_lines)
         lines[-1]=lines[-1].model_copy(update={'account_id':lines[0].account_id})
@@ -34,6 +38,12 @@ def test_complete_row_validator_rejects_independent_tampers_before_any_write(cli
         candidates.append(replace(bundle,deposit_bundle=db))
         db=copy.deepcopy(bundle.deposit_bundle);db['pending']['deposit_cash_cells'].pop()
         candidates.append(replace(bundle,deposit_bundle=db))
+        for table,field,value in [('posting_lines','account_snapshot','{}'),('deposit_components','currency','CAD'),('bank_effect_versions','batch_id',bundle.deposit_bundle['data']['prior']['id'])]:
+            db=copy.deepcopy(bundle.deposit_bundle)
+            assert db['pending'][table]
+            index=next((i for i,v in enumerate(db['pending'][table]) if not v.get('reversed_line_id')),0)
+            db['pending'][table][index][field]=value
+            candidates.append(replace(bundle,deposit_bundle=db))
         event=copy.deepcopy(bundle.audit_event);event.entries[0]['after']=b'\0{}'
         candidates.append(replace(bundle,audit_event=event))
         effect=bundle.output.effect.model_copy(update={'target_ids':bundle.output.effect.target_ids[:-1]})

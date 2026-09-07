@@ -35,6 +35,19 @@ def test_complete_work_tax_and_five_custom_kinds_persist_and_page(client,tax_sal
     with driver.session() as s:
         p=prepare(s,ctx,inp)
         original=s.company.raw.execute('SELECT source_basis_hash,denominator_hex,spans_json FROM work_billing_allocations WHERE transaction_id=?',(receipt['id'],)).fetchall()
+        from dataclasses import replace
+        import copy
+        from bookflow import BookflowError
+        from bookflow.company import deposit_coordinate_validation as validation
+        bundle=persistence.build(s,ctx,p)
+        assert bundle.source_rows.work_billing_allocations and bundle.deposit_bundle['pending']['deposit_component_keys']
+        baseline=tuple(s.company.raw.iterdump())
+        damaged=copy.deepcopy(bundle.deposit_bundle)
+        damaged['pending']['deposit_component_keys'][0]['semantic_identity']='wrong-owned-occurrence'
+        for broken in (replace(bundle,deposit_bundle=damaged),replace(bundle,source_rows=bundle.source_rows.model_copy(update={'work_billing_allocations':()}))):
+            with pytest.raises(BookflowError):validation.validate(s,ctx,broken)
+            assert tuple(s.company.raw.iterdump())==baseline
+
         result=persistence.execute(s,ctx,p)
         assert result.current.revision_bank_total==133
         inserted=result.effect.source.inserted

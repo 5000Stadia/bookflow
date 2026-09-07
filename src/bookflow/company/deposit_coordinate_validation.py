@@ -20,6 +20,13 @@ def validate(s,ctx,bundle):
         (payment_corrections if source.action.kind=='payment_update' else payment_cancellation).validate(plan,s,ctx)
     else:sales_validation.validate(plan,s,ctx)
     resolved=bundle.prepared.resolution
+    require(set(bundle.deposit_bundle)=={'header','pending','source_headers','claims','bank_current','data','financial','revision'})
+    require(set(bundle.deposit_bundle['pending'])=={table for table,_,_ in DEPOSIT_KINDS})
+    require(all(set(pointer)=={'key_id','version_id'} for pointer in bundle.deposit_bundle['bank_current']))
+    require(bundle.deposit_plan.verb==('void' if resolved.input.replacement.mode=='void' else 'update'))
+    require(bundle.deposit_plan.data_json==resolved.deposit_data_json and bundle.deposit_plan.custom_plan==resolved.deposit_custom_plan)
+    require(bundle.deposit_plan.binding==bundle.prepared.binding)
+    require(bundle.deposit_plan.input_json==resolved.input.model_dump_json(by_alias=True,exclude_unset=True))
     require(coordination.prepare_source_overlay(s,ctx,resolved.input,source,bundle.prepared.binding)==resolved.overlay)
     expected=dict(data['pending']) if source.plan.preview.changed else dict(data.get('pending',{}))
     if data.get('billing_allocations'):expected['work_billing_allocations']=data['billing_allocations']
@@ -27,6 +34,7 @@ def validate(s,ctx,bundle):
     require(source_before(s,resolved.overlay.source_id)==bundle.output.effect.source.before)
     deposit_persistence_validation.validate_rows(s,ctx,bundle.deposit_plan,bundle.deposit_bundle)
     validate_deposit_columns(s,ctx,bundle)
+    validate_deposit_business_columns(s,ctx,bundle)
     d=bundle.deposit_bundle;financial=d['financial'];old=d['data']['before'];h=d['header']
     if d['data']['changed'] and bundle.deposit_plan.verb!='void':
         previous=d['data']['previous']
@@ -266,3 +274,69 @@ def validate_deposit_columns(s,ctx,bundle):
     require(effect.before==deposit_operations.state(s,identity) and effect.after==deposit_persistence._state(h,f))
     require(output.current==effect.after and effect.financial==f and effect.audit_event_id==event)
     require(effect.batch_ids==tuple(v['id'] for v in pending['posting_batches']))
+
+
+def validate_deposit_business_columns(s,ctx,bundle):
+    """Full pending posting/key/cell/version images, including captured labels."""
+    d=bundle.deposit_bundle;data=d['data'];pending=d['pending'];f=d['financial'];identity=d['header']['id']
+    if not data['changed']:return
+    prov=dict(created_at=data['at'],created_by=s.actor.id,created_via=ctx.interface.value)
+    audited=dict(**prov,audit_event_id=data['event'])
+    prior=data['prior']
+    originals=rows.rows(s,c.posting_batches,c.posting_batches.c.revision_id==prior['id'],c.posting_batches.c.kind!='reversal')
+    require(len(originals)==1);original=originals[0]
+    reverse=next(v for v in pending['posting_batches'] if v['kind']=='reversal')
+    require(reverse==dict(id=reverse['id'],**audited,transaction_id=identity,revision_id=prior['id'],kind='reversal',
+        effective_date=original['effective_date'],reverses_batch_id=original['id'],replaces_batch_id=None))
+    business=original if bundle.deposit_plan.verb=='void' else next(v for v in pending['posting_batches'] if v['kind']=='replacement')
+    for key in pending['bank_effect_keys']:
+        require(key==dict(id=key['id'],transaction_id=identity,role=key['role'],row_id=key['row_id'],**audited))
+    for value in pending['bank_effect_versions']:
+        require(value['batch_id']==business['id'])
+    if bundle.deposit_plan.verb=='void':return
+    revision=d['revision'];currency=f.intent.currency
+    keys={v['id']:v for v in rows.rows(s,c.deposit_row_keys,c.deposit_row_keys.c.transaction_id==identity)}
+    keys.update({v['id']:v for v in pending['deposit_row_keys']})
+    envelopes={v['line_id']:v for v in pending['document_lines']}
+    components={(v['row_id'],v['component_ordinal']):v for v in pending['deposit_components']}
+    expected_keys={}
+    for source in f.intent.sources:
+        for occurrence in source.occurrences:
+            key=occurrence.key
+            expected_keys[source.row_id,occurrence.ordinal]=(key.kind,key.identity,key.tax_item)
+    expected_keys.update({(v.row_id,0):('additional',v.row_id,'') for v in f.intent.additional})
+    expected_keys[data['header_row'],1]=('header',data['header_row'],'')
+    oldkeys={(v['row_id'],v['ordinal']):v for v in rows.rows(s,c.deposit_component_keys,c.deposit_component_keys.c.transaction_id==identity)}
+    newkeys={(v['row_id'],v['ordinal']):v for v in pending['deposit_component_keys']}
+    require(len(newkeys)==len(pending['deposit_component_keys']) and set(newkeys)==set(expected_keys)-set(oldkeys))
+    for key,value in newkeys.items():
+        kind,semantic,tax=expected_keys[key]
+        require(value==dict(id=value['id'],**audited,transaction_id=identity,row_id=key[0],ordinal=key[1],kind=kind,semantic_identity=semantic,tax_item_id=tax))
+    for component in components.values():
+        require(component['document_line_id']==envelopes[keys[component['row_id']]['line_id']]['id'])
+        require(component['currency']==currency)
+    for value in pending['deposit_cash_cells']:
+        require(value['transaction_id']==identity and value['revision_id']==revision['id'] and value['currency']==currency)
+        if value['bucket']!='additional':require(value['bucket_row_id']==data['header_row'])
+    accounts={v.id:v for v in (f.intent.bank,*[v.account for v in f.intent.additional],*([f.intent.cash_back.account] if f.intent.cash_back else []))}
+    posted=[v for v in pending['posting_lines'] if v['batch_id']==business['id']]
+    require(len(posted)==len(f.legs))
+    for index,(value,leg) in enumerate(zip(posted,f.legs),1):
+        account=accounts.get(leg.account_id)
+        if account is not None:snapshot={k:getattr(account,k) for k in ('id','name','full_name','number','type','normal_balance')}
+        else:
+            _,rowid,ordinal=leg.key.split('/')
+            source=next(v for v in f.intent.sources if v.row_id==rowid)
+            semantic=next(v.key for v in source.occurrences if v.ordinal==int(ordinal))
+            component=next(v for v in source.source.components if v.key==semantic)
+            found=[v.model_dump() for v in bundle.source_rows.posting_lines if v.id==component.posting_line_id]
+            found+=rows.rows(s,c.posting_lines,c.posting_lines.c.id==component.posting_line_id)
+            require(len(found)==1);snapshot=json.loads(found[0]['account_snapshot'])
+        dims=leg.dimensions
+        require(value==dict(id=value['id'],**prov,transaction_id=identity,batch_id=business['id'],line_no=index,account_id=leg.account_id,
+            debit_minor_units=max(0,leg.signed_debit),credit_minor_units=max(0,-leg.signed_debit),currency=currency,account_snapshot=q.canonical(snapshot),
+            name_type=dims.party_kind,name_id=dims.party_id,party_name=dims.party_name,class_id=dims.class_id,class_name=dims.class_name,
+            description=data['memo'],original_minor_units=None,original_currency=None,rate_used=None,rate_source=None,reversed_line_id=None))
+    for value in pending['posting_line_sources']:
+        if value['reversed_source_id'] is not None:continue
+        require(value['currency']==currency and value.get('tax_component_id') is None and value.get('payment_component_id') is None)

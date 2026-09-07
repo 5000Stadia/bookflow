@@ -112,7 +112,7 @@ with open_database(Path(sys.argv[1]),writable=sys.argv[2]=='write') as db:
     (tmp_path/'preservation.json').write_text(json.dumps(dict(before=before,attachments=files),indent=2))
 
 
-@pytest.mark.parametrize('problem',['reserved_case','temp_shadow','temp_trigger','unknown_guard','copy','recreate','fk','publish'])
+@pytest.mark.parametrize('problem',['reserved_case','temp_shadow','temp_trigger','attached_shadow','unknown_guard','copy','raw_mismatch','recreate','fk','publish'])
 def test_rejection_preserves_complete_state(old_co22,tmp_path,monkeypatch,problem):
     _,original,_=old_co22
     root=tmp_path/'root';shutil.copytree(original,root)
@@ -121,13 +121,20 @@ def test_rejection_preserves_complete_state(old_co22,tmp_path,monkeypatch,proble
         if problem=='reserved_case':db.raw.execute('CREATE TABLE _CO0023_DEPOSIT_OPERATIONS(value TEXT)')
         if problem=='temp_shadow':db.raw.execute('CREATE TEMP TABLE deposit_operations(value TEXT)')
         if problem=='temp_trigger':db.raw.execute("CREATE TEMP TRIGGER temp_c AFTER INSERT ON main.deposit_operations BEGIN SELECT 1; END")
+        if problem=='attached_shadow':
+            db.raw.execute("ATTACH DATABASE ':memory:' AS owned_aux")
+            db.raw.execute('CREATE TABLE owned_aux.deposit_operations(value TEXT)')
+            db.raw.execute("INSERT INTO owned_aux.deposit_operations VALUES ('owned attached sentinel')")
         if problem=='unknown_guard':
             # Deliberate legacy local extension, only within the owned migration fixture.
             db.raw.execute('DROP TRIGGER deposit_operations_no_update')
             db.raw.execute("CREATE TRIGGER deposit_operations_no_update BEFORE UPDATE ON deposit_operations BEGIN SELECT RAISE(ABORT,'local guard'); END")
         before=tuple(db.raw.iterdump());temp=db.raw.execute('SELECT * FROM temp.sqlite_schema').fetchall()
+        attached=db.raw.execute('SELECT * FROM owned_aux.deposit_operations').fetchall() if problem=='attached_shadow' else None
         original_exec=db.conn.exec_driver_sql
         def fault(statement,*args,**kw):
+            if problem=='raw_mismatch' and statement.startswith('INSERT INTO main."_co0023_deposit_operations"'):
+                return original_exec(statement+" WHERE operation_key <> 'C-legacy'",*args,**kw)
             if ((problem=='copy' and statement.startswith('INSERT INTO main."_co0023_')) or
                 (problem=='recreate' and statement.startswith('CREATE INDEX local_coordinate_index')) or
                 (problem=='publish' and statement.startswith('UPDATE alembic_version'))):
@@ -149,3 +156,4 @@ def test_rejection_preserves_complete_state(old_co22,tmp_path,monkeypatch,proble
                 migrate_to_head(db,'company',tmp_path/'backups')
         assert tuple(db.raw.iterdump())==before
         assert db.raw.execute('SELECT * FROM temp.sqlite_schema').fetchall()==temp
+        if problem=='attached_shadow':assert db.raw.execute('SELECT * FROM owned_aux.deposit_operations').fetchall()==attached

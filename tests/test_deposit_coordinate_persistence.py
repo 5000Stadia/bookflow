@@ -140,6 +140,10 @@ def test_complete_action_and_noeffect_paths(client,sale,driver,n2,mode):
             if mode=='direct_bank':
                 assert result.effect.source.bank_changes.kind=='changed_effects'
                 assert sum(v.signed_debit for v in result.effect.source.bank_changes.after)==12000
+                from bookflow.company import reconciliation_adapters as r0
+                _,actual=r0.enumerate_graph(r0.graph(s,[payment['id']]))
+                assert actual==result.effect.source.bank_changes.after
+
         dump=tuple(s.company.raw.iterdump())
         replay=persistence.recover(s,ctx,inp,p.binding)
         assert replay.effect==result.effect and tuple(s.company.raw.iterdump())==dump
