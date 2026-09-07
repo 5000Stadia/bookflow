@@ -1642,3 +1642,17 @@ guard fields into original request provenance. These readers do not write or
 repair company copies. Full-C audience/publication integration, public deposit
 commands, source coordination/all-active cancellation and performance acceptance
 remain separate; no alternate identity binding or live permission policy is added.
+
+Deposit history orders company events by their company sequence first, then hub
+issuer events by their separate hub sequence, with stable record/field ties.
+It does not claim a cross-database chronological sequence; each event retains its
+timestamp. PostInput may omit a caller-supplied guard for a fresh post. The private
+Prepared result still carries the guard produced during preparation, and execute
+passes it back as expected_guard when repreparing before DML. Thus executing a
+prepared post rechecks its baseline even when the original input omitted a guard;
+a supplied input guard additionally checks an earlier caller preview. Exact
+permanent recovery skips that old business guard under current admission.
+Reconciliation currently provides only checked pre-feature absence, not a signed
+read-set anchor. Active resolver admission fails closed; its future integration
+must add the actual reconciliation dependencies rather than silently treating
+that status call as a captured fact.
