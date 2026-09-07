@@ -1,6 +1,7 @@
 """Migration runner for the hub and company chains (blueprint 3.2, 3.3)."""
 
 from __future__ import annotations
+from dataclasses import dataclass
 
 from typing import Any
 
@@ -16,7 +17,7 @@ from bookflow.core.durability import sync_directory, sync_file
 from bookflow.storage.engine import Database, io_error, sqlite_uri
 
 # Head revisions as constants: checked before Alembic is imported on the read path.
-HEADS = {"hub": "hub0012", "company": "co0019"}
+HEADS = {"hub": "hub0012", "company": "co0020"}
 _PKG = Path(__file__).parent
 
 
@@ -245,3 +246,50 @@ def migrate_company(s, ctx, db: Database, folder: Path, row: dict | None) -> tup
         write_company_marker(folder, company_id=row["id"], state="ready", display_name=row["display_name"], schema_revision=after)
         s.hub_touched.append(Touched("company", row["id"], "migrate", None, None, {"schema_revision": after, "from": before}, db="hub"))
     return before, after
+
+
+@dataclass(frozen=True)
+class FeatureRevision:
+    """Private feature activation metadata, installed with its owning migration.
+
+    None explicitly means no persistence in this supported chain. A feature
+    migration must replace None and ship its real resolver in the same change.
+    """
+    chain: str
+    revision: str | None
+
+
+def feature_admission(db, feature: FeatureRevision, *, resolver):
+    """Return absent only before the owned feature; return its real resolver if active.
+
+    Revision ancestry is Alembic graph ancestry, never lexical ordering. The
+    resolver is returned, not invoked: the caller owns typed feature arguments,
+    authorization and the existing database snapshot/transaction.
+    """
+    from alembic.script import ScriptDirectory
+    if type(feature) is not FeatureRevision or feature.chain not in ('company', 'hub'):
+        raise ValueError('invalid feature metadata')
+    script = ScriptDirectory.from_config(_config(feature.chain, None))
+    known = {r.revision: r for r in script.walk_revisions()}
+    current = current_revision_open(db)
+    if current not in known:
+        raise BookflowError('E_SCHEMA_UNKNOWN')
+    if feature.revision is None:
+        if resolver is not None:
+            raise ValueError('resolver without feature revision')
+        return None
+    if feature.revision not in known:
+        raise ValueError('feature revision is not in the supported chain')
+    ancestors, frontier = set(), [current]
+    while frontier:
+        revision = frontier.pop()
+        if revision in ancestors:
+            continue
+        ancestors.add(revision)
+        parent = known[revision].down_revision
+        frontier.extend(parent if isinstance(parent, tuple) else [parent] if parent else [])
+    if feature.revision not in ancestors:
+        return None
+    if not callable(resolver):
+        raise BookflowError('E_INTERNAL', message='Active storage feature requires its owning resolver.')
+    return resolver

@@ -62,7 +62,7 @@ def define_tables(metadata, column, table, common):
             name='ck_ledger_party_pair')
 
     transactions = T('transactions', *common(),
-        text('type', 'Business document type: journal_entry, invoice, sales_receipt or payment.', size=32),
+        text('type', 'Business document type: journal_entry, invoice, sales_receipt, payment or deposit.', size=32),
         text('number', 'Unique editable number within the document type.', size=64),
         identifier('current_revision_id', 'Immutable revision currently displayed.'),
         text('status', 'Current workflow state: posted or voided.', size=16),
@@ -71,7 +71,7 @@ def define_tables(metadata, column, table, common):
         text('void_reason', 'Reason supplied for the final void.', True, 140),
         identifier('void_posting_batch_id', 'Final reversal batch; no separate business number.', True),
         sa.UniqueConstraint('type', 'number', name='uq_transaction_type_number'),
-        sa.CheckConstraint("type IN ('journal_entry', 'invoice', 'sales_receipt', 'payment')", name='ck_transaction_type'),
+        sa.CheckConstraint("type IN ('journal_entry', 'invoice', 'sales_receipt', 'payment', 'deposit')", name='ck_transaction_type'),
         sa.UniqueConstraint('id', 'type', name='uq_transaction_id_type'),
         sa.CheckConstraint("length(trim(number)) BETWEEN 1 AND 64", name='ck_transaction_number'),
         sa.CheckConstraint("(status = 'posted' AND voided_at IS NULL AND voided_by IS NULL AND void_reason IS NULL AND void_posting_batch_id IS NULL) OR "
@@ -129,7 +129,7 @@ def define_tables(metadata, column, table, common):
             "(kind = 'journal' AND account_id IS NOT NULL AND side IS NOT NULL AND side IN ('debit', 'credit') "
             "AND typeof(amount_minor_units) = 'integer' AND amount_minor_units > 0 "
             "AND account_snapshot IS NOT NULL AND json_valid(account_snapshot) AND json_type(account_snapshot) = 'object') OR "
-            "(kind IN ('sale', 'payment') AND account_id IS NULL AND side IS NULL AND amount_minor_units IS NULL AND account_snapshot IS NULL "
+            "(kind IN ('sale', 'payment', 'deposit') AND account_id IS NULL AND side IS NULL AND amount_minor_units IS NULL AND account_snapshot IS NULL "
             "AND original_minor_units IS NULL AND original_currency IS NULL AND rate_used IS NULL AND rate_source IS NULL)",
             name='ck_document_line_kind_side'),
         description='Immutable ordered journal or sale envelopes, dimensions and original journal currency facts.')
@@ -188,6 +188,9 @@ def define_tables(metadata, column, table, common):
         identifier('reversed_source_id', 'Exactly retained attribution from an inverted posting line.', True),
         identifier('tax_component_id', 'Exact sale tax component; null for journal or sale net attribution.', True),
         identifier('payment_component_id', 'Exact owned payment revision component; null for all earlier document types.', True),
+        identifier('deposit_component_id', 'Owned deposit funding component; absent for earlier document types.', True),
+        fk(['transaction_id', 'revision_id', 'document_line_id', 'deposit_component_id'], ['deposit_components.transaction_id', 'deposit_components.revision_id', 'deposit_components.document_line_id', 'deposit_components.id'], 'fk_source_deposit_component'),
+        sa.CheckConstraint('(tax_component_id IS NOT NULL) + (payment_component_id IS NOT NULL) + (deposit_component_id IS NOT NULL) <= 1', name='ck_source_component_exclusive'),
         sa.UniqueConstraint('transaction_id', 'id', name='uq_posting_source_document'),
         sa.UniqueConstraint('reversed_source_id', name='uq_posting_source_reversed'),
         fk(['transaction_id', 'posting_line_id'], ['posting_lines.transaction_id', 'posting_lines.id'], 'fk_source_posting_line'),

@@ -1342,3 +1342,34 @@ can be reproduced in the unchanged isolated SQLite probe; unavailable private
 functions/collations produce a safe unsupported-local-DDL failure before
 persistent index creation. Required keys remain ordinary TEXT-affinity columns
 with BINARY collation. Old rows and local objects are not rewritten.
+
+### Private deposit G1 storage and effects
+
+`deposit_models`, `deposits`, `deposit_validation`, `deposit_sources`,
+`deposit_resolution`, `deposit_composition`, and `bank_effects` implement private
+strict deposit inputs, exact funding/disposition graphs, stored and prospective
+whole-cash adapters, current-fact checks and bank/card statement identities.
+Payment credit ownership remains separate from the payer's cash dimensions.
+Sales net/tax identities retain commercial-line/tax-item ordering. Source plans
+retain their complete settlement, billing, custom-field and date evidence and
+are revalidated without invoking a child applier. Payment and sales-update source
+fingerprints are compared exactly; existing sales void has no source fingerprint
+and retains its version contract. Coordinated all-active unapply/void, aggregate
+identity mapping and one-event persistence remain lifecycle responsibilities.
+
+Company revision `co0020` adds deposit envelopes, immutable semantic occurrences,
+funding/offset/header components, allocation cells, exact claim/release history,
+a unique current receipt claim, and versioned bank-effect keys/current pointers.
+It preserves old history and local SQLite objects and adds no deleted status.
+New source attribution proves both the deposit-owned envelope and the separately
+owned receipt attribution. Null deposit attribution is omitted from older
+serialized source facts. This private increment registers no deposit commands,
+GUI, public lifecycle, Delete execution or reconciliation certificates.
+
+`storage.migrate.FeatureRevision` and `feature_admission` provide the shared
+migration-ancestry boundary for independently owned features. Unknown revisions
+are denied. A feature before its declared revision is absent; an active feature
+requires its real resolver. `deposit_dependencies.RECONCILIATION` explicitly
+records that reconciliation persistence is not yet installed. Its owner must
+install revision metadata and the resolver together with its feature migration;
+there is no active-feature empty fallback.
