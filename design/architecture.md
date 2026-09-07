@@ -1724,3 +1724,108 @@ hub name-changing/create anchor, coherent with that pin. Deposit correction issu
 stay immutable. Aggregate persistence, permanent coordinate recovery, preserving
 operation-schema extension, Delete/drafts, public workflows and full-C publication
 remain separate prerequisites.
+
+### Private reconciliation successor models and preparation
+
+The private `reconciliation_commands_models` module describes strict inputs,
+retained draft/proposal and attempt leaves, and typed candidate/history/report
+values. Its name-to-model inventory is not a command registration. Parsed JSON
+arrays become immutable domain tuples without coercing their element types.
+`reconciliation_preparation.snapshot` consumes complete N rows, actual R0 source
+and capture Graphs, referenced rows and explicit current authority participants;
+it runs the accepted aggregate validator. Participant coverage is not an authority
+credential. Future runtime owners must obtain the real complete authority graph
+before preparation and repeat admission at each release/commit fence.
+
+Draft transformations retain saved versions, require whole producer movements,
+reject stale replacements without explicit accept-current, and preserve proposals
+and terminal states. Attempt chunks retain exact ordered typed payloads and
+receipts; seal checks counts, hashes and semantic targets, and apply changes only
+private values. N tables remain empty outside owned tests. Query cores compute
+whole-result facts and return bounded deterministic slices; their offsets and
+digests are not public authenticated cursors. Public cursor signing, fixed actor/
+principal/OS binding and publication remain activation work.
+
+Report projection keeps as-certified arithmetic and captured member displays,
+one-certificate selected-key replacement impact, and the opening/predecessor-key
+cumulative reconstruction separate. Current mapping precedes account/date filters.
+Amendment preparation derives mandatory and explicit-seed suffixes, validates
+whole replacement/invalidation manifests, and rebuilds adjacency in dated order.
+A staged predecessor FK guards the retained predecessor; a later aggregate
+persister must assign and link the new certificate IDs in that derived order.
+Undo prepares invalidation without a financial inverse.
+
+Proposal previews retain exact ordinary journal Plans, validate them through R0
+and the existing current period owner, and never apply them. Force amounts derive
+from exact difference, with bank/card sign conventions. Permanent recovery retains
+original JSON/presence/context independently of canonical captured intent and
+returns immutable effect separately from current state after explicit authority
+coverage. Actual original-action admission and storage lookup remain runtime
+obligations. Source-action arms retain present owning input types only; they do
+not implement deposit B/C's keyless compound persistence or its permission gates.
+
+Insertion targets now use the exact owned decoded replacement revision's
+account/date; existing certificate identity is certificate ID alone, independent
+of mode/account/predecessor. This joined semantic key is enforced by N's private
+validator and attempt seal, **not SQL UNIQUE**. SQL retains typed owner/revision
+FKs, discriminator shapes and final active account/date uniqueness. No co0022
+DDL/metadata change is made; future persistence must validate before DML.
+
+Certificate/seed attempts require an explicit ManifestContext containing the
+owning before-source graph, current authorized participants, captured chain
+versions and opening actions. Seal derives mandatory plus explicit seeded closure,
+loads exact owned open draft revisions and reconstructs the complete dated suffix.
+Observed predecessor IDs guard retained topology; they never dictate output
+adjacency. Seal rejects all resulting account/date collisions, including insertion
+versus replacement and two replacements, plus missing/extra suffix and stale
+revision/chain facts. Apply repeats these checks against the current snapshot.
+Member/proposal-only attempts keep their whole-selection/current checks and need
+no invented source-change context. Returned immutable attempts retain the complete
+manifest for future persistence; staging never certifies zero or posts money.
+Financial amendment preparation additionally proves whole selection, authentic
+opening partition and exact per-statement zero using derived adjacency.
+No resolver, backfill, public capability, live draft writer or activation is added.
+
+### Private reconciliation review corrections (F1–F5)
+
+Proposal preview binds supplied revision IDs exactly to the draft's saved set,
+with no omissions, extras, substitutions or duplicate IDs, before statement
+arithmetic. Explicit force proposals also belong to that saved revision set;
+preview has no unsaved-proposal exemption. Ordinary Plan identity, prospective
+owner validation, current period and full authority remain required.
+
+Every private report/query/component/history/draft-show/attempt-item/progress/
+operation-item/recovery reader takes a Snapshot and explicit current authority
+participants. Read admission checks complete retained/current graph coverage
+before account support/proof, content, filters, totals and paging. Snapshot
+construction alone is not authority for a later read. The actual runtime owner
+must obtain these participants from current authority and supply the complete
+required graph, including historical attempts/operations and captured worlds;
+there is no Boolean permission or synthetic Session. This private whole-snapshot
+proof is not a paging latency claim or the future publication fence.
+
+ReconciliationError now derives from the project's BookflowError. Existing
+shared codes (including query/preview/version staleness) retain their exact codes
+and serialization. Until public registration, private closed reconciliation
+reasons use E_VALIDATION with a fixed reason field, or E_INTERNAL for invalid
+owned source. Activation must register the planned domain codes/statuses and
+query-only factory path; this increment does not mutate the public error catalog.
+Known adapter Unsupported/Corrupt and owning content-format failures convert to
+these typed outcomes; IO/DB failures and existing BookflowErrors propagate through
+their existing owners. No raw source exception text becomes returned details.
+
+Seal explicitly checks the current edit barrier, allowing its own attempt only.
+Missing-range inspection validates contiguous chunk indices, receipts and hashes,
+and returns the exact unreceived ordinal suffix (zero ranges when complete),
+without a 200-item aggregate cap. Terminal sealed/applied attempts must be complete.
+Proposal removal is an immutable draft-link revision; cancellation is the parent
+draft's terminal revision/operation. Proposal headers have no terminal column in N.
+Thus unconsumed proposal availability is derived from current parent state and
+revision links; historical revisions and consumption records remain intact.
+No schema contradiction or new proposal-state column is introduced.
+
+Semantic attempt-target uniqueness has **no database constraint behind it**:
+it is enforced only by the aggregate validator and seal. SQL still independently
+checks typed ownership/shape and the final active account/date projection, but
+cannot enforce the joined draft-header date key. Future persistence must run the
+aggregate checks before DML; no co0022 rewrite or activation is included here.

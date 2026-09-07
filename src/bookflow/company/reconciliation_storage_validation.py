@@ -518,8 +518,21 @@ def _receipts(r):
             require(subtype is not None,'attempt_subtype')
             payload={k:v for k,v in subtype.items() if k not in ('attempt_id','ordinal')}
             require(item['payload']==payload,'attempt_payload')
-            fields={'member':('key_id',),'seed':('account_id','kind','opening_id','certificate_id','date'),'certificate':('account_id','certificate_id','predecessor_id'),'proposal':('proposal_id',)}[item['kind']]
-            key=(item['kind'],*(subtype[f] for f in fields)); require(key not in seen,'attempt_duplicate_target'); seen.add(key)
+            # Joined semantic identity is aggregate-enforced, not a SQL UNIQUE.
+            # Retained predecessor is a separate topology observation.
+            if item['kind']=='certificate':
+                if subtype['certificate_id'] is not None:
+                    key=('certificate',subtype['certificate_id'])
+                else:
+                    revision=next((v for v in r['draft_revisions'] if v['id']==subtype['replacement_draft_revision_id']),None)
+                    require(revision is not None and revision['account_id']==subtype['account_id'],'attempt_revision_owner')
+                    header=Header.model_validate(revision['header_snapshot'])
+                    require(header.statement_date is not None,'attempt_statement_date')
+                    key=('insertion',subtype['account_id'],header.statement_date)
+            else:
+                fields={'member':('key_id',),'seed':('account_id','kind','opening_id','certificate_id','date'),'proposal':('proposal_id',)}[item['kind']]
+                key=(item['kind'],*(subtype[f] for f in fields))
+            require(key not in seen,'attempt_duplicate_target'); seen.add(key)
             if item['kind'] in ('member','proposal'): require(subtype['draft_id']==a['draft_id'],'attempt_draft_owner')
             if item['kind']=='seed':
                 require((subtype['kind']=='opening' and subtype['opening_id'] is not None and subtype['certificate_id'] is None) or (subtype['kind']=='statement' and subtype['certificate_id'] is not None and subtype['opening_id'] is None) or (subtype['kind']=='insert' and subtype['opening_id'] is None and subtype['certificate_id'] is None and subtype['date'] is not None),'seed_shape')
