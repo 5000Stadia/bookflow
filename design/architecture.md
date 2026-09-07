@@ -1453,9 +1453,13 @@ Related commits share an outer operation. Scope exit reports committed, unchange
 rolled-back or durable-partial outcomes only after watched transactions settle;
 otherwise the operation stays pending until existing writer cleanup resolves it.
 Old generations are never restored after rollback. Hooks neither add transactions
-nor own rollback/retry algorithms. The hook notification seam does no event-loop
-waiting, response enumeration, filesystem I/O or admission locking; database
-tracking at each commit is constant work. Independent literal owner inventory and
+nor own rollback/retry algorithms. The admission owner's `finish_commit` retains
+the explicit boolean outcome classification, including durable-partial as committed,
+but does not branch on it: close invalidates old generations even on rollback.
+The hook notification seam takes the admission mutex only for constant-work close
+and finish; it does no event-loop waiting, response enumeration or filesystem I/O.
+Waiter notification is scheduled outside the mutex. Database tracking at each
+commit is constant work. Independent literal owner inventory and
 real owner-branch tests live in `tests/test_commit_hooks.py`. Their test-only gate
 observer proves routing order; it is not live transport/permission acceptance.
 
