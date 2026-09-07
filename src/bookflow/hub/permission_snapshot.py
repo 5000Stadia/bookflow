@@ -655,9 +655,10 @@ def observe_pair(old: RootFacts, proposed: RootFacts, *, old_catalog: CatalogBun
     manifests = []; phases = []; revisions = []
     for root, bundle, obs in zip((old, proposed), (old_catalog, new_catalog), observations):
         supplied = visibility.facts(root, raw_scopes, subjects)
-        _decode(supplied, VisibilityFacts, 'visibility', native=True)
-        if not supplied.policy_revision:
+        if (type(supplied) is not VisibilityFacts or type(supplied.policy_revision) is not str
+                or not supplied.policy_revision or type(supplied.rows) is not tuple):
             _fail('visibility_unresolved', 'visibility')
+        _decode(supplied, VisibilityFacts, 'visibility', native=True)
         values = {(x.subject, x.scope): x for x in supplied.rows}
         present = {x.scope for x in obs.scopes if x.logical_present}
         if len(values) != len(supplied.rows) or set(values) != {(who, scope) for who in subjects for scope in raw_scopes}:

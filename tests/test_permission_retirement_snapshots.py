@@ -431,3 +431,25 @@ def test_nonempty_structural_proposal_does_not_open_or_probe(old,monkeypatch):
     company=s.CompanyRow('V','Z',1,None)
     result=derive(old,s.ScopeRows(companies=(company,),remove_companies=('F',),remove_memberships=('X',))).root
     assert result.keys.companies==( ('C','O'),('D','O'),('E','Z'),('V','Z'))
+
+
+@pytest.mark.parametrize('kind', ['wrong_envelope','nonstring_revision','empty_revision','list_rows'])
+def test_visibility_envelope_retains_unresolved_category(old,kind):
+    class BadEnvelope(GovernedVisibility):
+        def facts(self,root,scopes,subjects):
+            valid=super().facts(root,scopes,subjects)
+            if kind=='wrong_envelope':return asdict(valid)
+            if kind=='nonstring_revision':return replace(valid,policy_revision=1)
+            if kind=='empty_revision':return replace(valid,policy_revision='')
+            return replace(valid,rows=list(valid.rows))
+    with pytest.raises(s.SnapshotError) as caught:observe(old,old,provider=BadEnvelope())
+    assert caught.value.args==('visibility_unresolved','visibility')
+
+
+def test_visibility_envelope_does_not_reclassify_nested_type_failure(old):
+    class BadNested(GovernedVisibility):
+        def facts(self,root,scopes,subjects):
+            valid=super().facts(root,scopes,subjects)
+            return replace(valid,rows=(replace(valid.rows[0],visible=1),*valid.rows[1:]))
+    with pytest.raises(s.SnapshotError) as caught:observe(old,old,provider=BadNested())
+    assert caught.value.args==('invalid_type','visibility')
