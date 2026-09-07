@@ -1920,3 +1920,20 @@ resource call-site parity. Changing this provenance changes the bundle identity
 digest, even when the policy descriptor and inventory digest are unchanged.
 Existing historical descriptors are not automatically adopted or rewritten;
 they still require the separately admitted catalog transition.
+
+### Private audit projection recovery
+
+`hub.audit_projection` and `core.publication_audit` provide a private typed
+history service through an authenticated reader and retained publication proof.
+Each release check uses a fresh reader. Public audit/activity commands still use
+their existing contracts; this service does not activate granular permissions.
+
+Payment selection header, immutable revision context, and set/remove/clear item
+history use closed models in `audit_projection_legacy`. Entered/calculated/
+unresolved amount origins and the original field-presence state are preserved.
+Current denied reference fields use the established null projection; entitled
+fields absent from a historical capture are not added from model defaults.
+
+Permanent operation and recovery receipt decoders, full producer/field conformance,
+no-entry semantics and public cursor/transport cutover remain required. The
+private implementation is not a complete audit or full-C release.

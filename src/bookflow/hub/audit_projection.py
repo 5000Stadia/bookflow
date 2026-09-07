@@ -727,6 +727,10 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
         if route is not None:required=(*required,route)
         if any(not _kind_allowed(audience,company,kind) for kind in required):
             updates[key]=None;partial=True;continue
+        # Preserve omission in an entitled historical capture. Masked fields
+        # above deliberately use one null shape even when originally absent.
+        if key not in value.model_fields_set:
+            continue
         projected=_disclose_company(audience,company,item,route,cutoff=cutoff)
         updates[key]=projected
         if isinstance(projected,legacy.View) and projected.projection_partial:partial=True
@@ -850,6 +854,9 @@ def project_event(audience,event_id,*,company=None,requirements=None,_seen_annot
                 command=event['command']
             from .audit_projection_legacy import _LIST_NOUNS
             if any(_LIST_NOUNS.get(e.identity.kind)==verb for e in projected):
+                command=event['command']
+            if event['command'].startswith('payment selection ') and any(
+                    e.identity.kind=='payment_selection' for e in projected):
                 command=event['command']
         if initiating.get(event['command']) in kinds:
             command=event['command']

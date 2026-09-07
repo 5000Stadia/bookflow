@@ -2553,6 +2553,10 @@ def decode_company_snapshot(*, producer: str, record_type: str, action: str,
                             snapshot: Mapping[str,object]):
     if type(snapshot) is not dict:_format()
     model=_list_model(producer,record_type,action,snapshot)
+    if record_type in _SELECTION_MODELS:
+        if producer not in _SELECTION_COMMANDS or action not in ('create','update'):
+            _format()
+        model=_SELECTION_MODELS[record_type]
     if record_type=='company_info' and producer=='upgrade' and action=='migrate':
         model=CompanyMigrationView
     if model is None and record_type in _ANNOTATION_MODELS:
@@ -2710,3 +2714,113 @@ _OBJECT_REFERENCE_KINDS.update({
     (WorkTaxCapture,'tax_item'):'item',(WorkTaxCapture,'agency'):'vendor',
     (AdditionalCapture,'payment_method'):'payment_method',
 })
+
+
+class SelectionContextView(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset({'customer_id','ar_account_id'})
+    mode: Literal['new_receipt','existing_credit']
+    customer_id: str | None
+    ar_account_id: str | None
+    payment_id: str | None
+    date: str
+    currency: str
+    label: str | None
+    automatically_calculate: bool
+    funding_version: int | None = None
+    funding_date: str | None = None
+    funding_capacities: dict[str,int] | None = None
+    funding_owners: dict[str,str] | None = None
+
+    @model_validator(mode='after')
+    def capacities(self):
+        if self.funding_capacities is not None and any(v<0 for v in self.funding_capacities.values()):
+            raise ValueError('negative captured funding')
+        return self
+
+
+class PaymentSelectionView(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(('version', 'created_at', 'created_by', 'created_via', 'updated_at', 'updated_by', 'updated_via'))
+    tag: Literal['payment_selection']='payment_selection'
+    id: str
+    version: int | None = Field(ge=1)
+    state: Literal['open','consumed']
+    current_revision_id: str
+    consumed_operation_id: str | None
+    created_at: str | None
+    created_by: str | None
+    created_via: str | None
+    updated_at: str | None
+    updated_by: str | None
+    updated_via: str | None
+
+    @model_validator(mode='after')
+    def state_owner(self):
+        if (self.state=='open')!=(self.consumed_operation_id is None):
+            raise ValueError('invalid consumption state')
+        return self
+
+
+class PaymentSelectionRevisionView(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(('version', 'created_at', 'created_by', 'created_via', 'manifest_hash'))
+    tag: Literal['payment_selection_revision']='payment_selection_revision'
+    _internal: ClassVar[frozenset[str]]=frozenset({'manifest_hash'})
+    id: str
+    selection_id: str
+    version: int | None = Field(ge=1)
+    context_snapshot: SelectionContextView
+    amount_minor_units: int | None = Field(ge=0)
+    amount_origin: Literal['entered','selection_total','unresolved']
+    currency: str
+    manifest_hash: str | None
+    item_count: int = Field(ge=0)
+    created_at: str | None
+    created_by: str | None
+    created_via: str | None
+    audit_event_id: str
+
+    @model_validator(mode='after')
+    def amount(self):
+        if self.amount_origin=='unresolved' and self.amount_minor_units is not None:
+            raise ValueError('unresolved captured amount')
+        if self.amount_origin=='entered' and self.amount_minor_units is None:
+            raise ValueError('missing entered amount')
+        return self
+
+
+class PaymentSelectionItemView(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(('created_at', 'created_by', 'created_via'))
+    tag: Literal['payment_selection_item']='payment_selection_item'
+    id: str
+    selection_id: str
+    revision_id: str
+    kind: Literal['set','remove','clear']
+    invoice_id: str | None
+    ordinal: int | None = Field(ge=1)
+    expected_version: int | None = Field(ge=1)
+    due_minor_units: int | None = Field(ge=0)
+    amount_minor_units: int | None = Field(ge=0)
+    amount_origin: Literal['entered','calculated','unresolved'] | None
+    created_at: str | None
+    created_by: str | None
+    created_via: str | None
+    audit_event_id: str
+
+    @model_validator(mode='after')
+    def shape(self):
+        values=(self.ordinal,self.expected_version,self.due_minor_units,self.amount_minor_units,self.amount_origin)
+        if self.kind!='set':
+            if any(v is not None for v in values) or (self.kind=='clear')!=(self.invoice_id is None):
+                raise ValueError('invalid removal event')
+        elif self.invoice_id is None or any(v is None for v in values[:3]) or self.amount_origin is None or ((self.amount_origin=='unresolved')!=(self.amount_minor_units is None)):
+            raise ValueError('invalid set event')
+        return self
+
+
+_SELECTION_MODELS={m.model_fields['tag'].default:m for m in (
+    PaymentSelectionView,PaymentSelectionRevisionView,PaymentSelectionItemView)}
+_SELECTION_COMMANDS=('payment selection create','payment selection update','payment selection clear',
+    'payment receive','payment apply','payment unapply','payment update','payment void',
+    'payment recovery apply','payment recovery replace')
+_REFERENCE_GROUPS.update({SelectionContextView: (
+    (('customer_id','funding_capacities','funding_owners'),'customer'),
+    (('ar_account_id',),'account'),)})
