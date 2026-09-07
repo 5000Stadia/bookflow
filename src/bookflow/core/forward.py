@@ -94,27 +94,31 @@ def call_host(sock_path: str, envelope: dict[str, Any], timeout: float = 30.0) -
     """Send one envelope, receive one JSON reply; None when no host answers."""
     if sys.platform == "win32":  # pragma: no cover - named pipes arrive with the Windows port
         return None
+    attempted = False
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sk:
             sk.settimeout(timeout)
             sk.connect(sock_path)
             payload = json.dumps(envelope, default=str).encode("utf-8")
+            attempted = True
             sk.sendall(len(payload).to_bytes(4, "big") + payload)
             head = b""
             while len(head) < 4:
                 chunk = sk.recv(4 - len(head))
                 if not chunk:
-                    return None
+                    raise BookflowError("E_IO", details={"stage": "local response", "outcome": "unknown"})
                 head += chunk
             size = int.from_bytes(head, "big")
             body = b""
             while len(body) < size:
                 chunk = sk.recv(min(65536, size - len(body)))
                 if not chunk:
-                    return None
+                    raise BookflowError("E_IO", details={"stage": "local response", "outcome": "unknown"})
                 body += chunk
             return json.loads(body.decode("utf-8"))
     except (OSError, ValueError):
+        if attempted:
+            raise BookflowError("E_IO", details={"stage": "local response", "outcome": "unknown"}) from None
         return None
 
 

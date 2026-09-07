@@ -53,6 +53,10 @@ class Delivery(StreamingResponse):
                           binary=binary, recovery=recovery, on_json=capture)
 
     async def __call__(self, scope, receive, send):
+        state = scope.get("bookflow.response_release")
+        if state is not None:
+            deadline = self.started_at + self.runtime.json_seconds
+            state.deadline = deadline if state.deadline is None else min(state.deadline, deadline)
         with self.runtime.intents.lock:
             if self.runtime.intents.active.get(self.intent.reference) is not self.intent or self.intent.abandoned:
                 raise invalid("delivery_abandoned")

@@ -25,6 +25,10 @@ class IntentGuard:
     credential: object
     permit: object
 
+    @property
+    def publication_transfer(self):
+        return getattr(self.intent, "transfer", None)
+
     def check(self, **_kwargs):
         if self.permit is not None:
             self.permit.check(self.runtime.host, self.credential)
@@ -269,6 +273,8 @@ def mount_transport(app, host, authenticate, make_context, response):
                 try:
                     transfer = (await run_in_threadpool(rt.reopen_output, intent, credential)
                                 if document.permit.execution_succeeded and document.permit.cmd.transfer and document.permit.cmd.transfer.direction == "output" else None)
+                    if transfer is not None:
+                        document.publication_transfer = transfer
                     return Delivery(rt, intent, document, binary=binary_chunks(transfer) if transfer else None, recovery=True)
                 except BaseException:
                     await run_in_threadpool(rt.intents.finish, intent, receipt=intent.receipt, publication=intent.publication)

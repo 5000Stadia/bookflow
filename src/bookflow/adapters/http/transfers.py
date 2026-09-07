@@ -92,6 +92,9 @@ class LeasedDownload(StreamingResponse):
             raise BookflowError("E_IO", details={"check": "download_digest"})
 
     async def __call__(self, scope, receive, send):
+        state = scope.get("bookflow.response_release")
+        if state is not None:
+            state.deadline = self.transfer.resource.lease._deadline
         async def bounded_send(message):
             timeout = min(30.0, self.transfer.resource.lease.remaining_seconds())
             try:
@@ -133,6 +136,9 @@ def install(app, host, *, credential, lookup, selector_of, make_context, secret_
         keep = False
         try:
             transfer = await run_in_threadpool(owner.run, begin)
+            state = request.scope.get("bookflow.response_release")
+            if state is not None:
+                state.deadline = transfer.resource.lease._deadline
             iterator = request.stream().__aiter__()
             while True:
                 timeout = min(30.0, transfer.resource.lease.remaining_seconds())

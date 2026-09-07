@@ -258,6 +258,60 @@ class HostedTransfer:
             finally:
                 self.host.reader_done()
 
+    def suspend_publication(self):
+        """Release output handles/lease before an F1 wait; keep only captured facts."""
+        if self.resource is None or self.resource.lease.state == 'closed':
+            return
+        if self.cmd.transfer.direction == 'input':
+            if self.body.size or self.body.completed:
+                from bookflow.core.publication_admission import AdmissionCancelled
+                self.close()
+                raise AdmissionCancelled('consumed input cannot wait for publication')
+        elif self.reader is None:
+            return
+        self._publication_deadline = self.resource.lease._deadline
+        self.resource.lease.close()
+        self.reader = None
+        self._publication_suspended = True
+
+    def resume_publication(self):
+        """Reacquire the same read-only body without executing its command again."""
+        if not getattr(self, '_publication_suspended', False):
+            return
+        from bookflow.core.dispatch import _close
+        session = self.host.reader_session(self.user_id, self.login)
+        lease = None
+        try:
+            self.authorize_session(session)
+            current = prepare(self.cmd, self.raw, self.ctx, session,
+                              selector=self.selector, source=self.source)
+            if (current.info != self.resource.info or current.store != self.resource.store
+                    or current.limit != self.prepared.limit):
+                raise BookflowError('E_IO', details={'check': 'download_changed'})
+            lease = self.host.acquire_transfer(self.user_id, self.resource.lease.company_id)
+            # A replacement lease must not restart the original lifetime.
+            lease._deadline = min(lease._deadline, self._publication_deadline)
+            lease.check_io()
+            resource = TransferResource(lease, current.store, current.info)
+            if self.cmd.transfer.direction == "input":
+                self.body = InputBody(resource, self.prepared.limit, self.dry_run)
+                reader = None
+            else:
+                reader = open_verified(current.store, current.info)
+                lease.add_cleanup(reader.close)
+            self.resource = resource
+            self.reader = reader
+            self._publication_suspended = False
+        except BaseException:
+            if lease is not None:
+                lease.close()
+            raise
+        finally:
+            try:
+                _close(session)
+            finally:
+                self.host.reader_done()
+
     def close(self):
         if self.resource is not None:
             self.resource.lease.close()

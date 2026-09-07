@@ -4,6 +4,8 @@ Only known nonblocking socket transports may execute inside the mutex. Validatio
 readiness, cancellation cleanup and all filesystem work belong outside it.
 """
 from dataclasses import dataclass
+import asyncio
+import time
 import socket
 from threading import Lock
 from asyncio.selector_events import _SelectorSocketTransport
@@ -23,11 +25,33 @@ class ReadGeneration:
 
 
 @dataclass(eq=False, repr=False)
+class ResponseRelease:
+    """Private whole-response evidence; HTTP interim100 is a separate class."""
+    accepted: int = 0
+    interim_accepted: int = 0
+    cutoff: float | None = None
+    deadline: float | None = None
+    aborted: bool = False
+
+    def start(self):
+        if self.cutoff is None:
+            self.cutoff = time.monotonic() + 30.0
+        if self.deadline is not None:
+            self.cutoff = min(self.cutoff, self.deadline)
+
+    def retry(self):
+        self.start()
+        if self.accepted or self.aborted or time.monotonic() >= self.cutoff:
+            raise AdmissionCancelled('response cannot wait for publication')
+
+
+@dataclass(eq=False, repr=False)
 class Frame:
     generation: ReadGeneration
     kind: str
     accepted: int = 0
     terminal: bool = False
+    response: ResponseRelease | None = None
 
 
 @dataclass(frozen=True, eq=False, repr=False)
@@ -40,6 +64,8 @@ class Admission:
         self._mutex = Lock()
         self._epoch = object()
         self._barrier = None
+        self._wait_loop = None
+        self._reopened = None
 
     def begin_validation(self):
         with self._mutex:
@@ -52,12 +78,14 @@ class Admission:
                 or generation.epoch is not self._epoch or self._barrier is not None):
             raise AdmissionCancelled('publication admission changed')
 
-    def admit(self, generation, kind):
+    def admit(self, generation, kind, response=None):
         if type(kind) is not str or not kind:
             raise ValueError('frame kind required')
         with self._mutex:
             self._valid(generation)
-            return Frame(generation, kind)
+            if response is not None and (type(response) is not ResponseRelease or response.aborted):
+                raise AdmissionCancelled("response ended")
+            return Frame(generation, kind, response=response)
 
     def _frame(self, frame):
         if type(frame) is not Frame or frame.terminal:
@@ -85,6 +113,8 @@ class Admission:
                 frame.terminal = True
                 raise
             frame.accepted += len(data)
+            if frame.response is not None:
+                frame.response.accepted += len(data)
             return len(data)
 
     def socket_send(self, frame, sock, data):
@@ -104,6 +134,8 @@ class Admission:
                 frame.terminal = True
                 raise AdmissionCancelled('socket closed')
             frame.accepted += count
+            if frame.response is not None:
+                frame.response.accepted += count
             return count
 
     @staticmethod
@@ -132,3 +164,35 @@ class Admission:
             if barrier is not self._barrier or type(barrier) is not CommitBarrier:
                 raise ValueError('foreign or completed barrier')
             self._barrier = None
+            loop, event = self._wait_loop, self._reopened
+        # Constant writer work. Event.set wakes tasks on their loop, outside the
+        # mutex and without the writer enumerating or waiting for responses.
+        if loop is not None and not loop.is_closed():
+            try:
+                loop.call_soon_threadsafe(event.set)
+            except RuntimeError:
+                # Shutdown can close the loop after the check. A dead transport
+                # has no waiter to notify; never change a durable commit outcome.
+                if not loop.is_closed():
+                    raise
+
+    async def wait_open(self, response, cancelled):
+        """No reader, writer resource or worker-pool slot is held by this wait."""
+        loop = asyncio.get_running_loop()
+        while True:
+            response.retry()
+            if cancelled():
+                raise AdmissionCancelled('response disconnected or host stopping')
+            with self._mutex:
+                if self._barrier is None:
+                    return
+                if self._wait_loop is not loop:
+                    if self._wait_loop is not None and not self._wait_loop.is_closed():
+                        raise RuntimeError('admission belongs to another transport loop')
+                    self._wait_loop, self._reopened = loop, asyncio.Event()
+                event = self._reopened
+                event.clear()  # register and check while finish_commit is excluded
+            try:
+                await asyncio.wait_for(event.wait(), min(.05, response.cutoff - time.monotonic()))
+            except TimeoutError:
+                pass

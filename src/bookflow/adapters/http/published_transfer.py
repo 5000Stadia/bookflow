@@ -46,6 +46,7 @@ class PublishedTransfer(HostedTransfer):
             self._publication_document = document
             raise BookflowError("E_IO", details={"stage": "publication", "outcome": "unknown"}) from None
         document = PublishedDocument(result, permit, self.host, self.credential)
+        document.publication_transfer = self
         self._publication_document = document
         protect(document)
         return document

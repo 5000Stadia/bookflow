@@ -1395,9 +1395,8 @@ protocol100/400/500/503 messages contain no business data. Empty finals and chun
 terminators belonging to a business response remain guarded.
 
 Local operation-owned sockets use nonblocking short writes and readiness outside
-the gate. Their conservative generation begins before execution/staging; later
-commit-owner wiring must supply current OS publication authority and reviewed
-own-effect handling. Generic cooperative Python streams retain their existing
+the gate. The F1 successor below supplies fresh phase/current OS publication
+proofs without resetting cumulative accepted bytes. Generic cooperative Python streams retain their existing
 contract and are never called while admission holds its mutex. Transfer lease
 cleanup remains independent. The complete-frame local receiver and verified MCP
 terminal remain client relay boundaries, not remote cancellation acknowledgments.
@@ -1489,3 +1488,49 @@ requires its real resolver. `deposit_dependencies.RECONCILIATION` explicitly
 records that reconciliation persistence is not yet installed. Its owner must
 install revision metadata and the resolver together with its feature migration;
 there is no active-feature empty fallback.
+
+### Response-wide F1 (nonactivating transport increment)
+
+`ResponseRelease` counts final/business bytes across headers, chunks, SSE and
+terminal frames in the same mutex as their actual bounded socket/buffer handoff.
+HTTP100 interim bytes have a separate protocol-only counter. An invalidated
+zero-final-byte response may wait and revalidate its captured result; any previous
+final byte or uncertain handoff forbids retry. Rollback never restores tickets.
+The owned `AdmissionCycle` encodes each h11 part once, keeps those pending bytes
+through zero-release revalidation, and marks completion/advances keep-alive only
+after admitted EndOfMessage. It retains upstream event handling with only the
+cycle constructor replaced. Header bounds include protocol defaults. Fixed
+protocol errors cannot replace an already aborted business response.
+
+One absolute30s F1 cutoff starts at first release, not business execution. Earlier
+local/transfer/MCP deadlines cap it; later phases cannot extend it. HTTP waits are
+loop tasks, local waits use their dedicated connection thread, and both observe
+disconnect/shutdown. Validation workers hold no reader while waiting. Flow-control
+waits detect invalidation too. Writer finish only schedules the loop notification
+outside the mutex; a stopped loop or saturated validation pool cannot block COMMIT.
+
+Local replies now use the same captured publication permit with typed `OSBinding`:
+effective login mapping and current actor are checked at dequeue and release;
+existing fixed principal bindings are rechecked without fabricating an API token.
+OS active-user eligibility stays the existing resolver's policy. Captured token,
+source, payment/recovery graph and narrow own-effect checks remain unchanged.
+Ready/body/final local transfer phases replace their guard but retain cumulative
+bytes. An empty preparation/output lease is surrendered before a zero-release
+wait and reacquired from the same current digest/size/store facts, with its original
+deadline and no command replay. Consumed input is closed/aborted, never rebuilt.
+MCP intent/recovery delivery exposes its actual transfer to this same lifecycle.
+Post-send local truncation is unknown outcome, never automatic offline fallback.
+
+Offline downloads verify into an owned disk spool under RootLock, release that
+lock, then deliver the complete captured file to a possibly blocking/short-writing
+caller sink under the original deadline. Hosted client relay, SDK complete-message
+verification and link-based destination publication retain their D1 ownership.
+This is not remote recall or an overwrite-semantics change.
+
+Production commit hooks remain nonactivating. Their shared depth/operation/outcome
+state is **writer-thread confined**, deliberately without a lock. Installation of
+closure must retain that confinement; reader sessions must never commit through
+the shared hook. FullC projector/granular/retirement policy, minimal authority-losing
+own-effect acknowledgments, opaque cursors and membershipless-admin policy remain
+separate acceptance gates. Later deposit integration must preserve its
+`feature_admission` changes and run the exact metadata/admission witness.

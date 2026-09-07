@@ -54,6 +54,7 @@ def run_transfer(cmd, raw, ctx, *, data_root=None, selector=None, source="option
     resource = None
     allowed = False
     effective_ctx = ctx
+    verified_output = None
 
     def session(writable):
         nonlocal allowed, effective_ctx
@@ -76,7 +77,7 @@ def run_transfer(cmd, raw, ctx, *, data_root=None, selector=None, source="option
             _pending.pop(lease, None)
 
     def run_locked():
-        nonlocal resource
+        nonlocal resource, verified_output
         with private_umask():
             lock.__enter__()
             try:
@@ -125,11 +126,26 @@ def run_transfer(cmd, raw, ctx, *, data_root=None, selector=None, source="option
                             raise BookflowError("E_IO", details={"check": "download_changed"})
                     finally:
                         _close(s)
-                copy_output(reader, output_stream, resource.info, check)
+                import tempfile
+                verified_output = tempfile.TemporaryFile(mode="w+b")
+                copy_output(reader, verified_output, resource.info, check)
+                verified_output.seek(0)
                 return output
             finally:
                 if resource is not None:
                     resource.lease.close()
                 else:
                     lock.__exit__(None, None, None)
-    return guard(run_locked, lambda: allowed)
+    try:
+        result = guard(run_locked, lambda: allowed)
+        if verified_output is not None:
+            # Complete verified bytes crossed the offline ownership boundary.
+            # The root lock is released before any caller-controlled write.
+            def delivery_deadline():
+                if resource.lease._clock() >= resource.lease._deadline:
+                    raise BookflowError('E_IO', 'Transfer deadline expired.')
+            guard(lambda: copy_output(verified_output, output_stream, resource.info, delivery_deadline), lambda: allowed)
+        return result
+    finally:
+        if verified_output is not None:
+            verified_output.close()
