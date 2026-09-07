@@ -154,27 +154,90 @@ def test_query_only_error_and_required_label_contract():
     assert 'E_PAYMENT_PROFILE_INVALID' in discovery['error_codes']
 
 
-def test_original_combined_page_fields_and_canonical_cursors(client, monkeypatch, tmp_path):
+def test_original_combined_page_fields_and_canonical_cursors(client, labels, monkeypatch, tmp_path):
+    import hashlib
+    import inspect
+    import math
+    import sqlite3
     import subprocess
     import types
     from pathlib import Path
-    source = subprocess.check_output(['git', 'show', 'c8e0f8ba34962eb0b8fc7bd26a22a71cede3b083:src/bookflow/company/payment_preparation.py'], cwd=Path(__file__).resolve().parents[1], text=True)
+    from tests.test_row8_journal import database_path
+
+    reference = 'c8e0f8ba34962eb0b8fc7bd26a22a71cede3b083'
+    checkout = Path(__file__).resolve().parents[1]
+    source = subprocess.check_output(['git', 'show', reference + ':src/bookflow/company/payment_preparation.py'], cwd=checkout)
     old = types.ModuleType('combined_payment_preparation')
-    exec(compile(source, 'c8e0f8b/payment_preparation.py', 'exec'), old.__dict__)
-    current = preparation.payment_page
+    exec(compile(source, reference + '/payment_preparation.py', 'exec'), old.__dict__)
+    command = registry.get('payment query')
+    registered = command.plan
+    # The registry closes over the selected function at registration time.
+    # Observe that actual execution seam; patching a module attribute is inert.
+    assert inspect.getclosurevars(registered).nonlocals['planner'] is preparation.payment_page
     receipts = []
-    def compared(session, inp):
+    calls = {'old': 0, 'new': 0}
+    canonical = lambda value: json.dumps(value, sort_keys=True, separators=(',', ':')).encode()
+
+    def compared(inp, ctx, session):
         expected = old.payment_page(session, inp)
-        actual = current(session, inp)
-        stripped = {**actual, 'items': [{k:v for k,v in row.items() if k not in ('payer_label','method_label')} for row in actual['items']]}
+        calls['old'] += 1
+        plan = registered(inp, ctx, session)
+        calls['new'] += 1
+        actual = plan.preview.model_dump(mode='json')
+        stripped = {**actual, 'items': [{k: v for k, v in row.items() if k not in ('payer_label', 'method_label')} for row in actual['items']]}
         assert stripped == expected
-        assert json.dumps(stripped, sort_keys=True, separators=(',',':')) == json.dumps(expected, sort_keys=True, separators=(',',':'))
-        receipts.append({'old':expected, 'new':actual})
-        return actual
-    monkeypatch.setattr(preparation, 'payment_page', compared)
-    before = allrows(client)
-    for limit in (1,25,200):
-        pages(client, limit=limit)
-    pages(client, q='absent-captured-payment', limit=1)
+        assert canonical(stripped) == canonical(expected)
+        receipts.append({'input': inp.model_dump(mode='json'), 'old': expected, 'new': actual,
+                         'old_canonical': canonical(expected).decode(),
+                         'new_without_labels_canonical': canonical(stripped).decode()})
+        return plan
+
+    monkeypatch.setattr(command, 'plan', compared)
+    before = allrows(client)  # Every old seeded history row plus the new receipts.
+    with sqlite3.connect(database_path(client)) as db:
+        total = db.execute("SELECT count(*) FROM transactions WHERE type='payment'").fetchone()[0]
+    assert total > 25, 'Fixture must exercise continuation at both limits 1 and 25'
+    request_count = 0
+    coverage = {}
+    complete_rows = []
+    for limit in (1, 25, 200):
+        cursor = None
+        rows = []
+        start = len(receipts)
+        while True:
+            request = dict(limit=limit, **({'cursor': cursor} if cursor else {}))
+            result = run(client, 'payment query', **request)
+            request_count += 1
+            # This assertion fails immediately if dispatch bypasses the comparator.
+            assert len(receipts) == calls['old'] == calls['new'] == request_count
+            assert result == receipts[-1]['new']
+            assert result['total_count'] == total
+            rows.extend(result['items'])
+            cursor = result['next_cursor']
+            if cursor is None:
+                break
+        chain = receipts[start:]
+        assert len(chain) == math.ceil(total / limit)
+        assert len(rows) == len({row['id'] for row in rows}) == total
+        assert chain[0]['input']['cursor'] is None
+        for previous, following in zip(chain, chain[1:]):
+            assert previous['old']['next_cursor'] == previous['new']['next_cursor'] == following['input']['cursor']
+        if limit < total:
+            assert len(chain) > 1 and chain[0]['new']['next_cursor']
+        complete_rows.append(rows)
+        coverage[str(limit)] = {'pages': len(chain), 'rows': len(rows), 'continuations': len(chain)-1}
+        empty = run(client, 'payment query', q='absent-captured-payment', limit=limit)
+        request_count += 1
+        assert len(receipts) == calls['old'] == calls['new'] == request_count
+        assert empty == receipts[-1]['new']
+        assert empty['items'] == [] and empty['total_count'] == 0 and empty['next_cursor'] is None
+    assert complete_rows[0] == complete_rows[1] == complete_rows[2]
+    assert len(receipts) == sum(math.ceil(total / limit) + 1 for limit in (1, 25, 200)) > 3
     assert allrows(client) == before
     (tmp_path/'combined-before-after-pages.json').write_text(json.dumps(receipts, indent=2))
+    (tmp_path/'combined-before-after-coverage.json').write_text(json.dumps({
+        'reference': reference, 'reference_source_sha256': hashlib.sha256(source).hexdigest(),
+        'candidate_source_sha256': hashlib.sha256(Path(preparation.__file__).read_bytes()).hexdigest(),
+        'calls': calls, 'requests': request_count, 'coverage': coverage,
+        'empty_pages': sum(row['new']['total_count'] == 0 for row in receipts),
+        'old_seeded_and_new_rows_preserved': True}, indent=2))
