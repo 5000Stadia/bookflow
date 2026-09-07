@@ -409,3 +409,45 @@ def test_deposit_zero_bank_actual_g1_profile_storage(client,sale):
             assert not accounts._has_captured_posting_use(db,sale['customer'])
         finally:db.raw.execute('ROLLBACK')
         assert list(db.raw.iterdump())==before
+
+
+def test_active_capture_table_missing_denies_account_change(client,sale):
+    target=run(client,'account create',dict(name='Missing capture table target',type='income'))['id']
+    with open_database(database_path(client),writable=True) as db:
+        # Deliberately corrupt only this owned fixture to exercise error handling.
+        db.raw.execute('PRAGMA foreign_keys=OFF')
+        db.raw.execute('DROP TABLE sales_line_profiles')
+        db.raw.execute('PRAGMA foreign_keys=ON')
+    before=snapshot(client)
+    with pytest.raises((BookflowError, sa.exc.SQLAlchemyError)) as exc:
+        run(client,'account update',dict(account=target,type='bank'))
+    if isinstance(exc.value,BookflowError):
+        assert exc.value.code=='E_IO'
+    else:
+        assert isinstance(exc.value,sa.exc.OperationalError)
+        assert 'no such table' in str(exc.value)
+    assert snapshot(client)==before
+
+
+def test_corrupt_receipt_control_requires_uf_role_and_explicit_remap(client,sale):
+    # Zero-total receipts cannot be posted. This is explicit corrupt-store defense,
+    # not an assertion that ordinary legacy commands can create this state.
+    control=run(client,'account create',dict(name='Corrupt receipt control',type='bank'))['id']
+    method=run(client,'payment-method create',dict(name='Corrupt control cash',kind='cash'))['id']
+    doc=run(client,'sales-receipt post',dict(date='2026-01-12',customer=sale['customer'],
+        deposit_to=control,payment_method=method,lines=[dict(item=sale['item'])]))
+    with open_database(database_path(client),writable=True) as db:
+        db.raw.execute("UPDATE accounts SET type='other_current_asset' WHERE id=?",(control,))
+    request=dict(sales_receipt=doc['id'],expected_version=doc['version'],
+        lines=[dict(item=r['item_id'],line_id=r['line_id'],unit_price='5') for r in doc['revision']['lines']])
+    before=snapshot(client)
+    with pytest.raises(BookflowError) as exc:run(client,'sales-receipt update',request)
+    assert exc.value.code=='E_VALIDATION'
+    assert exc.value.details=={'field':'deposit_to','reason':'captured_posting_account_type'}
+    assert snapshot(client)==before
+    bank=run(client,'account create',dict(name='Eligible remapped receipt bank',type='bank'))['id']
+    fixed=run(client,'sales-receipt update',dict(request,deposit_to=bank))
+    assert fixed['changed'] and fixed['revision']['total_minor_units']==500
+    with open_database(database_path(client),writable=False) as db:
+        assert db.raw.execute('SELECT sum(debit_minor_units-credit_minor_units) FROM posting_lines WHERE account_id=?',(control,)).fetchone()==(0,)
+        assert db.raw.execute('SELECT sum(debit_minor_units-credit_minor_units) FROM posting_lines WHERE account_id=?',(bank,)).fetchone()==(500,)
