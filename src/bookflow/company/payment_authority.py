@@ -75,6 +75,7 @@ def authorize_query(s, transaction_ids, *, write=False):
 
 
 PAYMENT_TARGETS = {
+    'deposit_operation': ('deposit_operations', 'id'),
     'payment_selection_recovery': ('payment_selection_recoveries', 'id'),
     'payment_selection_recovery_chunk': ('payment_selection_recovery_chunks', 'id'),
     'payment_selection_recovery_item': ('payment_selection_recovery_items', 'id'),
@@ -147,6 +148,13 @@ def record_transactions(db, record_type, record_id, seen=None, cache=None):
         raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'})
     row = dict(row)
     ids = {row[field] for field in ('transaction_id', 'paying_transaction_id', 'paid_transaction_id', 'source_transaction_id', 'target_transaction_id') if row.get(field)}
+    if record_type == 'deposit_operation':
+        targets = _evidence_rows(db, c.deposit_operation_targets, 'operation_id', record_id, cache)
+        owned = {r['transaction_id'] for r in targets}
+        if row['transaction_id'] not in owned:
+            from bookflow.core.errors import BookflowError
+            raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'})
+        ids.update(owned)
     if record_type == 'payment_operation':
         try:
             payload = json.loads(row['request_snapshot'])
@@ -292,6 +300,7 @@ class _EventCohort:
         columns = list(dict.fromkeys((*columns, *extra)))
         found = self._read(table, target[1], identifiers, columns)
         items, revisions, attempts, headers = {}, {}, {}, {}
+        deposit_targets = self._read(c.deposit_operation_targets, 'operation_id', identifiers, ('operation_id','transaction_id')) if kind == 'deposit_operation' else {}
         if kind.startswith('payment_selection'):
             owners = [r['id'] if kind == 'payment_selection' else r['selection_id']
                       for rows in found.values() if len(rows) == 1 for r in rows]
@@ -314,6 +323,11 @@ class _EventCohort:
             try:
                 ids = {row[field] for field in _TRANSACTION_FIELDS if row.get(field)}
                 edges = []
+                if kind == 'deposit_operation':
+                    owned = {r['transaction_id'] for r in deposit_targets.get(identifier, ())}
+                    if row['transaction_id'] not in owned:
+                        raise self._missing()
+                    ids.update(owned)
                 if kind == 'payment_operation':
                     try:
                         resolved = json.loads(row['request_snapshot'])['resolved_transaction_ids']

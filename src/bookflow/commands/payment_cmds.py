@@ -19,6 +19,9 @@ from bookflow.company.payment_outputs import PaymentWriteOutput, PaymentOutput
 def _financial(verb, model):
     def planner(inp, ctx, s):
         plan = payments.prepare(s, ctx, inp, verb)
+        if verb in ('update', 'void') and plan.preview.changed and not plan.data.get('recovered'):
+            from bookflow.company.deposit_dependencies import require_unclaimed
+            require_unclaimed(s, plan.data['header']['id'])
         if s.dry_run and not plan.data.get('recovered'):
             from bookflow.company.payment_pages import preview_output
             plan.preview = preview_output(s, ctx, inp, plan)
@@ -36,7 +39,7 @@ def _financial(verb, model):
         error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_APPLICATION_CAPACITY', 'E_APPLICATION_INCOMPATIBLE',
             'E_APPLICATION_INACTIVE', 'E_PAYMENT_OPERATION_KEY_REUSED', 'E_SELECTION_CONSUMED', 'E_PREVIEW_STALE',
             'E_PERIOD_CLOSED', 'E_INACTIVE_REFERENCE', 'E_DUPLICATE_NUMBER', 'E_AMOUNT_PRECISION', 'E_VALUE_RANGE',
-            'E_REASON_REQUIRED', 'E_HAS_APPLICATIONS']+(['E_RECOVERY_PENDING'] if verb in ('receive','apply') else []))(planner)
+            'E_REASON_REQUIRED', 'E_HAS_APPLICATIONS']+(['E_DEPOSIT_DEPENDENCY'] if verb in ('update','void') else [])+(['E_RECOVERY_PENDING'] if verb in ('receive','apply') else []))(planner)
     cmd.ledger = True
     cmd.permanent_recovery = lambda inp, ctx, s: payment_operations.recover(inp, ctx, s, 'payment ' + verb)
     cmd.applier(payments.apply)

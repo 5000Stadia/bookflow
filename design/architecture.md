@@ -1534,3 +1534,34 @@ the shared hook. FullC projector/granular/retirement policy, minimal authority-l
 own-effect acknowledgments, opaque cursors and membershipless-admin policy remain
 separate acceptance gates. Later deposit integration must preserve its
 `feature_admission` changes and run the exact metadata/admission witness.
+
+### Private ordinary deposit lifecycle (G2 increment)
+
+`deposit_lifecycle.prepare` resolves a complete ordinary inline post/replacement/
+void under the caller's company snapshot. `deposit_persistence.execute` requires
+an already-owned writer transaction, re-prepares the exact intent, compares its
+fingerprint/opaque dependency guard and independently validates every owned
+financial row before DML. It neither dispatches a child source command nor
+commits. Immutable revisions, row/component occurrences, release/claim history,
+source-header coalescing and stable bank-effect versions share that transaction.
+The independent persistence validator checks full component ownership and bank
+amounts as well as the exact arithmetic validator's equations.
+
+Company `co0021` appends permanent deposit-family operations, complete target
+indexes and ordered typed receipt items; `co0020` is unchanged. First no-effect
+operations receive one audit/operation record without financial changes. Exact
+currently-authorized recovery reads immutable effects plus current state and
+writes nothing; mismatch proceeds through ordinary new-write admission. Its
+hook-compatible adapter remains private and unregistered. Existing payment and
+sales-receipt update/void planners and final appliers reject active deposit
+claims through the migration-chain feature resolver. Pure source preparation
+remains available unchanged to the future atomic coordinator.
+
+This increment does not activate deposit public commands, drafts, Delete,
+coordination/all-active-unapply, granular permission setup, reconciliation,
+full-C delivery, or G3 queries/UI. Dependency mismatch reports unknown history;
+authoritative baseline attribution and paged conflict presentation remain an
+explicit unfinished seam, not a claim of complete G2. Complete replacement
+source-memo omission selects the captured source memo; explicit null retains
+G1's entered blank. Account activity remains required for fresh postings;
+exact historical inverses do not re-admit those accounts.

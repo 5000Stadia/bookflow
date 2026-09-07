@@ -17,6 +17,9 @@ def _write(document_type, verb, model):
 
     def planner(inp, ctx, s):
         plan = sales.prepare(s, ctx, inp, document_type, verb)
+        if document_type == 'sales_receipt' and verb in ('update', 'void') and plan.preview.changed:
+            from bookflow.company.deposit_dependencies import require_unclaimed
+            require_unclaimed(s, plan.data['header']['id'])
         if s.dry_run and document_type == 'invoice' and verb == 'update' and plan.preview.settlement is not None and not plan.data.get('recovered'):
             from bookflow.company.payment_pages import invoice_preview_output
             plan.preview.settlement = invoice_preview_output(s, ctx, inp, plan.preview.settlement)
@@ -36,6 +39,7 @@ def _write(document_type, verb, model):
         error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_PERIOD_CLOSED',
                      'E_DUPLICATE_NUMBER', 'E_INACTIVE_REFERENCE', 'E_VALUE_RANGE',
                      'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED', 'E_HAS_APPLICATIONS', 'E_APPLIED_EXCEEDS_TOTAL', 'E_PAYMENT_OPERATION_KEY_REUSED']
+                    + (['E_DEPOSIT_DEPENDENCY'] if document_type == 'sales_receipt' and verb != 'post' else [])
                     + (['E_PREVIEW_STALE', 'E_WORK_DEPENDENCY'] if verb != 'void' else ['E_WORK_DEPENDENCY']),
     )(planner)
     if verb != 'post':

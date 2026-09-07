@@ -2717,6 +2717,7 @@ Example JSON output:
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
 | `E_CONTEXT_IN_INPUT` | Input contains a context field. |
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DEPOSIT_DEPENDENCY` | The receipt is claimed by a deposit; an atomic coordinated correction is required. |
 | `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
@@ -3100,6 +3101,7 @@ Example JSON output:
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
 | `E_CONTEXT_IN_INPUT` | Input contains a context field. |
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DEPOSIT_DEPENDENCY` | The receipt is claimed by a deposit; an atomic coordinated correction is required. |
 | `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
 | `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
