@@ -1565,3 +1565,51 @@ explicit unfinished seam, not a claim of complete G2. Complete replacement
 source-memo omission selects the captured source memo; explicit null retains
 G1's entered blank. Account activity remains required for fresh postings;
 exact historical inverses do not re-admit those accounts.
+
+### Private reconciliation statement adapters (R0a)
+
+`company/reconciliation_models.py`, `reconciliation_adapters.py` and
+`reconciliation_proof.py` provide private immutable statement references and
+versions over the accepted company co0021 source families. The closed registry
+covers journal entries (including register translation), payment cash, sales
+receipt control/net, retained invoice net recognition and persisted deposit bank
+keys. These modules register no command, write no database, and do not activate
+`deposit_dependencies.RECONCILIATION`.
+
+References use their producer's stable commercial line plus closed role, or the
+existing deposit bank key. Account is version data. Receipt control lines share
+one remittance movement; net-recognition credits have a separate movement.
+Journal lines and deposit roles remain distinct even on the same account.
+Immutable revision/business-batch anchors change on metadata replacements;
+removal and void retain the former account and explicit transition provenance.
+Deposit inactive versions preserve the exact persisted business anchor and event.
+
+Account population resolves current versions before the date filter. Independent
+raw-leg coverage, unique ownership, exact inverse/source bijections and dated GL
+sums must all agree. Inverses never become additional statement items. Sums use
+unbounded Python integers; stored effect amounts remain within signed i64.
+Source currency is captured home currency. A foreign account produces a typed
+unsupported result after complete source authority; its GL completeness is not
+attempted and no original amount is reconverted. Home accounts with foreign
+original journal facts remain supported at captured home units.
+
+Every call uses the caller's existing company snapshot and current resource
+owner. Historical applications, operation participants, recovery attempts and
+deposit sources remain authority-bearing after release/abort/void. A hidden
+source denies the whole account without exposing its identifiers or counts.
+No authority result or graph survives a request. There is no live granular-policy
+or publication integration claim: future public consumers must capture and
+revalidate their complete disclosure roots at their current publication fence.
+
+`prepare_prospective` retains the actual source Plan or actual materialized G2
+bundle alongside the complete changed versions. Bounded public previews and a
+source composition's UF `cash=None` cannot substitute for that aggregate.
+Register adapters require the actual inner journal Plan. Future B/C coordination
+must retain and validate every participant under its single writer; this private
+projection does not implement or commit that coordinator. Foreign-account
+prospective aggregates return unsupported, never a partially proved change set.
+
+Persistent reconciliation links, opening coverage, drafts, certificates,
+amendments, undo, reports, public interfaces and foreign statement/FX units remain
+separate required ownership and acceptance gates. No certificate membership or
+clearing decision transfers implicitly to a replacement version.
