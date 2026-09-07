@@ -15,6 +15,7 @@ class Lifecycle(StrictModel):
     state: Literal['open', 'recovery_uploading', 'recovery_review', 'consumed']
     selection_id: str
     selection_version: int
+    selection_revision_id: str
     recovery_id: str | None = None
     attempt_generation: str | None = None
     recovery_version: int | None = None

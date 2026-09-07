@@ -92,7 +92,7 @@ def lifecycles(s,headers):
     results={}
     for header in headers:
         identifier=header['id'];row=live.get(identifier)
-        result=dict(state='open',selection_id=identifier,selection_version=header['version'])
+        result=dict(state='open',selection_id=identifier,selection_version=header['version'],selection_revision_id=header['current_revision_id'])
         if row:
             result.update(state='recovery_uploading' if row['state']=='uploading' else 'recovery_review',
                 recovery_id=row['id'],attempt_generation=row['attempt_generation'],recovery_version=row['version'],
@@ -252,7 +252,8 @@ def begin_row(s,inp,ctx,at,event,identifier,allow_active=False):
         fail('E_SELECTION_CONSUMED')
     selection._version(s,header,inp.expected_version)
     revision,context,_=selection.saved(s,header)
-    revision_by_id(s,header,inp.local_baseline_revision)
+    if inp.local_baseline_revision != revision['id']:
+        revision_by_id(s,header,inp.local_baseline_revision)
     if inp.header_intent.currency and inp.header_intent.currency!=context['currency']:
         fail('E_VALIDATION',reason='currency')
     if find(s,recovery_key=inp.recovery_key):
@@ -274,7 +275,7 @@ def comparison(s,row,inp):
         fail('E_QUERY_STALE')
     staged=sealed_entries(s,row)
     baseline,context,base_items=revision_by_id(s,header,row['anchor_revision_id'])
-    local,_,local_items=revision_by_id(s,header,row['local_baseline_revision_id'])
+    local,_,local_items=(baseline,context,base_items) if row['local_baseline_revision_id']==baseline['id'] else revision_by_id(s,header,row['local_baseline_revision_id'])
     prior={item['invoice_id']:item for item in base_items}
     local_by_id={item['invoice_id']:item for item in local_items}
     final={key:dict(value) for key,value in prior.items()}
@@ -423,7 +424,7 @@ def validate_upload(s,row,inp):
         fail('E_RECOVERY_KEY_REUSED',reason='overlapping_invoice')
     header=selection.resolve(s,row['selection_id'])
     baseline,context,base=revision_by_id(s,header,row['anchor_revision_id'])
-    local,_,saved=revision_by_id(s,header,row['local_baseline_revision_id'])
+    local,_,saved=(baseline,context,base) if row['local_baseline_revision_id']==baseline['id'] else revision_by_id(s,header,row['local_baseline_revision_id'])
     by_revision={baseline['id']:{r['invoice_id']:r for r in base},local['id']:{r['invoice_id']:r for r in saved}}
     for entry in inp.entries:
         if entry.currency and entry.currency!=context['currency']:

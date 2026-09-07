@@ -147,3 +147,34 @@ def test_every_durable_action_survives_expiry_and_actor_change_without_raw_mutat
         for reason in (None,'','Different reason'):
             with pytest.raises(BookflowError) as caught:call(peer,verb,inp,reason=reason,idempotency_key=key)
             assert caught.value.code=='E_RECOVERY_KEY_REUSED' and raw_books(root)==before
+
+
+@pytest.mark.parametrize('opponent',['apply','abort','replace'])
+def test_competing_terminal_actions_publish_at_most_one_whole_revision(client,sale,root,opponent):
+    import bookflow
+    draft,first,_=setup(client,sale)
+    edits=[dict(invoice_id=first['id'],observed_invoice_version=1,action='remove')]
+    begin=declaration(draft,edits);identifier,comparison=seal_compare(client,begin,edits)
+    apply=dict(recovery_id=identifier,expected_recovery_version=3,attempt_generation=begin['attempt_generation'],intent_hash=begin['intent_hash'],expected_selection_version=draft['version'],expected_facts_fingerprint=comparison['facts_fingerprint'])
+    second=apply if opponent=='apply' else dict(recovery_id=identifier,expected_recovery_version=3,**(dict(disposition='discard_entire_attempt') if opponent=='abort' else dict(replacement=declaration(draft,[]))))
+    def attempt(verb,inp):
+        try:return call(bookflow.connect(data_root=str(root)),verb,inp)
+        except BookflowError as exc:return dict(error=exc.code)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a=pool.submit(attempt,'apply',apply);b=pool.submit(attempt,opponent,second);results=[a.result(),b.result()]
+    successes=[r for r in results if 'error' not in r]
+    assert successes
+    for result in results:
+        if 'error' in result:assert result['error'] in {'E_RECOVERY_FINALIZED','E_VERSION_CONFLICT','E_DB_BUSY'}
+    if opponent=='apply':
+        assert len(successes)==2 and successes[0]['original_receipt']==successes[1]['original_receipt']
+        assert sum(not r['idempotent_replay'] for r in successes)==1
+    else:assert len(successes)==1
+    current=client.run('payment selection show',dict(selection=draft['id']),company=COMPANY)
+    assert client.run('payment query',dict(customer=sale['customer']),company=COMPANY)['total_count']==0
+    terminal=call(client,'show',dict(recovery_id=identifier))
+    if terminal['state']=='superseded':
+        assert current['version']==draft['version'] and current['current_lifecycle']['state']=='recovery_uploading'
+    else:
+        assert current['version']==draft['version']+1 and current['current_lifecycle']['state']=='open'
+        assert current['item_count']==(1 if terminal['state']=='applied' else 2)

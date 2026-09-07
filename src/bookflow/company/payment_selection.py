@@ -120,7 +120,7 @@ def output(header, revision, context_, items, lifecycle_=None):
     result = calc.calculate(revision['amount_minor_units'], revision['amount_origin'], stored, **funding)
     if result.amount != revision['amount_minor_units']:
         raise _invalid('amount', 'stored selection header does not match its derived manifest')
-    return dict(current_lifecycle=lifecycle_ or dict(state=header['state'],selection_id=header['id'],selection_version=header['version']),
+    return dict(current_lifecycle=lifecycle_ or dict(state=header['state'],selection_id=header['id'],selection_version=header['version'],selection_revision_id=header['current_revision_id']),
         id=header['id'], version=header['version'], revision_id=revision['id'],
         revision_version=revision['version'], state=header['state'], consumed_operation_id=header['consumed_operation_id'],
         context=context_, amount=Money(result.amount, context_['currency']).to_dict() if result.amount is not None else None,

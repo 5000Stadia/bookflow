@@ -65,3 +65,51 @@ def test_complete_recovery_contract_on_all_four_interfaces(client,sale,root,tmp_
         finally:
             await matrix.close()
     anyio.run(witness)
+
+
+@pytest.mark.timeout(600)
+def test_full_403_201_barrier_and_single_receipt_on_every_adapter(client,sale,root,tmp_path,monkeypatch):
+    from tests.test_payment_selection import invoice
+    from tests.test_payment_recovery import call,raw_books
+    from tests.test_service_sales_lifecycle import COMPANY
+    invoices=[invoice(client,sale,'SURFACE-403-'+str(i)) for i in range(403)]
+    draft=client.run('payment selection create',dict(mode='new_receipt',customer=sale['customer'],date='2026-06-01',amount='10.00'),company=COMPANY)
+    for offset in range(0,403,200):
+        draft=client.run('payment selection update',dict(selection=draft['id'],expected_version=draft['version'],set_items=[dict(invoice=r['id'],expected_version=1,amount='0.01',amount_origin='entered') for r in invoices[offset:offset+200]]),company=COMPANY)
+    entries=sorted([dict(invoice_id=r['id'],observed_invoice_version=1,action='set',amount_minor_units=2,currency='USD',amount_origin='entered') for r in invoices[:201]],key=lambda r:r['invoice_id'])
+    begin=declaration(draft,entries);identifier=call(client,'begin',begin)['original_receipt']['recovery_id']
+    call(client,'upload',dict(recovery_id=identifier,chunk_index=0,entries=entries[:200]))
+    method=client.run('payment-method list',{},company=COMPANY)['items'][0]['id']
+    binary=Path(__file__).parents[1]/'.cache/recovery/bin/bookflow'
+    monkeypatch.setenv('BOOKFLOW_MCP_TEST_BINARY',str(binary))
+    import tests.conftest
+    monkeypatch.setattr(tests.conftest,'BIN',binary)
+    async def witness():
+        matrix=Matrix()
+        try:
+            await matrix.open(root,tmp_path)
+            for surface in matrix.documents:
+                async def recovery(verb,inp,**context):return await matrix.call(surface,'payment recovery '+verb,inp,**context)
+                receive=dict(customer=sale['customer'],date='2026-06-01',amount='10.00',payment_method=method,operation_key='403-201-'+surface,applications=dict(mode='selection',selection=draft['id'],expected_version=draft['version']))
+                before=raw_books(matrix.roots[surface])
+                for command,inp in [('payment selection clear',dict(selection=draft['id'],expected_version=draft['version'])),('payment receive',receive)]:
+                    denied=await matrix.call(surface,command,inp,rejected=True)
+                    assert denied['code']=='E_RECOVERY_PENDING'
+                    assert raw_books(matrix.roots[surface])==before
+                state=await recovery('show',dict(recovery_id=identifier))
+                assert state['received_entry_count']==200 and state['declared_entry_count']==201 and state['missing_chunk_count']==1
+                await recovery('upload',dict(recovery_id=identifier,chunk_index=1,entries=entries[200:]))
+                await recovery('seal',dict(recovery_id=identifier,expected_recovery_version=3))
+                request=dict(recovery_id=identifier,attempt_generation=begin['attempt_generation'],intent_hash=begin['intent_hash'])
+                comparison=await recovery('compare',request)
+                assert (comparison['item_count'],comparison['selected_minor_units'],comparison['unapplied_minor_units'])==(403,604,396)
+                await recovery('apply',dict(**request,expected_recovery_version=4,expected_selection_version=draft['version'],expected_facts_fingerprint=comparison['facts_fingerprint']))
+                current=await matrix.call(surface,'payment selection show',dict(selection=draft['id']))
+                assert current['version']==draft['version']+1 and current['id']==draft['id']
+                receive['applications']['expected_version']=current['version']
+                original=await matrix.call(surface,'payment receive',receive)
+                assert (await matrix.call(surface,'payment receive',receive))['id']==original['id']
+                assert (await matrix.call(surface,'payment query',dict(customer=sale['customer'])))['total_count']==1
+            (tmp_path/'403-201-interface-barriers.json').write_text(json.dumps(matrix.documents,indent=2))
+        finally:await matrix.close()
+    anyio.run(witness)

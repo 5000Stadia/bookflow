@@ -58,3 +58,54 @@ def test_whole_intent_survives_unacknowledged_begin_and_tab_restart(register_bro
     assert run('payment query',dict(customer=payer))['total_count']==0
     assert b.evaluate("document.documentElement.scrollWidth<=window.innerWidth"),b.evaluate("document.documentElement.scrollWidth")
     shot(b,tmp_path,'recovery-published-same-selection',width)
+
+
+@pytest.mark.timeout(600)
+def test_browser_resumes_201_of_403_from_complete_durable_outbox(register_browser,tmp_path):
+    """Restart fixture begins after first200 acknowledged edits; no missing edit is inferred."""
+    import json
+    from uuid import uuid4
+    from tests.test_payment_review_gui import invoice_setup
+    from tests.test_payment_recovery import declaration
+    b,run,payer,_,base=setup(register_browser)
+    first,item,_=invoice_setup(run,payer)
+    invoices=[first]+[run('invoice post',dict(customer=payer,date='2026-06-01',number=f'OUTBOX-403-{i}',lines=[dict(item=item,quantity='1',net_amount='1')])) for i in range(402)]
+    selection=b.evaluate("new URL(location.href).searchParams.get('selection')")
+    draft=run('payment selection show',dict(selection=selection))
+    for offset in range(0,403,200):
+        draft=run('payment selection update',dict(selection=selection,expected_version=draft['version'],set_items=[dict(invoice=r['id'],expected_version=1,amount='0.01',amount_origin='entered') for r in invoices[offset:offset+200]]))
+    edits=sorted([dict(invoice_id=r['id'],observed_invoice_version=1,action='set',amount_minor_units=2,currency='USD',amount_origin='entered') for r in invoices[:201]],key=lambda r:r['invoice_id'])
+    begin=declaration(draft,edits)
+    manifest=dict(domain='bookflow.payment.recovery.intent',format=1,selection=selection,local_baseline_revision=draft['revision_id'],anchor_revision=draft['revision_id'],attempt_generation=begin['attempt_generation'],header_intent=begin['header_intent'],entries=edits)
+    attempt=dict(begin=begin,entries=edits,manifest=manifest,actions={},done=False)
+    # Fixture the *whole original browser intent*, independently of the server's
+    # deliberately incomplete stage. Persist using the actual outbox wire format.
+    b.evaluate("window.originalAttempt="+json.dumps(attempt))
+    b.evaluate("(async()=>{const config=BookflowExactJSON.parse(document.querySelector('#payment-config').textContent);const a=window.originalAttempt;a.scope='payment-recovery:'+config.company+':'+config.actor+':'+a.begin.selection;a.storageKey=a.scope+':'+a.begin.attempt_generation;await new Promise((resolve,reject)=>{const request=indexedDB.open('bookflow-payment-recovery-v1',1);request.onupgradeneeded=()=>request.result.createObjectStore('attempts');request.onsuccess=()=>{const db=request.result,tx=db.transaction('attempts','readwrite');tx.objectStore('attempts').put(BookflowExactJSON.stringify(a),a.storageKey);tx.oncomplete=()=>{db.close();resolve()};tx.onerror=()=>reject(tx.error)};request.onerror=()=>reject(request.error)});})()")
+    begun=run('payment recovery begin',begin);identifier=begun['original_receipt']['recovery_id']
+    run('payment recovery upload',dict(recovery_id=identifier,chunk_index=0,entries=edits[:200]))
+    for width in (1280,390):
+        b.viewport(width,900);b.navigate(base+'/receive-payments?selection='+selection)
+        b.wait_for("document.querySelector('#payment-workspace')?.dataset.loaded==='true'",timeout=180)
+        text=b.evaluate("document.querySelector('#payment-recovery-panel').innerText")
+        assert '200 of 201' in text and '1 parts are still missing' in text
+        assert run('payment selection show',dict(selection=selection))['version']==draft['version']
+        assert run('payment query',dict(customer=payer))['total_count']==0
+        shot(b,tmp_path,'201-interrupted-after200',width)
+    press(b,'Resume complete saved attempt')
+    comparison=b.evaluate("document.querySelector('#payment-recovery-panel').innerText")
+    assert 'selected: 6.04' in comparison and 'unapplied: 3.96' in comparison
+    state=run('payment recovery show',dict(recovery_id=identifier))
+    assert state['received_entry_count']==201 and state['state']=='sealed'
+    assert run('payment selection show',dict(selection=selection))['version']==draft['version']
+    for width in (1280,390):
+        b.viewport(width,900);shot(b,tmp_path,'201-complete-review',width)
+    press(b,'Confirm complete recovery')
+    final=run('payment selection show',dict(selection=selection))
+    assert final['id']==selection and final['version']==draft['version']+1 and final['applied_minor_units']==604
+    assert final['amount']['minor_units']==1000 and final['unapplied_minor_units']==396
+    click(b,'preview');click(b,'save-new')
+    assert [row['received_minor_units'] for row in run('payment query',dict(customer=payer))['items']]==[1000]
+    assert b.evaluate("document.querySelector('#payment-amount').value")==''
+    assert b.evaluate("document.querySelector('#payment-recovery-panel')===null")
+    (tmp_path/'complete-outbox.json').write_text(json.dumps(dict(manifest=manifest,begin=begin,stage=state,final=final),indent=2))

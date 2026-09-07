@@ -71,6 +71,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current_lifecycle.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
 | `current_lifecycle.selection_id` | string | yes | no | — | — |
 | `current_lifecycle.selection_version` | integer | yes | no | — | — |
+| `current_lifecycle.selection_revision_id` | string | yes | no | — | — |
 | `current_lifecycle.recovery_id` | string \| null | no | yes | null | — |
 | `current_lifecycle.attempt_generation` | string \| null | no | yes | null | — |
 | `current_lifecycle.recovery_version` | integer \| null | no | yes | null | — |
@@ -141,6 +142,7 @@ Example JSON output:
     "recovery_id": null,
     "recovery_version": null,
     "selection_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "selection_version": 1,
     "state": "open"
   },
@@ -270,6 +272,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current_lifecycle.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
 | `current_lifecycle.selection_id` | string | yes | no | — | — |
 | `current_lifecycle.selection_version` | integer | yes | no | — | — |
+| `current_lifecycle.selection_revision_id` | string | yes | no | — | — |
 | `current_lifecycle.recovery_id` | string \| null | no | yes | null | — |
 | `current_lifecycle.attempt_generation` | string \| null | no | yes | null | — |
 | `current_lifecycle.recovery_version` | integer \| null | no | yes | null | — |
@@ -340,6 +343,7 @@ Example JSON output:
     "recovery_id": null,
     "recovery_version": null,
     "selection_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "selection_version": 1,
     "state": "open"
   },
@@ -556,6 +560,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].current_lifecycle.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
 | `items[].current_lifecycle.selection_id` | string | yes | no | — | — |
 | `items[].current_lifecycle.selection_version` | integer | yes | no | — | — |
+| `items[].current_lifecycle.selection_revision_id` | string | yes | no | — | — |
 | `items[].current_lifecycle.recovery_id` | string \| null | no | yes | null | — |
 | `items[].current_lifecycle.attempt_generation` | string \| null | no | yes | null | — |
 | `items[].current_lifecycle.recovery_version` | integer \| null | no | yes | null | — |
@@ -693,6 +698,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current_lifecycle.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
 | `current_lifecycle.selection_id` | string | yes | no | — | — |
 | `current_lifecycle.selection_version` | integer | yes | no | — | — |
+| `current_lifecycle.selection_revision_id` | string | yes | no | — | — |
 | `current_lifecycle.recovery_id` | string \| null | no | yes | null | — |
 | `current_lifecycle.attempt_generation` | string \| null | no | yes | null | — |
 | `current_lifecycle.recovery_version` | integer \| null | no | yes | null | — |
@@ -763,6 +769,7 @@ Example JSON output:
     "recovery_id": null,
     "recovery_version": null,
     "selection_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "selection_version": 1,
     "state": "open"
   },
@@ -884,6 +891,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current_lifecycle.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
 | `current_lifecycle.selection_id` | string | yes | no | — | — |
 | `current_lifecycle.selection_version` | integer | yes | no | — | — |
+| `current_lifecycle.selection_revision_id` | string | yes | no | — | — |
 | `current_lifecycle.recovery_id` | string \| null | no | yes | null | — |
 | `current_lifecycle.attempt_generation` | string \| null | no | yes | null | — |
 | `current_lifecycle.recovery_version` | integer \| null | no | yes | null | — |
@@ -954,6 +962,7 @@ Example JSON output:
     "recovery_id": null,
     "recovery_version": null,
     "selection_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "selection_version": 1,
     "state": "open"
   },

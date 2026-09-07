@@ -89,6 +89,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
 | `current.selection_id` | string | yes | no | — | — |
 | `current.selection_version` | integer | yes | no | — | — |
+| `current.selection_revision_id` | string | yes | no | — | — |
 | `current.recovery_id` | string \| null | no | yes | null | — |
 | `current.attempt_generation` | string \| null | no | yes | null | — |
 | `current.recovery_version` | integer \| null | no | yes | null | — |
@@ -137,6 +138,7 @@ Example JSON output:
     "recovery_id": null,
     "recovery_version": null,
     "selection_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "selection_version": 1,
     "state": "open"
   },
@@ -291,6 +293,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
 | `current.selection_id` | string | yes | no | — | — |
 | `current.selection_version` | integer | yes | no | — | — |
+| `current.selection_revision_id` | string | yes | no | — | — |
 | `current.recovery_id` | string \| null | no | yes | null | — |
 | `current.attempt_generation` | string \| null | no | yes | null | — |
 | `current.recovery_version` | integer \| null | no | yes | null | — |
@@ -339,6 +342,7 @@ Example JSON output:
     "recovery_id": null,
     "recovery_version": null,
     "selection_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "selection_version": 1,
     "state": "open"
   },
@@ -498,6 +502,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
 | `current.selection_id` | string | yes | no | — | — |
 | `current.selection_version` | integer | yes | no | — | — |
+| `current.selection_revision_id` | string | yes | no | — | — |
 | `current.recovery_id` | string \| null | no | yes | null | — |
 | `current.attempt_generation` | string \| null | no | yes | null | — |
 | `current.recovery_version` | integer \| null | no | yes | null | — |
@@ -546,6 +551,7 @@ Example JSON output:
     "recovery_id": null,
     "recovery_version": null,
     "selection_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "selection_version": 1,
     "state": "open"
   },
@@ -1081,6 +1087,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].current.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
 | `items[].current.selection_id` | string | yes | no | — | — |
 | `items[].current.selection_version` | integer | yes | no | — | — |
+| `items[].current.selection_revision_id` | string | yes | no | — | — |
 | `items[].current.recovery_id` | string \| null | no | yes | null | — |
 | `items[].current.attempt_generation` | string \| null | no | yes | null | — |
 | `items[].current.recovery_version` | integer \| null | no | yes | null | — |
@@ -1239,6 +1246,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
 | `current.selection_id` | string | yes | no | — | — |
 | `current.selection_version` | integer | yes | no | — | — |
+| `current.selection_revision_id` | string | yes | no | — | — |
 | `current.recovery_id` | string \| null | no | yes | null | — |
 | `current.attempt_generation` | string \| null | no | yes | null | — |
 | `current.recovery_version` | integer \| null | no | yes | null | — |
@@ -1287,6 +1295,7 @@ Example JSON output:
     "recovery_id": null,
     "recovery_version": null,
     "selection_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "selection_version": 1,
     "state": "open"
   },
@@ -1437,6 +1446,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
 | `current.selection_id` | string | yes | no | — | — |
 | `current.selection_version` | integer | yes | no | — | — |
+| `current.selection_revision_id` | string | yes | no | — | — |
 | `current.recovery_id` | string \| null | no | yes | null | — |
 | `current.attempt_generation` | string \| null | no | yes | null | — |
 | `current.recovery_version` | integer \| null | no | yes | null | — |
@@ -1485,6 +1495,7 @@ Example JSON output:
     "recovery_id": null,
     "recovery_version": null,
     "selection_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "selection_version": 1,
     "state": "open"
   },
@@ -1664,6 +1675,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
 | `current.selection_id` | string | yes | no | — | — |
 | `current.selection_version` | integer | yes | no | — | — |
+| `current.selection_revision_id` | string | yes | no | — | — |
 | `current.recovery_id` | string \| null | no | yes | null | — |
 | `current.attempt_generation` | string \| null | no | yes | null | — |
 | `current.recovery_version` | integer \| null | no | yes | null | — |
@@ -1707,6 +1719,7 @@ Example JSON output:
     "recovery_id": null,
     "recovery_version": null,
     "selection_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "selection_version": 1,
     "state": "open"
   },
@@ -1856,6 +1869,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current.state` | literal["open", "recovery_uploading", "recovery_review", "consumed"] | yes | no | — | — |
 | `current.selection_id` | string | yes | no | — | — |
 | `current.selection_version` | integer | yes | no | — | — |
+| `current.selection_revision_id` | string | yes | no | — | — |
 | `current.recovery_id` | string \| null | no | yes | null | — |
 | `current.attempt_generation` | string \| null | no | yes | null | — |
 | `current.recovery_version` | integer \| null | no | yes | null | — |
@@ -1904,6 +1918,7 @@ Example JSON output:
     "recovery_id": null,
     "recovery_version": null,
     "selection_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "selection_revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "selection_version": 1,
     "state": "open"
   },
