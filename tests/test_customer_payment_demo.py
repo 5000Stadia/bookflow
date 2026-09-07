@@ -97,4 +97,12 @@ def test_active_append_exact_preservation_and_business_oracles(prefix_books,file
             recovered=client.run(entry['command'],data,company=company,**({'reason':entry['reason']} if 'reason' in entry else {}))
             assert recovered['idempotent_replay'] and not recovered['changed']
     assert snapshot(path)==stable
+    # Normal query captures expose current immutable labels without changing seed writes.
+    query = client.run('payment query', {'limit': 200}, company=company)
+    for row in query['items']:
+        shown = client.run('payment show', {'payment': row['id']}, company=company)
+        assert row['payer_label'] == shown['revision']['profile']['payer']['label']
+        assert row['method_label'] == shown['revision']['profile']['payment_method']['label']
+    assert snapshot(path) == stable
+    (tmp_path/'payment-query-capture.json').write_text(json.dumps(query, indent=2))
     (tmp_path/'payment-append-receipts.json').write_text(json.dumps(dict(commands=[dict(command=e['command'],input=d) for e,d in resolved],receipts=receipts),indent=2))

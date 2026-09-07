@@ -51,6 +51,21 @@ the original request and previews its recorded effect without a new financial wr
 The receipt displays captured facts separately from current settlement and offers
 internal printing and ordinary authorized notes/attachments.
 
+## Captured list labels
+
+`payment query` returns required `payer_label` and `method_label` strings from each
+selected receipt's current immutable profile. Renaming a customer or method does
+not change an existing receipt's captured labels. Receipt corrections select the
+corrected revision's profile. The browser consumes these shared fields directly.
+
+The query authorizes the complete selected payment batch before validating each
+selected full profile in the same read snapshot. Historical filtering and
+publication checks still apply, including access checks for empty pages. An
+invalid selected profile fails the entire query with `E_PAYMENT_PROFILE_INVALID`
+(HTTP 500); details contain only authorized payment/revision IDs and the field
+name. Valid empty captured labels remain empty. Other payment commands retain
+their existing validation behavior.
+
 ## Shared command contract
 
 The executable schemas and field names are in the generated [payment](cli/payment.md),

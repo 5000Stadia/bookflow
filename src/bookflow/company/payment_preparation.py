@@ -231,10 +231,22 @@ def calculate(s, inp):
         amount_origin=result.amount_origin, unapplied_minor_units=result.unapplied, problems=list(result.problems))
 
 
+def _payment_query_labels(snapshot, *, payment_id, revision_id):
+    """Decode a selected, already-authorized current profile in its entirety."""
+    from pydantic import ValidationError
+    from bookflow.company.payment_outputs import PaymentProfileOutput
+    try:
+        profile = PaymentProfileOutput.model_validate(json.loads(snapshot))
+    except (json.JSONDecodeError, UnicodeDecodeError, ValidationError):
+        raise BookflowError('E_PAYMENT_PROFILE_INVALID', details={
+            'payment_id': payment_id, 'revision_id': revision_id, 'field': 'profile_snapshot'}) from None
+    return profile.payer.label, profile.payment_method.label
+
+
 def payment_page(s, inp):
     """SQL aggregates and filtering precede bounded delivery; no per-row history walk."""
     import sqlalchemy as sa
-    from bookflow.company.payment_authority import require_resource
+    from bookflow.company.payment_authority import require_resource, authorize
     customer = defaults._row(s.company, 'customer', inp.customer, active=False)['id'] if inp.customer else None
     component_customer = defaults._row(s.company, 'customer', inp.component_customer, active=False)['id'] if inp.component_customer else None
     method = defaults._row(s.company, 'payment_method', inp.payment_method, active=False)['id'] if inp.payment_method else None
@@ -295,15 +307,25 @@ def payment_page(s, inp):
     # receipt's display fields before date sorting defeats bounded delivery.
     ids = [row['id'] for row in out['items']]
     if ids:
+        authorize(s, ids)
+        profile = c.payment_profiles
         # Use primary-key header lookup for bounded display, without repeating
         # expensive text/capacity predicates over the entire company.
         headers = c.transactions
         display = sa.select(headers.c.id, headers.c.version, headers.c.number, r.c.date,
-            headers.c.status, p.c.payer_id.label('customer_id'), p.c.payment_method_id,
-            r.c.currency, r.c.total_minor_units.label('received_minor_units')).select_from(
+            headers.c.status, profile.c.payer_id.label('customer_id'), profile.c.payment_method_id,
+            r.c.currency, r.c.total_minor_units.label('received_minor_units'),
+            r.c.id.label('_profile_revision_id'), profile.c.profile_snapshot.label('_profile_snapshot')).select_from(
                 query.cross_join(query.cross_join(headers, r, r.c.id == headers.c.current_revision_id),
-                    p, p.c.revision_id == r.c.id)).where(headers.c.id.in_(ids))
-        by_id = {row['id']: dict(row) for row in s.company.conn.execute(display).mappings()}
+                    profile, profile.c.revision_id == r.c.id)).where(headers.c.id.in_(ids))
+        by_id = {}
+        for stored in s.company.conn.execute(display).mappings():
+            row = dict(stored)
+            revision_id = row.pop('_profile_revision_id')
+            snapshot = row.pop('_profile_snapshot')
+            row['payer_label'], row['method_label'] = _payment_query_labels(
+                snapshot, payment_id=row['id'], revision_id=revision_id)
+            by_id[row['id']] = row
         out['items'] = [by_id[identifier] for identifier in ids]
     amounts = dict(s.company.conn.execute(sa.select(a.c.paying_transaction_id, sa.func.sum(a.c.amount_minor_units)).where(
         a.c.paying_transaction_id.in_(ids), a.c.kind == 'apply',

@@ -39,6 +39,7 @@ COMMAND_CODES: dict[str, str] = {
     "E_APPLICATION_INACTIVE": "This application is already unapplied or its payment is voided.",
     "E_HAS_APPLICATIONS": "Unapply the active settlements before this change.",
     "E_APPLIED_EXCEEDS_TOTAL": "The corrected total is below active settlement capacity.",
+    "E_PAYMENT_PROFILE_INVALID": "Stored payment profile is invalid.",
     "E_PAYMENT_OPERATION_KEY_REUSED": "This permanent operation key belongs to a different original request.",
     "E_SELECTION_LIMIT": "An inline selection, input chunk or page exceeds its delivery bound; use a shared selection for a complete receipt.",
     "E_SELECTION_CONSUMED": "This draft was consumed by a successful payment operation; recover that operation or start a new draft.",

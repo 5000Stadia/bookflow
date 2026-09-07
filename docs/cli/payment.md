@@ -921,6 +921,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
 | `items` | array[object] | yes | no | — | — |
+| `items[].payer_label` | string | yes | no | — | — |
+| `items[].method_label` | string | yes | no | — | — |
 | `items[].id` | string | yes | no | — | — |
 | `items[].version` | integer | yes | no | — | — |
 | `items[].number` | string | yes | no | — | — |
@@ -969,6 +971,7 @@ Example JSON output:
 | `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
 | `E_ORGANIZATION_NOT_FOUND` | No such organization. |
 | `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PAYMENT_PROFILE_INVALID` | Stored payment profile is invalid. |
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
