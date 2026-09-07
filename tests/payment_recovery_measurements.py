@@ -59,7 +59,11 @@ def measure(manifest_path,output_path,changed_count=201):
     before=finance();report['financial_before']=before
     try:
         draft=write('payment selection create',dict(mode='new_receipt',customer=manifest['parent'],date='2026-06-02',amount='10.00',label='Additional recovery measurements'))
-        records=manifest['records'][:403]
+        with sqlite3.connect(Path(manifest['database']).as_uri()+'?mode=ro',uri=True) as db:
+            eligible={row[0] for row in db.execute("SELECT t.id FROM transactions t JOIN transaction_revisions r ON r.id=t.current_revision_id WHERE t.type='invoice' AND t.status='posted' AND r.date<='2026-06-02'")}
+        records=[row for row in manifest['records'] if row['invoice'] in eligible][:403]
+        assert len(records)==403
+        report['selected_fixture_records']=records;save()
         for offset in range(0,403,200):
             draft=write('payment selection update',dict(selection=draft['id'],expected_version=draft['version'],set_items=[dict(invoice=r['invoice'],expected_version=r['invoice_version'],amount='0.01',amount_origin='entered') for r in records[offset:offset+200]]))
         # Observed1 claims resolve through actual existing application/unapply
