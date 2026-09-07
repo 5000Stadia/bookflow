@@ -191,3 +191,32 @@ def test_every_acknowledgement_boundary_resumes_original_whole_intent(register_b
             evidence.append(dict(boundary=boundary,after_server=after,lost_response=lost,begin=begin,final=final,recovery=recovery))
             (tmp_path/'all-acknowledgement-boundaries.json').write_text(json.dumps(evidence,indent=2))
     shot(b,tmp_path,'all-acknowledgement-boundaries-complete',width)
+
+
+@pytest.mark.timeout(300)
+@pytest.mark.parametrize('width',[1280,390])
+def test_browser_reviews_new_calculation_after_preserved_fixed_amount(register_browser,tmp_path,width):
+    from tests.test_payment_review_gui import invoice_setup
+    from tests.test_payment_recovery import declaration
+    b,run,payer,_,base=setup(register_browser);b.viewport(width,900)
+    _,item,_=invoice_setup(run,payer)
+    invoices=[run('invoice post',dict(customer=payer,date='2026-06-01',number='F8-BROWSER-'+str(i),lines=[dict(item=item,quantity='1',net_amount='1')])) for i in range(2)]
+    draft=run('payment selection create',dict(mode='new_receipt',customer=payer,date='2026-06-01',amount='1.50'))
+    draft=run('payment selection update',dict(selection=draft['id'],expected_version=1,set_items=[dict(invoice=invoices[0]['id'],expected_version=1,amount_origin='calculated')]))
+    entries=[dict(invoice_id=invoices[1]['id'],observed_invoice_version=1,action='calculate',attempted_calculated_minor_units=1)]
+    begin=declaration(draft,entries);identifier=run('payment recovery begin',begin)['original_receipt']['recovery_id']
+    run('payment recovery upload',dict(recovery_id=identifier,chunk_index=0,entries=entries))
+    run('payment recovery seal',dict(recovery_id=identifier,expected_recovery_version=2))
+    b.navigate(base+'/receive-payments?selection='+draft['id'])
+    b.wait_for("document.querySelector('#payment-workspace')?.dataset.loaded==='true'",timeout=120)
+    text=b.evaluate("document.querySelector('#payment-recovery-panel').textContent")
+    assert 'previous display 0.01' in text and 'Proposed selection: 0.50 (calculated)' in text
+    assert 'Current saved selection: 1.00 (calculated)' in text
+    b.evaluate("document.querySelectorAll('#payment-recovery-panel details').forEach(x=>x.open=true)")
+    shot(b,tmp_path,'fixed100-new50-explicit-review',width)
+    press(b,'Confirm complete recovery')
+    rows=run('payment selection items',dict(selection=draft['id']))['items']
+    assert {r['invoice_id']:(r['amount_minor_units'],r['amount_origin']) for r in rows}=={invoices[0]['id']:(100,'calculated'),invoices[1]['id']:(50,'calculated')}
+    final=run('payment selection show',dict(selection=draft['id']))
+    assert final['version']==draft['version']+1 and final['amount']['minor_units']==150 and final['unapplied_minor_units']==0
+    (tmp_path/'calculated-provenance-browser.json').write_text(__import__('json').dumps(dict(begin=begin,final=final,items=rows),indent=2))

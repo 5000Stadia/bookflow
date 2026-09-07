@@ -110,3 +110,35 @@ def test_full_403_201_barrier_and_single_receipt_on_every_adapter(client,sale,ro
             (tmp_path/'403-201-interface-barriers.json').write_text(json.dumps(matrix.documents,indent=2))
         finally:await matrix.close()
     anyio.run(witness)
+
+
+@pytest.mark.timeout(300)
+def test_preserved_calculation_and_new_candidate_match_on_real_adapters(client,sale,root,tmp_path,monkeypatch):
+    from tests.test_service_sales_lifecycle import COMPANY
+    invoices=[client.run('invoice post',dict(customer=sale['customer'],date='2026-06-01',number='F8-ADAPTER-'+str(i),lines=[dict(item=sale['item'],quantity='1',unit_price='1')]),company=COMPANY) for i in range(2)]
+    draft=client.run('payment selection create',dict(mode='new_receipt',customer=sale['customer'],date='2026-06-01',amount='1.50'),company=COMPANY)
+    draft=client.run('payment selection update',dict(selection=draft['id'],expected_version=1,set_items=[dict(invoice=invoices[0]['id'],expected_version=1,amount_origin='calculated')]),company=COMPANY)
+    entries=[dict(invoice_id=invoices[1]['id'],observed_invoice_version=1,action='calculate',attempted_calculated_minor_units=1)]
+    binary=launcher(monkeypatch);(tmp_path/'source-provenance.json').write_text(json.dumps(provenance(binary),indent=2))
+    async def witness():
+        matrix=Matrix()
+        try:
+            await matrix.open(root,tmp_path,mcp_env=source_environment())
+            for surface in matrix.documents:
+                async def call(verb,inp):return await matrix.call(surface,'payment recovery '+verb,inp)
+                begin=declaration(draft,entries)
+                identifier=(await call('begin',begin))['original_receipt']['recovery_id']
+                await call('upload',dict(recovery_id=identifier,chunk_index=0,entries=entries))
+                await call('seal',dict(recovery_id=identifier,expected_recovery_version=2))
+                request=dict(recovery_id=identifier,attempt_generation=begin['attempt_generation'],intent_hash=begin['intent_hash'])
+                comparison=await call('compare',request)
+                assert (comparison['amount_minor_units'],comparison['selected_minor_units'],comparison['unapplied_minor_units'])==(150,150,0)
+                page=await call('compare-items',dict(**request,facts_fingerprint=comparison['facts_fingerprint']))
+                candidate=next(row for row in page['items'] if row['invoice_id']==invoices[1]['id'])
+                assert candidate['attempted']['attempted_calculated_minor_units']==1 and candidate['proposed']['amount_minor_units']==50
+                await call('apply',dict(**request,expected_recovery_version=3,expected_selection_version=draft['version'],expected_facts_fingerprint=comparison['facts_fingerprint']))
+                rows=(await matrix.call(surface,'payment selection items',dict(selection=draft['id'])))['items']
+                assert {r['invoice_id']:(r['amount_minor_units'],r['amount_origin']) for r in rows}=={invoices[0]['id']:(100,'calculated'),invoices[1]['id']:(50,'calculated')}
+            (tmp_path/'calculated-provenance-interfaces.json').write_text(json.dumps(matrix.documents,indent=2))
+        finally:await matrix.close()
+    anyio.run(witness)
