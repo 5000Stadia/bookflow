@@ -146,6 +146,8 @@ def decode_revision(s, header, revision, kind):
     require(manifest.high_water==revision['high_water'])
     parent=kind+'_id'
     require(revision[parent]==header['id'])
+    from bookflow.company.deposit_draft_history import DraftHistoryProof
+    proof=DraftHistoryProof(s,header,revision,kind)
     st=getattr(c,'deposit_'+kind+'_sources')
     stored=list(s.company.conn.execute(sa.select(st).where(st.c.revision_id==revision['id']).order_by(st.c.ordinal)).mappings())
     require(len(stored)==len(manifest.sources),'source_count')
@@ -156,18 +158,16 @@ def decode_revision(s, header, revision, kind):
         # Independently reconstruct the captured business revision from real owned
         # rows. A later correction is history, not permission to rewrite the pin.
         g=deposit_sources.graph(s,row.source.transaction_id)
+        endpoint=proof.source_endpoint(row)
         if row.source.source_type=='payment':
-            version=row.captured_header_version or row.source.expected_header_version
-            endpoint=s.company.conn.execute(sa.select(c.audit_events.c.seq).join(c.audit_entries,c.audit_entries.c.event_id==c.audit_events.c.id).where(
-                c.audit_entries.c.record_type=='transaction',c.audit_entries.c.record_id==row.source.transaction_id,c.audit_entries.c.version_after==version)).scalars().all()
-            require(len(endpoint)==1,'source_version_history')
             keys=c.payment_component_keys
-            allowed=set(s.company.conn.execute(sa.select(keys.c.id).join(c.audit_events,c.audit_events.c.id==keys.c.audit_event_id).where(keys.c.transaction_id==row.source.transaction_id,c.audit_events.c.seq<=endpoint[0])).scalars())
+            allowed=set(s.company.conn.execute(sa.select(keys.c.id).join(c.audit_events,c.audit_events.c.id==keys.c.audit_event_id).where(keys.c.transaction_id==row.source.transaction_id,c.audit_events.c.seq<=endpoint.sequence)).scalars())
             g['payment_component_keys']=[key for key in g['payment_component_keys'] if key['id'] in allowed]
-        g['header']=dict(g['header'],current_revision_id=row.source.revision_id,version=row.source.expected_header_version,status='posted')
+        g['header']=endpoint.header
         g['posting_batches']=[b for b in g['posting_batches'] if b['id']==row.source.business_batch_id]
         actual=deposit_sources.project(g,uf_account=row.source.uf_account,home_currency=manifest.currency)
-        require(actual==row.source,'source_provenance')
+        captured=row.source.model_copy(update={'expected_header_version':endpoint.header['version']})
+        require(actual==captured,'source_provenance')
     if kind=='draft':
         require((revision['bank_account_id'],revision['cashback_account_id'])==(manifest.header.bank.id if manifest.header.bank else None,manifest.header.cash_back.account.id if manifest.header.cash_back and manifest.header.cash_back.account else None))
         at=c.deposit_draft_additional
