@@ -1086,3 +1086,6 @@ globals().update(_define_recovery_tables(metadata, _column, _table, _common))
 
 from bookflow.company.deposit_schema import define_tables as _define_deposit_tables
 globals().update(_define_deposit_tables(metadata, _column, _table, _common))
+
+from bookflow.company.reconciliation_schema import define_tables as _define_reconciliation_tables
+globals().update(_define_reconciliation_tables(metadata, _column, _table, _common))

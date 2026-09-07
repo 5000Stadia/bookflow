@@ -1656,3 +1656,40 @@ Reconciliation currently provides only checked pre-feature absence, not a signed
 read-set anchor. Active resolver admission fails closed; its future integration
 must add the actual reconciliation dependencies rather than silently treating
 that status call as a captured fact.
+
+### Private reconciliation storage N (co0022; activation OFF)
+
+`company/reconciliation_schema.py` describes 44 additive company tables. The
+frozen co0022 migration creates empty storage, preflights every planned object
+name across attached/local namespaces before DDL, and leaves existing objects
+and rows untouched. It adds no index to an existing table. Reciprocal deferred
+FKs admit complete effect/attempt subtypes in one transaction; immutable evidence
+rejects update/delete. Mutable chains, revisions, claims and attempt barriers
+have explicit transition guards. An attempt's `audit_event_id` identifies its
+latest admitted state event; its `created_*` fields retain original attribution.
+
+`reconciliation_storage_validation.validate` accepts complete explicit new-table
+rows, referenced old-table rows, an already authorized source Graph, and explicit
+historical capture Graphs for openings/certificates. It performs no database read,
+backfill, repair or authorization. It checks ownership even when a migration has
+FKs disabled, proves physical source history/current heads, and checks captured
+populations, whole movements, arithmetic, lineage, claims, receipt tails/hashes,
+and staged intent subtypes/chunks. Canonical-intent data is separate from original
+request evidence. Storage envelopes are not future public command admission
+models. Statement side counts count movements; sums count all component amounts.
+
+Event effects retain one transition per event/key, a required new version,
+its exact predecessor (null only for creation), and the causal source audit.
+Private validation derives predecessors from the validated producer histories
+and checks complete transition coverage for the event's source audit, including
+zero-amount metadata and inactive transitions. Typed operation targets retain the
+source transaction. No contextless impact or free-text cause is stored. Event
+before/after account/cutoff deltas and certificate-to-current selected impacts
+are different projections over these immutable facts; neither is a cached value.
+
+`deposit_dependencies.RECONCILIATION` remains None. A separately reserved future
+activation revision must rebuild/backfill authoritative history, install the real
+resolver and all five source-writer fences coherently, and meet its old-binary,
+full-C, public contract and interface gates. This increment supplies none of those
+behaviors. The accepted source has no public `company verify` command; private
+validation and SQLite integrity/FK checks do not claim to implement that command.
