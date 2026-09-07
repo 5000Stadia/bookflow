@@ -239,7 +239,9 @@ def _normal_catalog(catalog):
     for source in sources.values():
         _unique(source.call_sites, lambda x: x, 'call_sites')
         _unique(source.requirements, lambda x: x, 'requirements')
-        if any(line <= 0 for _, line in source.call_sites) or not set(source.requirements) <= registered & company:
+        # Private source owners can use known company requirements before a
+        # public command registers them. Source metadata grants no availability.
+        if any(line <= 0 for _, line in source.call_sites) or not set(source.requirements) <= company:
             _fail('invalid_catalog', 'conditional_sources')
     return replace(catalog,
         commands=tuple(replace(c, resources=tuple(sorted(c.resources, key=_req_key))) for c in sorted(commands.values(), key=lambda x: x.name)),

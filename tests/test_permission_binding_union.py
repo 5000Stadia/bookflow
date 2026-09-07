@@ -36,3 +36,21 @@ def test_historical_descriptor_is_not_auto_adopted(path):
         before=snapshot(db.raw)
         with pytest.raises(s.SnapshotError):s.load_root(db,catalog=r.catalog_bundle())
         assert snapshot(db.raw)==before
+
+
+def test_private_source_metadata_does_not_register_or_enable_delete():
+    from bookflow.hub import permission_catalog as c
+    catalog=r.catalog_bundle().descriptor
+    for name in ('transaction.journal_entry.delete','transaction.invoice.delete',
+                 'transaction.sales_receipt.delete','transaction.payment.delete'):
+        spec=next(x for x in catalog.capabilities if x.name==name)
+        assert spec.company_thresholds==('standard',) and spec.registered_thresholds==()
+        assert not any(x.requirement.capability==name for x in catalog.defaults)
+        actions=[x for x in catalog.company_actions if any(y.capability==name for y in x.requirements)]
+        assert actions and all(not x.available for x in actions)
+    assert catalog.capabilities==c.FROZEN_CATALOG.capabilities
+    assert catalog.company_actions==c.FROZEN_CATALOG.company_actions
+    assert catalog.defaults==c.FROZEN_CATALOG.defaults
+    for requirement in (c.Requirement('unknown','member'),c.Requirement('transaction.invoice.delete','member')):
+        bad=replace(catalog,conditional_sources=(c.ResourceSource('owned.invalid',(('owned.py',1),),(requirement,)),))
+        with pytest.raises(c.PolicyInputError):c.catalog_manifest(bad)

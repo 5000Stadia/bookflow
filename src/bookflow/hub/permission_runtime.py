@@ -24,6 +24,17 @@ _PAYMENT_LINES = {
     'authorize_publication_selections': (675,),
 }
 CURRENT_SOURCES = tuple(sorted((
+    c.ResourceSource('bookflow.company.transaction_deletion_facts.admit',
+        (('src/bookflow/company/transaction_deletion_facts.py', 100),
+         ('src/bookflow/company/transaction_deletion_facts.py', 101)),
+        (c.Requirement('transaction.journal_entry.delete','standard'),
+         c.Requirement('transaction.invoice.delete','standard'),
+         c.Requirement('transaction.sales_receipt.delete','standard'),
+         c.Requirement('transaction.payment.delete','standard'),
+         c.Requirement('ledger.read','member'))),
+    c.ResourceSource('bookflow.company.transaction_deletion_facts.load',
+        (('src/bookflow/company/transaction_deletion_facts.py', 152),),
+        (c.Requirement('customer-work','standard'),)),
     *(replace(source, call_sites=tuple(('src/bookflow/company/payment_authority.py', line)
         for line in _PAYMENT_LINES[source.owner.rsplit('.', 1)[-1]]))
       if source.owner.startswith('bookflow.company.payment_authority.') and source.owner.rsplit('.', 1)[-1] in _PAYMENT_LINES

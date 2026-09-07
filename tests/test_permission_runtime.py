@@ -104,7 +104,15 @@ def test_complete_current_catalog_source_delta_no_policy_rewrite():
     from tests.test_permission_catalog import RESOURCE_PAIRS, test_complete_unfiltered_registry_descriptors_and_action_owners
     test_complete_unfiltered_registry_descriptors_and_action_owners()
     assert replace(r.CURRENT_CATALOG,conditional_sources=c.CONDITIONAL_RESOURCE_SOURCES)==c.FROZEN_CATALOG
+    from bookflow.company.transaction_deletion_facts import FAMILIES
+    assert FAMILIES==('journal_entry','invoice','sales_receipt','payment')
     expected=dict(RESOURCE_PAIRS, **{
+        'transaction_deletion_facts.admit':{
+            ('transaction.journal_entry.delete','standard'),
+            ('transaction.invoice.delete','standard'),
+            ('transaction.sales_receipt.delete','standard'),
+            ('transaction.payment.delete','standard'),('ledger.read','member')},
+        'transaction_deletion_facts.load':{('customer-work','standard')},
         'reconciliation_adapters.authority':{('ledger.read','member')},
         'reconciliation_adapters.population':{('ledger.read','member')},
         'reconciliation_adapters.prepare_prospective':{('customer-work','member')},
