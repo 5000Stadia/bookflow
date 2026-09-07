@@ -41,6 +41,7 @@ with sqlite3.connect(path) as db:
  db.execute("ALTER TABLE deposit_operations ADD COLUMN local_blob BLOB DEFAULT X'410042FF'")
  db.execute("ALTER TABLE deposit_operations ADD COLUMN local_real REAL DEFAULT 0.10000000000000002")
  db.execute("ALTER TABLE deposit_operation_items ADD COLUMN local_text TEXT DEFAULT 'local text'")
+ db.execute("ALTER TABLE deposit_operation_items ADD COLUMN local_nul TEXT GENERATED ALWAYS AS ('A'||char(0)||'B') VIRTUAL")
  db.execute("CREATE TABLE local_raw(id INTEGER PRIMARY KEY,t TEXT,b BLOB,r REAL)")
  db.execute("INSERT INTO local_raw VALUES (97,?,?,?)",('A\\0B',b'\\0\\x80\\xff',0.10000000000000002))
  db.execute("CREATE VIEW local_coordinate_view AS SELECT id,local_blob FROM deposit_operations")
@@ -89,7 +90,10 @@ def test_populated_preservation_and_old_binary_refusal(old_co22,tmp_path):
         assert db.raw.execute('PRAGMA integrity_check').fetchall()==[('ok',)]
         assert migrate_to_head(db,'company',tmp_path/'backups')==('co0023','co0023')
     assert attachments(root)==files
-    for verb in ('read','write'):
+    co21=tmp_path/'co21-source';co21.mkdir()
+    archive=subprocess.check_output(['git','archive','162193259399f0554db07840e26c93444051664b','src'],cwd=Path(__file__).parents[1])
+    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:tar.extractall(co21,filter='data')
+    for binary,verb in [(binary,verb) for binary in (source,co21) for verb in ('read','write')]:
         code="""import sys
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import require_head_readonly,migrate_to_head
@@ -102,7 +106,7 @@ with open_database(Path(sys.argv[1]),writable=sys.argv[2]=='write') as db:
   print(getattr(e,'code',type(e).__name__))
  else: raise AssertionError('old binary admitted successor')
 """
-        run=subprocess.run([sys.executable,'-c',code,str(path),verb],cwd=source,env=dict(os.environ,PYTHONPATH=str(source/'src')),capture_output=True,text=True)
+        run=subprocess.run([sys.executable,'-c',code,str(path),verb],cwd=binary,env=dict(os.environ,PYTHONPATH=str(binary/'src')),capture_output=True,text=True)
         assert run.returncode==0 and 'E_SCHEMA_UNKNOWN' in run.stdout,run.stdout+run.stderr
     with sqlite3.connect(path) as db:assert raw(db)==before
     (tmp_path/'preservation.json').write_text(json.dumps(dict(before=before,attachments=files),indent=2))

@@ -9,6 +9,6 @@ Database: `company`.
 | Column | SQL type | Nullable | Default | Key | Indexes | References | Meaning |
 |---|---|---|---|---|---|---|---|
 | `operation_id` | VARCHAR(26) | no | — | primary key 1 | — | deposit_operations.id | Owning receipt. |
-| `kind` | TEXT | no | — | primary key 2 | — | — | Typed complete effect or request collection. |
+| `kind` | TEXT | no | — | primary key 2 | — | — | Complete request, deposit effect, or source component/application/allocation/document-change collection. |
 | `ordinal` | BIGINT | no | — | primary key 3 | — | — | Zero-based position in the immutable collection. |
 | `facts_snapshot` | TEXT | no | — | — | — | — | One complete object in the original collection. |

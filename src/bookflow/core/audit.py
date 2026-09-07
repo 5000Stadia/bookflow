@@ -69,7 +69,7 @@ class PreparedEvent:
 def prepare_event_to(db, ctx: Context, command: str, summary: str, touched: list[Touched], *,
                      actor_id: str | None, actor_kind: str | None,
                      directive_code: str | None = None, event_id: str | None = None,
-                     at: str | None = None) -> PreparedEvent:
+                     at: str | None = None, entry_ids: tuple[str, ...] | None = None) -> PreparedEvent:
     """Encode one event without DML; uses the ordinary snapshot codec and ID order."""
     events, _ = _tables(db)
     event_id = event_id or new_id()
@@ -85,8 +85,11 @@ def prepare_event_to(db, ctx: Context, command: str, summary: str, touched: list
         request_id=ctx.request_id, idempotency_key=ctx.idempotency_key, reason=ctx.reason,
         directive_id=ctx.directive_id, directive_code=directive_code, source_ref=ctx.source_ref, summary=summary[:512],
     )
+    if entry_ids is not None and (len(entry_ids)!=len(touched) or len(set(entry_ids))!=len(entry_ids)):
+        raise ValueError('Audit entry identities must be complete and unique')
+    identities = iter(entry_ids) if entry_ids is not None else None
     rows = tuple(dict(
-        id=new_id(), event_id=event_id, record_type=t.record_type, record_id=t.record_id, action=t.action,
+        id=next(identities) if identities is not None else new_id(), event_id=event_id, record_type=t.record_type, record_id=t.record_id, action=t.action,
         version_before=t.version_before, version_after=t.version_after,
         after=encode_snapshot(t.after), before=encode_snapshot(t.before),
     ) for t in touched)

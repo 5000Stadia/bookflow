@@ -14,7 +14,7 @@ from bookflow.company.deposit_lifecycle import Prepared
 from bookflow.company.deposit_lifecycle_models import LifecycleEffect, HeaderChange, MembershipChange
 from bookflow.company.deposit_coordinate_models import (
     PreparedCoordinate, SourceRows, SourceEvidence, CoordinateHeader, CoordinateIdentity,
-    CoordinateTransactionsRow, CoordinateEffect, CoordinateOutput)
+    CoordinateTransactionsRow, CoordinateEffect, CoordinateOutput, CoordinateCustomChange)
 from bookflow.company.deposit_models import Effect
 from bookflow.core import audit
 from bookflow.core.registry import Touched
@@ -70,6 +70,8 @@ def target_ids(s, prepared, headers, before, inserted):
     resolved=prepared.resolution;data=json.loads(resolved.deposit_data_json)
     result=set(data['targets'])|{resolved.input.deposit}|{v.before.id for v in headers}
     result.update(dependencies.historical_sources(s,resolved.input.deposit))
+    from bookflow.company.deposit_dependency_models import ReadSet
+    result.update(ReadSet.model_validate_json(prepared.readset_json).transactions)
     for collection in (before,inserted):
         for value in collection.applications:
             result.update((value.paying_transaction_id,value.paid_transaction_id))
@@ -99,17 +101,26 @@ def build(s,ctx,prepared):
     coalesced=coordination.coalesce_headers(changes,source.provenance,s.actor.id,ctx.interface.value)
     headers=tuple(CoordinateHeader.model_validate_json(q.canonical(dict(before=b,after=a))) for b,a in coalesced)
     final_source=next((h.after for h in headers if h.after.id==resolved.overlay.source_id),
-        CoordinateTransactionsRow.model_validate_json(q.canonical(source.plan.data['before'])))
+        CoordinateTransactionsRow.model_validate_json(q.canonical(json.loads(resolved.overlay.before_header_json))))
     targets=target_ids(s,prepared,headers,before,inserted)
     history._authorize_binding_graph(s,prepared.binding,targets,write=True)
     identity_map=[CoordinateIdentity(owner_kind=v.owner_kind,logical_key=v.logical_key,physical_id=v.physical_id)
         for v in coordination.source_identity_map(source.plan,payment=source.action.kind.startswith('payment_')).entries]
+    for key,value in (('event',data['event']),('operation_id',data['operation_id'])):
+        if not any(v.physical_id==value for v in identity_map):
+            identity_map.append(CoordinateIdentity(owner_kind='aggregate',logical_key=key,physical_id=value))
     for table, values in bundle['pending'].items():
         for index,value in enumerate(values):
-            if 'id' in value:identity_map.append(CoordinateIdentity(owner_kind='deposit/'+table,logical_key=str(index),physical_id=value['id']))
+            if 'id' in value and table!='deposit_row_keys':identity_map.append(CoordinateIdentity(owner_kind='deposit/'+table,logical_key=str(index),physical_id=value['id']))
     if resolved.deposit_custom_plan:
         for value in resolved.deposit_custom_plan.owner_plan.mutations:
             if value.operation=='insert':identity_map.append(CoordinateIdentity(owner_kind='deposit/custom_field_values',logical_key=value.definition_id,physical_id=value.row_id))
+    from bookflow.core.ids import new_id
+    custom_plans=(source.plan.data.get('custom_plan'),resolved.deposit_custom_plan if data['changed'] else None)
+    entry_count=len(headers)+sum(len(values) for _,values,_ in collected)+sum(len(values) for values in bundle['pending'].values())+1
+    entry_count+=sum(len(custom.touches(cp)) for cp in custom_plans if cp)
+    entry_ids=tuple(new_id() for _ in range(entry_count))
+    identity_map.extend(CoordinateIdentity(owner_kind='audit_entries',logical_key=str(index),physical_id=value) for index,value in enumerate(entry_ids))
     inverse=next((b for b in bundle['pending']['posting_batches'] if b['kind']=='reversal'),None)
     financial=bundle['financial'];h=bundle['header']
     effect=LifecycleEffect(action=plan.verb,before=operations.state(s,h['id']),after=deposit._state(h,financial),
@@ -119,8 +130,9 @@ def build(s,ctx,prepared):
             reverses_membership_id=v['reverses_membership_id'],amount_minor_units=v['amount_minor_units'],currency=v['currency']) for v in bundle['pending']['deposit_memberships']),
         headers=tuple(HeaderChange(id=v.after.id,before_version=v.before.version,after_version=v.after.version) for v in headers),
         bank_effects=tuple(bank_effects.BankEffect.model_validate(v) for v in bundle['data'].get('bank_effects',())),audit_event_id=data['event'])
-    evidence=SourceEvidence(action=source.action,before_header=CoordinateTransactionsRow.model_validate_json(q.canonical(source.plan.data['before'])),
+    evidence=SourceEvidence(action=source.action,before_header=CoordinateTransactionsRow.model_validate_json(resolved.overlay.before_header_json),
         after_header=final_source,before=before,inserted=inserted,
+        custom_changes=tuple(CoordinateCustomChange.model_validate_json(q.canonical(dict(before=v.before,after=v.after))) for v in custom.touches(source.plan.data['custom_plan'])) if source.plan.data.get('custom_plan') else (),
         payment_effect=source.plan.preview if source.action.kind.startswith('payment_') else None,bank_changes=source.bank_changes)
     current_headers=[]
     assigned={v.after.id:v.after for v in headers}
@@ -129,7 +141,7 @@ def build(s,ctx,prepared):
     output=CoordinateOutput(operation_key=resolved.input.operation_key,operation_id=data['operation_id'],changed=resolved.changed,new_effect=resolved.changed,
         facts_fingerprint=prepared.facts_fingerprint,dependency_guard=prepared.dependency_guard,
         effect=CoordinateEffect(source=evidence,deposit=effect,headers=headers,identities=tuple(identity_map),target_ids=targets),
-        current=effect.after,current_headers=tuple(current_headers))
+        current=effect.after,current_headers=tuple(current_headers),current_source_rows=typed_source({table:[v.model_dump() for v in getattr(before,table)]+[v.model_dump() for v in getattr(inserted,table)] for table in SourceRows.model_fields}))
     from bookflow.company.deposit_operation_pages import collections
     items=[dict(operation_id=data['operation_id'],kind=kind,ordinal=index,facts_snapshot=q.canonical(value))
         for kind,values in collections(output).items() for index,value in enumerate(values)]
@@ -147,7 +159,8 @@ def build(s,ctx,prepared):
         if cp:touched.extend(custom.touches(cp))
     touched.append(Touched('deposit_operation',operation['id'],'create',None,1,rows.decoded(operation),db='company'))
     event=audit.prepare_event_to(s.company,ctx,'deposit coordinate','Coordinate source and deposit',touched,
-        actor_id=s.actor.id,actor_kind=s.actor.kind,directive_code=getattr(s,'directive_code',None),event_id=data['event'],at=data['at'])
+        actor_id=s.actor.id,actor_kind=s.actor.kind,directive_code=getattr(s,'directive_code',None),event_id=data['event'],at=data['at'],entry_ids=entry_ids)
+    event=audit.PreparedEvent(dict(event.event,undo_of_event_id=None),event.entries)
     return CoordinateRows(prepared,plan,bundle,inserted,headers,output,q.canonical(operation),q.canonical(items),event)
 
 
@@ -220,7 +233,7 @@ def execute(s,ctx,prepared):
 
 
 def recover(s,ctx,inp,binding):
-    history.execution_binding(s,binding)
+    history._authorize_binding_graph(s,binding,(),write=True)
     if ctx.on_behalf_of!=binding.on_behalf_of:raise BookflowError('E_UNAUTHENTICATED')
     saved=operations.find(s,inp.operation_key)
     if saved is None:return None

@@ -85,6 +85,9 @@ def test_n2_full_source_deposit_rows(client,sale,driver,n2):
     original=driver.run('post',dict(operation_key='C-deposit',document=document))
     assert original.effect==post.effect and original.effect.after.revision_bank_total==17200
     assert original.current.revision_bank_total==19200
+    later=driver.run('post',dict(operation_key='C-later-number',document=dict(document,sources=[])))
+    assert later.current.number==str(int(post.current.number)+1)
+    assert later.current.revision_bank_total==1200
 
 
 @pytest.mark.parametrize('mode',['noop','payment_void','receipt_void','receipt_update','direct_bank'])
@@ -108,7 +111,21 @@ def test_complete_action_and_noeffect_paths(client,sale,driver,n2,mode):
     with driver.session() as s:
         p=prepare(s,ctx,inp)
         before={name:tuple(s.company.raw.execute('SELECT * FROM '+name)) for name in ('transactions','posting_lines','deposit_memberships','bank_effect_versions','custom_field_values','sequences')}
+        from bookflow.company import deposit_composition
+        original=deposit_composition.preview_source_effect(s,ctx,p.resolution.source.action,provenance=p.resolution.source.provenance)
+        payment_mode=mode not in ('receipt_void','receipt_update')
+        assert coord.canonical_source_data(original.plan,payment=payment_mode)==coord.canonical_source_data(p.resolution.source.plan,payment=payment_mode)
+        untouched=copy.deepcopy(coord.canonical_source_data(p.resolution.source.plan,payment=payment_mode))
         result=persistence.execute(s,ctx,p)
+        assert coord.canonical_source_data(p.resolution.source.plan,payment=payment_mode)==untouched
+        from bookflow.company import document_effects
+        for table in type(result.effect.source.inserted).model_fields:
+            owner=getattr(c,table)
+            for value in getattr(result.effect.source.inserted,table):
+                # All source owners have explicit complete physical row keys.
+                keys=[column.name for column in owner.primary_key]
+                actual=[dict(row) for row in s.company.conn.execute(sa.select(owner).where(*(owner.c[key]==getattr(value,key) for key in keys))).mappings()]
+                assert actual==[value.model_dump()]
         if mode=='noop':
             assert not result.changed and not result.new_effect and result.effect.headers==()
             assert result.effect.deposit.batch_ids==() and result.effect.deposit.memberships==()

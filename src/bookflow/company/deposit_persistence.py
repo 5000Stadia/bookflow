@@ -145,7 +145,7 @@ def _business(s,financial,data,revision,batch,pending,created,audited,source_ove
             if source_overlay is not None and source.transaction_id==source_overlay.source_id:
                 if source_overlay.deposit_id!=identity or source_overlay.source.cash!=source:
                     raise BookflowError('E_DEPOSIT_SOURCE_INVALID')
-                candidates += [r for r in source_overlay.source.plan.data['pending'].get('posting_lines',()) if r['id']==component.posting_line_id]
+                candidates += [r for r in source_overlay.source.plan.data.get('pending',{}).get('posting_lines',()) if r['id']==component.posting_line_id]
             if len(candidates)!=1:
                 raise BookflowError('E_DEPOSIT_SOURCE_INVALID')
             raw=candidates[0]

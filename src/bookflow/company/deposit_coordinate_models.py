@@ -541,6 +541,21 @@ class CoordinateHeader(Frozen):
     after: CoordinateTransactionsRow
 
 
+class CoordinateCustomValue(Frozen):
+    id: str
+    def_id: str
+    record_type: str
+    record_id: str
+    active: bool
+    canonical_text: str
+
+
+class CoordinateCustomChange(Frozen):
+    kind: Literal['custom'] = 'custom'
+    before: CoordinateCustomValue | None
+    after: CoordinateCustomValue
+
+
 class SourceEvidence(Frozen):
     @field_serializer('action')
     def original_action(self, value):
@@ -553,6 +568,7 @@ class SourceEvidence(Frozen):
     after_header: CoordinateTransactionsRow
     before: SourceRows
     inserted: SourceRows
+    custom_changes: tuple[CoordinateCustomChange, ...]
     payment_effect: PaymentSourceOutput | None
     bank_changes: ChangedEffects | UnsupportedPopulation
 
@@ -578,6 +594,7 @@ class CoordinateOutput(Frozen):
     effect: CoordinateEffect
     current: DocumentState
     current_headers: tuple[CoordinateTransactionsRow, ...]
+    current_source_rows: SourceRows
 
 
 class SalesComponentItem(Frozen):

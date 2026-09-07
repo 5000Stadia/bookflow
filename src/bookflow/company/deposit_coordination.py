@@ -460,6 +460,10 @@ def validate(s, ctx, prepared):
     from bookflow.company.payment_queries import digest
     _require(type(prepared) is PreparedCoordinate)
     resolved=prepared.resolution;inp=resolved.input;source=resolved.source
+    # Authenticate and compare the complete old intent before stale row-version
+    # checks, so a competing writer retains attributed history.
+    anchored=inp.model_copy(update={'dependency_guard':prepared.dependency_guard,'expected_facts_fingerprint':prepared.facts_fingerprint})
+    fresh=prepare(s,ctx,anchored,binding=prepared.binding,expected_source_fingerprint=source.source_fingerprint)
     data=json.loads(resolved.deposit_data_json)
     financial=Effect.model_validate_json(json.dumps(data['financial']))
     previous=Effect.model_validate_json(json.dumps(data['previous']))
@@ -504,8 +508,6 @@ def validate(s, ctx, prepared):
     _require(digest(canonical_coordinate(resolved))==prepared.facts_fingerprint)
     # A guard authenticates the exact submitted complete intent, not a mutable
     # prepared-object digest. Rebuilding catches changed request/data assignments.
-    anchored=inp.model_copy(update={'dependency_guard':prepared.dependency_guard,'expected_facts_fingerprint':prepared.facts_fingerprint})
-    fresh=prepare(s,ctx,anchored,binding=prepared.binding,expected_source_fingerprint=source.source_fingerprint)
     _require(canonical_coordinate(fresh.resolution)==canonical_coordinate(resolved))
     _require(canonical_source_preview(fresh.resolution.source)==canonical_source_preview(source))
     return fresh

@@ -94,6 +94,27 @@ PAYMENT_TARGETS = {
 }
 
 
+# Private coordinate audit rows are evidence owners, not new annotation targets.
+_COORDINATE_TARGETS = {
+    'deposit_profile': ('deposit_profiles','revision_id'),
+    'deposit_row_key': ('deposit_row_keys','id'),
+    'deposit_component_key': ('deposit_component_keys','id'),
+    'deposit_component': ('deposit_components','id'),
+    'deposit_cash_cell': ('deposit_cash_cells','id'),
+    'deposit_membership': ('deposit_memberships','id'),
+    'bank_effect_key': ('bank_effect_keys','id'),
+    'bank_effect_version': ('bank_effect_versions','id'),
+    'work_billing_allocation': ('work_billing_allocations','id'),
+    'sales_profile': ('sales_profiles','revision_id'),
+    'sales_line_profile': ('sales_line_profiles','document_line_id'),
+    'sales_tax_component': ('sales_tax_components','id'),
+    'sales_tax_line_key': ('sales_tax_line_keys','line_id'),
+    'sales_tax_attribution': ('sales_tax_attributions','revision_id'),
+    'sales_tax_attribution_line': ('sales_tax_attribution_lines','document_line_id'),
+}
+_EVIDENCE_TARGETS = PAYMENT_TARGETS | _COORDINATE_TARGETS
+
+
 def _evidence_rows(db, table, field, value, cache):
     """Batch reads only within one disclosure decision and its DB snapshot."""
     if cache is None:
@@ -130,7 +151,7 @@ def record_transactions(db, record_type, record_id, seen=None, cache=None):
     if record_type == 'payment_selection_recovery_active':
         # Barrier rows are deliberately removed; their primary identity is S.
         return record_transactions(db, 'payment_selection', record_id, seen, cache)
-    target = PAYMENT_TARGETS.get(record_type)
+    target = _EVIDENCE_TARGETS.get(record_type)
     if target is None:
         if record_type in ('transaction_revision', 'document_line', 'document_line_identity', 'posting_batch', 'posting_line', 'posting_line_source'):
             from bookflow.company.records import _TARGETS
@@ -194,7 +215,7 @@ def event_requirements(db, event_id, cache=None):
     ids = set()
     for kind, identifier in entries:
         ids.update(record_transactions(db, kind, identifier, cache=cache))
-    return requirements(db, ids, cache=cache) if ids or any(kind in PAYMENT_TARGETS for kind, _ in entries) else ()
+    return requirements(db, ids, cache=cache) if ids or any(kind in _EVIDENCE_TARGETS for kind, _ in entries) else ()
 
 
 _BATCH_SIZE = 200
@@ -280,7 +301,7 @@ class _EventCohort:
             for identifier in identifiers:
                 self.nodes[(kind, identifier)] = (set(), [('payment_selection', identifier)])
             return
-        target = PAYMENT_TARGETS.get(kind)
+        target = _EVIDENCE_TARGETS.get(kind)
         if kind == 'transaction':
             target = ('transactions', 'id')
         elif target is None and kind in ('transaction_revision', 'document_line', 'document_line_identity',
@@ -376,7 +397,7 @@ class _EventCohort:
         ids = self.resolved[event]
         if isinstance(ids, Exception):
             raise ids
-        if not ids and not any(r['record_type'] in PAYMENT_TARGETS for r in self.entries.get(event, ())):
+        if not ids and not any(r['record_type'] in _EVIDENCE_TARGETS for r in self.entries.get(event, ())):
             return ()
         expanded = ids | {r['paid_transaction_id'] for identifier in ids for r in self.applications.get(identifier, ())}
         result = [('ledger.read', 'member')]
@@ -410,7 +431,7 @@ def authorize_events(s, event_ids):
 def denied_events(s, resolved=None):
     from bookflow.core.errors import BookflowError
     events = s.company.conn.execute(sa.select(c.audit_entries.c.event_id).where(
-        c.audit_entries.c.record_type.in_((*PAYMENT_TARGETS, 'transaction', 'transaction_revision', 'document_line',
+        c.audit_entries.c.record_type.in_((*_EVIDENCE_TARGETS, 'transaction', 'transaction_revision', 'document_line',
             'document_line_identity', 'posting_batch', 'posting_line', 'posting_line_source', 'note', 'attachment', 'attachment_link'))).distinct()).scalars()
     denied = []
     for cohort in events.partitions(_BATCH_SIZE):

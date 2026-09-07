@@ -43,7 +43,7 @@ def test_frozen_ddl_metadata_and_shared_feature_admission(tmp_path):
         expected.extend(str(CreateIndex(i).compile(dialect=dialect())) for i in sorted(t.indexes,key=lambda i:i.name))
     assert M.DDL==expected
     with open_database(tmp_path/'fresh.db',writable=True,create=True) as db:
-        assert migrate_to_head(db,'company',None)==(None,'co0022')
+        assert migrate_to_head(db,'company',None)==(None,'co0023')
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
         assert db.raw.execute('PRAGMA integrity_check').fetchall()==[('ok',)]
         assert feature_admission(db,FeatureRevision('company',None),resolver=None) is None
@@ -89,7 +89,7 @@ def test_all_raw_values_local_ddl_attachments_and_rollback(co19,tmp_path):
         assert db.raw.execute('SELECT version_num FROM alembic_version').fetchone()==('co0019',)
         assert db.raw.execute("SELECT name FROM sqlite_schema WHERE name='deposit_profiles'").fetchall()==[]
         db.raw.execute('DROP TABLE deposit_current_memberships')
-        assert migrate_to_head(db,'company',tmp_path/'backups')==('co0019','co0022')
+        assert migrate_to_head(db,'company',tmp_path/'backups')==('co0019','co0023')
         after={name:table(db.raw,name,omit_columns=('deposit_component_id',) if name=='posting_line_sources' else ()) for name in names}
         assert before==after
         stored={(kind,name):(owner,sql) for kind,name,owner,sql in db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema')}

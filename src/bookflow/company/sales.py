@@ -621,6 +621,9 @@ def coordinate_rows_and_touches(plan):
     data = plan.data
     if data['document_type'] != 'sales_receipt' or data['operation'] not in ('update', 'void'):
         raise BookflowError('E_INTERNAL')
+    if not data['changed']:
+        if 'pending' in data:raise BookflowError('E_INTERNAL')
+        return tuple((table,(),()) for table,_,_ in TABLE_KINDS)+(billing.coordinate_rows_and_touches(plan),)
     return tuple((table, tuple(data['pending'][table]), tuple(
         Touched(kind, row[key], 'create', None, 1, effects.decoded(row), db='company')
         for row in data['pending'][table])) for table, kind, key in TABLE_KINDS) + (billing.coordinate_rows_and_touches(plan),)

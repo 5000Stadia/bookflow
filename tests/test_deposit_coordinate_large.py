@@ -22,8 +22,10 @@ def hashes(root):
     return {str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file()}
 
 
-@pytest.mark.timeout(600)
-def test_all_active_403_complete_commit_and_pages(tmp_path,monkeypatch):
+@pytest.fixture(scope='module')
+def committed_403(tmp_path_factory):
+    tmp_path=tmp_path_factory.mktemp('committed-403')
+    monkeypatch=pytest.MonkeyPatch()
     roots=sorted({p.resolve() for p in ORIGINAL.glob('test_all_active*/root')})
     assert len(roots)==1
     original=roots[0];before=hashes(original)
@@ -65,17 +67,6 @@ def test_all_active_403_complete_commit_and_pages(tmp_path,monkeypatch):
         assert output.current.status=='voided' and output.current.effective_bank_total==0
         assert len(output.effect.deposit.batch_ids)==1 and len(inserted.posting_batches)==1
         assert output.effect.source.after_header.status=='voided'
-        for kind,expected in pages.collections(output).items():
-            for limit in (1,50,200):
-                actual=[];cursor=None;seen=set()
-                while True:
-                    page=pages.items(s,inp.operation_key,kind,PageInput(limit=limit,cursor=cursor),binding)
-                    assert page.total_count==len(expected)
-                    actual.extend(page.items)
-                    if page.next_cursor is None:break
-                    assert page.next_cursor not in seen
-                    seen.add(page.next_cursor);cursor=page.next_cursor
-                assert actual==expected
         assert s.company.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
     # This outer transaction actually committed. Lost-response recovery observes
     # the durable operation without another event or row.
@@ -86,3 +77,34 @@ def test_all_active_403_complete_commit_and_pages(tmp_path,monkeypatch):
         assert tuple(s.company.raw.iterdump())==frozen
     assert hashes(original)==before
     (tmp_path/'retained-provenance.json').write_text(json.dumps(dict(original=str(original),hashes=before),indent=2))
+
+    yield owned,inp,ctx,output
+    assert hashes(original)==before
+    monkeypatch.undo()
+
+
+@pytest.mark.timeout(600)
+def test_all_active_403_actual_commit_and_lost_response(committed_403):
+    owned,inp,ctx,output=committed_403
+    with owned.session() as s:
+        assert persistence.recover(s,ctx,inp,OSBinding.from_session(s)).effect==output.effect
+
+
+@pytest.mark.timeout(600)
+@pytest.mark.parametrize('kind',['request_sources','request_additional','memberships','document_changes','cash_allocations','bank_changes','source_components','source_applications','source_allocations','source_document_changes'])
+@pytest.mark.parametrize('limit',[1,50,200])
+def test_all_active_403_full_ordered_pages(committed_403,kind,limit):
+    owned,inp,ctx,output=committed_403
+    expected=pages.collections(output)[kind]
+    with owned.session() as s:
+        before=tuple(s.company.raw.iterdump())
+        binding=OSBinding.from_session(s);actual=[];cursor=None;seen=set()
+        while True:
+            page=pages.items(s,inp.operation_key,kind,PageInput(limit=limit,cursor=cursor),binding)
+            assert page.total_count==len(expected)
+            actual.extend(page.model_dump(mode='json')['items'])
+            if page.next_cursor is None:break
+            assert page.next_cursor not in seen
+            seen.add(page.next_cursor);cursor=page.next_cursor
+        assert actual==expected
+        assert tuple(s.company.raw.iterdump())==before

@@ -26,7 +26,7 @@ def test_original_pages_retry_reason_and_directive_distinction(client,sale,drive
                 while True:
                     page=pages.items(s,inp.operation_key,kind,PageInput(limit=limit,cursor=cursor),p.binding)
                     assert page.total_count==len(values)
-                    observed.extend(page.items)
+                    observed.extend(page.model_dump(mode='json')['items'])
                     if page.next_cursor is None:break
                     assert page.next_cursor not in seen
                     seen.add(page.next_cursor);cursor=page.next_cursor
@@ -97,3 +97,43 @@ def test_deferred_fk_is_detected_inside_aggregate_and_preserves_caller_sentinel(
         assert tuple(s.company.raw.iterdump())==baseline
         assert s.company.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
         assert persistence.execute(s,ctx,p).new_effect
+
+
+def test_both_custom_slot_insert_and_update_failures_rollback_exact_raw_state(client,sale,driver,n2,monkeypatch):
+    from tests.payment_raw_evidence import table as raw_table,attachments
+    from tests.test_service_sales_lifecycle import COMPANY
+    inp,post,doc,payment,receipt,invoice=n2
+    definition=client.run('custom-field create',dict(name='C failure field',kind='text',scopes=['payment','deposit']),company=COMPANY)['id']
+    ctx=Context.new(Interface.python,'C custom fault',reason='Correct actual cash')
+    def raw(s):
+        return dict(tables={name:raw_table(s.company.raw,name) for name, in s.company.raw.execute("SELECT name FROM sqlite_schema WHERE type='table'")},
+            ddl=s.company.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name').fetchall(),attachments=attachments(s.data_root))
+    for phase in ('insert','update'):
+        wire=inp.model_dump(mode='json',by_alias=True,exclude_unset=True)
+        wire['operation_key']='C-custom-'+phase
+        wire['source_action']['input']['custom_fields']={definition:phase}
+        wire['source_action']['input']['expected_custom_field_kinds']={definition:'text'}
+        wire['replacement']['document']['custom_fields']={definition:phase}
+        wire['replacement']['document']['expected_custom_field_kinds']={definition:'text'}
+        if phase=='update':
+            wire['expected_version']=2
+            wire['source_action']['input']['expected_version']=3
+            wire['source_action']['input']['invoice_versions'][0]['expected_version']=3
+            wire['replacement']['document']['sources'][1]['expected_version']=3
+        request=CoordinateInput.model_validate(wire)
+        with driver.session() as s:
+            prepared=prepare(s,ctx,request);baseline=raw(s);hit=[]
+            original=sa.engine.Connection.execute
+            def fault(connection,statement,*args,**kwargs):
+                wanted=getattr(statement,'is_insert' if phase=='insert' else 'is_update',False)
+                if wanted and getattr(getattr(statement,'table',None),'name',None)=='custom_field_values':
+                    hit.append(True);raise RuntimeError('owned custom '+phase)
+                return original(connection,statement,*args,**kwargs)
+            with monkeypatch.context() as patch:
+                patch.setattr(sa.engine.Connection,'execute',fault)
+                with pytest.raises(RuntimeError,match='owned custom'):persistence.execute(s,ctx,prepared)
+            assert hit==[True] and raw(s)==baseline
+            result=persistence.execute(s,ctx,prepared)
+            assert result.changed and result.current.revision_bank_total==19200
+            values=s.company.raw.execute('SELECT record_type,canonical_text FROM custom_field_values WHERE def_id=? ORDER BY record_type',(definition,)).fetchall()
+            assert values==[('deposit',phase),('payment',phase)]
