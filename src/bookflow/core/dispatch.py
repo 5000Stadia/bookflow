@@ -292,6 +292,7 @@ def open_company(s: Session, ctx: Context, writable: bool) -> None:
             if info.get("display_name") != row["display_name"]:
                 with s.commits.autocommit(s.company, "dispatch.open_company"):
                     write_display_name_copy(s.company, row["display_name"])
+                info["display_name"] = row["display_name"]
         else:
             info = read_info(s.company)
         s.company_tz = info.get("timezone")
