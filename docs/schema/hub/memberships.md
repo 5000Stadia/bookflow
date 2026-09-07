@@ -18,3 +18,7 @@ Database: `hub`.
 | `granted_by` | VARCHAR(26) | no | — | — | — | — | User id that granted this membership. |
 | `granted_at` | VARCHAR(32) | no | — | — | — | — | UTC timestamp when this membership was granted. |
 | `revoked_at` | VARCHAR(32) | yes | — | — | — | — | UTC timestamp when this membership was revoked; null while active. |
+| `version` | INTEGER | no | — | — | — | — | Administration edit version; migrated rows start at one. |
+| `updated_at` | VARCHAR(32) | yes | — | — | — | — | Last administration update time; unknown for migrated rows. |
+| `updated_by` | VARCHAR(26) | yes | — | — | — | — | Last administration actor; unknown for migrated rows. |
+| `updated_via` | VARCHAR(16) | yes | — | — | — | — | Last administration interface; unknown for migrated rows. |

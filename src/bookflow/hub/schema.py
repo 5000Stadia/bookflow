@@ -29,6 +29,16 @@ def _common(*extra: sa.Column) -> list[sa.Column]:
     ]
 
 
+def _administration(table: str) -> list[sa.Column]:
+    return [
+        _column("version", sa.Integer, "Administration edit version; migrated rows start at one.",
+                sa.CheckConstraint("version >= 1", name=f"ck_{table}_version"), nullable=False, server_default=sa.text("1")),
+        _column("updated_at", sa.String(32), "Last administration update time; unknown for migrated rows.", nullable=True),
+        _column("updated_by", sa.String(26), "Last administration actor; unknown for migrated rows.", nullable=True),
+        _column("updated_via", sa.String(16), "Last administration interface; unknown for migrated rows.", nullable=True),
+    ]
+
+
 users = _table(
     "users",
     *_common(
@@ -78,6 +88,13 @@ agent_authority = _table(
     _column("suspended_at", sa.String(32), "UTC timestamp of authority suspension; null while authorized.", nullable=True),
     _column("suspension_reason", sa.String(140), "Reason for the authority suspension; null while authorized.", nullable=True),
     sa.CheckConstraint("epoch >= 1", name="ck_agent_authority_epoch"),
+    *_administration("agent_authority"),
+    _column("authorized_at", sa.String(32), "Explicit authorization time; unknown for migrated rows.", nullable=True),
+    _column("authorized_by", sa.String(26), "Explicit authorization actor; unknown for migrated rows.", nullable=True),
+    _column("permitted_use_at", sa.String(32), "Permitted-use confirmation time; unknown for migrated rows.", nullable=True),
+    _column("fresh_context_ack_at", sa.String(32), "Explicit fresh-context acknowledgment time; unknown for migrated rows.", nullable=True),
+    _column("fresh_context_required", sa.Boolean, "Whether subsequent authorization requires fresh-context acknowledgment.",
+            sa.CheckConstraint("fresh_context_required IN (0,1)", name="ck_agent_authority_fresh_context"), nullable=False, server_default=sa.text("0")),
     description="Current agent authority epoch and suspension state.",
 )
 
@@ -123,6 +140,7 @@ memberships = _table(
     _column("granted_at", sa.String(32), "UTC timestamp when this membership was granted.", nullable=False),
     _column("revoked_at", sa.String(32), "UTC timestamp when this membership was revoked; null while active.", nullable=True),
     sa.UniqueConstraint("user_id", "scope_type", "scope_id", name="uq_membership"),
+    *_administration("memberships"),
     description="Role and capability membership assigned to a user at an organization or company scope.",
 )
 
@@ -207,4 +225,23 @@ pending_config = _table(
     _column("contents", sa.Text, "Complete desired config.toml contents; private to the local data root.", nullable=False),
     sa.CheckConstraint("id = 1", name="ck_pending_config_singleton"),
     description="Committed local settings awaiting durable config.toml replacement. Reads overlay this row; successful file synchronization clears it.",
+)
+
+
+permission_state = _table(
+    "permission_state",
+    _column("id", sa.Integer, "Private singleton key, always one.", primary_key=True),
+    _column("generation", sa.Integer, "Private authority-input generation; never a public cursor.", nullable=False),
+    _column("mode", sa.String(16), "Legacy storage or explicitly activated policy; storage migration retains legacy.", nullable=False),
+    _column("catalog_version", sa.Text, "Accepted catalog version in policy mode; null in legacy mode.", nullable=True),
+    _column("catalog_sha256", sa.String(64), "Canonical complete root catalog digest; null in legacy mode.", nullable=True),
+    _column("catalog_json", sa.Text, "Canonical complete catalog using actual root defaults; null in legacy mode.", nullable=True),
+    _column("updated_at", sa.String(32), "Policy-state update time; unknown at migration.", nullable=True),
+    _column("updated_by", sa.String(26), "Policy-state update actor; unknown at migration.", nullable=True),
+    _column("updated_via", sa.String(16), "Policy-state update interface; unknown at migration.", nullable=True),
+    sa.CheckConstraint("id = 1", name="ck_permission_state_singleton"),
+    sa.CheckConstraint("generation >= 1", name="ck_permission_state_generation"),
+    sa.CheckConstraint("mode IN ('legacy','policy_v1')", name="ck_permission_state_mode"),
+    sa.CheckConstraint("(mode='legacy' AND catalog_version IS NULL AND catalog_sha256 IS NULL AND catalog_json IS NULL) OR (mode='policy_v1' AND catalog_version IS NOT NULL AND catalog_sha256 IS NOT NULL AND length(catalog_sha256)=64 AND catalog_json IS NOT NULL)", name="ck_permission_state_catalog"),
+    description="Private permission-storage state. Its presence does not activate policy evaluation.",
 )
