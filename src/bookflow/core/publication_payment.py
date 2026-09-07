@@ -163,30 +163,33 @@ def work_access(s):
 
 def check(s, roots):
     from bookflow.company import payment_authority
-    for kind, identifier, write in roots:
-        if kind == 'work_access':
-            if work_access(s) != identifier:
-                raise BookflowError('E_PERMISSION', details={'reason': 'payment_projection_changed'})
-        elif kind == 'audit_event':
-            payment_authority.authorize_event(s, identifier)
-        else:
-            try:
-                ids = payment_authority.disclosure_transactions(s.company, kind, identifier)
-            except (ValueError, TypeError, KeyError, RecursionError):
-                raise BookflowError('E_IO', details={'stage': 'publication', 'outcome': 'unknown',
-                                                    'reason': 'invalid_authority_evidence'}) from None
-            # Every returned dependency must resolve in this selected company.
-            # Missing/foreign historical references cannot be treated as an
-            # ordinary ledger-only graph merely because no billing edge exists.
-            from bookflow.company import schema as c
-            identifiers = sorted(ids)
-            for offset in range(0, len(identifiers), 500):
-                chunk = identifiers[offset:offset + 500]
-                count = s.company.conn.execute(sa.select(sa.func.count()).select_from(c.transactions).where(
-                    c.transactions.c.id.in_(chunk))).scalar_one()
-                if count != len(chunk):
-                    raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'})
-            if ids or kind in payment_authority.PAYMENT_TARGETS or kind in {'payer', 'payment_history', 'invoice_settlement'}:
-                # Annotation writes disclose the target under the core's read
-                # policy; writing a note does not grant/require ledger posting.
-                payment_authority.authorize(s, ids, write=write)
+    from itertools import groupby
+    for is_event, group in groupby(roots, key=lambda root: root[0] == 'audit_event'):
+        if is_event:
+            payment_authority.authorize_events(s, (identifier for _, identifier, _ in group))
+            continue
+        for kind, identifier, write in group:
+            if kind == 'work_access':
+                if work_access(s) != identifier:
+                    raise BookflowError('E_PERMISSION', details={'reason': 'payment_projection_changed'})
+            else:
+                try:
+                    ids = payment_authority.disclosure_transactions(s.company, kind, identifier)
+                except (ValueError, TypeError, KeyError, RecursionError):
+                    raise BookflowError('E_IO', details={'stage': 'publication', 'outcome': 'unknown',
+                                                        'reason': 'invalid_authority_evidence'}) from None
+                # Every returned dependency must resolve in this selected company.
+                # Missing/foreign historical references cannot be treated as an
+                # ordinary ledger-only graph merely because no billing edge exists.
+                from bookflow.company import schema as c
+                identifiers = sorted(ids)
+                for offset in range(0, len(identifiers), 500):
+                    chunk = identifiers[offset:offset + 500]
+                    count = s.company.conn.execute(sa.select(sa.func.count()).select_from(c.transactions).where(
+                        c.transactions.c.id.in_(chunk))).scalar_one()
+                    if count != len(chunk):
+                        raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'})
+                if ids or kind in payment_authority.PAYMENT_TARGETS or kind in {'payer', 'payment_history', 'invoice_settlement'}:
+                    # Annotation writes disclose the target under the core's read
+                    # policy; writing a note does not grant/require ledger posting.
+                    payment_authority.authorize(s, ids, write=write)
