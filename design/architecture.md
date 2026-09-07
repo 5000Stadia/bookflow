@@ -1176,9 +1176,48 @@ commit, exclusions and inventory digest remain separate from A's descriptor hash
 the existing complete catalog tests verify this executable's accepted inventory.
 Metadata-only B1 changes retain the combined recovery build’s reviewed `7b2d4c2` catalog version.
 
-`assemble_pair` constructs every old/new subject, scope, membership, visibility,
-agent and catalog union slot using the actual A types and `validate_comparison`.
-Every organization contributes a future-company scope. Eligible humans come from
+`observe_pair` preserves complete raw-union `LogicalObservation` values alongside
+its `SnapshotPair`. `assemble_pair` returns that same SnapshotPair contract.
+Required organization/company `pending_path` fields come from the full main
+registry snapshot and participate unchanged in its row digest. Scope keys and
+revoked membership rows remain raw and complete; retirement never filters SQL.
+Legacy serialized roots missing the required field must be freshly loaded.
+
+The private lexical classifier accepts slash, backslash and mixed separators,
+without platform or filesystem inspection. Relative nonempty components exclude
+empty/dot/dot-dot components, NUL, rooted and ASCII drive-prefixed paths. A first
+component exactly `trash` with a following component is retirement; bare `trash`
+is invalid. Case and original strings are preserved. An organization retires its
+companies and future-company scope; a company can also retire through its own
+pending destination. Ordinary moves retain logical presence.
+
+Observations contain raw presence/parent/path and logical presence/retirement
+cause for every raw old/new scope, plus the complete subject/membership product.
+Membership values on absent scopes are None while their raw rows remain intact.
+A receives exactly the union of the two logical live rosters and their dense
+slots, using its actual types and `validate_comparison`. Scopes absent on both
+sides remain explicit in the observations, outside A's callable scope domain.
+Every logically live organization contributes a future-company scope. Complete
+raw-domain visibility is validated before the A subset is selected: absent
+scopes require explicit false, including both-absent tombstones. True, missing,
+duplicate or malformed facts reject; no live-policy default is supplied.
+
+`ScopeRows` and `derive_scope_proposal` separately support complete typed scope
+upserts/removals plus ordinary ProposalRows against final scope keys. Existing
+company parents cannot move; retired destinations cannot be rewritten or cleared.
+New scopes must be live, with live parents. Removing an organization requires
+all children explicitly removed; membership removals must exactly cover all
+removed scopes, revoked rows included, with no removal/upsert overlap. New or
+reactivated membership on retired scopes rejects. Expected keys derive separately
+from old SQL keys and explicit changes. Users/agents and their identity constraints
+remain those of the ordinary constructor. No SQL or semantic increments occur.
+Both initiating and final proposals share one loaded old anchor; subsequent
+cleanup uses a freshly loaded retired anchor. Authority-input roots omit general
+registry metadata, tokens and audit, which still require separate full-state
+expected-write checks. These private APIs do not wire reset/read/publication
+consumers or activate retirement policy in the current runtime.
+
+Eligible humans come from
 unrevoked explicit assignments to present active humans, never ownership or token
 existence. A provider must explicitly supply complete governed visibility on both
 sides; no production provider or membershipless-administrator decision is included.
