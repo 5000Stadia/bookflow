@@ -11,6 +11,15 @@ from tests.test_row8_journal import database_path
 @pytest.mark.timeout(600)
 @pytest.mark.parametrize('count', [7, 403])
 def test_complete_guarded_invoice_correction_and_prospective_pages(client, sale, count):
+    # Scope the new graph's assertions while also preserving all seeded history.
+    history_tables = ('transactions', 'transaction_revisions', 'posting_batches', 'posting_lines',
+        'applications', 'application_allocations', 'payment_operations', 'payment_operation_items',
+        'audit_events', 'audit_entries')
+    with sqlite3.connect(database_path(client)) as db:
+        seeded_history = {table: db.execute(f'SELECT rowid,* FROM "{table}" ORDER BY rowid').fetchall()
+            for table in history_tables}
+        assert db.execute("SELECT count(*) FROM applications WHERE kind='unapply'").fetchone()[0] > 0
+
     invoice = posted(client, sale['customer'], sale['item'], '10.00', f'LARGE-CORRECTION-{count}')
     payment_method = method(client)
     for ordinal in range(count):
@@ -49,3 +58,8 @@ def test_complete_guarded_invoice_correction_and_prospective_pages(client, sale,
             assert db.execute('SELECT version FROM transactions WHERE id=?', (payment_id,)).fetchone()[0] == (1 if ordinal % 2 == 0 else 2)
         assert db.execute("SELECT count(*) FROM applications WHERE kind='unapply' AND paid_transaction_id=?", (invoice['id'],)).fetchone()[0] == 0
         assert db.execute('PRAGMA foreign_key_check').fetchall() == []
+    with sqlite3.connect(database_path(client)) as db:
+        for table, old in seeded_history.items():
+            assert old, table
+            assert db.execute(f'SELECT rowid,* FROM "{table}" WHERE rowid<=? ORDER BY rowid',
+                (old[-1][0],)).fetchall() == old, table

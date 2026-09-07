@@ -38,7 +38,7 @@ def lineage_facts(s, parties):
     return result
 
 
-def _candidate_query(s, inp, *, page_ids=None, resolved=None):
+def _candidate_query(s, inp, *, page_ids=None, resolved=None, positive_due=True):
     from bookflow.company.payment_authority import readable_predicate
     context, funding = resolved if resolved is not None else (selection.context(s, inp), None)
     if resolved is None and context['payment_id']:
@@ -69,7 +69,7 @@ def _candidate_query(s, inp, *, page_ids=None, resolved=None):
         r.c.id.label('revision_id'),
         used.label('applied_minor_units'), (r.c.total_minor_units-used).label('due_minor_units')).select_from(source).where(t.c.type == 'invoice', t.c.status == 'posted',
         r.c.date <= context['date'], r.c.currency == context['currency'], p.c.control_account_id == context['ar_account_id'],
-        r.c.total_minor_units > used, readable_predicate(s, t.c.id))
+        readable_predicate(s, t.c.id))
     if page_ids is not None:
         statement = statement.where(t.c.id.in_(page_ids))
     capacities = {}
@@ -86,6 +86,8 @@ def _candidate_query(s, inp, *, page_ids=None, resolved=None):
         s.company.raw.create_function('payment_casefold', 1, lambda value: (value or '').casefold(), deterministic=True)
         text = t.c.number + ' ' + sa.func.coalesce(r.c.memo, '')
         statement = statement.where(sa.func.payment_casefold(text).contains(inp.q.casefold(), autoescape=True))
+    if positive_due:
+        statement = statement.where(r.c.total_minor_units > used)
     if funding and context['date'] < funding['revision']['date']:
         statement = statement.where(sa.false())
     return context, statement.order_by(r.c.date, t.c.id), capacities, funding
@@ -101,14 +103,17 @@ def _original_projection(statement):
 _Candidate = namedtuple('_Candidate', 'invoice_id expected_version customer_id date currency revision_id gross_minor_units due_minor_units available_source_minor_units')
 
 def candidates(s, inp):
-    context, statement, capacities, funding = _candidate_query(s, inp)
+    context, statement, capacities, funding = _candidate_query(s, inp, positive_due=False)
     # Suggestions bind the complete candidate relation and exact current money.
     # Original display fields are projected only by invoice delivery; immutable
     # revision identity/header version bind commercial history on this baseline.
     cols = statement.selected_columns
     baseline = statement.with_only_columns(cols.invoice_id, cols.expected_version,
         cols.customer_id, cols.date, cols.currency, cols.revision_id,
-        cols.gross_minor_units, cols.due_minor_units)
+        cols.gross_minor_units, cols.due_minor_units).order_by(None).limit(-1).subquery('candidate_money')
+    # LIMIT -1 is a transient SQLite flattening barrier: evaluate each exact
+    # correlated live sum once, then retain all positive-due candidates.
+    baseline = sa.select(baseline).where(baseline.c.due_minor_units > 0).order_by(baseline.c.date, baseline.c.invoice_id)
     result = [_Candidate(*row, capacities[row[2]] if context['payment_id'] else None)
         for row in s.company.conn.execute(baseline).all()]
     return context, result
