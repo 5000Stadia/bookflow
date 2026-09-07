@@ -97,6 +97,7 @@ def test_split_and_zero_presence_survive_stored_print(client,sale,run_private):
     from tests.test_deposit_sources import uf
     from tests.test_payment_receipts import method
     from tests.test_deposit_lifecycle import additional_document
+    client.company.update(use_classes=True,company=COMPANY)
     classes=[client.run('class create',dict(name='Read split '+str(n)),company=COMPANY)['id'] for n in (1,2)]
     source=client.run('sales-receipt post',dict(customer=sale['customer'],deposit_to=uf(client),payment_method=method(client),date='2026-06-02',lines=[dict(item=sale['item'],quantity='1',unit_price=price,class_id=cls) for price,cls in [('20',classes[0]),('40',classes[1]),('0',classes[0])]]),company=COMPANY)
     doc=additional_document(client,sale)
@@ -107,8 +108,14 @@ def test_split_and_zero_presence_survive_stored_print(client,sale,run_private):
         result=printing.print_data(s,m.PrintDataInput(deposit=posted.current.id),binding=b)
         row=next(x for x in result.rows if isinstance(x,m.SourceItem))
         assert sorted(x.capacity for x in row.captured.source.components)==[2000,4000]
-        assert {x.dimensions.class_id for x in row.captured.source.components}==set(classes)
-        assert len(row.captured.occurrences)==3 and sum(x.present for x in row.captured.occurrences)==2
+        assert {x.cash.class_id for x in row.captured.source.components}==set(classes)
+        # Initial zero-value lines retain semantic presence but never allocate a
+        # funding occurrence. Historical zeroed occurrences are a separate case.
+        presence=set(row.captured.source.semantic_presence)
+        funded={x.key for x in row.captured.source.components}
+        assert len(presence)==3 and len(presence-funded)==1
+        assert len(row.captured.occurrences)==2 and all(x.present for x in row.captured.occurrences)
+        assert {x.key for x in row.captured.occurrences}==funded
         for limit in (1,25,200):
             collected=[];cursor=None
             while True:

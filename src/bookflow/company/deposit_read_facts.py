@@ -54,9 +54,18 @@ def load_complete(s,deposit_ids,*,binding):
     event_rows={r['id']:r for r in authority.select(s,c.audit_events,c.audit_events.c.id,events)}
     h._authorize_binding_graph(s,binding,tuple(sorted(roots)),tuple(sorted(events)),write=False)
     outputs={};links={i:[] for i in ids}
+    # Only this complete read's coherent snapshot owns these results. Repeated
+    # operation/link assembly must not reconstruct an identical draft again.
+    # Consumption.current retains its own independent admission/receipt check.
+    loaded_drafts={}
+    def load_draft(identity,kind='draft'):
+        key=(kind,identity)
+        if key not in loaded_drafts:
+            loaded_drafts[key]=deposit_drafts.load(s,identity,kind=kind,binding=binding)
+        return loaded_drafts[key]
     try:
         for draft_id in evidence.drafts:
-            dh,dr,dm,_=deposit_drafts.load(s,draft_id,binding=binding)
+            dh,dr,dm,_=load_draft(draft_id)
             linked=dh['edit_transaction_id'] or dh['copy_transaction_id']
             if linked in links:links[linked].append(EvidenceLink(kind='draft',id=draft_id,related_id=dr['id']))
         for op in graphs['deposit_operations']:
@@ -75,11 +84,11 @@ def load_complete(s,deposit_ids,*,binding):
             outputs[op['id']]=output
             links[op['transaction_id']].append(EvidenceLink(kind='operation',id=op['id'],label=op['operation_key']))
             if current:
-                dh,dr,dm,_=deposit_drafts.load(s,current.id,binding=binding)
+                dh,dr,dm,_=load_draft(current.id)
                 links[op['transaction_id']].append(EvidenceLink(kind='draft',id=current.id,related_id=dr['id']))
                 children=authority.select(s,c.deposit_selections,c.deposit_selections.c.target_draft_id,[current.id])
                 for child in children:
-                    deposit_drafts.load(s,child['id'],kind='selection',binding=binding)
+                    load_draft(child['id'],kind='selection')
                     links[op['transaction_id']].append(EvidenceLink(kind='selection',id=child['id'],related_id=child['accepted_revision_id']))
         results=[]
         for header in headers:
