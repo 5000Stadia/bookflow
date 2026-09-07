@@ -119,3 +119,15 @@ def test_payer_and_family_projection_keeps_exact_owner_nets_and_i64_boundary(cli
     # Unbounded intermediate18e18 cancels to exact zero; no SQLite overflow/clamp.
     assert page['payer_balance']['minor_units']==page['family_balance']['minor_units']==0
     assert sum(row['due_minor_units'] for row in page['items'])==18000000000000000000
+    # Each descendant can exceed i64 before opposite-party cancellation. Only
+    # the disclosed payer/family totals are bounded, never grouped intermediates.
+    family = client.customer.create(name='Cross-party exact cancellation', company=COMPANY)['id']
+    debit_party = client.customer.create(name='Debit job', parent_id=family, company=COMPANY)['id']
+    credit_party = client.customer.create(name='Credit job', parent_id=family, company=COMPANY)['id']
+    for _ in range(2):
+        client.journal.post(date='2026-06-02', company=COMPANY, lines=[
+            dict(account=ar, side='debit', amount='90000000000000000.00', name_type='customer', name_id=debit_party),
+            dict(account=ar, side='credit', amount='90000000000000000.00', name_type='customer', name_id=credit_party)])
+    page = client.run('payment invoices', dict(mode='new_receipt', customer=family, date='2026-06-02'), company=COMPANY)
+    assert page['total_count'] == 0
+    assert page['payer_balance']['minor_units'] == page['family_balance']['minor_units'] == 0
