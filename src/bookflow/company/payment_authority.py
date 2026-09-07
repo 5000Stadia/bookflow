@@ -434,3 +434,68 @@ def disclosure_transactions(db, kind, identifier):
             if identifier in values:
                 ids.update(record_transactions(db, 'payment_operation', row['id']))
     return ids
+
+
+def _publication_transaction_facts(s, identifiers):
+    """Bounded root facts; retain unmatched one-step targets for validation."""
+    roots, apps = c.transactions, c.applications
+    target = roots.alias('publication_target')
+    unresolved = sa.exists(sa.select(sa.literal(1)).select_from(apps).where(
+        apps.c.paying_transaction_id == roots.c.id,
+        ~sa.exists(sa.select(sa.literal(1)).select_from(target).where(
+            target.c.id == apps.c.paid_transaction_id)).correlate(apps))).correlate(roots)
+    statement = sa.select(roots.c.id, work_link_predicate(roots.c.id).label('linked_work'),
+                          unresolved.label('unresolved_target')).where(roots.c.id.in_(identifiers))
+    return {row['id']: row for row in s.company.conn.execute(statement).mappings()}
+
+
+def authorize_publication_transactions(s, occurrences):
+    """Authorize ordered occurrences with at most 200 roots loaded at a time."""
+    from itertools import islice
+    from bookflow.core.errors import BookflowError
+    occurrences = iter(occurrences)
+    while batch := list(islice(occurrences, _BATCH_SIZE)):
+        facts = _publication_transaction_facts(s, list(dict.fromkeys(identifier for identifier, _ in batch)))
+        for identifier, write in batch:
+            fact = facts.get(identifier)
+            if fact is None or fact['unresolved_target']:
+                raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'})
+            role = 'standard' if write else 'member'
+            require_resource(s, 'ledger.post' if write else 'ledger.read', role)
+            if fact['linked_work']:
+                require_resource(s, 'customer-work', role)
+        del facts
+
+
+def _publication_payer_family(customer_id):
+    family = sa.select(c.customers.c.id).where(c.customers.c.id == customer_id).cte(
+        'publication_payer_family', recursive=True)
+    return family.union(sa.select(c.customers.c.id).join(family, c.customers.c.parent_id == family.c.id))
+
+
+def _publication_payer_transactions(customer_id):
+    """All historical AR contributors, including unresolved header references."""
+    family = _publication_payer_family(customer_id)
+    return sa.select(c.posting_lines.c.transaction_id.label('transaction_id')).join(
+        c.accounts, c.accounts.c.id == c.posting_lines.c.account_id).where(
+            c.accounts.c.type == 'accounts_receivable', c.posting_lines.c.name_type == 'customer',
+            c.posting_lines.c.name_id.in_(sa.select(family.c.id))).distinct()
+
+
+def authorize_publication_payer(s, customer_id, *, write=False):
+    """Validate the exact payer/B/H evidence, then authorize B's one-step graph."""
+    from bookflow.core.errors import BookflowError
+    selected = _publication_payer_transactions(customer_id)
+    base = selected.cte('publication_payer_base')
+    base_ids = sa.select(base.c.transaction_id)
+    targets = sa.select(c.applications.c.paid_transaction_id.label('transaction_id')).where(
+        c.applications.c.paying_transaction_id.in_(base_ids))
+    closure = base_ids.union(targets).cte('publication_payer_closure')
+    missing_payer = ~sa.exists(sa.select(sa.literal(1)).select_from(c.customers).where(c.customers.c.id == customer_id))
+    missing_target = sa.exists(sa.select(sa.literal(1)).select_from(closure).where(
+        ~sa.exists(sa.select(sa.literal(1)).select_from(c.transactions).where(
+            c.transactions.c.id == closure.c.transaction_id)).correlate(closure)))
+    if s.company.conn.execute(sa.select(sa.or_(missing_payer, missing_target))).scalar_one():
+        raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'})
+    # authorize_query adds H itself; supplying closure would add an extra hop.
+    authorize_query(s, selected, write=write)
