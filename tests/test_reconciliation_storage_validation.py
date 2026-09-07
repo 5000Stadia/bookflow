@@ -127,6 +127,12 @@ def aggregate(rows,g,bank):
     for t in targets:
         field=dict(accounts='account_id',transactions='transaction_id',drafts='draft_id',openings='opening_id',certificates='certificate_id')[t['kind']]
         rows['operation_'+t['kind']].append(dict(operation_id=op,**{field:t['id']}))
+    previous={}
+    for value in rows['effect_versions']:
+        key=value['key_id']
+        if value['source_audit_event_id']==audit:
+            rows['event_effects'].append(dict(event_id=event,key_id=key,old_version_id=previous.get(key),new_version_id=value['id'],source_audit_event_id=audit))
+        previous[key]=value['id']
     return rows
 
 
@@ -148,7 +154,7 @@ def test_nonempty_certificate_chain_claim_receipts_and_independent_mutations(cli
         bad=copy.deepcopy(rows);change(bad)
         with pytest.raises(InvalidStorage,match=rule):validate(bad,source=g,captured_graphs=captures,referenced_rows=refs)
     # SQL independently admits the reciprocal graph and rejects unreleased removal.
-    order=['keys','effect_versions','commercial_versions','effect_legs','effect_sources','effect_heads','operations','events','draft_revisions','drafts','openings','certificates','certificate_members','event_accounts','accounts','active_certificates','claims','current_members','operation_items','operation_accounts','operation_transactions','operation_drafts','operation_openings','operation_certificates']
+    order=['keys','effect_versions','commercial_versions','effect_legs','effect_sources','effect_heads','operations','events','event_effects','draft_revisions','drafts','openings','certificates','certificate_members','event_accounts','accounts','active_certificates','claims','current_members','operation_items','operation_accounts','operation_transactions','operation_drafts','operation_openings','operation_certificates']
     with driver.session() as s:
         raw=s.company.raw
         # Operation target FKs resolve after draft/opening/certificate insertion.
@@ -213,7 +219,7 @@ def test_actual_403_leaf_storage_chunks_barrier_and_deferred_subtype_mutations(c
     with pytest.raises(InvalidStorage,match='attempt_hash'):validate(bad,source=g,referenced_rows=refs)
     with driver.session() as s:
         raw=s.company.raw
-        for name in ('keys','effect_versions','commercial_versions','effect_legs','effect_sources','effect_heads','operations','events','draft_revisions','drafts','operation_items','operation_accounts','operation_transactions','operation_drafts','attempts','attempt_chunks','attempt_items'):insert(raw,name,rows[name])
+        for name in ('keys','effect_versions','commercial_versions','effect_legs','effect_sources','effect_heads','operations','events','event_effects','draft_revisions','drafts','operation_items','operation_accounts','operation_transactions','operation_drafts','attempts','attempt_chunks','attempt_items'):insert(raw,name,rows[name])
         with pytest.raises(sqlite3.IntegrityError):raw.execute('COMMIT')
         # A failed deferred commit keeps the transaction open: supply missing
         # reciprocal leaves, then the real owning context COMMIT must succeed.
@@ -269,7 +275,7 @@ def test_proposal_exact_saved_fields_consumption_and_report_preset_versions(clie
     with pytest.raises(InvalidStorage,match='generated_journal_amount'):validate(bad,source=g,referenced_rows=refs)
     with driver.session() as s:
         raw=s.company.raw
-        for name in ('keys','effect_versions','commercial_versions','effect_legs','effect_sources','effect_heads','operations','events','draft_revisions','drafts','operation_items','operation_accounts','operation_transactions','operation_drafts','proposal_revisions','proposals','draft_proposals','proposal_consumptions','report_preset_revisions','report_presets'):insert(raw,name,rows[name])
+        for name in ('keys','effect_versions','commercial_versions','effect_legs','effect_sources','effect_heads','operations','events','event_effects','draft_revisions','drafts','operation_items','operation_accounts','operation_transactions','operation_drafts','proposal_revisions','proposals','draft_proposals','proposal_consumptions','report_preset_revisions','report_presets'):insert(raw,name,rows[name])
         assert raw.execute('PRAGMA foreign_key_check').fetchall()==[]
         with pytest.raises(sqlite3.IntegrityError):raw.execute('UPDATE reconciliation_proposals SET version=2')
         with pytest.raises(sqlite3.IntegrityError):raw.execute('UPDATE reconciliation_report_presets SET version=2')
@@ -277,21 +283,6 @@ def test_proposal_exact_saved_fields_consumption_and_report_preset_versions(clie
 
 
 def draft_header(rows):return rows['draft_revisions'][0]['header_snapshot']
-
-
-def test_event_impact_contract_gap_is_explicit_for_real_cross_account_move(client,driver):
-    a=account(client,'N impact A');b=account(client,'N impact B');equity=account(client,'N impact equity','equity')
-    doc=journal(client,pair(a,equity,'10'))
-    lines=[dict(account=b if v['side']=='debit' else equity,side=v['side'],amount='10',line_id=v['line_id']) for v in doc['revision']['lines']]
-    run(client,'journal update',dict(journal=doc['id'],expected_version=1,lines=lines))
-    with driver.session() as s:g=adapters.graph(s,[doc['id']]);refs=references(s)
-    source=captured(g);old,new=source['effect_versions']
-    assert (old['account_id'],new['account_id'])==(a,b)
-    assert old['signed_debit']==new['signed_debit']==1000
-    # A-local=-1000, B-local=+1000; source-wide delta=0 is neither value.
-    rows=staged(source,g,a,0)
-    rows['event_effects']=[dict(event_id=rows['events'][0]['id'],key_id=old['key_id'],old_version_id=old['id'],new_version_id=new['id'],source_audit_event_id=new['source_audit_event_id'],cause='account_move',local_signed_impact=0)]
-    with pytest.raises(InvalidStorage,match='event_impact_context_unspecified'):validate(rows,source=g,referenced_rows=refs)
 
 
 def test_event_backed_release_retains_certificate_and_never_inverts_source(client,driver):
@@ -318,7 +309,7 @@ def test_event_backed_release_retains_certificate_and_never_inverts_source(clien
     assert rows['certificates']==original['certificates'] and rows['claims']==original['claims']
     with driver.session() as s:
         raw=s.company.raw
-        order=['keys','effect_versions','commercial_versions','effect_legs','effect_sources','effect_heads','operations','events','draft_revisions','drafts','openings','certificates','certificate_members','event_accounts','accounts','active_certificates','claims','current_members','operation_items','operation_accounts','operation_transactions','operation_drafts','operation_openings','operation_certificates']
+        order=['keys','effect_versions','commercial_versions','effect_legs','effect_sources','effect_heads','operations','events','event_effects','draft_revisions','drafts','openings','certificates','certificate_members','event_accounts','accounts','active_certificates','claims','current_members','operation_items','operation_accounts','operation_transactions','operation_drafts','operation_openings','operation_certificates']
         for name in order:insert(raw,name,original[name])
         for name in ('operations','events','operation_items','operation_accounts','operation_transactions','operation_drafts','operation_openings','operation_certificates','event_accounts'):
             insert(raw,name,rows[name][len(original[name]):])

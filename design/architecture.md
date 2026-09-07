@@ -1642,14 +1642,14 @@ and staged intent subtypes/chunks. Canonical-intent data is separate from origin
 request evidence. Storage envelopes are not future public command admission
 models. Statement side counts count movements; sums count all component amounts.
 
-N is **not full acceptance** pending clarification of the planned
-`event_effects.local_signed_impact`: its row has no account/cutoff or certificate,
-but the specified local report impact requires that context. A real account move
-has two distinct local impacts. The private validator explicitly rejects this
-currently unprovable event population instead of validating a guessed scalar.
-The proposed resolution is to retain raw old/new facts here and derive local
-impact per account/certificate, or add explicit projection context in the owning
-plan before accepting N. No source rows or financial effects are repaired.
+Event effects retain one transition per event/key, a required new version,
+its exact predecessor (null only for creation), and the causal source audit.
+Private validation derives predecessors from the validated producer histories
+and checks complete transition coverage for the event's source audit, including
+zero-amount metadata and inactive transitions. Typed operation targets retain the
+source transaction. No contextless impact or free-text cause is stored. Event
+before/after account/cutoff deltas and certificate-to-current selected impacts
+are different projections over these immutable facts; neither is a cached value.
 
 `deposit_dependencies.RECONCILIATION` remains None. A separately reserved future
 activation revision must rebuild/backfill authoritative history, install the real

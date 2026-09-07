@@ -11,7 +11,5 @@ Database: `company`.
 | `event_id` | TEXT | no | — | primary key 1 | — | reconciliation_events.id | event id. |
 | `key_id` | TEXT | no | — | primary key 2 | ix_reconciliation_event_effects_key_id | reconciliation_effect_versions.key_id, reconciliation_effect_versions.key_id | key id. |
 | `old_version_id` | TEXT | yes | — | — | ix_reconciliation_event_effects_old_version_id | reconciliation_effect_versions.id | old version id. |
-| `new_version_id` | TEXT | yes | — | — | ix_reconciliation_event_effects_new_version_id | reconciliation_effect_versions.id | new version id. |
+| `new_version_id` | TEXT | no | — | — | ix_reconciliation_event_effects_new_version_id | reconciliation_effect_versions.id | new version id. |
 | `source_audit_event_id` | TEXT | no | — | — | ix_reconciliation_event_effects_source_audit_event_id | audit_events.id | source audit event id. |
-| `cause` | TEXT | no | — | — | — | — | cause. |
-| `local_signed_impact` | BIGINT | no | — | — | — | — | local signed impact. |

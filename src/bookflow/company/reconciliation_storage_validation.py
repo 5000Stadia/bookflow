@@ -296,6 +296,7 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
         if evidence['attachment_id']:
             require(any(v['id']==evidence['attachment_link_id'] and v['attachment_id']==evidence['attachment_id'] for v in referenced_rows['attachment_links']),'attachment_owner')
     keys=by('keys'); versions=by('effect_versions')
+    transitions = {}
     if versions:
         require(source is not None,'source_proof_required')
         from bookflow.company.reconciliation_adapters import enumerate_graph
@@ -321,6 +322,17 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
                 link=get('deposit_versions',v['id']); require((link['bank_key_id'],link['bank_version_id'])==(e.ref.component_id,e.version_id),'deposit_link')
             else: require(get('commercial_versions',v['id'])['line_id']==e.ref.component_id,'commercial_link')
         require(set(actual)==set(expected),'source_history_coverage')
+        # R0 enumeration orders each stable key's immutable business versions;
+        # never infer predecessor from ULIDs, dates, amounts or insertion order.
+        previous = {}
+        for effect in history:
+            ref=(effect.ref.producer,effect.ref.transaction_id,effect.ref.role,effect.ref.component_id,effect.version_id)
+            stored=actual[ref]; key=stored['key_id']; audit=effect.audit_event_id
+            transition=(key,previous.get(key),stored['id'],audit)
+            require((audit,key) not in transitions,'source_event_cardinality')
+            transitions[audit,key]=transition
+            previous[key]=stored['id']
+
         heads={v['key_id']:v['version_id'] for v in r['effect_heads']}
         expected_heads={next(k['id'] for k in keys.values() if (k['producer'],k['transaction_id'],k['role'],k['deposit_key_id'] or k['commercial_line_id'])==(v.ref.producer,v.ref.transaction_id,v.ref.role,v.ref.component_id)): actual[v.ref.producer,v.ref.transaction_id,v.ref.role,v.ref.component_id,v.version_id]['id'] for v in current}
         require(heads==expected_heads,'source_heads')
@@ -452,11 +464,20 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
             latest=max(choices,key=lambda v:v[number]); require(h['version']==latest[number],'projection_version')
             if 'current_revision_id' in h: require(h['current_revision_id']==latest['id'],'projection_head')
             else: require(h['parameters_snapshot']==latest['parameters_snapshot'],'preset_snapshot')
-    # Section 3.3 has no account/cutoff/certificate owner for this scalar,
-    # whereas section 8 defines account/date-specific local impact. Do not
-    # certify an unprovable entered number while that contract is unresolved.
-    require(not r['event_effects'],'event_impact_context_unspecified')
     _receipts(r)
+    for event in r['events']:
+        audit=event['audit_event_id']
+        expected={v for (owner,_),v in transitions.items() if owner==audit}
+        actual=set()
+        targets={v['transaction_id'] for v in r['operation_transactions'] if v['operation_id']==event['operation_id']}
+        for link in matching('event_effects','event_id',event['id']):
+            new=versions[link['new_version_id']]
+            require(link['source_audit_event_id']==new['source_audit_event_id']==audit,'event_causality')
+            require(new['transaction_id'] in targets,'event_source_target')
+            value=(link['key_id'],link['old_version_id'],link['new_version_id'],link['source_audit_event_id'])
+            require(value==transitions.get((audit,link['key_id'])),'event_predecessor')
+            actual.add(value)
+        require(actual==expected,'event_transition_coverage')
 
 
 def _receipts(r):

@@ -96,8 +96,8 @@ def define_tables(metadata, C, T, common):
         own('event_id','events','id'),fk('account_id','accounts','id'),
         *[own(n+' account_id',target,'id account_id',True) for n,target in [('before_opening_id','openings'),('after_opening_id','openings'),('before_head_id','certificates'),('after_head_id','certificates')]],
         uq('account_id','after_chain_version'),ck('after_chain_version=before_chain_version+1'),pk='event_id account_id')
-    table('event_effects',ids('event_id','key_id','old_version_id?','new_version_id?','source_audit_event_id')+[txt('cause'),num('local_signed_impact','int')],
-        own('event_id','events','id'),own('key_id old_version_id','effect_versions','key_id id'),own('key_id new_version_id','effect_versions','key_id id'),fk('source_audit_event_id','audit_events','id'),ck('old_version_id IS NOT NULL OR new_version_id IS NOT NULL'),pk='event_id key_id')
+    table('event_effects',ids('event_id','key_id','old_version_id?','new_version_id','source_audit_event_id'),
+        own('event_id','events','id'),own('key_id old_version_id','effect_versions','key_id id'),own('key_id new_version_id','effect_versions','key_id id'),fk('source_audit_event_id','audit_events','id'),pk='event_id key_id')
     table('drafts',ids('id','account_id')+[txt('kind'),num('version'),*ids('current_revision_id'),txt('state'),*ids('terminal_operation_id?'),*created()],
         uq('id','account_id'),fk('account_id','accounts','id'),own('current_revision_id id account_id','draft_revisions','id draft_id account_id',True),own('terminal_operation_id','operations','id',True),enum('kind','opening|statement|amendment'),enum('state','open|consumed|canceled'),ck("(state='open' AND terminal_operation_id IS NULL) OR (state<>'open' AND terminal_operation_id IS NOT NULL)"))
     table('draft_revisions',ids('id','draft_id','account_id')+[num('revision_number'),*ids('previous_revision_id?'),obj('header_snapshot'),num('base_chain_version','count'),*ids('base_opening_id?','base_head_id?','repair_of_opening_id?','repair_of_certificate_id?'),*created()],
@@ -157,6 +157,7 @@ def guards(names):
                 trigger(short, 'no_'+verb.lower(), verb, '1')
         elif short not in ('active_certificates', 'current_members', 'attempt_active'):
             trigger(short, 'no_delete', 'DELETE', '1')
+    trigger('event_effects','causality','INSERT',"EXISTS (SELECT 1 FROM reconciliation_effect_versions v WHERE v.id=NEW.new_version_id AND v.source_audit_event_id<>NEW.source_audit_event_id) OR EXISTS (SELECT 1 FROM reconciliation_events e WHERE e.id=NEW.event_id AND e.audit_event_id<>NEW.source_audit_event_id)")
     trigger('keys','deposit_role','INSERT',"NEW.producer='deposit' AND NOT EXISTS (SELECT 1 FROM bank_effect_keys k WHERE k.id=NEW.deposit_key_id AND k.transaction_id=NEW.transaction_id AND k.role=NEW.role)")
     head = "NOT EXISTS (SELECT 1 FROM reconciliation_effect_versions v JOIN reconciliation_keys k ON k.id=v.key_id JOIN transactions t ON t.id=v.transaction_id WHERE v.id=NEW.version_id AND v.key_id=NEW.key_id AND ((v.producer='deposit' AND EXISTS (SELECT 1 FROM bank_effect_current b WHERE b.key_id=k.deposit_key_id AND b.version_id=v.source_version)) OR (v.producer<>'deposit' AND t.current_revision_id=v.revision_id AND ((t.status='voided' AND v.transition_batch_id=t.void_posting_batch_id) OR (t.status<>'voided' AND v.transition_batch_id IS NULL)))))"
     trigger('effect_heads','current','INSERT',head)
