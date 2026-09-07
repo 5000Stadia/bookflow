@@ -229,7 +229,7 @@ def test_noncustomer_query_unicode_scalar_and_owned_fields(client):
     assert client.run("custom-field query", {"query": "SeparateAlpha SeparateBeta"}, company=COMPANY)["count"] == 0
 
 
-def test_ten_thousand_customer_query_work_is_bounded(client, root):
+def test_ten_thousand_customer_query_work_is_bounded(client, root, monkeypatch):
     import statistics
     import time
     from fastapi.testclient import TestClient
@@ -239,7 +239,9 @@ def test_ten_thousand_customer_query_work_is_bounded(client, root):
     company_id = client.company.show(company=COMPANY)["company_id"]
     secret = client.token.issue(label="query-budget")["secret"]
     handle = start_serving(root, client_version(), bind="127.0.0.1:8765", secure_cookies=False)
-    api = TestClient(handle.app)
+    from tests.query_phase_trace import QueryTrace, assert_bounded
+    trace = QueryTrace(monkeypatch)
+    api = TestClient(trace.app(handle.app))
     statements = []
     def capture(connection, cursor, statement, parameters, context, many):
         statements.append(statement)
@@ -250,14 +252,14 @@ def test_ten_thousand_customer_query_work_is_bounded(client, root):
         return response.json()
     try:
         run({"limit": 10})
-        sa.event.listen(sa.engine.Engine, "before_cursor_execute", capture)
-        small = run({"limit": 10})
-        small_count = len(statements)
-        statements.clear()
-        large = run({"limit": 200})
-        assert len(statements) == small_count
-        assert small["count"] == 10 and large["count"] == 200
-        sa.event.remove(sa.engine.Engine, "before_cursor_execute", capture)
+        run({"limit": 50}); run({"limit": 200})
+        small, small_trace = trace.run(lambda: run({"limit": 10}))
+        middle, middle_trace = trace.run(lambda: run({"limit": 50}))
+        large, large_trace = trace.run(lambda: run({"limit": 200}))
+        assert_bounded(small_trace, middle_trace, large_trace)
+        small_count = len(small_trace['raw_sql'])
+        assert small["count"] == 10 and middle["count"] == 50 and large["count"] == 200
+        print('query phase receipts:', __import__('json').dumps(trace.receipts))
         measurements = {}
         for name, payload in (("summary", {}), ("reference", {"projection": "reference"}),
                               ("broad_search", {"query": "Workload"}), ("contact_search", {"query": "Contact"}),
