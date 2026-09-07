@@ -223,9 +223,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
-| `prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
-| `prospective_pages[].request.input.number` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
-| `prospective_pages[].request.input.reference` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `prospective_pages[].request.input.number` | string \| null | no | yes | null | Internal receipt number Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.reference` | string \| null | no | yes | null | Customer check or payment reference; not the internal receipt number Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.memo` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.custom_fields` | object[string, any \| null] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.expected_custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -720,7 +720,7 @@ Example JSON output:
 
 ## `payment invoices`
 
-Read complete compatible payment candidates or calculate shared amount origins; page bounds never limit receipt intent.
+Find invoices this payer can pay. Read complete compatible payment candidates or calculate shared amount origins; page bounds never limit receipt intent.
 
 | Contract | Value |
 |---|---|
@@ -986,7 +986,7 @@ Example JSON output:
 
 ## `payment receive`
 
-Receive new cash with derived exact-party AR ownership and immutable invoice applications.
+Record new cash and apply it across compatible customer/job invoices; retain unapplied owned credit with derived exact-party AR ownership and immutable invoice applications.
 
 reference is the customer's check/reference number (for example 1042); number is Bookflow's internal receipt number. deposit_to accepts a bank account or the system Undeposited Funds holding account. Recording a receipt into Undeposited Funds does not record a completed bank deposit.
 
@@ -1028,9 +1028,9 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `applications.expected_version` | `--applications-expected-version` | integer | no | no | — | Present in SelectionReference.; minimum 1 |
 | `payment_method` | `--payment-method` | string \| null | no | yes | null | — |
 | `ar_account` | `--ar-account` | string \| null | no | yes | null | — |
-| `deposit_to` | `--deposit-to` | string \| null | no | yes | null | — |
-| `number` | `--number` | string \| null | no | yes | null | — |
-| `reference` | `--reference` | string \| null | no | yes | null | — |
+| `deposit_to` | `--deposit-to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit |
+| `number` | `--number` | string \| null | no | yes | null | Internal receipt number |
+| `reference` | `--reference` | string \| null | no | yes | null | Customer check or payment reference; not the internal receipt number |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `expected_custom_field_kinds` | `--expected-custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
@@ -1217,9 +1217,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
-| `prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
-| `prospective_pages[].request.input.number` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
-| `prospective_pages[].request.input.reference` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `prospective_pages[].request.input.number` | string \| null | no | yes | null | Internal receipt number Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.reference` | string \| null | no | yes | null | Customer check or payment reference; not the internal receipt number Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.memo` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.custom_fields` | object[string, any \| null] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.expected_custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -2182,9 +2182,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
-| `prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
-| `prospective_pages[].request.input.number` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
-| `prospective_pages[].request.input.reference` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `prospective_pages[].request.input.number` | string \| null | no | yes | null | Internal receipt number Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.reference` | string \| null | no | yes | null | Customer check or payment reference; not the internal receipt number Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.memo` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.custom_fields` | object[string, any \| null] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.expected_custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -2387,11 +2387,11 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `expected_facts_fingerprint` | `--expected-facts-fingerprint` | string \| null | no | yes | null | — |
 | `date` | `--date` | string \| null | no | yes | null | — |
 | `amount` | `--amount` | string \| object \| null | no | yes | null | — |
-| `number` | `--number` | string \| null | no | yes | null | — |
-| `reference` | `--reference` | string \| null | no | yes | null | — |
+| `number` | `--number` | string \| null | no | yes | null | Internal receipt number |
+| `reference` | `--reference` | string \| null | no | yes | null | Customer check or payment reference; not the internal receipt number |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `payment_method` | `--payment-method` | string \| null | no | yes | null | — |
-| `deposit_to` | `--deposit-to` | string \| null | no | yes | null | — |
+| `deposit_to` | `--deposit-to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `expected_custom_field_kinds` | `--expected-custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `invoice_versions[].invoice` | inside `--invoice-versions` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
@@ -2579,9 +2579,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
-| `prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
-| `prospective_pages[].request.input.number` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
-| `prospective_pages[].request.input.reference` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `prospective_pages[].request.input.number` | string \| null | no | yes | null | Internal receipt number Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.reference` | string \| null | no | yes | null | Customer check or payment reference; not the internal receipt number Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.memo` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.custom_fields` | object[string, any \| null] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.expected_custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
@@ -2962,9 +2962,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `prospective_pages[].request.input.applications.expected_version` | integer | no | no | — | Present in SelectionReference. Present in ReceivePreviewRequest, ApplyPreviewRequest. |
 | `prospective_pages[].request.input.payment_method` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.ar_account` | string \| null | no | yes | null | Present in ReceivePreviewRequest, InvoiceUpdatePreviewRequest. |
-| `prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
-| `prospective_pages[].request.input.number` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
-| `prospective_pages[].request.input.reference` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `prospective_pages[].request.input.deposit_to` | string \| null | no | yes | null | Bank account or Undeposited Funds; recording here does not perform a bank deposit Present in ReceivePreviewRequest, UpdatePreviewRequest. |
+| `prospective_pages[].request.input.number` | string \| null | no | yes | null | Internal receipt number Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
+| `prospective_pages[].request.input.reference` | string \| null | no | yes | null | Customer check or payment reference; not the internal receipt number Present in ReceivePreviewRequest, UpdatePreviewRequest. |
 | `prospective_pages[].request.input.memo` | string \| null | no | yes | null | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.custom_fields` | object[string, any \| null] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest, InvoiceUpdatePreviewRequest. |
 | `prospective_pages[].request.input.expected_custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in ReceivePreviewRequest, UpdatePreviewRequest. |

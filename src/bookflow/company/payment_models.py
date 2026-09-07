@@ -144,9 +144,9 @@ class PaymentReceiveInput(StrictModel):
     applications: Applications = Field(default_factory=InlineApplications)
     payment_method: Selector | None = None
     ar_account: Selector | None = None
-    deposit_to: Selector | None = None
-    number: _Number | None = None
-    reference: str | None = Field(default=None, max_length=128)
+    deposit_to: Selector | None = Field(default=None, description='Bank account or Undeposited Funds; recording here does not perform a bank deposit')
+    number: _Number | None = Field(default=None, description='Internal receipt number')
+    reference: str | None = Field(default=None, max_length=128, description='Customer check or payment reference; not the internal receipt number')
     memo: str | None = Field(default=None, max_length=2000)
     custom_fields: CustomFieldValuePatch = Field(default_factory=lambda: CustomFieldValuePatch({}))
     expected_custom_field_kinds: CustomFieldKindExpectations = Field(default_factory=lambda: CustomFieldKindExpectations({}))
@@ -195,11 +195,11 @@ class InvoiceVersion(StrictModel):
 class PaymentUpdateInput(PaymentVoidInput):
     date: _Date | None = None
     amount: Amount | None = None
-    number: _Number | None = None
-    reference: str | None = Field(default=None, max_length=128)
+    number: _Number | None = Field(default=None, description='Internal receipt number')
+    reference: str | None = Field(default=None, max_length=128, description='Customer check or payment reference; not the internal receipt number')
     memo: str | None = Field(default=None, max_length=2000)
     payment_method: Selector | None = None
-    deposit_to: Selector | None = None
+    deposit_to: Selector | None = Field(default=None, description='Bank account or Undeposited Funds; recording here does not perform a bank deposit')
     custom_fields: CustomFieldValuePatch = Field(default_factory=lambda: CustomFieldValuePatch({}))
     expected_custom_field_kinds: CustomFieldKindExpectations = Field(default_factory=lambda: CustomFieldKindExpectations({}))
     invoice_versions: list[InvoiceVersion] = Field(default_factory=list)

@@ -25,7 +25,7 @@ def _financial(verb, model):
         return plan
     cmd = command('payment ' + verb, scope='company',
         description={
-            'receive': 'Receive new cash with derived exact-party AR ownership and immutable invoice applications.',
+            'receive': 'Record new cash and apply it across compatible customer/job invoices; retain unapplied owned credit with derived exact-party AR ownership and immutable invoice applications.',
             'apply': 'Apply existing payment credit to its exact-party invoices without ledger posting.',
             'unapply': 'Reverse selected active applications and their current allocations at original dates; retain owned credit without ledger posting.',
             'void': 'Void an unapplied receipt with exact original-date ledger reversals; applications must be explicitly unapplied first.',
@@ -67,7 +67,8 @@ from bookflow.company.payment_outputs import PaymentCandidatesOutput, PaymentCal
 
 def _preparation(verb, model, output, planner):
     @command('payment ' + verb, scope='company',
-        description='Read complete compatible payment candidates or calculate shared amount origins; page bounds never limit receipt intent.',
+        description=('Find invoices this payer can pay. ' if verb == 'invoices' else '') +
+            'Read complete compatible payment candidates or calculate shared amount origins; page bounds never limit receipt intent.',
         input_model=model, output_model=output, required_role='member', capability='ledger.read',
         error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_QUERY_STALE', 'E_APPLICATION_INCOMPATIBLE', 'E_INACTIVE_REFERENCE', 'E_AMOUNT_PRECISION'] + (['E_PAYMENT_PROFILE_INVALID'] if verb == 'query' else []))
     def plan(inp, ctx, s):
