@@ -9,6 +9,7 @@ def test_post_read_before_dequeue_and_rollback_never_resurrect():
     gate = Admission()
     read = gate.begin_validation()
     barrier = gate.close_for_commit()
+    with pytest.raises(AdmissionCancelled): gate.begin_validation()
     with pytest.raises(AdmissionCancelled): gate.admit(read, 'post read')
     gate.finish_commit(barrier, committed=False)
     with pytest.raises(AdmissionCancelled): gate.admit(read, 'queued')

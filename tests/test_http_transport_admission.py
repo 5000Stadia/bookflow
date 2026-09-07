@@ -104,6 +104,31 @@ def test_sse_abort_has_no_heartbeat_or_success_terminal():
     asyncio.run(run())
 
 
+def test_plain_app_without_middleware_cannot_send_unframed_business_bytes():
+    async def run():
+        refused = []
+        async def app(scope, receive, send):
+            try:
+                await send({'type': 'http.response.start', 'status': 200,
+                            'headers': [(b'x-business', b'private-unframed')]})
+            except RuntimeError as exc:
+                refused.append(str(exc))
+                raise
+            await send({'type': 'http.response.body', 'body': b'private-unframed'})
+        transport, protocol, peer = await connection(app, Admission(), middleware=False)
+        try:
+            await asyncio.get_running_loop().sock_sendall(
+                peer, b'GET / HTTP/1.1\r\nHost: owned\r\nConnection: close\r\n\r\n')
+            data = await all_bytes(peer)
+            assert refused == ['application response missing admission frame']
+            assert b'500 Internal Server Error' in data and b'200 OK' not in data
+            assert data.split(b'\r\n\r\n', 1)[1] == b'15\r\nInternal Server Error\r\n0\r\n\r\n'
+            assert b'x-business' not in data and b'private-unframed' not in data
+        finally:
+            transport.close(); peer.close()
+    asyncio.run(run())
+
+
 def test_protocol_100_and_fixed_500_have_no_business_detail():
     async def run():
         gate=Admission()
@@ -189,6 +214,16 @@ from tests.test_row3_host import hosted
 
 def test_actual_sse_batch_attaches_permit_and_keeps_heartbeat_guard(hosted,monkeypatch):
     from bookflow.core.publication import PublicationPermit
+    from bookflow.adapters.http import publication
+    from bookflow.adapters.http.execution import PublishedDocument
+    batches = []
+    replace = publication.replace_guard
+    def capture_batch(previous, document):
+        replace(previous, document)
+        pending = tuple(item for item, _ in publication._guards.get()
+                        if isinstance(item, PublishedDocument))
+        batches.append((document, pending))
+    monkeypatch.setattr(publication, 'replace_guard', capture_batch)
     observed=[];original=PublicationPermit.check
     def check(self,*args,**kwargs):
         if self.cmd.name=='audit tail':observed.append(self.retained())
@@ -205,6 +240,25 @@ def test_actual_sse_batch_attaches_permit_and_keeps_heartbeat_guard(hosted,monke
                 assert chunk
                 data.extend(chunk)
             assert b'event: audit' in data and observed
+            # A real committed HTTP write wakes the subscribed generator for a
+            # second nonempty audit batch, not just its initial empty drain.
+            marker = 'transport-second-batch-555'
+            response = await asyncio.to_thread(hosted.call, 'company.update',
+                {'phone': marker}, company=hosted.company_id,
+                headers={'X-Bookflow-Reason': marker})
+            assert response.status_code == 200, response.text
+            while marker.encode() not in data:
+                chunk = await asyncio.wait_for(asyncio.get_running_loop().sock_recv(peer,65536),10)
+                assert chunk
+                data.extend(chunk)
+            nonempty = [document for document, _ in batches if document['items']]
+            assert len(nonempty) >= 2
+            assert nonempty[0].permit is not nonempty[-1].permit
+            assert nonempty[0]['next_after'] < nonempty[-1]['next_after']
+            # Observe the actual generator's guard context, leaving credential
+            # guards intact. Every replacement keeps exactly its current permit.
+            assert all(len(pending) == 1 and pending[0] is document
+                       for document, pending in batches)
             assert all(x['command']=='audit tail' for x in observed)
         finally:
             transport.close();peer.close()
