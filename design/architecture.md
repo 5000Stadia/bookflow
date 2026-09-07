@@ -1047,3 +1047,26 @@ preempt an earlier permission failure and aborts without fallback or a pending
 send. Existing transport checks prevent the failed pending send; previously
 successfully authorized bytes cannot be recalled. No transport buffering is added.
 The 200-event/ID bound does not bound total graph size or establish a latency SLO.
+
+Payment publication checks group contiguous audit-event, transaction and other
+root occurrences. Audit events retain their owning cohort; transaction runs
+load at most 200 occurrences at a time on the current publication reader.
+Unique IDs bound the projected root facts; duplicate occurrences retain their
+original order and read/write gates. Each occurrence validates its root and all
+one-step historical application targets before ledger and conditional work
+permission. Known missing facts are raised at that occurrence; a database/I/O
+failure during the cohort load aborts immediately without fallback or retry.
+
+Payer publication builds a recursive `UNION` customer family and distinct
+historical customer AR posting contributors B, including inactive descendants
+and reversals. It validates the payer and B plus one-step application targets H
+with a Boolean query, then passes B to the existing relational authority query
+(which adds H itself). Results and bindings have fixed cardinality; SQLite may
+still visit the complete history. Missing payer or application-only target
+references fail with unresolved payment evidence before permissions. Scalar
+helpers for other root kinds retain their existing validation contract.
+
+These facts live only within each fresh publication-reader snapshot. Capture,
+credential and membership checks, work-access projection comparisons, all
+response/retained-result fences and scalar fallback families remain in their
+existing owners. No facts or authorization results are cached between checks.

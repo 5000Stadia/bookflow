@@ -164,14 +164,19 @@ def work_access(s):
 def check(s, roots):
     from bookflow.company import payment_authority
     from itertools import groupby
-    for is_event, group in groupby(roots, key=lambda root: root[0] == 'audit_event'):
-        if is_event:
+    for kind_group, group in groupby(roots, key=lambda root: root[0] if root[0] in {'audit_event', 'transaction'} else 'other'):
+        if kind_group == 'audit_event':
             payment_authority.authorize_events(s, (identifier for _, identifier, _ in group))
+            continue
+        if kind_group == 'transaction':
+            payment_authority.authorize_publication_transactions(s, ((identifier, write) for _, identifier, write in group))
             continue
         for kind, identifier, write in group:
             if kind == 'work_access':
                 if work_access(s) != identifier:
                     raise BookflowError('E_PERMISSION', details={'reason': 'payment_projection_changed'})
+            elif kind == 'payer':
+                payment_authority.authorize_publication_payer(s, identifier, write=write)
             else:
                 try:
                     ids = payment_authority.disclosure_transactions(s.company, kind, identifier)
