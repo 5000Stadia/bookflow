@@ -155,6 +155,10 @@ def test_public_upgrade_publication_exact_old_prefix_and_noop(old,tmp_path):
     with sqlite3.connect(path) as raw:
         names=[v[0] for v in raw.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name<>'alembic_version'")]
         before={n:table(raw,n) for n in names}
+        principal_before=raw.execute('SELECT rowid,* FROM principals ORDER BY rowid').fetchall()
+        stable_principals=table(raw,'principals',omit_columns=('last_seen_at',))
+    with sqlite3.connect(root/'hub.db') as raw:
+        system_id=raw.execute("SELECT id FROM users WHERE kind='system'").fetchone()[0]
     c=bookflow.connect(data_root=str(root))
     with pytest.raises(BookflowError) as caught:c.run('company show',{},company='Demo Plumbing Co')
     assert caught.value.code=='E_SCHEMA_BEHIND'
@@ -166,11 +170,20 @@ def test_public_upgrade_publication_exact_old_prefix_and_noop(old,tmp_path):
         assert raw.execute('SELECT schema_revision FROM companies WHERE id=?',(marker['company_id'],)).fetchone()==('co0022',)
     with sqlite3.connect(path) as raw:
         assert raw.execute('SELECT version_num FROM alembic_version').fetchone()==('co0022',)
-        assert {n:table(raw,n,through_rowid=v['max_rowid']) for n,v in before.items()}==before
+        # The DDL-only witness above preserves EVERY principal byte. The
+        # existing public migrate_company owner separately refreshes last_seen
+        # and admits the system principal; assert that exact bookkeeping delta.
+        assert {n:table(raw,n,through_rowid=v['max_rowid']) for n,v in before.items() if n!='principals'}=={n:v for n,v in before.items() if n!='principals'}
+        assert table(raw,'principals',through_rowid=before['principals']['max_rowid'],omit_columns=('last_seen_at',))==stable_principals
+        principal_after=raw.execute('SELECT rowid,* FROM principals ORDER BY rowid').fetchall()
+        assert {r[1] for r in principal_after}=={r[1] for r in principal_before}|{system_id}
+        for old_row in principal_before:
+            new_row=next(r for r in principal_after if r[0]==old_row[0])
+            assert new_row[:-1]==old_row[:-1] and new_row[-1]>=old_row[-1]
         assert raw.execute('SELECT count(*) FROM audit_events').fetchone()[0]==before['audit_events']['count']+1
         empty(raw)
         first=list(raw.iterdump())
     result=c.run('upgrade',{})
     assert not result['companies_migrated'] and not result['companies_failed']
     with sqlite3.connect(path) as raw:assert list(raw.iterdump())==first
-    (tmp_path/'public-upgrade.json').write_text(json.dumps(dict(first=output,second=result,marker=marker,old_rows=before),indent=2))
+    (tmp_path/'public-upgrade.json').write_text(json.dumps(dict(first=output,second=result,marker=marker,old_rows=before,principal_before=principal_before,principal_after=principal_after),indent=2))

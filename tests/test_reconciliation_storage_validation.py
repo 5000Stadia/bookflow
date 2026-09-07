@@ -290,3 +290,40 @@ def test_event_impact_contract_gap_is_explicit_for_real_cross_account_move(clien
     rows=staged(source,g,a,0)
     rows['event_effects']=[dict(event_id=rows['events'][0]['id'],key_id=old['key_id'],old_version_id=old['id'],new_version_id=new['id'],source_audit_event_id=new['source_audit_event_id'],cause='account_move',local_signed_impact=0)]
     with pytest.raises(InvalidStorage,match='event_impact_context_unspecified'):validate(rows,source=g,referenced_rows=refs)
+
+
+def test_event_backed_release_retains_certificate_and_never_inverts_source(client,driver):
+    bank=account(client,'N release bank');equity=account(client,'N release equity','equity')
+    doc=journal(client,pair(bank,equity,'10'))
+    with driver.session() as s:g=adapters.graph(s,[doc['id']]);refs=references(s)
+    rows=aggregate(captured(g),g,bank);captures={v['id']:g for name in ('openings','certificates') for v in rows[name]}
+    original=copy.deepcopy(rows);old_event=rows['events'][0];old_op=rows['operations'][0]
+    next_audit=next(v['id'] for v in refs['audit_events'] if v['id']!=old_event['audit_event_id'])
+    operation,event=new_id(),new_id()
+    new_op=dict(old_op,id=operation,operation_key='N-explicit-release',command='reconcile undo',audit_event_id=next_audit)
+    request=dict(account=bank,certificate=rows['certificates'][0]['id'],expected_chain_version=1)
+    envelope=json.loads(new_op['original_request_snapshot']);envelope.update(document=request,canonical_intent=request)
+    new_op.update(original_request_snapshot=canonical(envelope),canonical_intent_hash=digest(request))
+    rows['operations'].append(new_op)
+    rows['events'].append(dict(old_event,id=event,operation_id=operation,audit_event_id=next_audit,kind='undo'))
+    for name in ('operation_items','operation_accounts','operation_transactions','operation_drafts','operation_openings','operation_certificates'):
+        rows[name].extend(dict(v,operation_id=operation) for v in original[name])
+    rows['event_accounts'].append(dict(original['event_accounts'][0],event_id=event,before_chain_version=1,after_chain_version=2,before_opening_id=rows['openings'][0]['id'],before_head_id=rows['certificates'][0]['id'],after_head_id=None))
+    rows['releases']=[dict(id=new_id(),claim_id=rows['claims'][0]['id'],event_id=event)]
+    rows['current_members']=[];rows['active_certificates']=[]
+    rows['accounts'][0].update(version=2,last_event_id=event,head_certificate_id=None)
+    validate(rows,source=g,captured_graphs=captures,referenced_rows=refs)
+    assert rows['certificates']==original['certificates'] and rows['claims']==original['claims']
+    with driver.session() as s:
+        raw=s.company.raw
+        order=['keys','effect_versions','commercial_versions','effect_legs','effect_sources','effect_heads','operations','events','draft_revisions','drafts','openings','certificates','certificate_members','event_accounts','accounts','active_certificates','claims','current_members','operation_items','operation_accounts','operation_transactions','operation_drafts','operation_openings','operation_certificates']
+        for name in order:insert(raw,name,original[name])
+        for name in ('operations','events','operation_items','operation_accounts','operation_transactions','operation_drafts','operation_openings','operation_certificates','event_accounts'):
+            insert(raw,name,rows[name][len(original[name]):])
+        insert(raw,'releases',rows['releases'])
+        raw.execute('DELETE FROM reconciliation_current_members')
+        raw.execute('DELETE FROM reconciliation_active_certificates')
+        raw.execute('UPDATE reconciliation_accounts SET version=2,last_event_id=?,head_certificate_id=NULL',(event,))
+        assert raw.execute('PRAGMA foreign_key_check').fetchall()==[]
+        assert adapters.graph(s,[doc['id']]).rows==g.rows
+        assert raw.execute('SELECT ending_balance FROM reconciliation_certificates').fetchall()==[(1000,)]
