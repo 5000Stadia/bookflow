@@ -331,3 +331,70 @@ class PaymentPreviewItemsInput(Page):
     request: PreviewRequest
     facts_fingerprint: Fingerprint
     kind: Literal['source_components', 'applications', 'allocations', 'document_changes']
+
+
+class EffectProvenance(StrictModel):
+    """Internal owning aggregate identities; no operation key or recovery lookup."""
+    model_config = {**StrictModel.model_config, 'frozen': True}
+    at: str
+    event_id: str
+    operation_id: str
+
+    @model_validator(mode='after')
+    def identities(self):
+        from bookflow.core.ids import is_ulid
+        from datetime import datetime
+        if not is_ulid(self.event_id) or not is_ulid(self.operation_id):
+            raise ValueError('invalid aggregate identity')
+        if datetime.fromisoformat(self.at.replace('Z', '+00:00')).tzinfo is None:
+            raise ValueError('aggregate time requires timezone')
+        return self
+
+
+class CancellationSet(StrictModel):
+    """Complete current cancellation witness; SQL batching is not a business cap."""
+    model_config = {**StrictModel.model_config, 'frozen': True}
+    payment_id: str
+    expected_version: _Version
+    application_ids: tuple[str, ...]
+    allocation_ids: tuple[str, ...]
+    invoice_versions: tuple[tuple[str, int], ...]
+
+    @model_validator(mode='after')
+    def complete_order(self):
+        for values in (self.application_ids, self.allocation_ids):
+            if tuple(sorted(set(values))) != values:
+                raise ValueError('cancellation identities must be unique and ordered')
+        if tuple(sorted(set(self.invoice_versions))) != self.invoice_versions or len({k for k,v in self.invoice_versions}) != len(self.invoice_versions):
+            raise ValueError('invoice versions must be unique and ordered')
+        return self
+
+
+class PaymentVoidIntent(StrictModel):
+    """Keyless owned cancellation intent; never an executable payment request."""
+    payment: Selector
+    expected_version: _Version
+    expected_facts_fingerprint: Fingerprint | None = None
+
+
+class PaymentUpdateIntent(PaymentVoidIntent):
+    date: _Date | None = None
+    amount: Amount | None = None
+    number: _Number | None = Field(default=None, description='Internal receipt number')
+    reference: str | None = Field(default=None, max_length=128, description='Customer check or payment reference; not the internal receipt number')
+    memo: str | None = Field(default=None, max_length=2000)
+    payment_method: Selector | None = None
+    deposit_to: Selector | None = Field(default=None, description='Bank account or Undeposited Funds; recording here does not perform a bank deposit')
+    custom_fields: CustomFieldValuePatch = Field(default_factory=lambda: CustomFieldValuePatch({}))
+    expected_custom_field_kinds: CustomFieldKindExpectations = Field(default_factory=lambda: CustomFieldKindExpectations({}))
+    invoice_versions: list[InvoiceVersion] = Field(default_factory=list)
+    settlement_guard: str | None = Field(default=None, max_length=2048)
+
+    @model_validator(mode='after')
+    def correction(self):
+        for field in ('date', 'amount', 'number', 'payment_method', 'deposit_to'):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f'{field} cannot be null')
+        if self.settlement_guard is not None and self.invoice_versions:
+            raise ValueError('settlement_guard and invoice_versions are mutually exclusive')
+        return self

@@ -8,7 +8,7 @@ from bookflow.company import document_effects as effects, journal_custom_fields 
 from bookflow.company import payments, payment_queries as query, payment_operations as operations
 from bookflow.company import payment_dependencies as dependencies
 from bookflow.company.payment_cancellation import live_allocations
-from bookflow.company.payment_outputs import PaymentProfileOutput, PaymentWriteOutput
+from bookflow.company.payment_outputs import PaymentProfileOutput, PaymentWriteOutput, PaymentSourceOutput
 from bookflow.company.sales_models import money, _invalid
 from bookflow.core import clock
 from bookflow.core.ids import new_id
@@ -18,6 +18,19 @@ from bookflow.core.registry import Plan
 
 
 def prepare(s, ctx, inp):
+    from bookflow.company.payment_models import PaymentUpdateIntent, EffectProvenance
+    intent = PaymentUpdateIntent.model_validate(inp.model_dump(exclude_unset=True, exclude={'operation_key'}))
+    plan = prepare_effect(s, ctx, intent, EffectProvenance(at=clock.now_iso(), event_id=new_id(), operation_id=new_id()))
+    plan.preview = PaymentWriteOutput(**plan.preview.model_dump(), operation_key=inp.operation_key)
+    plan.data['input'] = inp
+    return plan
+
+
+def prepare_effect(s, ctx, inp, provenance):
+    """Complete correction graph without payment-key lookup or child receipt."""
+    from bookflow.company.payment_models import PaymentUpdateIntent, EffectProvenance
+    if type(inp) is not PaymentUpdateIntent or type(provenance) is not EffectProvenance:
+        raise BookflowError('E_VALIDATION')
     funding = query.payment_facts(s, inp.payment, write=True)
     old, prior, saved = funding['header'], funding['revision'], funding['profile']
     dependencies.payment_version(s, old, inp.expected_version)
@@ -91,7 +104,7 @@ def prepare(s, ctx, inp):
     payer_applied = sum(app['amount_minor_units'] for app in funding['applications'] if app['source_component_key_id'] == payer_key)
     if payer_capacity < payer_applied or payer_capacity < 0:
         raise BookflowError('E_APPLIED_EXCEEDS_TOTAL', details={'party_id': saved['payer_id'], 'minimum_minor_units': payer_applied})
-    at, event, operation_id = clock.now_iso(), new_id(), new_id()
+    at, event, operation_id = provenance.at, provenance.event_id, provenance.operation_id
     created = lambda: dict(id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
     pending = {table: [] for table, _, _ in payments.TABLE_KINDS}
     header = dict(old)
@@ -187,6 +200,8 @@ def prepare(s, ctx, inp):
         current.update(version=header['version'], revision_id=revision['id'], received_minor_units=amount,
             effective_received_minor_units=amount, available_minor_units=amount-current['applied_minor_units'],
             components=components, component_count=len(components))
+    if any(after['version'] > 9223372036854775807 for after in [header, *(new for before, new in changed_headers)]):
+        raise BookflowError('E_VALUE_RANGE')
     fp = query.digest([operations.request(inp, ctx, s, 'payment update'), semantic, old,
         funding['applications'], old_allocations, [facts['header'] for facts in targets.values()],
         defaults._info(s.company)['closing_date']])
@@ -201,7 +216,7 @@ def prepare(s, ctx, inp):
         audit_event_id=event, before_header=payments.effect_header(old, prior), after_header=payments.effect_header(header, revision),
         preferences=profile.preferences.model_dump(),
         source_components=current['components'], applications=[], allocations=output_allocations, document_changes=changes)
-    output = PaymentWriteOutput(id=old['id'], version=header['version'], changed=changed, new_effect=changed, operation_key=inp.operation_key,
+    output = PaymentSourceOutput(id=old['id'], version=header['version'], changed=changed, new_effect=changed,
         facts_fingerprint=fp, effect=effect, current=current,
         effect_counts={key: len(effect[key]) for key in ('source_components', 'applications', 'allocations', 'document_changes')})
     return Plan(output, dict(input=inp, operation='update', header=header, before=old, pending=pending,

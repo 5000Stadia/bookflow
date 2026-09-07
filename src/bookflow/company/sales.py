@@ -337,6 +337,9 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
               or k.startswith(('address_', 'legal_address_', 'ship_address_'))}
     if old_revision and not inp.refresh_defaults:
         issuer = json.loads(old_revision['issuer_snapshot'])
+    else:
+        # Dispatch pins the authorized name for preparation and validation.
+        issuer['display_name'] = s.company_row['display_name']
     old_lines = saved_lines(s, old_revision) if old_revision else []
     prior = {line['line_id']: line for line in old_lines}
     entered = inp.lines if inp.lines is not None else [SalesLineInput(item=line['item_id'], line_id=line['line_id']) for line in old_lines]
@@ -430,7 +433,7 @@ def _posting_accounts_active(s, resolved):
                      'Explicitly refresh or select eligible tax defaults before posting this correction.', role='sales_tax_payable')
 
 
-def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _settlement_internal=False):
+def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _settlement_internal=False, provenance=None):
     if document_type == 'invoice' and operation == 'update' and not _settlement_internal:
         from bookflow.company.payment_invoice_corrections import prepare as settlement_prepare
         return settlement_prepare(s, ctx, inp)
@@ -454,7 +457,13 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         return Plan(SalesWriteOutput(**summary(old_header, old_revision, profile_row(s, old_revision)),
             revision=revision_output(s, old_revision), changed=False, warnings=warnings),
             dict(input=inp, operation=operation, document_type=document_type, changed=False))
-    at, event = clock.now_iso(), new_id()
+    if provenance is None:
+        at, event = clock.now_iso(), new_id()
+    else:
+        from bookflow.company.payment_models import EffectProvenance
+        if type(provenance) is not EffectProvenance or document_type != 'sales_receipt' or operation not in ('update', 'void'):
+            raise BookflowError('E_VALIDATION')
+        at, event = provenance.at, provenance.event_id
     created = lambda: dict(id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
     provenance = dict(created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
     header = dict(old_header) if old_header else dict(id=new_id(), **common(s.actor.id, ctx.interface.value, at),

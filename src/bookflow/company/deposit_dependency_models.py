@@ -34,7 +34,24 @@ class VoidRequest(Frozen):
     context: RequestContext = Field(default_factory=RequestContext)
 
 
-DepositRequest = Annotated[PostRequest | UpdateRequest | VoidRequest, Field(discriminator='command')]
+from bookflow.company.deposit_coordinate_models import CoordinateInput
+
+
+class CoordinateRequest(Frozen):
+    command: Literal['deposit coordinate']
+    input: CoordinateInput
+    context: RequestContext = Field(default_factory=RequestContext)
+
+
+DepositRequest = Annotated[PostRequest | UpdateRequest | VoidRequest | CoordinateRequest, Field(discriminator='command')]
+
+
+def request_document(original):
+    if isinstance(original, (InspectionRoot, VoidRequest)):
+        return None
+    if isinstance(original, CoordinateRequest):
+        return original.input.replacement.document if original.input.replacement.mode == 'document' else None
+    return original.input.document
 
 
 class InspectionRoot(Frozen):
@@ -45,6 +62,7 @@ class InspectionRoot(Frozen):
 RecordKind = Literal[
     'transaction',
     'deposit_number',
+    'source_number',
     'deposit_number_operation',
     'company_info',
     'account',
@@ -55,6 +73,18 @@ RecordKind = Literal[
     'class',
     'payment_method',
     'custom_field',
+    'source_custom_field',
+    'source_item',
+    'source_customer',
+    'source_tax_code',
+    'source_unit',
+    'source_price_level',
+    'source_price_version',
+    'source_vendor',
+    'source_ship_method',
+    'source_sales_rep',
+    'source_message',
+    'source_company',
     'work_document',
     'transaction_revision',
     'document_line_identity',
