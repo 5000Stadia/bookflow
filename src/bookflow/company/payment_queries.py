@@ -125,17 +125,18 @@ def payer_balances(s, customer_id):
     # arbitrary-intermediate aggregate and checked Money boundary, never SQLite
     # SUM/REAL or a stored running balance.
     customer_balances.register_functions(s.company)
-    lines = indexed_source(c.posting_lines, 'ix_co17_posting_party_ar',
-        'name_type', 'name_id', 'account_id', 'debit_minor_units', 'credit_minor_units')
-    net = lines.c.debit_minor_units - lines.c.credit_minor_units
-    # Aggregate each party once through the owning unbounded-intermediate
-    # function, then combine exact Python integers before either i64 boundary.
-    # No intermediate party is range-checked: cross-party cancellation is valid.
-    party_nets = {party: int(amount or '0') for party, amount in s.company.conn.execute(sa.select(
-        lines.c.name_id, sa.func.bookflow_sum_int(net)).select_from(lines).where(
-            lines.c.name_type == 'customer',
-            lines.c.account_id.in_(sa.select(c.accounts.c.id).where(c.accounts.c.type == 'accounts_receivable')),
-            lines.c.name_id.in_(sa.select(family.c.id))).group_by(lines.c.name_id))}
+    # Group losslessly; do not reject a party intermediate before cancellation.
+    party_nets = {party: int(amount or '0') for party, amount in s.company.raw.execute("""
+        WITH RECURSIVE balance_family(id) AS (
+            SELECT id FROM customers WHERE id=? UNION
+            SELECT child.id FROM customers AS child JOIN balance_family AS family ON child.parent_id=family.id)
+        SELECT name_id,bookflow_sum_int(debit_minor_units-credit_minor_units)
+        FROM posting_lines INDEXED BY ix_co17_posting_party_ar
+        WHERE name_type='customer'
+            AND account_id IN (SELECT id FROM accounts WHERE type='accounts_receivable')
+            AND name_id IN (SELECT id FROM balance_family)
+        GROUP BY name_id
+        """, (customer_id,)).fetchall()}
     payer, family_net = party_nets.get(customer_id, 0), sum(party_nets.values())
     return dict(customer_id=customer_id, payer_balance=Money(_require_i64(int(payer or '0'), field='current_balance'), currency).to_dict(),
         family_balance=Money(_require_i64(int(family_net or '0'), field='family_balance'), currency).to_dict())

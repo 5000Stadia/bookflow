@@ -38,84 +38,91 @@ def lineage_facts(s, parties):
     return result
 
 
-def _candidate_query(s, inp, *, page_ids=None, resolved=None, positive_due=True):
+def _candidate_query(s, inp, *, page_ids=None, resolved=None, projection='identity'):
     from bookflow.company.payment_authority import readable_predicate
     context, funding = resolved if resolved is not None else (selection.context(s, inp), None)
     if resolved is None and context['payment_id']:
         funding = query.payment_facts(s, context['payment_id'])
-    t = query.indexed_source(c.transactions, 'ix_co17_transactions_current',
-        'current_revision_id', 'type', 'status', 'id', 'version', 'number')
-    r = query.indexed_source(c.transaction_revisions, 'ix_co17_revisions_read',
-        'id', 'date', 'currency', 'total_minor_units', 'memo')
-    if page_ids is not None:
-        t = c.transactions
-    p = query.indexed_source(c.sales_profiles,
-        'ix_co17_sales_party' if page_ids is None else 'ix_co17_sales_revision',
-        'customer_id', 'control_account_id', 'revision_id')
-    display = query.indexed_source(c.sales_profiles, 'ix_co17_sales_revision',
-        'revision_id', 'due_date').alias('candidate_display')
-    due_date = sa.select(display.c.due_date).where(display.c.revision_id == r.c.id).correlate(r).scalar_subquery()
-    source = (query.cross_join(query.cross_join(p, r, r.c.id == p.c.revision_id), t, t.c.current_revision_id == r.c.id)
-        if page_ids is None else query.cross_join(query.cross_join(t, r, r.c.id == t.c.current_revision_id), p, p.c.revision_id == r.c.id))
-    a = query.indexed_source(c.applications, 'ix_co17_applications_invoice',
-        'paid_transaction_id', 'kind', 'amount_minor_units', 'id')
-    inverse = c.applications.alias('candidate_inverse')
-    used = sa.func.coalesce(sa.select(sa.func.sum(a.c.amount_minor_units)).where(
-        a.c.paid_transaction_id == t.c.id, a.c.kind == 'apply',
-        ~sa.exists(sa.select(sa.literal_column("1")).where(inverse.c.reverses_application_id == a.c.id))
-    ).correlate(t).scalar_subquery(), 0)
-    statement = sa.select(t.c.id.label('invoice_id'), t.c.version.label('expected_version'), t.c.number,
-        p.c.customer_id, r.c.date, due_date.label('due_date'), r.c.currency, r.c.total_minor_units.label('gross_minor_units'),
-        r.c.id.label('revision_id'),
-        used.label('applied_minor_units'), (r.c.total_minor_units-used).label('due_minor_units')).select_from(source).where(t.c.type == 'invoice', t.c.status == 'posted',
-        r.c.date <= context['date'], r.c.currency == context['currency'], p.c.control_account_id == context['ar_account_id'],
-        readable_predicate(s, t.c.id))
-    if page_ids is not None:
-        statement = statement.where(t.c.id.in_(page_ids))
+
+    # Compile the owner's predicate inside its real outer scope. Compiling an
+    # EXISTS alone would incorrectly introduce an independent header table.
+    header = c.transactions.alias('t')
+    authority = sa.select(sa.literal_column('1')).select_from(header).where(readable_predicate(s, header.c.id))
+    compiled = authority.compile(dialect=s.company.conn.dialect, compile_kwargs={'render_postcompile': True})
+    prefix, separator, predicate = str(compiled).partition('\nWHERE ')
+    assert separator and prefix.strip() == 'SELECT 1 \nFROM transactions AS t'
+    authority_values = [compiled.params[name] for name in compiled.positiontup]
+
     capacities = {}
     if funding:
         for key in funding['keys'].values():
             if key['ar_account_id'] == context['ar_account_id'] and key['currency'] == context['currency']:
                 capacities[key['party_id']] = capacities.get(key['party_id'], 0) + funding['available'][key['id']]
-        statement = statement.where(p.c.customer_id.in_([party for party, amount in capacities.items() if amount > 0]))
+        parties = [party for party, amount in capacities.items() if amount > 0]
+        with_sql, values = '', []
+        party_filter = 'p.customer_id IN (' + ','.join('?' for _ in parties) + ')' if parties else '0'
     else:
-        family = sa.select(c.customers.c.id).where(c.customers.c.id == context['customer_id']).cte('candidate_family', recursive=True)
-        family = family.union(sa.select(c.customers.c.id).join(family, c.customers.c.parent_id == family.c.id))
-        statement = statement.where(p.c.customer_id.in_(sa.select(family.c.id)))
+        with_sql = """WITH RECURSIVE candidate_family(id) AS (
+            SELECT id FROM customers WHERE id=? UNION
+            SELECT child.id FROM customers AS child JOIN candidate_family AS family ON child.parent_id=family.id)
+        """
+        values = [context['customer_id']]
+        party_filter = 'p.customer_id IN (SELECT id FROM candidate_family)'
+        parties = []
+
+    used = """coalesce((SELECT sum(a.amount_minor_units)
+        FROM applications AS a INDEXED BY ix_co17_applications_invoice
+        WHERE a.paid_transaction_id=t.id AND a.kind='apply'
+        AND NOT EXISTS (SELECT 1 FROM applications AS inverse WHERE inverse.reverses_application_id=a.id)),0)"""
+    if page_ids is None:
+        source = """sales_profiles AS p INDEXED BY ix_co17_sales_party
+            CROSS JOIN transaction_revisions AS r INDEXED BY ix_co17_revisions_read ON r.id=p.revision_id
+            CROSS JOIN transactions AS t INDEXED BY ix_co17_transactions_current ON t.current_revision_id=r.id"""
+    else:
+        source = """transactions AS t
+            CROSS JOIN transaction_revisions AS r INDEXED BY ix_co17_revisions_read ON r.id=t.current_revision_id
+            CROSS JOIN sales_profiles AS p INDEXED BY ix_co17_sales_revision ON p.revision_id=r.id"""
+    conditions = ["t.type='invoice'", "t.status='posted'", 'r.date<=?', 'r.currency=?',
+        'p.control_account_id=?', '(' + predicate + ')', party_filter]
+    values.extend([context['date'], context['currency'], context['ar_account_id'], *authority_values, *parties])
+    if page_ids is not None:
+        conditions.append('t.id IN (' + ','.join('?' for _ in page_ids) + ')' if page_ids else '0')
+        values.extend(page_ids)
     if getattr(inp, 'q', None):
         s.company.raw.create_function('payment_casefold', 1, lambda value: (value or '').casefold(), deterministic=True)
-        text = t.c.number + ' ' + sa.func.coalesce(r.c.memo, '')
-        statement = statement.where(sa.func.payment_casefold(text).contains(inp.q.casefold(), autoescape=True))
-    if positive_due:
-        statement = statement.where(r.c.total_minor_units > used)
+        # Match SQLAlchemy contains(autoescape=True), whose escape character is /.
+        escaped = inp.q.casefold().replace('/', '//').replace('%', '/%').replace('_', '/_')
+        conditions.append("payment_casefold(t.number || ' ' || coalesce(r.memo,'')) LIKE '%' || ? || '%' ESCAPE '/'")
+        values.append(escaped)
+    if projection != 'money':
+        conditions.append('r.total_minor_units > ' + used)
     if funding and context['date'] < funding['revision']['date']:
-        statement = statement.where(sa.false())
-    return context, statement.order_by(r.c.date, t.c.id), capacities, funding
+        conditions.append('0')
 
-
-def _original_projection(statement):
-    original = c.transaction_revisions.alias('candidate_original')
-    return statement.add_columns(original.c.id.label('original_revision_id'),
-        original.c.total_minor_units.label('original_gross_minor_units')).join(original,
-        sa.and_(original.c.transaction_id == statement.selected_columns.invoice_id, original.c.revision_number == 1))
+    identity = 't.id AS invoice_id,t.version AS expected_version,p.customer_id'
+    if projection == 'identity':
+        columns = identity
+    elif projection == 'money':
+        columns = identity + ',r.date,r.currency,r.id AS revision_id,r.total_minor_units AS gross_minor_units,r.total_minor_units-(' + used + ') AS due_minor_units'
+    else:
+        assert projection == 'display'
+        columns = identity + ',t.number,r.date,p.due_date,r.currency,r.total_minor_units AS gross_minor_units,r.id AS revision_id,' + used + ' AS applied_minor_units,r.total_minor_units-(' + used + ') AS due_minor_units,original.id AS original_revision_id,original.total_minor_units AS original_gross_minor_units'
+        source += ' JOIN transaction_revisions AS original ON original.transaction_id=t.id AND original.revision_number=1'
+    sql = 'SELECT ' + columns + ' FROM ' + source + ' WHERE ' + ' AND '.join(conditions)
+    if projection == 'money':
+        # Preserve the complete transient money relation and single evaluation.
+        sql = 'SELECT * FROM (' + sql + ' LIMIT -1) AS candidate_money WHERE due_minor_units>0 ORDER BY date,invoice_id'
+    else:
+        sql += ' ORDER BY r.date,t.id'
+    return context, (with_sql + sql, values), capacities, funding
 
 
 _Candidate = namedtuple('_Candidate', 'invoice_id expected_version customer_id date currency revision_id gross_minor_units due_minor_units available_source_minor_units')
 
 def candidates(s, inp):
-    context, statement, capacities, funding = _candidate_query(s, inp, positive_due=False)
-    # Suggestions bind the complete candidate relation and exact current money.
-    # Original display fields are projected only by invoice delivery; immutable
-    # revision identity/header version bind commercial history on this baseline.
-    cols = statement.selected_columns
-    baseline = statement.with_only_columns(cols.invoice_id, cols.expected_version,
-        cols.customer_id, cols.date, cols.currency, cols.revision_id,
-        cols.gross_minor_units, cols.due_minor_units).order_by(None).limit(-1).subquery('candidate_money')
-    # LIMIT -1 is a transient SQLite flattening barrier: evaluate each exact
-    # correlated live sum once, then retain all positive-due candidates.
-    baseline = sa.select(baseline).where(baseline.c.due_minor_units > 0).order_by(baseline.c.date, baseline.c.invoice_id)
+    context, statement, capacities, funding = _candidate_query(s, inp, projection='money')
     result = [_Candidate(*row, capacities[row[2]] if context['payment_id'] else None)
-        for row in s.company.conn.execute(baseline).all()]
+        for row in s.company.raw.execute(*statement).fetchall()]
     return context, result
 
 
@@ -124,8 +131,7 @@ def invoices(s, inp):
     # Legal commercial/settlement changes always advance the invoice header.
     # Bind every candidate identity/version and relevant lineage, but materialize
     # the monetary display projection only for the requested delivery page.
-    baseline = [list(row) for row in s.company.conn.execute(statement.with_only_columns(
-        statement.selected_columns.invoice_id, statement.selected_columns.expected_version, statement.selected_columns.customer_id)).all()]
+    baseline = [list(row) for row in s.company.raw.execute(*statement).fetchall()]
     balances = query.payer_balances(s, context['customer_id'])
     lineage = lineage_facts(s, [context['customer_id'], *(row[2] for row in baseline)])
     out = query.page(s, 'payment invoices', inp, baseline, facts=[context, baseline, balances, lineage])
@@ -133,9 +139,11 @@ def invoices(s, inp):
     # monetary projection to those IDs rather than rescanning/sorting the family.
     ids = [row[0] for row in out['items']]
     if ids:
-        _, delivery, _, _ = _candidate_query(s, inp, page_ids=ids, resolved=(context, funding))
-        out['items'] = [dict(row, available_source_minor_units=capacities[row['customer_id']] if context['payment_id'] else None)
-            for row in s.company.conn.execute(_original_projection(delivery)).mappings()]
+        _, delivery, _, _ = _candidate_query(s, inp, page_ids=ids, resolved=(context, funding), projection='display')
+        cursor = s.company.raw.execute(*delivery)
+        names = [column[0] for column in cursor.description]
+        out['items'] = [dict(zip(names, row), available_source_minor_units=capacities[row[2]] if context['payment_id'] else None)
+            for row in cursor.fetchall()]
     else:
         out['items'] = []
     return dict(out, **balances)

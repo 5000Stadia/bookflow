@@ -858,7 +858,12 @@ Historical co13→co14 tests use their frozen co14 schema and public command sou
 co16→co17 preservation and fresh-chain checks live in `test_payment_read_indexes.py`.
 
 Payment discovery uses explicit owned covering sources and a cohort-first SQLite
-join order. Invoice delivery starts from its selected identities, retains the
+join order. Preparation builds fixed parameterized SQL per request; its authority
+fragment is compiled from the owning predicate inside the actual outer header
+scope, retaining correlation and positional bound values. Context and complete
+posting-graph authorization still use their existing owners. Driver-native rows
+preserve the complete typed/canonical baseline and signed continuation contract;
+no statement/result cache or global driver/session change is involved. Invoice delivery starts from its selected identities, retains the
 original revision-one amounts, and leaves the complete candidate/version/lineage
 and funding baseline in the cursor fingerprint. Suggestion baselines contain the
 complete authorized identity/version/current monetary relation as transient tuples;
