@@ -148,3 +148,33 @@ def test_complete_action_and_noeffect_paths(client,sale,driver,n2,mode):
         replay=persistence.recover(s,ctx,inp,p.binding)
         assert replay.effect==result.effect and tuple(s.company.raw.iterdump())==dump
         assert s.company.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
+
+
+def test_retain_none_requires_actual_prior_unapply_and_preserves_history(client,sale,driver,n2):
+    inp,post,document,payment,receipt,invoice=n2
+    ctx=Context.new(Interface.python,'C retain-none',reason='Cancel the unapplied deposited receipt')
+    wire=inp.model_dump(mode='json',by_alias=True,exclude_unset=True)
+    wire['source_action']=dict(kind='payment_void',payment=payment['id'],expected_version=2,unapply='retain_none')
+    wire['replacement']['document']['sources']=[dict(source_type='sales_receipt',source=receipt['id'],expected_version=2)]
+    before=driver.dump()
+    with driver.session() as s:
+        with pytest.raises(BookflowError):prepare(s,ctx,CoordinateInput.model_validate(wire))
+        application=s.company.raw.execute("SELECT id FROM applications WHERE paying_transaction_id=? AND kind='apply'",(payment['id'],)).fetchone()[0]
+    assert driver.dump()==before
+    client.run('payment unapply',dict(payment=payment['id'],expected_version=2,operation_key='C-prior-explicit-unapply',
+        applications=[dict(application_id=application,invoice_expected_version=2)]),company=COMPANY,reason='Explicitly remove the allocation first')
+    wire['source_action']['expected_version']=3
+    request=CoordinateInput.model_validate(wire)
+    with driver.session() as s:
+        result=persistence.execute(s,ctx,prepare(s,ctx,request))
+        assert result.current.revision_bank_total==7200
+        assert result.effect.source.after_header.status=='voided'
+        assert result.effect.source.inserted.applications==() and result.effect.source.inserted.application_allocations==()
+        assert len(result.effect.source.before.applications)==2
+        assert invoice['id'] in result.effect.target_ids
+        assert {v.after.id for v in result.effect.headers}=={payment['id'],receipt['id'],post.current.id}
+        assert s.company.raw.execute('SELECT version FROM transactions WHERE id=?',(invoice['id'],)).fetchone()==(3,)
+        assert s.company.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
+        frozen=tuple(s.company.raw.iterdump())
+        assert persistence.recover(s,ctx,request,OSBinding.from_session(s)).effect==result.effect
+        assert tuple(s.company.raw.iterdump())==frozen
