@@ -522,3 +522,117 @@ def authorize_publication_payer(s, customer_id, *, write=False):
         raise BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'})
     # authorize_query adds H itself; supplying closure would add an extra hop.
     authorize_query(s, selected, write=write)
+
+
+class _PublicationSelectionCohort:
+    """Complete selection history, shared only within one publication snapshot."""
+    def __init__(self, db, identifiers):
+        self.db = db
+        self.headers = self._read(c.payment_selections, 'id', identifiers,
+                                  ('id', 'consumed_operation_id'))
+        self.items = self._read(c.payment_selection_items, 'selection_id', identifiers,
+                                ('selection_id', 'invoice_id'))
+        self.attempts = self._read(c.payment_selection_recovery_items, 'selection_id', identifiers,
+                                   ('selection_id', 'invoice_id'))
+        self.revisions = self._read(c.payment_selection_revisions, 'selection_id', identifiers,
+                                    ('selection_id', 'context_snapshot'))
+        self.resolved, operations = {}, set()
+        for identifier in identifiers:
+            try:
+                rows = self.headers.get(identifier, ())
+                if len(rows) != 1:
+                    raise self._missing()
+                if rows[0]['consumed_operation_id']:
+                    operations.add(rows[0]['consumed_operation_id'])
+            except Exception as exc:
+                self.resolved[identifier] = exc
+        self.operations = self._read(c.payment_operations, 'id', operations, ('id', 'request_snapshot'))
+        all_ids = set()
+        for identifier in identifiers:
+            if identifier in self.resolved:
+                continue
+            try:
+                ids = self._resolve(identifier)
+                all_ids.update(ids)
+                self.resolved[identifier] = ids
+            except Exception as exc:
+                # Content errors belong to this root, never to an earlier gate.
+                self.resolved[identifier] = exc
+        self.existing = self._read(c.transactions, 'id', all_ids, ('id',))
+        self.applications = self._read(c.applications, 'paying_transaction_id', all_ids,
+                                       ('paying_transaction_id', 'paid_transaction_id'))
+        work_ids = all_ids | {r['paid_transaction_id'] for rows in self.applications.values() for r in rows}
+        self.work = self._read(c.work_billing_allocations, 'transaction_id', work_ids, ('transaction_id',))
+
+    def _read(self, table, field, identifiers, columns):
+        groups = {}
+        for cohort in _groups(dict.fromkeys(identifiers)):
+            statement = sa.select(*(table.c[name] for name in columns)).where(table.c[field].in_(cohort))
+            # Driver failures abort this cohort; they are not content failures.
+            with self.db.conn.execute(statement) as result:
+                for rows in result.partitions(_BATCH_SIZE):
+                    for values in rows:
+                        row = dict(zip(columns, values))
+                        groups.setdefault(row[field], []).append(row)
+        return groups
+
+    @staticmethod
+    def _missing():
+        from bookflow.core.errors import BookflowError
+        return BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'})
+
+    def _resolve(self, identifier):
+        ids = {row['invoice_id'] for row in self.items.get(identifier, ()) if row['invoice_id']}
+        ids.update(row['invoice_id'] for row in self.attempts.get(identifier, ()))
+        operation = self.headers[identifier][0]['consumed_operation_id']
+        if operation:
+            rows = self.operations.get(operation, ())
+            if len(rows) != 1:
+                raise self._missing()
+            try:
+                values = json.loads(rows[0]['request_snapshot'])['resolved_transaction_ids']
+                if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
+                    raise ValueError()
+                ids.update(values)
+            except (ValueError, KeyError, TypeError):
+                raise self._missing() from None
+        try:
+            for row in self.revisions.get(identifier, ()):
+                payment = json.loads(row['context_snapshot'])['payment_id']
+                if payment:
+                    ids.add(payment)
+        except (ValueError, KeyError, TypeError):
+            raise self._missing() from None
+        return ids
+
+    def requirements(self, identifier, write):
+        ids = self.resolved[identifier]
+        if isinstance(ids, Exception):
+            raise ids
+        if not ids.issubset(self.existing):
+            raise self._missing()
+        # Selection's scalar contract validates D, not application-only H.
+        expanded = ids | {row['paid_transaction_id'] for i in ids for row in self.applications.get(i, ())}
+        role = 'standard' if write else 'member'
+        result = [('ledger.post' if write else 'ledger.read', role)]
+        if any(i in self.work for i in expanded):
+            result.append(('customer-work', role))
+        return tuple(result)
+
+
+def authorize_publication_selections(s, occurrences):
+    """Replay ordered roots after <=200-root reads, without reusing a fence."""
+    from itertools import islice
+    from bookflow.core.errors import BookflowError
+    occurrences = iter(occurrences)
+    while batch := list(islice(occurrences, _BATCH_SIZE)):
+        facts = _PublicationSelectionCohort(s.company, list(dict.fromkeys(i for i, _ in batch)))
+        for identifier, write in batch:
+            try:
+                required = facts.requirements(identifier, write)
+            except (ValueError, TypeError, KeyError, RecursionError):
+                raise BookflowError('E_IO', details={'stage': 'publication', 'outcome': 'unknown',
+                                                    'reason': 'invalid_authority_evidence'}) from None
+            for resource, role in required:
+                require_resource(s, resource, role)
+        del facts
