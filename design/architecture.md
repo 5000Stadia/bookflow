@@ -1897,10 +1897,10 @@ Select-matching resolves the complete authorized match set atomically with no
 aggregate cap. Full immutable snapshots cost O(manifest) storage per edit and
 full authority/source validation costs are not a responsiveness waiver.
 
-Private draft/source query admission requires explicit current company membership
-for actor and actual fixed principal, using existing role helpers without the
-legacy hub-admin escape. It additionally runs the existing complete resource
-checks. Shared discovery/publication/full-C cutover remains separately owned.
+Private draft/source query admission requires current applicable organization or
+exact-company membership for actor and actual fixed principal. Existing role helpers
+resolve the highest applicable role; unrelated scopes are excluded and installation
+hub-admin status supplies no automatic company-book access. It additionally runs the existing complete resource checks. Shared discovery/publication/full-C cutover remains separately owned.
 Historical draft/child/member/operation roots are authorized before JSON decode,
 filtering, counts or pages. Opaque company-keyed candidate tokens exclude destination
 writes and unrelated audit changes; item tokens bind their exact immutable revision.

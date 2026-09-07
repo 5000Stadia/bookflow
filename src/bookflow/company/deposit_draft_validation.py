@@ -29,7 +29,8 @@ def admit(s, ctx=None, binding=None, *, sources=(), draft=None, selection=None, 
         if user is None:raise BookflowError('E_UNAUTHENTICATED')
         view=replace(s,actor=Actor(**{k:user[k] for k in ('id','kind','username','display_name','hub_admin','timezone')}),memberships=[])
         access.load_memberships(view)
-        view.memberships=[row for row in view.memberships if row['scope_type']=='company' and row['scope_id']==s.company_row['id']]
+        applicable={('company',s.company_row['id']),('organization',s.company_row['organization_id'])}
+        view.memberships=[row for row in view.memberships if (row['scope_type'],row['scope_id']) in applicable]
         scope,role=access.company_role(view,s.company_row['id'],s.company_row['organization_id'])
         if role is None:raise BookflowError('E_COMPANY_NOT_FOUND')
         if not access.role_satisfies(role,scope,'standard' if write else 'member',False):raise BookflowError('E_PERMISSION')
