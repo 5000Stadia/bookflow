@@ -248,7 +248,7 @@ class Intent(Frozen):
 
 class Cell(Frozen):
     row_id: ID
-    component_ordinal: int = Field(ge=1,le=INT64_MAX)
+    component_ordinal: int = Field(ge=0,le=INT64_MAX)
     bucket: str
     units: Positive
 

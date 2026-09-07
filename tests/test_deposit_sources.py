@@ -45,6 +45,22 @@ def test_n1_actual_fully_applied_payment_and_sales_cash(client,sale,monkeypatch)
         additional=(additional('income',3,2000),additional('fee',4,-300,'expense')),cash_back=CashBack(account=account('cash','other_current_asset'),units=500)))
     assert (effect.posting_total,effect.subtotal,effect.bank_total)==(18000,17700,17200)
     assert nets(effect)=={'bank':17200,'cash':500,'feeacct':300,payment.uf_account:-16000,'incomeacct':-2000}
+    # Exact mixed allocation: source occurrences stay positive; additional is zero.
+    assert [(c.row_id,c.component_ordinal,c.bucket,c.units) for c in effect.cells] == [
+        ('row1',1,'cash_back',278),('row2',1,'cash_back',167),('income',0,'cash_back',55),
+        ('row1',1,'additional:fee',167),('row2',1,'additional:fee',100),('income',0,'additional:fee',33),
+        ('row1',1,'main_bank',9555),('row2',1,'main_bank',5733),('income',0,'main_bank',1912)]
+    from tests.test_deposit_g1 import dims
+    expected_dims={'row1':payment.components[0].cash,'row2':sales.components[0].cash,'income':dims('income')}
+    for leg in effect.legs:
+        if leg.key.startswith(('main_bank/','cash_back/','uf/')):
+            assert leg.dimensions == expected_dims[leg.key.split('/')[1]]
+        elif leg.key.startswith('additional:fee/'):
+            assert leg.dimensions == dims('fee')
+        else:
+            assert leg.key == 'additional:income' and leg.dimensions == dims('income')
+    assert effect.intent.sources[0].source == payment
+    assert effect.intent.sources[1].source == sales
     assert snapshots(client)==before
     # Independently enumerate source GL + proposed deposit; applications remain intact.
     with sqlite3.connect(database_path(client)) as db:

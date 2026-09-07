@@ -159,6 +159,39 @@ def test_n4_storage_claim_release_redeposit_and_owned_inverse(client,sale,monkey
             return rid,bid,rowid
         db.raw.execute('BEGIN IMMEDIATE')
         rid,bid,rowid=scaffolding(first.intent.deposit_id,'G1-STORAGE-ONE')
+        # Exercise migrated SQL, including exact ownership, without relaxing guards.
+        from sqlalchemy.exc import IntegrityError
+        for row_order, row_kind, key_kind, good_ordinal, role in (
+                (2,'additional','additional',0,'funding'),
+                (3,'additional','additional',0,'offset'),
+                (4,'header','header',1,'cash_back')):
+            lineid, extra_row = new_id(), new_id()
+            db.conn.execute(c.document_line_identities.insert().values(id=lineid,transaction_id=first.intent.deposit_id,**provenance))
+            db.conn.execute(c.deposit_row_keys.insert().values(id=extra_row,transaction_id=first.intent.deposit_id,line_id=lineid,ordinal=row_order,kind=row_kind,**audited))
+            envelope=dict(db.conn.execute(sa.select(c.document_lines).where(c.document_lines.c.revision_id==rid)).mappings().first())
+            envelope.update(id=new_id(),line_id=lineid,position=row_order)
+            db.conn.execute(c.document_lines.insert().values(**envelope))
+            key=dict(id=new_id(),transaction_id=first.intent.deposit_id,row_id=extra_row,ordinal=good_ordinal,kind=key_kind,semantic_identity=extra_row,tax_item_id='',**audited)
+            for invalid in (-1, 1 if key_kind=='additional' else 0):
+                with pytest.raises(IntegrityError):
+                    db.conn.execute(c.deposit_component_keys.insert().values(**dict(key,ordinal=invalid)))
+            db.conn.execute(c.deposit_component_keys.insert().values(**key))
+            component=dict(id=new_id(),transaction_id=first.intent.deposit_id,revision_id=rid,document_line_id=envelope['id'],row_id=extra_row,component_ordinal=good_ordinal,role=role,capacity=1,currency='USD',facts_snapshot='{}',**audited)
+            for invalid in (-1, 1 if key_kind=='additional' else 0):
+                with pytest.raises(IntegrityError):
+                    db.conn.execute(c.deposit_components.insert().values(**dict(component,component_ordinal=invalid)))
+            if key_kind=='additional':
+                with pytest.raises(IntegrityError):
+                    db.conn.execute(c.deposit_components.insert().values(**dict(component,role='cash_back')))
+                # Valid zero cannot borrow the source row's positive key.
+                with pytest.raises(IntegrityError):
+                    db.conn.execute(c.deposit_components.insert().values(**dict(component,row_id=rowid)))
+            db.conn.execute(c.deposit_components.insert().values(**component))
+        source_key=dict(id=new_id(),transaction_id=first.intent.deposit_id,row_id=rowid,ordinal=0,kind=source.components[0].key.kind,semantic_identity='invalid-zero',tax_item_id='',**audited)
+        with pytest.raises(IntegrityError):
+            db.conn.execute(c.deposit_component_keys.insert().values(**source_key))
+        assert db.raw.execute('SELECT k.kind,k.ordinal,c.role,c.component_ordinal FROM deposit_component_keys k JOIN deposit_components c ON c.transaction_id=k.transaction_id AND c.row_id=k.row_id AND c.component_ordinal=k.ordinal ORDER BY k.rowid').fetchall()==[
+            (source.components[0].key.kind,1,'funding',1),('additional',0,'funding',0),('additional',0,'offset',0),('header',1,'cash_back',1)]
         claim=dict(id=new_id(),kind='claim',transaction_id=first.intent.deposit_id,revision_id=rid,batch_id=bid,row_id=rowid,
             source_transaction_id=source.transaction_id,source_revision_id=source.revision_id,source_batch_id=source.business_batch_id,amount_minor_units=700,currency='USD',source_date=source.receipt_date,facts_snapshot=source.model_dump_json(),reverses_membership_id=None,**audited)
         db.conn.execute(c.deposit_memberships.insert().values(**claim))

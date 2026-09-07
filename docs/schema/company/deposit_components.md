@@ -13,7 +13,7 @@ Database: `company`.
 | `revision_id` | VARCHAR(26) | no | — | unique with revision_id + row_id + component_ordinal, unique with transaction_id + revision_id + document_line_id + id, unique with transaction_id + revision_id + id | — | deposit_profiles.revision_id, document_lines.revision_id | Owning revision. |
 | `document_line_id` | VARCHAR(26) | no | — | unique with transaction_id + revision_id + document_line_id + id | — | document_lines.id | Deposit-owned envelope. |
 | `row_id` | VARCHAR(26) | no | — | unique with revision_id + row_id + component_ordinal | — | deposit_component_keys.row_id, deposit_row_keys.id | Durable deposit row occurrence. |
-| `component_ordinal` | BIGINT | no | — | unique with revision_id + row_id + component_ordinal | — | deposit_component_keys.ordinal | Durable source component occurrence. |
+| `component_ordinal` | BIGINT | no | — | unique with revision_id + row_id + component_ordinal | — | deposit_component_keys.ordinal | Owned component occurrence: zero for additional rows; positive for source and header. |
 | `role` | TEXT | no | — | — | — | — | funding, offset or cash_back owned component. |
 | `capacity` | BIGINT | no | — | — | — | — | Positive component amount; only funding supplies allocation capacity. |
 | `currency` | TEXT | no | — | — | — | — | Home currency. |

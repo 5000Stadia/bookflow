@@ -31,7 +31,7 @@ def funding(intent):
         orders={o.key:o.ordinal for o in row.occurrences if o.present}
         for component in row.source.components:
             cells.append((row.ordinal,orders[component.key],row.row_id,component.capacity,component.cash))
-    cells.extend((row.ordinal,1,row.row_id,row.units,row.dimensions) for row in intent.additional if row.units>0)
+    cells.extend((row.ordinal,0,row.row_id,row.units,row.dimensions) for row in intent.additional if row.units>0)
     return sorted(cells)
 
 

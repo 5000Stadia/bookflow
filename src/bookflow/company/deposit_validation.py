@@ -84,7 +84,7 @@ def validate(effect):
             expected_legs[f'uf/{row.row_id}/{ordinal}'] = (row.source.uf_account, -component.capacity, component.cash)
     for row in intent.additional:
         if row.units > 0:
-            supplies[(row.ordinal, 1, row.row_id)] = (row.units, row.dimensions)
+            supplies[(row.ordinal, 0, row.row_id)] = (row.units, row.dimensions)
             expected_legs['additional:' + row.row_id] = (row.account.id, -row.units, row.dimensions)
     p = sum(n for n, _ in supplies.values())
     t = sum(r.source.cash_minor_units for r in intent.sources) + sum(r.units for r in intent.additional)

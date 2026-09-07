@@ -11,7 +11,7 @@ Database: `company`.
 | `id` | VARCHAR(26) | no | — | primary key 1 | — | — | Permanent semantic occurrence. |
 | `transaction_id` | VARCHAR(26) | no | — | unique with transaction_id + row_id + ordinal | — | deposit_row_keys.transaction_id | Owning deposit. |
 | `row_id` | VARCHAR(26) | no | — | unique with transaction_id + row_id + ordinal | — | deposit_row_keys.id | Owned deposit row occurrence. |
-| `ordinal` | BIGINT | no | — | unique with transaction_id + row_id + ordinal | — | — | Permanent component tie ordinal. |
+| `ordinal` | BIGINT | no | — | unique with transaction_id + row_id + ordinal | — | — | Additional row component is zero; source and header occurrences are positive. |
 | `kind` | TEXT | no | — | — | — | — | payment, sale_net, sale_tax, additional or header. |
 | `semantic_identity` | TEXT | no | — | — | — | — | Permanent payment key, sale line, additional row or header identity. |
 | `tax_item_id` | TEXT | no | — | — | — | — | Tax item for sale_tax; empty otherwise. |
