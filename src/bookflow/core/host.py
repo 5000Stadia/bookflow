@@ -53,6 +53,8 @@ class Host:
                 or not math.isfinite(transfer_lifetime_seconds) or not 0 < transfer_lifetime_seconds <= 300
                 or not math.isfinite(shutdown_wait_seconds) or not 0 < shutdown_wait_seconds <= 30):
             raise ValueError("Host transfer and shutdown limits must be positive and within their ceilings.")
+        from bookflow.core.publication_admission import Admission
+        self.publication_admission = Admission()
         self.data_root = data_root
         performance.protect_root(data_root)
         self.version = version

@@ -1342,3 +1342,44 @@ can be reproduced in the unchanged isolated SQLite probe; unavailable private
 functions/collations produce a safe unsupported-local-DDL failure before
 persistent index creation. Required keys remain ordinary TEXT-affinity columns
 with BINARY collation. Old rows and local objects are not rewritten.
+
+### Private transport admission prerequisite
+
+`Host.publication_admission` orders private validation generations and bounded
+HTTP/local handoffs. No production authority commit closes this gate yet; this
+primitive does not activate B2, retirement or full permission publication.
+`serve` selects the owned h11 protocol and asyncio loop. Middleware validates
+outside the mutex, then supplies a generation-bound frame to every ASGI send.
+The actual asyncio selector transport's outgoing buffer accepts each bounded
+immutable byte segment under the mutex. Selector registration, flow-control and
+error callbacks occur after unlocking. The adapter deliberately depends on this
+qualified asyncio transport implementation and fails for unsupported transports;
+upgrades require the actual protocol barrier witnesses. Ordinary ASGI test clients
+without the protocol extension retain predicate checking only, not commit ordering.
+
+Closing the private gate invalidates all pending generations in constant work;
+writer acknowledgment requires neither event-loop progress nor response cleanup.
+Accepted transport prefixes cannot be recalled. Rollback does not revive canceled
+frames. A canceled response is aborted without a successful body terminator.
+Header serialization is limited to65536 bytes (including fixed framing allowance);
+large bodies are segmented without introducing a business-result size cap. Fixed
+protocol100/400/500/503 messages contain no business data. Empty finals and chunk
+terminators belonging to a business response remain guarded.
+
+Local operation-owned sockets use nonblocking short writes and readiness outside
+the gate. Their conservative generation begins before execution/staging; later
+commit-owner wiring must supply current OS publication authority and reviewed
+own-effect handling. Generic cooperative Python streams retain their existing
+contract and are never called while admission holds its mutex. Transfer lease
+cleanup remains independent. The complete-frame local receiver and verified MCP
+terminal remain client relay boundaries, not remote cancellation acknowledgments.
+
+The actual SSE generator captures a PublicationPermit per drained audit batch;
+only the current batch guard is retained and it also covers idle heartbeat output.
+This does not implement opaque cursors or typed audit projection. Client MCP file
+publication remains after complete terminal verification: its owner fsyncs the
+private temporary file, links the final destination and fsyncs the directory.
+Those client operations are outside the host gate; no hard real-time filesystem
+bound or client-buffer recall is claimed. Interrupted relay data never becomes a
+successful result or complete output file. Exhaustive commit routing, projection,
+query freshness, governed visibility and full surface acceptance remain separate.
