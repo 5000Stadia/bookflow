@@ -237,7 +237,7 @@ def load(s, ctx, intent, binding):
         linkage={r.values()['id']:r.values()['reversed_line_id'] for r in inverted}
         oldsources={r.values()['id']:r.values() for r in sources}
         for item in invsources: require(linkage[item.values()['posting_line_id']]==oldsources[item.values()['reversed_source_id']]['posting_line_id'])
-    elif not applications: journals.open_dates(s,[bv['effective_date']])
+    elif not blockers: journals.open_dates(s,[bv['effective_date']])
     required=[('transaction.'+intent.family+'.delete','standard'),('ledger.read','member')]
     if payment_authority.linked_work_required(s.company,participants): required.append(('customer-work','standard'))
     return DeleteFacts(company_id=s.company_row['id'],transaction_id=intent.transaction_id,family=intent.family,
@@ -380,7 +380,10 @@ PRESERVATION_TARGETS=(('transaction_revisions','transaction_revision','id'),
     ('document_line_identities','document_line_identity','id'),('document_lines','document_line','id'),
     ('posting_batches','posting_batch','id'),('posting_lines','posting_line','id'),
     ('posting_line_sources','posting_line_source','id'),
-    *((table,kind,key) for kind,(table,key) in payment_authority.PAYMENT_TARGETS.items() if table in OWNED))
+    ('payment_profiles','payment_profile','revision_id'),
+    ('payment_component_keys','payment_component_key','id'),
+    ('payment_components','payment_component','id'),
+    ('settlement_line_keys','settlement_line_key','id'))
 
 def preservation(s,intent,owned):
     result=list(read(s,'sequences','name',(intent.family,)))
