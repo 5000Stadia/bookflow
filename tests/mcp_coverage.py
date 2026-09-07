@@ -35,7 +35,9 @@ payment unapply
 payment update
 payment void""".splitlines())
 
-FROZEN_COMMANDS = PAYMENT_COMMANDS | frozenset("""account activate
+BROWSING_COMMANDS = frozenset(('account query options', 'class query options', 'custom-field query children', 'custom-field query options', 'customer query options', 'customer-message query options', 'customer-type query options', 'employee query options', 'item query children', 'item query options', 'item-category query options', 'job-type query options', 'other-name query options', 'payment-method query options', 'price-level query children', 'price-level query options', 'sales-rep query options', 'sales-tax-code query options', 'ship-method query options', 'term query options', 'unit-of-measure query children', 'unit-of-measure query options', 'vendor query children', 'vendor query options', 'vendor-type query options'))
+
+FROZEN_COMMANDS = BROWSING_COMMANDS | PAYMENT_COMMANDS | frozenset("""account activate
 account create
 account deactivate
 account list
@@ -328,7 +330,8 @@ def execution_map():
     permissions = {row['command']: row for row in inventory()}
     result = []
     for cmd in commands:
-        witness = ('tests/test_mcp_registry_lists.py::test_each_list_lifecycle_valid_rejected_and_preview_parity' if cmd.name in LISTS else
+        witness = ('tests/test_mcp_registry_browsing.py::test_list_browsing_four_interfaces' if cmd.name in BROWSING_COMMANDS else
+                   'tests/test_mcp_registry_lists.py::test_each_list_lifecycle_valid_rejected_and_preview_parity' if cmd.name in LISTS else
                    'tests/test_mcp_registry_financial.py::test_financial_lifecycle_full_documents_and_ledger_parity' if cmd.name in FINANCIAL else
                    'tests/test_mcp_registry_supporting.py::test_supporting_family_full_documents_and_rejections' if any(cmd.name in names for names in FAMILIES.values()) else
                    'tests/test_mcp_registry_payment_preparation.py::test_payment_preparation_four_surface_documents_context_and_rejections' if any(cmd.name in names for names in PAYMENT_FAMILIES.values()) else
@@ -400,6 +403,10 @@ def variant_policies():
         ('anyOf', ('integer', 'null')): ([number, 'tests/test_mcp_nested_gui_browser.py::test_optional_nested_collection_order_empty_null_and_omission'], []),
         ('anyOf', ('null', 'object')): ([custom, 'tests/test_mcp_payment_form_browser.py::test_generated_payment_json_object_error_preview_and_saved_false'], []),
         ('anyOf', ('null', 'string')): ([boolean], []),
+        ('oneOf', ('BoolCriterion', 'ChoiceCriterion', 'DateCriterion', 'NumberCriterion', 'PresenceCriterion', 'TextCriterion')): ([
+            'tests/test_list_browsing_browser.py::test_named_columns_filters_and_readable_collections',
+            'tests/test_list_browsing_browser.py::test_reorder_reset_zero_missing_paging_and_stale_restart'],
+            ['Dedicated list chooser witnesses cover selected Boolean/number/choice/presence cases; text/date interactions and all generated-form criterion branches remain open.']),
         ('oneOf', ('InlineApplications', 'SelectionReference')): ([payment, 'tests/test_mcp_nested_payment_request_browser.py::test_all_six_nested_preview_request_branches_exact_input_results_and_inactive_controls'], []),
         ('oneOf', ('InlineCalculation', 'SelectionReference')): ([payment, 'tests/test_mcp_calculation_variant_browser.py::test_calculation_inline_null_origin_rejections_and_saved_selection'], ['parent-owned payment-selection workspace/navigation and combined-base acceptance']),
         ('oneOf', ('ApplyPreviewRequest', 'InvoiceUpdatePreviewRequest', 'ReceivePreviewRequest', 'UnapplyPreviewRequest', 'UpdatePreviewRequest', 'VoidPreviewRequest')): (['tests/test_mcp_nested_payment_request_browser.py::test_all_six_nested_preview_request_branches_exact_input_results_and_inactive_controls'], []),

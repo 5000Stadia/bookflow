@@ -919,10 +919,10 @@ error without queuing a business execution. Its rejection delivery owns cleanup
 and can retain the same guarded error receipt. Recovery of a failed download
 redelivers only its error document; it never reopens the missing binary resource.
 
-The Row9 test ledger tests/mcp_coverage.py explicitly classifies all276 registered
+The Row9 test ledger tests/mcp_coverage.py explicitly classifies all301 registered
 commands by routed JSON, advisory, finite poll/local follow, binary direction,
 local lifecycle or standalone protocol. Four-interface execution scenarios cover
-271 hosted commands. Five local lifecycle commands map actual local execution
+296 hosted commands. Five local lifecycle commands map actual local execution
 witnesses and explicit installed-MCP/HTTP rejection boundaries; they are not
 counted as hosted execution parity. The ledger gate rejects unclassified or
 pending execution rows. This is execution coverage, not full Row9 acceptance.
@@ -930,7 +930,7 @@ The actual all-command form check emits schema-path/control/variant/context
 mapping, separate from the still-incomplete browser interaction/output/success
 mapping and parent-owned fresh blind acceptance.
 
-The material-variant ledger groups 1813 hosted schema alternatives into 15
+The material-variant ledger groups 1963 hosted schema alternatives into 16
 structural groups; these counts are not browser journeys. Command-specific
 witness links cover authored address/default/payee, definition kinds, calculation,
 line origins, explicit Any JSON, discriminator visibility and hub destinations at
@@ -974,3 +974,29 @@ expression uses the fixed `$.payer.label` path and empty-string default. Indexes
 are maintained by SQLite on ordinary writes; they store no derived balances.
 Historical co13→co14 tests use their frozen co14 schema and public command source;
 co16→co17 preservation and fresh-chain checks live in `test_payment_read_indexes.py`.
+## Existing-master browsing projections
+
+`company/query_models.py` defines strict custom criteria, selected-row descriptors and bounded metadata inputs. `query_catalog.py` expands the authoritative list declarations into public show-field/alias catalogs, derives filter controls and supplies paged discovery. Each master has `query options`; custom choices use its `kind=choices` and stable definition selector. Dynamic definition and choice metadata never embeds an unbounded option collection. Company dispatch and the existing audit-watermark/permission cursor remain authoritative.
+
+`query_projection.py` adds only selected SQL expressions and typed custom predicates to the existing providers. Decimal custom values compare through an exact signed-64-bit nano-unit function, never SQLite REAL. Choice matching uses the active normalized choice identity within its definition; a retired option cannot match a later option reusing its label. Missing current values remain null. Definition deactivation preserves searchable/filterable values. Text equality is literal and case-sensitive; containment follows the existing normalized Unicode search.
+
+Explicit `columns` returns stable id/version/label/active plus a `values` mapping, ordered typed `columns` descriptors and `matching_total`. Legacy omitted-column responses retain their exact four top-level fields and page-size `count`; reference projections cannot select columns. Query fingerprints omit absent new inputs for continuation compatibility, and include any supplied projection/filter criteria. New projections use effective customer inheritance and existing protected-field disclosure rules.
+
+Owned collection columns return a count and shared `query children` coordinates. That read returns at most 200 ordered public child rows, an exact total and a snapshot continuation. Existing full `show`/`list` contracts remain unchanged. Workbench detail tables page through these collection reads. `adapters/workbench/browsing.py` translates URL controls and formats the shared results; `browsing.js` provides named, keyboard/touch column and filter controls. Decimal values remain strings. Browser state is URL-only and does not write settings or accounting state. Legacy filter URLs remain accepted.
+
+Selected custom-filter queries materialize matching IDs once per statement for both the exact total and bounded page. A process-local 128-entry LRU caches compiled SQLite statement structures across equivalent engine instances; it stores no rows, authorization decisions, sessions or connections, and every execution binds current parameters. Money filter controls translate exact human amounts into the existing minor-unit filter contract using BigInt, without rounding.
+
+Master query `ids` optionally restricts matches to at most 64 stable IDs, intersecting
+all other criteria under the same current authority and snapshot. Omission preserves
+legacy response/fingerprint behavior. Workbench retained reference filters resolve
+labels and inactive state through these bounded reference queries, grouped by target
+noun; they do not fetch full records or change the ID-valued predicate. Selected
+creation/update timestamps use the shared viewer/company timezone formatter.
+
+The list browsing integration adds twenty query-options and five query-children
+command identities to the explicit MCP execution ledger. The per-master witness
+compares Python, CLI, HTTP and actual SDK replies, complete reference/metadata/child
+pages and unchanged company data. Selected default columns cover their first page;
+this is not a blind-agent or complete custom-filter interaction claim. The six-way
+custom-filter schema group retains explicit unexecuted text/date and generated-form
+branch cases alongside the dedicated list chooser witnesses.

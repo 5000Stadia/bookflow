@@ -8,6 +8,8 @@ import json
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from bookflow.company.query_models import CustomCriterion
 import sqlalchemy as sa
 
 from bookflow.core.errors import BookflowError
@@ -23,6 +25,12 @@ class QueryInput(BaseModel):
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=2048)
     projection: Literal["summary", "reference"] = "summary"
+    ids: list[str] | None = Field(default=None, min_length=1, max_length=64,
+        description='Restrict matches to these stable record IDs, ANDed with all other criteria. Omit for ordinary browsing; useful for bounded reference-label resolution.')
+    columns: list[str] | None = Field(default=None, min_length=1, max_length=64,
+        description='Ordered public column keys from this noun\'s query options. Omit for the legacy response; reference projections reject this option.')
+    custom_filters: list[CustomCriterion] = Field(default_factory=list, max_length=32,
+        description='AND criteria keyed by stable applicable definition ID. Values are strict typed values; presence uses kind=presence and no value.')
 
 
 class ReferenceItem(BaseModel):
@@ -52,6 +60,13 @@ def _invalid_cursor() -> BookflowError:
 
 def fingerprint(inp: QueryInput) -> str:
     contract = inp.model_dump(exclude={"cursor"})
+    if contract.get('ids') is None:
+        contract.pop('ids', None)
+    # Keep existing omitted-input continuations compatible across this additive contract.
+    if contract.get("columns") is None:
+        contract.pop("columns", None)
+    if not contract.get("custom_filters"):
+        contract.pop("custom_filters", None)
     # Normalization matches the shared containment search; filters remain ordered.
     from bookflow.company.list_service import normalize_lookup_key
     contract["query"] = normalize_lookup_key(inp.query) if inp.query and inp.query.strip() else None

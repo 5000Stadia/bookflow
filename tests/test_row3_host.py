@@ -691,6 +691,13 @@ def _read_calls(hosted):
         "payment preview items": ({"request": request, "kind": "source_components",
             "facts_fingerprint": preview["facts_fingerprint"], "limit": 2}, cid),
     })
+    from bookflow.company.lists import LIST_DEFINITIONS
+    from bookflow.company.query_projection import COLLECTIONS
+    for noun in LIST_DEFINITIONS:
+        calls[f'{noun} query options'] = ({'kind': 'columns', 'limit': 2}, cid)
+    for noun, column in dict((noun, column) for noun, column in COLLECTIONS).items():
+        record = hosted.ok(f'{noun}.query', {'limit': 1, 'include_inactive': True}, company=cid)['items'][0]
+        calls[f'{noun} query children'] = ({'record': record['id'], 'column': column, 'limit': 2}, cid)
     return calls
 
 
@@ -1886,3 +1893,22 @@ def test_every_link_the_workbench_renders_resolves(hosted):
                 queue.append(href)
     assert len(seen) > 15, sorted(seen)
     assert f"/c/{hosted.company_id}/directive" in seen and "/hub/hub-audit" in seen and "/hub/organization/new" in seen
+
+
+def test_master_browsing_requested_values_and_discovery_http_library_parity(hosted, root):
+    """Independent scoped witness; retain the all-command manifest assertion above."""
+    from bookflow.company.lists import LIST_DEFINITIONS
+    from bookflow.company.query_projection import COLLECTIONS
+    from tests.test_row1_flow import normalize
+    all_calls = _read_calls(hosted)
+    calls = {name: data for name, data in all_calls.items() if name.endswith((' query options', ' query children'))
+             and name.split(' query ')[0] in LIST_DEFINITIONS}
+    for noun in LIST_DEFINITIONS:
+        defaults=hosted.ok(noun+'.query.options',{},company=hosted.company_id)['default_columns']
+        calls[noun+' query']=({'columns':defaults,'limit':2},hosted.company_id)
+    assert len(calls)==2*len(LIST_DEFINITIONS)+len({noun for noun,_ in COLLECTIONS})
+    observed={name:hosted.ok(name.replace(' ','.'),body,company=company) for name,(body,company) in calls.items()}
+    hosted.handle.stop()
+    c=bookflow.connect(data_root=str(root))
+    for name,(body,company) in calls.items():
+        assert normalize(c.run(name,body,company=company))==normalize(observed[name]),name

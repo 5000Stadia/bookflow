@@ -293,3 +293,15 @@ for _name, _payload in _PAYMENT_EXAMPLES.items():
     if _name in ('payment update', 'payment unapply', 'payment void'):
         _args.extend(['--reason', 'Correct recorded remittance'])
     EXAMPLES[_name] = Example(' '.join(_payment_shell.quote(value) for value in _args), _payload)
+
+# Master browsing discovery is additive to the existing bounded query command.
+from bookflow.company.lists import LIST_DEFINITIONS as _BROWSING_LISTS
+for _noun in _BROWSING_LISTS:
+    EXAMPLES[_noun + ' query options'] = Example(
+        f'bookflow {_noun} query options --kind columns --limit 50 --company "Demo Plumbing Co" --json',
+        {'kind': 'columns', 'limit': 50})
+for _noun, _column in {'vendor': 'expense_accounts', 'unit-of-measure': 'units', 'price-level': 'items',
+                       'item': 'members', 'custom-field': 'choices'}.items():
+    EXAMPLES[_noun + ' query children'] = Example(
+        f'bookflow {_noun} query children --record {ID} --column {_column} --limit 50 --company "Demo Plumbing Co" --json',
+        {'record': ID, 'column': _column, 'limit': 50})

@@ -13,6 +13,7 @@ import sqlalchemy as sa
 from bookflow.company import schema, list_service
 from bookflow.company.lists import get_list_definition
 from bookflow.company.query import QueryInput, page_state, continuation
+from bookflow.company.query_sql import execute as execute_query
 from bookflow.core.money import Money
 
 # Python str.strip() population semantics, including non-ASCII whitespace.
@@ -43,6 +44,8 @@ def _label(table, identifier):
 def contains_any(needle, *values):
     """Literal Unicode containment within a field, never across field boundaries."""
     for value in values:
+        if value is None:
+            continue
         if not isinstance(value, str):
             continue
         folded = value.casefold() if value.isascii() else unicodedata.normalize("NFC", unicodedata.normalize("NFC", value).casefold())
@@ -71,7 +74,7 @@ def _exact_search(noun, p, needle):
         elif field == "$custom-searchable":
             values, definitions = schema.custom_field_values, schema.custom_field_defs
             owned(values.c.record_id, (values.c.canonical_text,), values.c.record_type == noun.replace("-", "_"),
-                values.c.active.is_(True), definitions.c.active.is_(True), definitions.c.kind.in_(("text", "choice")),
+                values.c.active.is_(True), definitions.c.kind.in_(("text", "choice")),
                 source=values.join(definitions, definitions.c.id == values.c.def_id))
         elif field == "person_fields":
             direct.extend(table.c[name] for name in command._PERSON_FIELDS)
@@ -187,7 +190,7 @@ def _customer_search_predicate():
         owners(foreign_key, table, table.c.id, (display,))
     values, definitions = schema.custom_field_values, schema.custom_field_defs
     owners(customers.c.id, values, values.c.record_id, (values.c.canonical_text,),
-        values.c.record_type == "customer", values.c.active.is_(True), definitions.c.active.is_(True),
+        values.c.record_type == "customer", values.c.active.is_(True),
         definitions.c.kind.in_(("text", "choice")), from_clause=values.join(definitions, definitions.c.id == values.c.def_id))
     return sa.or_(*predicates)
 
@@ -270,7 +273,7 @@ def _account(inp, session):
         sorts={"balance": balance, "hierarchy_order": table.c.path},
         columns={"balance": balance},
         transform=lambda row: {**row, "balance": Money(_require_i64(int(row["balance"]), field="balance"),
-            session.company_info_row["home_currency"]).to_dict()})
+            session.company_info_row["home_currency"]).to_dict()} if 'balance' in row else row)
 
 
 def _from_options(table, options):
@@ -392,11 +395,22 @@ def _provider(noun, inp, session):
 
 
 def query_page(noun: str, inp: QueryInput, session, *, principal_id: str | None = None) -> dict:
+    from bookflow.company.query_catalog import selected_descriptors, error
+    from bookflow.company.query_projection import configure, custom_predicates
     definition = get_list_definition(noun)
+    if inp.columns is not None and inp.projection == 'reference':
+        raise error(noun, 'Reference projections do not accept selected columns')
+    descriptors = selected_descriptors(noun, inp.columns, session) if inp.columns is not None else None
     state = page_state(session, noun, inp, principal_id)
     if inp.query and inp.query.strip():
         session.company.raw.create_function("bookflow_query_contains", -1, contains_any, deterministic=True)
     p = _provider(noun, inp, session)
+    if inp.ids is not None:
+        predicate = p.table.c.id.in_(inp.ids)
+        p.visible = predicate if p.visible is None else sa.and_(p.visible, predicate)
+    if inp.custom_filters:
+        predicate = custom_predicates(noun, inp.custom_filters, session, p.table)
+        p.visible = predicate if p.visible is None else sa.and_(p.visible, predicate)
     if inp.query and inp.query.strip() and not p.search_handled:
         predicate = _exact_search(noun, p, list_service.normalize_lookup_key(inp.query))
         p.visible = predicate if p.visible is None else sa.and_(p.visible, predicate)
@@ -409,8 +423,10 @@ def query_page(noun: str, inp: QueryInput, session, *, principal_id: str | None 
         if session.company_info_row["use_account_numbers"]:
             label = sa.case((p.table.c.number.is_not(None), p.table.c.number + " · " + label), else_=label)
     selected["label"] = label
+    decoders = configure(noun, descriptors, p, session) if descriptors is not None else {}
     if inp.projection == "summary":
-        for name in dict.fromkeys((definition.display_field, *definition.summary_columns)):
+        names = [descriptor.key for descriptor in descriptors] if descriptors is not None else (definition.display_field, *definition.summary_columns)
+        for name in dict.fromkeys(names):
             selected[name] = p.columns.get(name, p.table.c.get(name))
             if selected[name] is None:
                 raise ValueError(f"{noun}: missing query projection {name}")
@@ -420,7 +436,21 @@ def query_page(noun: str, inp: QueryInput, session, *, principal_id: str | None 
         sort=inp.sort, direction=inp.direction, include_inactive=inp.include_inactive,
         search_expressions=p.search, filter_expressions=p.filters, sort_expressions=p.sorts, visible=p.visible,
     ).with_only_columns(*(value.label(name) for name, value in selected.items()), maintain_column_froms=True)
-    rows = [dict(row) for row in session.company.conn.execute(statement.limit(inp.limit + 1).offset(state.offset), p.parameters).mappings()]
+    count_statement = statement.order_by(None).with_only_columns(sa.func.count(), maintain_column_froms=True)
+    shared_matches = descriptors is not None and bool(inp.custom_filters)
+    if shared_matches:
+        # Evaluate exact custom predicates once for both rows and total. Materialize
+        # only matching IDs, never all selected values or owned collections.
+        matched = statement.order_by(None).with_only_columns(p.table.c.id, maintain_column_froms=True).cte('browse_matches').prefix_with('MATERIALIZED')
+        total_expression = sa.select(sa.func.count()).select_from(matched).scalar_subquery()
+        statement = sa.select(*(value.label(name) for name, value in selected.items()),
+            total_expression.label('__matching_total')).select_from(p.table).where(
+                p.table.c.id.in_(sa.select(matched.c.id))).order_by(*statement._order_by_clauses)
+    total = execute_query(session.company.conn, count_statement, p.parameters).scalar_one() if descriptors is not None and not shared_matches else None
+    rows = [dict(row) for row in execute_query(session.company.conn, statement.limit(inp.limit + 1).offset(state.offset), p.parameters).mappings()]
+    if shared_matches:
+        total = rows[0]['__matching_total'] if rows else (
+            execute_query(session.company.conn, count_statement, p.parameters).scalar_one() if state.offset else 0)
     more = len(rows) > inp.limit
     rows = rows[:inp.limit]
     if inp.projection == "summary":
@@ -428,6 +458,14 @@ def query_page(noun: str, inp: QueryInput, session, *, principal_id: str | None 
             rows = p.batch(rows)
         if p.transform is not None:
             rows = [p.transform(row) for row in rows]
-        allowed = {"id", "version", "label", "active", definition.display_field, *definition.summary_columns}
-        rows = [{name: value for name, value in row.items() if name in allowed} for row in rows]
-    return {"projection": inp.projection, "items": rows, "count": len(rows), "next_cursor": continuation(state, len(rows), more)}
+        if descriptors is not None:
+            rows = [{**{name: row[name] for name in ('id', 'version', 'label', 'active')},
+                'values': {descriptor.key: decoders[descriptor.key](row[descriptor.key], row) if descriptor.key in decoders else row[descriptor.key]
+                           for descriptor in descriptors}} for row in rows]
+        else:
+            allowed = {"id", "version", "label", "active", definition.display_field, *definition.summary_columns}
+            rows = [{name: value for name, value in row.items() if name in allowed} for row in rows]
+    output = {"projection": inp.projection, "items": rows, "count": len(rows), "next_cursor": continuation(state, len(rows), more)}
+    if descriptors is not None:
+        output.update(columns=descriptors, matching_total=total)
+    return output

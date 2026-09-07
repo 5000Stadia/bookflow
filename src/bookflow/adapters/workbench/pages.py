@@ -13,7 +13,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, JSONResponse
 from starlette.concurrency import run_in_threadpool
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -76,7 +76,7 @@ class _FlashStore:
 
 
 def _nouns(scope: str) -> list[str]:
-    return sorted({c.noun for c in registry.routed_commands() if c.scope == scope})
+    return sorted({c.noun for c in registry.routed_commands() if c.scope == scope and not c.noun.endswith(' query')})
 
 
 def _verbs(noun: str, scope: str | None = None) -> list[registry.Command]:
@@ -399,7 +399,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css", "payments.js", "payments.css", "invoice-settlement.js", "exact-json.js")
+        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css", "payments.js", "payments.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -715,6 +715,36 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             )
         return HTMLResponse("".join(options), headers={"Cache-Control": "no-store"})
 
+    @app.get('/c/{company_id}/_browse/{noun}/{kind}')
+    def browse_options(company_id: str, noun: str, kind: str, request: Request):
+        from bookflow.company.query_catalog import filter_descriptors
+        try:
+            # Discovery and references use the same ordinary dispatch as all other reads.
+            query = request.query_params
+            if kind == 'references':
+                run(request, f'{noun} query options', {'kind': 'filters', 'keys': [query.get('field', '')]}, company_id)
+                descriptor = next((d for d in filter_descriptors(noun) if d.key == query.get('field')), None)
+                if descriptor is None or not descriptor.reference_noun or '|' in descriptor.reference_noun:
+                    raise BookflowError('E_LIST_FILTER', message='This field has no reference lookup.')
+                result = run(request, descriptor.reference_noun + ' query', {'projection': 'reference',
+                    'query': query.get('query'), 'cursor': query.get('cursor'), 'include_inactive': True}, company_id)
+            elif kind == 'options':
+                raw = {key: query[key] for key in ('kind', 'definition', 'query', 'cursor') if key in query}
+                if 'keys' in query:
+                    raw['keys'] = json.loads(query['keys'])
+                if 'limit' in query:
+                    raw['limit'] = int(query['limit'])
+                if 'include_inactive' in query:
+                    raw['include_inactive'] = {'true': True, 'false': False}.get(query['include_inactive'], query['include_inactive'])
+                result = run(request, f'{noun} query options', raw, company_id)
+            else:
+                raise BookflowError('E_USAGE', message='Unknown list discovery request.')
+            return JSONResponse(result, headers={'Cache-Control': 'no-store'})
+        except (ValueError, TypeError):
+            return JSONResponse({'message': 'Invalid list discovery input.'}, status_code=422)
+        except BookflowError as err:
+            return JSONResponse(err.to_dict(), status_code=STATUS.get(err.code, 400))
+
     def noun_page(request: Request, company_id: str | None, noun: str):
         if company_id and noun == 'payment selection':
             return RedirectResponse('/c/' + company_id + '/payment-drafts', status_code=303)
@@ -757,6 +787,16 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             # a noun without a list (presence) still has a page: its actions
             return render("list.html", request, has_show=registry.get(f"{noun} show") is not None, company_id=company_id, noun=noun, items=[], columns=[], meta=_noun_meta(noun),
                           has_inactive=False, include=False, verbs=page_verbs, extra={"note": "this noun has no list; use its actions"})
+        if definition is not None and company_id:
+            from bookflow.adapters.workbench import browsing
+            try:
+                return browsing.page(request, company_id, noun, definition, page_verbs, meta,
+                    lambda name, raw, company: run(request, name, raw, company), render)
+            except BookflowError as err:
+                if err.code == 'E_QUERY_STALE' or (err.code == 'E_VALIDATION' and request.query_params.get('cursor')):
+                    restart = request.url.path + '?' + urlencode([(k, v) for k, v in request.query_params.multi_items() if k != 'cursor'])
+                    return render('error.html', request, error={**err.to_dict(), 'message': 'The list changed while you were browsing. Restart to see current results.'}, restart_url=restart)
+                return page_error(request, err)
         include = request.query_params.get("include_inactive") == "1"
         raw: dict[str, Any] = {}
         if company_id and "limit" in cmd.input_model.model_fields:
@@ -962,7 +1002,18 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 return page_error(request, BookflowError('E_RECORD_NOT_FOUND'))
             if annotation_context:
                 annotation_context['target'] = {'record_type': 'work_line', 'record_id': line_id}
+        master_detail = None
+        if company_id and definition is not None and command_noun != 'customer':
+            from bookflow.adapters.workbench import browsing
+            try:
+                master_detail = browsing.details(request, command_noun, company_id, visible_record,
+                    lambda name, raw, company: run(request, name, raw, company))
+            except BookflowError as err:
+                if err.code == 'E_QUERY_STALE':
+                    return render('error.html', request, error=err.to_dict(), restart_url=request.url.path)
+                return page_error(request, err)
         return render("record.html", request, company_id=company_id, noun=noun, record_id=record_id, record=visible_record, record_title=record_title, audit=audit, meta=meta, verbs=verbs,
+                      master_detail=master_detail,
                       billing=billing, billing_actions=bool(billing and _role_allows(registry.get(noun + " invoice"), role_view, hub_admin=cred.hub_admin)),
                       work=Work.detail_context(out, company_id) if noun in Work.NOUNS else None,
                       sale=Sales.detail_context(out, company_id) if command_noun in ('invoice', 'sales-receipt') else None,

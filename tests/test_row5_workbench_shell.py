@@ -51,11 +51,13 @@ def test_list_page_uses_declared_columns_and_command_backed_query_controls(hoste
     )
     assert page.status_code == 200
     assert "Net 30" in page.text and "Net 15" not in page.text
-    for column in ("name", "kind", "due_rule_summary", "discount_rule_summary", "active"):
-        assert f"<th>{column}</th>" in page.text
+    # Named headings replace raw schema-path headings without losing declared fields.
+    for column in ("Name", "Kind", "Due rule summary", "Discount rule summary", "Active"):
+        assert column in page.text
     assert 'name="query" value="Net 30"' in page.text
-    assert '<option value="name" selected>name</option>' in page.text
-    assert '<option value="desc" selected>Descending</option>' in page.text
+    assert 'name="sort" value="name"' in page.text
+    assert 'name="direction" value="desc"' in page.text
+    assert 'aria-sort="descending"' in page.text
 
 
 def test_list_columns_are_url_only_selectable_and_ordered(hosted):
@@ -65,9 +67,9 @@ def test_list_columns_are_url_only_selectable_and_ordered(hosted):
         params={"query": "Net 30", "columns": "active,name,kind"},
     )
     assert page.status_code == 200
-    assert page.text.index("<th>active</th>") < page.text.index("<th>name</th>")
-    assert page.text.index("<th>name</th>") < page.text.index("<th>kind</th>")
-    assert 'name="columns" value="active,name,kind"' in page.text
+    headers = page.text.split('<thead>', 1)[1].split('</thead>', 1)[0]
+    assert headers.index('Active') < headers.index('Name') < headers.index('Kind')
+    assert 'value="active,name,kind"' in page.text and 'name="columns"' in page.text
 
     invalid = browser.get(
         f"/c/{hosted.company_id}/term",
@@ -91,7 +93,8 @@ def test_list_page_preserves_repeated_filters_and_state_when_toggling_inactive(h
         ],
     )
     assert page.status_code == 200
-    assert page.text.count('name="filter"') == 3
+    # Two retained criteria; the blank raw filter box is replaced by a named chooser.
+    assert page.text.count('name="filter"') == 2
     assert 'value="active=true"' in page.text
     assert 'value="kind=standard"' in page.text
 
