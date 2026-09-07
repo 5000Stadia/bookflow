@@ -508,3 +508,16 @@ class PaymentPageOutput(StrictModel):
     total_count: int
     next_cursor: str | None
     facts_fingerprint: str
+
+
+class PaymentSourceOutput(WriteOutput):
+    changed: bool = True
+    new_effect: bool = True
+    id: str | None
+    version: int
+    facts_fingerprint: str
+    idempotent_replay: bool = False
+    effect: PaymentEffect
+    current: PaymentCurrentOutput
+    effect_counts: PaymentEffectCounts
+    prospective_pages: list[ProspectivePageOutput] = Field(default_factory=list)

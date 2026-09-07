@@ -129,53 +129,9 @@ def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None):
     if verb=='void':
         resolved=previous;number=old['number'];memo=prior['memo'];changed=old['status']=='posted'
     else:
-        doc=inp.document
-        if doc.mode!='inline':
-            raise BookflowError('E_DEPOSIT_DRAFT_STATE',details={'reason':'private draft provider not allocated'})
-        number,sequence=effects.allocate(s,'deposit',doc.number,identity if old else None)
-        memo=doc.memo
-        source_rows=[];additional=[]
-        oldsources={r.source.transaction_id:r for r in previous.intent.sources} if previous else {}
-        oldextras={r.row_id:r for r in previous.intent.additional} if previous else {}
-        extra_lines={r['line_id']:oldextras[r['id']] for r in keys if r['id'] in oldextras}
-        for index,value in enumerate(doc.sources):
-            source=deposit_sources.load(s,value.source)
-            if source.source_type!=value.source_type:raise BookflowError('E_DEPOSIT_SOURCE_INELIGIBLE')
-            claimed=dependencies.active_claim(s,value.source)
-            if claimed and claimed['transaction_id']!=identity:
-                raise BookflowError('E_DEPOSIT_SOURCE_CLAIMED',details=dependencies.claim_details(s,value.source,claimed))
-            h=effects.rows(s,c.transactions,c.transactions.c.id==value.source)[0]
-            history.version_meta(s,h,value.expected_version,binding)
-            retained=oldsources.get(value.source)
-            if retained:
-                row_id,ordinal=retained.row_id,retained.ordinal
-            else:
-                maximum+=1;row_id,ordinal=new_id(),maximum;mapping[row_id]=f'new-source-{index}'
-            # Complete replacement: omission chooses captured source memo;
-            # explicit null retains accepted G1's intentionally blank override.
-            entered='memo_override' in value.model_fields_set
-            origin='entered' if entered else 'source'
-            rowmemo=value.memo_override if entered else source.source_memo
-            source_rows.append(SourceRow(row_id=row_id,ordinal=ordinal,source=source,
-                occurrences=deposits.occurrences(source,retained.occurrences if retained else ()),memo=rowmemo,memo_origin=origin))
-        for index,value in enumerate(doc.additional):
-            retained=extra_lines.get(value.line_id) if value.line_id else None
-            if value.line_id and retained is None:raise BookflowError('E_VALIDATION',details={'field':'line_id'})
-            if retained:row_id,ordinal=retained.row_id,retained.ordinal
-            else:
-                maximum+=1;row_id,ordinal=new_id(),maximum;mapping[row_id]=f'new-additional-{index}'
-            additional.append(resolve_additional(s,value,row_id,ordinal,retained))
-        bank=resolve_account(s,doc.deposit_to,previous.intent.bank if previous else None)
-        cashback=CashBack(account=resolve_account(s,doc.cash_back.account,previous.intent.cash_back.account if previous and previous.intent.cash_back else None),
-            units=amount(doc.cash_back.amount,s.company_info_row['home_currency']),memo=doc.cash_back.memo) if doc.cash_back else None
-        resolved=deposits.prepare(Intent(deposit_id=identity,date=doc.date,currency=s.company_info_row['home_currency'],bank=bank,
-            sources=tuple(source_rows),additional=tuple(additional),cash_back=cashback))
-        custom.validate_kinds(s.company,doc.custom_fields,doc.expected_custom_field_kinds,record_type='deposit')
-        from bookflow.company.custom_fields import CustomFieldValuePatch
-        old_custom=json.loads(prior['custom_fields_snapshot']) if prior else {}
-        full_custom=CustomFieldValuePatch({**{key:None for key in old_custom if key not in doc.custom_fields.root},**doc.custom_fields.root})
-        custom_plan=custom.prepare(s.company,identity,full_custom,old_custom,creating=old is None,record_type='deposit')
-        changed=old is None or _business(resolved)!=_business(previous) or (number,memo)!=(prior['number'],prior['memo']) or custom_plan.changed
+        resolved,number,memo,custom_plan,changed,sequence,maximum=resolve_replacement(
+            s,ctx,inp.document,identity=identity,old=old,prior=prior,previous=previous,
+            keys=keys,maximum=maximum,mapping=mapping,binding=binding)
     if changed:
         journals.open_dates(s,[resolved.intent.date]+([prior['date']] if prior else []))
         if verb!='void':
@@ -209,3 +165,61 @@ def prepare(s,ctx,inp,verb, *, binding=None, expected_guard=None):
         mapping=mapping,at=clock.now_iso(),event=new_id(),operation_id=new_id(),
         issuer=json.loads(prior['issuer_snapshot']) if prior else {**{k:v for k,v in s.company_info_row.items() if k in ('id','legal_name','home_currency') or k.startswith(('address_','legal_address_','ship_address_'))}, 'display_name':readset.issuer.display_name})
     return Prepared(verb,inp.model_dump_json(by_alias=True,exclude_unset=True),fingerprint,guard,q.canonical(data),custom_plan,binding)
+
+
+def resolve_replacement(s, ctx, doc, *, identity, old, prior, previous, keys, maximum, mapping, binding, overlay=None):
+    """Shared complete replacement resolution; coordinator supplies proven overlay."""
+    from bookflow.company import deposit_dependency_history as history
+    if doc.mode!='inline':
+        raise BookflowError('E_DEPOSIT_DRAFT_STATE',details={'reason':'private draft provider not allocated'})
+    number,sequence=effects.allocate(s,'deposit',doc.number,identity if old else None)
+    memo=doc.memo
+    source_rows=[];additional=[]
+    oldsources={r.source.transaction_id:r for r in previous.intent.sources} if previous else {}
+    oldextras={r.row_id:r for r in previous.intent.additional} if previous else {}
+    extra_lines={r['line_id']:oldextras[r['id']] for r in keys if r['id'] in oldextras}
+    for index,value in enumerate(doc.sources):
+        from bookflow.company.deposit_coordinate_models import SourceResult
+        if isinstance(value, SourceResult):
+            if overlay is None or overlay.retained_row is None or overlay.source_id != value.source or overlay.deposit_id != identity:
+                raise BookflowError('E_DEPOSIT_SOURCE_INELIGIBLE')
+            source_rows.append(overlay.retained_row)
+            continue
+        source=deposit_sources.load(s,value.source)
+        if source.source_type!=value.source_type:raise BookflowError('E_DEPOSIT_SOURCE_INELIGIBLE')
+        claimed=dependencies.active_claim(s,value.source)
+        if claimed and claimed['transaction_id']!=identity:
+            raise BookflowError('E_DEPOSIT_SOURCE_CLAIMED',details=dependencies.claim_details(s,value.source,claimed))
+        h=effects.rows(s,c.transactions,c.transactions.c.id==value.source)[0]
+        history.version_meta(s,h,value.expected_version,binding)
+        retained=oldsources.get(value.source)
+        if retained:
+            row_id,ordinal=retained.row_id,retained.ordinal
+        else:
+            maximum+=1;row_id,ordinal=new_id(),maximum;mapping[row_id]=f'new-source-{index}'
+        # Complete replacement: omission chooses captured source memo;
+        # explicit null retains accepted G1's intentionally blank override.
+        entered='memo_override' in value.model_fields_set
+        origin='entered' if entered else 'source'
+        rowmemo=value.memo_override if entered else source.source_memo
+        source_rows.append(SourceRow(row_id=row_id,ordinal=ordinal,source=source,
+            occurrences=deposits.occurrences(source,retained.occurrences if retained else ()),memo=rowmemo,memo_origin=origin))
+    for index,value in enumerate(doc.additional):
+        retained=extra_lines.get(value.line_id) if value.line_id else None
+        if value.line_id and retained is None:raise BookflowError('E_VALIDATION',details={'field':'line_id'})
+        if retained:row_id,ordinal=retained.row_id,retained.ordinal
+        else:
+            maximum+=1;row_id,ordinal=new_id(),maximum;mapping[row_id]=f'new-additional-{index}'
+        additional.append(resolve_additional(s,value,row_id,ordinal,retained))
+    bank=resolve_account(s,doc.deposit_to,previous.intent.bank if previous else None)
+    cashback=CashBack(account=resolve_account(s,doc.cash_back.account,previous.intent.cash_back.account if previous and previous.intent.cash_back else None),
+        units=amount(doc.cash_back.amount,s.company_info_row['home_currency']),memo=doc.cash_back.memo) if doc.cash_back else None
+    resolved=deposits.prepare(Intent(deposit_id=identity,date=doc.date,currency=s.company_info_row['home_currency'],bank=bank,
+        sources=tuple(source_rows),additional=tuple(additional),cash_back=cashback))
+    custom.validate_kinds(s.company,doc.custom_fields,doc.expected_custom_field_kinds,record_type='deposit')
+    from bookflow.company.custom_fields import CustomFieldValuePatch
+    old_custom=json.loads(prior['custom_fields_snapshot']) if prior else {}
+    full_custom=CustomFieldValuePatch({**{key:None for key in old_custom if key not in doc.custom_fields.root},**doc.custom_fields.root})
+    custom_plan=custom.prepare(s.company,identity,full_custom,old_custom,creating=old is None,record_type='deposit')
+    changed=old is None or _business(resolved)!=_business(previous) or (number,memo)!=(prior['number'],prior['memo']) or custom_plan.changed
+    return resolved, number, memo, custom_plan, changed, sequence, maximum

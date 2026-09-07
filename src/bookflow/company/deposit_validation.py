@@ -146,6 +146,13 @@ def validate_current(effect, s, *, replacing_deposit=None, previous=None):
             c.deposit_current_memberships.c.source_transaction_id==actual.transaction_id)).mappings().first()
         if claimed is not None and claimed['transaction_id']!=replacing_deposit:
             raise BookflowError('E_DEPOSIT_SOURCE_CLAIMED')
+    validate_references(effect, s, previous=previous)
+
+
+def validate_references(effect, s, *, previous=None):
+    """Current non-source references shared by ordinary and prospective graphs."""
+    import sqlalchemy as sa
+    from bookflow.company import schema as c
     accounts=[effect.intent.bank]+[r.account for r in effect.intent.additional]
     if effect.intent.cash_back:accounts.append(effect.intent.cash_back.account)
     retained_accounts = ([previous.intent.bank]+[r.account for r in previous.intent.additional]+([previous.intent.cash_back.account] if previous.intent.cash_back else [])) if previous else []

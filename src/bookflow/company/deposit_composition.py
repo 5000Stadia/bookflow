@@ -9,7 +9,7 @@ from bookflow.company import payments, sales, deposit_sources
 class PreparedSource:
     action: str
     plan: Plan
-    cash: object | None
+    cash: deposit_sources.CashSource | None
 
 
 def prepare(s, ctx, inp, action, *, expected_fingerprint):
@@ -71,3 +71,64 @@ def prepare(s, ctx, inp, action, *, expected_fingerprint):
         else:
             cash = deposit_sources.project(graph, uf_account=account['id'], home_currency=s.company_info_row['home_currency'])
     return PreparedSource(action, plan, cash)
+
+
+def preview_source_effect(s, ctx, action, *, provenance):
+    """Prepare a full keyless owned source plan; never execute or claim it."""
+    from bookflow.company.deposit_coordinate_models import (
+        PaymentUpdateAction, SalesReceiptUpdateAction, PaymentVoidAction,
+        SalesReceiptVoidAction, PreparedSource as Source, source_identity)
+    from bookflow.company.payment_models import PaymentVoidIntent, EffectProvenance
+    from bookflow.company.sales_models import SalesReceiptVoidInput
+    from bookflow.company import payment_corrections, payment_cancellation
+    if type(action) not in (PaymentUpdateAction, SalesReceiptUpdateAction, PaymentVoidAction, SalesReceiptVoidAction) or type(provenance) is not EffectProvenance:
+        raise BookflowError('E_VALIDATION')
+    try:
+        identity = source_identity(action)
+    except ValueError:
+        raise BookflowError('E_VALIDATION') from None
+    if isinstance(action, PaymentUpdateAction):
+        plan = payment_corrections.prepare_effect(s, ctx, action.input, provenance)
+        payment_corrections.validate(plan, s, ctx)
+    elif isinstance(action, PaymentVoidAction):
+        inp = PaymentVoidIntent(payment=identity, expected_version=action.expected_version)
+        owner = payment_cancellation.prepare_all_active_void if action.unapply == 'all_active' else payment_cancellation.prepare_void_effect
+        plan = owner(s, ctx, inp, provenance)
+        payment_cancellation.validate(plan, s, ctx)
+    else:
+        inp = action.input if isinstance(action, SalesReceiptUpdateAction) else SalesReceiptVoidInput(sales_receipt=identity, expected_version=action.expected_version)
+        plan = sales.prepare(s, ctx, inp, 'sales_receipt', action.kind.rsplit('_', 1)[1], provenance=provenance)
+        from bookflow.company.sales_validation import validate
+        validate(plan, s, ctx)
+    fingerprint = plan.data.get('fingerprint', getattr(plan.preview, 'facts_fingerprint', None))
+    data = plan.data
+    if action.kind.endswith('_void'):
+        cash = None
+    elif not plan.preview.changed:
+        cash = deposit_sources.load(s, identity)
+    else:
+        import sqlalchemy as sa
+        from bookflow.company import schema as c
+        account = s.company.conn.execute(sa.select(c.accounts).where(c.accounts.c.system_role == 'undeposited_funds')).mappings().one()
+        graph = deposit_sources.graph(s, identity, data['pending'], data['header'])
+        payment = action.kind.startswith('payment_')
+        profiles = graph['payment_profiles' if payment else 'sales_profiles']
+        profile = next(r for r in profiles if r['revision_id'] == data['header']['current_revision_id'])
+        if profile['deposit_account_id' if payment else 'control_account_id'] != account['id']:
+            cash = None
+        else:
+            deposit_sources.require(bool(account['active']))
+            cash = deposit_sources.project(graph, uf_account=account['id'], home_currency=s.company_info_row['home_currency'])
+    from bookflow.company import reconciliation_adapters
+    bank_changes = reconciliation_adapters.prospective(s, ctx, plan)
+    return Source(action, provenance, plan, cash, fingerprint, bank_changes)
+
+
+def prepare_source_effect(s, ctx, action, *, provenance, expected_fingerprint):
+    """Reprepare a source against its earlier exact owned preview fingerprint."""
+    from bookflow.company.deposit_coordinate_models import SalesReceiptVoidAction
+    prepared = preview_source_effect(s, ctx, action, provenance=provenance)
+    absent = isinstance(action, SalesReceiptVoidAction) and prepared.source_fingerprint is None and expected_fingerprint is None
+    if not absent and (not expected_fingerprint or prepared.source_fingerprint != expected_fingerprint):
+        raise BookflowError('E_PREVIEW_STALE', details={'reason': 'payment_facts' if action.kind.startswith('payment_') else 'sales_facts'})
+    return prepared

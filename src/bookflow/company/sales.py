@@ -430,7 +430,7 @@ def _posting_accounts_active(s, resolved):
                      'Explicitly refresh or select eligible tax defaults before posting this correction.', role='sales_tax_payable')
 
 
-def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _settlement_internal=False):
+def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _settlement_internal=False, provenance=None):
     if document_type == 'invoice' and operation == 'update' and not _settlement_internal:
         from bookflow.company.payment_invoice_corrections import prepare as settlement_prepare
         return settlement_prepare(s, ctx, inp)
@@ -454,7 +454,13 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         return Plan(SalesWriteOutput(**summary(old_header, old_revision, profile_row(s, old_revision)),
             revision=revision_output(s, old_revision), changed=False, warnings=warnings),
             dict(input=inp, operation=operation, document_type=document_type, changed=False))
-    at, event = clock.now_iso(), new_id()
+    if provenance is None:
+        at, event = clock.now_iso(), new_id()
+    else:
+        from bookflow.company.payment_models import EffectProvenance
+        if type(provenance) is not EffectProvenance or document_type != 'sales_receipt' or operation not in ('update', 'void'):
+            raise BookflowError('E_VALIDATION')
+        at, event = provenance.at, provenance.event_id
     created = lambda: dict(id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
     provenance = dict(created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
     header = dict(old_header) if old_header else dict(id=new_id(), **common(s.actor.id, ctx.interface.value, at),
