@@ -1158,3 +1158,20 @@ Legacy roots may be read for strict preflight, but policy-to-policy assembly rej
 legacy mode: the actual legacy-observation/activation bridge remains B3/C work.
 This is not identity administration, token reconciliation, structural writer
 routing, a command/editor activation, or completion of Row7/B2/B3.
+
+### Payer reference indexes
+
+Company revision co0019 adds `ix_co19_posting_party_transactions` on
+posting_lines(name_type, name_id, account_id, transaction_id) and
+`ix_co19_applications_targets` on applications(paying_transaction_id,
+paid_transaction_id). All co0017 indexes remain. The additions cover historical
+payer contributor and application-target references without changing payment
+queries, exact balances, authority graphs or publication snapshots.
+
+The revision validates both reserved names and complete main-table DDL before
+creating either index. TEMP target shadows and reserved-name collisions are
+rejected. Local extensions are supported when their complete stored table DDL
+can be reproduced in the unchanged isolated SQLite probe; unavailable private
+functions/collations produce a safe unsupported-local-DDL failure before
+persistent index creation. Required keys remain ordinary TEXT-affinity columns
+with BINARY collation. Old rows and local objects are not rewritten.
