@@ -86,15 +86,9 @@ def test_net_zero_split_omission_is_caught_even_when_totals_match(client,driver,
     assert population(driver,a).eligible==values.eligible
 
 
-def test_receipt_control_group_separate_from_retained_bank_net(client,sale,driver,tmp_path):
-    bank=account(client,'R0 sale bank');target=account(client,'R0 retained income','income')
-    tax=next(x['id'] for x in run(client,'sales-tax-code list')['items'] if not x['taxable'])
-    item=run(client,'item create',dict(name='R0 zero retained',type='service',sales_enabled=True,description='Zero',income_account_id=target,price='0',sales_tax_code_id=tax))['id']
-    doc=run(client,'sales-receipt post',dict(customer=sale['customer'],date='2026-01-10',deposit_to=bank,payment_method=method(client),lines=[dict(item=sale['item']),dict(item=item)]))
-    run(client,'item update',dict(item=item,income_account_id=sale['income']))
-    run(client,'account update',dict(account=target,type='bank'))
-    lines=[dict(item=x['item_id'],line_id=x['line_id']) for x in doc['revision']['lines']];lines[1]['unit_price']='5'
-    doc=run(client,'sales-receipt update',dict(sales_receipt=doc['id'],expected_version=1,deposit_to=target,lines=lines))
+def test_receipt_control_group_separate_from_retained_bank_net(legacy_world,legacy_driver,tmp_path):
+    client,case=legacy_world;driver=legacy_driver
+    bank,target=case['bank'],case['target']
     out=population(driver,target)
     assert sorted(v.signed_debit for v in out.eligible)==[-500,500,1234]
     control=[v for v in out.eligible if v.ref.role=='control'];net=[v for v in out.eligible if v.ref.role=='net']
@@ -104,15 +98,9 @@ def test_receipt_control_group_separate_from_retained_bank_net(client,sale,drive
     (tmp_path/'retained-receipt.json').write_text(out.model_dump_json(indent=2))
 
 
-def test_retained_invoice_card_credit_remains_reconcilable(client,sale,driver,tmp_path):
-    target=account(client,'R0 invoice retained','income')
-    tax=next(x['id'] for x in run(client,'sales-tax-code list')['items'] if not x['taxable'])
-    item=run(client,'item create',dict(name='R0 invoice zero',type='service',sales_enabled=True,description='Zero',income_account_id=target,price='0',sales_tax_code_id=tax))['id']
-    doc=run(client,'invoice post',dict(customer=sale['customer'],date='2026-01-10',lines=[dict(item=sale['item']),dict(item=item)]))
-    run(client,'item update',dict(item=item,income_account_id=sale['income']))
-    run(client,'account update',dict(account=target,type='credit_card'))
-    lines=[dict(item=x['item_id'],line_id=x['line_id']) for x in doc['revision']['lines']];lines[1]['unit_price']='5'
-    doc=run(client,'invoice update',dict(invoice=doc['id'],expected_version=1,lines=lines))
+def test_retained_invoice_card_credit_remains_reconcilable(legacy_world,legacy_driver,tmp_path):
+    client,case=legacy_world;driver=legacy_driver
+    target,doc=case['target'],case['doc']
     out=population(driver,target);assert out.signed_total==-500 and out.eligible[0].statement_amount==500
     assert out.eligible[0].ref.producer=='invoice' and out.eligible[0].ref.role=='net'
     (tmp_path/'retained-invoice.json').write_text(out.model_dump_json(indent=2))
@@ -188,31 +176,28 @@ def test_actual_deposit_prospective_bundle(client,sale,driver):
     assert driver.dump()==before
 
 
-def test_foreign_account_is_typed_unsupported_home_foreign_original_supported(client,sale,driver,monkeypatch):
-    foreign=account(client,'R0 EUR bank',currency='EUR');home=account(client,'R0 USD bank');eq=account(client,'R0 FX equity','equity')
-    # Actual journal owner rejects a foreign account, even with foreign input.
+def test_foreign_account_is_typed_unsupported_home_foreign_original_supported(legacy_world,legacy_driver,monkeypatch):
+    client,case=legacy_world;driver=legacy_driver
+    foreign,doc=case['target'],case['doc']
+    home=account(client,'R0 USD bank');eq=account(client,'R0 FX equity','equity')
+    # Current ordinary posting rules remain intact on the legitimate old store.
     with pytest.raises(BookflowError) as rejected:
         run(client,'journal post',dict(date='2026-01-10',rate='2',lines=pair(foreign,eq,'10 EUR')))
     assert rejected.value.code=='E_VALIDATION'
     run(client,'journal post',dict(date='2026-01-10',rate='2',lines=pair(home,eq,'10 EUR')))
-    # The retained-capture route on this accepted pre-repair source can still
-    # contain home-unit postings on a subsequently foreign-tagged bank account.
-    target=account(client,'R0 foreign retained','income')
-    tax=next(x['id'] for x in run(client,'sales-tax-code list')['items'] if not x['taxable'])
-    item=run(client,'item create',dict(name='R0 FX zero',type='service',sales_enabled=True,description='Zero',income_account_id=target,price='0',sales_tax_code_id=tax))['id']
-    doc=run(client,'invoice post',dict(customer=sale['customer'],date='2026-01-10',lines=[dict(item=sale['item']),dict(item=item)]))
-    run(client,'item update',dict(item=item,income_account_id=sale['income']))
-    run(client,'account update',dict(account=target,type='bank',currency='EUR'))
-    lines=[dict(item=x['item_id'],line_id=x['line_id']) for x in doc['revision']['lines']];lines[1]['unit_price']='5'
-    run(client,'invoice update',dict(invoice=doc['id'],expected_version=1,lines=lines))
-    foreign=target
+    before=driver.dump()
+    with pytest.raises(BookflowError) as rejected:
+        run(client,'invoice update',dict(invoice=doc['id'],expected_version=2,memo='Foreign replacement'))
+    assert rejected.value.code=='E_VALIDATION'
+    assert rejected.value.details==dict(field='lines',reason='captured_posting_account_type')
+    assert driver.dump()==before
     with driver.session() as s:
         result=r.population(s,foreign,'2026-12-31')
         assert result.model_dump()==dict(kind='account_currency_unsupported',account_id=foreign,account_currency='EUR',home_currency='USD',reason='foreign_statement_units_not_activated')
     with driver.session() as s:
-        ctx=Context.new(Interface.python,'R0 foreign correction',reason='Metadata')
-        cmd=registry.get('invoice update')
-        inp=cmd.input_model.model_validate(dict(invoice=doc['id'],expected_version=2,memo='Foreign replacement'))
+        ctx=Context.new(Interface.python,'R0 foreign inverse',reason='Exact historical inverse')
+        cmd=registry.get('invoice void')
+        inp=cmd.input_model.model_validate(dict(invoice=doc['id'],expected_version=2))
         prospective=r.prospective(s,ctx,cmd.plan(inp,ctx,s))
         assert prospective.kind=='account_currency_unsupported' and prospective.account_id==foreign
     actual=population(driver,home);assert actual.signed_total==2000
@@ -502,3 +487,150 @@ def test_private_content_failure_is_typed_driver_failure_is_not_hidden(client,dr
         if failure=='content':assert r.population(s,a,'2026-12-31').model_dump()==dict(kind='corrupt_population',reason='invalid_owned_population')
         else:
             with pytest.raises(OperationalError):r.population(s,a,'2026-12-31')
+
+
+@pytest.fixture(scope='session')
+def reconciliation_legacy_worlds(tmp_path_factory):
+    import io,os,subprocess,sys,tarfile
+    from pathlib import Path
+    parent=tmp_path_factory.mktemp('reconciliation-legacy');source=parent/'source';source.mkdir()
+    pin='b890e1452f29017d45e584401d2e2213b155555d'
+    archive=subprocess.check_output(['git','archive',pin,'src'],cwd=Path(__file__).parents[1])
+    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:tar.extractall(source,filter='data')
+    code=r'''
+import bookflow,json,sys,shutil,hashlib
+from bookflow.core import registry
+from pathlib import Path
+parent=Path(sys.argv[1]);seed=parent/'seed'
+(parent/'import-pin.json').write_text(json.dumps(dict(bookflow_file=bookflow.__file__,interpreter=sys.executable)))
+c=bookflow.connect(data_root=str(seed));c.init();c.demo.reset();del c
+for kind in ('receipt','invoice','foreign'):
+ root=parent/kind;shutil.copytree(seed,root);c=bookflow.connect(data_root=str(root));transcript=[]
+ def run(n,d):
+  context=dict(reason='Retained reconciliation fixture') if registry.get(n).is_write else {}
+  try:
+   result=c.run(n,d,company='Demo Plumbing Co',**context)
+  except Exception as exc:
+   transcript.append(dict(command=n,input=d,context=context,error=str(exc)))
+   (parent/(kind+'-transcript.json')).write_text(json.dumps(transcript));raise
+  transcript.append(dict(command=n,input=d,context=context,output=result))
+  (parent/(kind+'-transcript.json')).write_text(json.dumps(transcript));return result
+ customer=run('customer create',dict(name='R0 legacy customer'))['id']
+ income=run('account create',dict(name='R0 positive income',type='income'))['id']
+ target=run('account create',dict(name='R0 retained income',type='income'))['id']
+ tax=next(x['id'] for x in run('sales-tax-code list',{})['items'] if not x['taxable'])
+ def item(name,account,price):return run('item create',dict(name=name,type='service',sales_enabled=True,description=name,income_account_id=account,price=price,sales_tax_code_id=tax))['id']
+ positive=item('R0 positive',income,'12.34');zero=item('R0 zero',target,'0')
+ noun='sales-receipt' if kind=='receipt' else 'invoice';extra={};bank=None
+ if kind=='receipt':
+  bank=run('account create',dict(name='R0 sale bank',type='bank'))['id']
+  extra=dict(deposit_to=bank,payment_method=run('payment-method create',dict(name='R0 legacy cash',kind='cash'))['id'])
+ doc=run(noun+' post',dict(customer=customer,date='2026-01-10',lines=[dict(item=positive),dict(item=zero)],**extra))
+ run('item update',dict(item=zero,income_account_id=income))
+ transition=dict(account=target,type='credit_card' if kind=='invoice' else 'bank')
+ if kind=='foreign':transition['currency']='EUR'
+ run('account update',transition)
+ lines=[dict(item=x['item_id'],line_id=x['line_id']) for x in doc['revision']['lines']];lines[1]['unit_price']='5'
+ body={noun.replace('-','_'):doc['id'],'expected_version':1,'lines':lines}
+ if kind=='receipt':body['deposit_to']=target
+ doc=run(noun+' update',body)
+ (parent/(kind+'.json')).write_text(json.dumps(dict(target=target,bank=bank,doc=doc)))
+ (parent/(kind+'-transcript.json')).write_text(json.dumps(transcript))
+ (parent/(kind+'-raw.json')).write_text(json.dumps({str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file()}))
+'''
+    result=subprocess.run([sys.executable,'-c',code,str(parent)],cwd=source,
+        env=dict(os.environ,PYTHONPATH=str(source/'src'),BOOKFLOW_DATA_ROOT=str(parent/'seed')),capture_output=True,text=True)
+    (parent/'legacy-run.log').write_text(result.stdout+result.stderr)
+    (parent/'source-pin.json').write_text(json.dumps(dict(commit=pin,interpreter=sys.executable,returncode=result.returncode)))
+    assert result.returncode==0,result.stderr
+    return parent
+
+
+@pytest.fixture
+def legacy_world(request,reconciliation_legacy_worlds,tmp_path,monkeypatch):
+    import bookflow,shutil,hashlib
+    kind={'test_receipt_control_group_separate_from_retained_bank_net':'receipt',
+          'test_retained_invoice_card_credit_remains_reconcilable':'invoice',
+          'test_foreign_account_is_typed_unsupported_home_foreign_original_supported':'foreign'}[request.node.name]
+    parent=reconciliation_legacy_worlds;root=tmp_path/'legacy';shutil.copytree(parent/kind,root)
+    expected=json.loads((parent/(kind+'-raw.json')).read_text())
+    assert {str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file()}==expected
+    monkeypatch.setenv('BOOKFLOW_DATA_ROOT',str(root));monkeypatch.delenv('BOOKFLOW_COMPANY',raising=False)
+    yield bookflow.connect(data_root=str(root)),json.loads((parent/(kind+'.json')).read_text())
+    original=parent/kind
+    assert {str(p.relative_to(original)):hashlib.sha256(p.read_bytes()).hexdigest() for p in original.rglob('*') if p.is_file()}==expected
+
+
+@pytest.fixture
+def legacy_driver(legacy_world,monkeypatch):
+    return driver.__wrapped__(legacy_world[0],monkeypatch)
+
+
+@pytest.mark.parametrize('family',['payment_operation','deposit_operation'])
+def test_actual_operation_owner_inventory_and_retained_participant_denial(client,sale,driver,monkeypatch,family):
+    """Operation participants are real, but not exclusive of immutable edge history.
+
+    The explicit owner-call assertion is a branch witness for M5/M10, not a
+    claim that deleting historical applications/memberships is a valid route.
+    """
+    from bookflow.company import payment_authority
+    from tests.test_work_billing_lifecycle import accepted,bill
+    source=accepted(client,sale);invoice=bill(client,source)
+    pay=run(client,'payment receive',dict(customer=sale['customer'],date='2026-06-02',amount='30',
+        payment_method=method(client),operation_key='r0-operation-receive',applications=dict(mode='inline',
+        items=[dict(invoice=invoice['id'],expected_version=1,amount='24.68')])))
+    application=pay['effect']['applications'][0]
+    run(client,'payment unapply',dict(payment=pay['id'],expected_version=1,operation_key='r0-operation-unapply',
+        applications=[dict(application_id=application['application_id'],invoice_expected_version=2)]))
+    document=additional_document(client,sale,'1')
+    document['sources']=[dict(source_type='payment',source=pay['id'],expected_version=2)]
+    deposited=driver.run('post',dict(operation_key='r0-operation-deposit',document=document))
+    removal=replacement(deposited,document);removal['sources']=[]
+    changed=driver.run('update',dict(operation_key='r0-operation-remove',deposit=deposited.current.id,
+        expected_version=1,document=removal),reason='Remove source but retain all history')
+    assert changed.current.active_source_ids==()
+    expected_graph={deposited.current.id,pay['id'],invoice['id']}
+    with driver.session() as s:
+        raw=s.company.raw
+        # Ordinary removal and unapply preserve exact immutable edges. Neither
+        # operation is an exclusive route to a participant in the current model.
+        assert raw.execute('SELECT paying_transaction_id,paid_transaction_id FROM applications WHERE id=?',
+            (application['application_id'],)).fetchall()==[(pay['id'],invoice['id'])]
+        memberships=raw.execute('SELECT kind,source_transaction_id FROM deposit_memberships WHERE transaction_id=? ORDER BY rowid',
+            (deposited.current.id,)).fetchall()
+        assert memberships==[('claim',pay['id']),('release',pay['id'])]
+        assert raw.execute('SELECT count(*) FROM deposit_current_memberships WHERE source_transaction_id=?',(pay['id'],)).fetchone()==(0,)
+        if family=='payment_operation':
+            rows=raw.execute("SELECT id,request_snapshot FROM payment_operations WHERE operation_key IN ('r0-operation-receive','r0-operation-unapply')").fetchall()
+            expected_operations={identity:{pay['id'],invoice['id']} for identity,_ in rows}
+            assert len(expected_operations)==2
+            assert all(set(json.loads(payload)['resolved_transaction_ids'])=={pay['id'],invoice['id']} for _,payload in rows)
+        else:
+            rows=raw.execute('SELECT id FROM deposit_operations WHERE transaction_id=?',(deposited.current.id,)).fetchall()
+            expected_operations={identity:{deposited.current.id,pay['id']} for (identity,) in rows}
+            assert len(expected_operations)==2
+            for identity,targets in expected_operations.items():
+                assert set(x[0] for x in raw.execute('SELECT transaction_id FROM deposit_operation_targets WHERE operation_id=?',(identity,)))==targets
+        assert raw.execute('PRAGMA foreign_key_check').fetchall()==[]
+    before=driver.dump();observed={}
+    owner=payment_authority.record_transactions
+    def observe(db,kind,identity,*args,**kwargs):
+        result=owner(db,kind,identity,*args,**kwargs)
+        if kind==family and identity in expected_operations:observed[identity]=set(result)
+        return result
+    monkeypatch.setattr(payment_authority,'record_transactions',observe)
+    actual=population(driver,document['deposit_to'])
+    assert actual.signed_total==100 and set(actual.authority_transactions)==expected_graph
+    assert observed==expected_operations, 'Every retained operation must reach its actual owning decoder'
+    assert driver.dump()==before
+    require=payment_authority.require_resource
+    def deny_work(s,capability,role):
+        if capability=='customer-work':raise BookflowError('E_PERMISSION',details={'hidden':'not publishable'})
+        return require(s,capability,role)
+    monkeypatch.setattr(payment_authority,'require_resource',deny_work)
+    observed.clear()
+    with driver.session() as s:
+        with pytest.raises(BookflowError) as error:r.population(s,document['deposit_to'],'2026-12-31')
+    assert error.value.code=='E_PERMISSION' and not error.value.details
+    assert observed==expected_operations
+    assert driver.dump()==before
