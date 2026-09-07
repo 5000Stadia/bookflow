@@ -22,15 +22,25 @@ def test_every_command_is_complete():
 
 
 def test_noun_index_matches_modules():
-    import importlib
     from bookflow.core.registry import NOUN_MODULES, REGISTRY
-    for module, nouns in NOUN_MODULES.items():
-        importlib.import_module(module)
+    registry.load_all()
     by_module = {}
     for cmd in REGISTRY.values():
         by_module.setdefault(cmd.plan.__module__, set()).add(cmd.noun)
+    assert by_module.keys() == NOUN_MODULES.keys()
     for module, nouns in NOUN_MODULES.items():
-        assert by_module.get(module, set()) == set(nouns), (module, by_module.get(module), nouns)
+        expected = set(nouns)
+        if module == 'bookflow.commands.query_cmds':
+            # _register exposes the root query, options for every root, and
+            # children only for the collection owners in query_projection.py.
+            collection_owners = {'vendor', 'unit-of-measure', 'price-level', 'item', 'custom-field'}
+            assert collection_owners <= expected
+            commands = {f'{noun} query' for noun in nouns}
+            commands |= {f'{noun} query options' for noun in nouns}
+            commands |= {f'{noun} query children' for noun in collection_owners}
+            assert {cmd.name for cmd in REGISTRY.values() if cmd.plan.__module__ == module} == commands
+            expected |= {f'{noun} query' for noun in nouns}
+        assert by_module.get(module, set()) == expected, (module, by_module.get(module), expected)
 
 
 def test_multi_noun_modules_load_incrementally_for_one_cli_target():

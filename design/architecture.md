@@ -1370,3 +1370,23 @@ can be reproduced in the unchanged isolated SQLite probe; unavailable private
 functions/collations produce a safe unsupported-local-DDL failure before
 persistent index creation. Required keys remain ordinary TEXT-affinity columns
 with BINARY collation. Old rows and local objects are not rewritten.
+
+The G0 inventory successor pins the permission catalog's source to
+`3f926ee62543d308dad8f60e707b4cabd82fc755`. Unlike the historical B1/B2
+metadata-only increments above, this corrects the conditional-source inventory:
+`payment_authority.authorize_publication_selections` calls `require_resource`
+at payment_authority.py:637 using `_PublicationSelectionCohort.requirements`.
+Reads require ledger.read/member; writes require ledger.post/standard. Both
+also require customer-work at the corresponding threshold when any complete
+historical selection item, recovery item, revision payment, consumed-operation
+transaction, or their directed historical paid target has work allocation.
+Missing or malformed evidence remains fail-closed with the existing owner;
+this static inventory neither runs nor replaces its graph predicates.
+
+The additional ResourceSource and source version change the canonical catalog
+manifest digest. Commands, capability/threshold universes, company/admin actions,
+and seed defaults are unchanged; no new grants or Delete availability result.
+The old 7b2 catalog remains a historical receipt, not an exact current source
+inventory. Persisted catalogs are decoded against their own version and digest;
+this correction performs no database rewrite or automatic catalog replacement.
+Any later replacement still belongs to the existing typed administration contract.
