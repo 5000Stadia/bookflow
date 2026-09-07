@@ -308,6 +308,18 @@ def _catalog_map(catalog):
     return result
 
 
+def _catalog_slot_key(slot):
+    kind, key = slot
+    if kind == 'requirement':
+        capability, threshold = key
+        return kind, (capability, THRESHOLDS.index(threshold))
+    if kind == 'default':
+        role, capability, threshold = key
+        return kind, ((*ROLES, 'hub_admin').index(role), capability,
+                      THRESHOLDS.index(threshold))
+    return kind, key
+
+
 def validate_comparison(value: ComparisonInput) -> ValidatedComparison:
     _check(value, ComparisonInput)
     manifests=tuple(_manifest(m) for m in (value.expected.old,value.expected.new))
@@ -372,7 +384,7 @@ def validate_comparison(value: ComparisonInput) -> ValidatedComparison:
             memberships=tuple(sorted(members,key=lambda x:(x.subject,_scope_key(x.scope)))),visibility=tuple(sorted(vv.values(),key=lambda x:(x.subject,_scope_key(x.scope)))),
             agents=tuple(replace(aa[i],value=replace(aa[i].value,eligible_humans=tuple(sorted(aa[i].value.eligible_humans)))) if aa[i].value else aa[i] for i in sorted(aa))))
     left,right=map(_catalog_map,(phases[0].catalog,phases[1].catalog))
-    slots=tuple(CatalogSlot(k,key,left.get((k,key)),right.get((k,key))) for k,key in sorted(set(left)|set(right)))
+    slots=tuple(CatalogSlot(k,key,left.get((k,key)),right.get((k,key))) for k,key in sorted(set(left)|set(right), key=_catalog_slot_key))
     # No public constructor can create an admitted wrapper. Nested values are frozen.
     result=object.__new__(ValidatedComparison)
     for field,item in zip(('expected','old','new','scopes','subjects','agents','catalog_slots'),

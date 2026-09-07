@@ -398,3 +398,48 @@ def test_feature_metadata_and_provenance_do_not_erase_or_distort_policy_bits():
     assert atom(v).grant_sources == (C,) and atom(v,phase='old').grant_sources == ()
     assert p.signature(v,phase='old',subject='P') == p.signature(v,phase='new',subject='P')
     assert not p.compare(v).agents[0].needs_suspension
+
+
+def test_catalog_requirement_slots_use_declared_threshold_order():
+    from bookflow.hub.permission_catalog import FROZEN_CATALOG
+    v = p.validate_comparison(pair(old_catalog=FROZEN_CATALOG))
+    slots = tuple(s for s in v.catalog_slots if s.kind == 'requirement' and s.key[0] == 'attachment')
+    expected = (('attachment','member'), ('attachment','standard'), ('attachment','admin'))
+    assert tuple(s.key for s in slots) == expected
+    assert tuple((s.old_value,s.new_value) for s in slots) == (
+        (R('attachment','member'), R('attachment','member')),
+        (R('attachment','standard'), R('attachment','standard')),
+        (R('attachment','admin'), R('attachment','admin')),
+    )
+
+
+def test_catalog_default_slots_use_declared_role_order():
+    from bookflow.hub.permission_catalog import FROZEN_CATALOG
+    v = p.validate_comparison(pair(old_catalog=FROZEN_CATALOG))
+    keys = tuple(s.key for s in v.catalog_slots if s.kind == 'default' and s.key[1:] == ('account','member'))
+    assert keys == (
+        ('readonly','account','member'),
+        ('standard','account','member'),
+        ('admin','account','member'),
+        ('owner','account','member'),
+        ('hub_admin','account','member'),
+    )
+
+
+def test_catalog_default_threshold_order_preserves_removed_entry():
+    from bookflow.hub.permission_catalog import FROZEN_CATALOG
+    removed = DefaultEntry('admin', R('attachment','standard'))
+    newer = replace(FROZEN_CATALOG, version='without-one-default',
+                    defaults=tuple(d for d in FROZEN_CATALOG.defaults if d != removed))
+    v = p.validate_comparison(pair(old_catalog=FROZEN_CATALOG,new_catalog=newer))
+    slots = tuple(s for s in v.catalog_slots if s.kind == 'default' and s.key[:2] == ('admin','attachment'))
+    assert tuple(s.key for s in slots) == (
+        ('admin','attachment','member'),
+        ('admin','attachment','standard'),
+        ('admin','attachment','admin'),
+    )
+    assert tuple((s.old_value,s.new_value) for s in slots) == (
+        (DefaultEntry('admin', R('attachment','member')), DefaultEntry('admin', R('attachment','member'))),
+        (removed, None),
+        (DefaultEntry('admin', R('attachment','admin')), DefaultEntry('admin', R('attachment','admin'))),
+    )
