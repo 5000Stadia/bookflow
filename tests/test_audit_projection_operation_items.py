@@ -48,4 +48,13 @@ def test_actual_operation_item_exact_values(receipt_items,kind):
         with pytest.raises(BookflowError) as caught:
             decode_company_snapshot(producer='payment receive',record_type='payment_operation_item',action='create',snapshot=bad)
         assert caught.value.code=='E_VALIDATION' and caught.value.details=={'reason':'audit_format'}
+        # Captured owner references are required by the actual producer. Their
+        # nullable projection types permit authorized masking, not corrupt input.
+        required={'source_components':('party_id','party_name','ar_account_id'),
+                  'effect_applications':('party_id',)}.get(kind,())
+        for field in required:
+            bad=copy.deepcopy(raw);bad['item_snapshot'][field]=None
+            with pytest.raises(BookflowError) as caught:
+                decode_company_snapshot(producer='payment receive',record_type='payment_operation_item',action='create',snapshot=bad)
+            assert caught.value.code=='E_VALIDATION' and caught.value.details=={'reason':'audit_format'}
     assert storage(path)==before

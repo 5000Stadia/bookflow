@@ -2837,6 +2837,7 @@ class RequestApplicationView(View):
 
 
 class SourceComponentResultView(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(('party_id','party_name','ar_account_id'))
     component_key_id: str | None
     component_id: str | None
     party_id: str | None
@@ -2849,6 +2850,7 @@ class SourceComponentResultView(View):
 
 
 class ApplicationResultView(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(('party_id',))
     kind: Literal['apply','unapply']='apply'
     reverses_application_id: str | None = None
     application_id: str | None
