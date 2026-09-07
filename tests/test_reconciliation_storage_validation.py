@@ -237,6 +237,8 @@ def test_receipt_whole_movement_and_no_claims_for_saved_draft_marks(client,sale,
     assert rows['claims']==rows['current_members']==[]
     bad=copy.deepcopy(rows);bad['draft_members'].pop()
     with pytest.raises(InvalidStorage,match='incomplete_movement'):validate(bad,source=g,referenced_rows=refs)
+    bad=copy.deepcopy(rows);bad['draft_members'][0]['action']='invented'
+    with pytest.raises(InvalidStorage,match='closed_discriminator'):validate(bad,source=g,referenced_rows=refs)
     bad=copy.deepcopy(rows);bad['draft_members'][1]['action']='outstanding'
     with pytest.raises(InvalidStorage,match='split_movement'):validate(bad,source=g,referenced_rows=refs)
 

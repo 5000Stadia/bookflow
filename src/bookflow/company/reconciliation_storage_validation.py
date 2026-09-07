@@ -242,6 +242,20 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
                 candidates = r[remote.removeprefix(PREFIX)] if remote.startswith(PREFIX) else referenced_rows.get(remote)
                 require(candidates is not None,'referenced_rows_required')
                 require(any(tuple(v[e.column.name] for e in constraint.elements)==key for v in candidates),'foreign_owner')
+    choices={
+        ('opening_members','classification'):('covered','outstanding'),
+        ('drafts','kind'):('opening','statement','amendment'),
+        ('drafts','state'):('open','consumed','canceled'),
+        ('draft_members','action'):('mark','covered','outstanding'),
+        ('proposals','role'):('charge','earned_credit','force_adjustment'),
+        ('operation_items','kind'):('request','effects','targets','generated'),
+        ('attempt_members','action'):('mark','unmark','covered','outstanding','accept_current'),
+        ('attempt_proposals','action'):('add','remove'),
+    }
+    for (name,field),allowed in choices.items():
+        require(all(v[field] in allowed for v in r[name]),'closed_discriminator')
+    for draft in r['drafts']:
+        require((draft['state']=='open')==(draft['terminal_operation_id'] is None),'draft_terminal_receipt')
     for v in r['effect_versions']:
         require(v['format_version']==1 and v['active']==int(v['signed_debit']!=0),'effect_format')
         require(v['account_type'] in ('bank','credit_card'),'effect_account_type')
