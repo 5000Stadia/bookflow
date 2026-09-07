@@ -178,25 +178,202 @@ def event_requirements(db, event_id, cache=None):
     return requirements(db, ids, cache=cache) if ids or any(kind in PAYMENT_TARGETS for kind, _ in entries) else ()
 
 
-def authorize_event(s, event_id):
-    for resource, role in event_requirements(s.company, event_id):
+_BATCH_SIZE = 200
+_TRANSACTION_FIELDS = ('transaction_id', 'paying_transaction_id', 'paid_transaction_id',
+                       'source_transaction_id', 'target_transaction_id')
+
+
+def _groups(values):
+    values = list(values)
+    for start in range(0, len(values), _BATCH_SIZE):
+        yield values[start:start + _BATCH_SIZE]
+
+
+class _EventCohort:
+    """Projected facts for at most 200 events, including their complete closures.
+
+    Graph facts are shared, traversal results are not: each root has its own seen
+    set. Errors stay on their node until that root reaches it in scalar order.
+    Nothing here retains audit snapshots or survives the owning operation.
+    """
+    def __init__(self, db, events):
+        self.db = db
+        self.entries = self._read(c.audit_entries, 'event_id', events,
+                                  ('event_id', 'record_type', 'record_id'))
+        self.nodes = {}
+        frontier = list(dict.fromkeys((r['record_type'], r['record_id'])
+                    for rows in self.entries.values() for r in rows))
+        while frontier:
+            by_kind = {}
+            for kind, identifier in frontier:
+                by_kind.setdefault(kind, []).append(identifier)
+            pending = []
+            for kind, identifiers in by_kind.items():
+                self._load(kind, identifiers)
+                for identifier in identifiers:
+                    node = self.nodes[(kind, identifier)]
+                    if not isinstance(node, Exception):
+                        pending.extend(node[1])
+            frontier = [key for key in dict.fromkeys(pending) if key not in self.nodes]
+        # Compute full roots in entry order before work membership. Errors are
+        # retained per event, so a later event cannot preempt an earlier error.
+        self.resolved = {}
+        all_ids = set()
+        for event in events:
+            try:
+                ids = set()
+                for row in self.entries.get(event, ()):
+                    ids.update(self._walk((row['record_type'], row['record_id'])))
+                self.resolved[event] = ids
+                all_ids.update(ids)
+            except Exception as exc:
+                self.resolved[event] = exc
+        self.applications = self._read(c.applications, 'paying_transaction_id', all_ids,
+                                      ('paying_transaction_id', 'paid_transaction_id'))
+        work_ids = all_ids | {r['paid_transaction_id'] for rows in self.applications.values() for r in rows}
+        self.work = self._read(c.work_billing_allocations, 'transaction_id', work_ids, ('transaction_id',))
+
+    def _read(self, table, field, identifiers, columns):
+        groups = {}
+        for cohort in _groups(dict.fromkeys(identifiers)):
+            query = sa.select(*(table.c[name] for name in columns)).where(table.c[field].in_(cohort))
+            with self.db.conn.execute(query) as result:
+                for rows in result.partitions(_BATCH_SIZE):
+                    for values in rows:
+                        row = dict(zip(columns, values))
+                        groups.setdefault(row[field], []).append(row)
+        return groups
+
+    @staticmethod
+    def _missing():
+        from bookflow.core.errors import BookflowError
+        return BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'})
+
+    def _load(self, kind, identifiers):
+        from bookflow.company.records import _TARGETS
+        if kind == 'attachment':
+            rows = self._read(c.attachment_links, 'attachment_id', identifiers, ('attachment_id', 'id'))
+            for identifier in identifiers:
+                self.nodes[(kind, identifier)] = (set(), [('attachment_link', r['id']) for r in rows.get(identifier, ())])
+            return
+        target = PAYMENT_TARGETS.get(kind)
+        if kind == 'transaction':
+            target = ('transactions', 'id')
+        elif target is None and kind in ('transaction_revision', 'document_line', 'document_line_identity',
+                'posting_batch', 'posting_line', 'posting_line_source', 'note', 'attachment_link'):
+            target = _TARGETS[kind]
+        if target is None:
+            for identifier in identifiers:
+                self.nodes[(kind, identifier)] = (set(), [])
+            return
+        table = c.metadata.tables[target[0]]
+        columns = [target[1]]
+        columns.extend(field for field in _TRANSACTION_FIELDS if field in table.c and field not in columns)
+        extra = {'payment_operation': ('request_snapshot',), 'payment_operation_item': ('operation_id',),
+                 'note': ('record_type', 'record_id'), 'attachment_link': ('record_type', 'record_id')}.get(kind, ())
+        if kind.startswith('payment_selection'):
+            extra = ('id',) if kind == 'payment_selection' else ('selection_id',)
+        columns = list(dict.fromkeys((*columns, *extra)))
+        found = self._read(table, target[1], identifiers, columns)
+        items, revisions = {}, {}
+        if kind.startswith('payment_selection'):
+            owners = [r['id'] if kind == 'payment_selection' else r['selection_id']
+                      for rows in found.values() if len(rows) == 1 for r in rows]
+            items = self._read(c.payment_selection_items, 'selection_id', owners, ('selection_id', 'invoice_id'))
+            revisions = self._read(c.payment_selection_revisions, 'selection_id', owners, ('selection_id', 'context_snapshot'))
+        # Keep the existing loaded-evidence seam over projected, bounded facts.
+        cache = {(table.name, target[1]): found}
+        for identifier in identifiers:
+            rows = _evidence_rows(self.db, table, target[1], identifier, cache)
+            if kind == 'transaction':
+                self.nodes[(kind, identifier)] = ({identifier}, []) if rows else self._missing()
+                continue
+            if len(rows) != 1:
+                self.nodes[(kind, identifier)] = self._missing()
+                continue
+            row = rows[0]
+            try:
+                ids = {row[field] for field in _TRANSACTION_FIELDS if row.get(field)}
+                edges = []
+                if kind == 'payment_operation':
+                    try:
+                        resolved = json.loads(row['request_snapshot'])['resolved_transaction_ids']
+                        if not isinstance(resolved, list) or any(not isinstance(value, str) for value in resolved):
+                            raise ValueError()
+                        ids.update(resolved)
+                    except (ValueError, KeyError, TypeError):
+                        raise self._missing() from None
+                if kind == 'payment_operation_item':
+                    edges.append(('payment_operation', row['operation_id']))
+                if kind.startswith('payment_selection'):
+                    owner = row['id'] if kind == 'payment_selection' else row['selection_id']
+                    ids.update(r['invoice_id'] for r in items.get(owner, ()) if r['invoice_id'])
+                    try:
+                        for revision in revisions.get(owner, ()):
+                            payment = json.loads(revision['context_snapshot'])['payment_id']
+                            if payment:
+                                ids.add(payment)
+                    except (ValueError, KeyError, TypeError):
+                        raise self._missing() from None
+                if kind in ('note', 'attachment_link') and row.get('record_type') and row.get('record_id'):
+                    edges.append((row['record_type'], row['record_id']))
+                self.nodes[(kind, identifier)] = (ids, edges)
+            except Exception as exc:
+                self.nodes[(kind, identifier)] = exc
+
+    def _walk(self, root):
+        seen, ids, pending = set(), set(), [root]
+        while pending:
+            key = pending.pop()
+            if key in seen:
+                continue
+            seen.add(key)
+            node = self.nodes[key]
+            if isinstance(node, Exception):
+                raise node
+            ids.update(node[0])
+            pending.extend(reversed(node[1]))
+        return ids
+
+    def requirements(self, event):
+        ids = self.resolved[event]
+        if isinstance(ids, Exception):
+            raise ids
+        if not ids and not any(r['record_type'] in PAYMENT_TARGETS for r in self.entries.get(event, ())):
+            return ()
+        expanded = ids | {r['paid_transaction_id'] for identifier in ids for r in self.applications.get(identifier, ())}
+        result = [('ledger.read', 'member')]
+        if any(identifier in self.work for identifier in expanded):
+            result.append(('customer-work', 'member'))
+        return tuple(result)
+
+
+def authorize_event(s, event_id, resolved=None):
+    facts = resolved[event_id] if resolved is not None and event_id in resolved else event_requirements(s.company, event_id)
+    for resource, role in facts:
         require_resource(s, resource, role)
 
 
-def denied_events(s):
+def denied_events(s, resolved=None):
     from bookflow.core.errors import BookflowError
     events = s.company.conn.execute(sa.select(c.audit_entries.c.event_id).where(
         c.audit_entries.c.record_type.in_((*PAYMENT_TARGETS, 'transaction', 'transaction_revision', 'document_line',
             'document_line_identity', 'posting_batch', 'posting_line', 'posting_line_source', 'note', 'attachment', 'attachment_link'))).distinct()).scalars()
-    denied, cache = [], {}
-    for event in events:
-        try:
-            for resource, role in event_requirements(s.company, event, cache):
-                require_resource(s, resource, role)
-        except BookflowError as exc:
-            if exc.code != 'E_PERMISSION':
-                raise
-            denied.append(event)
+    denied = []
+    for cohort in events.partitions(_BATCH_SIZE):
+        reader = _EventCohort(s.company, cohort)
+        for event in cohort:
+            try:
+                facts = reader.requirements(event)
+                if resolved is not None:
+                    resolved[event] = facts
+                for resource, role in facts:
+                    require_resource(s, resource, role)
+            except BookflowError as exc:
+                if exc.code != 'E_PERMISSION':
+                    raise
+                denied.append(event)
+        del reader
     return denied
 
 

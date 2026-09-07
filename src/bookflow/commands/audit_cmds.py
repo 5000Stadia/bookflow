@@ -177,10 +177,10 @@ def _apply_filters(q, events, s: Session, hub: bool, inp: AuditFilters, entries)
     return q
 
 
-def _event_out(s: Session, hub: bool, e: dict[str, Any], names: dict[str, str], with_entries: bool) -> AuditEventOut:
+def _event_out(s: Session, hub: bool, e: dict[str, Any], names: dict[str, str], with_entries: bool, authority=None) -> AuditEventOut:
     if not hub:
         from bookflow.company.payment_authority import authorize_event
-        authorize_event(s, e['id'])
+        authorize_event(s, e['id'], authority)
     db, events, entries, visible, _, texts = _scope(s, hub)
     entry_q = sa.select(entries).where(entries.c.event_id == e["id"])
     if visible is not None:
@@ -217,9 +217,10 @@ def _list(s: Session, hub: bool, inp: AuditListInput) -> AuditListOutput:
     if hub:
         q = q.where(hub_audit.visible_event_ids_filter(s))
     q = _apply_filters(q, events, s, hub, inp, entries)
+    authority = {}
     if not hub:
         from bookflow.company.payment_authority import denied_events
-        denied = denied_events(s)
+        denied = denied_events(s, authority)
         if denied:
             q = q.where(events.c.id.not_in(denied))
     if inp.before is not None:
@@ -229,16 +230,17 @@ def _list(s: Session, hub: bool, inp: AuditListInput) -> AuditListOutput:
     rows = rows[:inp.limit]
     ids = {r["actor_id"] for r in rows if r["actor_id"]} | {r["on_behalf_of"] for r in rows if r.get("on_behalf_of")}
     names = resolver(ids)
-    items = [_event_out(s, hub, r, names, False) for r in rows]
+    items = [_event_out(s, hub, r, names, False, authority) for r in rows]
     return AuditListOutput(items=items, count=len(items), next_before=rows[-1]["seq"] if more and rows else None)
 
 
 def _tail(s: Session, hub: bool, inp: AuditTailInput) -> AuditTailOutput:
     db, events, entries, visible, resolver, _ = _scope(s, hub)
     denied = []
+    authority = {}
     if not hub:
         from bookflow.company.payment_authority import denied_events
-        denied = denied_events(s)
+        denied = denied_events(s, authority)
     after = inp.after
     if after is None:
         newest = sa.select(sa.func.max(events.c.seq))
@@ -271,7 +273,7 @@ def _tail(s: Session, hub: bool, inp: AuditTailInput) -> AuditTailOutput:
     rows = [dict(r) for r in db.conn.execute(q).mappings().all()]
     ids = {r["actor_id"] for r in rows if r["actor_id"]} | {r["on_behalf_of"] for r in rows if r.get("on_behalf_of")}
     names = resolver(ids)
-    items = [_event_out(s, hub, r, names, False) for r in rows]
+    items = [_event_out(s, hub, r, names, False, authority) for r in rows]
     next_after = scanned[-1] if scanned else rows[-1]["seq"] if rows else None
     return AuditTailOutput(items=items, count=len(items), next_after=next_after, high_water=after,
                            scanned_count=len(scanned), scan_more=scan_more)
