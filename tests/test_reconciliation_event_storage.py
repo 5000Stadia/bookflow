@@ -123,6 +123,7 @@ def test_predecessor_causality_and_complete_event_coverage_mutations(history):
     for field in ('original_request_snapshot','original_effect_snapshot'):
         envelope=json.loads(op[field]);envelope['collections']['targets']=dict(count=len(targets),hash=digest([json.loads(v['facts_snapshot']) for v in targets]));op[field]=canonical(envelope)
     mutations.append((bad,'event_source_target'))
+    bad=copy.deepcopy(rows);event=bad['events'].pop()['id'];bad['event_effects']=[v for v in bad['event_effects'] if v['event_id']!=event];mutations.append((bad,'operation_event_coverage'))
     for bad,rule in mutations:
         with pytest.raises(InvalidStorage,match=rule):validate(bad,source=g,referenced_rows=refs)
     validate(rows,source=g,referenced_rows=refs)

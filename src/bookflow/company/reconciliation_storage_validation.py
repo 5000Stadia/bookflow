@@ -465,6 +465,7 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
             if 'current_revision_id' in h: require(h['current_revision_id']==latest['id'],'projection_head')
             else: require(h['parameters_snapshot']==latest['parameters_snapshot'],'preset_snapshot')
     _receipts(r)
+    require(Counter(e['operation_id'] for e in r['events'])==Counter({o['id']:1 for o in r['operations']}),'operation_event_coverage')
     for event in r['events']:
         audit=event['audit_event_id']
         expected={v for (owner,_),v in transitions.items() if owner==audit}
