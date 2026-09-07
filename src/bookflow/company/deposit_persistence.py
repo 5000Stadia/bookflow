@@ -180,11 +180,13 @@ def execute(s,ctx,plan):
     if not s.company.raw.in_transaction or s.dry_run:
         raise RuntimeError('Private deposit execution requires an owned writer transaction')
     inp=lifecycle.INPUTS[plan.verb].model_validate_json(plan.input_json)
-    recovered=operations.recover(s,ctx,inp,plan.verb)
+    recovered=lifecycle.recover(s,ctx,inp,plan.verb,plan.binding)
     if recovered is not None:return recovered
     if plan.verb!='post' and getattr(inp,'dependency_guard',None) is None:
         raise BookflowError('E_PREVIEW_STALE',details={'reason':'complete deposit guard required'})
-    fresh=lifecycle.prepare(s,ctx,inp,plan.verb)
+    # Retain the authenticated preview producer, including bearer liveness.
+    # Re-deriving OS identity here would change a hosted agent's admission.
+    fresh=lifecycle.prepare(s,ctx,inp,plan.verb,binding=plan.binding,expected_guard=plan.dependency_guard)
     if fresh.facts_fingerprint!=plan.facts_fingerprint:raise BookflowError('E_PREVIEW_STALE')
     bundle=build(s,ctx,fresh)
     from bookflow.company.deposit_persistence_validation import validate

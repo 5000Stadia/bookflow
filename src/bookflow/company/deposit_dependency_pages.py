@@ -8,7 +8,7 @@ DOMAIN = b'deposit-dependency-page-v1\0'
 
 
 def _key(item):
-    return [item.event_id, item.kind, item.record_id, list(item.fields)]
+    return [item.storage, item.event_id, item.kind, item.record_id, list(item.fields)]
 
 
 def changes_page(s, guard, original_request, page, binding):

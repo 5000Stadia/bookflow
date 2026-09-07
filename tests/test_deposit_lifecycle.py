@@ -118,6 +118,7 @@ def test_n1_actual_mixed_sources_claim_fences_and_n4_void(client,sale,driver):
     document['sources']=[dict(source_type='payment',source=payment['id'],expected_version=payment['version']),dict(source_type='sales_receipt',source=receipt['id'],expected_version=receipt['version'])]
     request=dict(operation_key='g2-n1-deposit',document=document)
     result=driver.run('post',request)
+    uf_account=uf(client)
     assert (result.effect.financial.posting_total,result.effect.financial.subtotal,result.effect.financial.bank_total)==(18000,17700,17200)
     assert len(result.effect.memberships)==2 and len(result.effect.headers)==3
     settlement_guard=client.run('payment show',dict(payment=payment['id']),company=COMPANY)['settlement_guard']
@@ -136,7 +137,7 @@ def test_n1_actual_mixed_sources_claim_fences_and_n4_void(client,sale,driver):
     with driver.session() as s:
         assert s.company.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
         gl=dict(s.company.raw.execute('SELECT account_id,sum(debit_minor_units-credit_minor_units) FROM posting_lines WHERE transaction_id=? GROUP BY account_id',(result.current.id,)).fetchall())
-        assert gl=={document['deposit_to']:17200,document['cash_back']['account']:500,fee:300,sale['income']:-2000,uf(client):-16000}
+        assert gl=={document['deposit_to']:17200,document['cash_back']['account']:500,fee:300,sale['income']:-2000,uf_account:-16000}
         assert s.company.raw.execute('SELECT amount_minor_units FROM applications WHERE paying_transaction_id=?',(payment['id'],)).fetchall()==[(10000,)]
     canceled=driver.run('void',dict(deposit=result.current.id,expected_version=1,operation_key='g2-n1-void'),reason='Retain original receipts')
     assert len(canceled.effect.memberships)==2
@@ -179,7 +180,7 @@ def test_claim_competitor_and_stale_guard_preserve_full_rows(client,sale,driver)
     before=driver.dump()
     with pytest.raises(BookflowError) as error:
         with driver.session() as s:persistence.execute(s,ctx,waiting)
-    assert error.value.code=='E_DEPOSIT_SOURCE_CLAIMED' and driver.dump()==before
+    assert error.value.code=='E_PREVIEW_STALE' and error.value.details['history']=='known_stale' and driver.dump()==before
     with pytest.raises(BookflowError) as error:
         client.run('payment void',dict(payment=payment['id'],expected_version=2,operation_key='g2-block-void'),reason='Claimed receipt',company=COMPANY)
     assert error.value.code=='E_DEPOSIT_DEPENDENCY'
@@ -191,7 +192,7 @@ def test_claim_competitor_and_stale_guard_preserve_full_rows(client,sale,driver)
     changed['document']['memo']='Different complete intent'
     before=driver.dump()
     with pytest.raises(BookflowError) as error:driver.run('update',changed,reason='Guarded change')
-    assert error.value.code=='E_PREVIEW_STALE' and driver.dump()==before
+    assert error.value.code=='E_VALIDATION' and error.value.details=={'field':'dependency_guard','reason':'invalid_guard'} and driver.dump()==before
 
 
 @pytest.mark.parametrize('failure_table',['audit_events','transactions','deposit_profiles','deposit_memberships','bank_effect_versions','deposit_operations','deposit_operation_items'])
@@ -279,6 +280,15 @@ def test_simultaneous_writers_have_one_complete_claim(client,sale,driver):
         except BookflowError as error:return error.code
     with ThreadPoolExecutor(max_workers=2) as pool:
         values=list(pool.map(writer,('g2-simultaneous-a','g2-simultaneous-b')))
+    # Real RootLock admission may reject the overlapping caller before SQL.
+    # After the winning writer releases it, retry that SAME losing request once;
+    # retain the business claim oracle and prove its retry performs no writes.
+    for index,value in enumerate(values):
+        if value=='E_DB_BUSY':
+            before=driver.dump()
+            try:values[index]=driver.run('post',dict(operation_key=('g2-simultaneous-a','g2-simultaneous-b')[index],document=document))
+            except BookflowError as error:values[index]=error.code
+            assert driver.dump()==before
     winners=[v for v in values if isinstance(v,LifecycleOutput)]
     assert len(winners)==1 and [v for v in values if isinstance(v,str)]==['E_DEPOSIT_SOURCE_CLAIMED']
     with driver.session() as s:

@@ -1,9 +1,10 @@
 """Private complete deposit history contracts; no public command registration."""
+import hashlib
+import json
 from typing import Literal, Annotated
 from pydantic import ConfigDict, Field, model_validator
 from bookflow.company.sales_models import StrictModel
-from bookflow.company.deposit_models import PostInput
-from bookflow.company.deposit_lifecycle_models import UpdateInput, VoidInput
+from bookflow.company.deposit_lifecycle_models import PostInput, UpdateInput, VoidInput
 
 
 class Frozen(StrictModel):
@@ -41,19 +42,103 @@ class InspectionRoot(Frozen):
     id: str = Field(min_length=1)
 
 
+RecordKind = Literal[
+    'transaction',
+    'deposit_number',
+    'deposit_number_operation',
+    'company_info',
+    'account',
+    'customer',
+    'vendor',
+    'employee',
+    'other_name',
+    'class',
+    'payment_method',
+    'custom_field',
+    'work_document',
+    'transaction_revision',
+    'document_line_identity',
+    'document_line',
+    'posting_batch',
+    'posting_line',
+    'posting_line_source',
+    'payment_profile',
+    'payment_component_key',
+    'payment_component',
+    'sales_profile',
+    'sales_line_profile',
+    'sales_tax_component',
+    'sales_tax_line_key',
+    'sales_tax_attribution',
+    'sales_tax_attribution_line',
+    'settlement_line_key',
+    'application',
+    'application_allocation',
+    'deposit_profile',
+    'deposit_row_key',
+    'deposit_component_key',
+    'deposit_component',
+    'deposit_cash_cell',
+    'deposit_membership',
+    'bank_effect_key',
+    'bank_effect_version',
+    'work_billing_conversion',
+    'work_billing_allocation',
+    'work_revision',
+    'work_line',
+    'work_revision_line',
+    'work_link',
+    'work_tax_line_key',
+    'work_tax_attribution',
+    'work_tax_attribution_line',
+]
+
+
 class RecordAnchor(Frozen):
-    kind: str
+    kind: RecordKind
     id: str
     version: int | None
     event_id: str | None
+    entry_id: str
     semantic_json: str
+    semantic_digest: str
     unknown: bool = False
+
+    @model_validator(mode='after')
+    def canonical_fact(self):
+        value=json.loads(self.semantic_json)
+        if not isinstance(value,dict) or json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',', ':'),allow_nan=False)!=self.semantic_json:
+            raise ValueError('owned fact must be a canonical object')
+        if hashlib.sha256(self.semantic_json.encode()).hexdigest()!=self.semantic_digest:
+            raise ValueError('owned semantic digest mismatch')
+        return self
 
 
 class RelationAnchor(Frozen):
     kind: str
     owner_id: str
     members: tuple[str, ...]
+    count: int = Field(ge=0, strict=True)
+    state: Literal['empty','populated']
+    digest: str
+
+    @model_validator(mode='after')
+    def complete_members(self):
+        if tuple(sorted(set(self.members)))!=self.members or self.count!=len(self.members):
+            raise ValueError('relation must contain each ordered member exactly once')
+        if self.state!=('populated' if self.members else 'empty'):
+            raise ValueError('relation presence disagrees with members')
+        expected=hashlib.sha256(json.dumps(self.members,ensure_ascii=False,separators=(',', ':')).encode()).hexdigest()
+        if self.digest!=expected:raise ValueError('relation digest mismatch')
+        return self
+
+
+class IssuerAnchor(Frozen):
+    company_id: str = Field(min_length=1)
+    hub_event_id: str = Field(min_length=1)
+    entry_id: str = Field(min_length=1)
+    after_version: int = Field(gt=0, strict=True)
+    display_name: str = Field(min_length=1, strict=True)
 
 
 class ReadSet(Frozen):
@@ -63,6 +148,7 @@ class ReadSet(Frozen):
     endpoint: str | None
     digest: str
     unknown: tuple[str, ...]
+    issuer: IssuerAnchor | None
 
 
 class BaselineRecipe(Frozen):
@@ -76,10 +162,12 @@ class BaselineRecipe(Frozen):
     actor_id: str
     actor_kind: str
     principal_id: str | None
+    issuer_entry: str | None
 
 
 class DependencyChange(Frozen):
-    kind: str
+    storage: Literal['company', 'hub'] = 'company'
+    kind: RecordKind | Literal['issuer']
     record_id: str
     event_id: str
     actor_id: str | None

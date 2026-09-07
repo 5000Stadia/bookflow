@@ -7,6 +7,7 @@ import base64
 import hashlib
 import hmac
 import json
+import zlib
 
 import sqlalchemy as sa
 from pydantic import TypeAdapter, ValidationError
@@ -44,6 +45,36 @@ def execution_binding(s, binding):
     if not eligible:
         raise BookflowError('E_UNAUTHENTICATED')
     return binding.user_id, binding.actor_kind, binding.on_behalf_of, epoch
+
+
+def _authorize_binding_graph(s, binding, transaction_ids, event_ids=(), *, write=False):
+    """Run existing resource rules for actor AND its validated fixed human.
+
+    These are current authenticated hub rows used only by access checks. No
+    historical planner, fabricated database, or granular visibility supplier is
+    involved. Do not change the shared transport's missing-principal policy.
+    """
+    from dataclasses import replace
+    from bookflow.core.session import Actor
+    from bookflow.hub import schema as h, access
+    from bookflow.company.deposit_dependencies import authorize
+    from bookflow.company.payment_authority import authorize_events
+    actor, _, principal, _ = execution_binding(s, binding)
+    for identity in (actor,) if principal is None else (actor, principal):
+        row = s.hub.conn.execute(sa.select(h.users).where(h.users.c.id == identity,
+            h.users.c.active.is_(True))).mappings().one_or_none()
+        if row is None:
+            raise BookflowError('E_UNAUTHENTICATED')
+        view = replace(s, actor=Actor(**{key: row[key] for key in ('id', 'kind', 'username', 'display_name', 'hub_admin', 'timezone')}), memberships=[])
+        access.load_memberships(view)
+        try:
+            authorize(view, sources=transaction_ids, write=write)
+            if event_ids:
+                authorize_events(view, event_ids)
+        except BookflowError as error:
+            if error.code in ('E_PERMISSION', 'E_COMPANY_NOT_FOUND'):
+                raise BookflowError('E_PERMISSION') from None
+            raise
 
 
 def canonical(value):
@@ -112,6 +143,9 @@ def decode_recipe(s, token, original_request, binding):
         raise invalid_guard()
     if isinstance(original, InspectionRoot) and recipe.root != original:
         raise invalid_guard()
+    needs_issuer = not isinstance(original, InspectionRoot) and original.command == 'deposit post'
+    if needs_issuer != (recipe.issuer_entry is not None):
+        raise invalid_guard()
     return recipe
 
 # Audit aliases are storage history, not generated English singulars. Keep the
@@ -131,6 +165,8 @@ class Owner:
 
 OWNERS = {
     'transaction': Owner('transactions', 'id', ('transaction',)),
+    'deposit_number': Owner('transactions', 'id', ('transaction',), ('id','type','number')),
+    'deposit_number_operation': Owner('deposit_operations','id',('deposit_operation',)),
     'company_info': Owner('company_info', 'id', ('company_info',), ('id', 'home_currency', 'closing_date')),
     'account': Owner('accounts', 'id', ('account',), ('id', 'name', 'full_name', 'number', 'type', 'system_role', 'active', 'currency')),
     'customer': Owner('customers', 'id', ('customer',), ('id', 'name', 'full_name', 'active')),
@@ -192,12 +228,26 @@ class MissingHistory(ValueError):
     """Only malformed, missing or contradictory owned history is classified here."""
 
 
+def _audit_image(blob):
+    if blob is None:
+        return None
+    if type(blob) is not bytes or blob[:1] not in (audit.RAW, audit.ZIP):
+        raise MissingHistory('invalid audit encoding')
+    try:
+        value = audit.decode_snapshot(blob)
+    except (json.JSONDecodeError, UnicodeDecodeError, zlib.error) as exc:
+        raise MissingHistory('malformed audit payload') from exc
+    if not isinstance(value, dict):
+        raise MissingHistory('audit image is not an object')
+    return value
+
+
 def _decoded(value):
     return {key: json.loads(item) if key.endswith('_snapshot') and isinstance(item, str) else item
             for key, item in value.items()}
 
 
-def _project(kind, value):
+def _project(kind, value, fields=None):
     owner = OWNERS[kind]
     if not isinstance(value, dict) or type(value.get(owner.key)) is not str:
         raise MissingHistory('missing owned identity')
@@ -213,8 +263,6 @@ def _project(kind, value):
         'sales_profile': ('profile_snapshot', SalesProfile),
         'sales_line_profile': ('item_snapshot', SalesLineProfile),
         'sales_tax_component': ('component_snapshot', SalesTaxComponent),
-        'work_revision': ('facts_snapshot', WorkFacts),
-        'work_revision_line': ('facts_snapshot', WorkLineFacts),
     }
     try:
         value = _decoded(value)
@@ -227,9 +275,47 @@ def _project(kind, value):
             value = {**value, 'payment_component_id': None}
         if kind in schemas:
             field, model = schemas[kind]
-            model.model_validate_json(canonical(value[field]))
+            decoded = model.model_validate_json(canonical(value[field]))
+            if kind == 'deposit_profile' and decoded.intent.deposit_id != value['transaction_id']:
+                raise MissingHistory('foreign deposit financial snapshot')
+            if kind == 'deposit_membership' and (decoded.transaction_id != value['source_transaction_id'] or decoded.revision_id != value['source_revision_id']):
+                raise MissingHistory('foreign source membership snapshot')
+        if kind in ('work_revision', 'work_revision_line'):
+            from bookflow.company.work_tax_facts import read_facts, read_line
+            (read_facts if kind == 'work_revision' else read_line)(value['facts_snapshot'])
+        if kind in ('sales_tax_attribution', 'work_tax_attribution'):
+            from bookflow.company.tax_attribution import TaxAttribution
+            TaxAttribution.model_validate_json(canonical(value['facts_snapshot']))
+        if kind == 'work_billing_allocation':
+            from bookflow.company.work_tax_facts import read_facts, read_line
+            read_facts(value['facts_snapshot']['document'])
+            read_line(value['facts_snapshot']['line'])
+            from bookflow.company import billing_allocations
+            if value['allocation_version'] not in (1, 2, 3):
+                raise MissingHistory('unknown allocation proof version')
+            try:
+                raw = {**value, 'facts_snapshot': canonical(value['facts_snapshot'])}
+                proof = billing_allocations.read_proof(raw)
+                if proof is not None and proof.source_basis_hash != billing_allocations.basis(
+                        billing_allocations.captured_line(raw), (value['root_document_id'],value['root_line_id']),
+                        billing_allocations.captured_policy(raw)):
+                    raise MissingHistory('contradictory work allocation basis')
+            except (ValueError, BookflowError) as exc:
+                raise MissingHistory('malformed owned allocation proof') from exc
+        if kind == 'deposit_number_operation':
+            from bookflow.company.deposit_lifecycle_models import LifecycleOutput
+            saved = LifecycleOutput.model_validate_json(canonical(value['effect_snapshot']))
+            if saved.operation_id != value['id'] or saved.effect.audit_event_id != value['audit_event_id'] or saved.current.id != value['transaction_id']:
+                raise MissingHistory('foreign automatic-number receipt')
+            return {'id':value['id'],'transaction_id':value['transaction_id'],'number':saved.effect.after.number}
+        if kind == 'transaction_revision':
+            from bookflow.company.journal_custom_fields import SnapshotField
+            for key, captured in value['custom_fields_snapshot'].items():
+                decoded = SnapshotField.model_validate_json(canonical(captured))
+                if decoded.definition_id != key:
+                    raise MissingHistory('foreign captured custom value')
         table = c.metadata.tables[owner.table]
-        required = owner.fields or tuple(column.name for column in table.c if column.name not in _PROVENANCE)
+        required = fields or owner.fields or tuple(column.name for column in table.c if column.name not in _PROVENANCE)
         result = {}
         for field in required:
             if field not in value:
@@ -237,11 +323,15 @@ def _project(kind, value):
                 # null: migration-specific historical decoding needs evidence.
                 raise MissingHistory('missing owned field: ' + field)
             item = value[field]
+            if field in table.c and item is None and not table.c[field].nullable:
+                raise MissingHistory('null required owned field: ' + field)
             if field in table.c and item is not None and not field.endswith('_snapshot'):
                 expected = table.c[field].type.python_type
                 if expected in (str, int, bool) and type(item) is not expected:
                     raise MissingHistory('invalid owned scalar: ' + field)
             result[field] = item
+        if kind == 'bank_effect_version':
+            result['version']=value['version']
         if kind == 'custom_field':
             for field in ('scopes', 'choices', '_scopes_identities', '_choices_identities'):
                 if type(value.get(field)) is not list:
@@ -254,8 +344,15 @@ def _project(kind, value):
 
 class History:
     """One immutable reader snapshot; kind loads are complete, never page slices."""
-    def __init__(self, s, endpoint=None, *, historical=False):
+    def __init__(self, s, endpoint=None, *, historical=False, company_issuer=False):
         self.s, self.historical = s, historical
+        self.issuer_events = []
+        self.custom_supplied = frozenset()
+        self.custom_values = {}
+        self.custom_creating = False
+        self.company_fields = None
+        if company_issuer:
+            self.company_fields = tuple(column.name for column in c.company_info.c if column.name in ('id', 'legal_name', 'home_currency', 'closing_date') or column.name.startswith(('address_', 'legal_address_', 'ship_address_')))
         self.cutoff = None
         self.raw = {}; self.entries = {}; self.events = {}
         self.anchors = {}; self.values = {}; self.unknown = set()
@@ -265,6 +362,24 @@ class History:
                 raise MissingHistory('missing baseline event')
         elif historical:
             self.cutoff = 0
+
+    def project(self, kind, value):
+        result = _project(kind, value, self.company_fields if kind == 'company_info' else None)
+        if kind == 'custom_field' and (not self.custom_creating or value['id'] in self.custom_supplied):
+            # Explicit supplied values (including explicit null) never read the
+            # definition default; corrections never populate omitted defaults.
+            result.pop('default_canonical_text', None)
+        if kind == 'custom_field':
+            from bookflow.company.list_service import normalize_lookup_key
+            selected = self.custom_values.get(value['id']) if value['id'] in self.custom_supplied else (value['default_canonical_text'] if self.custom_creating else None)
+            scopes = [row for row in result['scopes'] if row['record_type']=='deposit' and row['active']]
+            choices = [row for row in result['choices'] if row['active'] and selected is not None and normalize_lookup_key(row['value'])==normalize_lookup_key(selected)] if value['kind']=='choice' else []
+            # Only the admitted scope and actually resolved choice affect these
+            # financial facts. Other scopes/choices are not a company watermark.
+            result['scopes']=[{key:row[key] for key in ('id','record_type','active')} for row in scopes]
+            result['choices']=[{key:row[key] for key in ('id','value','active')} for row in choices]
+            result.pop('_scopes_identities'); result.pop('_choices_identities')
+        return result
 
     def load(self, kind):
         if kind in self.raw:
@@ -326,21 +441,21 @@ class History:
             if entry['event_id'] in seen:
                 raise MissingHistory('ambiguous same-event owner')
             seen.add(entry['event_id'])
-            try:
-                after = audit.decode_snapshot(entry['after'])
-                before = audit.decode_snapshot(entry['before'])
-                projected = _project(kind, after)
-                if kind == 'transaction':
-                    projected['commercial'] = self.commercial(after, entry['seq'])
-            except (ValueError, TypeError) as exc:
-                raise MissingHistory('malformed owned audit image') from exc
+            after = _audit_image(entry['after'])
+            before = _audit_image(entry['before'])
+            projected = self.project(kind, after)
+            if kind == 'transaction':
+                projected['commercial'] = self.commercial(after, entry['seq'])
+            if 'version' in after and kind not in {item[2] for item in _IMMUTABLE}:
+                if type(after['version']) is not int or after['version'] != entry['version_after']:
+                    raise MissingHistory('header version disagrees with event')
             if after.get(OWNERS[kind].key) != identity:
                 raise MissingHistory('foreign owned identity')
             if version is not None and entry['version_before'] != version:
                 raise MissingHistory('discontinuous owner version')
             if previous is None and entry['version_before'] is not None and entry['action'] != 'baseline':
                 raise MissingHistory('missing original owner history')
-            before_projected = _project(kind, before) if before is not None else None
+            before_projected = self.project(kind, before) if before is not None else None
             if before_projected is not None and kind == 'transaction':
                 before_projected['commercial'] = self.commercial(before, entry['seq'])
             if before_projected is not None and previous is not None and before_projected != previous:
@@ -379,13 +494,13 @@ class History:
                 if kind == 'custom_field' and raw is not None:
                     from bookflow.commands.custom_field_cmds import _snapshot
                     raw = _snapshot(self.s.company.conn, identity)
-                actual = _project(kind, raw) if raw is not None else None
+                actual = self.project(kind, raw) if raw is not None else None
                 if actual is not None and kind == 'transaction':
                     actual['commercial'] = self.commercial(raw, entry['seq'])
                 if actual != value:
                     raise MissingHistory('current owner differs from immutable history')
             self.anchors[key] = RecordAnchor(kind=kind, id=identity, version=entry['version_after'],
-                event_id=entry['event_id'], semantic_json=canonical(value))
+                event_id=entry['event_id'], entry_id=entry['id'], semantic_json=canonical(value), semantic_digest=hashlib.sha256(canonical(value).encode()).hexdigest())
             self.values[key] = value
             return value
         except MissingHistory:
@@ -404,10 +519,11 @@ class History:
                            if entry['seq'] <= self.cutoff and not (kind == 'company_info' and entry['action'] == 'migrate')]
                 if not entries:
                     continue
-                try:
-                    candidate = audit.decode_snapshot(entries[-1]['after'])
-                except (ValueError, TypeError) as exc:
-                    raise MissingHistory('malformed historical relation evidence') from exc
+                candidate = _audit_image(entries[-1]['after'])
+            if candidate is None and not self.historical:
+                entries = self.entries[kind].get(identity, ())
+                if entries:
+                    candidate = _audit_image(entries[-1]['after'])
             if candidate is None:
                 continue
             # A custom-field relation includes its active child scope facts.
@@ -428,12 +544,17 @@ class History:
 from bookflow.company.deposit_dependency_models import ReadSet, RelationAnchor
 
 
-def _readset(s, original, *, endpoint=None, historical=False):
+def _readset(s, original, *, endpoint=None, historical=False, allow_missing_selectors=False, issuer_entry=None):
     """Resolve both retained and proposed dependencies from one owned history view."""
     from bookflow.company import deposit_dependencies, payment_authority
     from bookflow.company.list_service import normalize_lookup_key
-    history = History(s, endpoint, historical=historical)
     original = request(original)
+    new_post = not isinstance(original, InspectionRoot) and original.command == 'deposit post'
+    history = History(s, endpoint, historical=historical, company_issuer=new_post)
+    history.custom_creating = new_post
+    if not isinstance(original, InspectionRoot) and original.command != 'deposit void' and original.input.document.mode == 'inline':
+        history.custom_supplied = frozenset(original.input.document.custom_fields.root)
+        history.custom_values = dict(original.input.document.custom_fields.root)
     relations = []
     transactions = set()
     deposits = set()
@@ -442,13 +563,13 @@ def _readset(s, original, *, endpoint=None, historical=False):
         members = tuple(sorted(row[key] for row in rows))
         if len(members) != len(set(members)):
             raise MissingHistory('duplicate relation member')
-        relations.append(RelationAnchor(kind=kind, owner_id=owner, members=members))
+        relations.append(RelationAnchor(kind=kind, owner_id=owner, members=members,count=len(members),state='populated' if members else 'empty',digest=hashlib.sha256(canonical(members).encode()).hexdigest()))
         return rows
     def select(kind, selector):
         # ULID first, then the owner's actual visible selector, exactly as current
         # list resolution does. Old aliases are resolved from old owner images.
         history.load(kind)
-        direct = selector.upper() if isinstance(selector, str) else selector
+        direct = selector.strip().upper() if isinstance(selector, str) else selector
         if direct in history.identities(kind):
             value = history.take(kind, direct)
             if value is not None:
@@ -456,8 +577,12 @@ def _readset(s, original, *, endpoint=None, historical=False):
         normalized = normalize_lookup_key(selector)
         matches = history.find(kind, lambda row: normalize_lookup_key(row.get('full_name') or row['name']) == normalized)
         relation('selector:' + kind, selector, matches)
+        if not matches and allow_missing_selectors:
+            return None
         if len(matches) != 1:
-            raise MissingHistory('unresolved or ambiguous original selector')
+            if historical:
+                raise MissingHistory('unresolved or ambiguous original selector')
+            raise BookflowError('E_RECORD_NOT_FOUND')
         return matches[0]
     if isinstance(original, InspectionRoot):
         (deposits if original.kind == 'deposit' else sources).add(original.id)
@@ -516,14 +641,14 @@ def _readset(s, original, *, endpoint=None, historical=False):
     if sources:
         relation('uf_account', 'company', history.find('account', lambda row: row['system_role'] == 'undeposited_funds'))
     transaction_kinds = [kind for kind, owner in OWNERS.items()
-                         if kind not in ('transaction', 'application', 'application_allocation', 'deposit_membership')
+                         if kind not in ('transaction', 'application', 'application_allocation', 'deposit_membership', 'deposit_number','deposit_number_operation')
                          and 'transaction_id' in c.metadata.tables[owner.table].c]
     for identity in sorted(transactions):
         header = history.take('transaction', identity)
         for kind in transaction_kinds:
             owned = history.find(kind, lambda row: row['transaction_id'] == identity)
             relation(kind, identity, owned, OWNERS[kind].key)
-        if header is not None and header['type'] == 'deposit':
+        if header is not None and header['type'] == 'deposit' and (isinstance(original, InspectionRoot) or original.command != 'deposit void'):
             profile = history.take('deposit_profile', header['current_revision_id'])
             if profile is not None:
                 from bookflow.company.deposit_models import Effect
@@ -540,12 +665,25 @@ def _readset(s, original, *, endpoint=None, historical=False):
             revision = history.take('transaction_revision', header['current_revision_id'])
             if revision is None or revision['transaction_id'] != identity:
                 history.unknown.add('transaction:' + identity)
+    _current_relations(history, sources, deposits, relation)
     # Work ancestry is a distinct complete relation, not a source-profile guess.
     conversions = history.find('work_billing_conversion', lambda row: row['destination_transaction_id'] in transactions)
     relation('work_conversions', 'transactions', conversions)
     allocations = history.find('work_billing_allocation', lambda row: row['transaction_id'] in transactions)
     work_ids = {row['source_document_id'] for row in conversions + allocations}
     work_ids.update(row['root_document_id'] for row in allocations)
+    visited_work=set()
+    while work_ids-visited_work:
+        for identity in sorted(work_ids-visited_work):
+            visited_work.add(identity)
+            links=history.find('work_link',lambda row:row['destination_document_id']==identity)
+            relation('work_ancestry',identity,links)
+            for link in links:
+                work_ids.add(link['source_document_id'])
+                for side in ('source','destination'):
+                    revision=history.take('work_revision',link[side+'_revision_id'])
+                    if revision is None or revision['document_id']!=link[side+'_document_id']:
+                        history.unknown.add('work_link:'+link['id'])
     for identity in sorted(work_ids):
         history.take('work_document', identity)
         for kind, owner in OWNERS.items():
@@ -553,35 +691,65 @@ def _readset(s, original, *, endpoint=None, historical=False):
             if owner.table.startswith('work_') and 'document_id' in table.c:
                 relation(kind, identity, history.find(kind, lambda row: row['document_id'] == identity), owner.key)
     deposit_dependencies.reconciliation_status(s.company)
+    if not isinstance(original, InspectionRoot) and original.command != 'deposit void':
+        _number_dependencies(history, original, relation, transactions)
+    issuer = None
+    if new_post:
+        try:
+            issuer, history.issuer_events = _issuer(s, issuer_entry, historical=historical)
+        except MissingHistory:
+            history.unknown.add('issuer.display_name')
     records = tuple(history.anchors[key] for key in sorted(history.anchors))
     events = [history.events[row.event_id] for row in records if row.event_id is not None]
     latest = max(events, key=lambda row: row['seq'])['event_id'] if events else None
     # Display versions/ages are not a hash over unrelated master-field writes.
-    facts = [(row.kind, row.id, row.event_id, row.semantic_json) for row in records]
+    facts = [(row.kind, row.id, row.event_id, row.entry_id, row.semantic_digest) for row in records]
     relations = tuple(sorted(set(relations), key=lambda row: (row.kind, row.owner_id)))
-    digest = hashlib.sha256(canonical({'records': facts, 'relations': [row.model_dump() for row in relations]}).encode()).hexdigest()
+    digest = hashlib.sha256(canonical({'records': facts, 'relations': [row.model_dump() for row in relations], 'issuer': issuer.model_dump() if issuer else None}).encode()).hexdigest()
     result = ReadSet(records=records, relations=relations, transactions=tuple(sorted(transactions)),
-                     endpoint=latest, digest=digest, unknown=tuple(sorted(history.unknown)))
+                     endpoint=latest, digest=digest, unknown=tuple(sorted(history.unknown)), issuer=issuer)
     return result, history
 
 
 def capture(s, original_request, binding):
     actor, kind, principal, _ = execution_binding(s, binding)
     original = request(original_request)
+    roots = []
+    if isinstance(original, InspectionRoot):
+        roots.append((original.id,original.kind))
+    else:
+        if original.command != 'deposit post':
+            roots.append((original.input.deposit,'deposit'))
+        if original.command != 'deposit void' and original.input.document.mode == 'inline':
+            roots.extend((row.source,row.source_type) for row in original.input.document.sources)
+    _authorize_binding_graph(s,binding,[identity for identity,_ in roots])
+    for identity, owner_kind in roots:
+        found=s.company.conn.execute(sa.select(c.transactions.c.id).where(c.transactions.c.id==identity,c.transactions.c.type==owner_kind)).first()
+        if found is None:raise BookflowError('E_RECORD_NOT_FOUND')
     readset, _ = _readset(s, original)
+    _authorize_binding_graph(s, binding, readset.transactions)
     recipe = BaselineRecipe(company_id=s.company_row['id'], mode='inspection' if isinstance(original, InspectionRoot) else 'intent',
         root=original if isinstance(original, InspectionRoot) else None, intent_digest=intent_digest(original),
-        endpoint=readset.endpoint, read_digest=readset.digest, actor_id=actor, actor_kind=kind, principal_id=principal)
+        endpoint=readset.endpoint, read_digest=readset.digest, actor_id=actor, actor_kind=kind, principal_id=principal, issuer_entry=readset.issuer.entry_id if readset.issuer else None)
     return recipe, readset
 
 
 def issue(s, recipe, readset, binding):
     actor, kind, principal, _ = execution_binding(s, binding)
+    if type(recipe) is not BaselineRecipe or type(readset) is not ReadSet:
+        raise invalid_guard()
     recipe = BaselineRecipe.model_validate_json(recipe.model_dump_json(), strict=True)
+    readset = ReadSet.model_validate_json(readset.model_dump_json(), strict=True)
+    expected = hashlib.sha256(canonical({'records': [(row.kind,row.id,row.event_id,row.entry_id,row.semantic_digest) for row in readset.records],
+        'relations':[row.model_dump() for row in readset.relations],'issuer':readset.issuer.model_dump() if readset.issuer else None}).encode()).hexdigest()
+    if expected != readset.digest:
+        raise invalid_guard()
     if ((recipe.actor_id, recipe.actor_kind, recipe.principal_id) != (actor, kind, principal)
             or recipe.company_id != s.company_row['id'] or recipe.read_digest != readset.digest
-            or recipe.endpoint != readset.endpoint):
+            or recipe.endpoint != readset.endpoint
+            or recipe.issuer_entry != (readset.issuer.entry_id if readset.issuer else None)):
         raise invalid_guard()
+    _authorize_binding_graph(s, binding, readset.transactions)
     if readset.unknown:
         raise BookflowError('E_PREVIEW_STALE', details={'reason': 'deposit_dependencies', 'history': 'unknown_history'})
     return _encode(s, recipe.model_dump(mode='json'), binding)
@@ -606,7 +774,8 @@ def _fields(before, after, prefix=''):
 
 def reconstruct(s, guard, original_request, binding):
     recipe = decode_recipe(s, guard, original_request, binding)
-    baseline, history = _readset(s, original_request, endpoint=recipe.endpoint, historical=True)
+    baseline, history = _readset(s, original_request, endpoint=recipe.endpoint, historical=True, issuer_entry=recipe.issuer_entry)
+    _authorize_binding_graph(s, binding, baseline.transactions)
     if baseline.digest != recipe.read_digest:
         raise MissingHistory('baseline digest disagrees with immutable evidence')
     return recipe, baseline, history
@@ -618,12 +787,13 @@ def compare(s, guard, original_request, binding):
     # Authenticate before looking up any old anchor. Current graph admission also
     # precedes disclosure when reconstructing the old recipe fails.
     recipe = decode_recipe(s, guard, original_request, binding)
-    current, current_history = _readset(s, original_request)
+    current, current_history = _readset(s, original_request, allow_missing_selectors=True)
+    _authorize_binding_graph(s, binding, current.transactions)
     try:
         _, baseline, old_history = reconstruct(s, guard, original_request, binding)
     except MissingHistory:
         return DependencyComparison(matches=False, unknown_history=True, unknown_records=(), changes=(), baseline=None, current=current)
-    authorize(s, sources=set(baseline.transactions) | set(current.transactions))
+    _authorize_binding_graph(s, binding, set(baseline.transactions) | set(current.transactions))
     unknown = set(baseline.unknown) | set(current.unknown)
     keys = {(row.kind, row.id) for row in baseline.records + current.records}
     changes = []
@@ -639,15 +809,215 @@ def compare(s, guard, original_request, binding):
                 fields = _fields(previous, value)
                 if fields:
                     at = datetime.fromisoformat(entry['at'].replace('Z', '+00:00'))
-                    changes.append((entry['seq'], DependencyChange(kind=kind, record_id=identity,
+                    changes.append(((0, entry['seq']), DependencyChange(kind=kind, record_id=identity,
                         event_id=entry['event_id'], actor_id=entry['actor_id'], actor_kind=entry['actor_kind'],
                         on_behalf_of=entry['on_behalf_of'], interface=entry['interface'], at=entry['at'],
                         age_seconds=max(0, int((clock.now() - at).total_seconds())),
                         version_before=entry['version_before'], version_after=entry['version_after'], fields=fields)))
             previous = value
+    if baseline.issuer is not None and current.issuer is not None:
+        past = False
+        for entry, anchor in current_history.issuer_events:
+            if anchor.entry_id == baseline.issuer.entry_id:
+                past = True
+                continue
+            if past:
+                at = datetime.fromisoformat(entry['at'].replace('Z', '+00:00'))
+                changes.append(((1, entry['seq']), DependencyChange(storage='hub', kind='issuer',
+                    record_id=anchor.company_id, event_id=anchor.hub_event_id,
+                    actor_id=entry['actor_id'], actor_kind=entry['actor_kind'], on_behalf_of=entry['on_behalf_of'],
+                    interface=entry['interface'], at=entry['at'], age_seconds=max(0, int((clock.now()-at).total_seconds())),
+                    version_before=entry['version_before'], version_after=anchor.after_version, fields=('issuer.display_name',))))
+        if not past:
+            unknown.add('issuer.display_name')
     # Whole event authority includes other participants in a composite event.
-    authorize_events(s, {change.event_id for _, change in changes})
+    _authorize_binding_graph(s, binding, set(baseline.transactions) | set(current.transactions), {change.event_id for _, change in changes if change.storage == 'company'})
     changes.sort(key=lambda pair: (pair[0], pair[1].kind, pair[1].record_id, pair[1].fields))
     return DependencyComparison(matches=not unknown and current.digest == baseline.digest,
         unknown_history=bool(unknown), unknown_records=tuple(sorted(unknown)),
         changes=tuple(change for _, change in changes), baseline=baseline, current=current)
+
+
+def _issuer(s, entry_id=None, *, historical=False):
+    """Selected-company name history paired with its hub row in ONE SQL read.
+
+    `companies.update` stores after-only images. The preceding proven company
+    image supplies the before name; it is never inferred from the current copy.
+    Company-side history and hub-side history keep their own event order.
+    """
+    from bookflow.hub import schema as h
+    from bookflow.company.deposit_dependency_models import IssuerAnchor
+    company_id = s.company_row['id']
+    joined = h.companies.outerjoin(h.audit_entries, sa.and_(
+        h.audit_entries.c.record_type == 'company', h.audit_entries.c.record_id == h.companies.c.id)).outerjoin(
+        h.audit_events, h.audit_events.c.id == h.audit_entries.c.event_id)
+    rows = list(s.hub.conn.execute(sa.select(h.companies.c.display_name.label('current_name'), h.audit_entries,
+        h.audit_events.c.seq, h.audit_events.c.at, h.audit_events.c.actor_id, h.audit_events.c.actor_kind,
+        h.audit_events.c.on_behalf_of, h.audit_events.c.interface).select_from(joined).where(
+        h.companies.c.id == company_id).order_by(h.audit_events.c.seq, h.audit_entries.c.id)).mappings())
+    if not rows or rows[0]['id'] is None:
+        raise MissingHistory('missing selected-company issuer history')
+    if historical:
+        positions = [index for index, row in enumerate(rows) if row['id'] == entry_id]
+        if len(positions) != 1:
+            raise MissingHistory('missing selected-company issuer anchor')
+        rows = rows[:positions[0]+1]
+    previous = None; previous_version = None; changes = []; seen_events = set()
+    for record in rows:
+        row = dict(record)
+        if row['action'] == 'migrate':
+            # Existing schema-only partial audit entries do not mutate the name.
+            continue
+        if row['event_id'] is None or type(row['seq']) is not int:
+            raise MissingHistory('issuer entry has no owning event')
+        if row['event_id'] in seen_events:
+            raise MissingHistory('ambiguous selected-company issuer event')
+        seen_events.add(row['event_id'])
+        after, before = _audit_image(row['after']), _audit_image(row['before'])
+        if row['action'] == 'delete':
+            if after is not None or before is None or before.get('id') != company_id:
+                raise MissingHistory('invalid retired company history')
+            previous = None; previous_version = None
+            continue
+        if (after is None or after.get('id') != company_id or type(after.get('display_name')) is not str
+                or not after['display_name'] or type(row['version_after']) is not int
+                or row['version_after'] < 1 or type(after.get('version')) is not int
+                or after['version'] != row['version_after']):
+            raise MissingHistory('malformed issuer image')
+        if previous is None:
+            if row['action'] != 'create' or row['version_before'] is not None:
+                raise MissingHistory('missing issuer creation')
+        elif row['version_before'] != previous_version:
+            raise MissingHistory('incomplete selected-company issuer chain')
+        if before is not None and (before.get('id') != company_id or before.get('display_name') != previous):
+            raise MissingHistory('contradictory issuer before image')
+        if after['display_name'] != previous or row['action'] == 'create':
+            anchor = IssuerAnchor(company_id=company_id, hub_event_id=row['event_id'], entry_id=row['id'],
+                                  after_version=row['version_after'], display_name=after['display_name'])
+            changes.append((row, anchor))
+        previous, previous_version = after['display_name'], row['version_after']
+    if not changes:
+        raise MissingHistory('no issuer name anchor')
+    anchor = changes[-1][1]
+    if historical:
+        if anchor.entry_id != entry_id:
+            raise MissingHistory('issuer anchor is not name-changing')
+    elif rows[-1]['current_name'] != anchor.display_name or s.company_row['display_name'] != anchor.display_name:
+        raise MissingHistory('issuer name differs from admitted hub history')
+    return anchor, changes
+
+
+def version_meta(s, header, expected, binding):
+    """Ordinary version conflicts use the same proven history and page contract.
+
+    An expected version alone can reconstruct the old OWNER graph, not pretend
+    that an arbitrary unsaved replacement was observed at that past moment.
+    The returned inspection recipe says precisely which proof it supplies.
+    """
+    if header['version'] == expected:
+        return
+    from bookflow.company.deposit_dependency_models import PageInput
+    from bookflow.company.deposit_dependency_pages import changes_page
+    _authorize_binding_graph(s, binding, (header['id'],))
+    root = InspectionRoot(kind={'deposit':'deposit', 'payment':'payment', 'sales_receipt':'sales_receipt'}[header['type']], id=header['id'])
+    reader = History(s); reader.load('transaction')
+    entries = [row for row in reader.entries['transaction'].get(header['id'], ()) if row['version_after'] == expected]
+    details = {'expected_version': expected, 'current_version': header['version']}
+    if expected > header['version']:
+        raise BookflowError('E_VERSION_CONFLICT', details={**details, 'reason':'invalid_expected_version'})
+    if len(entries) != 1:
+        raise BookflowError('E_VERSION_CONFLICT', details={**details, 'history':'unknown_history', 'unknown_versions':[expected]})
+    baseline, _ = _readset(s, root, endpoint=entries[0]['event_id'], historical=True)
+    actor, kind, principal, _ = execution_binding(s, binding)
+    recipe = BaselineRecipe(company_id=s.company_row['id'],mode='inspection',root=root,intent_digest=intent_digest(root),
+        endpoint=baseline.endpoint,read_digest=baseline.digest,actor_id=actor,actor_kind=kind,principal_id=principal,issuer_entry=None)
+    if baseline.unknown:
+        raise BookflowError('E_VERSION_CONFLICT', details={**details, 'history':'unknown_history','unknown_versions':[expected]})
+    guard = issue(s, recipe, baseline, binding)
+    page = changes_page(s, guard, root, PageInput(), binding)
+    raise BookflowError('E_VERSION_CONFLICT', details={**details,
+        'history':'unknown_history' if page.unknown_history else 'known_stale',
+        'dependency_guard':guard,'original_request':root.model_dump(mode='json'),
+        'changes':page.model_dump(mode='json')})
+
+
+def _number_dependencies(history, original, relation, transactions):
+    """Owned receipt reconstruction for the ordinary co21 deposit number writer.
+
+    co20/co21 do not seed a deposit series. The sole ordinary writer advances it
+    only on a changed automatic post; that permanent receipt retains the exact
+    omission and assigned number. Validate today's unaudited projection against
+    those immutable effects; never assume an arbitrary existing series is empty.
+    """
+    s = history.s
+    document = original.input.document
+    own = original.input.deposit if original.command != 'deposit post' else None
+    explicit = document.number
+    number = explicit
+    if explicit is None:
+        def automatic(row):
+            request = _decoded(row)['request_snapshot']
+            return row['command']=='deposit post' and request['input']['document'].get('number') is None
+        operations = history.find('deposit_number_operation', automatic)
+        relation('automatic_number_effects','deposit',operations)
+        ordered = sorted(operations,key=lambda row:history.events[history.anchors['deposit_number_operation',row['id']].event_id]['seq'])
+        next_number = 1
+        for row in ordered:
+            text = row['number']
+            if type(text) is not str or not text.isascii() or not text.isdigit() or str(int(text))!=text or int(text)<next_number:
+                history.unknown.add('deposit_number_sequence')
+                continue
+            next_number=int(text)+1
+            transactions.add(row['transaction_id'])
+        if not history.historical:
+            current = s.company.conn.execute(sa.select(c.sequences).where(c.sequences.c.name=='deposit')).mappings().one_or_none()
+            expected = {'name':'deposit','next_number':next_number,'prefix':''} if operations else None
+            if (dict(current) if current is not None else None)!=expected:
+                history.unknown.add('deposit_number_sequence')
+        number=str(next_number)
+        while True:
+            matches=history.find('deposit_number',lambda row:row['type']=='deposit' and row['id']!=own and row['number']==number)
+            relation('number_occupancy',number,matches)
+            transactions.update(row['id'] for row in matches)
+            if not matches:break
+            next_number+=1
+            number=str(next_number)
+    else:
+        matches=history.find('deposit_number',lambda row:row['type']=='deposit' and row['id']!=own and row['number']==number)
+        relation('number_occupancy',number,matches)
+        transactions.update(row['id'] for row in matches)
+
+
+def _current_relations(history, sources, deposits, relation):
+    """Reconstruct negative/current projections from complete immutable events."""
+    for source in sorted(sources):
+        members=history.find('deposit_membership',lambda row:row['source_transaction_id']==source)
+        ordered=sorted(members,key=lambda row:(history.events[history.anchors['deposit_membership',row['id']].event_id]['seq'],row['kind']=='claim',row['id']))
+        current=None
+        for member in ordered:
+            if member['kind']=='claim':
+                if current is not None:history.unknown.add('source_claims:'+source)
+                current=member
+            elif (current is None or member['reverses_membership_id']!=current['id'] or any(
+                    member[key]!=current[key] for key in ('transaction_id','source_transaction_id','source_revision_id','amount_minor_units','currency'))):
+                history.unknown.add('source_claims:'+source)
+            else:current=None
+        relation('active_claim',source,[current] if current else [])
+        if not history.historical:
+            rows=history.s.company.conn.execute(sa.select(c.deposit_current_memberships).where(c.deposit_current_memberships.c.source_transaction_id==source)).mappings().all()
+            expected=[{'source_transaction_id':source,'transaction_id':current['transaction_id'],'membership_id':current['id']}] if current else []
+            if [dict(row) for row in rows]!=expected:history.unknown.add('source_claims:'+source)
+    for deposit in sorted(deposits):
+        versions=history.find('bank_effect_version',lambda row:row['transaction_id']==deposit)
+        keys={row['key_id'] for row in versions}
+        for key in sorted(keys):
+            rows=sorted((row for row in versions if row['key_id']==key),key=lambda row:row['version'])
+            if [row['version'] for row in rows]!=list(range(1,len(rows)+1)):
+                history.unknown.add('bank_effect_current:'+key)
+                continue
+            latest=rows[-1]
+            relation('bank_effect_current',key,[latest])
+            if not history.historical:
+                current=history.s.company.conn.execute(sa.select(c.bank_effect_current).where(c.bank_effect_current.c.key_id==key)).mappings().one_or_none()
+                if current is None or current['version_id']!=latest['id']:
+                    history.unknown.add('bank_effect_current:'+key)
