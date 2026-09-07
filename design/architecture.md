@@ -1176,9 +1176,48 @@ commit, exclusions and inventory digest remain separate from A's descriptor hash
 the existing complete catalog tests verify this executable's accepted inventory.
 Metadata-only B1 changes retain the combined recovery build’s reviewed `7b2d4c2` catalog version.
 
-`assemble_pair` constructs every old/new subject, scope, membership, visibility,
-agent and catalog union slot using the actual A types and `validate_comparison`.
-Every organization contributes a future-company scope. Eligible humans come from
+`observe_pair` preserves complete raw-union `LogicalObservation` values alongside
+its `SnapshotPair`. `assemble_pair` returns that same SnapshotPair contract.
+Required organization/company `pending_path` fields come from the full main
+registry snapshot and participate unchanged in its row digest. Scope keys and
+revoked membership rows remain raw and complete; retirement never filters SQL.
+Legacy serialized roots missing the required field must be freshly loaded.
+
+The private lexical classifier accepts slash, backslash and mixed separators,
+without platform or filesystem inspection. Relative nonempty components exclude
+empty/dot/dot-dot components, NUL, rooted and ASCII drive-prefixed paths. A first
+component exactly `trash` with a following component is retirement; bare `trash`
+is invalid. Case and original strings are preserved. An organization retires its
+companies and future-company scope; a company can also retire through its own
+pending destination. Ordinary moves retain logical presence.
+
+Observations contain raw presence/parent/path and logical presence/retirement
+cause for every raw old/new scope, plus the complete subject/membership product.
+Membership values on absent scopes are None while their raw rows remain intact.
+A receives exactly the union of the two logical live rosters and their dense
+slots, using its actual types and `validate_comparison`. Scopes absent on both
+sides remain explicit in the observations, outside A's callable scope domain.
+Every logically live organization contributes a future-company scope. Complete
+raw-domain visibility is validated before the A subset is selected: absent
+scopes require explicit false, including both-absent tombstones. True, missing,
+duplicate or malformed facts reject; no live-policy default is supplied.
+
+`ScopeRows` and `derive_scope_proposal` separately support complete typed scope
+upserts/removals plus ordinary ProposalRows against final scope keys. Existing
+company parents cannot move; retired destinations cannot be rewritten or cleared.
+New scopes must be live, with live parents. Removing an organization requires
+all children explicitly removed; membership removals must exactly cover all
+removed scopes, revoked rows included, with no removal/upsert overlap. New or
+reactivated membership on retired scopes rejects. Expected keys derive separately
+from old SQL keys and explicit changes. Users/agents and their identity constraints
+remain those of the ordinary constructor. No SQL or semantic increments occur.
+Both initiating and final proposals share one loaded old anchor; subsequent
+cleanup uses a freshly loaded retired anchor. Authority-input roots omit general
+registry metadata, tokens and audit, which still require separate full-state
+expected-write checks. These private APIs do not wire reset/read/publication
+consumers or activate retirement policy in the current runtime.
+
+Eligible humans come from
 unrevoked explicit assignments to present active humans, never ownership or token
 existence. A provider must explicitly supply complete governed visibility on both
 sides; no production provider or membershipless-administrator decision is included.
@@ -1269,3 +1308,20 @@ and authority-commit/publication fencing before any live route is connected.
 These modules do not complete B3 structural integration, C/D activation or Row7.
 No command/resource-owner inventory changed; the accepted `7b2d4c2` catalog and
 `50b259f8` descriptor remain unchanged.
+
+### Payer reference indexes
+
+Company revision co0019 adds `ix_co19_posting_party_transactions` on
+posting_lines(name_type, name_id, account_id, transaction_id) and
+`ix_co19_applications_targets` on applications(paying_transaction_id,
+paid_transaction_id). All co0017 indexes remain. The additions cover historical
+payer contributor and application-target references without changing payment
+queries, exact balances, authority graphs or publication snapshots.
+
+The revision validates both reserved names and complete main-table DDL before
+creating either index. TEMP target shadows and reserved-name collisions are
+rejected. Local extensions are supported when their complete stored table DDL
+can be reproduced in the unchanged isolated SQLite probe; unavailable private
+functions/collations produce a safe unsupported-local-DDL failure before
+persistent index creation. Required keys remain ordinary TEXT-affinity columns
+with BINARY collation. Old rows and local objects are not rewritten.
