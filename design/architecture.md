@@ -1126,6 +1126,34 @@ all captured participants. Projected reads retain the200-ID bound and root-local
 errors; facts expire with the current check. Selection/recovery query audit-epoch
 roots remain separate boundaries in grouped publication dispatch.
 
+### Explicit-grant-only live admission (Delete prerequisite G0)
+
+`core.registry.EXPLICIT_GRANT_ONLY_CAPABILITIES` marks the four
+`transaction.{journal_entry,invoice,sales_receipt,payment}.delete` contracts
+independently of command import order. `Command.explicit_grant_only` additionally
+marks company commands such as future saved-operation inspection whose family is
+not yet known. The marker is registry metadata, never a request/context option.
+Registration rejects nonboolean markers and bootstrap/standalone or hub routes
+for marked commands. Authorization help labels them as not activated.
+
+`hub.access.require_explicit_grant(session, capability)` unconditionally raises
+`E_PERMISSION` with the fixed `capability_not_activated` reason. Roles, including
+owner and hub administrator, cannot bypass it. There is no configurable provider,
+activation flag or public override. A future reviewed granular resolver must
+replace this owner with current effective actor/principal enforcement; test-only
+monkeypatching supplies no production activation mechanism.
+
+`require_command_activation` checks the primary marker/capability and every
+explicit-grant-only static resource before ordinary company authorization.
+`dispatch._permanent_recovery` explicitly invokes it before authorization opens a
+company or calls any saved-fact recovery hook. `require_resource` applies the
+same gate before its existing visibility/role checks, so dynamic family graph
+owners can reuse it. Successful retained publication permits recheck command
+activation before opening target data; original rejection delivery is preserved. Commands without markers retain their existing behavior.
+No financial Delete or operation-inspection command is registered by G0. The
+private frozen permission catalog, role defaults, schema, setup and full C
+publication policies remain separate prerequisites.
+
 ### Inert permission-administration storage (B1)
 
 Hub `hub0012` follows `hub0011`; company history is unchanged. It adds membership

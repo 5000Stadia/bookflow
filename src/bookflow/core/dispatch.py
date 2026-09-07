@@ -380,6 +380,7 @@ def execute(cmd: Command, raw_input: dict[str, Any], ctx: Context, s: Session, *
             raise BookflowError("E_USAGE", message=f"`{cmd.name}` is not a company-scoped command; --company does not apply.")
         inp = validate_input(cmd, raw_input)
         validate_context(ctx)
+        access.require_command_activation(s, cmd)
         recovered = _permanent_recovery(cmd, inp, ctx, s, company_selector, company_source, dry_run)
         if recovered is not None:
             return recovered
@@ -477,6 +478,7 @@ def authorize(cmd: Command, ctx: Context, s: Session, *, company_selector: str |
               company_source: str = "option", dry_run: bool = False, read_only: bool = False,
               _recovery_only: bool = False) -> Context:
     """Shared company, role, directive and reason checks, with optional read-only opening."""
+    access.require_command_activation(s, cmd)
     if cmd.scope == "company":
         if s.company_row is None or (company_selector is not None):
             s.close_company()
@@ -516,6 +518,8 @@ def authorize(cmd: Command, ctx: Context, s: Session, *, company_selector: str |
 def _permanent_recovery(cmd, inp, ctx, s, selector, source, dry_run):
     if cmd.permanent_recovery is None:
         return None
+    # Before authorization opens the company or the hook inspects saved facts.
+    access.require_command_activation(s, cmd)
     recovered_ctx = authorize(cmd, ctx, s, company_selector=selector, company_source=source,
                               dry_run=dry_run, read_only=True, _recovery_only=True)
     from bookflow.core.registry import MatchedRecovery

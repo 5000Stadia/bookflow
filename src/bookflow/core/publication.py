@@ -237,6 +237,7 @@ class PublicationPermit:
                 s.company_row = row
                 if not self.execution_succeeded:
                     return  # unchanged authority may receive its original rejection
+                access.require_command_activation(s, self.cmd)
                 acc, role = access.company_role(s, *self.company)
                 if not access.role_satisfies(role, acc, self.cmd.required_role, s.is_hub_admin):
                     _deny()
