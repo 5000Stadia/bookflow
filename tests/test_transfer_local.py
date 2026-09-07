@@ -157,14 +157,17 @@ def test_binary_version_mismatch_before_source(tmp_path, monkeypatch):
 @pytest.mark.parametrize("truncated", [False, True])
 def test_handler_kernel_identity_safe_context_and_truncation(tmp_path, monkeypatch, truncated):
     from bookflow.commands import host_cmds
-    from bookflow.core import transfers
+    from bookflow.adapters.http import published_transfer
+    from bookflow.core.publication import OSBinding
+    from bookflow.core.publication_admission import Admission
     from bookflow.core.transfer_resources import TransferLease
     from bookflow.company.attachment_store import BodyInfo
     expected = b"complete download"
     seen = []
     cmd = SimpleNamespace(bootstrap=False, transfer=SimpleNamespace(direction="output"))
     monkeypatch.setattr(registry, "get", lambda _: cmd)
-    monkeypatch.setattr(host_cmds, "user_for_login", lambda host, login: seen.append(login) or "real-user")
+    monkeypatch.setattr(OSBinding, "capture", lambda host, login, principal:
+        seen.append(login) or SimpleNamespace(user_id="real-user", revalidate=lambda db: None))
 
     class FakeTransfer:
         def __init__(self, host, cmd, raw, ctx, user_id, login, **kwargs):
@@ -173,16 +176,23 @@ def test_handler_kernel_identity_safe_context_and_truncation(tmp_path, monkeypat
             self.prepared = SimpleNamespace(info=BodyInfo(hashlib.sha256(expected).hexdigest(), len(expected)),
                 metadata={"original_filename": "a.pdf", "media_type": "application/pdf"})
             self.reader = io.BytesIO(expected[:-1] if truncated else expected)
-            self.output = {"done": True}
+            class Document(dict):
+                def check(document): seen.append("checked")
+            self.output = Document(done=True)
+        def suspend_publication(self):
+            pytest.fail("uncontended transfer must not suspend")
+        def resume_publication(self):
+            pytest.fail("uncontended transfer must not resume")
         def check_output(self):
             self.resource.lease.check_io()
             seen.append("checked")
         def close(self):
             self.resource.lease.close()
 
-    monkeypatch.setattr(transfers, "HostedTransfer", FakeTransfer)
-    handler = make_local_handler(None, client_version())
-    listener = LocalListener(None, tmp_path / "unused", handler)
+    monkeypatch.setattr(published_transfer, "PublishedTransfer", FakeTransfer)
+    host = SimpleNamespace(publication_admission=Admission(), _stopping=False)
+    handler = make_local_handler(host, client_version())
+    listener = LocalListener(host, tmp_path / "unused", handler)
     client, server = socket.socketpair()
     thread = threading.Thread(target=listener._serve_one, args=(server,))
     thread.start()

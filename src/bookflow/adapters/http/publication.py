@@ -44,8 +44,13 @@ class PublicationMiddleware:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         from .admission import bounded_messages, send_frame
+        from bookflow.core.publication_admission import ResponseRelease, AdmissionCancelled
         gate = self.host.publication_admission if self.host is not None else None
         integrated = gate is not None and scope.get("bookflow.transport_admission", False)
+        response_state = scope.get("bookflow.response_release") or ResponseRelease()
+        disconnected = scope.get("bookflow.disconnected", lambda: False)
+        def cancelled():
+            return disconnected() or bool(getattr(self.host, "_stopping", False))
         guards = []
         token = _guards.set(guards)
         denied, started = False, False
@@ -62,15 +67,43 @@ class PublicationMiddleware:
                         exc.publication_auth_only = True
                     raise
 
+        def resources():
+            return {id(transfer): transfer for document, _ in guards
+                    if (transfer := getattr(document, 'publication_transfer', None)) is not None}.values()
+
+        async def before_wait():
+            for transfer in resources():
+                await run_in_threadpool(transfer.suspend_publication)
+
+        async def after_wait():
+            for transfer in resources():
+                await run_in_threadpool(transfer.resume_publication)
+
         async def release(message, *, validate=True):
-            for part in bounded_messages(message):
-                generation = gate.begin_validation() if integrated else None
+            async def validate_current():
                 if validate:
                     await run_in_threadpool(check)
-                if integrated:
-                    await send_frame(send, part, gate, generation)
-                else:
+            for part in bounded_messages(message):
+                if not integrated:
+                    await validate_current()
                     await send(part)
+                    continue
+                for transfer in resources():
+                    deadline = transfer.resource.lease._deadline
+                    response_state.deadline = deadline if response_state.deadline is None else min(response_state.deadline, deadline)
+                response_state.start()
+                while True:
+                    try:
+                        generation = gate.begin_validation()
+                        await validate_current()
+                        break
+                    except AdmissionCancelled:
+                        response_state.retry()
+                        await before_wait()
+                        await gate.wait_open(response_state, cancelled)
+                        await after_wait()
+                await send_frame(send, part, gate, generation, response=response_state,
+                                 validate=validate_current, cancelled=cancelled, before_wait=before_wait, after_wait=after_wait)
 
         async def checked_send(message):
             nonlocal denied, started
@@ -80,7 +113,7 @@ class PublicationMiddleware:
                 try:
                     await release(message)
                 except BookflowError as exc:
-                    if started:
+                    if started or response_state.accepted or response_state.aborted:
                         # Headers/bytes cannot be recalled. Closing the response
                         # without a complete body is an interrupted result.
                         raise ConnectionAbortedError("Publication authority changed") from None

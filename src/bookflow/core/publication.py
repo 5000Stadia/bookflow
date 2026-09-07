@@ -6,6 +6,7 @@ No planner, applier, replay, migration or compensating write is invoked here.
 from dataclasses import dataclass, field, fields
 from copy import deepcopy
 from contextlib import contextmanager
+from pathlib import Path
 
 import sqlalchemy as sa
 
@@ -51,6 +52,59 @@ def publication_reader(host, cred):
             host.reader_done()
 
 
+@dataclass(frozen=True, repr=False)
+class OSBinding:
+    """Peer-derived login and fixed current actor/principal, never an API token."""
+    root: Path
+    user_id: str
+    login: str
+    actor_kind: str
+    hub_admin: bool
+    on_behalf_of: str | None = None
+    authority_epoch: int | None = None
+    token_id: None = None
+
+    @classmethod
+    def capture(cls, host, login, principal=None):
+        from bookflow.core.config import Config
+        table = Config.load(host.data_root / 'config.toml').user_table(login)
+        if not isinstance(table, dict) or not isinstance(table.get('user_id'), str):
+            raise BookflowError('E_UNAUTHENTICATED')
+        session = host.reader_session(table['user_id'], login)
+        try:
+            epoch = None
+            if principal is not None:
+                eligible, epoch = credentials._binding(session.hub, session.actor.id, principal)
+                if not eligible:
+                    raise BookflowError('E_UNAUTHENTICATED')
+            # OS mappings use the existing active-user resolver, not token
+            # issuance eligibility. Do not invent a human-only OS policy.
+            return cls(host.data_root, session.actor.id, login, session.actor.kind,
+                       session.is_hub_admin, principal, epoch)
+        finally:
+            try:
+                _close(session)
+            finally:
+                host.reader_done()
+
+    def revalidate_current(self, host):
+        with publication_reader(host, self) as session:
+            self.revalidate(session.hub)
+
+    def revalidate(self, db):
+        from bookflow.core.config import Config
+        table = Config.load(self.root / 'config.toml').user_table(self.login)
+        if not isinstance(table, dict) or table.get('user_id') != self.user_id:
+            raise BookflowError('E_UNAUTHENTICATED', details={'reason': 'OS binding changed'})
+        actor = db.conn.execute(sa.select(h.users.c.kind, h.users.c.hub_admin).where(
+            h.users.c.id == self.user_id, h.users.c.active.is_(True))).first()
+        eligible, epoch = True, None
+        if self.on_behalf_of is not None:
+            eligible, epoch = credentials._binding(db, self.user_id, self.on_behalf_of)
+        if not eligible or epoch != self.authority_epoch or actor is None or tuple(actor) != (self.actor_kind, self.hub_admin):
+            raise BookflowError('E_UNAUTHENTICATED', details={'reason': 'OS authority changed'})
+
+
 # Only these current lifecycle operations may account for their own membership
 # row additions/removals. Each substitution must be in this request's hub audit.
 MEMBERSHIP_EFFECTS = frozenset({"company new", "company attach", "company detach", "demo reset"})
@@ -64,7 +118,7 @@ class PublicationPermit:
     actor: tuple
     memberships: frozenset
     company: tuple | None
-    token: dict = field(repr=False)
+    token: dict | None = field(repr=False)
     target_company: str | None = None
     dry_run: bool = False
     committed: bool = False
@@ -112,11 +166,16 @@ class PublicationPermit:
             if exc.code not in {"E_VALIDATION", "E_CONTEXT_IN_INPUT"}:
                 raise
             inp, input_error = None, exc.to_dict()
-        token = s.hub.conn.execute(sa.select(h.api_tokens).where(h.api_tokens.c.id == cred.token_id)).mappings().first()
-        if token is None:
-            raise BookflowError("E_UNAUTHENTICATED")
+        if isinstance(cred, OSBinding):
+            cred.revalidate(s.hub)
+            token = None
+        else:
+            token = s.hub.conn.execute(sa.select(h.api_tokens).where(h.api_tokens.c.id == cred.token_id)).mappings().first()
+            if token is None:
+                raise BookflowError("E_UNAUTHENTICATED")
+            token = dict(token)
         return cls(cmd, inp, ctx, _actor(s), frozenset(_membership(row) for row in s.memberships),
-                   None, dict(token), None, dry_run, input_error=input_error)
+                   None, token, None, dry_run, input_error=input_error)
 
     def finish(self, s, *, succeeded=True, result=None):
         """Capture only a committed, same-request audit certificate, after execute."""
@@ -179,6 +238,8 @@ class PublicationPermit:
                 self.target_company = removed[0]
 
     def _self_revoke(self, s, cred):
+        if self.token is None or isinstance(cred, OSBinding):
+            return False
         if not (self.committed and self.cmd.name == "token revoke" and self.own_event
                 and self.inp.token.upper() == cred.token_id):
             return False

@@ -56,9 +56,12 @@ def test_drain_cancel_ack_with_event_loop_frozen(at):
             assert trace == ['cancel-ack','commit']  # this loop has not progressed
             protocol.flow.resume_writing()
             data=await all_bytes(peer)
-            assert b'0\r\n\r\n' not in data
-            assert (b'private' in data) == (at == 'terminal')
-            assert (b'200 OK' in data) == (at != 'headers')
+            if at == 'headers':
+                assert b'200 OK' in data and data.endswith(b'7\r\nprivate\r\n0\r\n\r\n')
+            else:
+                assert b'0\r\n\r\n' not in data
+                assert (b'private' in data) == (at == 'terminal')
+                assert b'200 OK' in data
         finally: transport.close();peer.close()
     asyncio.run(run())
 
@@ -189,10 +192,13 @@ def test_mcp_client_terminal_verification_and_client_file_handoff(tmp_path,compl
 def test_validation_in_worker_racing_commit_cannot_admit_old_read():
     async def run():
         from bookflow.adapters.http.publication import protect
-        gate=Admission();reached=threading.Event();resume=threading.Event()
+        gate=Admission();reached=threading.Event();resume=threading.Event();checks=[]
         class Guard:
             credential=SimpleNamespace(token_id='owned')
             def check(self, **kwargs):
+                from bookflow.core.errors import BookflowError
+                checks.append(True)
+                if len(checks)>1:raise BookflowError("E_PERMISSION")
                 reached.set();assert resume.wait(2)
         async def app(scope,receive,send):
             protect(Guard())
@@ -203,6 +209,7 @@ def test_validation_in_worker_racing_commit_cannot_admit_old_read():
             assert await asyncio.to_thread(reached.wait,2)
             barrier=gate.close_for_commit();gate.finish_commit(barrier,committed=True);resume.set()
             data=await all_bytes(peer)
+            assert len(checks)==2
             assert b'x-private' not in data and b'old-read' not in data
         finally:resume.set();transport.close();peer.close()
     asyncio.run(run())

@@ -360,7 +360,6 @@ def make_local_handler(host, version: str):
 
     def handler(login: str, envelope: dict[str, Any]) -> dict[str, Any]:
         from bookflow.core import registry
-        from bookflow.core.dispatch import _close, execute, guard
         ctx = context_from_envelope(envelope)
         sent = envelope.get("version") or ctx.client_version
         if sent != version:
@@ -372,29 +371,22 @@ def make_local_handler(host, version: str):
             raise BookflowError("E_USAGE", message=f"unknown command {name!r}")
         if cmd.bootstrap:
             raise BookflowError("E_USAGE", message=f"`{cmd.name}` runs in the calling process; it is never forwarded to the host.")
-        user_id = user_for_login(host, login)
-        raw = envelope.get("input") or {}
-        selector = envelope.get("company_selector")
-        source = envelope.get("company_source") or "option"
-        dry_run = bool(envelope.get("dry_run"))
-        if (cmd.is_write and not dry_run) or cmd.kind == "advisory":
-            return host.run_write(user_id, login, lambda s: execute(cmd, raw, ctx, s, company_selector=selector, company_source=source, dry_run=dry_run))
-        s = host.reader_session(user_id, login)
-        try:
-            return execute(cmd, raw, ctx, s, company_selector=selector, company_source=source, dry_run=dry_run)
-        finally:
-            try:
-                guard(lambda: _close(s), s.is_hub_admin)
-            finally:
-                host.reader_done()
+        from bookflow.core.publication import OSBinding
+        from bookflow.adapters.http.execution import run_hosted
+        cred = OSBinding.capture(host, login, ctx.on_behalf_of)
+        return run_hosted(host, cmd, envelope.get("input") or {}, ctx, cred,
+                          envelope.get("company_selector"), envelope.get("company_source") or "option",
+                          bool(envelope.get("dry_run")))
 
     def transfer(login, envelope, socket, *, check=None):
         from pydantic import ValidationError
+        import time
         from bookflow.adapters.http.local import validate_transfer_envelope
         from bookflow.core import registry
         from bookflow.core.transfer_protocol import FramedReader, _encode, send_body, send_json
         from bookflow.core.transfer_resources import TransferLease
-        from bookflow.core.transfers import HostedTransfer
+        from bookflow.adapters.http.published_transfer import PublishedTransfer
+        from bookflow.core.publication import OSBinding
 
         transport = TransferLease("", "", lambda lease: None)
         outer_check = check or transport.check_io
@@ -413,17 +405,22 @@ def make_local_handler(host, version: str):
             if (cmd is None or cmd.bootstrap or cmd.transfer is None
                     or cmd.transfer.direction != envelope["transfer"]["direction"]):
                 raise BookflowError("E_USAGE", message="Command does not support this transfer direction.")
-            user_id = user_for_login(host, login)
-            hosted = HostedTransfer(host, cmd, envelope["input"], ctx, user_id, login,
+            cred = OSBinding.capture(host, login, ctx.on_behalf_of)
+            user_id = cred.user_id
+            hosted = PublishedTransfer(host, cmd, envelope["input"], ctx, user_id, login,
                                     selector=envelope.get("company_selector"),
                                     source=envelope.get("company_source", "option"),
-                                    dry_run=envelope.get("dry_run", False))
+                                    dry_run=envelope.get("dry_run", False), credential=cred,
+                                    authorize_session=lambda session: cred.revalidate(session.hub))
+
+            socket.response.deadline = time.monotonic() + hosted.resource.lease.remaining_seconds()
 
             def check_io():
                 outer_check()
                 hosted.resource.lease.check_io()
 
             if cmd.transfer.direction == "input":
+                socket.bind_guard(hosted.check_output, before_wait=hosted.suspend_publication, after_wait=hosted.resume_publication)
                 send_json(socket, {"ready": True, "limit": hosted.prepared.limit}, check=check_io)
                 hosted.receive(FramedReader(socket, hosted.prepared.limit, check=check_io))
                 output = hosted.finish_input()
@@ -434,6 +431,7 @@ def make_local_handler(host, version: str):
                 # Once ready starts, failure must truncate rather than masquerade as a body frame.
                 _encode(ready, 65536)
                 output_started = True
+                socket.bind_guard(hosted.output.check, before_wait=hosted.suspend_publication, after_wait=hosted.resume_publication)
                 send_json(socket, ready, check=check_io)
 
                 def check_output():
@@ -461,13 +459,17 @@ def make_local_handler(host, version: str):
                 check_output()
                 output = hosted.output
             hosted.close()
-            send_json(socket, {"output": output}, check=outer_check)
+            socket.bind_guard(output.check)
+            send_json(socket, {"output": dict(output)}, check=outer_check)
         except Exception as exc:
             if not output_started:
                 error = exc if isinstance(exc, BookflowError) else BookflowError(
                     "E_IO" if isinstance(exc, (OSError, TimeoutError)) else "E_INTERNAL",
                     message="Local transfer failed.")
                 try:
+                    rejected = getattr(exc, "publication_document", None)
+                    if rejected is not None:
+                        socket.bind_guard(rejected.check)
                     send_json(socket, {"error": error.to_dict()}, check=outer_check)
                 except (BookflowError, OSError):
                     pass

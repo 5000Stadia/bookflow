@@ -105,7 +105,14 @@ class LocalListener:
         import time
 
         wire_socket = None
+        reply_guard = None
+        request_started = time.monotonic()
         with conn, TransferLease("", "", lambda lease: None) as lease:
+            def current_connection():
+                from bookflow.core.publication_admission import AdmissionCancelled
+                if self._stopping or bool(getattr(self.host, "_stopping", False)):
+                    raise AdmissionCancelled("local host stopping")
+                lease.check_io()
             binary = False
             try:
                 conn.settimeout(CONNECTION_TIMEOUT_SECONDS)
@@ -124,31 +131,38 @@ class LocalListener:
                     transfer = getattr(self.handler, "transfer", None)
                     if transfer is None:
                         raise BookflowError("E_USAGE", message="Binary forwarding is unavailable.")
-                    wire_socket = (AdmittedSocket(conn, self.host.publication_admission, lease.check_io)
+                    wire_socket = (AdmittedSocket(conn, self.host.publication_admission, current_connection)
                                    if self.host is not None else conn)
                     transfer(login, envelope, wire_socket, check=lease.check_io)
                     return
-                wire_socket = (AdmittedSocket(conn, self.host.publication_admission, lease.check_io)
+                wire_socket = (AdmittedSocket(conn, self.host.publication_admission, current_connection)
                                    if self.host is not None else conn)
-                reply = {"output": self.handler(login, envelope)}
+                document = self.handler(login, envelope)
+                reply_guard = document.check
+                reply = {"output": document}
             except BookflowError as e:
-                reply = {"error": e.to_dict()}
+                document = getattr(e, "publication_document", None)
+                reply_guard = document.check if document is not None else None
+                reply = {"error": document if document is not None else e.to_dict()}
             except Exception as e:  # noqa: BLE001
                 reply = {"error": BookflowError("E_INTERNAL", message="host failure", details={"cause": type(e).__name__}).to_dict()}
             try:
                 if binary:
                     if wire_socket is None:
-                        wire_socket = (AdmittedSocket(conn, self.host.publication_admission, lease.check_io)
+                        wire_socket = (AdmittedSocket(conn, self.host.publication_admission, current_connection)
                                    if self.host is not None else conn)
                     send_json(wire_socket, reply, check=lease.check_io)
                 else:
                     payload = json.dumps(reply, default=str).encode("utf-8")
                     if wire_socket is None:
-                        wire_socket = (AdmittedSocket(conn, self.host.publication_admission, lease.check_io)
+                        wire_socket = (AdmittedSocket(conn, self.host.publication_admission, current_connection)
                                    if self.host is not None else conn)
                     if self.host is None:
                         conn.sendall(len(payload).to_bytes(4, "big") + payload)
                     else:
+                        wire_socket.response.deadline = request_started + CONNECTION_TIMEOUT_SECONDS
+                        if reply_guard is not None:
+                            wire_socket.bind_guard(reply_guard)
                         wire.write(wire_socket, len(payload).to_bytes(4, "big") + payload)
             except (OSError, BookflowError):
                 pass
@@ -196,17 +210,24 @@ def context_from_envelope(envelope: dict[str, Any]) -> Context:
 
 
 class AdmittedSocket:
-    """Operation-owned nonblocking socket; caller-stream callbacks stay outside gate.
-
-    The generation precedes execution/staging. This private conservative envelope
-    cancels the operation on any barrier; future commit wiring must supply fresh
-    OS publication authority for supported own-effect responses.
-    """
+    """Owned nonblocking output with fresh phase guards and response-wide evidence."""
     def __init__(self, conn, gate, check):
+        from bookflow.core.publication_admission import ResponseRelease, AdmissionCancelled
         self.conn, self.gate, self.check = conn, gate, check
         self.timeout = conn.gettimeout()
         conn.setblocking(False)
-        self.generation = gate.begin_validation()
+        self.response = ResponseRelease()
+        self.validate = None
+        self.before_wait = self.after_wait = None
+        try:
+            self.generation = gate.begin_validation()
+        except AdmissionCancelled:
+            self.generation = None
+
+    def bind_guard(self, validate, *, before_wait=None, after_wait=None):
+        self.validate = validate
+        self.before_wait, self.after_wait = before_wait, after_wait
+        self.generation = None  # new phase, never reset response accepted bytes
 
     def gettimeout(self):
         return self.timeout
@@ -214,15 +235,44 @@ class AdmittedSocket:
     def settimeout(self, value):
         self.timeout = value
 
+    def _refresh(self):
+        import time
+        from bookflow.core.publication_admission import AdmissionCancelled
+        self.response.retry()
+        if self.validate is None:
+            raise AdmissionCancelled('no current publication certificate')
+        if self.before_wait is not None:
+            self.before_wait()
+        while True:
+            self.check()
+            self.response.retry()
+            try:
+                generation = self.gate.begin_validation()
+                if self.after_wait is not None:
+                    self.after_wait()
+                self.validate()
+                self.response.retry()
+                self.gate.finish(self.gate.admit(generation, 'local revalidated'))
+                self.generation = generation
+                return
+            except AdmissionCancelled:
+                if self.before_wait is not None:
+                    self.before_wait()
+                # This is a dedicated local connection thread, never the host
+                # writer or a shared HTTP validation worker.
+                import select
+                readable, _, _ = select.select([self.conn], [], [], min(.05, max(0, self.response.cutoff-time.monotonic())))
+                if readable and not self.conn.recv(1, socket.MSG_PEEK):
+                    raise AdmissionCancelled('local peer disconnected')
+
     def _wait(self, *, writing):
         import select
         import time
         deadline = None if self.timeout is None else time.monotonic() + self.timeout
         while True:
             self.check()
-            # A fresh comparison acknowledges cancellation even with no peer I/O.
-            frame = self.gate.admit(self.generation, 'local readiness')
-            self.gate.finish(frame)
+            if writing:
+                self.gate.finish(self.gate.admit(self.generation, 'local readiness'))
             remaining = .05 if deadline is None else min(.05, deadline - time.monotonic())
             if remaining <= 0:
                 raise socket.timeout()
@@ -239,13 +289,27 @@ class AdmittedSocket:
                 pass
 
     def send(self, data):
-        from bookflow.core.publication_admission import FRAME_BYTES
+        from bookflow.core.publication_admission import FRAME_BYTES, AdmissionCancelled
+        self.response.start()
         self.check()
-        frame = self.gate.admit(self.generation, 'local bytes')
         chunk = bytes(data[:FRAME_BYTES])
-        while True:
-            count = self.gate.socket_send(frame, self.conn, chunk)
-            if count:
-                self.gate.finish(frame)
-                return count
-            self._wait(writing=True)
+        try:
+            if self.validate is not None:
+                try:
+                    self.generation = self.gate.begin_validation()
+                    self.validate()
+                except AdmissionCancelled:
+                    self._refresh()
+            while True:
+                try:
+                    frame = self.gate.admit(self.generation, 'local bytes', self.response)
+                    count = self.gate.socket_send(frame, self.conn, chunk)
+                    if count:
+                        self.gate.finish(frame)
+                        return count
+                    self._wait(writing=True)
+                except AdmissionCancelled:
+                    self._refresh()
+        except BaseException:
+            self.response.aborted = True
+            raise
