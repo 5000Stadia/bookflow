@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 from bookflow.commands.host_cmds import start_serving
 from bookflow.core.context import client_version
 from bookflow.company.payment_queries import digest
+from payment_raw_evidence import table as raw_table
 
 
 def measure(manifest_path,output_path,changed_count=201):
@@ -54,7 +55,7 @@ def measure(manifest_path,output_path,changed_count=201):
         return result
     def finance():
         with sqlite3.connect(Path(manifest['database']).as_uri()+'?mode=ro',uri=True) as db:
-            return {table:db.execute('SELECT count(*) FROM '+table).fetchone()[0] for table in ('transactions','transaction_revisions','posting_batches','posting_lines','applications','application_allocations','payment_operations')}
+            return {table:raw_table(db,table) for table in ('transactions','transaction_revisions','posting_batches','posting_lines','posting_line_sources','applications','application_allocations','payment_operations','payment_operation_items')}
     before=finance();report['financial_before']=before
     try:
         draft=write('payment selection create',dict(mode='new_receipt',customer=manifest['parent'],date='2026-06-02',amount='10.00',label='Additional recovery measurements'))
