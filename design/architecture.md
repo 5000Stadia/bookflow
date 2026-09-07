@@ -1701,3 +1701,53 @@ type, retained transaction ID and attachment ID independently. Transaction-only
 evidence has null attachment columns. These checks prove identity, not audience
 admission. Direct opening attachments require later record-owner registration;
 link retirement/collection and current authority remain activation obligations.
+
+### Private reconciliation successor models and preparation
+
+The private `reconciliation_commands_models` module describes strict inputs,
+retained draft/proposal and attempt leaves, and typed candidate/history/report
+values. Its name-to-model inventory is not a command registration. Parsed JSON
+arrays become immutable domain tuples without coercing their element types.
+`reconciliation_preparation.snapshot` consumes complete N rows, actual R0 source
+and capture Graphs, referenced rows and explicit current authority participants;
+it runs the accepted aggregate validator. Participant coverage is not an authority
+credential. Future runtime owners must obtain the real complete authority graph
+before preparation and repeat admission at each release/commit fence.
+
+Draft transformations retain saved versions, require whole producer movements,
+reject stale replacements without explicit accept-current, and preserve proposals
+and terminal states. Attempt chunks retain exact ordered typed payloads and
+receipts; seal checks counts, hashes and semantic targets, and apply changes only
+private values. N tables remain empty outside owned tests. Query cores compute
+whole-result facts and return bounded deterministic slices; their offsets and
+digests are not public authenticated cursors. Public cursor signing, fixed actor/
+principal/OS binding and publication remain activation work.
+
+Report projection keeps as-certified arithmetic and captured member displays,
+one-certificate selected-key replacement impact, and the opening/predecessor-key
+cumulative reconstruction separate. Current mapping precedes account/date filters.
+Amendment preparation derives mandatory and explicit-seed suffixes, validates
+whole replacement/invalidation manifests, and rebuilds adjacency in dated order.
+A staged predecessor FK guards the retained predecessor; a later aggregate
+persister must assign and link the new certificate IDs in that derived order.
+Undo prepares invalidation without a financial inverse.
+
+Proposal previews retain exact ordinary journal Plans, validate them through R0
+and the existing current period owner, and never apply them. Force amounts derive
+from exact difference, with bank/card sign conventions. Permanent recovery retains
+original JSON/presence/context independently of canonical captured intent and
+returns immutable effect separately from current state after explicit authority
+coverage. Actual original-action admission and storage lookup remain runtime
+obligations. Source-action arms retain present owning input types only; they do
+not implement deposit B/C's keyless compound persistence or its permission gates.
+
+One confirmed N/model seam remains unresolved: two distinct inserted statement
+drafts at the same retained predecessor collide in N's aggregate attempt target
+key `(account_id, certificate_id, predecessor_id)`. The new seal currently retains
+that fail-closed rule rather than silently accepting incompatible storage. A
+focused witness proves one prefix passes and the two distinct dated targets fail.
+Full step(ii) completion needs an independently reviewed semantic-target correction
+shared with the existing N validator (no DDL change appears necessary). Existing
+certificate duplicate targets must still reject regardless of supplied predecessor;
+insertions need account/date identity derived from their owned replacement draft.
+No resolver, backfill, public capability, live draft writer or activation is added.
