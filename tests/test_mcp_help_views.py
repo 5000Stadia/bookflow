@@ -105,8 +105,19 @@ def test_payment_help_preserves_shared_guidance_and_discovery_paging():
     assert 'remaining 100.00 is unapplied credit owned by the parent' in command_help('payment receive')['documentation']
     description = TOOLS['bookflow_list_commands'][1]
     assert all(text in description for text in ('prefix', 'default 20', 'next_cursor', '200'))
-    first = list_commands(prefix='payment', limit=20)
-    second = list_commands(prefix='payment', cursor=first['next_cursor'])
+    commands, seen_cursors = [], set()
+    cursor = None
+    while True:
+        page = list_commands(prefix='payment', cursor=cursor)
+        assert 0 < len(page['commands']) <= 20
+        commands.extend(page['commands'])
+        cursor = page['next_cursor']
+        if cursor is None:
+            break
+        assert len(page['commands']) == 20
+        assert cursor not in seen_cursors
+        seen_cursors.add(cursor)
     complete = list_commands(prefix='payment', limit=200)
-    assert first['commands'] + second['commands'] == complete['commands']
-    assert second['next_cursor'] is None
+    assert complete['commands'] and complete['next_cursor'] is None
+    assert commands == complete['commands']
+    assert len({command['name'] for command in commands}) == len(commands)
