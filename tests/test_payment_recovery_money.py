@@ -187,3 +187,27 @@ def test_relevant_customer_lineage_change_invalidates_whole_confirmation(client,
     assert current['facts_fingerprint']!=old['facts_fingerprint']
     assert current['selected_minor_units']==old['selected_minor_units']==200
     confirm(client,identifier,begin,current)
+
+
+def test_only_added_X_due_100_to_50_invalidates_paged_comparison(client,sale,root):
+    draft,_,_=setup(client,sale)
+    added=client.run('invoice post',dict(customer=sale['customer'],date='2026-06-01',number='REC-EXACT-X',lines=[dict(item=sale['item'],quantity='1',unit_price='1')]),company=COMPANY)
+    entries=[dict(invoice_id=added['id'],observed_invoice_version=1,action='calculate',attempted_calculated_minor_units=1)]
+    begin=declaration(draft,entries,dict(action='set',amount_origin='entered',amount_minor_units=300,currency='USD'))
+    identifier,old=seal_compare(client,begin,entries)
+    request=dict(recovery_id=identifier,attempt_generation=begin['attempt_generation'],intent_hash=begin['intent_hash'],facts_fingerprint=old['facts_fingerprint'],kind='changes',limit=1)
+    page=call(client,'compare-items',request);assert page['next_cursor']
+    client.run('payment receive',dict(customer=sale['customer'],date='2026-06-01',amount='0.50',payment_method=method(client),operation_key='X-due-only',applications=dict(mode='inline',items=[dict(invoice=added['id'],expected_version=1,amount='0.50')])),company=COMPANY)
+    before=raw_books(root)
+    with pytest.raises(BookflowError) as caught:call(client,'compare-items',dict(request,cursor=page['next_cursor']))
+    assert caught.value.code=='E_QUERY_STALE' and raw_books(root)==before
+    with pytest.raises(BookflowError) as caught:confirm(client,identifier,begin,old)
+    assert caught.value.code=='E_PREVIEW_STALE' and raw_books(root)==before
+    fresh=call(client,'compare',dict(recovery_id=identifier,attempt_generation=begin['attempt_generation'],intent_hash=begin['intent_hash']))
+    rows=call(client,'compare-items',dict(request,limit=200,facts_fingerprint=fresh['facts_fingerprint']))['items']
+    x=next(row for row in rows if row.get('invoice_id')==added['id'] and not row.get('history_event_id'))
+    assert x['current']['version']==2 and x['current']['due']==50 and x['proposed']['amount_minor_units']==50
+    assert x['observed_history']=='unknown'  # Never invent historical due from caller claim.
+    confirm(client,identifier,begin,fresh)
+    shown=client.run('payment selection show',dict(selection=draft['id']),company=COMPANY)
+    assert shown['version']==draft['version']+1 and shown['applied_minor_units']==250
