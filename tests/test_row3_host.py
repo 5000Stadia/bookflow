@@ -667,6 +667,51 @@ def _read_calls(hosted):
         operation = conn.execute("SELECT operation_key FROM payment_operations ORDER BY id LIMIT 1").fetchone()[0]
     context = dict(mode="new_receipt", customer=payment["revision"]["profile"]["payer"]["id"], date="2026-12-31")
     draft = hosted.ok("payment.selection.create", dict(context, amount="1.00"), company=cid)
+    # A real, sealed attempted edit gives every recovery read nonempty business
+    # evidence. Keep it separate from the ordinary selection parity fixture.
+    from tests.test_payment_recovery import declaration
+    income = hosted.ok("account.create", {"name": "HTTP recovery income", "type": "income"}, company=cid)
+    customer = hosted.ok("customer.create", {"name": "HTTP recovery customer"}, company=cid)
+    tax_code = next(row["id"] for row in hosted.ok("sales-tax-code.list", company=cid)["items"] if not row["taxable"])
+    item = hosted.ok("item.create", dict(name="HTTP recovery service", type="service", sales_enabled=True,
+        description="HTTP recovery parity service",
+        income_account_id=income["id"], price="1.00", sales_tax_code_id=tax_code), company=cid)
+    invoice = hosted.ok("invoice.post", dict(customer=customer["id"], date="2026-06-01",
+        lines=[dict(item=item["id"], quantity="1")]), company=cid)
+    recovery_context = dict(mode="new_receipt", customer=customer["id"], date="2026-12-31")
+    candidates = hosted.ok("payment.invoices", dict(recovery_context, limit=1), company=cid)["items"]
+    assert [(row["invoice_id"], row["due_minor_units"]) for row in candidates] == [(invoice["id"], 100)]
+    candidate = candidates[0]
+    recovery_draft = hosted.ok("payment.selection.create", dict(recovery_context, amount="1.00"), company=cid)
+    entries = [dict(invoice_id=candidate["invoice_id"], observed_invoice_version=candidate["expected_version"],
+                    action="set", amount_minor_units=1, currency=candidate["currency"], amount_origin="entered")]
+    declared = declaration(recovery_draft, entries)
+    begun = hosted.ok("payment.recovery.begin", declared, company=cid)
+    recovery_id = begun["original_receipt"]["recovery_id"]
+    uploaded = hosted.ok("payment.recovery.upload", dict(recovery_id=recovery_id, chunk_index=0, entries=entries), company=cid)
+    hosted.ok("payment.recovery.seal", dict(recovery_id=recovery_id,
+        expected_recovery_version=uploaded["original_receipt"]["recovery_version"]), company=cid)
+    comparison_input = dict(recovery_id=recovery_id, attempt_generation=declared["attempt_generation"], intent_hash=declared["intent_hash"])
+    comparison = hosted.ok("payment.recovery.compare", comparison_input, company=cid)
+    assert comparison["item_count"] == 1 and comparison["change_count"] >= 1
+    assert (comparison["amount_minor_units"], comparison["selected_minor_units"], comparison["unapplied_minor_units"]) == (100, 1, 99)
+    assert comparison["hard_blocker_count"] == 0
+    calls.update({
+        "payment recovery query": ({"selection": recovery_draft["id"], "state": "sealed", "limit": 2}, cid),
+        "payment recovery show": ({"recovery_id": recovery_id}, cid),
+        "payment recovery items": ({"recovery_id": recovery_id, "kind": "entries", "limit": 2}, cid),
+        "payment recovery compare": (comparison_input, cid),
+        "payment recovery compare-items": ({**comparison_input, "facts_fingerprint": comparison["facts_fingerprint"], "kind": "changes", "limit": 2}, cid),
+    })
+    acknowledged = hosted.ok("payment.recovery.items", calls["payment recovery items"][0], company=cid)
+    assert acknowledged["total_count"] == 1
+    assert [(row["invoice_id"], row["action"], row["amount_minor_units"], row["currency"], row["amount_origin"])
+            for row in acknowledged["items"]] == [(candidate["invoice_id"], "set", 1, candidate["currency"], "entered")]
+    changes = hosted.ok("payment.recovery.compare-items", calls["payment recovery compare-items"][0], company=cid)
+    changed = next(row for row in changes["items"] if row.get("invoice_id") == candidate["invoice_id"] and "proposed" in row)
+    assert changed["attempted"] == entries[0]
+    assert changed["proposed"]["amount_minor_units"] == 1
+    assert changed["current"]["version"] == candidate["expected_version"]
     request = dict(command="payment receive", input=dict(customer=context["customer"], date=context["date"],
         amount="1.00", payment_method=payment["revision"]["profile"]["payment_method"]["id"],
         deposit_to=payment["revision"]["profile"]["deposit_account"]["id"], operation_key="HTTP-PARITY-PREVIEW"))
@@ -733,12 +778,21 @@ def test_every_routed_read_returns_the_same_document_over_http_as_in_the_library
             bodies[name] = response.content
         else:
             over_http[name] = hosted.ok(name.replace(" ", "."), body, company=company)
+    recovered = over_http["payment recovery show"]
+    assert recovered["state"] == "sealed"
+    assert (recovered["received_entry_count"], recovered["declared_entry_count"], recovered["missing_chunk_count"]) == (1, 1, 0)
+    assert recovered["begin_receipt"]["action"] == "begin" and recovered["seal_receipt"]["action"] == "seal"
+    assert over_http["payment recovery query"]["total_count"] == 1
+    assert [row["id"] for row in over_http["payment recovery query"]["items"]] == [recovered["id"]]
     hosted.handle.stop()  # the library takes the data-root lock, so the host lets go first
     c = bookflow.connect(data_root=str(root))
     for name, (body, company) in calls.items():
         sink = io.BytesIO()
         streams = {"output_stream": sink} if registry.get(name).transfer else {}
-        assert normalize(c.run(name, body, company=company, **streams)) == normalize(over_http[name]), name
+        local = c.run(name, body, company=company, **streams)
+        assert normalize(local) == normalize(over_http[name]), name
+        if name.startswith("payment recovery "):
+            assert local == over_http[name], name
         if streams:
             assert sink.getvalue() == bodies[name]
 
