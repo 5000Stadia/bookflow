@@ -45,6 +45,7 @@ def test_real_n1_report_and_shared_accounting_oracles(client,sale,run_private,tm
     doc['sources']=[dict(source=source['id'],source_type='sales_receipt',expected_version=1)]
     doc['additional'].append(dict(received_from=dict(kind='customer',id=sale['customer']),from_account=expense,amount='-3'))
     doc['cash_back']=dict(account=cash,amount='5')
+    tb_before=client.run('report trial-balance',dict(date_to='2026-06-30'),company=COMPANY)
     pl_before=client.run('report profit-and-loss',dict(date_from='2026-06-01',date_to='2026-06-30'),company=COMPANY)
     bs_before=client.run('report balance-sheet',dict(date_to='2026-06-30'),company=COMPANY)
     field=client.run('custom-field create',dict(name='Captured report text',kind='text',scopes=['deposit'],default='<saved & literal>'),company=COMPANY)['id']
@@ -76,6 +77,8 @@ def test_real_n1_report_and_shared_accounting_oracles(client,sale,run_private,tm
         assert custom[0].captured.name=='Captured report text' and custom[0].captured_print_visibility is None
         rows=s.company.raw.execute('SELECT account_id,sum(debit_minor_units-credit_minor_units) FROM posting_lines WHERE transaction_id=? GROUP BY account_id',(posted.current.id,)).fetchall()
         assert dict(rows)=={control:-16000,doc['deposit_to']:17200,cash:500,sale['income']:-2000,expense:300}
+        from bookflow.company import customer_balances
+        assert customer_balances.own_balance(s.company,sale['customer'])==customer_balances.family_balance(s.company,sale['customer'])==0
         assert tuple(s.company.raw.iterdump())==raw
     run_private(read)
     (tmp_path/'report-measurements.json').write_text(json.dumps(measurements,indent=2))
@@ -86,6 +89,10 @@ def test_real_n1_report_and_shared_accounting_oracles(client,sale,run_private,tm
                            ('report balance-sheet',dict(date_to='2026-06-30')),
                            ('report trial-balance',dict(date_to='2026-06-30'))]:
         outputs[command]=client.run(command,params,company=COMPANY)
+    tb=outputs['report trial-balance']['totals']
+    assert tb['debit']['minor_units']==tb_before['totals']['debit']['minor_units']+2000
+    assert tb['credit']['minor_units']==tb_before['totals']['credit']['minor_units']+2000
+    assert tb['signed_net']['minor_units']==0
     assert outputs['report general-ledger']['totals']['closing']['minor_units']==17200
     assert outputs['register query']['ledger_totals']['closing']['minor_units']==17200
     assert {r['category_label'] for r in outputs['register query']['rows'] if r['kind']=='posting'}=={'Deposit'}
@@ -93,4 +100,4 @@ def test_real_n1_report_and_shared_accounting_oracles(client,sale,run_private,tm
     assert outputs['report balance-sheet']['totals']['difference']['minor_units']==0
     assert outputs['report balance-sheet']['totals']['assets']['minor_units']-bs_before['totals']['assets']['minor_units']==1700
     assert client.customer.show(customer=sale['customer'],company=COMPANY)['current_balance']['minor_units']==0
-    (tmp_path/'n1-public-oracle.json').write_text(json.dumps(dict(before_pl=pl_before,before_bs=bs_before,after=outputs),indent=2))
+    (tmp_path/'n1-public-oracle.json').write_text(json.dumps(dict(before_tb=tb_before,before_pl=pl_before,before_bs=bs_before,after=outputs),indent=2))
