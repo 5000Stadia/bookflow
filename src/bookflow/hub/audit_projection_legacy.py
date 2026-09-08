@@ -4215,3 +4215,154 @@ class DepositAuditLifecycleOutput(View):
     dependency_guard: str
     effect: DepositAuditLifecycleEffect
     current: DepositAuditDocumentState
+
+
+class DepositAuditSourceIdentity(View):
+    source: str
+    row: str
+
+
+class DepositAuditAdditionalIdentity(View):
+    row: str
+    account: str
+    party: str | None
+
+
+class DepositAuditIdentityMap(View):
+    document: str
+    bank: str
+    header_row: str
+    sources: tuple[DepositAuditSourceIdentity,...]
+    additional: tuple[DepositAuditAdditionalIdentity,...]
+    prospective_ids: dict[str,str]
+
+
+class DepositAuditDraftPin(View):
+    _internal: ClassVar[frozenset[str]]=frozenset({'manifest_hash','header_json','keys_json'})
+    id: str
+    version: int
+    revision_id: str
+    revision_number: int
+    manifest_hash: str
+    snapshot: DepositAuditManifest
+    header_json: str
+    keys_json: str
+
+    @model_validator(mode='before')
+    @classmethod
+    def captured_pin(cls,value):
+        from bookflow.company.deposit_draft_provider import DraftPin
+        DraftPin.model_validate_json(json.dumps(value,allow_nan=False))
+        if type(value) is dict and type(value.get('snapshot')) is str:
+            value=dict(value,snapshot=json.loads(value['snapshot']))
+        return value
+
+
+class DepositAuditRequest(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset({'resolved_identity_map'})
+    _internal: ClassVar[frozenset[str]]=frozenset({'resolved_identity_map','resolved_draft'})
+    schema_version: Literal[1]
+    company_id: str
+    provided_fields: tuple[str,...]
+    context: OriginalContext
+    context_provided_fields: tuple[str,...]
+    resolved_transaction_ids: tuple[str,...]
+    resolved_identity_map: DepositAuditIdentityMap | None
+    resolved_draft: DepositAuditDraftPin | None = None
+
+    @model_validator(mode='after')
+    def captured_presence(self):
+        if tuple(sorted(self.input.model_fields_set))!=self.provided_fields or tuple(sorted(self.context.model_fields_set))!=self.context_provided_fields:
+            raise ValueError('captured request presence differs')
+        return self
+
+
+class DepositAuditPostRequest(DepositAuditRequest):
+    command: Literal['deposit post']
+    input: DepositAuditPostInput
+
+
+class DepositAuditUpdateRequest(DepositAuditRequest):
+    command: Literal['deposit update']
+    input: DepositAuditUpdateInput
+
+
+class DepositAuditVoidRequest(DepositAuditRequest):
+    command: Literal['deposit void']
+    input: DepositAuditVoidInput
+
+
+DepositAuditOriginalRequest=Annotated[DepositAuditPostRequest|DepositAuditUpdateRequest|DepositAuditVoidRequest,Field(discriminator='command')]
+
+
+class DepositOperationView(View):
+    tag: Literal['deposit_operation']='deposit_operation'
+    _internal: ClassVar[frozenset[str]]=frozenset({'request_hash'})
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset({'created_at','created_by','created_via'})
+    id: str
+    operation_key: str
+    command: Literal['deposit post','deposit update','deposit void']
+    transaction_id: str
+    request_hash: str
+    request_snapshot: DepositAuditOriginalRequest
+    effect_snapshot: DepositAuditLifecycleOutput
+    created_at: str | None
+    created_by: str | None
+    created_via: str | None
+    audit_event_id: str
+
+    @model_validator(mode='before')
+    @classmethod
+    def captured_original_input(cls,value):
+        if type(value) is dict:
+            from bookflow.company import deposit_lifecycle_models as inputs
+            owners={'deposit post':inputs.PostInput,'deposit update':inputs.UpdateInput,'deposit void':inputs.VoidInput}
+            try:
+                request=value['request_snapshot']
+                if type(request) is str:request=json.loads(request)
+                original=request['input']
+                if 'operation_key' in original:raise ValueError('operation key belongs to receipt')
+                owners[value['command']].model_validate_json(json.dumps(dict(original,operation_key=value['operation_key']),allow_nan=False))
+            except (KeyError,TypeError):raise ValueError('invalid original deposit intent') from None
+        return value
+
+    @model_validator(mode='after')
+    def captured_identity(self):
+        request=self.request_snapshot;output=self.effect_snapshot;effect=output.effect
+        if self.command!=request.command or self.command!=output.command or self.command!='deposit '+effect.action:
+            raise ValueError('deposit operation command differs')
+        if self.id!=output.operation_id or self.operation_key!=output.operation_key or self.audit_event_id!=effect.audit_event_id:
+            raise ValueError('deposit operation identity differs')
+        if self.transaction_id!=output.current.id or self.transaction_id!=effect.after.id or self.transaction_id!=request.resolved_identity_map.document:
+            raise ValueError('deposit document identity differs')
+        if self.transaction_id not in request.resolved_transaction_ids:
+            raise ValueError('deposit target absent')
+        if effect.before is not None and effect.before.id!=self.transaction_id:
+            raise ValueError('foreign prior deposit')
+        if output.current!=effect.after:
+            raise ValueError('stored deposit current state differs')
+        mapping=request.resolved_identity_map
+        if mapping.bank!=effect.financial.intent.bank.id:
+            raise ValueError('deposit bank identity differs')
+        if [(v.source,v.row) for v in mapping.sources]!=[(v.source.transaction_id,v.row_id) for v in effect.financial.intent.sources]:
+            raise ValueError('deposit source identities differ')
+        if [(v.row,v.account,v.party) for v in mapping.additional]!=[(v.row_id,v.account.id,v.dimensions.party_id) for v in effect.financial.intent.additional]:
+            raise ValueError('deposit additional identities differ')
+        if self.command!='deposit post' and request.input.deposit!=self.transaction_id:
+            raise ValueError('deposit intent target differs')
+        pin=request.resolved_draft;consumed=effect.consumed_draft;current=output.current_draft
+        document=getattr(request.input,'document',None)
+        if document is not None and document.mode=='draft':
+            if pin is None or (document.draft,document.expected_version)!=(pin.id,pin.version):
+                raise ValueError('draft intent target differs')
+        elif pin is not None:
+            raise ValueError('inline intent has draft pin')
+        if pin is None:
+            if consumed is not None or current is not None:raise ValueError('unexpected draft consumption')
+        else:
+            if consumed is None or current is None:raise ValueError('missing draft consumption')
+            if (pin.id,pin.version,pin.revision_id,pin.manifest_hash)!=(consumed.draft_id,consumed.version,consumed.revision_id,consumed.manifest_hash) or pin.snapshot!=consumed.snapshot:
+                raise ValueError('draft capture differs')
+            if (current.id,current.version,current.revision_id,current.manifest_hash,current.operation_id)!=(pin.id,pin.version+1,pin.revision_id,pin.manifest_hash,self.id):
+                raise ValueError('consumed draft state differs')
+        return self

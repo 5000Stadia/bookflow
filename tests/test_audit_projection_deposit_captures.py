@@ -9,16 +9,20 @@ from tests.test_deposit_drafts import cash
 from tests.test_service_sales_lifecycle import sale,COMPANY
 
 @pytest.fixture
-def captured(client,cash,run_private):
+def captured_operation(client,cash,run_private):
     posted,draft=make_posted(client,cash,run_private)
     def read(s,ctx):
         before=tuple(s.company.raw.iterdump())
-        row=s.company.raw.execute('SELECT effect_snapshot FROM deposit_operations WHERE id=?',(posted.operation_id,)).fetchone()
-        value=json.loads(row[0])
+        cursor=s.company.raw.execute('SELECT * FROM deposit_operations WHERE id=?',(posted.operation_id,))
+        value=dict(zip((v[0] for v in cursor.description),cursor.fetchone(),strict=True))
         assert tuple(s.company.raw.iterdump())==before
         return value
     return run_private(read)
 
+
+@pytest.fixture
+def captured(captured_operation):
+    return json.loads(captured_operation['effect_snapshot'])
 
 def test_actual_consumed_receipt_preserves_composition(captured):
     value=views.DepositAuditLifecycleOutput.model_validate(captured)
@@ -71,3 +75,34 @@ def test_actual_inline_post_and_void_keep_absent_draft(client,cash,run_private):
         assert decoded.current.status=='voided' and decoded.current.effective_bank_total==0
         assert tuple(s.company.raw.iterdump())==before
     run_private(check)
+
+
+def test_actual_operation_original_request_and_receipt_agree(captured_operation):
+    value=views.DepositOperationView.model_validate(captured_operation)
+    raw=json.loads(captured_operation['request_snapshot'])
+    assert value.request_snapshot.input.document.draft==value.effect_snapshot.current_draft.id
+    assert value.request_snapshot.resolved_draft.snapshot==value.effect_snapshot.effect.consumed_draft.snapshot
+    assert value.request_snapshot.provided_fields==tuple(raw['provided_fields'])
+    assert value.request_snapshot.input.document.model_dump(mode='json')==raw['input']['document']
+    output=value.model_dump(mode='json',by_alias=True)
+    assert 'request_hash' not in output
+    assert 'resolved_draft' not in output['request_snapshot']
+    assert 'resolved_identity_map' not in output['request_snapshot']
+
+
+@pytest.mark.parametrize('defect',['command','operation','document','event','draft','presence','original_input','draft_target','bank','source_map'])
+def test_actual_operation_rejects_crossed_receipt(captured_operation,defect):
+    raw=copy.deepcopy(captured_operation)
+    request=json.loads(raw['request_snapshot']);effect=json.loads(raw['effect_snapshot'])
+    if defect=='command':raw['command']='deposit update'
+    elif defect=='operation':raw['operation_key']='unrelated-operation'
+    elif defect=='document':raw['transaction_id']=raw['id']
+    elif defect=='event':raw['audit_event_id']=raw['id']
+    elif defect=='draft':request['resolved_draft']['version']+=1
+    elif defect=='presence':request['provided_fields']=[]
+    elif defect=='original_input':request['input']['document']['expected_version']=0
+    elif defect=='draft_target':request['input']['document']['draft']=raw['id']
+    elif defect=='bank':request['resolved_identity_map']['bank']=raw['id']
+    else:request['resolved_identity_map']['sources'][0]['row']=raw['id']
+    raw.update(request_snapshot=request,effect_snapshot=effect)
+    with pytest.raises(ValidationError):views.DepositOperationView.model_validate(raw)
