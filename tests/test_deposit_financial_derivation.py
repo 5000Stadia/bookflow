@@ -141,17 +141,19 @@ def test_operation_denial_precedes_deferred_decode_error(world,driver,monkeypatc
 def test_draft_gate_and_manifest_failure_precede_source_admission(world,driver,monkeypatch):
     with driver.session() as s:
         b=OSBinding.from_session(s);calls=[]
-        gate=drafts.v.admit;graph=sources.graph_many
+        gate=drafts.v.admit;graph=sources.graph_many;begin=d.begin_draft
         failure=BookflowError('E_VALIDATION',details={'reason':'manifest_hash'})
         def admitted(*args,**kwargs):calls.append('admit');return gate(*args,**kwargs)
+        def draft(*args,**kwargs):calls.append('draft');return begin(*args,**kwargs)
         def invalid(*args,**kwargs):calls.append('manifest');raise failure
         def source(*args,**kwargs):calls.append('source');return graph(*args,**kwargs)
         with monkeypatch.context() as patch:
             patch.setattr(drafts.v,'admit',admitted);patch.setattr(d,'begin_revision',invalid)
             patch.setattr(sources,'graph_many',source)
+            patch.setattr(d,'begin_draft',draft)
             with pytest.raises(BookflowError) as caught:drafts.load(s,world['copy'].id,binding=b)
             assert caught.value is failure
-        assert calls==['admit','manifest']
+        assert calls==['admit','draft','manifest']
 
 
 @pytest.mark.parametrize('entrance',[
