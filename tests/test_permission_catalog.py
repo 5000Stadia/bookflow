@@ -178,7 +178,7 @@ def test_frozen_manifest_digest_and_pure_import_boundary():
     for name in ('permission_catalog', 'permission_policy'):
         tree = ast.parse((ROOT / f'src/bookflow/hub/{name}.py').read_text())
         modules = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)} | {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
-        assert modules <= {'__future__', 'dataclasses', 'typing', 'types', 'enum', 'hashlib', 'json', 'permission_catalog'}
+        assert modules <= {'__future__', 'dataclasses', 'typing', 'types', 'enum', 'hashlib', 'json', 'functools', 'permission_catalog'}
 
 
 @pytest.mark.parametrize('field', ['commands', 'capabilities', 'defaults', 'company_actions', 'admin_actions', 'conditional_sources'])

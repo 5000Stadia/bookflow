@@ -4,6 +4,7 @@ from dataclasses import dataclass, fields, is_dataclass, asdict, replace
 from typing import Literal, get_type_hints, get_origin, get_args, Union
 from types import UnionType
 from enum import Enum
+from functools import lru_cache
 import hashlib
 import json
 
@@ -134,6 +135,19 @@ def _fail(category, field):
     raise PolicyInputError(InputErrorCategory(category), field)
 
 
+@lru_cache(maxsize=128)
+def _declared_fields(annotation):
+    # Only this module's fixed declaration metadata is cached, never values,
+    # memberships, permission answers or a catalog validation result.
+    return tuple(get_type_hints(annotation).items())
+
+
+def _field_types(annotation):
+    if annotation.__module__ == __name__:
+        return _declared_fields(annotation)
+    return tuple(get_type_hints(annotation).items())
+
+
 def _check(value, annotation, field='input'):
     origin, args = get_origin(annotation), get_args(annotation)
     if origin in (Union, UnionType):
@@ -161,7 +175,7 @@ def _check(value, annotation, field='input'):
     elif is_dataclass(annotation):
         if type(value) is not annotation:
             _fail('invalid_type', field)
-        for key, kind in get_type_hints(annotation).items():
+        for key, kind in _field_types(annotation):
             _check(getattr(value, key), kind, key)
     elif isinstance(annotation, type) and issubclass(annotation, Enum):
         if type(value) is not annotation:
