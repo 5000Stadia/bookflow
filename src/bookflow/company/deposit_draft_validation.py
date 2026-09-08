@@ -109,53 +109,11 @@ def validate_manifest(manifest):
 
 
 def decode_revision(s, header, revision, kind):
-    try:manifest=Manifest.model_validate_json(revision['snapshot'])
-    except ValidationError:raise BookflowError('E_VALIDATION',details={'reason':'invalid_manifest'}) from None
-    validate_manifest(manifest)
-    require(q.digest(manifest.model_dump(mode='json'))==revision['manifest_hash'],'manifest_hash')
-    require(manifest.high_water==revision['high_water'])
-    parent=kind+'_id'
-    require(revision[parent]==header['id'])
-    from bookflow.company.deposit_draft_history import DraftHistoryProof
-    proof=DraftHistoryProof(s,header,revision,kind)
-    st=getattr(c,'deposit_'+kind+'_sources')
-    stored=list(s.company.conn.execute(sa.select(st).where(st.c.revision_id==revision['id']).order_by(st.c.ordinal)).mappings())
-    require(len(stored)==len(manifest.sources),'source_count')
-    source_graphs=deposit_sources.graph_many(s,[row.source.transaction_id for row in manifest.sources])
-    for raw,row in zip(stored,manifest.sources):
-        require((raw[parent],raw['row_id'],raw['ordinal'],raw['source_transaction_id'],raw['source_type'],raw['expected_header_version'],raw['source_revision_id'],raw['memo'],raw['memo_origin'])==
-            (header['id'],row.row_id,row.ordinal,row.source.transaction_id,row.source.source_type,row.source.expected_header_version,row.source.revision_id,row.memo,row.memo_origin))
-        require(json.loads(raw['snapshot'])==row.model_dump(mode='json'),'source_snapshot')
-        # Independently reconstruct the captured business revision from real owned
-        # rows. A later correction is history, not permission to rewrite the pin.
-        g=source_graphs[row.source.transaction_id]
-        endpoint=proof.source_endpoint(row)
-        if row.source.source_type=='payment':
-            keys=c.payment_component_keys
-            allowed=set(s.company.conn.execute(sa.select(keys.c.id).join(c.audit_events,c.audit_events.c.id==keys.c.audit_event_id).where(keys.c.transaction_id==row.source.transaction_id,c.audit_events.c.seq<=endpoint.sequence)).scalars())
-            g['payment_component_keys']=[key for key in g['payment_component_keys'] if key['id'] in allowed]
-        g['header']=endpoint.header
-        g['posting_batches']=[b for b in g['posting_batches'] if b['id']==row.source.business_batch_id]
-        actual=deposit_sources.project(g,uf_account=row.source.uf_account,home_currency=manifest.currency)
-        captured=row.source.model_copy(update={'expected_header_version':endpoint.header['version']})
-        require(actual==captured,'source_provenance')
-    if kind=='draft':
-        require((revision['bank_account_id'],revision['cashback_account_id'])==(manifest.header.bank.id if manifest.header.bank else None,manifest.header.cash_back.account.id if manifest.header.cash_back and manifest.header.cash_back.account else None))
-        at=c.deposit_draft_additional
-        added=list(s.company.conn.execute(sa.select(at).where(at.c.revision_id==revision['id']).order_by(at.c.ordinal)).mappings())
-        require(len(added)==len(manifest.additional))
-        for raw,row in zip(added,manifest.additional):
-            require(json.loads(raw['snapshot'])==row.model_dump(mode='json'))
-            require((raw['draft_id'],raw['row_id'],raw['ordinal'],raw['account_id'],raw['class_id'],raw['payment_method_id'],raw['amount_minor_units'],raw['currency'])==
-                (header['id'],row.row_id,row.ordinal,row.account.id if row.account else None,row.class_ref.id if row.class_ref else None,row.payment_method.id if row.payment_method else None,row.units,manifest.currency))
-            require(raw['party_kind']==(row.received_from.kind if row.received_from else None))
-            for k in ('customer','vendor','employee','other_name'):require(raw[k+'_id']==(row.received_from.id if row.received_from and row.received_from.kind==k else None))
-        keys={r['id']:r for r in s.company.conn.execute(sa.select(c.deposit_draft_row_keys).where(c.deposit_draft_row_keys.c.draft_id==header['id'])).mappings()}
-        for group,name in ((manifest.sources,'source'),(manifest.additional,'additional')):
-            for row in group:
-                key=keys.get(row.row_id);require(key is not None and (key['ordinal'],key['kind'])==(row.ordinal,name))
-                require(key['edit_transaction_id'] is None or key['edit_transaction_id'] in (header['edit_transaction_id'],header['copy_transaction_id']))
-    return manifest
+    from bookflow.company import deposit_financial_derivation as d
+    read=d.CompanyFacts(d.CompanyConnection(s.company.conn))
+    start=d.begin_revision(read,header,revision,kind=kind)
+    source_graphs=deposit_sources.graph_many(s,[row.source.transaction_id for row in start.manifest.sources])
+    return d.finish_revision(read,start,source_graphs)
 
 
 def stale_sources(s,manifest,edit=None):

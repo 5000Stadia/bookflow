@@ -178,7 +178,15 @@ def test_same_state_financial_loaders_for_admitted_bindings(state,record_propert
     assert stored(state)==before and state['host']._readers_attached==0
 
 
-# Source assessment at a2a8866, accepted precursor 9d214d30. This is a finite
+# Source assessment: staged derivation extraction after accepted precursor 9d214d30.
+# Financial functions now retain only CompanyFacts(company.conn). Wrappers retain
+# all admission and credential returns. OriginalDecode/require_original are pure
+# stored-value decoding/diagnosis. The moved bank validator calls precisely
+# deposit_read_authority.select (data-only); no admission-module-wide exemption.
+# DraftHistoryProof and History now receive CompanyFacts in derivation. Their
+# selected unchanged delegates and the entire new module are pinned below.
+# Consumption error normalization stays around its moved raw validator.
+# This is a finite
 # change detector anchored in review, NOT a taint analyzer or a proof for every
 # graph/permission model. Never refresh a digest without reviewing the changed
 # body, its new calls/aliases and this assessment, and retaining the real-binding
@@ -223,14 +231,15 @@ def test_same_state_financial_loaders_for_admitted_bindings(state,record_propert
 #
 # Named reviewed selections, not a general module/table inventory.
 FLOW_OWNERS = {
-    'deposit_operation_pages': ('authorized_original', 'collections', 'typed_collections'),
+    'deposit_financial_derivation': ('CompanyConnection', 'CompanyFacts', 'checked', '_row', 'DraftStart', 'RevisionStart', 'RootFinancial', 'begin_draft', 'begin_revision', 'finish_revision', 'require_row_origins', '_validate_consumed', 'require_consumed', 'require_no_consumption', 'consumed_state', 'derive_root', '_bank', 'require_operation_items', 'require_consumption_match'),
+    'deposit_operation_pages': ('authorized_original', 'collections', 'typed_collections', 'OriginalDecode', 'decode_original', 'require_original'),
     'deposit_operations': ('decode_output',),
     'deposit_draft_consumption': ('current', '_validate_consumed', 'validate_consumed'),
     'deposit_drafts': ('load', '_row'),
     'deposit_draft_validation': ('admit', 'require', 'summary', 'validate_manifest', 'decode_revision'),
     'deposit_draft_history': ('require', 'HeaderEndpoint', 'DraftHistoryProof'),
     'deposit_draft_provider': ('validate_row_origins',),
-    'deposit_read_facts': ('ValidatedDeposit', 'invalid', 'load_complete', '_bank', '_history', '_navigation', '_associations'),
+    'deposit_read_facts': ('ValidatedDeposit', 'invalid', 'load_complete', '_history', '_navigation', '_associations'),
     'deposit_read_authority': ('ReadEvidence', 'select', 'authenticate', 'admit'),
     'deposit_sources': ('require', 'graph_many', '_partition', 'CashPartition', '_project', 'project'),
     'deposit_read_validation': ('require', 'exact_one', 'audit_rows', 'revision', 'posting_lifecycle', 'lifecycle'),
@@ -281,14 +290,15 @@ BINDING_RETURN = ('deposit_drafts', 'load', 'return (header, dict(revision), man
 # Filled once from the reviewed selections above. No update/generate mode exists
 # in the tests; an AST change requires a new source-flow assessment.
 FLOW_DIGESTS = {
-    'deposit_operation_pages': 'b38d5f66b60df54b92fd215907f76a4cd4f35dc02291a3a2dbd8d00a8ae28133',
+    'deposit_financial_derivation': '200ad5050ab32abf1fe6d2842f5f594cf8f736fdf175b5f2df0dd9bec763cf13',
+    'deposit_operation_pages': '598b25b6bfcc974957e88b3786b1c9d3c6ace895cdf513a743fc31b7867c4d46',
     'deposit_operations': '1d0bf86ac1cddc8fb8453e03d26353b1878e6265f7a9fb14d546cb3fc07ba903',
-    'deposit_draft_consumption': 'cae75a88a0b0adcfd85253041d5326514861528833ab4b8a458befda4653d31e',
-    'deposit_drafts': '7cb392a65adc8dedec20c9e3e5a7f9d926000b58c230e0eed2e17e09b4de73eb',
-    'deposit_draft_validation': '93c75f23e3a616b52c46f304741f4dfcae5f7c113d3011f512b838c1cfd0dd6b',
+    'deposit_draft_consumption': 'c5784f641df128518c9e02dfcee1e1ce50a7b1054b50d03750728e4bf995025d',
+    'deposit_drafts': 'a23aec5ee36f84047923c530e4b238935f9dae6e78ab0fe95ffcef92783b0fc8',
+    'deposit_draft_validation': 'a55c0f68b9f6f1350fb5920dcced913a9f16300a490f29ff2a95828aa4ba89d7',
     'deposit_draft_history': '73169adbc158396acca700937a5fe0c1220e5aa46834e81505afbacf70f1f0ee',
-    'deposit_draft_provider': 'b185a8172117594515e4692a116cd38b281ddad84afbd869c55e621aedf65267',
-    'deposit_read_facts': 'e104287b65ce72b9bed70c8d45b1322a66092cb1c3b564205342d3aa211ffb36',
+    'deposit_draft_provider': '81c88b8bf62391588eaabf31840cfc3e8793bd64c2b339d3be816c6ec5839020',
+    'deposit_read_facts': '4cd2155f4ace68977b8efdec54d605166c3c92ab9d04d73a563f5713a9332b5a',
     'deposit_read_authority': '65c398b3b754f876f6dfdaa8fc1ba3a780261b8ca76a960fa00137b1e09558bf',
     'deposit_sources': '6f3b3dc473e6a3df8fde53f0c58d1ba31786788a8b474dfa1fb1b6d264fcc7a0',
     'deposit_read_validation': '02ea40e755ad4f8145eff6acb02cf6d0265a2b064a67f0dca1346208f0583089',
@@ -399,5 +409,23 @@ def test_binding_flow_independent_of_fingerprint(monkeypatch, statement, excepti
         include_attributes=False).encode()).hexdigest()
     monkeypatch.setitem(FLOW_DIGESTS, module, digest)
     with pytest.raises(exception, match=match) as caught:
+        _assert_binding_flow(sources)
+    assert 'Review binding source flow:' not in str(caught.value)
+
+
+def test_binding_flow_checks_later_owner_return(monkeypatch):
+    sources = _flow_sources()
+    _assert_binding_flow(sources)
+    module = 'deposit_drafts'
+    function = next(node for node in sources[module].body
+        if isinstance(node, ast.FunctionDef) and node.name == 'load')
+    # The legitimate fourth binding return must not permit another position.
+    function.body[-1:] = ast.parse('return binding, header, revision, manifest').body
+    ast.fix_missing_locations(sources[module])
+    digest = hashlib.sha256(ast.dump(
+        _flow_selection(sources[module], FLOW_OWNERS[module]),
+        include_attributes=False).encode()).hexdigest()
+    monkeypatch.setitem(FLOW_DIGESTS, module, digest)
+    with pytest.raises(AssertionError) as caught:
         _assert_binding_flow(sources)
     assert 'Review binding source flow:' not in str(caught.value)

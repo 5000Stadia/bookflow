@@ -107,6 +107,51 @@ def collections(output):
     return {kind:[value.model_dump(mode='json') for value in values] for kind,values in typed_collections(output).items()}
 
 
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True, slots=True)
+class OriginalDecode:
+    request_ok: bool
+    resolved: tuple[str, ...]
+    output_ok: bool
+    output: object
+
+    @property
+    def additional_roots(self):
+        available=set(self.resolved)
+        if self.output is not None and self.output.command=='deposit coordinate':
+            available.update(self.output.effect.target_ids)
+        return available
+
+
+def decode_original(saved) -> OriginalDecode:
+    request_ok=True;output_ok=True
+    resolved=[]
+    try:
+        request=json.loads(saved['request_snapshot'])
+        resolved=request['resolved_transaction_ids']
+        if type(resolved) is not list or any(type(v) is not str or not v for v in resolved):raise ValueError()
+    except (ValueError,KeyError,TypeError):
+        request_ok=False;resolved=[]
+    output=None
+    try:
+        output=operations.decode_output(saved['effect_snapshot'],saved['command'])
+    except (ValueError,TypeError,ValidationError):
+        output_ok=False
+    return OriginalDecode(request_ok,tuple(resolved),output_ok,output)
+
+
+def require_original(saved,targets,decoded: OriginalDecode):
+    resolved=decoded.resolved;output=decoded.output
+    if not decoded.request_ok or not decoded.output_ok or not targets or saved['transaction_id'] not in targets or list(targets)!=sorted(resolved):
+        raise BookflowError('E_INTERNAL',message='Incomplete operation evidence.')
+    if output.operation_id!=saved['id'] or output.current.id!=saved['transaction_id']:
+        raise BookflowError('E_INTERNAL')
+    if output.command=='deposit coordinate' and output.effect.target_ids!=targets:raise BookflowError('E_INTERNAL')
+    return output
+
+
 def authorized_original(s,saved,binding,*,write=False):
     history.execution_binding(s,binding)
     indexed=rows.rows(s,c.deposit_operation_targets,c.deposit_operation_targets.c.operation_id==saved['id'])
@@ -120,33 +165,15 @@ def authorized_original(s,saved,binding,*,write=False):
             if error.code=='E_PERMISSION':raise BookflowError('E_PERMISSION',details={}) from None
             raise
     admit((*targets,saved['transaction_id']))
-    malformed=False
-    resolved=[]
-    try:
-        request=json.loads(saved['request_snapshot'])
-        resolved=request['resolved_transaction_ids']
-        if type(resolved) is not list or any(type(v) is not str or not v for v in resolved):raise ValueError()
-    except (ValueError,KeyError,TypeError):
-        malformed=True;resolved=[]
-    output=None
-    try:
-        output=operations.decode_output(saved['effect_snapshot'],saved['command'])
-    except (ValueError,TypeError,ValidationError):
-        malformed=True
+    decoded=decode_original(saved)
     # Admit every recoverable root before diagnosing inconsistent evidence,
     # including effect roots when request JSON itself is corrupt. Equal roots
     # need no second check in this same binding/snapshot; this is no cross-read
     # permission cache and the next page starts with fresh admission.
-    available=set(resolved)
-    if output is not None and output.command=='deposit coordinate':available.update(output.effect.target_ids)
+    available=decoded.additional_roots
     admitted=set(targets)|{saved['transaction_id']}
     if available-admitted:admit((*admitted,*available))
-    if malformed or not targets or saved['transaction_id'] not in targets or list(targets)!=sorted(resolved):
-        raise BookflowError('E_INTERNAL',message='Incomplete operation evidence.')
-    if output.operation_id!=saved['id'] or output.current.id!=saved['transaction_id']:
-        raise BookflowError('E_INTERNAL')
-    if output.command=='deposit coordinate' and output.effect.target_ids!=targets:raise BookflowError('E_INTERNAL')
-    return output
+    return require_original(saved,targets,decoded)
 
 
 def authorized_output(s,saved,binding,*,write=False):

@@ -39,53 +39,9 @@ def persist(s,value):
 
 
 def _validate_consumed(s,header,revision):
-    """Validate terminal lifecycle independently of the pinned revision version."""
-    found=list(s.company.conn.execute(sa.select(c.deposit_draft_consumptions).where(c.deposit_draft_consumptions.c.draft_id==header['id'])).mappings())
-    validation.require(len(found)==1,'consumption')
-    row=dict(found[0])
-    validation.require((row['revision_id'],row['operation_id'],row['manifest_hash'])==
-        (revision['id'],header['consumed_operation_id'],revision['manifest_hash']),'consumption_pin')
-    validation.require(header['consumed_revision_id']==header['current_revision_id']==revision['id'] and header['version']==revision['version']+1,'consumption_version')
-    operation=drafts._row(s,c.deposit_operations,row['operation_id'])
-    validation.require(operation['audit_event_id']==header['audit_event_id']==row['audit_event_id'],'consumption_event')
-    if header['edit_transaction_id'] is not None:validation.require(operation['transaction_id']==header['edit_transaction_id'],'consumption_target')
-    validation.require(header['state']=='consumed' and revision['draft_id']==header['id'], 'consumption_owner')
-    validation.require((row['created_at'],row['created_by'],row['created_via'])==
-        (header['updated_at'],header['updated_by'],header['updated_via']), 'consumption_writer')
-    try:
-        saved=json.loads(operation['request_snapshot'])
-        pin=provider.DraftPin.model_validate_json(q.canonical(saved['resolved_draft']))
-        output=json.loads(operation['effect_snapshot'])
-        effect=output['effect']
-        if operation['command']=='deposit coordinate':effect=effect['deposit']
-        from bookflow.company.deposit_lifecycle_models import DraftConsumptionReceipt
-        receipt=DraftConsumptionReceipt.model_validate_json(q.canonical(effect['consumed_draft']))
-    except (ValueError, KeyError, TypeError):
-        raise BookflowError('E_VALIDATION',details={'reason':'consumption_receipt'}) from None
-    validation.require((pin.id,pin.version,pin.revision_id,pin.revision_number,pin.manifest_hash,pin.snapshot)==
-        (header['id'],revision['version'],revision['id'],revision['version'],revision['manifest_hash'],revision['snapshot']), 'consumption_pin_receipt')
-    old=json.loads(pin.header_json)
-    transitioned=dict(old,state='consumed',version=old['version']+1,consumed_revision_id=revision['id'],
-        consumed_operation_id=operation['id'],audit_event_id=operation['audit_event_id'],
-        updated_at=operation['created_at'],updated_by=operation['created_by'],updated_via=operation['created_via'])
-    validation.require(old['state']=='open' and header==transitioned,'consumption_exact_transition')
-    keys=list(s.company.conn.execute(sa.select(c.deposit_draft_row_keys).where(
-        c.deposit_draft_row_keys.c.draft_id==header['id']).order_by(c.deposit_draft_row_keys.c.ordinal)).mappings())
-    validation.require(q.canonical([dict(k) for k in keys])==pin.keys_json,'consumption_exact_keys')
-    validation.require((receipt.draft_id,receipt.version,receipt.revision_id,receipt.manifest_hash,receipt.snapshot)==
-        (pin.id,pin.version,pin.revision_id,pin.manifest_hash,pin.snapshot), 'consumption_original_receipt')
-    validation.require(effect['after']['id']==operation['transaction_id'] and
-        effect['audit_event_id']==row['audit_event_id'], 'consumption_effect_target')
-    from bookflow.company.deposit_draft_models import Manifest
-    manifest=Manifest.model_validate_json(revision['snapshot'])
-    validation.require(q.digest(manifest.model_dump(mode='json'))==revision['manifest_hash'],'consumption_manifest_hash')
-    captured={r.ordinal:r.row_id for r in (*manifest.sources,*manifest.additional)}
-    financial=effect['financial']['intent']
-    actual={r['ordinal']:r['row_id'] for r in (*financial['sources'],*financial['additional'])}
-    validation.require(len(actual)==len(captured)==len(receipt.rows), 'consumption_row_count')
-    validation.require({r.ordinal:(r.draft_row_id,r.financial_row_id) for r in receipt.rows}==
-        {n:(identity,actual.get(n)) for n,identity in captured.items()}, 'consumption_row_map')
-    validation.require(len({r.financial_row_id for r in receipt.rows})==len(receipt.rows), 'consumption_row_bijection')
+    from bookflow.company import deposit_financial_derivation as d
+    read=d.CompanyFacts(d.CompanyConnection(s.company.conn))
+    return d._validate_consumed(read,header,revision)
 
 
 def validate_consumed(s,header,revision):
@@ -113,11 +69,12 @@ def current(s,operation,*,ctx=None,binding=None,write=False):
     rows=list(s.company.conn.execute(sa.select(c.deposit_draft_consumptions).where(c.deposit_draft_consumptions.c.operation_id==operation)).mappings())
     if not rows:
         stored=drafts._row(s,c.deposit_operations,operation)
-        validation.require('resolved_draft' not in json.loads(stored['request_snapshot']), 'missing_consumption')
+        from bookflow.company.deposit_financial_derivation import require_no_consumption
+        require_no_consumption(stored)
         return None
     h,r,m,_=drafts.load(s,rows[0]['draft_id'],ctx=ctx,binding=binding,write=write)
-    from bookflow.company.deposit_lifecycle_models import ConsumedDraftState
-    return ConsumedDraftState(id=h['id'],version=h['version'],state=h['state'],revision_id=r['id'],manifest_hash=r['manifest_hash'],operation_id=operation)
+    from bookflow.company.deposit_financial_derivation import consumed_state
+    return consumed_state(operation,h,r)
 
 
 def receipt(data,financial):

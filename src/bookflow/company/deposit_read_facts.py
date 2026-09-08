@@ -46,7 +46,9 @@ def load_complete(s,deposit_ids,*,binding):
     source_graphs=deposit_sources.graph_many(s,source_ids)
     source_headers={r['id']:r for r in authority.select(s,c.transactions,c.transactions.c.id,source_ids)}
     source_claims={r['source_transaction_id']:r for r in authority.select(s,c.deposit_current_memberships,c.deposit_current_memberships.c.source_transaction_id,source_ids)}
-    reader=h.History(s)
+    from bookflow.company import deposit_financial_derivation as d
+    read=d.CompanyFacts(d.CompanyConnection(s.company.conn))
+    reader=h.History(read)
     events=set(evidence.events)
     for rows in graphs.values():events.update(r['audit_event_id'] for r in rows if 'audit_event_id' in r)
     for graph in source_graphs.values():
@@ -72,15 +74,9 @@ def load_complete(s,deposit_ids,*,binding):
             output=opages.authorized_original(s,op,binding,write=False)
             collections=opages.collections(output)
             stored=authority.select(s,c.deposit_operation_items,c.deposit_operation_items.c.operation_id,[op['id']])
-            v.require(set(r['kind'] for r in stored)<=set(collections))
-            for kind,values in collections.items():
-                found=sorted([r for r in stored if r['kind']==kind],key=lambda r:r['ordinal'])
-                v.require([r['ordinal'] for r in found]==list(range(len(values))) and [json.loads(r['facts_snapshot']) for r in found]==values)
+            d.require_operation_items(collections,stored)
             current=deposit_draft_consumption.current(s,op['id'],binding=binding,write=False)
-            saved_effect=output.effect.deposit if output.command=='deposit coordinate' else output.effect
-            if saved_effect.consumed_draft:
-                v.require(current is not None and current.id==saved_effect.consumed_draft.draft_id)
-            else:v.require(current is None)
+            d.require_consumption_match(output,current)
             outputs[op['id']]=output
             links[op['transaction_id']].append(EvidenceLink(kind='operation',id=op['id'],label=op['operation_key']))
             if current:
@@ -94,20 +90,9 @@ def load_complete(s,deposit_ids,*,binding):
         for header in headers:
             identity=header['id'];graph={name:[r for r in rows if r['transaction_id']==identity] for name,rows in graphs.items()}
             graph['_event_sequences']={k:r['seq'] for k,r in event_rows.items()}
-            v.require(reader.take('transaction',identity) is not None)
-            v.audit_rows(reader,{k:x for k,x in graph.items() if not k.startswith('_')})
-            revs=sorted(graph['transaction_revisions'],key=lambda r:r['revision_number']);previous=None
-            chosen={};effects={}
-            for n,rev in enumerate(revs,1):
-                v.require(rev['revision_number']==n and rev['supersedes_revision_id']==previous);previous=rev['id']
-                effect,issuer,custom=v.revision(graph,rev,source_graphs,reader)
-                v.require(issuer.id==s.company_info_row['id'] and issuer.home_currency==rev['currency'])
-                effects[rev['id']]=effect
-                chosen[n]=Selected(pin=Pin(deposit=identity,revision_id=rev['id'],revision_number=n),date=rev['date'],number=rev['number'],memo=rev['memo'],issuer=issuer,custom_fields=custom,deposit_to=effect.intent.bank,cash_back=effect.intent.cash_back)
-                links[identity].append(EvidenceLink(kind='revision',id=rev['id']))
-            v.require(revs and header['current_revision_id']==revs[-1]['id'] and header['number']==revs[-1]['number'])
-            v.lifecycle(graph,header)
-            _bank(s,graph,effects,header)
+            financial=d.derive_root(read,header,graph,source_graphs,event_rows,company_info_id=s.company_info_row['id'],reader=reader)
+            chosen,effects,revs=financial.selected,financial.effects,financial.revisions
+            for rev in revs:links[identity].append(EvidenceLink(kind='revision',id=rev['id']))
             for version in graph['bank_effect_versions']:links[identity].append(EvidenceLink(kind='bank_version',id=version['id'],related_id=version['key_id'],active=bool(version['active'])))
             _associations(s,identity,links[identity])
             semantic=_history(graph,event_rows,outputs)
@@ -121,39 +106,6 @@ def load_complete(s,deposit_ids,*,binding):
     except (ValidationError,h.MissingHistory,ValueError,KeyError,TypeError,IndexError,BookflowError) as error:invalid(error)
 
 
-def _bank(s,g,effects,header):
-    keys={r['id']:r for r in g['bank_effect_keys']};versions=g['bank_effect_versions']
-    current=authority.select(s,c.bank_effect_current,c.bank_effect_current.c.key_id,keys)
-    v.require(len(current)==len(keys));bykey={r['key_id']:r['version_id'] for r in current}
-    for key,k in keys.items():
-        found=sorted([r for r in versions if r['key_id']==key],key=lambda r:r['version'])
-        v.require(found and [r['version'] for r in found]==list(range(1,len(found)+1)) and bykey[key]==found[-1]['id'])
-        for r in found:
-            e=effects[r['revision_id']];role=k['role'];account=None;units=0
-            if role=='main_bank':account=e.intent.bank;units=e.bank_total
-            elif role=='cash_back':
-                if e.intent.cash_back:account=e.intent.cash_back.account;units=e.cash_back
-            else:
-                row=next((a for a in e.intent.additional if a.row_id==k['row_id']),None)
-                if row:account=row.account;units=-row.units
-            batch=v.exact_one([b for b in g['posting_batches'] if b['id']==r['batch_id']])
-            if r['active']:
-                v.require(batch['kind']!='reversal' and account is not None and account.type in ('bank','credit_card') and units!=0)
-                v.require((r['account_id'],r['signed_debit'],r['statement_amount'])==(account.id,units,-units if account.type=='credit_card' else units))
-            else:v.require(r['signed_debit']==r['statement_amount']==0)
-            selected=v.exact_one([x for x in g['transaction_revisions'] if x['id']==r['revision_id']])
-            v.require((r['effective_date'],r['currency'],r['number'],r['memo'])==(selected['date'],selected['currency'],selected['number'],selected['memo']))
-        if header['status']=='voided':v.require(not found[-1]['active'])
-    # Every bank/card role of every stored business revision has its exact active version.
-    for rid,e in effects.items():
-        expected=[('main_bank',e.intent.bank,e.bank_total)]
-        if e.intent.cash_back:expected.append(('cash_back',e.intent.cash_back.account,e.cash_back))
-        expected.extend(('additional',a.account,-a.units) for a in e.intent.additional)
-        wanted=Counter((role,a.id,n) for role,a,n in expected if a.type in ('bank','credit_card') and n)
-        got=Counter((keys[r['key_id']]['role'],r['account_id'],r['signed_debit']) for r in versions if r['revision_id']==rid and r['active'])
-        v.require(wanted==got)
-
-from collections import Counter
 
 def _history(g,events,outputs):
     rows=[]

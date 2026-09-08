@@ -113,36 +113,9 @@ def verify_pin(s,ctx,pin,binding):
 
 
 def validate_row_origins(s, header, keys):
-    """Original keys prove pinned composition membership; only edit reuses IDs."""
-    origin = header['edit_transaction_id'] or header['copy_transaction_id']
-    revision_id = header['baseline_revision_id'] or header['copy_revision_id']
-    members = {}
-    if origin is not None:
-        from bookflow.company.deposit_models import Effect
-        profile = s.company.conn.execute(sa.select(c.deposit_profiles).where(
-            c.deposit_profiles.c.transaction_id == origin,
-            c.deposit_profiles.c.revision_id == revision_id)).mappings().one_or_none()
-        validation.require(profile is not None, 'draft_origin_profile')
-        try:
-            effect = Effect.model_validate_json(profile['facts_snapshot'])
-        except (ValueError,TypeError):
-            raise BookflowError('E_VALIDATION',details={'reason':'draft_origin_profile'}) from None
-        for kind, group in (('source', effect.intent.sources), ('additional', effect.intent.additional)):
-            for row in group:
-                validation.require(row.row_id not in members, 'draft_origin_bijection')
-                members[row.row_id] = (kind, row.ordinal)
-    seen = set()
-    for key in keys:
-        pair = (key['edit_transaction_id'], key['original_row_id'])
-        if pair == (None, None):
-            continue
-        validation.require(origin is not None and pair[0] == origin, 'draft_origin_owner')
-        validation.require(members.get(pair[1]) == (key['kind'], key['ordinal']), 'draft_origin_member')
-        validation.require(pair[1] not in seen, 'draft_origin_bijection')
-        seen.add(pair[1])
-        raw = s.company.conn.execute(sa.select(c.deposit_row_keys).where(
-            c.deposit_row_keys.c.id == pair[1], c.deposit_row_keys.c.transaction_id == origin)).mappings().one_or_none()
-        validation.require(raw is not None and (raw['kind'], raw['ordinal']) == members[pair[1]], 'draft_origin_key')
+    from bookflow.company import deposit_financial_derivation as d
+    read=d.CompanyFacts(d.CompanyConnection(s.company.conn))
+    return d.require_row_origins(read,header,keys)
 
 
 def coordinate(s,ctx,inp,binding):

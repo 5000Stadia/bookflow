@@ -27,32 +27,16 @@ def _row(s,table,identity):
 
 def load(s,identity,revision_number=None,*,kind='draft',ctx=None,binding=None,write=False):
     binding=v.admit(s,ctx,binding,**{kind:identity},write=write)
-    table=getattr(c,'deposit_'+('drafts' if kind=='draft' else 'selections'))
-    header=_row(s,table,identity);rt=getattr(c,'deposit_'+kind+'_revisions')
-    revisions=list(s.company.conn.execute(sa.select(rt).where(rt.c[kind+'_id']==identity).order_by(rt.c.version)).mappings())
-    prior=None;high_water=-1
-    for index,revision in enumerate(revisions,1):
-        v.require(revision['version']==index and revision['previous_revision_id']==prior,'revision_chain')
-        v.require(revision['high_water']>=high_water,'ordinal_high_water')
-        high_water=revision['high_water'];prior=revision['id']
-    consumed=kind=='draft' and header['state']=='consumed'
-    v.require(bool(revisions) and revisions[-1]['id']==header['current_revision_id'] and revisions[-1]['version']+int(consumed)==header['version'],'current_revision')
+    from bookflow.company import deposit_financial_derivation as d
+    read=d.CompanyFacts(d.CompanyConnection(s.company.conn))
+    start=d.begin_draft(read,identity,revision_number,kind=kind)
+    header,revision=start.header,start.revision
+    pending=d.begin_revision(read,header,revision,kind=kind)
+    source_graphs=deposit_sources.graph_many(s,[row.source.transaction_id for row in pending.manifest.sources])
+    manifest=d.finish_revision(read,pending,source_graphs)
     if kind=='draft':
-        if not consumed:
-            v.require(s.company.conn.execute(sa.select(c.deposit_draft_consumptions.c.operation_id).where(c.deposit_draft_consumptions.c.draft_id==identity)).first() is None,'unexpected_consumption')
-    if consumed:
-        from bookflow.company.deposit_draft_consumption import validate_consumed
-        validate_consumed(s,header,revisions[-1])
-    revision=next((r for r in revisions if r['version']==revision_number),None) if revision_number else revisions[-1]
-    if revision is None:raise BookflowError('E_RECORD_NOT_FOUND')
-    if kind=='draft':
-        maximum=s.company.conn.execute(sa.select(sa.func.max(c.deposit_draft_row_keys.c.ordinal)).where(c.deposit_draft_row_keys.c.draft_id==identity)).scalar_one() or 0
-        v.require(high_water>=maximum,'ordinal_high_water')
-    manifest=v.decode_revision(s,header,revision,kind)
-    if kind=='draft':
-        from bookflow.company.deposit_draft_provider import validate_row_origins
         keys=list(s.company.conn.execute(sa.select(c.deposit_draft_row_keys).where(c.deposit_draft_row_keys.c.draft_id==identity)).mappings())
-        validate_row_origins(s,header,keys)
+        d.require_row_origins(read,header,keys)
     return header,dict(revision),manifest,binding
 
 
