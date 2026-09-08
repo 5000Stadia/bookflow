@@ -3859,6 +3859,7 @@ class RecoveryHeaderView(RecoveryCreated):
             if (request is None)!=(receipt is None) or (request is None)!=(digest is None):raise ValueError('incomplete receipt')
             if receipt is not None:
                 if receipt.recovery_id!=self.id or receipt.selection_id!=self.selection_id:raise ValueError('foreign receipt')
+                if receipt.declared_entry_count!=self.declared_entry_count:raise ValueError('receipt declared count differs')
                 if request.command!='payment recovery '+receipt.action or receipt.request_hash!=digest:raise ValueError('receipt command or hash mismatch')
         if (self.state in ('applied','aborted','superseded'))!=(self.terminal_receipt_snapshot is not None):raise ValueError('invalid terminal state')
         if self.state in ('sealed','applied') and self.seal_receipt_snapshot is None:raise ValueError('missing seal')

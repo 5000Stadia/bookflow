@@ -1974,3 +1974,5 @@ cutover remain required. The
 private implementation is not a complete audit or full-C release.
 
 Private recovery audit decoding binds each begin/seal/terminal and upload request snapshot to its stored SHA-256 before typed projection omits internal fields. Stored strings use their exact UTF-8 bytes; already-decoded object input uses the original producer canonical encoding. Body/digest binding is separate from request-action/receipt-hash agreement, which remains checked for every retained phase. Original audit bytes are never rewritten.
+
+Each captured recovery phase receipt's declared entry count must equal its owning attempt header's immutable declared count. This check applies to begin, seal and terminal receipts; mutable per-phase received counts are not compared to later header state.

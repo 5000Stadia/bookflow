@@ -164,3 +164,20 @@ def test_nonterminal_recovery_receipt_agreement(recovered,phase):
         decode_company_snapshot(producer=command,record_type=kind,action=action,snapshot=raw)
     assert error.value.code=='E_VALIDATION' and error.value.details=={'reason':'audit_format'}
     assert storage(path)==before
+
+
+@pytest.mark.parametrize('phase',['begin','seal','terminal'])
+def test_recovery_receipt_declared_count_matches_attempt(recovered,phase):
+    import copy,json
+    from bookflow.core.errors import BookflowError
+    _,_,path,rows=recovered;before=storage(path)
+    _,command,kind,action,_,blob=next(row for row in rows if row[1]=='payment recovery apply' and row[2]=='payment_selection_recovery')
+    raw=copy.deepcopy(decode_snapshot(blob));key=phase+'_receipt_snapshot'
+    receipt=json.loads(raw[key])
+    assert receipt['declared_entry_count']==raw['declared_entry_count']
+    receipt['declared_entry_count']+=1
+    raw[key]=json.dumps(receipt)
+    with pytest.raises(BookflowError) as error:
+        decode_company_snapshot(producer=command,record_type=kind,action=action,snapshot=raw)
+    assert error.value.code=='E_VALIDATION' and error.value.details=={'reason':'audit_format'}
+    assert storage(path)==before
