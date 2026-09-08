@@ -377,6 +377,7 @@ class AuditAudience:
         self.comparison=observed.observation.snapshot.comparison
         self._signatures={}
         self._origin_kinds={}
+        self._kind_decisions={}
 
     def validate(self):
         if self.reader.authenticate()!=self.identity:
@@ -655,12 +656,21 @@ def _company_view(audience,event,entry,value,side):
 
 def _kind_allowed(audience,company,kind):
     from . import audit_projection_legacy as legacy
+    # Only field disclosure repeats this decision. For this audience, comparison,
+    # actor/principal and phase are fixed; kind selects fixed build requirements.
+    # Thus (company, kind) contains every varying input. Fresh publication creates
+    # a new audience and an empty memo; never share admitted decisions across it.
+    # Main/entry/annotation admission gates still call require without this memo.
+    key=(company,kind)
+    if key in audience._kind_decisions:return audience._kind_decisions[key]
     try:
         audience.require(company,legacy.entry_requirement(kind))
-        return True
+        allowed=True
     except BookflowError as exc:
-        if exc.code=='E_PERMISSION':return False
-        raise
+        if exc.code!='E_PERMISSION':raise
+        allowed=False
+    audience._kind_decisions[key]=allowed
+    return allowed
 
 
 def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
