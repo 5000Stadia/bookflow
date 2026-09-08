@@ -372,3 +372,32 @@ def test_source_flow_rejects_identity_derived_alias(module, owner, statements):
     # This proves change detection at these flow sites, not semantic taint proof.
     with pytest.raises(AssertionError, match=f'Review binding source flow: {module};'):
         _assert_binding_flow(sources)
+
+
+@pytest.mark.parametrize('statement,exception,match', [
+    ('carrier = binding', pytest.fail.Exception, 'Unreviewed binding use:'),
+    ('output = output.model_copy(update={"operation_id": binding.user_id})',
+        AssertionError, 'authorized_original'),
+    ('return binding', AssertionError, None),
+])
+def test_binding_flow_independent_of_fingerprint(monkeypatch, statement, exception, match):
+    sources = _flow_sources()
+    _assert_binding_flow(sources)
+    module = 'deposit_operation_pages'
+    function = next(node for node in sources[module].body
+        if isinstance(node, ast.FunctionDef) and node.name == 'authorized_original')
+    injected = ast.parse(statement).body
+    if isinstance(injected[-1], ast.Return):
+        function.body[-1:] = injected
+    else:
+        function.body[-1:-1] = injected
+    ast.fix_missing_locations(sources[module])
+    # Bypass only this parsed mutant's fingerprint to exercise the flow layer.
+    # This temporary in-memory substitution is not a source-hash update mode.
+    digest = hashlib.sha256(ast.dump(
+        _flow_selection(sources[module], FLOW_OWNERS[module]),
+        include_attributes=False).encode()).hexdigest()
+    monkeypatch.setitem(FLOW_DIGESTS, module, digest)
+    with pytest.raises(exception, match=match) as caught:
+        _assert_binding_flow(sources)
+    assert 'Review binding source flow:' not in str(caught.value)
