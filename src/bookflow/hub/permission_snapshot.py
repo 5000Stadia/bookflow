@@ -347,17 +347,34 @@ def _read_rows(raw, table, kind):
     return tuple(records)
 
 
+def _policy_pass(catalog):
+    """One local pass; normalize lazily, but parse and validate every row."""
+    normalized = None
+
+    def policy(row):
+        nonlocal normalized
+        try:
+            values = []
+            for raw in (row.grants, row.denies):
+                value = [] if raw is None else _parse(raw, 'memberships')
+                if type(value) is not list:
+                    _fail('legacy_policy_invalid', 'memberships')
+                values.append(tuple(value))
+            if normalized is None:
+                normalized = c._normal_catalog(catalog)
+            return _policy_from_values(values, normalized_catalog=normalized)
+        except (SnapshotError, c.PolicyInputError):
+            _fail('legacy_policy_invalid', 'memberships')
+
+    return policy
+
+
+def _policy_from_values(values, *, normalized_catalog):
+    return a._normalize_policy(*values, normalized_catalog)
+
+
 def _policy(row, catalog):
-    try:
-        values = []
-        for raw in (row.grants, row.denies):
-            value = [] if raw is None else _parse(raw, 'memberships')
-            if type(value) is not list:
-                _fail('legacy_policy_invalid', 'memberships')
-            values.append(tuple(value))
-        return a.normalize_policy(*values, catalog=catalog)
-    except (SnapshotError, c.PolicyInputError):
-        _fail('legacy_policy_invalid', 'memberships')
+    return _policy_pass(catalog)(row)
 
 
 def _keys(rows):
@@ -392,6 +409,7 @@ def _validate(rows, keys, catalog):
     for row in (*orgs, *companies):
         _retired(row.pending_path)
     member_keys = set()
+    policy = _policy_pass(catalog)
     for row in members:
         key = (row.user_id,row.scope_type,row.scope_id)
         if key in member_keys:
@@ -399,7 +417,7 @@ def _validate(rows, keys, catalog):
         member_keys.add(key)
         if row.revoked_at is None and (row.user_id not in uu or row.scope_id not in (oo if row.scope_type=='organization' else cc)):
             _fail('invalid_facts','memberships')
-        _policy(row, catalog)  # Full preflight includes revoked policies too.
+        policy(row)  # Full preflight includes revoked policies too.
     for row in assignments:
         if row.agent_user_id not in uu or uu[row.agent_user_id].kind != 'agent' or row.principal_user_id not in uu or uu[row.principal_user_id].kind != 'human':
             _fail('invalid_facts','assignments')
@@ -621,8 +639,9 @@ def _observe(root, scopes, subjects):
                         row.pending_path if row else None, reason))
     live = {x.scope for x in observed if x.logical_present}
     members = {(x.user_id, c.ScopeKey(x.scope_type, x.scope_id)): x for x in root.memberships if x.revoked_at is None}
+    policy = _policy_pass(root.catalog)
     slots = tuple(a.MembershipSlot(who, scope,
-        a.Membership(members[who, scope].role, _policy(members[who, scope], root.catalog))
+        a.Membership(members[who, scope].role, policy(members[who, scope]))
         if who in root.keys.users and scope in live and (who, scope) in members else None)
         for who in subjects for scope in scopes if scope.kind in ('organization', 'company'))
     live_orgs = tuple(sorted(set(orgs) - retired_orgs))
