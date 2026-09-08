@@ -2567,6 +2567,9 @@ def decode_company_snapshot(*, producer: str, record_type: str, action: str,
         if model is None:_format()
         if producer=='invoice update' and snapshot.get('kind')=='document_changes':
             model=InvoiceDocumentChangeItemView
+    if record_type in _RECOVERY_MODELS:
+        if (producer,action) not in _RECOVERY_ACTIONS[record_type]:_format()
+        model=_RECOVERY_MODELS[record_type]
     if record_type in _SELECTION_MODELS:
         if producer not in _SELECTION_COMMANDS or action not in ('create','update'):
             _format()
@@ -2835,7 +2838,7 @@ _SELECTION_MODELS={m.model_fields['tag'].default:m for m in (
     PaymentSelectionView,PaymentSelectionRevisionView,PaymentSelectionItemView)}
 _SELECTION_COMMANDS=('payment selection create','payment selection update','payment selection clear',
     'payment receive','payment apply','payment unapply','payment update','payment void',
-    'payment recovery apply','payment recovery replace')
+    'payment recovery apply','payment recovery abort')
 _REFERENCE_GROUPS.update({SelectionContextView: (
     (('customer_id','funding_capacities','funding_owners'),'customer'),
     (('ar_account_id',),'account'),)})
@@ -3641,3 +3644,278 @@ for _field in ('billing_links','billing_sources'):
     _OBJECT_FIELD_REQUIREMENTS[InvoiceAuditSalesRevisionOutput,_field]=('work_order',)
 for _field in ('source_effect','source_current','billing_forecast','billing_progress'):
     _OBJECT_FIELD_REQUIREMENTS[InvoiceAuditSalesWriteOutput,_field]=('work_order',)
+
+
+class RecoveryAuditHeaderIntent(View):
+    action: Literal['keep','set']
+    amount_origin: Literal['entered','selection_total','unresolved'] | None = None
+    amount_minor_units: int | None = None
+    currency: str | None = None
+
+
+class RecoveryAuditBeginInput(View):
+    _internal: ClassVar[frozenset[str]]=frozenset(['attempt_generation', 'intent_hash'])
+    recovery_key: str
+    selection: str
+    expected_version: int
+    local_baseline_revision: str
+    attempt_generation: str
+    declared_entry_count: int
+    intent_hash: str
+    header_intent: RecoveryAuditHeaderIntent
+
+
+class RecoveryAuditRecoveryEntry(View):
+    invoice_id: str
+    observed_invoice_version: int
+    action: Literal['set','remove','calculate']
+    amount_minor_units: int | None = None
+    currency: str | None = None
+    amount_origin: Literal['entered','calculated','unresolved'] | None = None
+    retained_calculation_revision_id: str | None = None
+    attempted_calculated_minor_units: int | None = None
+
+
+class RecoveryAuditUploadInput(View):
+    recovery_id: str
+    chunk_index: int
+    entries: tuple[RecoveryAuditRecoveryEntry,...]
+
+
+class RecoveryAuditSealInput(View):
+    recovery_id: str
+    expected_recovery_version: int
+
+
+class RecoveryAuditApplyInput(View):
+    _internal: ClassVar[frozenset[str]]=frozenset(['attempt_generation', 'intent_hash', 'expected_facts_fingerprint'])
+    recovery_id: str
+    expected_recovery_version: int
+    attempt_generation: str
+    intent_hash: str
+    expected_selection_version: int
+    expected_facts_fingerprint: str
+
+
+class RecoveryAuditAbortInput(View):
+    recovery_id: str
+    expected_recovery_version: int
+    disposition: Literal['discard_entire_attempt']
+
+
+class RecoveryAuditReplaceInput(View):
+    recovery_id: str
+    expected_recovery_version: int
+    replacement: RecoveryAuditBeginInput
+
+
+class RecoveryAuditReceipt(View):
+    _internal: ClassVar[frozenset[str]]=frozenset(['request_hash'])
+    action: Literal['begin','upload','seal','apply','abort','replace']
+    request_hash: str
+    recovery_id: str | None
+    selection_id: str
+    recovery_version: int
+    selection_version: int
+    revision_id: str | None = None
+    replacement_recovery_id: str | None = None
+    actor_id: str | None = None
+    recorded_at: str | None = None
+    audit_event_id: str | None = None
+    chunk_index: int | None = None
+    received_entry_count: int
+    declared_entry_count: int
+
+
+
+class RecoveryContext(View):
+    _internal: ClassVar[frozenset[str]]=frozenset({'reason','reason_present'})
+    reason_present: bool
+    reason: str | None
+
+
+class RecoveryRequest(View):
+    request_schema_version: Literal[1]
+    context: RecoveryContext
+
+    @model_validator(mode='before')
+    @classmethod
+    def owned_input(cls,value):
+        from bookflow.company import payment_recovery_models as owner
+        models={'payment recovery begin':owner.BeginInput,'payment recovery upload':owner.UploadInput,
+            'payment recovery seal':owner.SealInput,'payment recovery apply':owner.ApplyInput,
+            'payment recovery abort':owner.AbortInput,'payment recovery replace':owner.ReplaceInput}
+        if type(value) is dict:
+            command=value.get('command')
+            if command not in models:raise ValueError('unknown recovery command')
+            models[command].model_validate_json(json.dumps(value.get('input'),allow_nan=False))
+        return value
+
+
+class RecoveryBeginRequest(RecoveryRequest):
+    command: Literal['payment recovery begin']
+    input: RecoveryAuditBeginInput
+
+
+class RecoveryUploadRequest(RecoveryRequest):
+    command: Literal['payment recovery upload']
+    input: RecoveryAuditUploadInput
+
+
+class RecoverySealRequest(RecoveryRequest):
+    command: Literal['payment recovery seal']
+    input: RecoveryAuditSealInput
+
+
+class RecoveryApplyRequest(RecoveryRequest):
+    command: Literal['payment recovery apply']
+    input: RecoveryAuditApplyInput
+
+
+class RecoveryAbortRequest(RecoveryRequest):
+    command: Literal['payment recovery abort']
+    input: RecoveryAuditAbortInput
+
+
+class RecoveryReplaceRequest(RecoveryRequest):
+    command: Literal['payment recovery replace']
+    input: RecoveryAuditReplaceInput
+
+
+class RecoveryCreated(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset({'created_at','created_by','created_via'})
+    created_at: str | None
+    created_by: str | None
+    created_via: str | None
+    audit_event_id: str
+
+
+class RecoveryHeaderView(RecoveryCreated):
+    tag: Literal['payment_selection_recovery']='payment_selection_recovery'
+    _internal: ClassVar[frozenset[str]]=frozenset({'attempt_generation','intent_hash','begin_request_hash','seal_request_hash','terminal_request_hash'})
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset({'version','updated_at','updated_by','updated_via'})
+    id: str
+    version: int | None = Field(ge=1)
+    updated_at: str | None
+    updated_by: str | None
+    updated_via: str | None
+    selection_id: str
+    recovery_key: str
+    request_schema_version: Literal[1]
+    attempt_generation: str
+    local_baseline_revision_id: str
+    anchor_revision_id: str
+    anchor_selection_version: int = Field(ge=1)
+    header_intent: RecoveryAuditHeaderIntent
+    declared_entry_count: int = Field(ge=0)
+    intent_hash: str
+    state: Literal['uploading','sealed','applied','aborted','superseded']
+    applied_revision_id: str | None
+    begin_request_snapshot: RecoveryBeginRequest
+    begin_request_hash: str
+    begin_receipt_snapshot: RecoveryAuditReceipt
+    seal_request_snapshot: RecoverySealRequest | None
+    seal_request_hash: str | None
+    seal_receipt_snapshot: RecoveryAuditReceipt | None
+    terminal_request_snapshot: Annotated[RecoveryApplyRequest | RecoveryAbortRequest | RecoveryReplaceRequest,Field(discriminator='command')] | None
+    terminal_request_hash: str | None
+    terminal_receipt_snapshot: RecoveryAuditReceipt | None
+
+    @model_validator(mode='before')
+    @classmethod
+    def header_json(cls,value):
+        if type(value) is dict and type(value.get('header_intent')) is str:
+            value=dict(value,header_intent=json.loads(value['header_intent']))
+        return value
+
+    @model_validator(mode='after')
+    def captured_state(self):
+        from bookflow.company.payment_recovery_models import HeaderIntent
+        HeaderIntent.model_validate_json(json.dumps(self.header_intent.model_dump(mode='json'),allow_nan=False))
+        original=self.begin_request_snapshot.input
+        if original.selection!=self.selection_id or original.recovery_key!=self.recovery_key or original.local_baseline_revision!=self.local_baseline_revision_id or original.attempt_generation!=self.attempt_generation or original.intent_hash!=self.intent_hash or original.declared_entry_count!=self.declared_entry_count:
+            raise ValueError('foreign original attempt')
+        if original.header_intent!=self.header_intent:raise ValueError('different header intent')
+
+        if (self.state=='applied')!=(self.applied_revision_id is not None):raise ValueError('invalid applied revision')
+        for action in ('begin','seal','terminal'):
+            request=getattr(self,action+'_request_snapshot');receipt=getattr(self,action+'_receipt_snapshot');digest=getattr(self,action+'_request_hash')
+            if (request is None)!=(receipt is None) or (request is None)!=(digest is None):raise ValueError('incomplete receipt')
+            if receipt is not None:
+                if receipt.recovery_id!=self.id or receipt.selection_id!=self.selection_id:raise ValueError('foreign receipt')
+                if request.command!='payment recovery '+receipt.action or receipt.request_hash!=digest:raise ValueError('receipt command or hash mismatch')
+        if (self.state in ('applied','aborted','superseded'))!=(self.terminal_receipt_snapshot is not None):raise ValueError('invalid terminal state')
+        if self.state in ('sealed','applied') and self.seal_receipt_snapshot is None:raise ValueError('missing seal')
+        if self.state=='uploading' and self.seal_receipt_snapshot is not None:raise ValueError('uploading with seal')
+        expected={'applied':'apply','aborted':'abort','superseded':'replace'}.get(self.state)
+        if expected is not None and self.terminal_receipt_snapshot.action!=expected:raise ValueError('wrong terminal action')
+        if self.begin_receipt_snapshot.action!='begin' or (self.seal_receipt_snapshot is not None and self.seal_receipt_snapshot.action!='seal'):raise ValueError('wrong lifecycle action')
+        return self
+
+
+class RecoveryChunkView(RecoveryCreated):
+    tag: Literal['payment_selection_recovery_chunk']='payment_selection_recovery_chunk'
+    _internal: ClassVar[frozenset[str]]=frozenset({'request_hash'})
+    id: str
+    selection_id: str
+    recovery_id: str
+    chunk_index: int = Field(ge=0)
+    request_hash: str
+    request_snapshot: RecoveryUploadRequest
+    receipt_snapshot: RecoveryAuditReceipt
+
+    @model_validator(mode='after')
+    def captured_chunk(self):
+        if self.request_snapshot.input.recovery_id!=self.recovery_id or self.receipt_snapshot.recovery_id!=self.recovery_id or self.receipt_snapshot.selection_id!=self.selection_id:raise ValueError('foreign chunk')
+        if self.request_snapshot.input.chunk_index!=self.chunk_index or self.receipt_snapshot.chunk_index!=self.chunk_index:raise ValueError('wrong chunk index')
+        if self.receipt_snapshot.action!='upload' or self.receipt_snapshot.request_hash!=self.request_hash:raise ValueError('wrong chunk receipt')
+        return self
+
+
+class RecoveryItemView(RecoveryCreated):
+    tag: Literal['payment_selection_recovery_item']='payment_selection_recovery_item'
+    id: str
+    selection_id: str
+    recovery_id: str
+    entry_index: int = Field(ge=1)
+    invoice_id: str
+    invoice_type: Literal['invoice']
+    observed_invoice_version: int = Field(ge=1)
+    action: Literal['set','remove','calculate']
+    amount_minor_units: int | None = Field(ge=0)
+    currency: str | None
+    amount_origin: Literal['entered','calculated','unresolved'] | None
+    retained_calculation_revision_id: str | None
+    attempted_calculated_minor_units: int | None = Field(ge=0)
+
+    @model_validator(mode='after')
+    def captured_intent(self):
+        extras=(self.amount_minor_units,self.currency,self.amount_origin,self.retained_calculation_revision_id)
+        if self.action=='remove' and any(v is not None for v in (*extras,self.attempted_calculated_minor_units)):
+            raise ValueError('remove has amount data')
+        if self.action=='calculate' and any(v is not None for v in extras):raise ValueError('calculate has saved amount')
+        if self.action=='set':
+            if self.currency is None or self.attempted_calculated_minor_units is not None:raise ValueError('set requires currency')
+            if self.amount_origin=='unresolved':
+                if self.amount_minor_units is not None or self.retained_calculation_revision_id is not None:raise ValueError('unresolved has amount')
+            elif self.amount_origin in ('entered','calculated'):
+                if self.amount_minor_units is None or ((self.amount_origin=='calculated')!=(self.retained_calculation_revision_id is not None)):raise ValueError('invalid saved calculation')
+            else:raise ValueError('missing amount origin')
+        return self
+
+
+class RecoveryActiveView(RecoveryCreated):
+    tag: Literal['payment_selection_recovery_active']='payment_selection_recovery_active'
+    selection_id: str
+    recovery_id: str
+
+
+_RECOVERY_COMMANDS=tuple('payment recovery '+verb for verb in ('begin','upload','seal','apply','abort','replace'))
+_RECOVERY_MODELS={model.model_fields['tag'].default:model for model in (RecoveryHeaderView,RecoveryChunkView,RecoveryItemView,RecoveryActiveView)}
+
+_RECOVERY_ACTIONS={
+    'payment_selection_recovery':frozenset((('payment recovery begin','create'),('payment recovery upload','update'),('payment recovery seal','update'),('payment recovery apply','update'),('payment recovery abort','update'),('payment recovery replace','update'),('payment recovery replace','create'))),
+    'payment_selection_recovery_chunk':frozenset({('payment recovery upload','create')}),
+    'payment_selection_recovery_item':frozenset({('payment recovery upload','create')}),
+    'payment_selection_recovery_active':frozenset({('payment recovery begin','create'),('payment recovery apply','delete'),('payment recovery abort','delete'),('payment recovery replace','delete'),('payment recovery replace','create')}),
+}

@@ -704,9 +704,9 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
         if kind not in ('customer','vendor','employee','other_name'):format_error()
         if not _kind_allowed(audience,company,kind):
             updates.update({key:None for key in fields});partial=True
-    if isinstance(value,legacy.OperationExecutionView):
+    if isinstance(value,(legacy.OperationExecutionView,legacy.RecoveryAuditReceipt)):
         for key in ('actor_id','on_behalf_of'):
-            identifier=getattr(value,key)
+            identifier=getattr(value,key,None)
             if identifier is not None and not audience.identity_visible(identifier):
                 updates[key]=None;partial=True
     for key in ('created_by','updated_by','author_id','uploaded_by','linked_by','given_by','recorded_by','entered_by','deactivated_by','voided_by','accepted_by'):

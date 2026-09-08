@@ -1958,7 +1958,17 @@ Original command inputs and captured results are validated against their owners;
 current reference permissions apply to both. The checked-in field inventory covers
 the invoice-specific models and rejects unclassified schema growth.
 
-Deposit operation variants, recovery receipt decoders,
+Saved payment-recovery audit records use closed begin/upload/seal/apply/abort/replace
+request variants and typed receipts. Header, chunk, attempted item and active-barrier
+records have explicit producer/action allowances. Apply and abort append selection
+revisions; replacement preserves the selection and replaces the active barrier.
+Captured request omission, exact amount origins and retained calculation identities
+are preserved. Internal intent/request hashes, attempt generations, freshness
+assertions and free-text context provenance are omitted. Actor identities use the
+same current identity disclosure as other operations. Unchanged projected headers
+are omitted even when their raw version changes during an upload.
+
+Deposit operation variants,
 complete producer/format conformance, no-entry semantics and public cursor/transport
 cutover remain required. The
 private implementation is not a complete audit or full-C release.
