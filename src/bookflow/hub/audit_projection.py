@@ -968,12 +968,21 @@ def _matches(event,selection):
     return True
 
 
-def _visible_events(audience,company,*,descending,lower=None,upper=None):
+def _visible_events(audience,company,*,descending,lower=None,upper=None,candidate=None):
     """Bounded SQL blocks; stop decoding once the semantic page is complete."""
-    db,events,_=_tables(audience,company)
+    db,events,entries=_tables(audience,company)
     last=None
     while True:
         q=sa.select(events.c.id,events.c.seq)
+        if candidate is not None:
+            # Only immutable raw identities can exclude an event. Projection
+            # must preserve entry identity; candidates still undergo every gate.
+            predicate=sa.select(entries.c.id).where(entries.c.event_id==events.c.id)
+            if candidate.record_type is not None:
+                predicate=predicate.where(entries.c.record_type==candidate.record_type)
+            if candidate.record_id is not None:
+                predicate=predicate.where(entries.c.record_id==candidate.record_id)
+            q=q.where(predicate.exists())
         if lower is not None:q=q.where(events.c.seq>lower)
         if upper is not None:q=q.where(events.c.seq<=upper)
         if last is not None:q=q.where(events.c.seq<last if descending else events.c.seq>last)
@@ -1064,7 +1073,9 @@ def project_history(audience,selection):
     lower=anchorseq if not descending else None
     matched=[];scanned=[];more=False;predicates=[]
     budget=min(selection.limit,selection.scan_limit) if selection.mode=='tail' and selection.scan_limit is not None else None
-    for _,event in _visible_events(audience,selection.company,descending=descending,lower=lower,upper=upper):
+    candidate=(selection if selection.mode=='list' and selection.company is not None
+               and (selection.record_type is not None or selection.record_id is not None) else None)
+    for _,event in _visible_events(audience,selection.company,descending=descending,lower=lower,upper=upper,candidate=candidate):
         evidence.append(event.id)
         if budget is not None:
             if len(scanned)==budget:more=True;break

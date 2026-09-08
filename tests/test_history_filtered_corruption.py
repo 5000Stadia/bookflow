@@ -1,4 +1,4 @@
-"""Current filtered-list corruption behavior, kept explicit before scan optimization."""
+"""Filtered scans exclude noncandidate events, never corrupt candidates."""
 from pathlib import Path
 
 import pytest
@@ -14,7 +14,7 @@ from bookflow.storage.engine import open_database
 from tests.test_audit_projection_activity import world
 
 
-def test_older_unrelated_authorized_capture_still_validated(world):
+def test_noncandidate_corruption_is_excluded_but_remains_detectable(world):
     client=world['client']
     company='Demo Plumbing Co'
     older=client.customer.create(name='Unrelated corruption witness',company=company)
@@ -29,10 +29,34 @@ def test_older_unrelated_authorized_capture_still_validated(world):
     host=Host(world['root'],version=client_version());host.start()
     try:
         cred=OSBinding.capture(host,os_login())
+        result=run_hosted(host,registry.get('audit list'),
+            {'record_type':'customer','record_id':target['id'],'limit':20},
+            Context.new('http','Filtered corruption witness'),cred,info['company_id'],'option',False)
+        assert result['count']==1
+        result.check()
+        for filters in ({'record_type':'customer','record_id':older['id']},{}):
+            with pytest.raises(BookflowError) as caught:
+                run_hosted(host,registry.get('audit list'),{**filters,'limit':20},
+                           Context.new('http','Corruption detection witness'),cred,info['company_id'],'option',False)
+            assert caught.value.code=='E_VALIDATION'
+            assert caught.value.details=={'reason':'audit_format'}
+        assert host._readers_attached==0
+    finally:
+        host.stop()
+    # Move the corrupt capture into the matching event in this disposable DB.
+    # The candidate unit is an event, not just its matching entry. Preserve a
+    # newer valid endpoint so this specifically tests the selected scan.
+    with open_database(Path(info['path'])/'company.db',writable=True) as db:
+        event=db.raw.execute('SELECT event_id FROM audit_entries WHERE record_id=?',(target['id'],)).fetchone()[0]
+        db.raw.execute('UPDATE audit_entries SET event_id=? WHERE record_id=?',(event,older['id']))
+    client.customer.create(name='Newer valid corruption endpoint',company=company)
+    host=Host(world['root'],version=client_version());host.start()
+    try:
+        cred=OSBinding.capture(host,os_login())
         with pytest.raises(BookflowError) as caught:
-            run_hosted(host,registry.get('audit list'),{'record_type':'customer','record_id':target['id'],'limit':20},
-                       Context.new('http','Filtered corruption witness'),cred,info['company_id'],'option',False)
-        assert caught.value.code=='E_VALIDATION'
+            run_hosted(host,registry.get('audit list'),
+                {'record_type':'customer','record_id':target['id'],'limit':20},
+                Context.new('http','Co-resident corruption witness'),cred,info['company_id'],'option',False)
         assert caught.value.details=={'reason':'audit_format'}
         assert host._readers_attached==0
     finally:

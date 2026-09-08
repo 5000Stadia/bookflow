@@ -1970,6 +1970,15 @@ assertions and free-text context provenance are omitted. Actor identities use th
 same current identity disclosure as other operations. Unchanged projected headers
 are omitted even when their raw version changes during an upload.
 
+Company history lists with record identity filters select candidate events using
+immutable raw entry identities before projection. Every projected entry retains
+its raw identity. Candidates still pass full event projection and final matching;
+raw matches alone confer no visibility. Endpoint discovery and anchor validation
+remain unfiltered. Corrupt decoded entries in a candidate event fail the request,
+including unrelated co-resident entries. Excluded noncandidate captures are not
+decoded by the filtered scan; unfiltered history still detects their corruption.
+Hub history, activity and tail scans retain their existing selection paths.
+
 Deposit operation variants,
 complete producer/format conformance, no-entry semantics and public cursor/transport
 cutover remain required. The

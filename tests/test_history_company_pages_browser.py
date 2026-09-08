@@ -46,5 +46,7 @@ def test_library_note_revisions_visible_in_company_page(company_site, customer, 
         assert browser.evaluate("document.querySelector('[data-section=notes] [data-items]').textContent.includes('Original <script>')") is False
         assert browser.evaluate("document.querySelectorAll('[data-annotations] [data-items] script').length") == 0
         _contained(browser, width)
+        timing=browser.evaluate("(() => {const n=performance.getEntriesByType('navigation')[0]; return {response_ms:n.responseEnd-n.startTime,load_ms:n.loadEventEnd-n.startTime};})()")
+        print(json.dumps({'width':width,'navigation':timing},sort_keys=True))
     finally:
         browser.close()
