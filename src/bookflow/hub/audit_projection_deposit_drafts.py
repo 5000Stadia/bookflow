@@ -23,18 +23,22 @@ def require(value):
 
 
 class Created(legacy.View):
-    created_at: str
-    created_by: ID
-    created_via: str
+    # The trusted disclosure walker nulls provenance before serialization.
+    # Stored captures remain required and nonnull through the inherited guard.
+    _captured_nonnull: ClassVar[frozenset[str]] = frozenset({'created_at', 'created_by', 'created_via'})
+    created_at: str | None
+    created_by: ID | None
+    created_via: str | None
     audit_event_id: ID
 
 
 class Header(Created):
+    _captured_nonnull: ClassVar[frozenset[str]] = frozenset({'version', 'updated_at', 'updated_by', 'updated_via'})
     id: ID
-    version: Positive
-    updated_at: str
-    updated_by: ID
-    updated_via: str
+    version: Positive | None
+    updated_at: str | None
+    updated_by: ID | None
+    updated_via: str | None
     current_revision_id: ID
 
 
@@ -79,9 +83,10 @@ class Selection(Header):
 
 
 class Revision(Created):
+    _captured_nonnull: ClassVar[frozenset[str]] = frozenset({'version'})
     _internal: ClassVar[frozenset[str]] = frozenset({'manifest_hash', 'high_water'})
     id: ID
-    version: Positive
+    version: Positive | None
     previous_revision_id: ID | None
     snapshot: legacy.DepositAuditManifest
     manifest_hash: Digest

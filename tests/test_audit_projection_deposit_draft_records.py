@@ -181,3 +181,59 @@ def test_literal_nine_owner_names_and_route_fields():
             for field in fields:
                 assert field in model.model_fields
                 assert type(None) in __import__('typing').get_args(model.model_fields[field].annotation)
+
+
+# Exact fields written to None by the existing disclosure walker's identity and
+# partial-provenance paths; these are still nonnull in raw co24 captures.
+CREATED_PROVENANCE = frozenset({'created_at', 'created_by', 'created_via'})
+HEADER_PROVENANCE = frozenset({'version', 'updated_at', 'updated_by', 'updated_via'})
+
+
+def provenance_fields(kind):
+    if kind in ('deposit_draft', 'deposit_selection'):
+        return CREATED_PROVENANCE | HEADER_PROVENANCE
+    if kind in ('deposit_draft_revision', 'deposit_selection_revision'):
+        return CREATED_PROVENANCE | {'version'}
+    return CREATED_PROVENANCE
+
+
+@pytest.mark.parametrize('kind', tuple(codec.MODELS))
+def test_raw_null_provenance_rejected_for_every_record_family(records, kind):
+    row = next(r for r in records if r['record_type'] == kind)
+    raw = stored_decode(row['after'])
+    for field in sorted(provenance_fields(kind)):
+        assert raw[field] is not None
+        damaged = copy.deepcopy(raw)
+        damaged[field] = None
+        with pytest.raises(BookflowError) as caught:
+            codec.decode_snapshot(producer=row['command'], record_type=kind,
+                                  action=row['action'], snapshot=damaged)
+        assert caught.value.code == 'E_VALIDATION'
+        assert caught.value.details == {'reason': 'audit_format'}
+
+
+@pytest.mark.parametrize('kind', tuple(codec.MODELS))
+def test_trusted_identity_and_partial_provenance_nulls_serialize(records, kind):
+    from typing import get_args
+    from bookflow.hub import audit_projection_legacy as legacy
+    row = next(r for r in records if r['record_type'] == kind)
+    raw = stored_decode(row['after'])
+    value = codec.decode_snapshot(producer=row['command'], record_type=kind,
+                                  action=row['action'], snapshot=raw)
+    fields = provenance_fields(kind)
+    assert fields == legacy._PARTIAL_PROVENANCE & codec.MODELS[kind].model_fields.keys()
+    for field in fields:
+        assert type(None) in get_args(codec.MODELS[kind].model_fields[field].annotation)
+    # Exercise created and updated identity denial independently before the
+    # partial path strips them, including the serializer's intermediate handler.
+    for field in sorted(fields & {'created_by', 'updated_by'}):
+        masked = value.model_copy(update={field: None})
+        expected = value.model_dump(mode='json', warnings='error')
+        expected[field] = None
+        assert masked.model_dump(mode='json', warnings='error') == expected
+        assert json.loads(masked.model_dump_json(warnings='error')) == expected
+    partial = value.model_copy(update={**dict.fromkeys(fields), 'projection_partial': True})
+    expected = {k: v for k, v in value.model_dump(mode='json').items() if k not in fields}
+    assert partial.model_dump(mode='json', warnings='error') == expected
+    assert json.loads(partial.model_dump_json(warnings='error')) == expected
+    assert_capture(value, raw)  # trusted copies never rewrite the original capture
