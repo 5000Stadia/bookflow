@@ -55,7 +55,12 @@ def coordinate(request, _seeded_template, tmp_path_factory):
                 total = 17200
             ctx = Context.new(Interface.python, 'Coordinate event producer', reason='Correct captured source')
             with runner.session() as s:
-                output = persistence.execute(s, ctx, prepare(s, ctx, CoordinateInput.model_validate(wire)))
+                proposed = CoordinateInput.model_validate(wire)
+                prepared = prepare(s, ctx, proposed)
+                # Both private freshness inputs are actually supplied, so their
+                # removal from display and supplied-field metadata has a witness.
+                proposed = proposed.model_copy(update={'expected_facts_fingerprint': prepared.facts_fingerprint})
+                output = persistence.execute(s, ctx, prepare(s, ctx, proposed))
                 assert output.current.revision_bank_total == total
                 cur = s.company.raw.execute('SELECT * FROM deposit_operations WHERE id=?', (output.operation_id,))
                 raw = dict(zip((x[0] for x in cur.description), cur.fetchone(), strict=True))
@@ -133,6 +138,12 @@ def test_real_coordinate_whole_event_covers_all_touched_entries(coordinate):
         assert actual.effect.source.action.kind == c['family']
         assert actual.operation_id == c['raw']['id']
         assert len(result.entries) > 1
+        original_request = json.loads(c['raw']['request_snapshot'])
+        internal = {'dependency_guard', 'expected_facts_fingerprint'}
+        assert internal <= set(original_request['provided_fields'])
+        shown_request = operations[0].after.request_snapshot
+        assert internal.isdisjoint(shown_request.provided_fields)
+        assert internal.isdisjoint(shown_request.input.model_dump(mode='json'))
 
 
 def test_fresh_mandatory_source_denial_hides_entire_coordinate_event(coordinate):
@@ -145,12 +156,19 @@ def test_fresh_mandatory_source_denial_hides_entire_coordinate_event(coordinate)
         assert read(c, host, event=False)['effect_snapshot']['current']['revision_bank_total'] == c['total']
 
 
-def test_coordinate_current_field_denies_preserve_amounts(coordinate):
+def test_coordinate_current_field_denies_preserve_amounts(coordinate, monkeypatch):
     c = coordinate
     with hosted(c) as host:
         allowed = read(c, host, event=False)
         with denied(c, host, ('account', 'payment-method', 'custom-field', 'customer')):
-            masked = read(c, host, event=False)
+            from bookflow.hub import audit_projection_deposit_coordinate as coordinate_codec
+            from bookflow.hub import audit_projection_deposit_drafts as draft_codec
+            # A granted requirement in an earlier map must not replace the
+            # existing denied custom-field requirement in the coordinate map.
+            with monkeypatch.context() as patch:
+                patch.setitem(draft_codec.FIELD_REQUIREMENTS,
+                    (coordinate_codec.CoordinateSourceEvidence, 'custom_changes'), ('employee',))
+                masked = read(c, host, event=False)
         for value in (allowed, masked):
             current = value['effect_snapshot']['current']
             assert current['revision_bank_total'] == c['total'] and current['revision_cash_back'] == 500
