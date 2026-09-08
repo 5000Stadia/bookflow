@@ -30,7 +30,9 @@ def records(_seeded_template, tmp_path_factory):
             return run(lambda s, ctx: owner.run(s, ctx, owner.INPUTS[verb].model_validate(body), verb))
         bank = client.account.create(name='Codec bank', type='bank', company=COMPANY)['id']
         vendor = client.vendor.create(name='Codec vendor', company=COMPANY)['id']
-        draft = command(deposit_drafts, 'create', header=dict(deposit_to=bank, date='2026-06-03'))
+        till = client.account.create(name='Codec till', type='other_current_asset', company=COMPANY)['id']
+        draft = command(deposit_drafts, 'create', header=dict(deposit_to=bank, date='2026-06-03',
+            cash_back=dict(account=till, amount='1.00', memo='Codec cash back')))
         draft = command(deposit_drafts, 'update', draft=draft.id, expected_version=draft.version,
             set_sources=[source], set_additional=[dict(received_from=dict(kind='vendor', id=vendor),
                 from_account=sale_data['income'], amount='1.25', memo='Extra')])
@@ -43,7 +45,9 @@ def records(_seeded_template, tmp_path_factory):
             draft=draft.id, expected_draft_version=draft.version)
         draft = accepted.draft
         posted = financial(run, dict(operation_key='codec-consume', document=dict(mode='draft', draft=draft.id, expected_version=draft.version)))
-        assert posted.current.revision_bank_total == 6125
+        assert posted.current.revision_bank_total == 6025
+        assert posted.effect.financial.cash_back == 100
+        command(deposit_drafts, 'create', from_deposit=posted.current.id, expected_version=posted.current.version)
         def capture(s, ctx):
             baseline = tuple(s.company.raw.iterdump())
             cursor = s.company.raw.execute('SELECT a.command,e.* FROM audit_entries e JOIN audit_events a ON a.id=e.event_id ORDER BY a.seq,e.id')
@@ -135,7 +139,8 @@ def test_malformed_capture_rejected(records, fault):
         'manifest_hash':'deposit_draft_revision','high_water':'deposit_draft_revision','bank':'deposit_draft_revision',
         'previous':'deposit_draft_revision','accepted':'deposit_selection','unknown':'deposit_draft_consumption',
         'plain_json':'deposit_draft_source','record_id':'deposit_draft_source','command':'deposit_draft'}[fault]
-    row = next(r for r in reversed(records) if r['record_type'] == kind)
+    row = next(r for r in reversed(records) if r['record_type'] == kind
+               and (fault != 'previous' or stored_decode(r['after'])['version'] > 1))
     raw = stored_decode(row['after']); record_id = row['record_id']; producer = row['command']
     if fault == 'state': raw['state'] = 'posted'
     elif fault == 'consumed_head': raw['consumed_revision_id'] = raw['id']
@@ -237,3 +242,118 @@ def test_trusted_identity_and_partial_provenance_nulls_serialize(records, kind):
     assert partial.model_dump(mode='json', warnings='error') == expected
     assert json.loads(partial.model_dump_json(warnings='error')) == expected
     assert_capture(value, raw)  # trusted copies never rewrite the original capture
+
+
+# Faults change only detached captured dictionaries, never the database. Every
+# original is decoded first, so malformed setup cannot masquerade as rejection.
+def decode_record(row, raw):
+    return codec.decode_snapshot(producer=row['command'], record_type=row['record_type'],
+        action=row['action'], record_id=row['record_id'], snapshot=raw)
+
+
+def assert_format_rejected(row, raw):
+    with pytest.raises(BookflowError) as caught:
+        decode_record(row, raw)
+    assert caught.value.code == 'E_VALIDATION'
+    assert caught.value.details == {'reason': 'audit_format'}
+
+
+@pytest.mark.parametrize('kind', ('deposit_draft_source', 'deposit_selection_source'))
+def test_source_memo_agreement_is_independent_of_row_snapshot_agreement(records, kind):
+    row = next(r for r in records if r['record_type'] == kind
+               and stored_decode(r['after'])['memo_origin'] == 'source')
+    raw = stored_decode(row['after'])
+    original = decode_record(row, raw)
+    snapshot = json.loads(raw['snapshot'])
+    assert raw['memo'] == snapshot['memo'] == snapshot['source']['source_memo']
+    raw['memo'] = snapshot['memo'] = 'Contradictory captured source memo'
+    assert snapshot['memo'] != snapshot['source']['source_memo']
+    raw['snapshot'] = json.dumps(snapshot)
+    assert_format_rejected(row, raw)
+    # The same unequal memo is legitimate when explicitly entered on both sides.
+    raw['memo_origin'] = snapshot['memo_origin'] = 'entered'
+    raw['snapshot'] = json.dumps(snapshot)
+    assert decode_record(row, raw).memo == 'Contradictory captured source memo'
+    assert original.memo_origin == 'source'
+
+
+def test_selection_revision_rejects_valid_additional_manifest(records):
+    from bookflow.company.deposit_draft_models import Manifest, Additional
+    from bookflow.company.deposit_draft_validation import validate_manifest
+    from bookflow.company.payment_queries import digest
+    row = next(r for r in records if r['record_type'] == 'deposit_selection_revision'
+               and json.loads(stored_decode(r['after'])['snapshot'])['sources'])
+    raw = stored_decode(row['after'])
+    decode_record(row, raw)
+    previous = Manifest.model_validate_json(raw['snapshot'])
+    additional_row = next(r for r in records if r['record_type'] == 'deposit_draft_additional')
+    additional = Additional.model_validate_json(stored_decode(additional_row['after'])['snapshot'])
+    # Retain real row identity/source captures; use a fresh noncolliding ordinal.
+    additional = additional.model_copy(update={'ordinal': previous.high_water + 1})
+    proposed = deposit_drafts.manifest(previous.currency, previous.header, previous.sources,
+        (additional,), previous.high_water + 1)
+    validate_manifest(proposed)
+    assert proposed.summary.additional_count == 1
+    assert proposed.summary.known_additional_total == 125
+    assert proposed.summary.source_total == 6000
+    raw.update(snapshot=proposed.model_dump_json(), high_water=proposed.high_water,
+               manifest_hash=digest(proposed.model_dump(mode='json')))
+    # Prove every inherited revision guard succeeds; only selection forbids rows.
+    inherited = {key: value for key, value in raw.items() if key in codec.Revision.model_fields}
+    assert codec.Revision.model_validate(inherited).snapshot.additional[0].units == 125
+    assert_format_rejected(row, raw)
+
+
+def test_draft_revision_cashback_account_matches_actual_capture(records):
+    row = next(r for r in records if r['record_type'] == 'deposit_draft_revision'
+               and stored_decode(r['after'])['cashback_account_id'] is not None)
+    raw = stored_decode(row['after'])
+    original = decode_record(row, raw)
+    assert original.snapshot.header.cash_back.units == 100
+    assert raw['cashback_account_id'] == original.snapshot.header.cash_back.account.id
+    assert raw['bank_account_id'] != raw['cashback_account_id']
+    raw['cashback_account_id'] = raw['bank_account_id']
+    # Manifest/hash/bank counterpart and all other fields remain untouched.
+    assert_format_rejected(row, raw)
+
+
+@pytest.mark.parametrize('missing', ('edit_transaction_id', 'original_row_id'))
+def test_real_edit_row_key_requires_both_origin_fields(records, missing):
+    row = next(r for r in records if r['record_type'] == 'deposit_draft_row_key'
+               and stored_decode(r['after'])['edit_transaction_id'] is not None)
+    raw = stored_decode(row['after'])
+    value = decode_record(row, raw)
+    header = next(stored_decode(r['after']) for r in records if r['record_type'] == 'deposit_draft'
+                  and stored_decode(r['after'])['id'] == value.draft_id)
+    assert header['edit_transaction_id'] == value.edit_transaction_id
+    assert header['copy_transaction_id'] is None
+    assert value.original_row_id is not None
+    assert any(r['record_type'] == 'deposit_draft_consumption' for r in records)
+    raw[missing] = None
+    assert_format_rejected(row, raw)
+
+
+def test_descriptor_kinds_resolve_and_owner_edges_name_real_fields():
+    from bookflow.hub import audit_projection_legacy as legacy
+    from typing import get_args
+    kinds = {kind for groups in codec.REFERENCE_GROUPS.values() for _, kind in groups}
+    for model, (discriminator, identity) in codec.SOURCE_ROUTES.items():
+        assert identity in model.model_fields
+        kinds.update(kind for arg in get_args(model.model_fields[discriminator].annotation)
+                     for kind in get_args(arg))
+    for model, (discriminator, pairs) in codec.PARTY_ROUTES.items():
+        assert discriminator in model.model_fields
+        for kind, identity in pairs:
+            kinds.add(kind)
+            assert identity in model.model_fields
+    assert kinds == {'account', 'class', 'customer', 'deposit', 'employee', 'other_name',
+                     'payment', 'payment_method', 'sales_receipt', 'vendor'}
+    for kind in kinds:
+        assert legacy.entry_requirement(kind)
+    external = {'deposit_operation': legacy.DepositOperationView}
+    for model, edges in codec.OWNER_EDGES.items():
+        assert model in codec.MODELS.values()
+        for field, target in edges:
+            assert field in model.model_fields
+            target_model = (codec.MODELS | external)[target]
+            assert target_model.model_fields['tag'].default == target
