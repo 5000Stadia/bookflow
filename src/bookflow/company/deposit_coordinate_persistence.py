@@ -41,6 +41,7 @@ class CoordinateRows:
     operation_json: str
     items_json: str
     audit_event: audit.PreparedEvent
+    consumption_json: str
 
 
 def typed_source(values):
@@ -117,13 +118,15 @@ def build(s,ctx,prepared):
             if value.operation=='insert':identity_map.append(CoordinateIdentity(owner_kind='deposit/custom_field_values',logical_key=value.definition_id,physical_id=value.row_id))
     from bookflow.core.ids import new_id
     custom_plans=(source.plan.data.get('custom_plan'),resolved.deposit_custom_plan if data['changed'] else None)
-    entry_count=len(headers)+sum(len(values) for _,values,_ in collected)+sum(len(values) for values in bundle['pending'].values())+1
+    from bookflow.company import deposit_draft_consumption as consumption
+    consumed=consumption.build(s,ctx,data,prepared.binding)
+    entry_count=len(consumption.touches(consumed))+len(headers)+sum(len(values) for _,values,_ in collected)+sum(len(values) for values in bundle['pending'].values())+1
     entry_count+=sum(len(custom.touches(cp)) for cp in custom_plans if cp)
     entry_ids=tuple(new_id() for _ in range(entry_count))
     identity_map.extend(CoordinateIdentity(owner_kind='audit_entries',logical_key=str(index),physical_id=value) for index,value in enumerate(entry_ids))
     inverse=next((b for b in bundle['pending']['posting_batches'] if b['kind']=='reversal'),None)
     financial=bundle['financial'];h=bundle['header']
-    effect=LifecycleEffect(action=plan.verb,before=operations.state(s,h['id']),after=deposit._state(h,financial),
+    effect=LifecycleEffect(consumed_draft=consumption.receipt(data,financial),action=plan.verb,before=operations.state(s,h['id']),after=deposit._state(h,financial),
         financial=financial,reversal=deposits.inverse(Effect.model_validate_json(q.canonical(data['previous'])),inverse['reverses_batch_id']) if inverse else None,
         batch_ids=tuple(b['id'] for b in bundle['pending']['posting_batches']),
         memberships=tuple(MembershipChange(source_id=v['source_transaction_id'],claim_id=v['id'],kind=v['kind'],
@@ -138,7 +141,7 @@ def build(s,ctx,prepared):
     assigned={v.after.id:v.after for v in headers}
     for identity in targets:
         current_headers.append(assigned.get(identity) or CoordinateTransactionsRow.model_validate_json(q.canonical(rows.rows(s,c.transactions,c.transactions.c.id==identity)[0])))
-    output=CoordinateOutput(operation_key=resolved.input.operation_key,operation_id=data['operation_id'],changed=resolved.changed,new_effect=resolved.changed,
+    output=CoordinateOutput(current_draft=consumption.projected(consumed),operation_key=resolved.input.operation_key,operation_id=data['operation_id'],changed=resolved.changed,new_effect=resolved.changed,
         facts_fingerprint=prepared.facts_fingerprint,dependency_guard=prepared.dependency_guard,
         effect=CoordinateEffect(source=evidence,deposit=effect,headers=headers,identities=tuple(identity_map),target_ids=targets),
         current=effect.after,current_headers=tuple(current_headers),current_source_rows=typed_source({table:[v.model_dump() for v in getattr(before,table)]+[v.model_dump() for v in getattr(inserted,table)] for table in SourceRows.model_fields}))
@@ -148,10 +151,11 @@ def build(s,ctx,prepared):
     request=operations.request(resolved.input,ctx,s,'coordinate',original=True)
     request.update(resolved_transaction_ids=list(targets),resolved_identity_map=[v.model_dump(mode='json') for v in identity_map],
         item_manifests={kind:dict(count=len(values),digest=q.digest(values)) for kind,values in collections(output).items()})
+    if consumed is not None:request['resolved_draft']=data['draft']
     operation=dict(id=data['operation_id'],operation_key=resolved.input.operation_key,command='deposit coordinate',transaction_id=h['id'],
         request_hash=q.digest(operations.request(resolved.input,ctx,s,'coordinate')),request_snapshot=q.canonical(request),effect_snapshot=output.model_dump_json(),
         created_at=data['at'],created_by=s.actor.id,created_via=ctx.interface.value,audit_event_id=data['event'])
-    touched=[Touched('transaction',v.after.id,'update',v.before.version,v.after.version,v.after.model_dump(),v.before.model_dump(),db='company') for v in headers]
+    touched=consumption.touches(consumed)+[Touched('transaction',v.after.id,'update',v.before.version,v.after.version,v.after.model_dump(),v.before.model_dump(),db='company') for v in headers]
     for _,_,values in collected:touched.extend(values)
     for table,kind,key in DEPOSIT_KINDS:
         touched.extend(Touched(kind,v[key],'create',None,1,rows.decoded(v),db='company') for v in bundle['pending'][table])
@@ -161,7 +165,7 @@ def build(s,ctx,prepared):
     event=audit.prepare_event_to(s.company,ctx,'deposit coordinate','Coordinate source and deposit',touched,
         actor_id=s.actor.id,actor_kind=s.actor.kind,directive_code=getattr(s,'directive_code',None),event_id=data['event'],at=data['at'],entry_ids=entry_ids)
     event=audit.PreparedEvent(dict(event.event,undo_of_event_id=None),event.entries)
-    return CoordinateRows(prepared,plan,bundle,inserted,headers,output,q.canonical(operation),q.canonical(items),event)
+    return CoordinateRows(prepared,plan,bundle,inserted,headers,output,q.canonical(operation),q.canonical(items),event,q.canonical(consumed))
 
 
 def _foreign_keys(s):
@@ -186,6 +190,11 @@ def execute(s,ctx,prepared):
     bundle=build(s,ctx,fresh)
     from bookflow.company.deposit_coordinate_validation import validate
     validate(s,ctx,bundle)
+    from bookflow.company import deposit_draft_consumption as consumption
+    consumed=consumption.build(s,ctx,bundle.deposit_bundle['data'],prepared.binding)
+    # Bind persistence to the exact consumption value used for audited touches.
+    if q.canonical(consumed)!=bundle.consumption_json:
+        raise BookflowError('E_VALIDATION',details={'reason':'coordinate_consumption_changed'})
     s.company.raw.execute('SAVEPOINT bookflow_deposit_coordinate')
     try:
         audit.insert_prepared_event(s.company,bundle.audit_event)
@@ -223,7 +232,10 @@ def execute(s,ctx,prepared):
         for target in bundle.output.effect.target_ids:
             s.company.conn.execute(c.deposit_operation_targets.insert().values(operation_id=bundle.output.operation_id,transaction_id=target))
         for item in json.loads(bundle.items_json):s.company.conn.execute(c.deposit_operation_items.insert().values(**item))
+        from bookflow.company import deposit_draft_consumption as consumption
+        consumption.persist(s,consumed)
         _foreign_keys(s)
+        consumption.validate_persisted(s,consumed)
         s.company.raw.execute('RELEASE bookflow_deposit_coordinate')
     except BaseException:
         s.company.raw.execute('ROLLBACK TO bookflow_deposit_coordinate')

@@ -162,7 +162,9 @@ def prepare_source_overlay(s, ctx, inp, source, binding):
     _require(type(inp) is CoordinateInput and type(source) is PreparedSource)
     inp = CoordinateInput.model_validate_json(inp.model_dump_json(by_alias=True, exclude_unset=True))
     identity = source_identity(inp.source_action)
-    rows = inp.replacement.document.sources if inp.replacement.mode == 'document' else []
+    from bookflow.company import deposit_draft_provider as provider
+    document=provider.coordinate(s,ctx,inp,binding)
+    rows=document.sources if document is not None else []
     targets = dependencies.authorize(s, inp.deposit, [identity, *(row.source for row in rows)], write=True)
     history._authorize_binding_graph(s, binding, targets, write=True)
     if ctx.on_behalf_of != binding.on_behalf_of:
@@ -235,7 +237,7 @@ def prepare_source_overlay(s, ctx, inp, source, binding):
             occurrences=deposits.occurrences(actual_cash, before.occurrences),
             memo=row.memo_override if entered else actual_cash.source_memo,
             memo_origin='entered' if entered else 'source')
-        if actual_cash.receipt_date > inp.replacement.document.date:
+        if actual_cash.receipt_date > document.date:
             raise BookflowError('E_DEPOSIT_DATE_BEFORE_SOURCE')
     dependencies.reconciliation_status(s.company)
     return SourceResultOverlay(inp.deposit, identity, canonical(header), canonical(membership), replacement, source)
@@ -254,7 +256,9 @@ def resolve_coordinate(s, ctx, inp, binding):
     from bookflow.core.ids import new_id
     _require(type(inp) is CoordinateInput)
     inp = CoordinateInput.model_validate_json(inp.model_dump_json(by_alias=True, exclude_unset=True))
-    rows = inp.replacement.document.sources if inp.replacement.mode == 'document' else []
+    from bookflow.company import deposit_draft_provider as provider
+    document=provider.coordinate(s,ctx,inp,binding)
+    rows=document.sources if document is not None else []
     identity = source_identity(inp.source_action)
     targets = dependencies.authorize(s, inp.deposit, [identity, *(row.source for row in rows)], write=True)
     history._authorize_binding_graph(s, binding, targets, write=True)
@@ -276,7 +280,7 @@ def resolve_coordinate(s, ctx, inp, binding):
     mapping = {}; custom = None; sequence = None
     if inp.replacement.mode == 'document':
         financial, number, memo, custom, changed, sequence, maximum = lifecycle.resolve_replacement(
-            s, ctx, inp.replacement.document, identity=inp.deposit, old=old, prior=prior, previous=previous,
+            s, ctx, document, identity=inp.deposit, old=old, prior=prior, previous=previous,
             keys=keys, maximum=maximum, mapping=mapping, binding=binding, overlay=overlay)
         deposit_validation.validate(financial)
         # The source action is independently proven above. Every other source
@@ -286,7 +290,12 @@ def resolve_coordinate(s, ctx, inp, binding):
             if row.source.transaction_id != identity:
                 _require(row.source == deposit_sources.load(s, row.source.transaction_id))
         if changed:
-            deposit_validation.validate_references(financial, s, previous=previous)
+            if document.pin is None:
+                deposit_validation.validate_references(financial, s, previous=previous)
+            else:
+                from bookflow.company import deposit_draft_provider as provider
+                from bookflow.company.deposit_draft_models import Manifest
+                provider.validate_references(s,financial,Manifest.model_validate_json(document.pin.snapshot),old['id'])
     else:
         financial=previous;number=prior['number'];memo=prior['memo'];changed=True
     if changed:
@@ -312,6 +321,7 @@ def resolve_coordinate(s, ctx, inp, binding):
         changed=changed,identity=inp.deposit,header_row=headers[0]['id'],header_ordinal=headers[0]['ordinal'],number=number,memo=memo,
         source_headers=source_headers,claims=claims,targets=targets,sequence=sequence,mapping=mapping,
         at=provenance.at,event=provenance.event_id,operation_id=provenance.operation_id,issuer=json.loads(prior['issuer_snapshot']))
+    if document is not None and document.pin is not None:data['draft']=document.pin.model_dump(mode='json')
     return CoordinateResolution(inp,source,overlay,canonical(data),custom,canonical(coalesced),before_bank,after_bank,
                                 changed or source.plan.preview.changed)
 
@@ -376,7 +386,7 @@ def canonical_coordinate(resolved):
             if after.get(key)==resolved.source.provenance.at:after[key]='aggregate/at'
     request=resolved.input.model_dump(mode='json',by_alias=True,exclude_unset=True)
     request.pop('dependency_guard',None);request.pop('expected_facts_fingerprint',None)
-    return dict(request=request,source=canonical_source_data(resolved.source.plan,payment=resolved.source.action.kind.startswith('payment_')),
+    return dict(draft=data.get('draft'),request=request,source=canonical_source_data(resolved.source.plan,payment=resolved.source.action.kind.startswith('payment_')),
         source_fingerprint=resolved.source.source_fingerprint,financial=visit(financial),before=data['before'],prior=data['prior'],
         claims=data['claims'],source_headers=data['source_headers'],headers=headers,number=data['number'],memo=data['memo'],
         issuer=data['issuer'],sequence=data['sequence'],custom=custom,changed=resolved.changed,

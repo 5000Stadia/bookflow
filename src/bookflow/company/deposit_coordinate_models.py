@@ -7,9 +7,9 @@ if TYPE_CHECKING:
     from bookflow.adapters.http.app import Credential
 from typing import Annotated, Literal
 
-from pydantic import Field, model_validator, field_validator, field_serializer
+from pydantic import Field, model_validator, field_validator, field_serializer, model_serializer
 
-from bookflow.company.deposit_models import CashSource, ReplacementDocument, SourceInput, SourceRow
+from bookflow.company.deposit_models import CashSource, ReplacementDocument, DraftDocument, SourceInput, SourceRow
 from bookflow.company.payment_models import PaymentUpdateIntent, OperationKey, EffectProvenance
 from bookflow.company.sales_models import StrictModel, Fingerprint, SalesReceiptUpdateInput
 from bookflow.company.journal_models import _Version
@@ -85,7 +85,15 @@ class CoordinateDocument(ReplacementDocument):
 
 class DocumentReplacement(StrictModel):
     mode: Literal['document']
-    document: CoordinateDocument
+    document: Annotated[CoordinateDocument | DraftDocument,Field(discriminator='mode')]
+    draft_source_result: Literal['retain','remove'] | None = None
+
+    @model_validator(mode='after')
+    def draft_choice(self):
+        if self.document.mode=='draft':
+            if self.draft_source_result is None:raise ValueError('draft_source_result required')
+        elif 'draft_source_result' in self.model_fields_set:raise ValueError('inline forbids draft_source_result')
+        return self
 
 
 class VoidReplacement(StrictModel):
@@ -107,7 +115,7 @@ class CoordinateInput(StrictModel):
         from bookflow.core.ids import is_ulid
         if not is_ulid(self.deposit):
             raise ValueError('deposit must be an exact stable transaction identity')
-        rows = self.replacement.document.sources if self.replacement.mode == 'document' else []
+        rows = self.replacement.document.sources if self.replacement.mode == 'document' and self.replacement.document.mode=='inline' else []
         ids = [row.source for row in rows]
         if len(set(ids)) != len(ids):
             raise ValueError('each source appears once')
@@ -167,7 +175,7 @@ class PreparedCoordinate:
 # Closed physical source receipt schemas at co0023; explicit fields are retained
 # on disk. These models do not authorize a table or validate financial equations.
 from bookflow.company.deposit_models import Frozen
-from bookflow.company.deposit_lifecycle_models import LifecycleEffect, DocumentState
+from bookflow.company.deposit_lifecycle_models import LifecycleEffect, DocumentState, ConsumedDraftState
 from bookflow.company.payment_outputs import PaymentSourceOutput
 
 
@@ -582,6 +590,14 @@ class CoordinateEffect(Frozen):
 
 
 class CoordinateOutput(Frozen):
+    current_draft: ConsumedDraftState | None = None
+
+    @model_serializer(mode='wrap')
+    def optional_draft(self,handler):
+        result=handler(self)
+        if self.current_draft is None:result.pop('current_draft',None)
+        return result
+
     schema_version: Literal[2] = 2
     command: Literal['deposit coordinate'] = 'deposit coordinate'
     operation_key: str

@@ -1974,3 +1974,85 @@ Deposit operation variants,
 complete producer/format conformance, no-entry semantics and public cursor/transport
 cutover remain required. The
 private implementation is not a complete audit or full-C release.
+### Private G3 durable deposit composition (co0024)
+
+`deposit_drafts`, immutable full `deposit_draft_revisions`, source/additional rows
+and permanent draft row keys store incomplete composition without financial writes.
+`deposit_selections` owns separate child revisions and atomically accepts only their
+sources into an unchanged parent header/additional/custom/cash-back context.
+B1 requires all reciprocal heads before the final `PRAGMA main.foreign_key_check`
+inside the nonposting rollback boundary. Financial draft consumption belongs to
+the financial owner: ordinary post/update and coordinate replacement write the
+consumption links before their final whole-main foreign-key check and persisted
+reciprocal validation. Coordinate consumption uses the existing C savepoint; the
+nonposting draft writer is never invoked as its child.
+
+The private draft provider expands a complete owned immutable revision below the
+unchanged bounded inline inputs. Current authority, cash, claims and reference
+eligibility are checked independently from captured display and custom values.
+A consumption receipt binds the original draft revision/hash, exact row identity
+map, financial operation and event. The consumed header advances once without
+rewriting its composition revision. Identical edits still consume once and retain
+a permanent no-effect operation. Exact authorized recovery returns the original
+effect with separately labeled current deposit/draft state and performs no write.
+
+Memo patch omission retains; null and empty text are distinct entered overrides;
+`memo_action: restore_source` is exclusive and restores captured source origin.
+Ordinals are persistent display/paging identities; newly added sources appear last.
+Select-matching resolves the complete authorized match set atomically with no
+aggregate cap. Full immutable snapshots cost O(manifest) storage per edit and
+full authority/source validation costs are not a responsiveness waiver.
+
+Private draft/source query admission requires current applicable organization or
+exact-company membership for actor and actual fixed principal. Existing role helpers
+resolve the highest applicable role; unrelated scopes are excluded and installation
+hub-admin status supplies no automatic company-book access. It additionally runs the existing complete resource checks. Shared discovery/publication/full-C cutover remains separately owned.
+Historical draft/child/member/operation roots are authorized before JSON decode,
+filtering, counts or pages. Opaque company-keyed candidate tokens exclude destination
+writes and unrelated audit changes; item tokens bind their exact immutable revision.
+
+`DraftCreate.copy_from_voided` is distinct from editing a posted deposit: a new
+unconsumed identity with no edit pin or reused number, retaining original row and
+source provenance. Copy records the current source header version; copied source
+`captured_header_version` retains the original cash evidence endpoint. Unavailable,
+changed or claimed sources remain visible as stale, never silently removed. The
+original voided transaction, claims and any consumed draft are untouched. Source
+refresh is explicit. Financial posting allocates fresh destination identities
+for copied rows; only a genuine edit retains the eligible original financial keys.
+Complete manifests are not limited to a single source page.
+
+Custom values retain typed canonical values, definition/choice snapshots and
+origins; blank required values report incomplete state. Existing definitions lack
+print visibility, so `print_visible=None` records unavailable provenance rather
+than an invented default. The print owner must resolve this before full G3.
+Public command registration, current full-C publication integration, GUI/MCP
+continuation, reconciliation activation and Delete remain separately owned
+requirements.
+
+### Private stored deposit reads
+
+`deposit_queries` supplies typed `show`, `query`, `items` and `history`;
+`deposit_print_data` supplies complete captured print data without rendering.
+These functions require an existing authenticated binding and caller-owned read
+snapshot. They are not registered public commands or hosted publication routes.
+
+`deposit_read_authority` admits historical transaction, operation and draft roots
+before sensitive decoding. `deposit_read_facts` loads complete stored graphs and
+`deposit_read_validation` checks captured source endpoints, immutable row evidence,
+financial equations and lifecycle projections. `deposit_read_manifest` pins the
+owned field, edge and codec inventory. Repeated draft references reuse validated
+results only within one `load_complete` invocation; consumption validation remains
+independent. No result survives the call or crosses snapshots.
+
+Selected immutable revisions remain separate from freshly observed current
+metadata. Dated states sum recorded effects through the supplied effective date.
+Items continuations pin the selected revision while rechecking current authority.
+Query and history continuations bind their complete authorized result relation;
+an authorized malformed aggregate fails the complete query. Company-keyed tokens
+use separate read domains without exposing audit sequence or permission epochs.
+
+Print data includes every selected row and cash allocation, captured issuer and
+custom values. Unknown historical print visibility stays null. A line reduced to
+zero retains its semantic occurrence and ordinal, with no invented zero-value
+cash allocation; restoring its amount restores funding under that identity.
+Reports and public GUI/MCP integration remain separate consumers.

@@ -27,6 +27,20 @@ def active_claim(s, source):
     return resolver(s, source) if resolver is not None else None
 
 
+def active_claims(s, sources):
+    """One schema admission for a complete bounded-read source collection."""
+    import sqlalchemy as sa
+    from bookflow.company import schema as c
+    resolver=feature_admission(s.company,DEPOSIT,resolver=_active_claim)
+    if resolver is None:return {}
+    identities=sorted(set(sources));result={}
+    for offset in range(0,len(identities),200):
+        rows=s.company.conn.execute(sa.select(c.deposit_current_memberships).where(
+            c.deposit_current_memberships.c.source_transaction_id.in_(identities[offset:offset+200]))).mappings()
+        result.update((row['source_transaction_id'],dict(row)) for row in rows)
+    return result
+
+
 def historical_sources(s, deposit):
     import sqlalchemy as sa
     from bookflow.company import schema as c

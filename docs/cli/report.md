@@ -320,7 +320,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].batch_id` | string \| null | no | yes | null | — |
 | `rows[].batch_kind` | literal["original", "reversal", "replacement"] \| null | no | yes | null | — |
 | `rows[].transaction_id` | string \| null | no | yes | null | — |
-| `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment"] \| null | no | yes | null | — |
+| `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit"] \| null | no | yes | null | — |
 | `rows[].transaction_number` | string \| null | no | yes | null | — |
 | `rows[].revision_id` | string \| null | no | yes | null | — |
 | `rows[].reverses_batch_id` | string \| null | no | yes | null | — |
