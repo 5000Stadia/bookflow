@@ -5,6 +5,9 @@ is deposit_drafts.load()[3], its documented execution binding, asserted by ident
 below. Full operation/consumption/aggregate values (including ReadEvidence) compare
 without normalization, field removal, serialization or audience redaction.
 """
+import ast
+import hashlib
+from pathlib import Path
 from contextlib import contextmanager
 
 import pytest
@@ -37,14 +40,14 @@ from tests.test_service_sales_lifecycle import sale, COMPANY
 from tests.test_row8_journal import database_path
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def current_policy(root):
     with open_database(root/'hub.db', writable=True) as db:
         install_fixture_policy(db.raw, catalog_bundle())
 
 
 @pytest.fixture
-def state(root, client, cash, run_private):
+def state(current_policy, root, client, cash, run_private):
     posted, original = make_posted(client, cash, run_private)
     edit = run_private(lambda s,ctx:drafts.run(s,ctx,m.DraftCreate(
         from_deposit=posted.current.id,expected_version=1),'create'))
@@ -173,3 +176,199 @@ def test_same_state_financial_loaders_for_admitted_bindings(state,record_propert
             with pytest.raises(BookflowError) as caught:load()
             assert caught.value.code=='E_UNAUTHENTICATED'
     assert stored(state)==before and state['host']._readers_attached==0
+
+
+# Source assessment at a2a8866, accepted precursor 9d214d30. This is a finite
+# change detector anchored in review, NOT a taint analyzer or a proof for every
+# graph/permission model. Never refresh a digest without reviewing the changed
+# body, its new calls/aliases and this assessment, and retaining the real-binding
+# witness above. Stored writer attribution stays in the compared payload.
+#
+# Four owners: opages authenticates/admit indexed and recovered roots, then
+# returns the stored decoded output unchanged; consumption.current(nonempty)
+# admits through drafts.load and builds its state from stored header/revision;
+# drafts.load admits before decoding and returns stored header/revision/manifest
+# PLUS its binding in position 4; facts.load_complete admits the complete graph,
+# delegates to those loaders and assembles financial/history/evidence values.
+# It discards the fourth draft component, never copies it into ReadEvidence.
+#
+# Session flows through SQL selectors, DraftHistoryProof.self.s and History.self.s.
+# These read company-owned rows; company identity/currency are stored inputs.
+# The ONLY reviewed current-reader identity uses in this selected deposit flow
+# are execution_binding (credential revalidation, Session actor/root agreement,
+# principal/epoch), v.admit (OS fallback, ctx/principal agreement, memberships),
+# and _authorize_binding_graph (actor+principal replaced Session views for gates).
+# Their view/actor/principal aliases are included as full bodies. No financial
+# shaping by current actor, timezone, principal or memberships was found.
+# ReadEvidence and HistoryEntry actor fields are stored evidence, not exclusions.
+#
+# Below are the bounded derivation delegates, including Session-carrying helpers
+# and pure stored-value transforms. Each selection also freezes ALL module-level
+# statements other than unselected def/class declarations: imports, aliases,
+# registries and rebinding cannot silently change the selected body meaning.
+# Full nested bodies catch new aliases/getattr/innocuously named helpers at the
+# call site, independent of spelling; adding an unused function is not a failure.
+#
+# Trust boundaries, not universal closure: Python/SQLAlchemy/Pydantic, schema and
+# model validators, Session/connection behavior, shared credential/access owners,
+# feature admission, declaration conformance, and generic source-master snapshot
+# codecs are not exhaustively pinned here. The shared admission/evidence closure
+# has its own test_deposit_denial_inventory fence. History's source-master image
+# dispatch is pinned but the items/parties/pricing/units/custom-field libraries
+# it calls are not. Payment/tax/custom/corrupt branches have reviewed stored-input
+# call shapes, NOT new behavioral coverage. The live witness covers receipt post,
+# coordinate, consumed drafts and accepted selection under current read-equivalent
+# roles. New ambient identity behavior beyond this named perimeter, monkeypatches,
+# and future policy/catalog semantics require separate review and witnesses.
+#
+# Named reviewed selections, not a general module/table inventory.
+FLOW_OWNERS = {
+    'deposit_operation_pages': ('authorized_original', 'collections', 'typed_collections'),
+    'deposit_operations': ('decode_output',),
+    'deposit_draft_consumption': ('current', '_validate_consumed', 'validate_consumed'),
+    'deposit_drafts': ('load', '_row'),
+    'deposit_draft_validation': ('admit', 'require', 'summary', 'validate_manifest', 'decode_revision'),
+    'deposit_draft_history': ('require', 'HeaderEndpoint', 'DraftHistoryProof'),
+    'deposit_draft_provider': ('validate_row_origins',),
+    'deposit_read_facts': ('ValidatedDeposit', 'invalid', 'load_complete', '_bank', '_history', '_navigation', '_associations'),
+    'deposit_read_authority': ('ReadEvidence', 'select', 'authenticate', 'admit'),
+    'deposit_sources': ('require', 'graph_many', '_partition', 'CashPartition', '_project', 'project'),
+    'deposit_read_validation': ('require', 'exact_one', 'audit_rows', 'revision', 'posting_lifecycle', 'lifecycle'),
+    'deposit_validation': ('require', 'validate_intent', 'validate'),
+    'deposit_dependency_history': ('execution_binding', '_proven_resource_denial', '_authorize_binding_graph',
+        'canonical', 'Owner', 'MissingHistory', '_audit_image', '_decoded', '_project', 'History',
+        '_source_owner_image', '_complete_unit_image', '_unit_matches', '_source_raw_child', '_source_image_types'),
+    'document_effects': ('rows',),
+    'payment_queries': ('canonical', 'digest'),
+    'sales': ('profile_row', 'saved_lines', '_custom_semantic', '_line_semantic', '_saved_semantic'),
+    'tax_attribution': ('semantic_profile',),
+}
+
+# Admission calls AND binding-carrying loaders are allowed explicitly, with exact
+# argument flow; this does not allow arbitrary calls merely named "authorize".
+BINDING_CALLS = {
+    ('deposit_read_authority', 'authenticate'): (
+        'draft_admit(s, binding=binding, write=False)',
+    ),
+    ('deposit_read_authority', 'admit'): (
+        'authenticate(s, binding)',
+        'h._authorize_binding_graph(s, binding, tuple(sorted(group)), write=False)',
+        "draft_admit(s, binding=binding, draft=draft['id'], write=False)",
+        'h._authorize_binding_graph(s, binding, tuple(sorted(roots)), tuple(sorted(events)), write=False)',
+        'draft_admit(s, binding=binding, draft=identity, write=False)',
+    ),
+    ('deposit_operation_pages', 'authorized_original'): (
+        'history.execution_binding(s, binding)',
+        'history._authorize_binding_graph(s, binding, tuple(sorted(set(ids))), write=write)',
+    ),
+    ('deposit_draft_consumption', 'current'): (
+        "drafts.load(s, rows[0]['draft_id'], ctx=ctx, binding=binding, write=write)",
+    ),
+    ('deposit_drafts', 'load'): (
+        'v.admit(s, ctx, binding, **{kind: identity}, write=write)',
+    ),
+    ('deposit_read_facts', 'load_complete'): (
+        'authority.authenticate(s, binding)',
+        'authority.admit(s, ids, binding=binding)',
+        'h._authorize_binding_graph(s, binding, tuple(sorted(roots)), tuple(sorted(events)), write=False)',
+        'deposit_drafts.load(s, identity, kind=kind, binding=binding)',
+        'opages.authorized_original(s, op, binding, write=False)',
+        "deposit_draft_consumption.current(s, op['id'], binding=binding, write=False)",
+    ),
+}
+BINDING_RETURN = ('deposit_drafts', 'load', 'return (header, dict(revision), manifest, binding)')
+
+# Filled once from the reviewed selections above. No update/generate mode exists
+# in the tests; an AST change requires a new source-flow assessment.
+FLOW_DIGESTS = {
+    'deposit_operation_pages': 'b38d5f66b60df54b92fd215907f76a4cd4f35dc02291a3a2dbd8d00a8ae28133',
+    'deposit_operations': '1d0bf86ac1cddc8fb8453e03d26353b1878e6265f7a9fb14d546cb3fc07ba903',
+    'deposit_draft_consumption': 'cae75a88a0b0adcfd85253041d5326514861528833ab4b8a458befda4653d31e',
+    'deposit_drafts': '7cb392a65adc8dedec20c9e3e5a7f9d926000b58c230e0eed2e17e09b4de73eb',
+    'deposit_draft_validation': '93c75f23e3a616b52c46f304741f4dfcae5f7c113d3011f512b838c1cfd0dd6b',
+    'deposit_draft_history': '73169adbc158396acca700937a5fe0c1220e5aa46834e81505afbacf70f1f0ee',
+    'deposit_draft_provider': 'b185a8172117594515e4692a116cd38b281ddad84afbd869c55e621aedf65267',
+    'deposit_read_facts': 'e104287b65ce72b9bed70c8d45b1322a66092cb1c3b564205342d3aa211ffb36',
+    'deposit_read_authority': '65c398b3b754f876f6dfdaa8fc1ba3a780261b8ca76a960fa00137b1e09558bf',
+    'deposit_sources': '6f3b3dc473e6a3df8fde53f0c58d1ba31786788a8b474dfa1fb1b6d264fcc7a0',
+    'deposit_read_validation': '02ea40e755ad4f8145eff6acb02cf6d0265a2b064a67f0dca1346208f0583089',
+    'deposit_validation': '5a5246068c1feebf5a888dd25fe91169105cae0566cdf6ee1028a94c8403e67a',
+    'deposit_dependency_history': 'bd7efcf091a1f07cc8461480acfa0ea27b0f9511dba4fb08e9d25ccd3ce2408a',
+    'document_effects': '559f13d0f1be74746f5af60676404eeb3ae611a5a2f4dd94e1e8dd47434b7d7b',
+    'payment_queries': 'cd81aeb149993625bf9f102b06cc160a18914641c55dff94ea586d52c5be5691',
+    'sales': 'e70fa06295a2b3300840ff38db222f3a8ef9cfdf57f64f3e416a0314477f512c',
+    'tax_attribution': 'b6b47c84ab3dc2faa7529a2b4649d9b34a8f110e0673072eb79a3e19eaf51b97',
+}
+
+
+def _flow_sources():
+    source = Path(__file__).resolve().parents[1] / 'src/bookflow/company'
+    return {name: ast.parse((source / (name + '.py')).read_text()) for name in FLOW_OWNERS}
+
+
+def _flow_selection(tree, names):
+    definitions = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+    selected = [node for node in tree.body if isinstance(node, definitions) and node.name in names]
+    assert sorted(node.name for node in selected) == sorted(names), 'Missing/duplicate reviewed owner'
+    return ast.Module(body=[node for node in tree.body
+        if not isinstance(node, definitions) or node.name in names], type_ignores=[])
+
+
+def _assert_binding_flow(sources):
+    assert set(FLOW_DIGESTS) == set(FLOW_OWNERS) == set(sources)
+    for name, names in FLOW_OWNERS.items():
+        tree = _flow_selection(sources[name], names)
+        actual = hashlib.sha256(ast.dump(tree, include_attributes=False).encode()).hexdigest()
+        assert actual == FLOW_DIGESTS[name], (
+            f'Review binding source flow: {name}; inspect aliases and reachable delegates, not just refresh hash')
+    for (module, owner), allowed in BINDING_CALLS.items():
+        function = next(node for node in sources[module].body if isinstance(node, ast.FunctionDef) and node.name == owner)
+        parents = {child: node for node in ast.walk(function) for child in ast.iter_child_nodes(node)}
+        uses = [node for node in ast.walk(function)
+            if isinstance(node, ast.Name) and node.id == 'binding' and isinstance(node.ctx, ast.Load)]
+        calls = []
+        returns = []
+        for use in uses:
+            node = use
+            while node in parents and not isinstance(node, (ast.Call, ast.Return)):
+                node = parents[node]
+            if isinstance(node, ast.Call):
+                calls.append(ast.unparse(node))
+            elif isinstance(node, ast.Return):
+                returns.append((module, owner, ast.unparse(node)))
+            else:
+                pytest.fail(f'Unreviewed binding use: {module}.{owner}: {ast.unparse(node)}')
+        assert sorted(calls) == sorted(allowed), (module, owner, calls)
+        assert returns == ([BINDING_RETURN] if (module, owner) == BINDING_RETURN[:2] else [])
+
+
+def test_reviewed_binding_source_flow():
+    _assert_binding_flow(_flow_sources())
+
+
+@pytest.mark.parametrize('module,owner,statements', [
+    # Direct binding alias used as an innocuously named derived output value.
+    ('deposit_operation_pages', 'authorized_original',
+        "carrier = binding\nmetric = carrier.user_id\noutput = output.model_copy(update={'operation_id': metric})"),
+    # Session alias, with no reference to the identifier 'binding', changes output.
+    ('deposit_drafts', 'load',
+        "session = s\nchannel = session.actor\nrevision = dict(revision, memo=channel.id)"),
+    # A reachable derivation delegate also carries identity without a binding arg.
+    ('deposit_drafts', '_row',
+        "channel = s\nmetric = channel.actor.id\nreturn dict(value, memo=metric)"),
+])
+def test_source_flow_rejects_identity_derived_alias(module, owner, statements):
+    sources = _flow_sources()
+    _assert_binding_flow(sources)  # Establish that the failure is the mutation.
+    function = next(node for node in sources[module].body if isinstance(node, ast.FunctionDef) and node.name == owner)
+    assert isinstance(function.body[-1], ast.Return)
+    injected = ast.parse(statements).body
+    if isinstance(injected[-1], ast.Return):
+        function.body[-1:] = injected
+    else:
+        function.body[-1:-1] = injected
+    ast.fix_missing_locations(sources[module])
+    # Mutate parsed source only: never import/execute a mutant or touch runtime.
+    # This proves change detection at these flow sites, not semantic taint proof.
+    with pytest.raises(AssertionError, match=f'Review binding source flow: {module};'):
+        _assert_binding_flow(sources)
