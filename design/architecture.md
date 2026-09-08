@@ -2104,3 +2104,15 @@ results; it is not a public permission certificate. Registration, fullC fresh
 publication, GUI/MCP workflows, CSV/HTML/device rendering and future Delete
 integration remain separately required. No schema, financial posting algorithm,
 report recognition policy or reconciliation activation changes here.
+
+### Private draft audit row ownership
+
+`hub.audit_projection_draft_owners.validate` checks finite co24 captured images
+after external whole-event permission admission. Immutable rows match the retained
+row selected by its complete primary key, including revision-qualified source and
+additional row identities. Mutable header images retain their captured versions;
+the consumed draft header is one version beyond its retained consumed revision.
+After images identify the producing event, and before images identify an earlier
+event. Declared relational constraints bind each captured revision and permanent
+row to its owner. Failure returns the fixed `audit_format` reason. The validator
+does not grant permissions or register an audit reader.
