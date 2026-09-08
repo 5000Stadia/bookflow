@@ -88,8 +88,13 @@ def _show(s,data,inp,binding,*,with_guard=True):
         dated=m.DatedState(as_of=inp.as_of,knowledge_observed_at=at,cutoff_after_evaluation_date=inp.as_of>at[:10],financial_state=state,bank_movement=money(net,effect.intent.currency),source_membership_total=money(members,effect.intent.currency))
     guard=None;status='unknown_history'
     if with_guard:
-        recipe,readset=history_owner.capture(s,InspectionRoot(kind='deposit',id=data.header['id']),binding)
-        if not readset.unknown:guard=history_owner.issue(s,recipe,readset,binding);status='complete'
+        try:
+            recipe,readset=history_owner.capture(s,InspectionRoot(kind='deposit',id=data.header['id']),binding)
+        except history_owner.MissingHistory:
+            # Financial facts are validated; unavailable auxiliary history disables the guard.
+            pass
+        else:
+            if not readset.unknown:guard=history_owner.issue(s,recipe,readset,binding);status='complete'
     return m.DepositShow(company_id=s.company_row['id'],currency=effect.intent.currency,selected=sel,selected_is_current=sel.pin.revision_id==data.header['current_revision_id'],current=current(data),current_observed_at=at,
         totals=totals(effect),counts=counts(effect),fingerprints=fps,dated_state=dated,links=data.links,current_references=data.references,
         dependencies=m.DependencySummary(source_ids=tuple(sorted({r['source_transaction_id'] for r in data.graph['deposit_memberships']})),guard=guard,history=status))
