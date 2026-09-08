@@ -977,6 +977,21 @@ def _visible_anchor(audience,selection,identifier):
     return sequence,value
 
 
+def _identity_filter(audience, value):
+    """Resolve names only inside the same identity disclosure audience."""
+    if value is None:return None
+    from .users import username_key
+    db=audience.reader.session.hub
+    db.raw.create_function('bookflow_username_key',1,username_key,deterministic=True)
+    query=sa.select(h.users.c.id).where(sa.or_(h.users.c.id==value,
+        sa.func.bookflow_username_key(h.users.c.username)==username_key(value)))
+    if not audience.global_admin():
+        query=query.where(h.users.c.id.in_(audience.subjects()))
+    matches=tuple(db.conn.execute(query.limit(2)).scalars())
+    if value in matches:return value
+    return matches[0] if len(matches)==1 else value
+
+
 def normalized_selection(audience,selection):
     if type(selection) is not HistorySelection:
         raise BookflowError('E_VALIDATION')
@@ -991,7 +1006,9 @@ def normalized_selection(audience,selection):
             raise BookflowError('E_VALIDATION',details={'reason':'history_filter'}) from None
         if since is not None and until is not None and since>=until:
             raise BookflowError('E_VALIDATION',details={'reason':'history_filter'})
-        selection=selection.model_copy(update={'since':since,'until':until})
+        selection=selection.model_copy(update={'since':since,'until':until,
+            'actor':_identity_filter(audience,selection.actor),
+            'principal':_identity_filter(audience,selection.principal)})
     return selection
 
 

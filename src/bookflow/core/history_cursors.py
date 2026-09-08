@@ -138,6 +138,7 @@ def issue_events(reader, proof, *, ctx=None):
     """Execution-owned tail anchors, one per actually projected returned event."""
     publication.revalidate_proof(reader,proof,ctx=ctx)
     if proof.failure is not None or proof.selection.mode != 'tail':invalid()
+    # Tail is audit-only; activity has a separate paired-entry continuation.
     audience=projection.make_audience(reader)
     selection=projection.normalized_selection(audience,proof.selection)
     common=dict(reader=reader_digest(audience),query=query_digest(selection),
