@@ -41,6 +41,8 @@ def test_actual_coordinate_rows_preserve_before_inserted_current(client, sale, d
         assert complete.current.revision_bank_total == 19200
         complete.model_dump(mode='json', warnings='error')
         assert_all_captured_fields(complete, raw)
+        for fault in RECEIPT_GUARDS:
+            assert_independent_receipt_guard(raw, fault)
         for fault in ('current', 'headers', 'source', 'rows', 'operation', 'input'):
             broken = copy.deepcopy(raw)
             if fault == 'current': broken['current']['version'] += 1
@@ -237,3 +239,70 @@ def test_coordinate_receipt_fields_and_disclosure_descriptors():
     for (model, field), _ in views.FIELD_REQUIREMENTS.items():
         assert field in model.model_fields
         assert TypeAdapter(model.model_fields[field].annotation).validate_python(None) is None
+
+
+RECEIPT_GUARDS = ('payment_family', 'operation_presence', 'event_presence',
+                  'deposit_target', 'header_contiguous')
+
+
+def assert_independent_receipt_guard(raw, fault):
+    """Detached real receipt faults; exact errors and mutants isolate each clause."""
+    views.CoordinateOutput.model_validate(raw)  # unchanged positive control
+    broken = copy.deepcopy(raw)
+    effect = broken['effect']
+    if fault == 'payment_family':
+        assert effect['source']['action']['kind'] == 'payment_update'
+        assert effect['source']['payment_effect'] is not None
+        effect['source']['payment_effect'] = None
+        message = 'coordinate source receipt kind differs'
+    elif fault in ('operation_presence', 'event_presence'):
+        key = 'operation_id' if fault == 'operation_presence' else 'event'
+        expected = broken['operation_id'] if key == 'operation_id' else effect['deposit']['audit_event_id']
+        assert any(row['physical_id'] == expected for row in effect['identities'])
+        effect['identities'] = [row for row in effect['identities'] if row['physical_id'] != expected]
+        # No mismatched keyed identity remains to trip the earlier guard.
+        assert not [row for row in effect['identities'] if row['owner_kind'] == 'aggregate' and row['logical_key'] == key]
+        assert not any(row['physical_id'] == expected for row in effect['identities'])
+        message = 'coordinate aggregate identity absent'
+    elif fault == 'deposit_target':
+        deposit = broken['current']['id']
+        assert deposit in effect['target_ids']
+        effect['target_ids'].remove(deposit)
+        broken['current_headers'] = [row for row in broken['current_headers'] if row['id'] != deposit]
+        # Keep the remaining changed/current comparisons valid as well.
+        effect['headers'] = [row for row in effect['headers'] if row['after']['id'] != deposit]
+        assert {row['id'] for row in broken['current_headers']} == set(effect['target_ids'])
+        assert len(broken['current_headers']) == len(effect['target_ids'])
+        assert broken['current'] == effect['deposit']['after']
+        message = 'coordinate deposit target absent'
+    elif fault == 'header_contiguous':
+        source = effect['source']['after_header']['id']
+        header = next(row for row in effect['headers'] if row['after']['id'] not in
+                      (source, broken['current']['id']) and row['before']['version'] > 1)
+        assert header['after']['version'] == header['before']['version'] + 1
+        header['before']['version'] -= 1
+        assert header['after']['version'] == header['before']['version'] + 2
+        assert header['after'] == next(row for row in broken['current_headers'] if row['id'] == header['after']['id'])
+        assert broken['current'] == effect['deposit']['after']
+        message = 'coordinate changed header differs'
+    else:
+        raise AssertionError(fault)
+    with pytest.raises(ValidationError) as caught:
+        views.CoordinateOutput.model_validate(broken)
+    errors = caught.value.errors()
+    assert len(errors) == 1 and errors[0]['loc'] == ()
+    assert errors[0]['msg'] == 'Value error, ' + message
+    # The helper never mutates the producer's original receipt.
+    assert_all_captured_fields(views.CoordinateOutput.model_validate(raw), raw)
+
+
+def test_inherited_internal_fields_remain_internal_across_view_mro():
+    from bookflow.hub import audit_projection_legacy as legacy
+    models = {value for module in (legacy, views) for value in vars(module).values()
+              if isinstance(value, type) and issubclass(value, legacy.View)}
+    assert views.CoordinateRequest in models
+    assert legacy.DepositAuditRequest._internal <= views.CoordinateRequest._internal
+    for model in models:
+        for base in model.__mro__[1:]:
+            inherited = base.__dict__.get('_internal', frozenset())
+            assert inherited & model.model_fields.keys() <= model._internal, (model.__name__, base.__name__)
