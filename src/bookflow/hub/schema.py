@@ -245,3 +245,13 @@ permission_state = _table(
     sa.CheckConstraint("(mode='legacy' AND catalog_version IS NULL AND catalog_sha256 IS NULL AND catalog_json IS NULL) OR (mode='policy_v1' AND catalog_version IS NOT NULL AND catalog_sha256 IS NOT NULL AND length(catalog_sha256)=64 AND catalog_json IS NOT NULL)", name="ck_permission_state_catalog"),
     description="Private permission-storage state. Its presence does not activate policy evaluation.",
 )
+
+
+history_cursor_keys = _table(
+    'history_cursor_keys',
+    _column('key_id', sa.Integer, 'Singleton private history continuation key slot.', primary_key=True),
+    _column('key_material', sa.LargeBinary, 'Database-owned signing material; never a public record.', nullable=False),
+    sa.CheckConstraint('key_id = 1', name='ck_history_cursor_key_slot'),
+    sa.CheckConstraint("typeof(key_material) = 'blob' AND length(key_material) = 32", name='ck_history_cursor_key_material'),
+    description='Private hub history continuation signing key, independent of company keys.',
+)

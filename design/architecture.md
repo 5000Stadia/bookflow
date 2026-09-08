@@ -2122,3 +2122,16 @@ including empty drafts. Selected source and party references use their explicit
 descriptor groups; field requirements from all participating descriptor maps
 are combined. Exchange-rate audit entries use the existing `ledger.read`
 capability, matching `rate show`. Public full-C acceptance remains separate.
+
+### Hub history continuation key owner
+
+Hub migration hub0013 adds a singleton `history_cursor_keys` table with a
+32-byte database-generated key. Migration and the read-only owner explicitly
+address `main`, so temporary tables cannot redirect either operation. Existing
+hub rows and history remain unchanged. Reopening or an idempotent upgrade keeps
+the same key; a different new hub receives independent material. Database backup
+and restore carry this material with the hub. Reads never create or repair a
+missing key. This is separate from company `report_cursor_keys` and is not a
+credential, public record, or authorization grant. Domain-separated cursor
+signing and the coordinated opaque wire contract remain successor work; this
+storage increment activates neither a public cursor nor a key-rotation command.
