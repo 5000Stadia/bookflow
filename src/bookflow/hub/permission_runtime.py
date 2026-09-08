@@ -19,9 +19,9 @@ SOURCE_COMMIT = '3990636d2a2d3c683a0e806e6635a4a64c0075b0'
 # threshold, default, action or availability policy changes. Existing roots must
 # go through the separately admitted catalog transition, never automatic adoption.
 _PAYMENT_LINES = {
-    'authorize_event': (415,), 'authorize_events': (430,), 'denied_events': (448,),
-    'authorize_publication_transactions': (525, 527),
-    'authorize_publication_selections': (675,),
+    'authorize_event': (428,), 'authorize_events': (443,), 'denied_events': (461,),
+    'authorize_publication_transactions': (538, 540),
+    'authorize_publication_selections': (688,),
 }
 CURRENT_SOURCES = tuple(sorted((
     c.ResourceSource('bookflow.company.transaction_deletion_facts.admit',
