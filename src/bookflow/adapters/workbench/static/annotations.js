@@ -147,7 +147,7 @@
       entry.append(el('p', item.summary || item.command));
       if (item.body != null) entry.append(el('p', item.body, 'annotation-text'));
       if (item.caption) entry.append(el('p', item.caption, 'annotation-text'));
-      if (item.on_behalf_of) entry.append(el('p', 'On behalf of ' + (item.on_behalf_of_name || item.on_behalf_of), 'muted'));
+    if (item.principal_id) entry.append(el('p', 'On behalf of ' + (item.principal_name || item.principal_id), 'muted'));
       if (item.text_truncated) entry.append(el('p', 'Excerpt; full text is in audit event ' + item.event_id, 'muted'));
       return entry;
     }
