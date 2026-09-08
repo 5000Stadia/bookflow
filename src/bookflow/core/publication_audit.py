@@ -55,6 +55,8 @@ class ProjectionProof:
     evidence: tuple[projection.ProjectedEvent, ...]
     digest: str
     wire: object | None
+    # A successful proof uses the resolved selection for evidence; request
+    # keeps the original selection/input needed to reproduce cursor failures.
     request: object | None
 
     def __init__(self, identity, selection, history, evidence, *, _seal, failure=None, wire=None, request=None):
@@ -92,6 +94,8 @@ def execute_history(reader: BoundReader, selection: projection.HistorySelection,
             raise TypeError('matching closed history request required')
     try:
         if request is not None:
+            # If resolution raises, selection remains the original request
+            # selection, which is the one the retained failure must reproduce.
             selection = request.resolve(reader, ctx=ctx)
         elif ctx is not None:
             open_selected(reader,selection,ctx)
