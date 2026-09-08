@@ -1,14 +1,15 @@
-"""Private deposit report arithmetic types; constructors do not confer authority.
+"""Strict private deposit report inputs, arithmetic and typed runtime outputs.
 
-The read owner must validate and authorize complete populations before converting
-its facts to these projection inputs. No Session entry point is installed here.
+Constructors do not confer authority. Session entry points load and authorize
+complete populations through the accepted read and source-history owners.
 """
 from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
-from bookflow.company.deposit_models import Effect, Frozen, ID
+from bookflow.company.deposit_models import Effect, Frozen, ID, Additional
 from bookflow.company.bank_effects import BankEffect
+from bookflow.company.deposit_read_authority import ReadEvidence
 from bookflow.company.journal_models import _Date
 from bookflow.company.sales_models import Selector
 from bookflow.core.errors import BookflowError
@@ -55,7 +56,7 @@ class DepositDetailFilter(DepositReportPeriod):
 
 
 class DepositDetailInput(DepositDetailFilter):
-    page_size: int = Field(default=50, ge=1, le=200)
+    limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, min_length=1)
 
 
@@ -175,6 +176,7 @@ class ReportTotals(Currency):
     composition: Composition
     movement: MovementTotals | None
     account_roles: tuple[AccountRoleTotal, ...]
+    effective_current_bank_total: Signed | None
 
 
 class CompleteRelation(Frozen):
@@ -220,6 +222,7 @@ class UFBridge(Currency):
 class UFComplete(Frozen):
     state: Literal['complete'] = 'complete'
     data: UFBridge
+    evidence: tuple[ReadEvidence, ...] = ()
 
 
 class UFUnavailable(Frozen):
@@ -228,3 +231,52 @@ class UFUnavailable(Frozen):
 
 
 UFBridgeSection = Annotated[UFComplete | UFUnavailable, Field(discriminator='state')]
+
+# Runtime output uses the accepted read owner's finite captured/link models.
+from bookflow.company.deposit_read_models import Selected, EvidenceLink, Navigation, DepositPrintData, SourceItem, CellItem
+
+class RuntimeRow(Frozen):
+    movement: ReportRow
+    selected: Selected
+    sources: tuple[SourceItem, ...]
+    additional: tuple[Additional, ...]
+    cash_allocations: tuple[CellItem, ...]
+    current_version: int = Field(gt=0)
+    recorded_at: str | None
+    links: tuple[EvidenceLink, ...]
+    current_references: tuple[Navigation, ...]
+
+
+class ReportMetadata(Currency):
+    company_id: ID
+    display_name: str
+    legal_name: str
+    period: DepositReportPeriod
+    projection: Projection
+    projection_version: Literal[1] = 1
+    schema_revision: str
+    knowledge_basis: Literal['all_current_knowledge'] = 'all_current_knowledge'
+    knowledge_observed_at: str
+    generated_at: str
+    cutoff_after_evaluation_date: bool
+    snapshot_reference: str
+
+
+class DepositDetailPage(Frozen):
+    metadata: ReportMetadata
+    items: tuple[RuntimeRow, ...]
+    totals: ReportTotals
+    uf: UFBridgeSection
+    next_cursor: str | None
+    previous_cursor: str | None
+    # Private provenance only; publication must revalidate actual fields/roots.
+    evidence: tuple[ReadEvidence, ...]
+
+
+class DepositReportPrintData(Frozen):
+    metadata: ReportMetadata
+    rows: tuple[RuntimeRow, ...]
+    compositions: tuple[DepositPrintData, ...]
+    totals: ReportTotals
+    uf: UFBridgeSection
+    evidence: tuple[ReadEvidence, ...]

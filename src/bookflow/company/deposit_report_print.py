@@ -1,8 +1,7 @@
-"""Pure complete-relation print arithmetic, pending read-owner print supplier.
+"""Complete report print data from one admitted snapshot, without rendering.
 
-This is not DepositReportPrintData: captured custom values, issuer/operation
-links, authority/evidence and company metadata must come from the real reader.
-No paginated reader loop or synthetic metadata stands in for that dependency.
+Captured compositions reuse the accepted print owner; no repeated page reads,
+attachment capabilities, output device, or public activation.
 """
 from bookflow.company.deposit_report_models import CompleteRelation, ReportRevision, ReportDeposit
 from bookflow.core.errors import BookflowError
@@ -29,3 +28,15 @@ def selected_compositions(relation: CompleteRelation,
             raise BookflowError('E_DEPOSIT_SOURCE_INVALID')
         result.append(revision)
     return tuple(result)
+
+
+def print_data(s,inp,*,binding):
+    from bookflow.company import deposit_report_models as m, deposit_reports as reports
+    from bookflow.company import deposit_queries as queries, deposit_read_pages as pages
+    from bookflow.company import deposit_print_data as printing, deposit_read_models as read
+    inp=queries.checked(inp,m.DepositDetailFilter)
+    rows,totals,uf,evidence,content,lookup=reports._runtime(s,inp,binding=binding)
+    fp=pages.fingerprint(s,binding,'report.detail',content)
+    compositions=tuple(printing.assemble(s,lookup[r.movement.transaction_id],read.PrintDataInput(
+        deposit=r.movement.transaction_id,revision_number=r.selected.pin.revision_number),binding=binding,with_guard=False) for r in rows)
+    return m.DepositReportPrintData(metadata=reports._metadata(s,inp,fp),rows=rows,compositions=compositions,totals=totals,uf=uf,evidence=evidence)
