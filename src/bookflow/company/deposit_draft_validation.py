@@ -96,6 +96,7 @@ def validate_manifest(manifest):
         require(len({o.key for o in row.occurrences})==len(row.occurrences) and len({o.ordinal for o in row.occurrences})==len(row.occurrences))
         # Never-positive zero keys need no ordinal yet. Extra present zero keys
         # remain legal, including equality-era snapshots and retained ordinals.
+        # CashComponent.capacity is Positive (gt=0); zero funding has no component.
         positive={x.key for x in source.components}
         present={o.key for o in row.occurrences if o.present}
         require(positive<=present<=set(source.semantic_presence))

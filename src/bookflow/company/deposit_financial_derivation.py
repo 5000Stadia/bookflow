@@ -105,6 +105,8 @@ def begin_revision(read: CompanyFacts, header, revision, *, kind) -> RevisionSta
     dv.require(revision[parent]==header['id'])
     # Validate one predecessor before source graph admission, never recursively
     # decode the chain. Presence is mandatory; old ordinal reorders stay readable.
+    # This predecessor proves financial retention, unlike optional inspection
+    # history: unreadable evidence cannot establish a valid successor manifest.
     if revision['version']==1:
         dv.require(revision['previous_revision_id'] is None,'revision_chain')
     else:
