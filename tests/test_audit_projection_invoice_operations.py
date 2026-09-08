@@ -133,3 +133,19 @@ def test_invoice_edit_history_masks_currently_denied_customer_and_item(corrected
         assert line['item'] is None and line['unit_price']=='1'
     PublicationPermit.from_retained(out.permit.retained()).check(host,current)
     assert storage(path)==before and host._readers_attached==0
+
+
+def test_explicit_null_captured_item_is_rejected_before_projection(corrected):
+    from bookflow.core.errors import BookflowError
+    _,_,_,path,event,_,_,_=corrected;before=storage(path)
+    with sqlite3.connect(path.as_uri()+'?mode=ro',uri=True) as db:
+        captures=[decode_snapshot(blob) for blob, in db.execute("SELECT after FROM audit_entries WHERE event_id=? AND record_type='sales_line_profile'",(event,))]
+    assert captures
+    for raw in captures:
+        decode_company_snapshot(producer='invoice update',record_type='sales_line_profile',action='create',snapshot=raw)
+        bad=copy.deepcopy(raw)
+        bad['item_snapshot']['item']=None
+        with pytest.raises(BookflowError) as error:
+            decode_company_snapshot(producer='invoice update',record_type='sales_line_profile',action='create',snapshot=bad)
+        assert error.value.code=='E_VALIDATION' and error.value.details=={'reason':'audit_format'}
+    assert storage(path)==before
