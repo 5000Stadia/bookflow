@@ -1,5 +1,17 @@
 """Reconciliation activation metadata; owned successor must supply its resolver."""
 from bookflow.storage.migrate import FeatureRevision, feature_admission
+from bookflow.core.errors import BookflowError
+
+
+class ProvenDepositDenial(BookflowError):
+    """Private raise-path provenance, never a retained/compared authority proof.
+
+    Only an evaluated role/resource denial may construct this marker. Its wire
+    representation remains the ordinary sanitized E_PERMISSION failure.
+    """
+
+    def __init__(self):
+        super().__init__('E_PERMISSION')
 
 RECONCILIATION = FeatureRevision('company', None)
 

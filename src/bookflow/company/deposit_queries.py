@@ -7,6 +7,7 @@ from bookflow.company import deposit_dependency_history as history_owner
 from bookflow.company.deposit_dependency_models import InspectionRoot
 from bookflow.company import deposit_read_models as m
 from bookflow.company.deposit_lifecycle_models import DocumentState
+from bookflow.company.deposit_dependencies import ProvenDepositDenial
 from bookflow.core.errors import BookflowError
 
 
@@ -124,8 +125,11 @@ def query(s,inp,*,binding):
     allowed=[]
     for identity in ids:
         try:authority.admit(s,[identity],binding=binding)
+        except ProvenDepositDenial:
+            continue
         except BookflowError as e:
-            if e.code in ('E_PERMISSION','E_RECORD_NOT_FOUND','E_COMPANY_NOT_FOUND'):continue
+            if e.code in ('E_PERMISSION','E_RECORD_NOT_FOUND'):
+                raise BookflowError('E_DEPOSIT_SOURCE_INVALID') from None
             raise
         allowed.append(identity)
     values=[]

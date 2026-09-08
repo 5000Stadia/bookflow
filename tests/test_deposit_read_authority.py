@@ -170,3 +170,211 @@ def test_discovered_groups_are_admitted_before_expansion(client,cash,run_private
     monkeypatch.setattr(authority,'select',select)
     run_private(lambda s,ctx:authority.admit(s,[posted.current.id],binding=OSBinding.from_session(s)))
     assert {posted.current.id} in expansions and {cash['source']} in expansions
+
+
+def test_missing_operation_index_aborts_query_before_filter(root, client, sale, run_private, monkeypatch):
+    """Real persisted fault from the diagnostic, not a permission-provider stub."""
+    import sqlite3
+    from pathlib import Path
+    from bookflow.company import deposit_operation_pages, payment_authority
+    from tests.test_deposit_lifecycle import additional_document
+    from tests.test_deposit_draft_financial import financial
+
+    document = additional_document(client, sale, '10', cash='3')
+    document['additional'] = [dict(document['additional'][0], memo=f'Cash row {n}') for n in range(3)]
+    good, broken = [financial(run_private, dict(operation_key=f'denial-index-{n}', document=document)) for n in range(2)]
+    def clean(s):
+        result = q.query(s, m.QueryInput(page={'limit': 25}), binding=OSBinding.from_session(s))
+        assert result.total_count == len(result.items) == 2
+        assert result.totals.bank_total.minor_units == 5400
+    observe(client, monkeypatch, clean)
+    path = Path(client.company.show(company=COMPANY)['path']) / 'company.db'
+    assert path.is_relative_to(root)
+    db = sqlite3.connect(path)
+    try:
+        guards = db.execute("SELECT name,sql FROM sqlite_master WHERE name IN "
+                            "('deposit_operation_targets_no_delete','deposit_operations_no_update')").fetchall()
+        assert len(guards) == 2
+        for name, _ in guards:
+            db.execute(f'DROP TRIGGER "{name}"')
+        assert db.execute('DELETE FROM deposit_operation_targets WHERE operation_id=?',
+                          (broken.operation_id,)).rowcount == 1
+        assert db.execute('UPDATE deposit_operations SET request_snapshot=? WHERE id=?',
+                          ('{}', broken.operation_id)).rowcount == 1
+        for _, sql in guards:
+            db.execute(sql)
+        db.commit()
+    finally:
+        db.close()
+
+    def read(s):
+        assert not s.company.writable
+        binding = OSBinding.from_session(s)
+        assert q.show(s, m.ShowInput(deposit=good.current.id), binding=binding).totals.bank_total.minor_units == 2700
+        for inp in (m.QueryInput(), m.QueryInput(number=good.current.number), m.QueryInput(q='no match')):
+            with pytest.raises(BookflowError) as error:
+                q.query(s, inp, binding=binding)
+            assert error.value.to_dict() == BookflowError('E_DEPOSIT_SOURCE_INVALID').to_dict()
+        # Point and shared evidence owners retain their existing codes/details.
+        with pytest.raises(BookflowError) as point:
+            q.show(s, m.ShowInput(deposit=broken.current.id), binding=binding)
+        assert point.value.to_dict() == BookflowError('E_RECORD_NOT_FOUND').to_dict()
+        cohort = payment_authority._EventCohort(s.company, [])
+        cohort._load('deposit_operation', [broken.operation_id])
+        with pytest.raises(BookflowError) as shared:
+            cohort._walk(('deposit_operation', broken.operation_id))
+        assert shared.value.to_dict() == BookflowError('E_PERMISSION', details={'reason': 'unresolved_payment_evidence'}).to_dict()
+        cursor = s.company.raw.execute('SELECT * FROM deposit_operations WHERE id=?', (broken.operation_id,))
+        saved = dict(zip((v[0] for v in cursor.description), cursor.fetchone()))
+        with pytest.raises(BookflowError) as owner:
+            deposit_operation_pages.authorized_original(s, saved, binding)
+        assert owner.value.code == 'E_INTERNAL'
+    observe(client, monkeypatch, read)
+
+
+def test_query_omits_only_positive_gate_denial(client, sale, run_private, monkeypatch):
+    """Gate-level witness: legacy member roles cannot selectively deny these roots."""
+    from bookflow.company import deposit_read_authority as authority, deposit_dependency_history as history
+    from bookflow.company.deposit_dependencies import ProvenDepositDenial
+    from bookflow.hub import access
+    from tests.test_deposit_lifecycle import additional_document
+    from tests.test_deposit_draft_financial import financial
+
+    document = additional_document(client, sale)
+    good, hidden = [financial(run_private, dict(operation_key=f'denial-gate-{n}', document=document)) for n in range(2)]
+    def read(s):
+        binding = OSBinding.from_session(s)
+        # Exercise the real resource error producer and sanitizer. Forcing its
+        # predicate is a unit gate test, not a configurable/public deny journey.
+        with monkeypatch.context() as patch:
+            patch.setattr(access, 'role_satisfies', lambda *args: False)
+            with pytest.raises(ProvenDepositDenial) as denied:
+                history._authorize_binding_graph(s, binding, [hidden.current.id])
+        original = authority.admit
+        def gate(s, ids, *, binding):
+            if hidden.current.id in ids:
+                raise denied.value
+            return original(s, ids, binding=binding)
+        with monkeypatch.context() as patch:
+            patch.setattr(authority, 'admit', gate)
+            result = q.query(s, m.QueryInput(), binding=binding)
+            assert result.total_count == len(result.items) == 1
+            assert result.items[0].current.id == good.current.id
+            assert result.totals.bank_total.minor_units == result.effective_bank_total.minor_units == 1000
+            assert result.next_cursor is None
+
+        for failure in (BookflowError('E_PERMISSION'), BookflowError('E_PERMISSION', details={'reason': 'new_unknown_reason'}),
+                        BookflowError('E_RECORD_NOT_FOUND'), BookflowError('E_COMPANY_NOT_FOUND'),
+                        BookflowError('E_UNAUTHENTICATED'), BookflowError('E_SCHEMA_BEHIND'),
+                        BookflowError('E_DB_BUSY'), OSError('owned I/O failure')):
+            def unclassified(s, ids, *, binding):
+                if hidden.current.id in ids:
+                    raise failure
+                return original(s, ids, binding=binding)
+            with monkeypatch.context() as patch:
+                patch.setattr(authority, 'admit', unclassified)
+                with pytest.raises((BookflowError, OSError)) as caught:
+                    q.query(s, m.QueryInput(q='no match'), binding=binding)
+                if isinstance(failure, BookflowError) and failure.code in ('E_PERMISSION', 'E_RECORD_NOT_FOUND'):
+                    assert caught.value.to_dict() == BookflowError('E_DEPOSIT_SOURCE_INVALID').to_dict()
+                else:
+                    assert caught.value is failure
+    observe(client, monkeypatch, read)
+
+
+def test_actual_role_and_activation_denial_provenance(root, client, monkeypatch):
+    from tests.conftest import make_actor, as_user
+    from bookflow.company import deposit_dependency_history as history, deposit_draft_validation as drafts
+    from bookflow.company.deposit_dependencies import ProvenDepositDenial
+    from bookflow.core import registry
+
+    company = client.company.show(company=COMPANY)['company_id']
+    make_actor(root, 'deposit-denial-reader', company_role=(company, 'readonly'))
+    reader = as_user(root, 'deposit-denial-reader')
+    def read(s):
+        binding = OSBinding.from_session(s)
+        # Real readonly role: read admission passes, standard write requirement fails.
+        drafts.admit(s, binding=binding)
+        for owner in (lambda: history._authorize_binding_graph(s, binding, (), write=True),
+                      lambda: drafts.admit(s, binding=binding, write=True)):
+            with pytest.raises(ProvenDepositDenial) as error:
+                owner()
+            ordinary = BookflowError('E_PERMISSION')
+            assert error.value.to_dict() == ordinary.to_dict()
+            assert vars(error.value) == vars(ordinary)
+        # Isolated activation-set change exercises the real default-deny owner;
+        # no capability is activated and this is not a public permission journey.
+        with monkeypatch.context() as patch:
+            patch.setattr(registry, 'EXPLICIT_GRANT_ONLY_CAPABILITIES',
+                          registry.EXPLICIT_GRANT_ONLY_CAPABILITIES | {'ledger.read'})
+            with pytest.raises(ProvenDepositDenial) as error:
+                history._authorize_binding_graph(s, binding, ())
+            assert error.value.to_dict() == BookflowError('E_PERMISSION').to_dict()
+    observe(reader, monkeypatch, read)
+
+
+@pytest.mark.parametrize('membership', ['absent', 'revoked'])
+def test_actual_missing_membership_fails_whole_query(root, client, monkeypatch, membership):
+    from tests.conftest import make_actor, as_user
+    from tests.test_row7_credentials import writer
+    from bookflow.hub import schema as hub
+    from bookflow.core import clock
+    company = client.company.show(company=COMPANY)['company_id']
+    # Hub admin can enter company show, but private deposit authentication still
+    # requires actual applicable membership, including before an empty query.
+    actor = make_actor(root, 'deposit-missing-member', hub_admin=True,
+                       company_role=(company, 'readonly') if membership == 'revoked' else None)
+    if membership == 'revoked':
+        with writer(root) as db:
+            db.conn.execute(hub.memberships.update().where(hub.memberships.c.user_id == actor)
+                            .values(revoked_at=clock.now_iso()))
+    def read(s):
+        with pytest.raises(BookflowError) as error:
+            q.query(s, m.QueryInput(), binding=OSBinding.from_session(s))
+        assert error.value.to_dict() == BookflowError('E_COMPANY_NOT_FOUND').to_dict()
+    observe(as_user(root, 'deposit-missing-member'), monkeypatch, read)
+
+
+@pytest.mark.parametrize('stage', ['authentication', 'group', 'final', 'draft'])
+def test_positive_tag_survives_candidate_admission_entrances(client, cash, run_private, monkeypatch, stage):
+    """Gate-outcome injection checks propagation, not real selective permissions."""
+    from bookflow.company import deposit_read_authority as authority
+    from bookflow.company.deposit_dependencies import ProvenDepositDenial
+    posted, draft = make_posted(client, cash, run_private)
+    def read(s):
+        binding = OSBinding.from_session(s)
+        marker = ProvenDepositDenial()
+        original_graph = authority.h._authorize_binding_graph
+        original_draft = authority.draft_admit
+        def graph(s, binding, ids, events=(), *, write=False):
+            if ((stage == 'authentication' and not ids) or (stage == 'group' and ids and not events)
+                    or (stage == 'final' and events)):
+                raise marker
+            return original_graph(s, binding, ids, events, write=write)
+        def draft_gate(s, **kwargs):
+            if stage == 'draft' and kwargs.get('draft') == draft.id:
+                raise marker
+            return original_draft(s, **kwargs)
+        with monkeypatch.context() as patch:
+            patch.setattr(authority.h, '_authorize_binding_graph', graph)
+            patch.setattr(authority, 'draft_admit', draft_gate)
+            with pytest.raises(ProvenDepositDenial) as error:
+                authority.admit(s, [posted.current.id], binding=binding)
+            assert error.value is marker
+    observe(client, monkeypatch, read)
+
+
+@pytest.mark.parametrize('write', [False, True])
+def test_positive_resource_shape_is_closed(write):
+    from bookflow.company.deposit_dependency_history import _proven_resource_denial
+    capability, role = ('ledger.post', 'standard') if write else ('ledger.read', 'member')
+    for resource in (capability, 'customer-work'):
+        details = dict(capability=resource, required_role=role, role='readonly')
+        assert _proven_resource_denial(BookflowError('E_PERMISSION', details=details), write=write)
+        for change in ({'capability': 'unknown'}, {'required_role': 'owner'}, {'role': 'unknown'}, {'extra': True}):
+            assert not _proven_resource_denial(BookflowError('E_PERMISSION', details=dict(details, **change)), write=write)
+    for details in ({}, {'reason': 'unresolved_payment_evidence'}, {'reason': 'new_reason'},
+                    {'reason': 'capability_not_activated', 'extra': True}):
+        assert not _proven_resource_denial(BookflowError('E_PERMISSION', details=details), write=write)
+    assert _proven_resource_denial(BookflowError('E_PERMISSION', details={'reason': 'capability_not_activated'}), write=write)
+    assert not _proven_resource_denial(BookflowError('E_RECORD_NOT_FOUND', details={'reason': 'capability_not_activated'}), write=write)

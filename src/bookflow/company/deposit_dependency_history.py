@@ -47,6 +47,23 @@ def execution_binding(s, binding):
     return binding.user_id, binding.actor_kind, binding.on_behalf_of, epoch
 
 
+def _proven_resource_denial(error, *, write):
+    """Closed require_resource raise shapes, before their details are sanitized.
+
+    Unknown owners/reasons are not positive denial evidence. The source inventory
+    witness pins these producers and the current resource/activation coverage.
+    """
+    if error.code != 'E_PERMISSION' or type(error.details) is not dict:
+        return False
+    details = error.details
+    if details == {'reason': 'capability_not_activated'}:
+        return True
+    return (set(details) == {'capability', 'required_role', 'role'}
+            and details['capability'] in ('ledger.post' if write else 'ledger.read', 'customer-work')
+            and details['required_role'] == ('standard' if write else 'member')
+            and details['role'] in (None, 'readonly', 'standard', 'admin', 'owner'))
+
+
 def _authorize_binding_graph(s, binding, transaction_ids, event_ids=(), *, write=False):
     """Run existing resource rules for actor AND its validated fixed human.
 
@@ -57,7 +74,7 @@ def _authorize_binding_graph(s, binding, transaction_ids, event_ids=(), *, write
     from dataclasses import replace
     from bookflow.core.session import Actor
     from bookflow.hub import schema as h, access
-    from bookflow.company.deposit_dependencies import authorize
+    from bookflow.company.deposit_dependencies import authorize, ProvenDepositDenial
     from bookflow.company.payment_authority import authorize_events
     actor, _, principal, _ = execution_binding(s, binding)
     for identity in (actor,) if principal is None else (actor, principal):
@@ -72,6 +89,8 @@ def _authorize_binding_graph(s, binding, transaction_ids, event_ids=(), *, write
             if event_ids:
                 authorize_events(view, event_ids)
         except BookflowError as error:
+            if _proven_resource_denial(error, write=write):
+                raise ProvenDepositDenial() from None
             if error.code in ('E_PERMISSION', 'E_COMPANY_NOT_FOUND'):
                 raise BookflowError('E_PERMISSION') from None
             raise
