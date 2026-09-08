@@ -147,7 +147,28 @@
       entry.append(el('p', item.summary || item.command));
       if (item.body != null) entry.append(el('p', item.body, 'annotation-text'));
       if (item.caption) entry.append(el('p', item.caption, 'annotation-text'));
-    if (item.principal_id) entry.append(el('p', 'On behalf of ' + (item.principal_name || item.principal_id), 'muted'));
+      if (item.principal_id) entry.append(el('p', 'On behalf of ' + (item.principal_name || item.principal_id), 'muted'));
+      const explanation = item.explanation;
+      if (explanation) {
+        if (explanation.reason) entry.append(el('p', explanation.reason, 'annotation-text'));
+        if (explanation.directive_status === 'available' && explanation.directive) {
+          const directive = explanation.directive;
+          const line = el('p', undefined, 'annotation-text');
+          const link = el('a', directive.code);
+          link.href = '/c/' + encodeURIComponent(config.company) + '/directive/' + encodeURIComponent(directive.id);
+          line.append(link);
+          if (directive.text === '' && item.text_truncated) {
+            line.append(document.createTextNode(' — Instruction omitted from this excerpt. '));
+            const full = el('a', 'Read full instruction'); full.href = link.href;
+            line.append(full);
+          } else if (directive.text) {
+            line.append(document.createTextNode(': ' + directive.text));
+          }
+          entry.append(line);
+        } else if (explanation.directive_status === 'unavailable') {
+          entry.append(el('p', 'Cited directive unavailable.', 'muted'));
+        }
+      }
       if (item.text_truncated) entry.append(el('p', 'Excerpt; full text is in audit event ' + item.event_id, 'muted'));
       return entry;
     }

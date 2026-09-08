@@ -80,9 +80,14 @@ class HistoryTail(Response):
     scan_more: bool
 
 
+class HistoryActivityItem(ProjectedActivity):
+    # Wire input is a JSON mapping, while the projection owns frozen dataclasses.
+    explanation: HistoryExplanation | None = None
+
+
 class HistoryActivity(Response):
     projection_version: Literal[2]
-    items: list[ProjectedActivity]
+    items: list[HistoryActivityItem]
     count: int
     has_more: bool
     next_cursor: str | None

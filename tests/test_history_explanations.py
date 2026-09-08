@@ -31,6 +31,9 @@ def test_customer_reason_and_deactivated_directive_use_historical_capture(world)
         explanation=out['items'][0]['explanation']
         assert explanation=={'reason':'Customer called <today>','directive_status':'available',
             'directive':{'id':directive['id'],'code':directive['code'],'text':'Keep <original> customer instruction'}}
+        activity=run_hosted(host,registry.get('activity'),raw,Context.new('http','Activity explanation'),cred,info['company_id'],'option',False)
+        assert activity['items'][0]['explanation']==explanation
+        activity.check()
         out.check()
         assert host._readers_attached==0
     finally:host.stop()
@@ -45,6 +48,9 @@ def test_customer_reason_and_deactivated_directive_use_historical_capture(world)
         cred=OSBinding.capture(host,os_login())
         out=run_hosted(host,registry.get('audit list'),raw,Context.new('http','Unavailable directive'),cred,info['company_id'],'option',False)
         assert out['items'][0]['explanation']=={'reason':'Customer called <today>','directive_status':'unavailable','directive':None}
+        activity=run_hosted(host,registry.get('activity'),raw,Context.new('http','Unavailable activity'),cred,info['company_id'],'option',False)
+        assert activity['items'][0]['explanation']==out['items'][0]['explanation']
+        activity.check()
         out.check()
     finally:host.stop()
 
@@ -65,11 +71,13 @@ def test_separate_directive_denial_keeps_reason_without_reference(world):
     host=Host(world['root'],version=client_version());host.start()
     try:
         cred=OSBinding.capture(host,os_login())
-        def read(credential):
-            return run_hosted(host,registry.get('audit list'),
+        def read(credential,command='audit list'):
+            return run_hosted(host,registry.get(command),
                 {'record_type':'customer','record_id':customer['id'],'limit':1},
                 Context.new('http','Directive authority'),credential,cid,'option',False)
         before=read(cred)
+        activity_before=read(cred,'activity')
+        assert activity_before['items'][0]['explanation']==before['items'][0]['explanation']
         assert before['items'][0]['explanation']['directive_status']=='available'
         def reduce():
             with host._commit_hooks.operation('dispatch.apply',host._hub):
@@ -81,5 +89,10 @@ def test_separate_directive_denial_keeps_reason_without_reference(world):
         assert after['items'][0]['explanation']=={'reason':'Visible business explanation','directive_status':'unavailable','directive':None}
         with pytest.raises(BookflowError) as caught:before.check()
         assert caught.value.code=='E_PERMISSION'
+        activity_after=read(OSBinding.capture(host,os_login()),'activity')
+        assert activity_after['items'][0]['explanation']==after['items'][0]['explanation']
+        with pytest.raises(BookflowError) as activity_error:activity_before.check()
+        assert activity_error.value.code=='E_PERMISSION'
+        activity_after.check()
         after.check()
     finally:host.stop()

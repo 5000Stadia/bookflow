@@ -62,10 +62,12 @@ def explanation_site(world,tmp_path_factory):
                 assert event['actor_id']==agent and event['principal_id']==principal and event['interface']=='mcp'
                 assert event['explanation']=={'reason':context['reason'],'directive_status':'available',
                     'directive':{key:directive[key] for key in ('id','code','text')}}
-                return event
+                activity=await run('activity',{'record_type':'transaction','record_id':journal['id']})
+                assert activity['items'][0]['explanation']==event['explanation']
+                return event,journal['id']
     try:
-        event=anyio.run(journey)
-        yield site,cid,human,event
+        event,journal=anyio.run(journey)
+        yield site,cid,human,event,journal
     finally:
         server.close();host.stop()
 
@@ -74,7 +76,7 @@ def explanation_site(world,tmp_path_factory):
 @pytest.mark.skipif(not CHROME.is_file(),reason='Chrome unavailable')
 @pytest.mark.parametrize('width',(1280,390))
 def test_mcp_explanation_visible_to_human_on_desktop_and_phone(explanation_site,tmp_path,width):
-    site,cid,token,event=explanation_site
+    site,cid,token,event,journal=explanation_site
     browser=_Cdp(tmp_path/'chrome')
     try:
         browser.viewport(width,850)
@@ -87,5 +89,12 @@ def test_mcp_explanation_visible_to_human_on_desktop_and_phone(explanation_site,
         assert browser.evaluate("document.querySelectorAll('.history-explanation script').length")==0
         assert browser.evaluate("document.querySelector('.history-explanation a').getAttribute('href')")==(
             '/c/'+cid+'/directive/'+event['explanation']['directive']['id'])
+        _contained(browser,width)
+        browser.navigate(site+'/c/'+cid+'/journal/'+journal)
+        browser.wait_for("!!document.querySelector('[data-section=activity] .annotation-entry')")
+        activity_text=browser.evaluate("document.querySelector('[data-section=activity]').textContent")
+        assert 'Post <today> correctly' in activity_text and 'Post <balanced> plumbing receipts' in activity_text
+        assert browser.evaluate("document.querySelector('[data-section=activity] a').getAttribute('href')")==('/c/'+cid+'/directive/'+event['explanation']['directive']['id'])
+        assert browser.evaluate("document.querySelectorAll('[data-section=activity] script').length")==0
         _contained(browser,width)
     finally:browser.close()

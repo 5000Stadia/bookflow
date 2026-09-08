@@ -81,6 +81,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].attachment_id` | string \| null | no | yes | null | — |
 | `items[].active` | boolean \| null | no | yes | null | — |
 | `items[].text_truncated` | boolean | no | no | false | — |
+| `items[].explanation` | object \| null | no | yes | null | — |
+| `items[].explanation.reason` | string \| null | yes | yes | — | — |
+| `items[].explanation.directive_status` | literal["not_cited", "available", "unavailable"] | yes | no | — | — |
+| `items[].explanation.directive` | object \| null | yes | yes | — | — |
+| `items[].explanation.directive.id` | string | yes | no | — | — |
+| `items[].explanation.directive.code` | string | yes | no | — | — |
+| `items[].explanation.directive.text` | string | yes | no | — | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |

@@ -2163,3 +2163,15 @@ missing key. This is separate from company `report_cursor_keys` and is not a
 credential, public record, or authorization grant. Domain-separated cursor
 signing and the coordinated opaque wire contract remain successor work; this
 storage increment activates neither a public cursor nor a key-rotation command.
+
+Record activity carries only the whole-event explanation already admitted by the
+history projector. Its public wire model preserves undisclosed, not-cited,
+unavailable and available states and shares fresh publication revalidation.
+Activity is an excerpt: serialized escaped JSON remains within its existing item
+budget. Reduction uses fixed precedence (body, caption, reason, directive text),
+slices narrative text on codepoint boundaries and measures again after each cut.
+An oversized directive's text is omitted whole, never shown as a partial rule;
+its admitted identity/code/status remain with an explicit full-instruction link.
+`text_truncated` now covers any excerpted activity text, including an omitted
+instruction. Full audit-event explanations remain unchanged. GUI explanation text
+uses DOM text nodes, and unavailable citations never receive a link.

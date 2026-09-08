@@ -357,6 +357,7 @@ class ProjectedActivity(FrozenView):
     attachment_id: str | None = None
     active: bool | None = None
     text_truncated: bool = False
+    explanation: ProjectedExplanation | None = None
 
 
 @dataclass(frozen=True)
@@ -1157,6 +1158,7 @@ def project_history(audience,selection):
 def activity_item(event,entry):
     """An excerpt of the sole projected entry, never a second raw decoder."""
     import json
+    from dataclasses import replace
     from bookflow.commands.activity_cmds import PAGE_BYTES
     from . import audit_projection_legacy as legacy
     kind='note' if entry.identity.kind=='note' else 'attachment' if entry.identity.kind in ('attachment','attachment_link') else 'audit'
@@ -1164,7 +1166,8 @@ def activity_item(event,entry):
         record_type=entry.identity.kind,record_id=entry.identity.id,action=entry.action,
         command=event.command,summary=event.summary,actor_id=event.actor_id,actor_name=event.actor_name,
         principal_id=event.principal_id,principal_name=event.principal_name,interface=event.interface,
-        version_before=entry.version_before,version_after=entry.version_after)
+        version_before=entry.version_before,version_after=entry.version_after,
+        explanation=event.explanation)
     capture=entry.after if entry.after is not None else entry.before
     if kind=='note':
         if type(capture) is not legacy.NoteView:format_error()
@@ -1175,10 +1178,23 @@ def activity_item(event,entry):
         elif type(capture) is not legacy.AttachmentView:format_error()
     item=ProjectedActivity(**fields)
     while len(json.dumps(item.model_dump()).encode())>PAGE_BYTES-8192:
-        key='body' if item.body is not None else 'caption'
-        value=getattr(item,key)
-        if not value:format_error()
-        item=item.model_copy(update={key:value[:len(value)//2],'text_truncated':True})
+        # Fixed precedence and codepoint slicing make sealed recomputation
+        # deterministic. Measure escaped JSON bytes again after every cut.
+        if item.body:
+            changes={'body':item.body[:len(item.body)//2]}
+        elif item.caption:
+            changes={'caption':item.caption[:len(item.caption)//2]}
+        elif item.explanation is not None and item.explanation.reason:
+            reason=item.explanation.reason
+            changes={'explanation':replace(item.explanation,reason=reason[:len(reason)//2])}
+        elif (item.explanation is not None and item.explanation.directive is not None
+              and item.explanation.directive.text):
+            # A partial instruction can reverse its meaning. Omit its text,
+            # preserving the admitted reference and the explicit excerpt flag.
+            changes={'explanation':replace(item.explanation,
+                directive=replace(item.explanation.directive,text=''))}
+        else:format_error()
+        item=item.model_copy(update={**changes,'text_truncated':True})
     return item
 
 
