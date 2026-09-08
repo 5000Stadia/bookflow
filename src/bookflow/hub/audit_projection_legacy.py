@@ -2609,6 +2609,8 @@ def decode_company_snapshot(*, producer: str, record_type: str, action: str,
 
 
 def entry_requirement(kind):
+    from . import audit_projection_deposit_drafts as drafts
+    if kind in drafts.MODELS:return (('ledger.read','member'),)
     if kind in ('principal','audit_event','audit_entry'):return ()
     if kind=='customer_vendor_link':return (('customer','member'),('vendor','member'))
     if kind in ('journal_entry','invoice','sales_receipt','payment','deposit'):
@@ -2624,7 +2626,7 @@ def entry_requirement(kind):
     if kind in _ANNOTATION_MODELS:
         return (({'company_info':'company','note':'note','attachment':'attachment',
                   'attachment_link':'attachment','attachment_collection':'attachment',
-                  'directive':'directive','exchange_rate':'rate'}[kind],
+                  'directive':'directive','exchange_rate':'ledger.read'}[kind],
                  'admin' if kind=='attachment_collection' else 'member'),)
     if kind in _LIST_NOUNS:
         return ((_LIST_NOUNS[kind],'member'),)

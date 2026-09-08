@@ -16,12 +16,13 @@ def validate(db, *, event, entry, snapshot, side):
 
     Mutable before/after headers are historical images, never compared with the
     current mutable values. Immutable rows use their complete composite key.
-    This function makes no permission decision and returns no display data.
+    This function makes no permission decision; it returns the validated capture
+    for the caller's subsequent disclosure filtering.
     """
     kind = entry['record_type']
     require(kind in codec.TABLES and side in ('before', 'after'))
-    codec.decode_snapshot(producer=event['command'], record_type=kind,
-                          action=entry['action'], record_id=entry['record_id'], snapshot=snapshot)
+    decoded = codec.decode_snapshot(producer=event['command'], record_type=kind,
+                                    action=entry['action'], record_id=entry['record_id'], snapshot=snapshot)
     table_name, keys = codec.TABLES[kind]
     table = schema.metadata.tables[table_name]
     row = db.conn.execute(sa.select(table).where(*(
@@ -64,3 +65,4 @@ def validate(db, *, event, entry, snapshot, side):
             element.column == value for element, value in zip(elements, values, strict=True)
         )).limit(1)).first()
         require(found is not None)
+    return decoded

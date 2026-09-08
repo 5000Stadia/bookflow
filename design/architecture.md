@@ -2115,4 +2115,10 @@ the consumed draft header is one version beyond its retained consumed revision.
 After images identify the producing event, and before images identify an earlier
 event. Declared relational constraints bind each captured revision and permanent
 row to its owner. Failure returns the fixed `audit_format` reason. The validator
-does not grant permissions or register an audit reader.
+does not grant permissions. The private company event reader invokes it after
+the shared scalar/cohort authority adapter admits the complete retained draft
+graph. All nine draft and selection capture kinds require ledger read access,
+including empty drafts. Selected source and party references use their explicit
+descriptor groups; field requirements from all participating descriptor maps
+are combined. Exchange-rate audit entries use the existing `ledger.read`
+capability, matching `rate show`. Public full-C acceptance remains separate.

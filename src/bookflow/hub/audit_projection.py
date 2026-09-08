@@ -637,10 +637,14 @@ def _name(audience,identifier):
     return row
 
 
-def _company_view(audience,event,entry,value):
+def _company_view(audience,event,entry,value,side):
     if value is None:return None
     from . import audit_projection_legacy as legacy
-    decoded=legacy.decode_company_snapshot(producer=event['command'],record_type=entry['record_type'],action=entry['action'],snapshot=value)
+    from . import audit_projection_deposit_drafts as drafts, audit_projection_draft_owners as owners
+    if entry['record_type'] in drafts.MODELS:
+        decoded=owners.validate(audience.reader.session.company,event=event,entry=entry,snapshot=value,side=side)
+    else:
+        decoded=legacy.decode_company_snapshot(producer=event['command'],record_type=entry['record_type'],action=entry['action'],snapshot=value)
     return _disclose_company(audience,audience.reader.session.company_row['id'],decoded,cutoff=event['seq'])
 
 
@@ -658,6 +662,7 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
     """One closed typed traversal; no SQL reflection, string rewriting or ACLs."""
     from . import audit_projection_legacy as legacy
     from . import audit_projection_deposit_coordinate as coordinate
+    from . import audit_projection_deposit_drafts as drafts
     if value is None:return None
     if type(value) is tuple:
         return tuple(_disclose_company(audience,company,item,reference_kind,cutoff=cutoff) for item in value)
@@ -692,6 +697,7 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
     for base in type(value).__mro__:
         groups.extend(legacy._REFERENCE_GROUPS.get(base,()))
         groups.extend(coordinate.REFERENCE_GROUPS.get(base,()))
+        groups.extend(drafts.REFERENCE_GROUPS.get(base,()))
     if reference_kind is not None:
         groups.append((tuple(key for key in ('id','label','version') if key in type(value).model_fields),reference_kind))
     for fields,kind in groups:
@@ -706,6 +712,23 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
         if kind not in ('customer','vendor','employee','other_name'):format_error()
         if not _kind_allowed(audience,company,kind):
             updates.update({key:None for key in fields});partial=True
+    for base in type(value).__mro__:
+        route=drafts.SOURCE_ROUTES.get(base)
+        if route is not None:
+            discriminator,identifier=route
+            kind=getattr(value,discriminator)
+            if kind not in ('payment','sales_receipt'):format_error()
+            if not _kind_allowed(audience,company,kind):
+                updates.update({discriminator:None,identifier:None});partial=True
+        route=drafts.PARTY_ROUTES.get(base)
+        if route is not None:
+            discriminator,pairs=route
+            kind=getattr(value,discriminator)
+            if kind is not None:
+                fields=dict(pairs)
+                if kind not in fields:format_error()
+                if not _kind_allowed(audience,company,kind):
+                    updates.update({discriminator:None,fields[kind]:None});partial=True
     if isinstance(value,(legacy.OperationExecutionView,legacy.RecoveryAuditReceipt)):
         for key in ('actor_id','on_behalf_of'):
             identifier=getattr(value,key,None)
@@ -729,9 +752,9 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
         # Field admission applies to absent and populated captures alike. A
         # hidden reference becoming present must not expose its presence through
         # an empty object, collection size or version-only audit entry.
-        required=next((mapping[base,key] for base in type(value).__mro__
-                       for mapping in (coordinate.FIELD_REQUIREMENTS,legacy._OBJECT_FIELD_REQUIREMENTS)
-                       if (base,key) in mapping),())
+        required=tuple(dict.fromkeys(kind for base in type(value).__mro__
+                       for mapping in (drafts.FIELD_REQUIREMENTS,coordinate.FIELD_REQUIREMENTS,legacy._OBJECT_FIELD_REQUIREMENTS)
+                       for kind in mapping.get((base,key),())))
         if route is not None:required=(*required,route)
         if any(not _kind_allowed(audience,company,kind) for kind in required):
             updates[key]=None;partial=True;continue
@@ -763,9 +786,9 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
         # optional reference or internal freshness assertion was supplied.
         hidden=set(value.input._internal)
         for base in type(value.input).__mro__:
-            for fields,kind in (*legacy._REFERENCE_GROUPS.get(base,()),*coordinate.REFERENCE_GROUPS.get(base,())):
+            for fields,kind in (*legacy._REFERENCE_GROUPS.get(base,()),*coordinate.REFERENCE_GROUPS.get(base,()),*drafts.REFERENCE_GROUPS.get(base,())):
                 if not _kind_allowed(audience,company,kind):hidden.update(fields)
-            for mapping in (legacy._OBJECT_FIELD_REQUIREMENTS,coordinate.FIELD_REQUIREMENTS):
+            for mapping in (legacy._OBJECT_FIELD_REQUIREMENTS,coordinate.FIELD_REQUIREMENTS,drafts.FIELD_REQUIREMENTS):
                 for (owner,field),requirements in mapping.items():
                     if owner is base and any(not _kind_allowed(audience,company,kind) for kind in requirements):
                         hidden.add(field)
@@ -843,8 +866,8 @@ def project_event(audience,event_id,*,company=None,requirements=None,_seen_annot
                 entries.c.version_after==entry['version_before'],events.c.seq<event['seq'])).scalars())
             if len(previous)!=1:format_error()
             before=_decode(previous[0])
-        render=(lambda value:_hub_view(audience,entry['record_type'],entry['record_id'],value)) if company is None else (lambda value:_company_view(audience,event,entry,value))
-        left,right=render(before),render(after)
+        render=(lambda value,side:_hub_view(audience,entry['record_type'],entry['record_id'],value)) if company is None else (lambda value,side:_company_view(audience,event,entry,value,side))
+        left,right=render(before,'before'),render(after,'after')
         if left is None and right is None:continue
         if left==right and entry['action'] not in ('create','delete','baseline','migrate'):continue
         l={} if left is None else left.model_dump(mode='json',by_alias=True)
