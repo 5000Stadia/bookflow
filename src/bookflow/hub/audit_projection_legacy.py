@@ -2731,7 +2731,6 @@ _REFERENCE_GROUPS.update({
 })
 _OBJECT_REFERENCE_KINDS.update({
     (SalesTaxCapture,'tax_item'):'item',(SalesTaxCapture,'agency'):'vendor',
-    (WorkTaxCapture,'tax_item'):'item',(WorkTaxCapture,'agency'):'vendor',
     (AdditionalCapture,'payment_method'):'payment_method',
 })
 
