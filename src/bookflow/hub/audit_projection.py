@@ -897,6 +897,7 @@ HUB_EXPLANATION_COMMANDS = frozenset({
 
 
 def _hub_explanation(audience,event):
+    # Intentional second lock: current view completeness also excludes nonadmins.
     if not audience.global_admin() or event['command'] not in HUB_EXPLANATION_COMMANDS:return None
     reason=event['reason']
     if reason is not None and type(reason) is not str:format_error()

@@ -2177,7 +2177,14 @@ instruction. Full audit-event explanations remain unchanged. GUI explanation tex
 uses DOM text nodes, and unavailable citations never receive a link.
 
 Hub explanations use the same internal `reader_redacted` signal as company
-projections. The initial supported domain is the six private permission-service
+projections. Under current supported permissions, a global administrator sees
+non-null identities and company membership discovers its parent organization, so
+the hidden-parent redaction test verifies an invariant with a stricter simulated
+audience; it does not demonstrate a reachable current configuration. Hidden-scope
+candidate omission is the demonstrated runtime completeness restriction for this
+increment. The explicit global-administrator gate remains an intentional second
+safeguard even where current view completeness already excludes nonadmins.
+The initial supported domain is the six private permission-service
 producers plus organization creation and rename. Private command names are owned
 by the permission writer's immutable vocabulary; registered organization producers
 are checked as hub-scoped. An unbound human installation administrator must still
