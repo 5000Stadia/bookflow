@@ -14,3 +14,15 @@ def test_invoice_operation_owned_fields(view_name,owner_name):
     expected=set(owner.model_fields)
     if name=='InvoiceUpdateInput':expected.remove('operation_key')
     assert set(view.model_fields)-{'tag','projection_partial'}==expected
+
+
+def test_all_mask_routes_name_real_nullable_fields():
+    from pydantic import TypeAdapter
+    routes=set(views._OBJECT_REFERENCE_KINDS)|set(views._OBJECT_FIELD_REQUIREMENTS)
+    for owner,groups in views._REFERENCE_GROUPS.items():
+        routes.update((owner,key) for fields,_ in groups for key in fields)
+    for owner,key in sorted(routes,key=lambda pair:(pair[0].__name__,pair[1])):
+        assert key in owner.model_fields,(owner.__name__,key)
+        # The projector applies null with model_copy. Serialization must support
+        # that intentional value even where original capture rejects null.
+        assert TypeAdapter(owner.model_fields[key].annotation).validate_python(None) is None

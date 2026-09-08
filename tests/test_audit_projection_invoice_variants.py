@@ -100,6 +100,8 @@ def test_tax_custom_references_follow_current_denials(billed_edit):
                 assert component['tax_item_id'] is None and component['agency_id'] is None and component['liability_account_id'] is None
         tax=revision['tax_calculation_details']['attribution']['calculation']
         assert tax['tax_minor_units']==30
+        assert all(t['rule']['agency'] is None for source in revision['billing_sources'] for t in source['facts_snapshot']['line']['taxes'])
+        assert all(cell['rule']['agency'] is None for bucket in tax['buckets'] for cell in bucket['cells'])
         assert all(v['agency_id'] is None and v['liability_account_id'] is None for v in tax['liabilities'])
         assert all(v['liability_account_id'] is None for v in tax['accounts'])
         PublicationPermit.from_retained(out.permit.retained()).check(host,current)
