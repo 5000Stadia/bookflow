@@ -55,19 +55,24 @@ class ProjectionProof:
     evidence: tuple[projection.ProjectedEvent, ...]
     digest: str
     wire: object | None
+    request: object | None
 
-    def __init__(self, identity, selection, history, evidence, *, _seal, failure=None, wire=None):
+    def __init__(self, identity, selection, history, evidence, *, _seal, failure=None, wire=None, request=None):
         if _seal is not _SEAL:
             raise TypeError('execution-owned proof required')
         if (history is None)==(failure is None):
             raise TypeError('exactly one semantic outcome required')
+        if request is not None:
+            from bookflow.core.history_request import HistoryRequest
+            if type(request) is not HistoryRequest:
+                raise TypeError('closed history request required')
         if wire is not None:
             from bookflow.core.history_wire import HistoryWire
             if type(wire) is not HistoryWire or failure is not None or wire.history != history:
                 raise TypeError('execution-owned wire history required')
         output=wire.document() if wire is not None else document(history) if failure is None else failure.error().to_dict()
         for key, value in dict(identity=identity, selection=selection, history=history,failure=failure,
-                               evidence=evidence, digest=_digest(output), wire=wire).items():
+                               evidence=evidence, digest=_digest(output), wire=wire, request=request).items():
             object.__setattr__(self, key, value)
 
     def __deepcopy__(self, memo):
@@ -78,20 +83,27 @@ class ProjectionProof:
         return self.digest == _digest(result)
 
 
-def execute_history(reader: BoundReader, selection: projection.HistorySelection, *, ctx=None):
+def execute_history(reader: BoundReader, selection: projection.HistorySelection, *, ctx=None, request=None):
     """Only construction path: authenticated observation then sole projection."""
     audience = projection.make_audience(reader, read_capability='activity' if selection.mode=='activity' else 'audit')
+    if request is not None:
+        from bookflow.core.history_request import HistoryRequest
+        if type(request) is not HistoryRequest or request.selection != selection:
+            raise TypeError('matching closed history request required')
     try:
-        if ctx is not None:open_selected(reader,selection,ctx)
+        if request is not None:
+            selection = request.resolve(reader, ctx=ctx)
+        elif ctx is not None:
+            open_selected(reader,selection,ctx)
         history = projection.project_history(audience, selection)
     except BookflowError as error:
         failure=projection.ProjectedFailure.capture(error)
         audience.validate()
-        proof=ProjectionProof(audience.identity,selection,None,(),_seal=_SEAL,failure=failure)
+        proof=ProjectionProof(audience.identity,selection,None,(),_seal=_SEAL,failure=failure,request=request)
         return failure.error().to_dict(),proof
     evidence = history.events
     audience.validate()
-    proof = ProjectionProof(audience.identity, selection, history, evidence, _seal=_SEAL)
+    proof = ProjectionProof(audience.identity, selection, history, evidence, _seal=_SEAL,request=request)
     return document(history), proof
 
 
@@ -106,8 +118,12 @@ def revalidate_proof(reader: BoundReader, proof: ProjectionProof, *, ctx=None):
         if authority_digest(audience,proof.selection.company)!=proof.wire.authority:_deny()
     if proof.failure is not None:
         try:
-            if ctx is not None:open_selected(reader,proof.selection,ctx)
-            projection.project_history(audience,proof.selection)
+            selection = proof.selection
+            if proof.request is not None:
+                selection = proof.request.resolve(reader, ctx=ctx)
+            elif ctx is not None:
+                open_selected(reader,selection,ctx)
+            projection.project_history(audience,selection)
         except BookflowError as error:
             current=projection.ProjectedFailure.capture(error)
             if current!=proof.failure:_deny()

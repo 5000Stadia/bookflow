@@ -26,7 +26,7 @@ class PublishedDocument(dict):
         return result
 
 
-def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_execute=None, _semantic_history=None):
+def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_execute=None, _semantic_history=None, _wire_history=False, _history_bookmark=None):
     normalize_options(cmd, company=selector, reason=ctx.reason,
                       source_ref=ctx.source_ref, directive=ctx.directive_id,
                       idempotency_key=ctx.idempotency_key, dry_run=dry_run)
@@ -82,7 +82,14 @@ def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_e
                     permit = PublicationPermit(cmd, None, ctx,
                         (identity.actor, identity.actor_kind, identity.hub_admin),
                         frozenset(), None, None)
-                    result, proof = publication_audit.execute_history(reader, selection,ctx=ctx)
+                    request = None
+                    if _wire_history:
+                        from bookflow.core.history_request import HistoryRequest
+                        request = HistoryRequest.capture(selection, _history_bookmark)
+                    result, proof = publication_audit.execute_history(reader, selection,ctx=ctx,request=request)
+                    if _wire_history:
+                        from bookflow.core.history_wire import bind
+                        result, proof = bind(reader, proof)
                     finish(session, succeeded=proof.failure is None,result=result, audit_proof=proof)
                     if proof.failure is not None:
                         raise proof.failure.error()
@@ -134,7 +141,7 @@ def _reader_binding(host, cred, request_id):
                         cred.on_behalf_of, host.data_root / 'hub.db', request_id)
 
 
-def run_history(host, selection, ctx, cred):
+def run_history(host, selection, ctx, cred, *, wire=False, bookmark=None):
     """Private semantic service using actual execution/publication owners.
 
     No registered endpoint calls this until the inseparable cursor wire cutover.
@@ -144,4 +151,5 @@ def run_history(host, selection, ctx, cred):
     if selection.mode == 'activity':
         name = 'activity'
     return run_hosted(host, registry.get(name), {}, ctx, cred,
-                      selection.company, 'option', False, _semantic_history=selection)
+                      selection.company, 'option', False, _semantic_history=selection,
+                      _wire_history=wire, _history_bookmark=bookmark)

@@ -43,6 +43,6 @@ def bind(reader, proof):
         cursors.issue_events(reader,proof) if proof.selection.mode=='tail' else (),
         cursors.authority_digest(audience,proof.selection.company))
     bound=publication.ProjectionProof(proof.identity,proof.selection,proof.history,proof.evidence,
-                                     _seal=publication._SEAL,wire=wire)
+                                     _seal=publication._SEAL,wire=wire,request=proof.request)
     audience.validate()
     return wire.document(),bound

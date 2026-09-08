@@ -26,13 +26,18 @@ class FrozenView(BaseModel):
 
 class ProjectedFailure(FrozenView):
     code: Literal['E_EVENT_NOT_FOUND','E_RECORD_NOT_FOUND','E_VALIDATION','E_PERMISSION']
-    reason: Literal['audit_format','history_filter','invalid_cursor'] | None = None
+    reason: Literal['audit_format','history_filter','invalid_cursor','authority_changed'] | None = None
 
     def error(self):
+        if self.reason == 'invalid_cursor':
+            return BookflowError(self.code, message='Restart the history query without a bookmark.',
+                                 details={'reason': self.reason})
         return BookflowError(self.code,details={} if self.reason is None else {'reason':self.reason})
 
     @classmethod
     def capture(cls,error):
+        if error.code == 'E_PERMISSION' and error.details == {'reason':'authority_changed'}:
+            return cls(code=error.code,reason='authority_changed')
         if error.code in ('E_EVENT_NOT_FOUND','E_RECORD_NOT_FOUND','E_PERMISSION'):
             return cls(code=error.code)
         if error.code=='E_VALIDATION' and error.details in (
