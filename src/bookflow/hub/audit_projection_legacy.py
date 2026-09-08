@@ -3948,13 +3948,14 @@ class DepositAuditCustomCapture(View):
 
 
 class DepositAuditHeader(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['custom_fields'])
     bank: DepositAccount | None = None
     date: str | None = None
     number: str | None = None
     memo: str | None = None
     label: str | None = None
     cash_back: DepositAuditCashBack | None = None
-    custom_fields: dict[str,DepositAuditCustomCapture] = {}
+    custom_fields: dict[str,DepositAuditCustomCapture] | None = {}
     origins: dict[str,Literal['entered','default','source','unresolved']] = {}
 
 
@@ -3969,8 +3970,9 @@ class DepositAuditSource(View):
 
 
 class DepositAuditParty(View):
-    kind: Literal['customer','vendor','employee','other_name']
-    id: str
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['kind', 'id'])
+    kind: Literal['customer','vendor','employee','other_name'] | None
+    id: str | None
 
 
 class DepositAuditAdditional(View):
@@ -4021,7 +4023,8 @@ class DepositAuditSignedMoney(View):
 
 
 class DepositAuditCashBackInput(View):
-    account: str
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['account'])
+    account: str | None
     amount: str | DepositAuditSignedMoney
     memo: str | None = None
 
@@ -4034,9 +4037,10 @@ class DepositAuditSourceInput(View):
 
 
 class DepositAuditAdditionalInput(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['received_from', 'from_account'])
     line_id: str | None = None
-    received_from: DepositAuditParty
-    from_account: str
+    received_from: DepositAuditParty | None
+    from_account: str | None
     amount: str | DepositAuditSignedMoney
     memo: str | None = None
     check_number: str | None = None
@@ -4045,14 +4049,15 @@ class DepositAuditAdditionalInput(View):
 
 
 class DepositAuditInlineDocument(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['deposit_to', 'custom_fields', 'expected_custom_field_kinds'])
     mode: Literal['inline'] = 'inline'
-    deposit_to: str
+    deposit_to: str | None
     date: str
     number: str | None = None
     memo: str | None = None
     cash_back: DepositAuditCashBackInput | None = None
-    custom_fields: dict[str,str|bool|int|None] = {}
-    expected_custom_field_kinds: dict[str,Literal['text','number','date','bool','choice']] = {}
+    custom_fields: dict[str,str|bool|int|None] | None = {}
+    expected_custom_field_kinds: dict[str,Literal['text','number','date','bool','choice']] | None = {}
     sources: tuple[DepositAuditSourceInput,...] = ()
     additional: tuple[DepositAuditAdditionalInput,...] = ()
 
@@ -4071,14 +4076,16 @@ class DepositAuditPostInput(View):
 
 
 class DepositAuditReplacementDocument(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['deposit_to', 'custom_fields', 'expected_custom_field_kinds'])
     mode: Literal['inline']
-    deposit_to: str
+    deposit_to: str | None
     date: str
     number: str
     memo: str | None
     cash_back: DepositAuditCashBackInput | None
-    custom_fields: dict[str,str|bool|int|None]
-    expected_custom_field_kinds: dict[str,Literal['text','number','date','bool','choice']]
+    custom_fields: dict[str,str|bool|int|None] | None
+
+    expected_custom_field_kinds: dict[str,Literal['text','number','date','bool','choice']] | None
     sources: tuple[DepositAuditSourceInput,...]
     additional: tuple[DepositAuditAdditionalInput,...]
 
@@ -4168,10 +4175,11 @@ class DepositAuditHeaderChange(View):
 
 
 class DepositAuditBankEffect(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['account_id'])
     transaction_id: str
     role: Literal['main_bank','cash_back','additional']
     row_id: str
-    account_id: str
+    account_id: str | None
     active: bool
     signed_debit: int
     statement_amount: int
@@ -4366,3 +4374,30 @@ class DepositOperationView(View):
             if (current.id,current.version,current.revision_id,current.manifest_hash,current.operation_id)!=(pin.id,pin.version+1,pin.revision_id,pin.manifest_hash,self.id):
                 raise ValueError('consumed draft state differs')
         return self
+
+
+# Deposit captured reference routes; these do not activate any public adapter.
+_REFERENCE_GROUPS.update({
+    DepositAuditCashBackInput: ((('account',),'account'),),
+    DepositAuditAdditionalInput: ((('from_account',),'account'),(('payment_method',),'payment_method'),(('class_id',),'class')),
+    DepositAuditInlineDocument: ((('deposit_to',),'account'),),
+    DepositAuditReplacementDocument: ((('deposit_to',),'account'),),
+    DepositAuditBankEffect: ((('account_id',),'account'),),
+})
+_POLYMORPHIC_PARTIES[DepositAuditParty]=('kind','id')
+_OBJECT_REFERENCE_KINDS.update({
+    (DepositAuditHeader,'bank'):'account',
+    (DepositAuditCashBack,'account'):'account',
+    (DepositAuditAdditional,'account'):'account',
+    (DepositAuditAdditional,'payment_method'):'payment_method',
+    (DepositAuditAdditional,'class_ref'):'class',
+})
+for _owner in (DepositAuditHeader,DepositAuditInlineDocument,DepositAuditReplacementDocument):
+    _OBJECT_FIELD_REQUIREMENTS[_owner,'custom_fields']=('custom_field',)
+for _owner in (DepositAuditInlineDocument,DepositAuditReplacementDocument):
+    _OBJECT_FIELD_REQUIREMENTS[_owner,'expected_custom_field_kinds']=('custom_field',)
+_DEPOSIT_ORIGIN_REQUIREMENTS={
+    DepositAuditHeader:{'deposit_to':('account',)},
+    DepositAuditCashBack:{'account':('account',)},
+    DepositAuditAdditional:{'from_account':('account',),'payment_method':('payment_method',),'class_id':('class',)},
+}

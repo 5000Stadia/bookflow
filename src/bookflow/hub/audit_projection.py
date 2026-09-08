@@ -740,7 +740,22 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
         updates[key]=projected
         if isinstance(projected,legacy.View) and projected.projection_partial:partial=True
         if type(projected) is tuple and any(isinstance(x,legacy.View) and x.projection_partial for x in projected):partial=True
-    if isinstance(value,legacy.OriginalPaymentRequest):
+    if isinstance(value,(legacy.DepositAuditAdditional,legacy.DepositAuditAdditionalInput)):
+        party=value.received_from
+        party_hidden=(not _kind_allowed(audience,company,party.kind) if party is not None else
+                      any(not _kind_allowed(audience,company,kind) for kind in ('customer','vendor','employee','other_name')))
+        if party_hidden:
+            updates['received_from']=None;partial=True
+            if 'party_name' in type(value).model_fields:updates['party_name']=None
+            if 'origins' in type(value).model_fields:
+                updates['origins']={k:v for k,v in value.origins.items() if k!='received_from'}
+    for owner,routes in legacy._DEPOSIT_ORIGIN_REQUIREMENTS.items():
+        if isinstance(value,owner):
+            hidden={key for key,kinds in routes.items() if any(not _kind_allowed(audience,company,kind) for kind in kinds)}
+            if hidden:
+                updates['origins']={k:v for k,v in updates.get('origins',value.origins).items() if k not in hidden}
+                partial=True
+    if isinstance(value,(legacy.OriginalPaymentRequest,legacy.DepositAuditRequest)):
         # Presence is captured intent too. Do not disclose whether a denied
         # optional reference or internal freshness assertion was supplied.
         hidden=set(value.input._internal)

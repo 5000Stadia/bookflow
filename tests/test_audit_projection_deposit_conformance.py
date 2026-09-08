@@ -13,3 +13,17 @@ def test_deposit_capture_fields(view_name,owner_name):
     assert set(view.model_fields)-{'projection_partial'}==expected
     for key,field in owner.model_fields.items():
         if key in expected:assert view.model_fields[key].alias==field.alias
+
+
+def test_deposit_reference_routes_have_serializable_null_fields():
+    from pydantic import TypeAdapter
+    owners={getattr(views,name) for name,_ in OWNERS}
+    routes=set(views._OBJECT_REFERENCE_KINDS)|set(views._OBJECT_FIELD_REQUIREMENTS)
+    for owner,groups in views._REFERENCE_GROUPS.items():
+        routes.update((owner,key) for fields,_ in groups for key in fields)
+    for owner,fields in views._POLYMORPHIC_PARTIES.items():
+        routes.update((owner,key) for key in fields)
+    for owner,key in routes:
+        if owner in owners:
+            assert key in owner.model_fields,(owner.__name__,key)
+            assert TypeAdapter(owner.model_fields[key].annotation).validate_python(None) is None
