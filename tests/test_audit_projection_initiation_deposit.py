@@ -8,6 +8,7 @@ from tests.test_audit_projection_draft_owners import draft_history
 from tests.test_audit_projection_coordinate_events import hosted, denied
 from tests.test_audit_projection_draft_disclosure import project, complete
 from tests.test_audit_projection_initiation import events, read, direct_only, ordinary
+from tests.test_audit_projection_activity import world
 from tests.test_deposit_draft_financial import run_private, financial
 from bookflow.storage.engine import open_database
 

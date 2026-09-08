@@ -22,6 +22,8 @@ DIRECT = {
     'deposit_selection': (drafts.Selection, frozenset((
         'deposit selection create', 'deposit selection update', 'deposit selection clear',
         'deposit selection abandon', 'deposit selection accept', 'deposit selection select-matching'))),
+    # Upload currently writes chunks/items, not this header, so it stays generic.
+    # A future header-writing upload needs an explicit rendering-contract review.
     'payment_selection_recovery': (legacy.RecoveryHeaderView, frozenset((
         'payment recovery begin', 'payment recovery upload', 'payment recovery seal',
         'payment recovery apply', 'payment recovery abort', 'payment recovery replace'))),
