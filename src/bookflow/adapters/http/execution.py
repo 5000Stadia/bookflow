@@ -30,6 +30,8 @@ def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_e
     normalize_options(cmd, company=selector, reason=ctx.reason,
                       source_ref=ctx.source_ref, directive=ctx.directive_id,
                       idempotency_key=ctx.idempotency_key, dry_run=dry_run)
+    from bookflow.core.history_commands import COMMANDS, prepare
+    public_history = _semantic_history is None and cmd.name in COMMANDS
     permit = None
 
     def finish(session, **values):
@@ -54,19 +56,20 @@ def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_e
         return result
 
     try:
-        if _semantic_history is not None:
+        if _semantic_history is not None or public_history:
             from bookflow.core.identity_admin_binding import hosted_reader
             from bookflow.core import publication_audit
             from bookflow.hub.audit_projection import HistorySelection
             from bookflow.hub.identity_admin import AdministrationError
             selection = _semantic_history
-            if type(selection) is not HistorySelection:
+            if not public_history and type(selection) is not HistorySelection:
                 raise BookflowError('E_VALIDATION')
-            expected = ('hub audit ' if selection.company is None else 'audit ') + selection.mode
-            if selection.mode == 'activity':
-                expected = 'activity'
-            if cmd.name != expected or cmd.is_write or dry_run:
-                raise BookflowError('E_VALIDATION')
+            if not public_history:
+                expected = ('hub audit ' if selection.company is None else 'audit ') + selection.mode
+                if selection.mode == 'activity':
+                    expected = 'activity'
+                if cmd.name != expected or cmd.is_write or dry_run:
+                    raise BookflowError('E_VALIDATION')
             try:
                 with hosted_reader(host, _reader_binding(host, cred, ctx.request_id),
                                    request_id=ctx.request_id) as reader:
@@ -77,13 +80,15 @@ def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_e
                     if before_execute is not None:
                         before_execute(session)
                         reader.authenticate()
-                    # This private service has its own closed selection model.
-                    # Registered public models remain unchanged until cutover.
+                    request = None
+                    if public_history:
+                        request = prepare(reader, cmd, raw, ctx, selector, source, dry_run)
+                        selection = request.selection
+                        _wire_history = True
                     permit = PublicationPermit(cmd, None, ctx,
                         (identity.actor, identity.actor_kind, identity.hub_admin),
                         frozenset(), None, None)
-                    request = None
-                    if _wire_history:
+                    if _wire_history and not public_history:
                         from bookflow.core.history_request import HistoryRequest
                         request = HistoryRequest.capture(selection, _history_bookmark)
                     result, proof = publication_audit.execute_history(reader, selection,ctx=ctx,request=request)
@@ -144,7 +149,7 @@ def _reader_binding(host, cred, request_id):
 def run_history(host, selection, ctx, cred, *, wire=False, bookmark=None):
     """Private semantic service using actual execution/publication owners.
 
-    No registered endpoint calls this until the inseparable cursor wire cutover.
+    Registered requests use run_hosted with shared command preparation.
     """
     from bookflow.core import registry
     name = ('hub audit ' if selection.company is None else 'audit ') + selection.mode

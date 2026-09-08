@@ -24,13 +24,13 @@ Page immutable record, note and file-link actions chronologically, with a fixed 
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `record_type` | `RECORD_TYPE` | string | yes | no | — | Canonical annotation type, e.g. customer, account, or company_info.; minimum length 1; maximum length 64 |
-| `record_id` | `RECORD_ID` | string | yes | no | — | Stable id of the target inside the selected company.; minimum length 1; maximum length 26 |
-| `since` | `--since` | string \| null | no | yes | null | ISO timestamp or date in the viewer's zone; inclusive lower bound. |
-| `until` | `--until` | string \| null | no | yes | null | Exclusive timestamp upper bound, or inclusive calendar date in the viewer's zone. |
+| `record_type` | `RECORD_TYPE` | string | yes | no | — | minimum length 1; maximum length 64 |
+| `record_id` | `RECORD_ID` | string | yes | no | — | minimum length 1; maximum length 26 |
+| `since` | `--since` | string \| null | no | yes | null | — |
+| `until` | `--until` | string \| null | no | yes | null | — |
 | `kinds` | `--kinds` | array[literal["audit", "note", "attachment"]] \| null | no | yes | null | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
-| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `cursor` | `--cursor` | string \| null | no | yes | null | Opaque next_cursor bookmark from this activity query; omit to restart |
 
 ### Command and context options
 
@@ -58,21 +58,21 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `projection_version` | literal[2] | yes | no | — | — |
 | `items` | array[object] | yes | no | — | — |
 | `items[].kind` | literal["audit", "note", "attachment"] | yes | no | — | — |
 | `items[].at` | string | yes | no | — | — |
 | `items[].event_id` | string | yes | no | — | — |
 | `items[].entry_id` | string | yes | no | — | — |
-| `items[].seq` | integer | yes | no | — | — |
 | `items[].record_type` | string | yes | no | — | — |
 | `items[].record_id` | string | yes | no | — | — |
 | `items[].action` | string | yes | no | — | — |
-| `items[].command` | string | yes | no | — | — |
+| `items[].command` | string \| null | yes | yes | — | — |
 | `items[].summary` | string | yes | no | — | — |
 | `items[].actor_id` | string \| null | yes | yes | — | — |
 | `items[].actor_name` | string \| null | yes | yes | — | — |
-| `items[].on_behalf_of` | string \| null | yes | yes | — | — |
-| `items[].on_behalf_of_name` | string \| null | yes | yes | — | — |
+| `items[].principal_id` | string \| null | yes | yes | — | — |
+| `items[].principal_name` | string \| null | yes | yes | — | — |
 | `items[].interface` | string | yes | no | — | — |
 | `items[].version_before` | integer \| null | yes | yes | — | — |
 | `items[].version_after` | integer \| null | yes | yes | — | — |
@@ -80,11 +80,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].caption` | string \| null | no | yes | null | — |
 | `items[].attachment_id` | string \| null | no | yes | null | — |
 | `items[].active` | boolean \| null | no | yes | null | — |
-| `items[].text_truncated` | boolean | no | no | false | Text shortened to fit the response ceiling; event_id and entry_id identify the complete immutable audit snapshot. |
+| `items[].text_truncated` | boolean | no | no | false | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
-| `high_water` | integer | yes | no | — | — |
 
 Example JSON output:
 
@@ -92,9 +91,9 @@ Example JSON output:
 {
   "count": 0,
   "has_more": false,
-  "high_water": 1,
   "items": [],
-  "next_cursor": null
+  "next_cursor": null,
+  "projection_version": 2
 }
 ```
 

@@ -315,14 +315,12 @@ def _build_command(cmd: registry.Command):
                 except BookflowError as e:
                     if e.code != "E_DB_BUSY":
                         raise
-                    out = {"items": [], "next_after": None, "high_water": None}
+                    out = {"items": [], "next_after": None}
                 for item in out.get("items", []):
                     typer.echo(render_output(item, as_json) if as_json else render_output({"items": [item], "count": 1}, False))
-                # keep the high-water mark: the first poll without --after starts at the newest event and must stay there
+                # Keep the authenticated scan bookmark, including empty initial polls.
                 if out.get("next_after") is not None:
                     after = out["next_after"]
-                elif after is None and out.get("high_water") is not None:
-                    after = out["high_water"]
                 try:
                     _time.sleep(2)
                 except KeyboardInterrupt:

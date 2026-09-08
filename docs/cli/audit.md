@@ -27,14 +27,14 @@ List this company's audit events, newest first.
 | `since` | `--since` | string \| null | no | yes | null | ISO timestamp or date in your zone; events at or after |
 | `until` | `--until` | string \| null | no | yes | null | ISO timestamp or date in your zone; events before |
 | `actor` | `--actor` | string \| null | no | yes | null | Actor user id or username |
-| `kind` | `--kind` | literal["human", "agent", "system"] \| null | no | yes | null | Actor kind |
-| `via` | `--via` | literal["cli", "http", "mcp", "gui", "python", "system"] \| null | no | yes | null | Interface the write came through |
+| `kind` | `--kind` | literal["human", "agent", "system"] \| null | no | yes | null | — |
+| `via` | `--via` | literal["cli", "http", "mcp", "gui", "python", "system"] \| null | no | yes | null | — |
 | `principal` | `--principal` | string \| null | no | yes | null | On-behalf-of user id |
-| `command` | `--command` | string \| null | no | yes | null | Command name, e.g. 'company update' |
-| `record_type` | `--record-type` | string \| null | no | yes | null | Record type: company_info, directive, organization, company, membership, user |
+| `command` | `--command` | string \| null | no | yes | null | — |
+| `record_type` | `--record-type` | string \| null | no | yes | null | — |
 | `record_id` | `--record-id` | string \| null | no | yes | null | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 1000 |
-| `before` | `--before` | integer \| null | no | yes | null | Cursor: page older than this seq |
+| `before` | `--before` | string \| null | no | yes | null | Opaque next_before bookmark from this query; omit to restart |
 
 ### Command and context options
 
@@ -62,42 +62,22 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `projection_version` | literal[2] | yes | no | — | — |
 | `items` | array[object] | yes | no | — | — |
 | `items[].id` | string | yes | no | — | — |
-| `items[].seq` | integer \| null | yes | yes | — | — |
 | `items[].at` | string | yes | no | — | — |
-| `items[].command` | string | yes | no | — | — |
+| `items[].command` | string \| null | yes | yes | — | — |
+| `items[].summary` | string | yes | no | — | — |
 | `items[].actor_id` | string \| null | yes | yes | — | — |
 | `items[].actor_name` | string \| null | yes | yes | — | — |
 | `items[].actor_kind` | string \| null | yes | yes | — | — |
-| `items[].on_behalf_of` | string \| null | yes | yes | — | — |
-| `items[].on_behalf_of_name` | string \| null | yes | yes | — | — |
+| `items[].principal_id` | string \| null | yes | yes | — | — |
+| `items[].principal_name` | string \| null | yes | yes | — | — |
 | `items[].interface` | string | yes | no | — | — |
-| `items[].client_name` | string | yes | no | — | — |
-| `items[].client_version` | string | yes | no | — | — |
-| `items[].client_host` | string | yes | no | — | — |
-| `items[].session_id` | string | yes | no | — | — |
-| `items[].request_id` | string | yes | no | — | — |
-| `items[].reason` | string \| null | yes | yes | — | — |
-| `items[].directive_id` | string \| null | yes | yes | — | — |
-| `items[].directive_code` | string \| null | yes | yes | — | — |
-| `items[].directive_text` | string \| null | yes | yes | — | — |
-| `items[].source_ref` | string \| null | yes | yes | — | — |
-| `items[].undo_of_event_id` | string \| null | no | yes | null | Original company audit event compensated by this event; null otherwise |
-| `items[].summary` | string | yes | no | — | — |
-| `items[].entry_count` | integer | yes | no | — | Number of records touched by this event |
-| `items[].entries` | array[object] \| null | no | yes | null | Touched-record details returned by audit show; null in list and tail results |
-| `items[].entries[].id` | string | yes | no | — | — |
-| `items[].entries[].record_type` | string | yes | no | — | — |
-| `items[].entries[].record_id` | string | yes | no | — | — |
-| `items[].entries[].action` | string | yes | no | — | — |
-| `items[].entries[].version_before` | integer \| null | yes | yes | — | — |
-| `items[].entries[].version_after` | integer \| null | yes | yes | — | — |
-| `items[].entries[].before` | object[string, any] \| null | yes | yes | — | — |
-| `items[].entries[].after` | object[string, any] \| null | yes | yes | — | — |
-| `items[].entries[].diff` | object[string, any] \| null | no | yes | null | — |
+| `items[].entry_count` | integer | yes | no | — | — |
+| `items[].entries` | NoneType | yes | no | — | — |
 | `count` | integer | yes | no | — | — |
-| `next_before` | integer \| null | yes | yes | — | — |
+| `next_before` | string \| null | yes | yes | — | — |
 
 Example JSON output:
 
@@ -105,7 +85,8 @@ Example JSON output:
 {
   "count": 0,
   "items": [],
-  "next_before": null
+  "next_before": null,
+  "projection_version": 2
 }
 ```
 
@@ -187,38 +168,29 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
 | `id` | string | yes | no | — | — |
-| `seq` | integer \| null | yes | yes | — | — |
 | `at` | string | yes | no | — | — |
-| `command` | string | yes | no | — | — |
+| `command` | string \| null | yes | yes | — | — |
+| `summary` | string | yes | no | — | — |
 | `actor_id` | string \| null | yes | yes | — | — |
 | `actor_name` | string \| null | yes | yes | — | — |
 | `actor_kind` | string \| null | yes | yes | — | — |
-| `on_behalf_of` | string \| null | yes | yes | — | — |
-| `on_behalf_of_name` | string \| null | yes | yes | — | — |
+| `principal_id` | string \| null | yes | yes | — | — |
+| `principal_name` | string \| null | yes | yes | — | — |
 | `interface` | string | yes | no | — | — |
-| `client_name` | string | yes | no | — | — |
-| `client_version` | string | yes | no | — | — |
-| `client_host` | string | yes | no | — | — |
-| `session_id` | string | yes | no | — | — |
-| `request_id` | string | yes | no | — | — |
-| `reason` | string \| null | yes | yes | — | — |
-| `directive_id` | string \| null | yes | yes | — | — |
-| `directive_code` | string \| null | yes | yes | — | — |
-| `directive_text` | string \| null | yes | yes | — | — |
-| `source_ref` | string \| null | yes | yes | — | — |
-| `undo_of_event_id` | string \| null | no | yes | null | Original company audit event compensated by this event; null otherwise |
-| `summary` | string | yes | no | — | — |
-| `entry_count` | integer | yes | no | — | Number of records touched by this event |
-| `entries` | array[object] \| null | no | yes | null | Touched-record details returned by audit show; null in list and tail results |
+| `entry_count` | integer | yes | no | — | — |
+| `entries` | array[object] | yes | no | — | — |
 | `entries[].id` | string | yes | no | — | — |
-| `entries[].record_type` | string | yes | no | — | — |
-| `entries[].record_id` | string | yes | no | — | — |
+| `entries[].identity` | object | yes | no | — | — |
+| `entries[].identity.company` | string \| null | yes | yes | — | — |
+| `entries[].identity.kind` | string | yes | no | — | — |
+| `entries[].identity.id` | string | yes | no | — | — |
 | `entries[].action` | string | yes | no | — | — |
-| `entries[].version_before` | integer \| null | yes | yes | — | — |
-| `entries[].version_after` | integer \| null | yes | yes | — | — |
 | `entries[].before` | object[string, any] \| null | yes | yes | — | — |
 | `entries[].after` | object[string, any] \| null | yes | yes | — | — |
-| `entries[].diff` | object[string, any] \| null | no | yes | null | — |
+| `entries[].changed_fields` | array[string] | yes | no | — | — |
+| `entries[].version_before` | integer \| null | yes | yes | — | — |
+| `entries[].version_after` | integer \| null | yes | yes | — | — |
+| `projection_version` | literal[2] | yes | no | — | — |
 
 Example JSON output:
 
@@ -228,26 +200,15 @@ Example JSON output:
   "actor_kind": null,
   "actor_name": null,
   "at": "value",
-  "client_host": "value",
-  "client_name": "value",
-  "client_version": "value",
-  "command": "value",
-  "directive_code": null,
-  "directive_id": null,
-  "directive_text": null,
-  "entries": null,
+  "command": null,
+  "entries": [],
   "entry_count": 1,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "interface": "cli",
-  "on_behalf_of": null,
-  "on_behalf_of_name": null,
-  "reason": null,
-  "request_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-  "seq": null,
-  "session_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-  "source_ref": null,
-  "summary": "value",
-  "undo_of_event_id": null
+  "principal_id": null,
+  "principal_name": null,
+  "projection_version": 2,
+  "summary": "value"
 }
 ```
 
@@ -295,7 +256,7 @@ This company's audit events newer than a cursor, oldest first; the event feed.
 
 ### CLI
 
-`bookflow audit tail --company "Demo Plumbing Co" --after 42 --json`
+`bookflow audit tail --company "Demo Plumbing Co" --json`
 
 ### Input
 
@@ -304,15 +265,15 @@ This company's audit events newer than a cursor, oldest first; the event feed.
 | `since` | `--since` | string \| null | no | yes | null | ISO timestamp or date in your zone; events at or after |
 | `until` | `--until` | string \| null | no | yes | null | ISO timestamp or date in your zone; events before |
 | `actor` | `--actor` | string \| null | no | yes | null | Actor user id or username |
-| `kind` | `--kind` | literal["human", "agent", "system"] \| null | no | yes | null | Actor kind |
-| `via` | `--via` | literal["cli", "http", "mcp", "gui", "python", "system"] \| null | no | yes | null | Interface the write came through |
+| `kind` | `--kind` | literal["human", "agent", "system"] \| null | no | yes | null | — |
+| `via` | `--via` | literal["cli", "http", "mcp", "gui", "python", "system"] \| null | no | yes | null | — |
 | `principal` | `--principal` | string \| null | no | yes | null | On-behalf-of user id |
-| `command` | `--command` | string \| null | no | yes | null | Command name, e.g. 'company update' |
-| `record_type` | `--record-type` | string \| null | no | yes | null | Record type: company_info, directive, organization, company, membership, user |
+| `command` | `--command` | string \| null | no | yes | null | — |
+| `record_type` | `--record-type` | string \| null | no | yes | null | — |
 | `record_id` | `--record-id` | string \| null | no | yes | null | — |
 | `limit` | `--limit` | integer | no | no | 100 | minimum 1; maximum 1000 |
-| `after` | `--after` | integer \| null | no | yes | null | Cursor: events newer than this seq; default the newest, so only new events |
-| `scan_limit` | `--scan-limit` | integer \| null | no | yes | null | Bound visible candidate events examined before business filters to the smaller of this value and limit; omitted preserves matching-event pagination |
+| `after` | `--after` | string \| null | no | yes | null | Opaque next_after or event resume_after bookmark; omit to watch new events |
+| `scan_limit` | `--scan-limit` | integer \| null | no | yes | null | Bound visible candidates examined before business filters |
 
 ### Command and context options
 
@@ -341,56 +302,36 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
-| `items` | array[object] | yes | no | — | Matching events newer than the request cursor, in sequence order |
+| `projection_version` | literal[2] | yes | no | — | — |
+| `items` | array[object] | yes | no | — | — |
 | `items[].id` | string | yes | no | — | — |
-| `items[].seq` | integer \| null | yes | yes | — | — |
 | `items[].at` | string | yes | no | — | — |
-| `items[].command` | string | yes | no | — | — |
+| `items[].command` | string \| null | yes | yes | — | — |
+| `items[].summary` | string | yes | no | — | — |
 | `items[].actor_id` | string \| null | yes | yes | — | — |
 | `items[].actor_name` | string \| null | yes | yes | — | — |
 | `items[].actor_kind` | string \| null | yes | yes | — | — |
-| `items[].on_behalf_of` | string \| null | yes | yes | — | — |
-| `items[].on_behalf_of_name` | string \| null | yes | yes | — | — |
+| `items[].principal_id` | string \| null | yes | yes | — | — |
+| `items[].principal_name` | string \| null | yes | yes | — | — |
 | `items[].interface` | string | yes | no | — | — |
-| `items[].client_name` | string | yes | no | — | — |
-| `items[].client_version` | string | yes | no | — | — |
-| `items[].client_host` | string | yes | no | — | — |
-| `items[].session_id` | string | yes | no | — | — |
-| `items[].request_id` | string | yes | no | — | — |
-| `items[].reason` | string \| null | yes | yes | — | — |
-| `items[].directive_id` | string \| null | yes | yes | — | — |
-| `items[].directive_code` | string \| null | yes | yes | — | — |
-| `items[].directive_text` | string \| null | yes | yes | — | — |
-| `items[].source_ref` | string \| null | yes | yes | — | — |
-| `items[].undo_of_event_id` | string \| null | no | yes | null | Original company audit event compensated by this event; null otherwise |
-| `items[].summary` | string | yes | no | — | — |
-| `items[].entry_count` | integer | yes | no | — | Number of records touched by this event |
-| `items[].entries` | array[object] \| null | no | yes | null | Touched-record details returned by audit show; null in list and tail results |
-| `items[].entries[].id` | string | yes | no | — | — |
-| `items[].entries[].record_type` | string | yes | no | — | — |
-| `items[].entries[].record_id` | string | yes | no | — | — |
-| `items[].entries[].action` | string | yes | no | — | — |
-| `items[].entries[].version_before` | integer \| null | yes | yes | — | — |
-| `items[].entries[].version_after` | integer \| null | yes | yes | — | — |
-| `items[].entries[].before` | object[string, any] \| null | yes | yes | — | — |
-| `items[].entries[].after` | object[string, any] \| null | yes | yes | — | — |
-| `items[].entries[].diff` | object[string, any] \| null | no | yes | null | — |
-| `count` | integer | yes | no | — | Number of events returned |
-| `next_after` | integer \| null | yes | yes | — | Sequence of the last returned event, or last scanned visible candidate when scan_limit is set; null when none were returned or scanned |
-| `high_water` | integer \| null | yes | yes | — | Lower-bound cursor used for this request: the supplied after value, or the newest visible sequence when after was omitted |
-| `scanned_count` | integer | no | no | 0 | Visible candidates examined before business filters in bounded scan mode; zero when scan_limit is omitted |
-| `scan_more` | boolean | no | no | false | More visible candidates remain after this bounded scan; false when scan_limit is omitted |
+| `items[].entry_count` | integer | yes | no | — | — |
+| `items[].entries` | NoneType | yes | no | — | — |
+| `items[].resume_after` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | — |
+| `next_after` | string | yes | no | — | — |
+| `scanned_count` | integer | yes | no | — | — |
+| `scan_more` | boolean | yes | no | — | — |
 
 Example JSON output:
 
 ```json
 {
   "count": 0,
-  "high_water": null,
   "items": [],
-  "next_after": null,
+  "next_after": "value",
+  "projection_version": 2,
   "scan_more": false,
-  "scanned_count": 0
+  "scanned_count": 1
 }
 ```
 

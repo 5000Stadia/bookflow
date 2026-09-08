@@ -25,3 +25,18 @@ def read(root, selection, ctx, *, bookmark=None):
             return output
     except AdministrationError:
         raise BookflowError('E_UNAUTHENTICATED') from None
+
+
+def run_command(root, cmd, raw, ctx, selector, source, dry_run=False):
+    from bookflow.core.history_commands import prepare
+    try:
+        with offline_reader(root, request_id=ctx.request_id, principal=ctx.on_behalf_of) as reader:
+            request = prepare(reader, cmd, raw, ctx, selector, source, dry_run)
+            _, semantic = publication_audit.execute_history(reader, request.selection, ctx=ctx, request=request)
+            output, proof = history_wire.bind(reader, semantic)
+            publication_audit.revalidate_proof(reader, proof, ctx=ctx)
+            if proof.failure is not None:
+                raise proof.failure.error()
+            return output
+    except AdministrationError:
+        raise BookflowError('E_UNAUTHENTICATED') from None

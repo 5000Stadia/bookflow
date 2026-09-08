@@ -251,6 +251,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`hub/audit_events`](schema/hub/audit_events.md)
 - [`hub/companies`](schema/hub/companies.md)
 - [`hub/features`](schema/hub/features.md)
+- [`hub/history_cursor_keys`](schema/hub/history_cursor_keys.md)
 - [`hub/idempotency_keys`](schema/hub/idempotency_keys.md)
 - [`hub/memberships`](schema/hub/memberships.md)
 - [`hub/organizations`](schema/hub/organizations.md)

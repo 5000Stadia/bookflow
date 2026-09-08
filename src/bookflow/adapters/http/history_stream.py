@@ -19,6 +19,10 @@ def drain(host, selection, ctx, credential, bookmark=None):
     if type(selection) is not HistorySelection or selection.mode != 'tail':
         raise BookflowError('E_VALIDATION')
     document = run_history(host, selection, ctx, credential, wire=True, bookmark=bookmark)
+    return frame_document(document, selection.company or 'hub', bookmark)
+
+
+def frame_document(document, key, bookmark=None):
     frames = []
     last = bookmark
     for item in document['items']:
@@ -31,5 +35,5 @@ def drain(host, selection, ctx, credential, bookmark=None):
     # receipt of an audit frame, and comes AFTER all returned event frames.
     if cursor != last:
         frames.append(f'id: {cursor}\nevent: checkpoint\ndata: {{"projection_version":2}}\n\n')
-    return HistoryBatch(tuple(frames), cursor, selection.company or 'hub',
+    return HistoryBatch(tuple(frames), cursor, key,
                         document['scan_more'], document)

@@ -30,7 +30,7 @@
 </section>{% endif %}
 {% macro fields(obj, prefix) %}{% for k, v in obj.items() %}{% if v is mapping %}<div class="field"><b>{{ prefix }}{{ k }}</b><span></span></div>{{ fields(v, prefix ~ k ~ ".") }}{% elif v is sequence and v is not string and v and v[0] is mapping %}<div class="field"><b>{{ prefix }}{{ k }}</b><pre>{{ json.dumps(v, indent=1, default=str) }}</pre></div>{% else %}<div class="field"><b>{{ prefix }}{{ k }}</b><span>{{ v if v is not none else "" }}</span></div>{% endif %}{% endfor %}{% endmacro %}
 {% if workspace or master_detail or noun in ('journal', 'payment') or sale or work %}<details class="technical-details{% if noun == 'payment' %} payment-technical{% endif %}"><summary>All fields and technical details</summary>{{ fields(record, "") }}</details>{% else %}{{ fields(record, "") }}{% endif %}
-{% if audit is not none %}<h3>Audit</h3><div class="table-wrap"><table><tr><th>at</th><th>command</th><th>actor</th><th>interface</th><th>reason</th><th>summary</th></tr>
-{% for e in audit %}<tr><td>{{ e.at }}</td><td>{{ e.command }}</td><td>{{ e.actor_name or e.actor_id }}</td><td>{{ e.interface }}</td><td>{{ e.reason or "" }}{% if e.directive_code %} ({{ e.directive_code }}){% endif %}</td><td>{{ e.summary }}</td></tr>{% endfor %}</table></div>{% endif %}
+{% if audit is not none %}<h3>Audit</h3><div class="table-wrap"><table><tr><th>at</th><th>command</th><th>actor</th><th>interface</th><th>summary</th></tr>
+{% for e in audit %}<tr><td>{{ e.at }}</td><td>{{ e.command or "" }}</td><td>{{ e.actor_name or e.actor_id }}</td><td>{{ e.interface }}</td><td>{{ e.summary }}</td></tr>{% endfor %}</table></div>{% endif %}
 {% include "annotations.html" %}
 {% endblock %}

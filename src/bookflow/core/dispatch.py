@@ -466,6 +466,12 @@ def _run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: st
     if forwarded is not None:
         return forwarded
 
+    from bookflow.core.history_commands import COMMANDS
+    if cmd.name in COMMANDS:
+        from bookflow.core.history_offline import run_command
+        return guard(lambda: run_command(s.data_root, cmd, raw_input, ctx,
+                                         company_selector, company_source, dry_run), False)
+
     def under_lock():
         with private_umask(), RootLock(s.data_root, cmd.name):
             try:

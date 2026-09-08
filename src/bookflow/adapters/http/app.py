@@ -337,7 +337,6 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
         validated = validate_input(cmd, raw)
         values = validated.model_dump(mode="json", exclude_none=True)
         cursor = values.pop("after", None)
-        values.pop("limit", None)
         secret = secret_of(request)
         ctx = make_context(request, cred)
         def resolve_again() -> None:
@@ -346,32 +345,14 @@ def create_app(host, *, secure_cookies: bool) -> FastAPI:
                 if auth.needs_refresh(row):
                     host.enqueue_token_refresh(row["id"], row["kind"])
 
-        def drain(start: int | None):
-            frames: list[str] = []
-            next_cursor = start
-            s = host.reader_session(cred.user_id, cred.login)
-            try:
-                command_input = {**values, **({"after": next_cursor} if next_cursor is not None else {}), "limit": 100, "scan_limit": 100}
-                from bookflow.core.publication import PublicationPermit
-                from bookflow.adapters.http.execution import PublishedDocument
-                cred.revalidate(s.hub)
-                permit = PublicationPermit.capture(cmd, command_input, ctx, s, cred, selector, "option", False)
-                out = execute(cmd, command_input, ctx, s, company_selector=selector, company_source="option")
-                permit.finish(s, result=out)
-                document = PublishedDocument(out, permit, host, cred)
-                for item in out["items"]:
-                    frames.append(f"id: {item['seq']}\nevent: audit\ndata: {json.dumps(item, default=str)}\n\n")
-                if out["next_after"] is not None:
-                    next_cursor = out["next_after"]
-                elif next_cursor is None:
-                    next_cursor = out.get("high_water") or 0
-            finally:
-                try:
-                    guard(lambda: _close(s), cred.hub_admin)
-                finally:
-                    host.reader_done()
-            canonical_key = s.company_row["id"] if s.company_row is not None else "hub"
-            return frames, next_cursor or 0, canonical_key, out["scan_more"], document
+        def drain(start: str | None):
+            from bookflow.adapters.http.execution import run_hosted
+            from bookflow.adapters.http.history_stream import frame_document
+            command_input = {**values, **({"after": start} if start is not None else {})}
+            document = run_hosted(host, cmd, command_input, ctx, cred, selector, "option", False)
+            key = document.permit.audit_proof.selection.company or "hub"
+            batch = frame_document(document, key, start)
+            return batch.frames, batch.next_cursor, batch.key, batch.more, document
 
         async def gen():
             nonlocal cursor

@@ -411,7 +411,12 @@ Rules:
 
 ### 7.1 Event feed
 
-The audit log is the event stream. `audit tail --after <cursor> --limit <n>` returns events after the cursor in commit order with a new cursor; the cursor is the event's `seq`, an integer assigned in insertion order under the data-root lock, so no two events share a position and a restart never reorders the feed. `tail` accepts every `list` filter. `--follow` on the CLI keeps polling. The host exposes `GET /companies/{company_id}/events?after=<cursor>` as server-sent events, one event per message, with the same filters as `audit list`. A subscriber persists its last processed cursor and reconnects after interruption using `Last-Event-ID` or `after` to resume without gaps. The root-wide folder gate in 3.2 can interrupt an unrelated company's stream; clients retry transient busy responses and must not interpret disconnect as end of history. Webhooks are a later addition on top of this feed and are not in release 1.
+The audit log is the event stream. Public audit and activity responses carry `projection_version: 2` and disclose only the current reader's permitted history. Stored sequence numbers and global high-water marks are internal and are never public continuation values. List uses `next_before`, activity uses `next_cursor`, and tail uses `next_after`; these are opaque authenticated strings bound to the reader, fixed principal, query and current visible authority. Omit a bookmark to restart. Numeric or malformed bookmarks are `E_VALIDATION` with restart guidance; changed authority can invalidate a bookmark. No request-version field is required.
+
+`audit tail --after <bookmark> --limit <n>` returns events in commit order with a new scan bookmark. Tail accepts every list filter; `--follow` on the CLI retains the returned bookmark, including empty polls. The host exposes `GET /companies/{company_id}/events?after=<bookmark>` as server-sent events with the same filters. Each audit event carries its own opaque `resume_after`, also used as its SSE ID. A final checkpoint can advance past scanned nonmatching events, after all event frames. Persist the last processed SSE ID and reconnect using `Last-Event-ID` or `after`; never advance to a page bookmark before processing that page. Unchanged polls emit no checkpoint: identical reader, query, authority and position produce identical bookmarks.
+
+Publication checks current authority for bounded stream handoffs. Initial drain followed by subscription and another drain closes the registration race. The root-wide folder gate in 3.2 can interrupt an unrelated company's stream; clients retry transient busy responses and must not interpret disconnect as end of history. Webhooks remain later scope.
+
 
 ## 8. Money and currency
 
