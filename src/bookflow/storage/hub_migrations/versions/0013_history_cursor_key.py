@@ -1,4 +1,5 @@
 """Hub-owned continuation signing material; no public cursor activation."""
+import secrets
 from alembic import op
 import sqlalchemy as sa
 
@@ -15,7 +16,9 @@ def upgrade():
         sa.CheckConstraint('key_id = 1', name='ck_history_cursor_key_slot'),
         sa.CheckConstraint("typeof(key_material) = 'blob' AND length(key_material) = 32", name='ck_history_cursor_key_material'),
         schema='main')
-    op.get_bind().exec_driver_sql('INSERT INTO main.history_cursor_keys(key_id,key_material) VALUES (1,randomblob(32))')
+    op.get_bind().exec_driver_sql(
+        'INSERT INTO main.history_cursor_keys(key_id,key_material) VALUES (1,?)',
+        (secrets.token_bytes(32),))
 
 
 def downgrade():
