@@ -5,7 +5,7 @@ DB, or adopts SQL columns at runtime. Model/producer conformance is a release ga
 """
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Literal, Mapping, ClassVar, get_origin, get_args
+from typing import Annotated, Literal, Mapping, ClassVar, get_origin, get_args
 import json
 from pydantic import BaseModel, ConfigDict, Field, model_validator, model_serializer
 from bookflow.core.errors import BookflowError
@@ -289,20 +289,22 @@ class BillingAddress(View):
 
 
 class PaymentCapture(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset({'payer','lineage','billing_address','payment_method'})
     schema_version: Literal[1]=1
-    payer: Reference
-    lineage: tuple[Reference,...]
-    billing_address: BillingAddress
+    payer: Reference | None
+    lineage: tuple[Reference,...] | None
+    billing_address: BillingAddress | None
     ar_account: Account
     deposit_account: Account
-    payment_method: Reference
+    payment_method: Reference | None
     preferences: PaymentPreferences
 
 
 class ComponentCapture(View):
-    party: Reference
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset({'party','lineage'})
+    party: Reference | None
     ar_account: Account
-    lineage: tuple[Reference,...]
+    lineage: tuple[Reference,...] | None
 
 
 class AllocationSpan(View):
@@ -2553,6 +2555,9 @@ def decode_company_snapshot(*, producer: str, record_type: str, action: str,
                             snapshot: Mapping[str,object]):
     if type(snapshot) is not dict:_format()
     model=_list_model(producer,record_type,action,snapshot)
+    if record_type=='payment_operation':
+        if producer not in _PAYMENT_OPERATION_COMMANDS or action!='create' or snapshot.get('command')!=producer:_format()
+        model=PaymentOperationView
     if record_type=='payment_operation_item':
         if producer not in _OPERATION_COMMANDS or action!='create':_format()
         model=_OPERATION_ITEM_MODELS.get(snapshot.get('kind'))
@@ -2680,6 +2685,7 @@ _OBJECT_FIELD_REQUIREMENTS = {
     (CustomerListView,'counterparty_link'):('customer','vendor'),
     (VendorListView,'counterparty_link'):('customer','vendor'),
     (CommercialProfile,'billing_address'):('customer',),
+    (PaymentCapture,'billing_address'):('customer',),
     (CommercialProfile,'shipping_address'):('customer',),
     (CommercialProfile,'shipping_address_id'):('customer',),
 }
@@ -2943,3 +2949,276 @@ _REFERENCE_GROUPS.update({
     ApplicationResultView: ((('party_id',),'customer'),),
     AllocationResultView: ((('tax_item_id',),'item'),),
 })
+
+
+# Original input differs from public write input: the operation key is stored on
+# the receipt, and omission is part of intent. These models retain that shape.
+from bookflow.company.sales_models import SalesMoneyInput
+
+
+class IntentInvoiceAmount(View):
+    invoice: str
+    expected_version: int = Field(ge=1)
+    amount: str | SalesMoneyInput
+
+
+class IntentInlineApplications(View):
+    mode: Literal['inline']='inline'
+    items: tuple[IntentInvoiceAmount,...]=()
+
+
+class IntentSelectionReference(View):
+    mode: Literal['selection']
+    selection: str
+    expected_version: int = Field(ge=1)
+
+
+IntentApplications=Annotated[IntentInlineApplications|IntentSelectionReference,Field(discriminator='mode')]
+
+
+class PaymentIntentBase(View):
+    _internal: ClassVar[frozenset[str]]=frozenset({'expected_facts_fingerprint'})
+    expected_facts_fingerprint: str | None=None
+
+
+class ReceiveIntent(PaymentIntentBase):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset({'customer'})
+    customer: str | None
+    date: str
+    amount: str | SalesMoneyInput
+    applications: IntentApplications=Field(default_factory=IntentInlineApplications)
+    payment_method: str | None=None
+    ar_account: str | None=None
+    deposit_to: str | None=None
+    number: str | None=None
+    reference: str | None=None
+    memo: str | None=None
+    custom_fields: dict[str,str|bool|int|None] | None=None
+    expected_custom_field_kinds: dict[str,Literal['text','number','date','bool','choice']] | None=None
+
+
+class ApplyIntent(PaymentIntentBase):
+    payment: str
+    expected_version: int=Field(ge=1)
+    date: str
+    applications: IntentApplications
+
+
+class IntentUnapplyReference(View):
+    application_id: str
+    invoice_expected_version: int=Field(ge=1)
+
+
+class UnapplyIntent(PaymentIntentBase):
+    payment: str
+    expected_version: int=Field(ge=1)
+    applications: tuple[IntentUnapplyReference,...]
+
+
+class VoidIntent(PaymentIntentBase):
+    payment: str
+    expected_version: int=Field(ge=1)
+
+
+class IntentInvoiceVersion(View):
+    invoice: str
+    expected_version: int=Field(ge=1)
+
+
+class UpdateIntent(VoidIntent):
+    _internal: ClassVar[frozenset[str]]=PaymentIntentBase._internal|frozenset({'settlement_guard'})
+    date: str | None=None
+    amount: str | SalesMoneyInput | None=None
+    number: str | None=None
+    reference: str | None=None
+    memo: str | None=None
+    payment_method: str | None=None
+    deposit_to: str | None=None
+    custom_fields: dict[str,str|bool|int|None] | None=None
+    expected_custom_field_kinds: dict[str,Literal['text','number','date','bool','choice']] | None=None
+    invoice_versions: tuple[IntentInvoiceVersion,...]=()
+    settlement_guard: str | None=None
+
+
+class OriginalContext(View):
+    _internal: ClassVar[frozenset[str]]=frozenset({'reason'})
+    reason: str | None=None
+
+
+class OriginalPaymentRequest(View):
+    request_schema_version: Literal[1]
+    company_id: str
+    provided_fields: tuple[str,...]
+    context: OriginalContext
+    context_provided_fields: tuple[str,...]
+
+    @model_validator(mode='after')
+    def field_presence(self):
+        if tuple(sorted(self.input.model_fields_set))!=self.provided_fields or tuple(sorted(self.context.model_fields_set))!=self.context_provided_fields:
+            raise ValueError('captured request presence differs')
+        return self
+
+
+class OriginalReceiveRequest(OriginalPaymentRequest):
+    command: Literal['payment receive']
+    input: ReceiveIntent
+
+
+class OriginalApplyRequest(OriginalPaymentRequest):
+    command: Literal['payment apply']
+    input: ApplyIntent
+
+
+class OriginalUnapplyRequest(OriginalPaymentRequest):
+    command: Literal['payment unapply']
+    input: UnapplyIntent
+
+
+class OriginalUpdateRequest(OriginalPaymentRequest):
+    command: Literal['payment update']
+    input: UpdateIntent
+
+
+class OriginalVoidRequest(OriginalPaymentRequest):
+    command: Literal['payment void']
+    input: VoidIntent
+
+
+OriginalPaymentIntent=Annotated[OriginalReceiveRequest|OriginalApplyRequest|OriginalUnapplyRequest|OriginalUpdateRequest|OriginalVoidRequest,Field(discriminator='command')]
+
+
+class PaymentRequestSnapshot(View):
+    _internal: ClassVar[frozenset[str]]=frozenset({'expanded_selection_hash'})
+    original_request: OriginalPaymentIntent
+    resolved_transaction_ids: tuple[str,...]
+    expanded_selection_hash: str | None
+
+
+class PaymentCurrentResultView(View):
+    payment_id: str | None
+    version: int
+    revision_id: str | None
+    status: Literal['posted','voided']
+    received_minor_units: int
+    effective_received_minor_units: int
+    applied_minor_units: int
+    available_minor_units: int
+    currency: str
+    components: tuple[SourceComponentResultView,...]
+    component_count: int
+
+
+class PaymentEffectHeaderView(View):
+    id: str | None
+    version: int
+    revision_id: str | None
+    revision_number: int
+    number: str
+    date: str
+    amount: CapturedMoney
+    status: Literal['posted','voided']
+
+
+class PaymentEffectResultView(View):
+    kind: Literal['receive','apply','unapply','update','void']
+    financial_changed: bool
+    audit_event_id: str | None=None
+    before_header: PaymentEffectHeaderView | None=None
+    after_header: PaymentEffectHeaderView | None=None
+    preferences: PaymentPreferences | None=None
+    operation_id: str | None
+    payment_id: str | None
+    source_components: tuple[SourceComponentResultView,...]
+    applications: tuple[ApplicationResultView,...]
+    allocations: tuple[AllocationResultView,...]
+    document_changes: tuple[InvoiceSettlementResultView,...]
+
+
+class PaymentEffectCountsView(View):
+    source_components: int=Field(ge=0)
+    applications: int=Field(ge=0)
+    allocations: int=Field(ge=0)
+    document_changes: int=Field(ge=0)
+
+
+class PaymentWriteResultView(View):
+    _internal: ClassVar[frozenset[str]]=frozenset({'facts_fingerprint'})
+    dry_run: bool=False
+    warnings: tuple[str,...]=()
+    changed: bool=True
+    new_effect: bool=True
+    id: str | None
+    version: int
+    operation_key: str
+    facts_fingerprint: str
+    idempotent_replay: bool=False
+    effect: PaymentEffectResultView
+    current: PaymentCurrentResultView
+    effect_counts: PaymentEffectCountsView
+    # payments.apply captures prepare().preview, before preview_output adds
+    # prospective descriptors. Committed receipt captures contain an empty tuple.
+    prospective_pages: tuple[()]=()
+
+
+class OperationExecutionView(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset({'actor_id'})
+    _internal: ClassVar[frozenset[str]]=frozenset({'directive_code','directive_id','reason'})
+    actor_id: str | None
+    interface: str
+    on_behalf_of: str | None
+    reason: str | None
+    directive_id: str | None
+    directive_code: str | None
+
+
+class PaymentOperationView(View):
+    tag: Literal['payment_operation']='payment_operation'
+    _internal: ClassVar[frozenset[str]]=frozenset({'request_hash'})
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset({'created_at','created_by','created_via'})
+    id: str
+    operation_key: str
+    command: Literal['payment receive','payment apply','payment unapply','payment update','payment void']
+    request_schema_version: Literal[1]
+    request_hash: str
+    request_snapshot: PaymentRequestSnapshot
+    effect_snapshot: PaymentWriteResultView
+    execution_snapshot: OperationExecutionView
+    created_at: str | None
+    created_by: str | None
+    created_via: str | None
+    audit_event_id: str
+
+    @model_validator(mode='before')
+    @classmethod
+    def original_input_contract(cls,value):
+        if type(value) is dict:
+            from bookflow.company import payment_models as inputs
+            owners={'payment receive':inputs.PaymentReceiveInput,'payment apply':inputs.PaymentApplyInput,
+                'payment unapply':inputs.PaymentUnapplyInput,'payment update':inputs.PaymentUpdateInput,
+                'payment void':inputs.PaymentVoidInput}
+            try:
+                snapshot=value['request_snapshot']
+                if type(snapshot) is str:snapshot=json.loads(snapshot)
+                original=snapshot['original_request']['input']
+                if 'operation_key' in original:raise ValueError('operation key belongs to receipt')
+                owners[value['command']].model_validate_json(json.dumps(dict(original,operation_key=value['operation_key']),allow_nan=False))
+            except (KeyError,TypeError):raise ValueError('invalid original payment intent') from None
+        return value
+
+    @model_validator(mode='after')
+    def operation_identity(self):
+        if self.command!=self.request_snapshot.original_request.command or self.command!='payment '+self.effect_snapshot.effect.kind:
+            raise ValueError('operation command differs')
+        if self.operation_key!=self.effect_snapshot.operation_key or self.id!=self.effect_snapshot.effect.operation_id:
+            raise ValueError('operation identity differs')
+        return self
+
+
+_PAYMENT_OPERATION_COMMANDS=('payment receive','payment apply','payment unapply','payment update','payment void')
+_REFERENCE_GROUPS.update({
+    ReceiveIntent: ((('customer',),'customer'),(('payment_method',),'payment_method'),(('ar_account','deposit_to'),'account')),
+    UpdateIntent: ((('payment_method',),'payment_method'),(('deposit_to',),'account')),
+})
+for _intent in (ReceiveIntent,UpdateIntent):
+    for _field in ('custom_fields','expected_custom_field_kinds'):
+        _OBJECT_FIELD_REQUIREMENTS[_intent,_field]=('custom_field',)

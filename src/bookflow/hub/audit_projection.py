@@ -704,6 +704,11 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
         if kind not in ('customer','vendor','employee','other_name'):format_error()
         if not _kind_allowed(audience,company,kind):
             updates.update({key:None for key in fields});partial=True
+    if isinstance(value,legacy.OperationExecutionView):
+        for key in ('actor_id','on_behalf_of'):
+            identifier=getattr(value,key)
+            if identifier is not None and not audience.identity_visible(identifier):
+                updates[key]=None;partial=True
     for key in ('created_by','updated_by','author_id','uploaded_by','linked_by','given_by','recorded_by','entered_by','deactivated_by','voided_by','accepted_by'):
         if key in type(value).model_fields:
             identifier=getattr(value,key)
@@ -735,6 +740,18 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
         updates[key]=projected
         if isinstance(projected,legacy.View) and projected.projection_partial:partial=True
         if type(projected) is tuple and any(isinstance(x,legacy.View) and x.projection_partial for x in projected):partial=True
+    if isinstance(value,legacy.OriginalPaymentRequest):
+        # Presence is captured intent too. Do not disclose whether a denied
+        # optional reference or internal freshness assertion was supplied.
+        hidden=set(value.input._internal)
+        for base in type(value.input).__mro__:
+            for fields,kind in legacy._REFERENCE_GROUPS.get(base,()):
+                if not _kind_allowed(audience,company,kind):hidden.update(fields)
+            for (owner,field),requirements in legacy._OBJECT_FIELD_REQUIREMENTS.items():
+                if owner is base and any(not _kind_allowed(audience,company,kind) for kind in requirements):
+                    hidden.add(field)
+        updates['provided_fields']=tuple(field for field in value.provided_fields if field not in hidden)
+        updates['context_provided_fields']=tuple(field for field in value.context_provided_fields if field not in value.context._internal)
     if partial:
         updates.update({key:None for key in legacy._PARTIAL_PROVENANCE if key in type(value).model_fields})
     updates['projection_partial']=partial

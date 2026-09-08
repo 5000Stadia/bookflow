@@ -1934,6 +1934,22 @@ unresolved amount origins and the original field-presence state are preserved.
 Current denied reference fields use the established null projection; entitled
 fields absent from a historical capture are not added from model defaults.
 
-Permanent operation and recovery receipt decoders, full producer/field conformance,
-no-entry semantics and public cursor/transport cutover remain required. The
+Ordinary payment receive/apply/unapply/update/void operation captures use
+command-discriminated original intents and closed recorded result models. Stored
+input is validated against its owning command schema without substituting today's
+result. Captured provided-field lists preserve omission, excluding internal fields
+and currently denied references. Monetary effects and historical posted/voided
+state remain original after later corrections. Operation items use five typed
+collection variants. Required captured references reject null before permission
+projection; permitted masking does not make null captured input valid.
+
+Internal hashes, guards, execution reasons and directive metadata are excluded
+from these views. Actor and principal identities use current identity disclosure.
+Committed receipts contain no prospective preview-page descriptors. Field-set
+conformance compares ordinary payment inputs, results and stored header columns
+against their declared models.
+
+Invoice-correction and deposit operation variants, recovery receipt decoders,
+complete producer/format conformance, no-entry semantics and public cursor/transport
+cutover remain required. The
 private implementation is not a complete audit or full-C release.
