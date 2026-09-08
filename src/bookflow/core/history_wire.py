@@ -13,6 +13,10 @@ class HistoryWire:
     authority: str
 
     def document(self):
+        from bookflow.core.history_models import validate_response
+        return validate_response(self.mode, self._values())
+
+    def _values(self):
         h=self.history
         if self.mode=='activity':
             return dict(projection_version=2,items=publication._json(h.activity_items),
