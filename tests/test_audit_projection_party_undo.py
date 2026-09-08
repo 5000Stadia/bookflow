@@ -35,6 +35,8 @@ def events_world(world):
     return dict(root=world['root'],path=Path(info['path'])/'company.db',cid=info['company_id'],cases=cases)
 
 
+# Independent reviewer measured65.4s for the real link-undo positive case.
+@pytest.mark.timeout(120)
 @pytest.mark.parametrize('mode,action', [('link','deactivate'),('unlink','update'),('ordinary','deactivate')])
 def test_real_undo_full_event_and_list_preserve_actions(events_world, mode, action):
     c = events_world; case=c['cases'][mode]
