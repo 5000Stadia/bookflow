@@ -202,8 +202,9 @@ class TaxCode(Reference):
 
 
 class TaxRule(Reference):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset({'agency'})
     rate_percent_millionths: int
-    agency: Reference
+    agency: Reference | None
     liability_account: Account
 
 
@@ -377,8 +378,9 @@ class CalculatedTaxAccount(View):
 
 
 class CalculatedTaxRule(CalculatedTaxReference):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset({'agency'})
     rate_percent_millionths: int
-    agency: CalculatedTaxReference
+    agency: CalculatedTaxReference | None
     liability_account: CalculatedTaxAccount
 
 

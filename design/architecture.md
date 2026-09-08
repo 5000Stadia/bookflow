@@ -1931,6 +1931,8 @@ their existing contracts; this service does not activate granular permissions.
 Payment selection header, immutable revision context, and set/remove/clear item
 history use closed models in `audit_projection_legacy`. Entered/calculated/
 unresolved amount origins and the original field-presence state are preserved.
+Captured ordinary and calculated tax rules permit a null agency only in the
+permission-masked view; explicit null in the original capture is rejected.
 Current denied reference fields use the established null projection; entitled
 fields absent from a historical capture are not added from model defaults.
 
