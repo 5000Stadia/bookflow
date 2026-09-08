@@ -62,3 +62,19 @@ def test_self_preference_presence_and_content_survive_loss_of_target_visibility(
     apply(host,path,RevokeMembership('M-A',1),'W')
     after=read(preferences,'A',events['A'])
     assert after==before
+
+
+def test_os_human_bound_context_cannot_read_own_preference_history(preferences):
+    from bookflow.core.publication import OSBinding
+    from bookflow.core.errors import BookflowError
+
+    host,path,events=preferences
+    config=Config.load(path.parent/'config.toml')
+    config.set_user(os_login(),'P');config.save()
+    assert read(preferences,'P',events['P']) is not None
+    # Human credentials cannot acquire a bound principal, including OS bindings.
+    # Reject this context before it can reach preference-history projection.
+    with pytest.raises(BookflowError) as caught:
+        OSBinding.capture(host,os_login(),principal='P')
+    assert caught.value.code=='E_UNAUTHENTICATED'
+    assert host._readers_attached==0
