@@ -24,6 +24,11 @@ class FrozenView(BaseModel):
     model_config = ConfigDict(extra='forbid', frozen=True, strict=True)
 
 
+class HubView(FrozenView):
+    # Same disclosure signal as company View; never captured or serialized.
+    reader_redacted: bool = Field(False, exclude=True, repr=False)
+
+
 class ProjectedFailure(FrozenView):
     code: Literal['E_EVENT_NOT_FOUND','E_RECORD_NOT_FOUND','E_VALIDATION','E_PERMISSION']
     reason: Literal['audit_format','history_filter','invalid_cursor','authority_changed'] | None = None
@@ -46,7 +51,7 @@ class ProjectedFailure(FrozenView):
         raise error
 
 
-class MembershipView(FrozenView):
+class MembershipView(HubView):
     tag: Literal['membership']='membership'
     id: str
     user_id: str | None
@@ -60,7 +65,7 @@ class MembershipView(FrozenView):
     revoked_at: str | None
 
 
-class UserView(FrozenView):
+class UserView(HubView):
     tag: Literal['user']='user'
     id: str
     username: str | None = None
@@ -79,7 +84,7 @@ class AssignmentView(FrozenView):
     revoked_at: str | None
 
 
-class AuthorityView(FrozenView):
+class AuthorityView(HubView):
     tag: Literal['agent_authority']='agent_authority'
     agent_user_id: str
     epoch: int
@@ -94,7 +99,7 @@ class AuthorityView(FrozenView):
     transition_reasons: tuple[str,...]
 
 
-class TokenView(FrozenView):
+class TokenView(HubView):
     tag: Literal['api_token']='api_token'
     id: str
     user_id: str | None = None
@@ -107,7 +112,7 @@ class TokenView(FrozenView):
     created_via: str | None = None
 
 
-class TokenRevocationView(FrozenView):
+class TokenRevocationView(HubView):
     tag: Literal['token_revocation']='token_revocation'
     revoked: Literal[True]=True
 
@@ -130,7 +135,7 @@ class CompanyActionView(FrozenView):
     available: bool
 
 
-class CatalogView(FrozenView):
+class CatalogView(HubView):
     tag: Literal['permission_state']='permission_state'
     defaults: tuple[CatalogDefaultView,...]
     capabilities: tuple[CapabilityPolicyView,...]
@@ -138,7 +143,7 @@ class CatalogView(FrozenView):
     admin_actions: tuple[c.AdminAction,...]
 
 
-class RegistryView(FrozenView):
+class RegistryView(HubView):
     tag: Literal['organization','company']
     id: str
     display_name: str
@@ -180,7 +185,7 @@ class CompanyRegistryCaptured(RegistryCaptured):
     schema_revision: str
 
 
-class MigrationView(FrozenView):
+class MigrationView(HubView):
     tag: Literal['migration']='migration'
     from_revision: str | None
     to_revision: str
@@ -522,30 +527,38 @@ def _hub_view(audience,kind,identifier,value):
                 captured=model.model_validate(row)
                 if captured.id!=identifier:format_error()
         except (ValueError,TypeError):format_error()
+    redacted=False
+    def finish(view):
+        return view.model_copy(update={'reader_redacted':redacted})
     def identity(key):
+        nonlocal redacted
         result=row.get(key)
-        return result if audience.identity_visible(result) else None
+        if result is not None and not audience.identity_visible(result):
+            redacted=True
+            return None
+        return result
     try:
         if kind=='membership':
             scope=c.ScopeKey(row['scope_type'],row['scope_id'])
             if not audience.visible(scope):return None
             if row['user_id'] not in audience.subjects() and not audience.administrator(scope):return None
-            return MembershipView(id=identifier,user_id=row['user_id'],scope_type=row['scope_type'],scope_id=row['scope_id'],
+            return finish(MembershipView(id=identifier,user_id=row['user_id'],scope_type=row['scope_type'],scope_id=row['scope_id'],
                 role=row['role'],grants=_policies(row.get('grants')),denies=_policies(row.get('denies')),
-                granted_at=row['granted_at'],granted_by=identity('granted_by'),revoked_at=row.get('revoked_at'))
+                granted_at=row['granted_at'],granted_by=identity('granted_by'),revoked_at=row.get('revoked_at')))
         if kind=='user':
             if not audience.identity_visible(identifier):return None
             fields=dict(id=identifier,username=row.get('username'),display_name=row.get('display_name'),timezone=row.get('timezone'))
             if audience.global_admin():fields.update(kind=row.get('kind'),active=_bool(row['active']) if 'active' in row else None,
                 hub_admin=_bool(row['hub_admin']) if 'hub_admin' in row else None,owner_user_id=identity('owner_user_id'))
-            return UserView(**fields)
+            else:redacted=True
+            return finish(UserView(**fields))
         if kind=='api_token':
             if set(row)=={'revoked'}:return TokenRevocationView(revoked=_bool(row['revoked']))
             if not audience.global_admin() and row.get('user_id')!=audience.identity.actor:return None
-            fields={key:identifier if key=='id' else row.get(key) for key in TokenView.model_fields if key!='tag'}
+            fields={key:identifier if key=='id' else row.get(key) for key in TokenView.model_fields if key not in ('tag','reader_redacted')}
             for key in ('created_by','user_id','on_behalf_of'):
                 fields[key]=identity(key)
-            return TokenView(**fields)
+            return finish(TokenView(**fields))
         if kind in ('organization','company'):
             if not audience.visible(c.ScopeKey(kind,identifier)):return None
             if 'schema_revision' in row and 'display_name' not in row:
@@ -554,16 +567,19 @@ def _hub_view(audience,kind,identifier,value):
             captured=model.model_validate(dict(row,is_demo=_bool(row['is_demo'])))
             if captured.id!=identifier:format_error()
             parent=getattr(captured,'organization_id',None)
-            if parent is not None and not audience.visible(c.ScopeKey('organization',parent)):parent=None
+            if parent is not None and not audience.visible(c.ScopeKey('organization',parent)):
+                parent=None
+                redacted=True
             full=audience.global_admin()
-            return RegistryView(tag=kind,id=identifier,display_name=captured.display_name,
+            if not full:redacted=True
+            return finish(RegistryView(tag=kind,id=identifier,display_name=captured.display_name,
                 organization_id=parent,is_demo=captured.is_demo,
                 legal_name=getattr(captured,'legal_name',None),home_currency=getattr(captured,'home_currency',None),
                 schema_revision=getattr(captured,'schema_revision',None),
                 path=captured.path if full else None,pending_path=captured.pending_path if full else None,
                 created_at=captured.created_at if full else None,created_by=captured.created_by if full else None,
                 created_via=captured.created_via if full else None,updated_at=captured.updated_at if full else None,
-                updated_by=captured.updated_by if full else None,updated_via=captured.updated_via if full else None)
+                updated_by=captured.updated_by if full else None,updated_via=captured.updated_via if full else None))
         if kind=='hub' and audience.global_admin():
             return MigrationView(from_revision=row.get('from'),to_revision=row['schema_revision'])
         if kind=='agent_authority':
@@ -874,6 +890,20 @@ def _annotation_targets(audience,company,kind,identifier,seen=()):
         _annotation_targets(audience,company,target_kind,target_id,seen+(key,))
 
 
+HUB_EXPLANATION_COMMANDS = frozenset({
+    'permission membership put','permission membership revoke','permission user active',
+    'permission assignments set','permission agent authorize','permission catalog replace',
+    'organization new','organization rename'})
+
+
+def _hub_explanation(audience,event):
+    if not audience.global_admin() or event['command'] not in HUB_EXPLANATION_COMMANDS:return None
+    reason=event['reason']
+    if reason is not None and type(reason) is not str:format_error()
+    # Hub history has no company context for a cited business directive.
+    return ProjectedExplanation(reason,'not_cited' if event['directive_id'] is None else 'unavailable',None)
+
+
 def _company_explanation(audience,event,company):
     """Called only after the whole initiating operation is reader-visible."""
     reason=event['reason']
@@ -916,9 +946,11 @@ def project_event(audience,event_id,*,company=None,requirements=None,_seen_annot
             raise
     raw_entries=list(db.conn.execute(sa.select(entries).where(entries.c.event_id==event_id).order_by(entries.c.id)).mappings())
     projected=[]
-    complete=company is not None and bool(raw_entries)
+    complete=bool(raw_entries)
     for entry in raw_entries:
-        if company is None and not _hub_candidate(audience,entry):continue
+        if company is None and not _hub_candidate(audience,entry):
+            complete=False
+            continue
         if company is not None:
             from .audit_projection_legacy import entry_requirement
             try:
@@ -939,7 +971,7 @@ def project_event(audience,event_id,*,company=None,requirements=None,_seen_annot
         left,right=render(before,'before'),render(after,'after')
         # Observe every capture before unchanged entries are omitted. Both
         # collapse-to-None and reader-specific field masking defeat disclosure.
-        if company is not None and any(raw is not None and (view is None or view.reader_redacted)
+        if any(raw is not None and (view is None or view.reader_redacted)
                for raw,view in ((before,left),(after,right))):complete=False
         if left is None and right is None:continue
         if left==right and entry['action'] not in ('create','delete','baseline','migrate'):continue
@@ -1009,7 +1041,8 @@ def project_event(audience,event_id,*,company=None,requirements=None,_seen_annot
     from bookflow.core.session import localize
     result=ProjectedEvent(event_id,localize(audience.reader.session,event['at']),command,summary,actor,_name(audience,actor),
         event['actor_kind'] if actor is not None else None,principal,_name(audience,principal),event['interface'],tuple(projected),
-        _company_explanation(audience,event,company) if complete and command is not None else None)
+        (_company_explanation(audience,event,company) if company is not None else _hub_explanation(audience,event))
+        if complete and command is not None else None)
     audience.validate()
     return result
 

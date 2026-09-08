@@ -80,6 +80,12 @@ class ReplaceCatalog:
 
 Edit = PutMembership | RevokeMembership | SetUserActive | SetAssignments | AuthorizeAgent | ReplaceCatalog
 
+# One producer-owned vocabulary for private hub operations and their history.
+from types import MappingProxyType
+AUDIT_KINDS = MappingProxyType({PutMembership:'membership put',RevokeMembership:'membership revoke',
+    SetUserActive:'user active',SetAssignments:'assignments set',AuthorizeAgent:'agent authorize',
+    ReplaceCatalog:'catalog replace'})
+
 
 @dataclass(frozen=True, slots=True)
 class TokenBinding:
@@ -394,7 +400,7 @@ def _prepare(tx,*,actor_id,intent,catalog,visibility,context=None):
         mutations.append(Mutation('role_capabilities',key,(),key,insert=True))
     if semantic:mutations.append(_mutation('permission_state',old_state,final_state,('id',)))
     if type(intent) in (SetAssignments,AuthorizeAgent):version=next(x.version for x in final.root.authorities if x.agent_user_id==target_id)
-    kind={PutMembership:'membership put',RevokeMembership:'membership revoke',SetUserActive:'user active',SetAssignments:'assignments set',AuthorizeAgent:'agent authorize',ReplaceCatalog:'catalog replace'}[type(intent)]
+    kind=AUDIT_KINDS[type(intent)]
     prepared_audit=None
     if semantic and not preview:
         prepared_audit=audit_owner.prepare_audit(tx,context=context,actor_id=actor_id,command='permission '+kind,

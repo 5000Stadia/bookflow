@@ -1995,8 +1995,8 @@ Deactivation does not rewrite that instruction. An admitted explanation distingu
 `not_cited`, `available` and `unavailable`; missing, malformed or undisclosed cited
 evidence produces `unavailable` without exposing an id or link. A separately admitted
 reason remains present. Audit pages escape explanatory text and link only admitted
-directives. Publication re-evaluates the full disclosure predicate. Hub and unsupported
-no-entry explanation provenance remain unimplemented; no raw context fallback exists.
+directives. Publication re-evaluates the full disclosure predicate. Unqualified hub and
+no-entry explanation provenance remains unimplemented; no raw context fallback exists.
 
 Deposit operation variants,
 complete producer/format conformance, no-entry semantics and public cursor/transport
@@ -2175,3 +2175,17 @@ its admitted identity/code/status remain with an explicit full-instruction link.
 `text_truncated` now covers any excerpted activity text, including an omitted
 instruction. Full audit-event explanations remain unchanged. GUI explanation text
 uses DOM text nodes, and unavailable citations never receive a link.
+
+Hub explanations use the same internal `reader_redacted` signal as company
+projections. The initial supported domain is the six private permission-service
+producers plus organization creation and rename. Private command names are owned
+by the permission writer's immutable vocabulary; registered organization producers
+are checked as hub-scoped. An unbound human installation administrator must still
+have complete visibility of every captured co-effect, including membership scopes
+and registry parent organizations. Unchanged captures and hidden entries count
+against completeness. Installation administration alone is not company access.
+A hub citation has no company resolver: it is either not cited or unavailable,
+without directive identity or link. Company-origin registry repairs, company
+creation, self-profile company selection and other unqualified hub producers do
+not receive explanatory text. Remaining producer and nonadministrator policies
+are explicit follow-up work, not full history acceptance.
