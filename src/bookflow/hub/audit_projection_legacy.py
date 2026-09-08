@@ -3790,6 +3790,19 @@ class RecoveryCreated(View):
     audit_event_id: str
 
 
+def _captured_request_digest(value,snapshot_field,hash_field):
+    """Bind immutable recovery request bytes before typed projection omits fields."""
+    import hashlib
+    from bookflow.company.payment_queries import canonical
+    snapshot=value.get(snapshot_field);digest=value.get(hash_field)
+    if snapshot is None and digest is None:return
+    if type(snapshot) is dict:snapshot=canonical(snapshot)
+    if type(snapshot) is not str or type(digest) is not str:
+        raise ValueError('missing captured request digest')
+    if hashlib.sha256(snapshot.encode('utf-8')).hexdigest()!=digest:
+        raise ValueError('captured request digest mismatch')
+
+
 class RecoveryHeaderView(RecoveryCreated):
     tag: Literal['payment_selection_recovery']='payment_selection_recovery'
     _internal: ClassVar[frozenset[str]]=frozenset({'attempt_generation','intent_hash','begin_request_hash','seal_request_hash','terminal_request_hash'})
@@ -3824,6 +3837,9 @@ class RecoveryHeaderView(RecoveryCreated):
     @model_validator(mode='before')
     @classmethod
     def header_json(cls,value):
+        if type(value) is dict:
+            for phase in ('begin','seal','terminal'):
+                _captured_request_digest(value,phase+'_request_snapshot',phase+'_request_hash')
         if type(value) is dict and type(value.get('header_intent')) is str:
             value=dict(value,header_intent=json.loads(value['header_intent']))
         return value
@@ -3854,6 +3870,12 @@ class RecoveryHeaderView(RecoveryCreated):
 
 
 class RecoveryChunkView(RecoveryCreated):
+    @model_validator(mode='before')
+    @classmethod
+    def captured_upload_digest(cls,value):
+        if type(value) is dict:_captured_request_digest(value,'request_snapshot','request_hash')
+        return value
+
     tag: Literal['payment_selection_recovery_chunk']='payment_selection_recovery_chunk'
     _internal: ClassVar[frozenset[str]]=frozenset({'request_hash'})
     id: str

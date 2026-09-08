@@ -1972,3 +1972,5 @@ Deposit operation variants,
 complete producer/format conformance, no-entry semantics and public cursor/transport
 cutover remain required. The
 private implementation is not a complete audit or full-C release.
+
+Private recovery audit decoding binds each begin/seal/terminal and upload request snapshot to its stored SHA-256 before typed projection omits internal fields. Stored strings use their exact UTF-8 bytes; already-decoded object input uses the original producer canonical encoding. Body/digest binding is separate from request-action/receipt-hash agreement, which remains checked for every retained phase. Original audit bytes are never rewritten.

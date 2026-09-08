@@ -114,10 +114,52 @@ def test_recovery_phase_request_receipt_agreement(recovered,fault):
         # This is a valid command for the same attempt, but its saved receipt is apply.
         from bookflow.company.payment_recovery_models import AbortInput
         AbortInput.model_validate_json(json.dumps(request['input']))
-        raw['terminal_request_snapshot']=json.dumps(request)
+        from bookflow.company.payment_queries import canonical,digest
+        raw['terminal_request_snapshot']=canonical(request)
+        raw['terminal_request_hash']=digest(request)
+        receipt=json.loads(raw['terminal_receipt_snapshot']);receipt['request_hash']=digest(request)
+        raw['terminal_receipt_snapshot']=canonical(receipt)
     else:
-        assert raw['terminal_request_hash']!='0'*64
-        raw['terminal_request_hash']='0'*64
+        receipt=json.loads(raw['terminal_receipt_snapshot'])
+        assert receipt['request_hash']!='0'*64
+        receipt['request_hash']='0'*64
+        raw['terminal_receipt_snapshot']=json.dumps(receipt)
+    with pytest.raises(BookflowError) as error:
+        decode_company_snapshot(producer=command,record_type=kind,action=action,snapshot=raw)
+    assert error.value.code=='E_VALIDATION' and error.value.details=={'reason':'audit_format'}
+    assert storage(path)==before
+
+
+@pytest.mark.parametrize('phase',['begin','seal','terminal','upload'])
+def test_recovery_request_body_is_bound_to_digest(recovered,phase):
+    import copy,json
+    from bookflow.company.payment_queries import canonical
+    from bookflow.core.errors import BookflowError
+    _,_,path,rows=recovered;before=storage(path)
+    wanted='payment_selection_recovery_chunk' if phase=='upload' else 'payment_selection_recovery'
+    _,command,kind,action,_,blob=next(row for row in rows if row[2]==wanted and (phase=='upload' or row[1]=='payment recovery apply'))
+    raw=copy.deepcopy(decode_snapshot(blob))
+    decode_company_snapshot(producer=command,record_type=kind,action=action,snapshot=raw)
+    key='request_snapshot' if phase=='upload' else phase+'_request_snapshot'
+    request=json.loads(raw[key])
+    if phase=='upload':request['input']['entries'][0]['observed_invoice_version']+=1
+    else:request['input']['expected_version' if phase=='begin' else 'expected_recovery_version']+=1
+    # Request is still structurally valid; neither stored hash is edited.
+    raw[key]=canonical(request)
+    with pytest.raises(BookflowError) as error:
+        decode_company_snapshot(producer=command,record_type=kind,action=action,snapshot=raw)
+    assert error.value.code=='E_VALIDATION' and error.value.details=={'reason':'audit_format'}
+    assert storage(path)==before
+
+
+@pytest.mark.parametrize('phase',['begin','seal'])
+def test_nonterminal_recovery_receipt_agreement(recovered,phase):
+    import copy,json
+    from bookflow.core.errors import BookflowError
+    _,_,path,rows=recovered;before=storage(path)
+    _,command,kind,action,_,blob=next(row for row in rows if row[1]=='payment recovery apply' and row[2]=='payment_selection_recovery')
+    raw=copy.deepcopy(decode_snapshot(blob));key=phase+'_receipt_snapshot'
+    receipt=json.loads(raw[key]);receipt['request_hash']='0'*64;raw[key]=json.dumps(receipt)
     with pytest.raises(BookflowError) as error:
         decode_company_snapshot(producer=command,record_type=kind,action=action,snapshot=raw)
     assert error.value.code=='E_VALIDATION' and error.value.details=={'reason':'audit_format'}
