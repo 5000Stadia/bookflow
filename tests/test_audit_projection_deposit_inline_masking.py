@@ -8,6 +8,11 @@ from pathlib import Path
 
 import pytest
 
+# These cases include real producer setup and governed membership commits.
+# Independent review measured 76s for the first case including its fixture.
+# This is a bounded correctness-test ceiling, not a product latency allowance.
+pytestmark = pytest.mark.timeout(120)
+
 from bookflow.company import deposit_drafts as drafts, deposit_draft_models as models
 from bookflow.core.config import Config, os_login
 from bookflow.core.context import Context, client_version
