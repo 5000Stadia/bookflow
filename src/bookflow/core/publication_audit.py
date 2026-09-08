@@ -54,15 +54,20 @@ class ProjectionProof:
     failure: projection.ProjectedFailure | None
     evidence: tuple[projection.ProjectedEvent, ...]
     digest: str
+    wire: object | None
 
-    def __init__(self, identity, selection, history, evidence, *, _seal, failure=None):
+    def __init__(self, identity, selection, history, evidence, *, _seal, failure=None, wire=None):
         if _seal is not _SEAL:
             raise TypeError('execution-owned proof required')
         if (history is None)==(failure is None):
             raise TypeError('exactly one semantic outcome required')
-        output=document(history) if failure is None else failure.error().to_dict()
+        if wire is not None:
+            from bookflow.core.history_wire import HistoryWire
+            if type(wire) is not HistoryWire or failure is not None or wire.history != history:
+                raise TypeError('execution-owned wire history required')
+        output=wire.document() if wire is not None else document(history) if failure is None else failure.error().to_dict()
         for key, value in dict(identity=identity, selection=selection, history=history,failure=failure,
-                               evidence=evidence, digest=_digest(output)).items():
+                               evidence=evidence, digest=_digest(output), wire=wire).items():
             object.__setattr__(self, key, value)
 
     def __deepcopy__(self, memo):
@@ -96,6 +101,9 @@ def revalidate_proof(reader: BoundReader, proof: ProjectionProof, *, ctx=None):
     audience = projection.make_audience(reader, read_capability='activity' if proof.selection.mode=='activity' else 'audit')
     if audience.identity != proof.identity:
         _deny()
+    if proof.wire is not None:
+        from bookflow.core.history_cursors import authority_digest
+        if authority_digest(audience,proof.selection.company)!=proof.wire.authority:_deny()
     if proof.failure is not None:
         try:
             if ctx is not None:open_selected(reader,proof.selection,ctx)

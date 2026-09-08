@@ -132,3 +132,22 @@ def resume(reader, selection, token, *, ctx=None):
         invalid()
     audience.validate()
     return result
+
+
+def issue_events(reader, proof, *, ctx=None):
+    """Execution-owned tail anchors, one per actually projected returned event."""
+    publication.revalidate_proof(reader,proof,ctx=ctx)
+    if proof.failure is not None or proof.selection.mode != 'tail':invalid()
+    audience=projection.make_audience(reader)
+    selection=projection.normalized_selection(audience,proof.selection)
+    common=dict(reader=reader_digest(audience),query=query_digest(selection),
+                authority=authority_digest(audience,selection.company),endpoint=None,
+                entry_anchor=None,empty_start=False)
+    secret=key(reader,selection)
+    result=[]
+    for event in proof.history.events:
+        value=Bookmark(anchor=event.id,**common)
+        raw=canonical(value.model_dump(mode='json'))
+        result.append((event.id,encode64(raw)+'.'+encode64(hmac.digest(secret,DOMAIN+raw,'sha256'))))
+    audience.validate()
+    return tuple(result)
