@@ -7,7 +7,8 @@ from bookflow.core.errors import BookflowError
 
 def _scope(s,binding,purpose):
     identity=history.execution_binding(s,binding)
-    return _cursor_key(s.company), ('bookflow.deposit.read.'+purpose+'.v1\0').encode()+history.canonical([s.company_row['id'],identity]).encode()+b'\0'
+    domain = 'bookflow.deposit.report.detail.v1' if purpose == 'report.detail' else 'bookflow.deposit.read.'+purpose+'.v1'
+    return _cursor_key(s.company), (domain+'\0').encode()+history.canonical([s.company_row['id'],identity]).encode()+b'\0'
 
 
 def fingerprint(s,binding,purpose,content):

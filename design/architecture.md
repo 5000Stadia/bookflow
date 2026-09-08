@@ -2070,3 +2070,37 @@ Private coordinate audit receipts decode all four source-action forms, bank move
 Private recovery audit decoding binds each begin/seal/terminal and upload request snapshot to its stored SHA-256 before typed projection omits internal fields. Stored strings use their exact UTF-8 bytes; already-decoded object input uses the original producer canonical encoding. Body/digest binding is separate from request-action/receipt-hash agreement, which remains checked for every retained phase. Original audit bytes are never rewritten.
 
 Each captured recovery phase receipt's declared entry count must equal its owning attempt header's immutable declared count. This check applies to begin, seal and terminal receipts; mutable per-phase received counts are not compared to later header state.
+
+### Private deposit reports and historical UF control
+
+`deposit_reports.detail`, `deposit_report_print.print_data`, and
+`deposit_report_uf.uf_bridge` consume current authenticated read snapshots. They
+are private APIs, not registered commands. The read owner supplies complete
+validated deposit revisions, effects, claims, bank versions, operations and
+consumed-draft links; print assembly reuses that loaded snapshot. Current
+business totals remain distinct from signed original/reversal/replacement
+movements. Opening, period, closing and role totals carry their selected
+population qualifier, never an account-balance claim.
+
+`deposit_cash_history.load_cash_history` admits complete source graphs before
+loading bodies, proves immutable rows and historical header endpoints through
+`deposit_dependency_history.History`, and reuses the source owner's cash
+partition plus the read owner's exact posting lifecycle proof. It retains
+never-deposited, replaced, voided, direct-bank and inactive-reference histories.
+The generic `deposit_sources.project_cash` reports the actual captured cash
+account; the existing UF `project` contract is unchanged. Direct-bank effects
+never become UF receipts. Claim releases use their actual inverse batch dates.
+The separate whole-company UF section computes receipt cash minus net claims,
+compares all UF ledger lines, and reports the unexplained scope difference.
+It is complete or typed unavailable, never partial/zero. Base authentication
+errors, corrupt history and I/O are not converted into unavailable sections.
+
+The existing read cursor codec now admits the fixed report-detail domain while
+preserving its old domains. Fingerprints cover complete selected rows/totals and
+conditional UF facts, exclude observation clocks/global audit sequences, and
+are checked in each fresh snapshot. Unrequested UF loads nothing; a still-denied
+section contributes its state only. Private ReadEvidence accompanies the
+results; it is not a public permission certificate. Registration, fullC fresh
+publication, GUI/MCP workflows, CSV/HTML/device rendering and future Delete
+integration remain separately required. No schema, financial posting algorithm,
+report recognition policy or reconciliation activation changes here.

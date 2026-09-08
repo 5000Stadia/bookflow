@@ -70,8 +70,8 @@ def load_many(s, identities):
             for identity,g in graph_many(s,identities).items()}
 
 
-def _project(g, *, uf_account, home_currency):
-    """Validate ownership and exact positive UF partition, independent of SQL."""
+def _partition(g, *, cash_account, home_currency):
+    """Validate the actual captured positive cash partition, independent of SQL."""
     h = g['header']; identity = h['id']; revision = h['current_revision_id']
     if h['type'] not in ('payment', 'sales_receipt') or h['status'] != 'posted':
         raise BookflowError('E_DEPOSIT_SOURCE_INELIGIBLE')
@@ -89,7 +89,7 @@ def _project(g, *, uf_account, home_currency):
     batch = batches[0]
     legs = [r for r in g['posting_lines'] if r['batch_id'] == batch['id']]
     require(len({r['id'] for r in legs}) == len(legs))
-    cash_legs = {r['id']: r for r in legs if r['account_id'] == uf_account}
+    cash_legs = {r['id']: r for r in legs if r['account_id'] == cash_account}
     if not cash_legs:
         raise BookflowError('E_DEPOSIT_SOURCE_INELIGIBLE')
     require(all(r['debit_minor_units'] > 0 and r['credit_minor_units'] == 0 and r['currency'] == home_currency for r in cash_legs.values()))
@@ -105,7 +105,7 @@ def _project(g, *, uf_account, home_currency):
     profiles = current('payment_profiles' if payment else 'sales_profiles')
     require(len(profiles) == 1)
     profile = (PaymentProfileOutput if payment else SalesProfile).model_validate_json(profiles[0]['profile_snapshot'])
-    if (profile.deposit_account.id if payment else profile.control_account.id) != uf_account:
+    if (profile.deposit_account.id if payment else profile.control_account.id) != cash_account:
         raise BookflowError('E_DEPOSIT_SOURCE_INELIGIBLE')
     presence = []
     if payment:
@@ -164,10 +164,38 @@ def _project(g, *, uf_account, home_currency):
             posting_line_id=leg['id'], posting_source_id=src['id'], physical_component_id=physical_id, cash=dims, **extra))
     require(len({x.key for x in components}) == len(components) and len(set(presence)) == len(presence))
     require(sum(x.capacity for x in components) == rev['total_minor_units'])
-    return CashSource(source_type=h['type'], transaction_id=identity, expected_header_version=h['version'], revision_id=revision,
+    return dict(source_type=h['type'], transaction_id=identity, expected_header_version=h['version'], revision_id=revision,
         business_batch_id=batch['id'], receipt_date=rev['date'], currency=home_currency, cash_minor_units=rev['total_minor_units'],
-        uf_account=uf_account, source_memo=rev['memo'], source_reference=profiles[0]['reference'] if payment else profile.payment_reference, profile=profile, semantic_presence=tuple(sorted(presence,key=lambda k:k.order())),
+        cash_account=cash_account, source_memo=rev['memo'], source_reference=profiles[0]['reference'] if payment else profile.payment_reference, profile=profile, semantic_presence=tuple(sorted(presence,key=lambda k:k.order())),
         components=tuple(sorted(components,key=lambda c:c.key.order())), dependencies=(identity,))
+
+
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class CashPartition:
+    transaction_id: str
+    revision_id: str
+    business_batch_id: str
+    cash_account_id: str
+    currency: str
+    minor_units: int
+
+
+def _project(g, *, uf_account, home_currency):
+    facts=_partition(g,cash_account=uf_account,home_currency=home_currency)
+    facts['uf_account']=facts.pop('cash_account')
+    return CashSource(**facts)
+
+
+def project_cash(g, *, cash_account, home_currency):
+    """Typed actual cash endpoint, including direct bank; never a UF claim."""
+    try:
+        facts=_partition(g,cash_account=cash_account,home_currency=home_currency)
+        return CashPartition(facts['transaction_id'],facts['revision_id'],facts['business_batch_id'],
+                             facts['cash_account'],facts['currency'],facts['cash_minor_units'])
+    except (ValueError,KeyError,TypeError) as error:
+        raise BookflowError('E_DEPOSIT_SOURCE_INVALID') from error
 
 
 def project(g, *, uf_account, home_currency):

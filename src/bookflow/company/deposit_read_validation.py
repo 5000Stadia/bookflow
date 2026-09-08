@@ -136,7 +136,7 @@ def revision(graph,rev,source_graphs,reader):
     return effect,issuer,tuple(sorted(customs,key=lambda c:(c.captured.position,c.captured.definition_id)))
 
 
-def lifecycle(graph,header):
+def posting_lifecycle(graph,header):
     batches={r['id']:r for r in graph['posting_batches']};lines={r['id']:r for r in graph['posting_lines']};attrs=graph['posting_line_sources']
     reversed_batches=set()
     for batch in batches.values():
@@ -151,12 +151,21 @@ def lifecycle(graph,header):
             prior=lines[line['reversed_line_id']]
             require(all(line[k]==v for k,v in prior.items() if k not in ('id','batch_id','debit_minor_units','credit_minor_units','reversed_line_id','created_at','created_by','created_via')))
             require((line['debit_minor_units'],line['credit_minor_units'])==(prior['credit_minor_units'],prior['debit_minor_units']))
-            a=exact_one([a for a in attrs if a['posting_line_id']==line['id']]);old_a=exact_one([r for r in attrs if r['posting_line_id']==prior['id']])
-            require(a['reversed_source_id']==old_a['id'] and all(a.get(k)==v for k,v in old_a.items() if k not in ('id','posting_line_id','reversed_source_id','created_at','created_by','created_via')))
+            new_attrs=[a for a in attrs if a['posting_line_id']==line['id']]
+            old_attrs={a['id']:a for a in attrs if a['posting_line_id']==prior['id']}
+            require(len(new_attrs)==len(old_attrs) and {a['reversed_source_id'] for a in new_attrs}==set(old_attrs))
+            for a in new_attrs:
+                old_a=old_attrs[a['reversed_source_id']]
+                require(all(a.get(k)==v for k,v in old_a.items() if k not in ('id','posting_line_id','reversed_source_id','created_at','created_by','created_via')))
+
     active=[b for b in batches.values() if b['kind']!='reversal' and b['id'] not in reversed_batches]
     require(header['status'] in ('posted','voided'))
     require(len(active)==(1 if header['status']=='posted' else 0))
     if active:require(active[0]['revision_id']==header['current_revision_id'])
+
+
+def lifecycle(graph,header):
+    posting_lifecycle(graph,header)
     memberships=graph['deposit_memberships'];claims={r['id']:r for r in memberships if r['kind']=='claim'};released=set()
     for r in memberships:
         if r['kind']=='claim':continue

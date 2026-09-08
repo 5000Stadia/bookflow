@@ -6,7 +6,12 @@ from bookflow.company import deposit_queries as queries, deposit_read_authority 
 def print_data(s,inp,*,binding):
     inp=queries.checked(inp,m.PrintDataInput);authority.selected(s,inp.deposit,binding=binding)
     data=facts.load_complete(s,[inp.deposit],binding=binding)[0]
-    document=queries._show(s,data,m.ShowInput(**inp.model_dump(exclude_unset=True)),binding)
+    return assemble(s,data,inp,binding=binding)
+
+
+def assemble(s,data,inp,*,binding,with_guard=True):
+    """Assemble only an already admitted complete snapshot; no independent load."""
+    document=queries._show(s,data,m.ShowInput(**inp.model_dump(exclude_unset=True)),binding,with_guard=with_guard)
     groups=queries.collections(data,document.selected.pin)
     rows=tuple(sorted((*groups['sources'],*groups['additional']),key=lambda r:(r.captured.ordinal,r.captured.row_id) if isinstance(r,m.SourceItem) else (r.ordinal,r.row_id)))
     fp=pages.fingerprint(s,binding,'print',[document.selected.model_dump(mode='json'),{k:queries.immutable(v) for k,v in groups.items()},document.totals.model_dump(mode='json')])
