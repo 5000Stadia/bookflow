@@ -7,6 +7,8 @@ only; no captured labels are replaced. Shared source/work fields are validated b
 their exact history/source owners. No future field is adopted at runtime.
 """
 import hashlib,json
+from types import FunctionType, MethodType
+from pydantic import BaseModel
 from bookflow.core.errors import BookflowError
 REQUIRED_TABLES = ('accounts', 'application_allocations', 'applications', 'attachment_links', 'attachments', 'audit_entries', 'audit_events', 'bank_effect_current', 'bank_effect_keys', 'bank_effect_versions', 'classes', 'company_info', 'custom_field_defs', 'customer_messages', 'customers', 'deposit_cash_cells', 'deposit_component_keys', 'deposit_components', 'deposit_current_memberships', 'deposit_draft_additional', 'deposit_draft_consumptions', 'deposit_draft_revisions', 'deposit_draft_row_keys', 'deposit_draft_sources', 'deposit_drafts', 'deposit_memberships', 'deposit_operation_items', 'deposit_operation_targets', 'deposit_operations', 'deposit_profiles', 'deposit_row_keys', 'deposit_selection_revisions', 'deposit_selection_sources', 'deposit_selections', 'document_line_identities', 'document_lines', 'employees', 'items', 'notes', 'other_names', 'payment_component_keys', 'payment_components', 'payment_methods', 'payment_profiles', 'posting_batches', 'posting_line_sources', 'posting_lines', 'price_levels', 'sales_line_profiles', 'sales_profiles', 'sales_reps', 'sales_tax_attribution_lines', 'sales_tax_attributions', 'sales_tax_codes', 'sales_tax_components', 'sales_tax_line_keys', 'settlement_line_keys', 'ship_methods', 'transaction_revisions', 'transactions', 'units_of_measure', 'vendors', 'work_billing_allocations', 'work_billing_conversions', 'work_documents', 'work_line_identities', 'work_lines', 'work_links', 'work_revisions', 'work_tax_attribution_lines', 'work_tax_attributions', 'work_tax_line_keys')
 # The fourth slot is an explicit field category, not free-form table boilerplate.
@@ -1748,6 +1750,139 @@ EDGES.update({'custom_field_defs': [],
  'work_documents': [(('estimate_group_id',), ('work_documents.id',)),
                     (('id', 'current_revision_id'), ('work_revisions.document_id', 'work_revisions.id'))]})
 
+# Process-local, six fixed slots, never persisted. Each entry is one immutable
+# (declaration snapshot, derived digest) pair, published by one reference store.
+# This memo contains no conformance result, expected digest, or business data.
+_DIGESTS = [None] * 6
+_JSON_SCHEMA = BaseModel.model_json_schema.__func__
+_JSON_PROVIDER = BaseModel.__get_pydantic_json_schema__.__func__
+
+
+class _UncachedDeclaration(Exception):
+    pass
+
+
+def _class_input(model):
+    for provider, expected in ((model.model_json_schema, _JSON_SCHEMA),
+                               (model.__get_pydantic_json_schema__, _JSON_PROVIDER)):
+        if (type(provider) is not MethodType or provider.__func__ is not expected
+                or provider.__self__ is not model):
+            raise _UncachedDeclaration
+    root = model.__pydantic_root_model__
+    return (model.model_config, model.__name__, model.__doc__,
+            hasattr(model, '__deprecated__'), root,
+            model.model_fields['root'].json_schema_extra if root else None)
+
+
+def _declaration(model):
+    """Snapshot the default validation-schema generator's finite inputs by value.
+
+    Classes/functions retain identity; mutable containers become immutable trees.
+    Custom schema callbacks and unsupported values cannot prove reuse safe. They
+    take the original generation path instead of guessing at external state.
+    """
+    classes = {}
+    completed = {}
+    active = set()
+
+    def freeze(value, *, core=False, key=None):
+        kind = type(value)
+        if value is None or kind in (str, int, bool, float, bytes):
+            return (kind, value)
+        if kind in (dict, list, tuple):
+            token = (id(value), core, key)
+            if token in active:
+                raise _UncachedDeclaration
+            if token in completed:
+                return completed[token][1]
+            active.add(token)
+            if kind is dict:
+                result = (dict, tuple((freeze(k), freeze(v, core=core, key=k)) for k, v in value.items()))
+            else:
+                result = (kind, tuple(freeze(v, core=core, key=key) for v in value))
+            active.remove(token)
+            # Retain temporary configuration tuples too: their IDs must not be
+            # recycled while this traversal's alias memo is alive.
+            completed[token] = (value, result)
+            return result
+        if core and isinstance(value, type) and issubclass(value, BaseModel):
+            if value not in classes:
+                # The generator consults these class attributes directly, even
+                # when an unchanged compiled schema still refers to the class.
+                classes[value] = freeze(_class_input(value))
+            return (kind, value)
+        if core and key == 'pydantic_js_functions' and kind is MethodType:
+            if value.__func__ is _JSON_PROVIDER and isinstance(value.__self__, type):
+                freeze(value.__self__, core=True)
+                return (kind, (value.__func__, value.__self__))
+        # Validation functions and default factories are not executed when
+        # generating the default validation JSON schema. Schema hooks are.
+        if core and key in ('function', 'default_factory'):
+            if kind is FunctionType:
+                return (kind, value)
+            if kind is MethodType and isinstance(value.__self__, type):
+                return (kind, (value.__func__, value.__self__))
+            if value is list or value is tuple or value is dict:
+                return (kind, value)
+        raise _UncachedDeclaration
+
+    try:
+        freeze(model, core=True)
+        compiled = freeze(model.__pydantic_core_schema__, core=True)
+        return model, compiled, tuple(classes.items())
+    except _UncachedDeclaration:
+        return None
+
+
+def _same(value, snapshot, seen=None):
+    """Compare against the immutable tree without copying it on a warm read."""
+    kind, saved = snapshot
+    if type(value) is not kind:
+        return False
+    if kind in (dict, list, tuple):
+        if len(value) != len(saved):
+            return False
+        if seen is None:
+            seen = set()
+        pair = (id(value), id(snapshot))
+        if pair in seen:
+            return True
+        seen.add(pair)
+        if kind is dict:
+            return all(_same(k, sk, seen) and _same(v, sv, seen)
+                       for (k, v), (sk, sv) in zip(value.items(), saved))
+        return all(_same(v, s, seen) for v, s in zip(value, saved))
+    if kind is MethodType:
+        return value.__func__ is saved[0] and value.__self__ is saved[1]
+    if isinstance(value, type) or kind is FunctionType:
+        return value is saved
+    return value == saved
+
+
+def _unchanged(model, snapshot):
+    if snapshot is None or snapshot[0] is not model:
+        return False
+    try:
+        return (_same(model.__pydantic_core_schema__, snapshot[1])
+                and all(_same(_class_input(cls), config) for cls, config in snapshot[2]))
+    except _UncachedDeclaration:
+        return False
+
+
+def _codec_digest(slot, model):
+    entry = _DIGESTS[slot]
+    if entry is not None and _unchanged(model, entry[0]):
+        return entry[1]
+    before = _declaration(model)
+    digest = hashlib.sha256(json.dumps(model.model_json_schema(), sort_keys=True).encode()).hexdigest()
+    # Concurrent calls may calculate twice, but cannot see a partial pair.
+    # Generation exceptions and declarations changed during generation publish
+    # nothing. All expected/current manifest comparisons still happen below.
+    if _unchanged(model, before):
+        _DIGESTS[slot] = (before, digest)
+    return digest
+
+
 def conform():
     from bookflow.company import schema as c, deposit_dependency_history as h, deposit_sources as sources
     from bookflow.company.deposit_read_facts import TABLES
@@ -1769,5 +1904,5 @@ def conform():
         require(edges==EDGES[name])
     models=(m.Effect,l.LifecycleOutput,co.CoordinateOutput,d.Manifest,Issuer,SnapshotField)
     require(set(CODECS)=={x.__name__ for x in models})
-    for model in models:
-        require(hashlib.sha256(json.dumps(model.model_json_schema(),sort_keys=True).encode()).hexdigest()==CODECS[model.__name__])
+    for slot, model in enumerate(models):
+        require(_codec_digest(slot,model)==CODECS[model.__name__])
