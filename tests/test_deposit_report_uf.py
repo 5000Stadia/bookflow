@@ -290,3 +290,24 @@ def test_real_apply_unapply_and_closed_period_leave_cash_unchanged(client,sale,r
     client.run('payment unapply',dict(payment=paid['id'],expected_version=2,operation_key='report-unapply',applications=[dict(application_id=applied['effect']['applications'][0]['application_id'],invoice_expected_version=2)]),company=COMPANY,reason='Remove settlement only')
     client.company.update(closing_date='2026-06-30',company=COMPANY)
     assert run_private(check)==before
+
+
+def test_real_negative_unexplained_difference_survives_detail_and_print(client,cash,sale,run_private):
+    from tests.test_deposit_sources import uf as uf_account
+    from bookflow.company import deposit_report_uf as bridge,deposit_reports as report,deposit_report_print as printing,deposit_report_models as m
+    from bookflow.core.publication import OSBinding
+    # A balanced journal reduces actual UF without changing the receipt-backed cash.
+    client.run('journal post',dict(date='2026-06-04',lines=[
+        dict(account=uf_account(client),side='credit',amount='0.75'),
+        dict(account=sale['income'],side='debit',amount='0.75')]),company=COMPANY)
+    def check(s,ctx):
+        raw=tuple(s.company.raw.iterdump());binding=OSBinding.from_session(s)
+        period=m.DepositReportPeriod(date_from='2026-06-01',date_to='2026-06-30')
+        standalone=bridge.uf_bridge(s,period,binding=binding)
+        detail=report.detail(s,m.DepositDetailInput(**period.model_dump(),include_uf_bridge=True),binding=binding)
+        printed=printing.print_data(s,m.DepositDetailFilter(**period.model_dump(),include_uf_bridge=True),binding=binding)
+        expected=dict(receipts=6000,deposited=0,source_backed=6000,ledger=5925,unexplained=-75)
+        for value in (standalone,detail.uf,printed.uf):
+            assert value.state=='complete' and value.data.closing.model_dump()==expected
+        assert tuple(s.company.raw.iterdump())==raw
+    run_private(check)
