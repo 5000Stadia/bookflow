@@ -96,3 +96,29 @@ def test_recovery_malformed_capture_fails_closed(recovered,fault):
         decode_company_snapshot(producer=command,record_type=kind,action=action,snapshot=raw)
     assert error.value.code=='E_VALIDATION' and error.value.details=={'reason':'audit_format'}
     assert storage(path)==before
+
+
+@pytest.mark.parametrize('fault',['phase_action','phase_hash'])
+def test_recovery_phase_request_receipt_agreement(recovered,fault):
+    import copy,json
+    from bookflow.core.errors import BookflowError
+    _,_,path,rows=recovered;before=storage(path)
+    _,command,kind,action,_,blob=next(row for row in rows if row[1]=='payment recovery apply' and row[2]=='payment_selection_recovery')
+    raw=copy.deepcopy(decode_snapshot(blob))
+    decode_company_snapshot(producer=command,record_type=kind,action=action,snapshot=raw)
+    if fault=='phase_action':
+        request=json.loads(raw['terminal_request_snapshot'])
+        request['command']='payment recovery abort'
+        request['input']={key:request['input'][key] for key in ('recovery_id','expected_recovery_version')}
+        request['input']['disposition']='discard_entire_attempt'
+        # This is a valid command for the same attempt, but its saved receipt is apply.
+        from bookflow.company.payment_recovery_models import AbortInput
+        AbortInput.model_validate_json(json.dumps(request['input']))
+        raw['terminal_request_snapshot']=json.dumps(request)
+    else:
+        assert raw['terminal_request_hash']!='0'*64
+        raw['terminal_request_hash']='0'*64
+    with pytest.raises(BookflowError) as error:
+        decode_company_snapshot(producer=command,record_type=kind,action=action,snapshot=raw)
+    assert error.value.code=='E_VALIDATION' and error.value.details=={'reason':'audit_format'}
+    assert storage(path)==before
