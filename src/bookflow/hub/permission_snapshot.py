@@ -13,6 +13,7 @@ from types import UnionType
 from typing import Literal, Protocol, Union, get_args, get_origin, get_type_hints
 from . import permission_catalog as c, permission_policy as a
 from bookflow.storage.engine import Database
+from bookflow.storage.migrate import HEADS
 
 
 class SnapshotError(ValueError):
@@ -425,7 +426,7 @@ def _load_root(tx: Database, *, catalog: CatalogBundle) -> RootFacts:
         _fail('snapshot_required', 'transaction')
     raw = tx.raw
     revision = raw.execute('SELECT version_num FROM main.alembic_version').fetchall()
-    if revision != [('hub0012',)]:
+    if revision != [(HEADS['hub'],)]:
         _fail('schema_mismatch', 'revision')
     state = raw.execute('SELECT id,generation,mode,catalog_version,catalog_sha256,catalog_json FROM main.permission_state').fetchall()
     if len(state)!=1 or state[0][0]!=1 or type(state[0][1]) is not int or not 1 <= state[0][1] <= 9223372036854775807:
@@ -454,12 +455,12 @@ def _load_root(tx: Database, *, catalog: CatalogBundle) -> RootFacts:
         if stored != actual:
             _fail('catalog_mismatch','state')
     facts_digest = _rows_digest(rows)
-    return RootFacts(ReadStamp('hub0012',generation,mode,sha,facts_digest,bundle_digest), keys, *rows, actual)
+    return RootFacts(ReadStamp(HEADS['hub'],generation,mode,sha,facts_digest,bundle_digest), keys, *rows, actual)
 
 
 def _validated_root(root, bundle):
     _decode(root, RootFacts, 'root', native=True)
-    if root.stamp.hub_revision != 'hub0012':
+    if root.stamp.hub_revision != HEADS['hub']:
         _fail('schema_mismatch', 'revision')
     if not 1 <= root.stamp.generation <= 9223372036854775807:
         _fail('invalid_facts', 'state')

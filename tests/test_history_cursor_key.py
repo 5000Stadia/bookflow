@@ -78,3 +78,18 @@ def test_key_constraints_and_missing_key_fail_closed(tmp_path):
         with pytest.raises(BookflowError) as caught:read(db)
         assert caught.value.code == 'E_INTERNAL'
         assert db.raw.execute('SELECT * FROM main.history_cursor_keys').fetchall() == []
+
+
+def test_permission_snapshot_uses_current_head_and_rejects_old_stamp(tmp_path):
+    from dataclasses import replace
+    from bookflow.hub import permission_snapshot as snapshots, permission_runtime as runtime
+    path = tmp_path/'hub.db'
+    create_hub(path, revision='hub0012')
+    with open_database(path, writable=True) as db:
+        migrate_to_head(db, 'hub', None)
+        db.raw.execute('BEGIN')
+        bundle = runtime.catalog_bundle()
+        root = snapshots.load_root(db,catalog=bundle)
+        assert root.stamp.hub_revision == 'hub0013'
+        with pytest.raises(snapshots.SnapshotError,match='schema_mismatch'):
+            snapshots._validated_root(replace(root,stamp=replace(root.stamp,hub_revision='hub0012')),bundle)
