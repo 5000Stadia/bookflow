@@ -1949,7 +1949,16 @@ Committed receipts contain no prospective preview-page descriptors. Field-set
 conformance compares ordinary payment inputs, results and stored header columns
 against their declared models.
 
-Invoice-correction and deposit operation variants, recovery receipt decoders,
+Invoice-update operation captures retain the complete original invoice result,
+including its commercial lines and settlement effects. The edit becomes the current
+invoice; the retained operation is internal retry and audit evidence. Invoice
+settlement document changes contain typed invoice and payment balances. Their
+settlement keys and allocation rows have an explicit invoice-update producer.
+Original command inputs and captured results are validated against their owners;
+current reference permissions apply to both. The checked-in field inventory covers
+the invoice-specific models and rejects unclassified schema growth.
+
+Deposit operation variants, recovery receipt decoders,
 complete producer/format conformance, no-entry semantics and public cursor/transport
 cutover remain required. The
 private implementation is not a complete audit or full-C release.

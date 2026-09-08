@@ -330,8 +330,9 @@ class AllocationCapture(View):
 
 
 class SalesLineCapture(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset({'item'})
     schema_version: Literal[1,2,3]=1
-    item: Reference
+    item: Reference | None
     item_type: Literal['service','non_inventory_part','other_charge']
     income_account: Account
     unit: Unit | None = None
@@ -348,10 +349,11 @@ class SalesLineCapture(View):
 
 
 class SalesTaxCapture(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset({'tax_item','agency'})
     schema_version: Literal[1]=1
     position: int
-    tax_item: Reference
-    agency: Reference
+    tax_item: Reference | None
+    agency: Reference | None
     liability_account: Account
 
 
@@ -1345,6 +1347,7 @@ _FINANCIAL_PRODUCERS = (
     Producer('company.journals.apply',('journal post','journal update','journal void'),_JOURNAL_KINDS,('create','update')),
     Producer('company.registers.apply',('register post','register update'),_JOURNAL_KINDS,('create','update')),
     Producer('company.sales.apply',('invoice post','invoice update','invoice void','sales-receipt post','sales-receipt update','sales-receipt void'),_SALES_KINDS+('work_billing_allocation',),('create','update')),
+    Producer('company.payment_invoice_corrections.persist',('invoice update',),('settlement_line_key','application_allocation'),('create',)),
     Producer('company.payments.apply',('payment receive','payment apply','payment unapply','payment update','payment void'),_PAYMENT_KINDS,('create','update')),
     Producer('company.deposit_persistence.execute',('deposit post','deposit update','deposit void'),
         ('transaction','transaction_revision','document_line_identitie','document_line','posting_batche',
@@ -2556,12 +2559,14 @@ def decode_company_snapshot(*, producer: str, record_type: str, action: str,
     if type(snapshot) is not dict:_format()
     model=_list_model(producer,record_type,action,snapshot)
     if record_type=='payment_operation':
-        if producer not in _PAYMENT_OPERATION_COMMANDS or action!='create' or snapshot.get('command')!=producer:_format()
-        model=PaymentOperationView
+        if producer not in (*_PAYMENT_OPERATION_COMMANDS,'invoice update') or action!='create' or snapshot.get('command')!=producer:_format()
+        model=InvoiceOperationView if producer=='invoice update' else PaymentOperationView
     if record_type=='payment_operation_item':
         if producer not in _OPERATION_COMMANDS or action!='create':_format()
         model=_OPERATION_ITEM_MODELS.get(snapshot.get('kind'))
         if model is None:_format()
+        if producer=='invoice update' and snapshot.get('kind')=='document_changes':
+            model=InvoiceDocumentChangeItemView
     if record_type in _SELECTION_MODELS:
         if producer not in _SELECTION_COMMANDS or action not in ('create','update'):
             _format()
@@ -3222,3 +3227,417 @@ _REFERENCE_GROUPS.update({
 for _intent in (ReceiveIntent,UpdateIntent):
     for _field in ('custom_fields','expected_custom_field_kinds'):
         _OBJECT_FIELD_REQUIREMENTS[_intent,_field]=('custom_field',)
+
+
+# Closed invoice-correction result declarations. Schema sources are checked by
+# conformance tests; no fields are discovered or added at runtime.
+class InvoiceAuditSalesLineInput(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['item'])
+    line_id: str | None = None
+    item: str | None
+    quantity: str = '1'
+    unit: str | None = None
+    unit_price: str | SalesMoneyInput | None = None
+    net_amount: str | SalesMoneyInput | None = None
+    description: str | None = None
+    class_id: str | None = None
+    tax_code: str | None = None
+    price_level: str | None = None
+    price_basis_amount: str | SalesMoneyInput | None = None
+    refresh_defaults: bool = False
+    use_defaults: tuple[Literal['description','unit','unit_price','class_id','tax_code','price_level'],...] = ()
+
+
+class InvoiceAuditSettlementPaymentVersion(View):
+    payment: str
+    expected_version: int
+
+
+class InvoiceAuditInvoiceUpdateInput(View):
+    _internal: ClassVar[frozenset[str]]=frozenset(['expected_facts_fingerprint', 'settlement_guard'])
+    ar_account: str | None = None
+    terms: str | None = None
+    due_date: str | None = None
+    sales_tax_calculation: Literal['line_component_half_even','line_combined_half_up','invoice_combined_half_up'] = None
+    number: str | None = None
+    memo: str | None = None
+    customer_message: str | None = None
+    customer_message_item: str | None = None
+    customer_purchase_order: str | None = None
+    billing_address: Address | None = None
+    shipping_address: Address | None = None
+    shipping_address_id: str | None = None
+    ship_date: str | None = None
+    ship_method: str | None = None
+    sales_rep: str | None = None
+    class_id: str | None = None
+    customer_tax_code: str | None = None
+    sales_tax_item: str | None = None
+    price_level: str | None = None
+    refresh_defaults: bool = False
+    use_defaults: tuple[Literal['sales_tax_calculation','billing_address','shipping_address','terms','due_date','ship_method','sales_rep','class_id','customer_tax_code','sales_tax_item','price_level','payment_method'],...] = ()
+    expected_facts_fingerprint: str | None = None
+    custom_fields: dict[str,str|bool|int|None] | None = {}
+    custom_field_kinds: dict[str,Literal['text','number','date','bool','choice']] | None = {}
+    expected_version: int | None = None
+    date: str | None = None
+    customer: str | None = None
+    lines: tuple[InvoiceAuditSalesLineInput,...] | None = None
+    invoice: str
+    settlement_versions: tuple[InvoiceAuditSettlementPaymentVersion,...] = ()
+    settlement_guard: str | None = None
+
+
+class InvoiceAuditTaxDetails(View):
+    policy: Literal['line_component_half_even','line_combined_half_up','invoice_combined_half_up']
+    origin: Origin
+    legacy_interpretation: bool
+    attribution: TaxCapture | None = None
+
+
+class InvoiceAuditJournalBatchOutput(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['created_at', 'created_by', 'created_via'])
+    id: str
+    created_at: str | None
+    created_by: str | None
+    created_via: str | None
+    total: CapturedMoney
+    transaction_id: str
+    revision_id: str
+    kind: Literal['original','replacement','reversal']
+    effective_date: str
+    reverses_batch_id: str | None
+    replaces_batch_id: str | None
+    audit_event_id: str
+    debit_total: CapturedMoney
+    credit_total: CapturedMoney
+    debit_minor_units: int
+    credit_minor_units: int
+    currency: str
+    line_count: int
+
+
+class InvoiceAuditBillingSourceLinkOutput(View):
+    source_document_id: str
+    source_revision_id: str
+
+
+class InvoiceAuditBillingSourceOutput(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['created_at', 'created_by', 'created_via'])
+    id: str
+    created_at: str | None
+    created_by: str | None
+    created_via: str | None
+    transaction_id: str
+    revision_id: str
+    source_document_id: str
+    source_revision_id: str
+    source_line_id: str
+    root_document_id: str
+    root_line_id: str
+    document_line_id: str
+    quantity_microunits: int | None
+    net_minor_units: int
+    tax_minor_units: int
+    gross_minor_units: int
+    facts_snapshot: WorkAllocationCapture
+    allocation_version: Literal[1,2,3] = 1
+    allocation_proof: AllocationCapture | AllocationCapture | None = None
+
+
+class InvoiceAuditExactFraction(View):
+    numerator: str
+    denominator: str
+
+
+class InvoiceAuditTaxComponentOutput(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['agency_id', 'created_at', 'created_by', 'created_via', 'liability_account_id', 'tax_item_id'])
+    id: str
+    created_at: str | None
+    created_by: str | None
+    created_via: str | None
+    transaction_id: str
+    revision_id: str
+    document_line_id: str
+    tax_item_id: str | None
+    agency_id: str | None
+    liability_account_id: str | None
+    rate_percent_millionths: int
+    taxable_minor_units: int
+    tax_minor_units: int
+    taxable: CapturedMoney
+    tax: CapturedMoney
+    component_snapshot: SalesTaxCapture
+
+
+class InvoiceAuditSalesLineOutput(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['created_at', 'created_by', 'created_via', 'item_id'])
+    id: str
+    created_at: str | None
+    created_by: str | None
+    created_via: str | None
+    tax_ordinal: int | None = None
+    transaction_id: str
+    revision_id: str
+    line_id: str
+    position: int
+    kind: Literal['sale']
+    item_id: str | None
+    description: str | None
+    quantity: str
+    base_quantity: str
+    quantity_microunits: int | None
+    base_quantity_microunits: int | None
+    quantity_fraction: InvoiceAuditExactFraction | None = None
+    base_quantity_fraction: InvoiceAuditExactFraction | None = None
+    quoted_quantity: str | None = None
+    unit_id: str | None
+    unit_factor_nanounits: int
+    unit_price: CapturedMoney | None
+    pricing_basis: Literal['unit','amount','allocated'] = 'unit'
+    net: CapturedMoney
+    tax: CapturedMoney
+    gross: CapturedMoney
+    unit_price_minor_units: int | None
+    net_minor_units: int
+    tax_minor_units: int
+    gross_minor_units: int
+    currency: str
+    item_snapshot: SalesLineCapture
+    tax_components: tuple[InvoiceAuditTaxComponentOutput,...]
+
+
+class InvoiceAuditSalesRevisionOutput(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['created_at', 'created_by', 'created_via', 'name_id', 'name_type', 'revision_number'])
+    id: str
+    created_at: str | None
+    created_by: str | None
+    created_via: str | None
+    tax_calculation_details: InvoiceAuditTaxDetails | None = None
+    transaction_id: str
+    revision_number: int | None
+    supersedes_revision_id: str | None
+    date: str
+    number: str
+    name_type: Literal['customer'] | None
+    name_id: str | None
+    memo: str | None
+    subtotal: CapturedMoney
+    tax: CapturedMoney
+    total: CapturedMoney
+    subtotal_minor_units: int
+    tax_minor_units: int
+    total_minor_units: int
+    currency: str
+    audit_event_id: str
+    line_count: int
+    batches: tuple[InvoiceAuditJournalBatchOutput,...]
+    billing_links: tuple[InvoiceAuditBillingSourceLinkOutput,...] | None = ()
+    billing_sources: tuple[InvoiceAuditBillingSourceOutput,...] | None = ()
+    issuer_snapshot: Issuer
+    custom_fields_snapshot: CustomCaptures
+    custom_fields: tuple[CustomCapture,...] | None
+    profile: SalesCapture
+    lines: tuple[InvoiceAuditSalesLineOutput,...]
+
+
+class InvoiceAuditInvoiceCorrectionEffect(View):
+    kind: Literal['invoice_update'] = 'invoice_update'
+    operation_id: str | None
+    invoice_id: str
+    audit_event_id: str | None = None
+    before_header: PaymentEffectHeaderView | None = None
+    after_header: PaymentEffectHeaderView | None = None
+    source_components: tuple[SourceComponentResultView,...] = ()
+    applications: tuple[ApplicationResultView,...] = ()
+    allocations: tuple[AllocationResultView,...]
+    document_changes: tuple[InvoiceSettlementResultView | PaymentCurrentResultView,...]
+    payment_changes: tuple[PaymentCurrentResultView,...]
+
+
+class InvoiceAuditInvoiceCorrectionOutput(View):
+    _internal: ClassVar[frozenset[str]]=frozenset(['facts_fingerprint'])
+    operation_key: str
+    facts_fingerprint: str
+    changed: bool
+    new_effect: bool
+    idempotent_replay: bool = False
+    effect: InvoiceAuditInvoiceCorrectionEffect
+    current: InvoiceSettlementResultView
+    effect_counts: PaymentEffectCountsView
+    prospective_pages: tuple[()] = ()
+
+
+class InvoiceAuditWorkBillingSourceEffect(View):
+    source_id: str
+    source_kind: Literal['estimate','work_order']
+    version_before: int
+    version_after: int
+    active_before: bool
+    active_after: bool
+    automatically_closed: bool
+
+
+class InvoiceAuditWorkBillingCurrent(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['version'])
+    source_id: str
+    version: int | None
+    active: bool
+    status: str
+
+
+class InvoiceAuditForecastReason(View):
+    code: Literal['line_span_limit','conversion_span_limit','source_ineligible','posting_ineligible','no_charge']
+    line_id: str | None = None
+    recovery: str
+
+
+class InvoiceAuditWorkTaxForecast(View):
+    _internal: ClassVar[frozenset[str]]=frozenset(['forecast_fingerprint'])
+    forecast_basis: Literal['all_remaining_together'] = 'all_remaining_together'
+    can_bill_together: bool
+    forecast_eligibility_reasons: tuple[InvoiceAuditForecastReason,...] = ()
+    forecast_line_ordinals: dict[str,int]
+    forecast_tax_attribution: TaxCapture
+    forecast_fingerprint: str
+
+
+class InvoiceAuditBillingProgressAmount(View):
+    quantity: str
+    quantity_fraction: InvoiceAuditExactFraction
+    scope_percent: str
+    scope_percent_fraction: InvoiceAuditExactFraction
+    net_minor_units: int
+    tax_minor_units: int
+    gross_minor_units: int
+
+
+class InvoiceAuditBillingProgressLine(View):
+    line_id: str
+    root_document_id: str
+    root_line_id: str
+    previous: InvoiceAuditBillingProgressAmount
+    current: InvoiceAuditBillingProgressAmount
+    cumulative: InvoiceAuditBillingProgressAmount
+    remaining: InvoiceAuditBillingProgressAmount
+
+
+class InvoiceAuditSalesWriteOutput(View):
+    _internal: ClassVar[frozenset[str]]=frozenset(['void_reason', 'facts_fingerprint'])
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['created_at', 'created_by', 'created_via', 'customer_id', 'customer_name', 'updated_at', 'updated_by', 'updated_via', 'version'])
+    dry_run: bool = False
+    warnings: tuple[str,...] = ()
+    id: str
+    version: int | None
+    created_at: str | None
+    created_by: str | None
+    created_via: str | None
+    updated_at: str | None
+    updated_by: str | None
+    updated_via: str | None
+    settlement_current: InvoiceSettlementResultView | None = None
+    type: Literal['invoice','sales_receipt']
+    number: str
+    current_revision_id: str
+    status: Literal['posted','voided']
+    voided_at: str | None
+    voided_by: str | None
+    void_reason: str | None
+    void_posting_batch_id: str | None
+    date: str
+    customer_id: str | None
+    customer_name: str | None
+    memo: str | None
+    due_date: str | None
+    subtotal: CapturedMoney
+    tax: CapturedMoney
+    total: CapturedMoney
+    subtotal_minor_units: int
+    tax_minor_units: int
+    total_minor_units: int
+    currency: str
+    revision: InvoiceAuditSalesRevisionOutput
+    settlement: InvoiceAuditInvoiceCorrectionOutput | None = None
+    source_effect: InvoiceAuditWorkBillingSourceEffect | None = None
+    source_current: InvoiceAuditWorkBillingCurrent | None = None
+    billing_forecast: InvoiceAuditWorkTaxForecast | None = None
+    billing_progress: tuple[InvoiceAuditBillingProgressLine,...] | None = ()
+    facts_fingerprint: str | None = None
+    changed: bool = True
+    changed_fields: tuple[str,...] = ()
+    merged_over_versions: tuple[int,...] = ()
+    idempotent_replay: bool = False
+
+
+
+class OriginalInvoiceRequest(OriginalPaymentRequest):
+    command: Literal['invoice update']
+    input: InvoiceAuditInvoiceUpdateInput
+
+
+class InvoiceRequestSnapshot(PaymentRequestSnapshot):
+    original_request: OriginalInvoiceRequest
+
+
+class InvoiceOperationView(PaymentOperationView):
+    command: Literal['invoice update']
+    request_snapshot: InvoiceRequestSnapshot
+    effect_snapshot: InvoiceAuditSalesWriteOutput
+
+    @model_validator(mode='before')
+    @classmethod
+    def original_input_contract(cls,value):
+        if type(value) is dict:
+            from bookflow.company.sales_models import InvoiceUpdateInput
+            from bookflow.company.sales_outputs import SalesWriteOutput
+            try:
+                request=value['request_snapshot'];effect=value['effect_snapshot']
+                if type(request) is str:request=json.loads(request)
+                if type(effect) is str:effect=json.loads(effect)
+                original=request['original_request']['input']
+                if 'operation_key' in original:raise ValueError('operation key belongs to receipt')
+                InvoiceUpdateInput.model_validate_json(json.dumps(dict(original,operation_key=value['operation_key']),allow_nan=False))
+                SalesWriteOutput.model_validate_json(json.dumps(effect,allow_nan=False))
+            except (KeyError,TypeError):raise ValueError('invalid original invoice correction') from None
+        return value
+
+    @model_validator(mode='after')
+    def operation_identity(self):
+        settled=self.effect_snapshot.settlement
+        if settled is None or self.request_snapshot.original_request.command!=self.command:
+            raise ValueError('missing invoice correction receipt')
+        if settled.operation_key!=self.operation_key or settled.effect.operation_id!=self.id:
+            raise ValueError('operation identity differs')
+        if settled.effect.invoice_id!=self.effect_snapshot.id or self.effect_snapshot.id not in self.request_snapshot.resolved_transaction_ids:
+            raise ValueError('invoice correction identity differs')
+        return self
+
+
+class InvoiceDocumentChangeItemView(OperationItemView):
+    kind: Literal['document_changes']
+    item_snapshot: InvoiceSettlementResultView | PaymentCurrentResultView
+
+
+_REFERENCE_GROUPS.update({
+    InvoiceAuditInvoiceUpdateInput: (
+        (('ar_account',),'account'),(('terms',),'term'),(('customer',),'customer'),
+        (('customer_message_item',),'customer_message'),(('shipping_address_id',),'customer'),
+        (('ship_method',),'ship_method'),(('sales_rep',),'sales_rep'),(('class_id',),'class'),
+        (('customer_tax_code',),'sales_tax_code'),(('sales_tax_item',),'item'),(('price_level',),'price_level')),
+    InvoiceAuditSalesLineInput: ((('item',),'item'),(('unit',),'unit_of_measure'),(('class_id',),'class'),
+        (('tax_code',),'sales_tax_code'),(('price_level',),'price_level')),
+    InvoiceAuditSalesWriteOutput: ((('customer_id','customer_name'),'customer'),),
+    InvoiceAuditSalesRevisionOutput: ((('name_type','name_id'),'customer'),),
+    InvoiceAuditSalesLineOutput: ((('item_id',),'item'),(('unit_id',),'unit_of_measure')),
+    InvoiceAuditTaxComponentOutput: ((('tax_item_id',),'item'),(('agency_id',),'vendor'),(('liability_account_id',),'account')),
+})
+for _field in ('billing_address','shipping_address'):
+    _OBJECT_FIELD_REQUIREMENTS[InvoiceAuditInvoiceUpdateInput,_field]=('customer',)
+for _field in ('custom_fields','custom_field_kinds'):
+    _OBJECT_FIELD_REQUIREMENTS[InvoiceAuditInvoiceUpdateInput,_field]=('custom_field',)
+_OBJECT_FIELD_REQUIREMENTS[InvoiceAuditSalesRevisionOutput,'custom_fields']=('custom_field',)
+
+for _field in ('billing_links','billing_sources'):
+    _OBJECT_FIELD_REQUIREMENTS[InvoiceAuditSalesRevisionOutput,_field]=('work_order',)
+for _field in ('source_effect','source_current','billing_forecast','billing_progress'):
+    _OBJECT_FIELD_REQUIREMENTS[InvoiceAuditSalesWriteOutput,_field]=('work_order',)
