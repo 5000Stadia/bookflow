@@ -72,7 +72,7 @@ def test_reference_group_masks_identity_label_and_version_as_one_unit(hosted):
     allowed = disclose(hosted, captured)
     assert allowed.model_dump() == captured.model_dump()
     assert allowed.reader_redacted is False
-    deny(hosted, 'unit_of_measure')
+    deny(hosted, 'unit-of-measure')
     masked = disclose(hosted, captured)
     assert masked.reader_redacted is True
     assert masked.projection_partial is True
@@ -84,7 +84,7 @@ def test_reference_group_masks_identity_label_and_version_as_one_unit(hosted):
 
 @pytest.mark.parametrize('presence', ['omitted', 'null', 'populated'])
 @pytest.mark.parametrize('field,capability', [
-    ('ship_method', 'ship_method'),  # An object reference route.
+    ('ship_method', 'ship-method'),  # An object reference route.
     ('billing_address', 'customer'),  # A whole-field requirement.
 ])
 def test_optional_capture_absence_is_redacted_too(hosted, presence, field, capability):
@@ -113,7 +113,7 @@ def test_polymorphic_party_masks_discriminator_identity_and_name(hosted, kind):
         class_id='class-1', class_name='Visible class',
     )
     assert disclose(hosted, captured).reader_redacted is False
-    deny(hosted, kind)
+    deny(hosted, kind.replace('_','-'))
     masked = disclose(hosted, captured)
     assert masked.reader_redacted is True and masked.projection_partial is True
     assert (masked.party_kind, masked.party_id, masked.party_name) == (None,) * 3
@@ -133,7 +133,7 @@ def test_counterparty_link_collapses_to_none(hosted, missing_kind):
 class LinkEnvelope(legacy.View):
     """Isolate recursive signal propagation from the parent's field ACL."""
     link: legacy.CounterpartylinkView | None
-    links: tuple[legacy.CounterpartylinkView, ...]
+    links: tuple[legacy.CounterpartylinkView | None, ...]
 
 
 @pytest.mark.parametrize('container', ['object', 'tuple'])

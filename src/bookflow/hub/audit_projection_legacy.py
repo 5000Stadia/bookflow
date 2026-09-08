@@ -16,12 +16,13 @@ class View(BaseModel):
     _internal: ClassVar[frozenset[str]] = frozenset()
     _captured_nonnull: ClassVar[frozenset[str]] = frozenset()
     projection_partial: bool = Field(False,exclude=True,repr=False)
+    reader_redacted: bool = Field(False,exclude=True,repr=False)
 
     @model_validator(mode='before')
     @classmethod
     def captured_json_fields(cls, value):
         if type(value) is dict:
-            if 'projection_partial' in value:
+            if 'projection_partial' in value or 'reader_redacted' in value:
                 raise ValueError('projection state is execution-owned')
             value=dict(value)
             for base in cls.__mro__:

@@ -74,6 +74,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].interface` | string | yes | no | — | — |
 | `items[].entry_count` | integer | yes | no | — | — |
 | `items[].entries` | NoneType | yes | no | — | — |
+| `items[].explanation` | object \| null | no | yes | null | — |
+| `items[].explanation.reason` | string \| null | yes | yes | — | — |
+| `items[].explanation.directive_status` | literal["not_cited", "available", "unavailable"] | yes | no | — | — |
+| `items[].explanation.directive` | object \| null | yes | yes | — | — |
+| `items[].explanation.directive.id` | string | yes | no | — | — |
+| `items[].explanation.directive.code` | string | yes | no | — | — |
+| `items[].explanation.directive.text` | string | yes | no | — | — |
 | `count` | integer | yes | no | — | — |
 | `next_before` | string \| null | yes | yes | — | — |
 
@@ -186,6 +193,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `entries[].changed_fields` | array[string] | yes | no | — | — |
 | `entries[].version_before` | integer \| null | yes | yes | — | — |
 | `entries[].version_after` | integer \| null | yes | yes | — | — |
+| `explanation` | object \| null | no | yes | null | — |
+| `explanation.reason` | string \| null | yes | yes | — | — |
+| `explanation.directive_status` | literal["not_cited", "available", "unavailable"] | yes | no | — | — |
+| `explanation.directive` | object \| null | yes | yes | — | — |
+| `explanation.directive.id` | string | yes | no | — | — |
+| `explanation.directive.code` | string | yes | no | — | — |
+| `explanation.directive.text` | string | yes | no | — | — |
 | `projection_version` | literal[2] | yes | no | — | — |
 
 Example JSON output:
@@ -199,6 +213,7 @@ Example JSON output:
   "command": null,
   "entries": [],
   "entry_count": 1,
+  "explanation": null,
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "interface": "cli",
   "principal_id": null,
@@ -310,6 +325,13 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].interface` | string | yes | no | — | — |
 | `items[].entry_count` | integer | yes | no | — | — |
 | `items[].entries` | NoneType | yes | no | — | — |
+| `items[].explanation` | object \| null | no | yes | null | — |
+| `items[].explanation.reason` | string \| null | yes | yes | — | — |
+| `items[].explanation.directive_status` | literal["not_cited", "available", "unavailable"] | yes | no | — | — |
+| `items[].explanation.directive` | object \| null | yes | yes | — | — |
+| `items[].explanation.directive.id` | string | yes | no | — | — |
+| `items[].explanation.directive.code` | string | yes | no | — | — |
+| `items[].explanation.directive.text` | string | yes | no | — | — |
 | `items[].resume_after` | string | yes | no | — | — |
 | `count` | integer | yes | no | — | — |
 | `next_after` | string | yes | no | — | — |

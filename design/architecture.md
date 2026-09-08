@@ -1979,6 +1979,25 @@ including unrelated co-resident entries. Excluded noncandidate captures are not
 decoded by the filtered scan; unfiltered history still detects their corruption.
 Hub history, activity and tail scans retain their existing selection paths.
 
+Company audit explanations are typed reason and cited-directive values shared by
+list, show and tail responses. They appear only for a supported initiating
+operation whose entire captured before/after evidence passed entry and reference
+visibility. Admission observes unchanged entries before omitting them. A collapsed
+view or reader-dependent redaction suppresses the complete explanation.
+`reader_redacted` is execution-owned and excluded from output and accepted capture
+inputs; it propagates through nested views separately from `projection_partial`,
+which also covers universally stripped internal fields. Internal field omission
+alone does not suppress a fully authorized operation's explanation.
+
+Cited directives require separate company directive admission and use the unique
+creation capture at or before the operation's sequence, never current row text.
+Deactivation does not rewrite that instruction. An admitted explanation distinguishes
+`not_cited`, `available` and `unavailable`; missing, malformed or undisclosed cited
+evidence produces `unavailable` without exposing an id or link. A separately admitted
+reason remains present. Audit pages escape explanatory text and link only admitted
+directives. Publication re-evaluates the full disclosure predicate. Hub and unsupported
+no-entry explanation provenance remain unimplemented; no raw context fallback exists.
+
 Deposit operation variants,
 complete producer/format conformance, no-entry semantics and public cursor/transport
 cutover remain required. The

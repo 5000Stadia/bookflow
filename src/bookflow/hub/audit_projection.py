@@ -257,6 +257,20 @@ class ProjectedEntry:
 
 
 @dataclass(frozen=True)
+class ProjectedDirective:
+    id: str
+    code: str
+    text: str
+
+
+@dataclass(frozen=True)
+class ProjectedExplanation:
+    reason: str | None
+    directive_status: Literal['not_cited','available','unavailable']
+    directive: ProjectedDirective | None
+
+
+@dataclass(frozen=True)
 class ProjectedEvent:
     id: str
     at: str
@@ -269,6 +283,7 @@ class ProjectedEvent:
     principal_name: str | None
     interface: str
     entries: tuple[ProjectedEntry,...]
+    explanation: ProjectedExplanation | None = None
 
 
 class HistorySelection(FrozenView):
@@ -673,6 +688,16 @@ def _kind_allowed(audience,company,kind):
     return allowed
 
 
+def _reader_redaction(original,projected):
+    """Reader-dependent absence and flags, excluding universal internal stripping."""
+    from .audit_projection_legacy import View
+    if isinstance(original,View):
+        return projected is None or projected.reader_redacted
+    if type(original) is tuple and type(projected) is tuple:
+        return any(_reader_redaction(a,b) for a,b in zip(original,projected))
+    return False
+
+
 def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
     """One closed typed traversal; no SQL reflection, string rewriting or ACLs."""
     from . import audit_projection_legacy as legacy
@@ -685,7 +710,7 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
     if isinstance(value,legacy.CounterpartylinkView) and not all(
             _kind_allowed(audience,company,kind) for kind in ('customer','vendor')):
         return None
-    updates={};partial=False
+    updates={};partial=False;redacted=False
     if isinstance(value,legacy.Origin) and value.source_id is not None:
         # Legacy origins name a persisted default source without a kind tag.
         # Resolve only its immutable, already-existing audit owner; never use a
@@ -702,7 +727,7 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
         kinds=audience._origin_kinds[cache_key]
         if len(kinds)!=1:format_error()
         if not _kind_allowed(audience,company,next(iter(kinds))):
-            updates['source_id']=None;partial=True
+            updates['source_id']=None;partial=True;redacted=True
     # Internal normalized keys are never retained by a public proof. Secrets and
     # operational receipts make the record partial even when their value is null.
     for key in value._internal:
@@ -717,7 +742,7 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
         groups.append((tuple(key for key in ('id','label','version') if key in type(value).model_fields),reference_kind))
     for fields,kind in groups:
         if not _kind_allowed(audience,company,kind):
-            updates.update({key:None for key in fields});partial=True
+            updates.update({key:None for key in fields});partial=True;redacted=True
     for base in type(value).__mro__:
         fields=legacy._POLYMORPHIC_PARTIES.get(base)
         if fields is None:continue
@@ -726,7 +751,7 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
         if kind is None and identifier is None:continue
         if kind not in ('customer','vendor','employee','other_name'):format_error()
         if not _kind_allowed(audience,company,kind):
-            updates.update({key:None for key in fields});partial=True
+            updates.update({key:None for key in fields});partial=True;redacted=True
     for base in type(value).__mro__:
         route=drafts.SOURCE_ROUTES.get(base)
         if route is not None:
@@ -734,7 +759,7 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
             kind=getattr(value,discriminator)
             if kind not in ('payment','sales_receipt'):format_error()
             if not _kind_allowed(audience,company,kind):
-                updates.update({discriminator:None,identifier:None});partial=True
+                updates.update({discriminator:None,identifier:None});partial=True;redacted=True
         route=drafts.PARTY_ROUTES.get(base)
         if route is not None:
             discriminator,pairs=route
@@ -743,23 +768,23 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
                 fields=dict(pairs)
                 if kind not in fields:format_error()
                 if not _kind_allowed(audience,company,kind):
-                    updates.update({discriminator:None,fields[kind]:None});partial=True
+                    updates.update({discriminator:None,fields[kind]:None});partial=True;redacted=True
     if isinstance(value,(legacy.OperationExecutionView,legacy.RecoveryAuditReceipt)):
         for key in ('actor_id','on_behalf_of'):
             identifier=getattr(value,key,None)
             if identifier is not None and not audience.identity_visible(identifier):
-                updates[key]=None;partial=True
+                updates[key]=None;partial=True;redacted=True
     for key in ('created_by','updated_by','author_id','uploaded_by','linked_by','given_by','recorded_by','entered_by','deactivated_by','voided_by','accepted_by'):
         if key in type(value).model_fields:
             identifier=getattr(value,key)
             if identifier is not None and not audience.identity_visible(identifier):
-                updates[key]=None;partial=True
+                updates[key]=None;partial=True;redacted=True
     for key,field in type(value).model_fields.items():
-        if key in updates or key=='projection_partial':continue
+        if key in updates or key in ('projection_partial','reader_redacted'):continue
         item=getattr(value,key)
         if key in ('custom_values','values') and isinstance(value,(legacy.AggregateView,legacy.CustomCaptures)):
             if not _kind_allowed(audience,company,'custom_field'):
-                updates[key]=None;partial=True;continue
+                updates[key]=None;partial=True;redacted=True;continue
         route=None
         for base in type(value).__mro__:
             route=legacy._OBJECT_REFERENCE_KINDS.get((base,key))
@@ -772,13 +797,14 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
                        for kind in mapping.get((base,key),())))
         if route is not None:required=(*required,route)
         if any(not _kind_allowed(audience,company,kind) for kind in required):
-            updates[key]=None;partial=True;continue
+            updates[key]=None;partial=True;redacted=True;continue
         # Preserve omission in an entitled historical capture. Masked fields
         # above deliberately use one null shape even when originally absent.
         if key not in value.model_fields_set:
             continue
         projected=_disclose_company(audience,company,item,route,cutoff=cutoff)
         updates[key]=projected
+        if _reader_redaction(item,projected):partial=True;redacted=True
         if isinstance(projected,legacy.View) and projected.projection_partial:partial=True
         if type(projected) is tuple and any(isinstance(x,legacy.View) and x.projection_partial for x in projected):partial=True
     if isinstance(value,(legacy.DepositAuditAdditional,legacy.DepositAuditAdditionalInput)):
@@ -786,7 +812,7 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
         party_hidden=(not _kind_allowed(audience,company,party.kind) if party is not None else
                       any(not _kind_allowed(audience,company,kind) for kind in ('customer','vendor','employee','other_name')))
         if party_hidden:
-            updates['received_from']=None;partial=True
+            updates['received_from']=None;partial=True;redacted=True
             if 'party_name' in type(value).model_fields:updates['party_name']=None
             if 'origins' in type(value).model_fields:
                 updates['origins']={k:v for k,v in value.origins.items() if k!='received_from'}
@@ -795,7 +821,7 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
             hidden={key for key,kinds in routes.items() if any(not _kind_allowed(audience,company,kind) for kind in kinds)}
             if hidden:
                 updates['origins']={k:v for k,v in updates.get('origins',value.origins).items() if k not in hidden}
-                partial=True
+                partial=True;redacted=True
     if isinstance(value,(legacy.OriginalPaymentRequest,legacy.DepositAuditRequest)):
         # Presence is captured intent too. Do not disclose whether a denied
         # optional reference or internal freshness assertion was supplied.
@@ -812,6 +838,7 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
     if partial:
         updates.update({key:None for key in legacy._PARTIAL_PROVENANCE if key in type(value).model_fields})
     updates['projection_partial']=partial
+    updates['reader_redacted']=redacted
     return value.model_copy(update=updates)
 
 
@@ -846,6 +873,31 @@ def _annotation_targets(audience,company,kind,identifier,seen=()):
         _annotation_targets(audience,company,target_kind,target_id,seen+(key,))
 
 
+def _company_explanation(audience,event,company):
+    """Called only after the whole initiating operation is reader-visible."""
+    reason=event['reason']
+    if reason is not None and type(reason) is not str:format_error()
+    cited=event['directive_id']
+    if cited is None:return ProjectedExplanation(reason,'not_cited',None)
+    unavailable=ProjectedExplanation(reason,'unavailable',None)
+    from . import audit_projection_legacy as legacy
+    try:
+        audience.require(company,legacy.entry_requirement('directive'))
+        db,events,entries=_tables(audience,company)
+        rows=list(db.conn.execute(sa.select(entries).select_from(entries.join(events,entries.c.event_id==events.c.id)).where(
+            entries.c.record_type=='directive',entries.c.record_id==cited,
+            entries.c.action=='create',events.c.command=='directive add',events.c.seq<=event['seq'])).mappings())
+        if len(rows)!=1:return unavailable
+        value=legacy.decode_company_snapshot(producer='directive add',record_type='directive',action='create',snapshot=_decode(rows[0]['after']))
+        value=_disclose_company(audience,company,value,cutoff=event['seq'])
+        if value is None or value.reader_redacted:return unavailable
+        if value.id!=cited or value.code!=event['directive_code']:return unavailable
+        return ProjectedExplanation(reason,'available',ProjectedDirective(value.id,value.code,value.text))
+    except BookflowError as exc:
+        if exc.code=='E_PERMISSION' or (exc.code=='E_VALIDATION' and exc.details=={'reason':'audit_format'}):return unavailable
+        raise
+
+
 def project_event(audience,event_id,*,company=None,requirements=None,_seen_annotations=()):
     audience.validate()
     db,events,entries=_tables(audience,company)
@@ -863,6 +915,7 @@ def project_event(audience,event_id,*,company=None,requirements=None,_seen_annot
             raise
     raw_entries=list(db.conn.execute(sa.select(entries).where(entries.c.event_id==event_id).order_by(entries.c.id)).mappings())
     projected=[]
+    complete=company is not None and bool(raw_entries)
     for entry in raw_entries:
         if company is None and not _hub_candidate(audience,entry):continue
         if company is not None:
@@ -871,7 +924,7 @@ def project_event(audience,event_id,*,company=None,requirements=None,_seen_annot
                 audience.require(company,entry_requirement(entry['record_type']))
                 _annotation_targets(audience,company,entry['record_type'],entry['record_id'],_seen_annotations)
             except BookflowError as exc:
-                if exc.code=='E_PERMISSION':continue
+                if exc.code=='E_PERMISSION':complete=False;continue
                 raise
         before,after=_decode(entry['before']),_decode(entry['after'])
         if before is None and entry['action'] not in ('create','baseline','migrate','delete') and entry['version_before'] is not None:
@@ -883,6 +936,10 @@ def project_event(audience,event_id,*,company=None,requirements=None,_seen_annot
             before=_decode(previous[0])
         render=(lambda value,side:_hub_view(audience,entry['record_type'],entry['record_id'],value)) if company is None else (lambda value,side:_company_view(audience,event,entry,value,side))
         left,right=render(before,'before'),render(after,'after')
+        # Observe every capture before unchanged entries are omitted. Both
+        # collapse-to-None and reader-specific field masking defeat disclosure.
+        if company is not None and any(raw is not None and (view is None or view.reader_redacted)
+               for raw,view in ((before,left),(after,right))):complete=False
         if left is None and right is None:continue
         if left==right and entry['action'] not in ('create','delete','baseline','migrate'):continue
         l={} if left is None else left.model_dump(mode='json',by_alias=True)
@@ -950,7 +1007,8 @@ def project_event(audience,event_id,*,company=None,requirements=None,_seen_annot
     principal=event['on_behalf_of'] if audience.identity_visible(event['on_behalf_of']) else None
     from bookflow.core.session import localize
     result=ProjectedEvent(event_id,localize(audience.reader.session,event['at']),command,summary,actor,_name(audience,actor),
-        event['actor_kind'] if actor is not None else None,principal,_name(audience,principal),event['interface'],tuple(projected))
+        event['actor_kind'] if actor is not None else None,principal,_name(audience,principal),event['interface'],tuple(projected),
+        _company_explanation(audience,event,company) if complete and command is not None else None)
     audience.validate()
     return result
 

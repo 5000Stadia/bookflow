@@ -27,6 +27,18 @@ class HistoryEntry(Response):
     version_after: int | None
 
 
+class HistoryDirective(Response):
+    id: str
+    code: str
+    text: str
+
+
+class HistoryExplanation(Response):
+    reason: str | None
+    directive_status: Literal['not_cited','available','unavailable']
+    directive: HistoryDirective | None
+
+
 class HistoryEvent(Response):
     id: str
     at: str
@@ -40,6 +52,7 @@ class HistoryEvent(Response):
     interface: str
     entry_count: int
     entries: None
+    explanation: HistoryExplanation | None = None
 
 
 class HistoryTailEvent(HistoryEvent):

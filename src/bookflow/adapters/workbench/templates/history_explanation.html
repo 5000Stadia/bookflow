@@ -1,0 +1,8 @@
+{% macro explain(event, company_id) -%}
+{% if event.explanation %}<div class="history-explanation" style="white-space:normal;overflow-wrap:anywhere">
+{% if event.explanation.reason %}<p>{{ event.explanation.reason }}</p>{% endif %}
+{% if event.explanation.directive_status == 'available' and event.explanation.directive and company_id %}
+<p><a href="/c/{{ company_id }}/directive/{{ event.explanation.directive.id }}">{{ event.explanation.directive.code }}</a>: {{ event.explanation.directive.text }}</p>
+{% elif event.explanation.directive_status == 'unavailable' %}<p class="muted">Cited directive unavailable.</p>{% endif %}
+</div>{% endif %}
+{%- endmacro %}
