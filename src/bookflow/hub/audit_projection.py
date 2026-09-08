@@ -899,6 +899,14 @@ def project_event(audience,event_id,*,company=None,requirements=None,_seen_annot
         # Explicit supported hub no-entry initialization is management-domain only.
         if company is None and event['command']=='init' and audience.global_admin():
             command,summary='init','Local login mapping restored.'
+        elif (company is None and event['command']=='company use'
+              and event['actor_kind']=='human'
+              and (audience.global_admin() or (audience.identity.actor==event['actor_id']
+                   and audience.identity.actor_kind=='human' and audience.identity.principal is None))):
+            # Self-profile history: neither presence nor content may depend on
+            # target-company visibility. Identity admins see timing/frequency,
+            # never the selected company or the raw stored summary.
+            command,summary='company use','Default company preference changed.'
         else:
             # Company no-entry adapters must enumerate the owning producer rather
             # than interpreting its unclassified free-text summary.
