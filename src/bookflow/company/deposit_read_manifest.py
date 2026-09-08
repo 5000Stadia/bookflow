@@ -1754,6 +1754,9 @@ EDGES.update({'custom_field_defs': [],
 # (declaration snapshot, derived digest) pair, published by one reference store.
 # This memo contains no conformance result, expected digest, or business data.
 _DIGESTS = [None] * 6
+# First successful generation pays only the original cost in a one-shot process.
+# These six markers govern snapshot setup, never declaration validity.
+_GENERATED = [False] * 6
 _JSON_SCHEMA = BaseModel.model_json_schema.__func__
 _JSON_PROVIDER = BaseModel.__get_pydantic_json_schema__.__func__
 
@@ -1763,6 +1766,7 @@ class _UncachedDeclaration(Exception):
 
 
 def _class_input(model):
+    # Count GenerateJsonSchema.generate: wrapping model_json_schema disables reuse.
     for provider, expected in ((model.model_json_schema, _JSON_SCHEMA),
                                (model.__get_pydantic_json_schema__, _JSON_PROVIDER)):
         if (type(provider) is not MethodType or provider.__func__ is not expected
@@ -1870,6 +1874,10 @@ def _unchanged(model, snapshot):
 
 
 def _codec_digest(slot, model):
+    if not _GENERATED[slot]:
+        digest = hashlib.sha256(json.dumps(model.model_json_schema(), sort_keys=True).encode()).hexdigest()
+        _GENERATED[slot] = True
+        return digest
     entry = _DIGESTS[slot]
     if entry is not None and _unchanged(model, entry[0]):
         return entry[1]

@@ -58,6 +58,56 @@ def assert_original_failure(monkeypatch):
     assert optimized.value.code == 'E_DEPOSIT_SOURCE_INVALID'
 
 
+def warm_conformance():
+    # First use only generates; the second call establishes a stable snapshot.
+    assert manifest.conform() is None
+    assert manifest.conform() is None
+
+
+def test_first_second_and_warm_reads_with_generation_failures(monkeypatch):
+    monkeypatch.setattr(manifest, '_DIGESTS', [None] * 6)
+    monkeypatch.setattr(manifest, '_GENERATED', [False] * 6)
+    generated, snapshots = [], []
+    state = {'fail': True}
+    generate = GenerateJsonSchema.generate
+    declaration = manifest._declaration
+
+    def counted(self, schema, *args, **kwargs):
+        if state['fail']:
+            raise RuntimeError('generation interrupted')
+        result = generate(self, schema, *args, **kwargs)
+        generated.append(schema)
+        return result
+
+    def snapshot(model):
+        snapshots.append(model)
+        return declaration(model)
+
+    monkeypatch.setattr(GenerateJsonSchema, 'generate', counted)
+    monkeypatch.setattr(manifest, '_declaration', snapshot)
+    with pytest.raises(RuntimeError, match='generation interrupted'):
+        manifest.conform()
+    assert not snapshots and not generated
+
+    # Failure did not advance the first-use marker: retry is still raw generation.
+    state['fail'] = False
+    assert manifest.conform() is None
+    assert len(generated) == 6 and not snapshots
+
+    state['fail'] = True
+    with pytest.raises(RuntimeError, match='generation interrupted'):
+        manifest.conform()
+    assert snapshots == [deposit_models.Effect] and len(generated) == 6
+
+    # The failed second call published no digest: every root must generate again.
+    state['fail'] = False
+    assert manifest.conform() is None
+    assert snapshots == [deposit_models.Effect, *roots()]
+    assert len(generated) == 12
+    assert manifest.conform() is None
+    assert len(snapshots) == 7 and len(generated) == 12
+
+
 def test_unchanged_warm_conformance_avoids_schema_generation(monkeypatch):
     assert {m.__name__: raw_digest(m) for m in roots()} == manifest.CODECS
     calls = []
@@ -68,11 +118,11 @@ def test_unchanged_warm_conformance_avoids_schema_generation(monkeypatch):
         return original(self, *args, **kwargs)
 
     monkeypatch.setattr(GenerateJsonSchema, 'generate', counted)
-    assert manifest.conform() is None
-    cold_calls = len(calls)
+    warm_conformance()
+    setup_calls = len(calls)
     for _ in range(3):
         assert manifest.conform() is None
-    assert len(calls) == cold_calls
+    assert len(calls) == setup_calls
 
 
 @pytest.mark.parametrize('change', [
@@ -86,7 +136,7 @@ def test_warm_declaration_changes_keep_original_failure(monkeypatch, change):
             **account.model_config, 'json_schema_extra': {'x-cost': {'values': [1]}},
         })
         accept_declarations(monkeypatch)
-    manifest.conform()
+    warm_conformance()
     if change == 'expected_codec':
         monkeypatch.setattr(manifest, 'CODECS', dict(manifest.CODECS, Effect='changed'))
     elif change == 'root_replacement':
@@ -167,7 +217,7 @@ def test_custom_schema_providers_remain_uncached(monkeypatch, provider):
         rebuild(monkeypatch, nested)
         rebuild(monkeypatch, model)
     accept_declarations(monkeypatch)
-    manifest.conform()
+    warm_conformance()
     before = state['calls']
     manifest.conform()
     assert state['calls'] > before
@@ -196,13 +246,14 @@ def test_unsupported_configuration_uses_original_generation(monkeypatch):
     monkeypatch.setattr(GenerateJsonSchema, 'generate', counted)
     manifest.conform()
     manifest.conform()
-    assert len(calls) == 2
+    manifest.conform()
+    assert len(calls) == 3
     extra['x-unsupported'] = 2
     assert_original_failure(monkeypatch)
 
 
 def test_generation_exception_and_changed_inputs_do_not_publish(monkeypatch):
-    manifest.conform()
+    warm_conformance()
     monkeypatch.setattr(Issuer, 'model_config', dict(Issuer.model_config, title='Before generation'))
     accept_declarations(monkeypatch)
     original = GenerateJsonSchema.generate
