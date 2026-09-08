@@ -1,4 +1,4 @@
-"""Scalar/cohort parity over real history; corruption policy remains separate.
+"""Scalar/cohort parity with entitled corruption errors and restricted omission.
 
 Faults below replace loaded evidence or raise at a named internal boundary.
 They are not public permission-configuration journeys or persistent DB corruption.
@@ -30,11 +30,11 @@ def financial(world):
         amount='1.00', payment_method=method(client), operation_key='cohort-omission',
         applications=dict(mode='inline', items=[dict(invoice=invoice['id'], expected_version=1,
             amount='1.00')])), company=COMPANY)
-    notes = [client.note.add(record_type='transaction', record_id=paid['id'], body=body,
+    notes = [client.note.add(record_type='customer', record_id=commercial['customer'], body=body,
         company=COMPANY)['note'] for body in ('Good before', 'Missing evidence', 'Good after')]
     events = [client.audit.list(record_type='note', record_id=n['id'], company=COMPANY)['items'][0]['id']
         for n in notes]
-    return dict(world=world, client=client, payment=paid, invoice=invoice, notes=notes,
+    return dict(world=world, client=client, payment=paid, invoice=invoice, customer=commercial['customer'], notes=notes,
         events=events, since=client.audit.show(event=events[0], company=COMPANY)['at'],
         company=client.company.show(company=COMPANY)['company_id'], path=database_path(client))
 
@@ -42,7 +42,7 @@ def financial(world):
 @contextmanager
 def audience_for(financial, mode='list'):
     selection = projection.HistorySelection(mode=mode, company=financial['company'],
-        **(dict(record_type='transaction', record_id=financial['payment']['id']) if mode=='activity' else {}))
+        **(dict(record_type='customer', record_id=financial['customer']) if mode=='activity' else {}))
     ctx = Context.new('python', 'Cohort parity')
     with binding.offline_reader(financial['world']['root'], request_id=ctx.request_id) as reader:
         open_selected(reader, selection, ctx)
@@ -62,7 +62,7 @@ def missing_note(monkeypatch, financial):
 def test_mixed_history_counts_and_continuation(financial, monkeypatch, mode):
     client = financial['client']
     fields = dict(record_type='note', since=financial['since']) if mode=='list' else dict(
-        record_type='transaction', record_id=financial['payment']['id'], kinds=['note'])
+        record_type='customer', record_id=financial['customer'], kinds=['note'])
     def read(**extra):
         return client.run('audit list' if mode=='list' else 'activity', {**fields, **extra}, company=COMPANY)
     token_name, input_name = ('next_before', 'before') if mode=='list' else ('next_cursor', 'cursor')
@@ -73,6 +73,20 @@ def test_mixed_history_counts_and_continuation(financial, monkeypatch, mode):
     assert clean['count'] == 3 and clean[token_name] is None
     before = storage(financial['path'])
     missing_note(monkeypatch, financial)
+    with pytest.raises(BookflowError) as caught:
+        client.audit.show(event=financial['events'][1], company=COMPANY)
+    assert caught.value.code == 'E_VALIDATION' and caught.value.details == {'reason': 'audit_format'}
+    with pytest.raises(BookflowError) as caught:
+        read()
+    assert caught.value.code == 'E_VALIDATION' and caught.value.details == {'reason': 'audit_format'}
+    # Gate-level fallback denial; real governed audience pairs are covered in
+    # test_history_unresolved_evidence. Healthy customer notes need no graph rights.
+    original = authority.require_resource
+    def restricted(session, capability, role):
+        if capability == 'customer-work':
+            raise BookflowError('E_PERMISSION')
+        return original(session, capability, role)
+    monkeypatch.setattr(authority, 'require_resource', restricted)
     with pytest.raises(BookflowError) as caught:
         client.audit.show(event=financial['events'][1], company=COMPANY)
     assert caught.value.code == 'E_EVENT_NOT_FOUND'
@@ -105,8 +119,10 @@ def test_real_scalar_cohort_requirements_and_once_resolution(financial):
         cohort = authority._EventCohort(db, events)
         requirements = {event: cohort.requirements(event) for event in events}
         assert requirements == {event: authority.event_requirements(db, event) for event in events}
-        for event in financial['events']:
-            assert ('customer-work', 'member') in requirements[event]
+        payment_event = db.raw.execute('SELECT audit_event_id FROM payment_operations WHERE id=?',
+            (financial['payment']['effect']['operation_id'],)).fetchone()[0]
+        assert ('customer-work', 'member') in requirements[payment_event]
+        for event in [payment_event, *financial['events']]:
             seen = []
             def resolve(identifier):
                 seen.append(identifier)

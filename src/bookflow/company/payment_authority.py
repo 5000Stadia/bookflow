@@ -49,6 +49,12 @@ def linked_work_required(db, transaction_ids, cache=None):
         c.work_billing_allocations.c.transaction_id.in_(ids)).limit(1)).first() is not None
 
 
+# Exact upper bound of current graph READ requirements, including selection
+# delegation. History may use this only to establish conservative entitlement
+# after unresolved evidence; it is never a substitute resolved graph or proof.
+READ_REQUIREMENT_ENVELOPE = (('ledger.read', 'member'), ('customer-work', 'member'))
+
+
 def requirements(db, transaction_ids, *, write=False, cache=None):
     result = [('ledger.post' if write else 'ledger.read', 'standard' if write else 'member')]
     if linked_work_required(db, transaction_ids, cache):

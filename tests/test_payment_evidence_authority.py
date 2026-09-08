@@ -73,5 +73,17 @@ def test_batched_audit_disclosure_keeps_unknown_operation_ownership_closed(clien
     monkeypatch.setattr(payment_authority,'_evidence_rows',malformed)
     with pytest.raises(BookflowError) as caught:
         client.audit.show(event=event,company=COMPANY)
+    assert caught.value.code=='E_VALIDATION' and caught.value.details=={'reason':'audit_format'}
+    with pytest.raises(BookflowError) as caught:
+        client.audit.list(record_type='payment_operation',record_id=operation,company=COMPANY)
+    assert caught.value.code=='E_VALIDATION' and caught.value.details=={'reason':'audit_format'}
+    # Internal envelope-denial control; real governed pairs have separate witnesses.
+    original_resource=payment_authority.require_resource
+    def restricted(session, capability, role):
+        if capability=='customer-work':raise BookflowError('E_PERMISSION')
+        return original_resource(session, capability, role)
+    monkeypatch.setattr(payment_authority,'require_resource',restricted)
+    with pytest.raises(BookflowError) as caught:
+        client.audit.show(event=event,company=COMPANY)
     assert caught.value.code=='E_EVENT_NOT_FOUND'
     assert client.audit.list(record_type='payment_operation',record_id=operation,company=COMPANY)['items']==[]

@@ -15,7 +15,7 @@ from bookflow.hub.access import ROLE_RANK, ROLE_FOR_REQUIRED
 
 
 SOURCES = {
-    'company/payment_authority.py': (None, '78d86ec1dd60d77c263a56a60bde9e4a6270b759e5dc0e8ed4c9f51308a6d716'),
+    'company/payment_authority.py': (None, '60f79b6d63858217990ef4cef774776a92de35e4c95fc59182ecf3f9f0d595a6'),
     'company/deposit_draft_evidence.py': (None, '5175a3ae0130ac138bdcb627bbb3137c53c67edee62de44ce89e237cfb16c505'),
     'hub/access.py': (('load_memberships', 'company_role', 'role_satisfies', 'require_resource', 'require_explicit_grant'),
                       '8ed7705563acafe3a20bb26b70ddfd38b0985687ba454232bf3102804499b192'),

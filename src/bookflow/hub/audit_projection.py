@@ -940,17 +940,33 @@ def project_event(audience,event_id,*,company=None,requirement_resolver=None,_se
     db,events,entries=_tables(audience,company)
     event=db.conn.execute(sa.select(events).where(events.c.id==event_id)).mappings().one_or_none()
     if event is None:return None
+    pending_format_failure=False
     if company is not None:
         from bookflow.company import payment_authority
         try:
-            # Resolve this event exactly once inside the scalar omission boundary.
+            # Resolve this event exactly once; only resolution can trigger fallback.
             actual=requirement_resolver(event_id) if requirement_resolver is not None else payment_authority.event_requirements(db,event_id)
-            # Keep existing whole-graph owner admission and add governed A rights.
-            payment_authority.authorize_event(audience.reader.session,event_id,{event_id:actual})
-            audience.require(company,actual)
         except BookflowError as exc:
-            if exc.code=='E_PERMISSION':return None
-            raise
+            if exc.code!='E_PERMISSION':raise
+            if exc.details!={'reason':'unresolved_payment_evidence'}:return None
+            try:
+                envelope=payment_authority.READ_REQUIREMENT_ENVELOPE
+                for capability,role in envelope:
+                    payment_authority.require_resource(audience.reader.session,capability,role)
+                audience.require(company,envelope)
+            except BookflowError as denied:
+                if denied.code in ('E_PERMISSION','E_COMPANY_NOT_FOUND'):return None
+                raise
+            # Entitlement to the bound is not evidence of event visibility.
+            # Retain the failure through the ordinary entry and field gates.
+            pending_format_failure=True
+        else:
+            try:
+                payment_authority.authorize_event(audience.reader.session,event_id,{event_id:actual})
+                audience.require(company,actual)
+            except BookflowError as exc:
+                if exc.code=='E_PERMISSION':return None
+                raise
     raw_entries=list(db.conn.execute(sa.select(entries).where(entries.c.event_id==event_id).order_by(entries.c.id)).mappings())
     projected=[]
     complete=bool(raw_entries)
@@ -991,6 +1007,9 @@ def project_event(audience,event_id,*,company=None,requirement_resolver=None,_se
         full=company is not None and not any(getattr(x,'projection_partial',False) for x in (left,right) if x is not None)
         projected.append(ProjectedEntry(entry['id'],AuditIdentity(company,entry['record_type'],entry['record_id']),entry['action'],left,right,differences,
                                         entry['version_before'] if full else None,entry['version_after'] if full else None))
+    if pending_format_failure:
+        if projected:format_error()
+        return None
     if not projected:
         if raw_entries:return None
         # Explicit supported hub no-entry initialization is management-domain only.
