@@ -924,6 +924,9 @@ def project_event(audience,event_id,*,company=None,requirements=None,_seen_annot
                 command=event['command']
         if initiating.get(event['command']) in kinds:
             command=event['command']
+        if command is None and company is not None:
+            from .audit_projection_initiation import direct_command
+            command=direct_command(event['command'],tuple(projected))
         summary=(command+'.') if command is not None else ', '.join(kinds)+' updated.' 
     actor=event['actor_id'] if audience.identity_visible(event['actor_id']) else None
     principal=event['on_behalf_of'] if audience.identity_visible(event['on_behalf_of']) else None
