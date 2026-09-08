@@ -53,3 +53,31 @@ def test_every_draft_kind_projects_its_complete_real_event(draft_history, kind):
     finally:
         host.stop()
     assert storage(c['path']) == original
+
+
+@pytest.mark.parametrize('command', (
+    'deposit draft create', 'deposit draft update', 'deposit selection create',
+    'deposit selection update', 'deposit selection clear', 'deposit selection accept', 'deposit post',
+))
+def test_each_stored_draft_producer_event_is_complete(draft_history, command):
+    c = draft_history
+    events = {r['event_id'] for r in c['rows'] if r['command'] == command}
+    assert events, command
+    original = storage(c['path'])
+    host = Host(c['root'], version=client_version())
+    host.start()
+    try:
+        for event_id in sorted(events):
+            ctx = Context.new('http', 'Draft producer history witness')
+            selection = projection.HistorySelection(mode='show', company=c['cid'], event=event_id)
+            with binding.hosted_reader(host, OSBinding.capture(host, os_login()), request_id=ctx.request_id) as reader:
+                open_selected(reader, selection, ctx)
+                event = projection.project_event(projection.make_audience(reader), event_id, company=c['cid'])
+                assert event is not None
+                expected = set(reader.session.company.raw.execute(
+                    'SELECT id,record_type,record_id,action FROM audit_entries WHERE event_id=?', (event_id,)))
+                assert {(e.id,e.identity.kind,e.identity.id,e.action) for e in event.entries} == expected
+            assert host._readers_attached == 0
+    finally:
+        host.stop()
+    assert storage(c['path']) == original
