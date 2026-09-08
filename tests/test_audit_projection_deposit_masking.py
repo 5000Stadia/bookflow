@@ -57,7 +57,11 @@ def test_real_deposit_reference_denial_preserves_amounts(deposit):
                 audience.require(cid,(('ledger.read','member'),))
                 value=views.DepositOperationView.model_validate(raw) if additional is None else views.DepositAuditAdditional.model_validate(additional)
                 return projection._disclose_company(audience,cid,value,cutoff=seq).model_dump(mode='json',by_alias=True)
+        original_request=json.loads(raw['request_snapshot'])
+        assert original_request['input']['dependency_guard']
         allowed=project(cred)
+        assert set(allowed['request_snapshot']['input'])=={'document'}
+        assert allowed['request_snapshot']['provided_fields']==['document']
         manifest=allowed['effect_snapshot']['effect']['consumed_draft']['snapshot']
         assert manifest['header']['custom_fields'][custom]['canonical_text']=='Captured private value'
         assert manifest['additional'][0]['received_from']['id']==vendor
@@ -70,6 +74,9 @@ def test_real_deposit_reference_denial_preserves_amounts(deposit):
                     host._commit_hooks.commit(host._hub,'dispatch.apply')
         host.submit(deny)
         denied=project(OSBinding.capture(host,os_login()))
+        assert [effect['account_id'] for effect in denied['effect_snapshot']['effect']['bank_effects']]==[None]
+        assert set(denied['request_snapshot']['input'])=={'document'}
+        assert denied['request_snapshot']['provided_fields']==['document']
         manifest=denied['effect_snapshot']['effect']['consumed_draft']['snapshot']
         assert manifest['header']['bank'] is None and manifest['header']['custom_fields'] is None
         assert 'deposit_to' not in manifest['header']['origins']
