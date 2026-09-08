@@ -73,3 +73,18 @@ def test_prepare_keeps_command_aliases_and_rejects_numeric_bookmarks(world):
             prepare(reader,cmd,{'after':3},ctx,'O/C','option')
         assert caught.value.details == {'reason':'invalid_cursor'}
         assert reader.session.company is None
+
+
+def test_bound_agent_cannot_claim_a_different_principal(world):
+    from bookflow.core import registry
+    from bookflow.core.context import Context
+    from bookflow.core.history_commands import prepare
+    registry.load_all()
+    host,path=world
+    credential=TokenBinding('secret-GP-live','GP-live','G','bearer','P',path,'REQUEST')
+    ctx=Context.new('http','Principal claim').model_copy(update={'request_id':'REQUEST','on_behalf_of':'Q'})
+    with binding.hosted_reader(host,credential,request_id='REQUEST') as reader:
+        with pytest.raises(BookflowError) as caught:
+            prepare(reader,registry.get('hub audit list'),{},ctx,None,'none')
+        assert caught.value.code=='E_UNAUTHENTICATED'
+        assert reader.session.company is None
