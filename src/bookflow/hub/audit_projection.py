@@ -906,6 +906,11 @@ def _hub_explanation(audience,event):
 
 def _company_explanation(audience,event,company):
     """Called only after the whole initiating operation is reader-visible."""
+    if audience.read_capability=='activity':
+        try:audience.require(company,(('audit','member'),))
+        except BookflowError as exc:
+            if exc.code=='E_PERMISSION':return None
+            raise
     reason=event['reason']
     if reason is not None and type(reason) is not str:format_error()
     cited=event['directive_id']

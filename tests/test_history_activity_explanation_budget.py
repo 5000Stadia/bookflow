@@ -57,3 +57,15 @@ def test_oversized_instruction_is_omitted_whole_and_full_event_is_unchanged():
     assert item.explanation.directive_status=='available'
     assert event.explanation.directive.text==instruction
     assert item==activity_item(event,entry)
+
+
+def test_reduction_order_prefers_narrative_over_instruction_and_ignores_size():
+    body='body'*10
+    reason='界'*60000
+    instruction='Do X unless Y'
+    explanation=ProjectedExplanation(reason,'available',ProjectedDirective('d','D1',instruction))
+    event,entry=event_with(explanation,body=body)
+    item=activity_item(event,entry)
+    assert item.explanation.directive.text==instruction
+    assert item.body==''
+    assert item.explanation.reason and len(item.explanation.reason)<len(reason)

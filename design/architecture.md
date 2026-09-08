@@ -2189,3 +2189,15 @@ without directive identity or link. Company-origin registry repairs, company
 creation, self-profile company selection and other unqualified hub producers do
 not receive explanatory text. Remaining producer and nonadministrator policies
 are explicit follow-up work, not full history acceptance.
+
+Activity narrative additionally requires company audit-read capability. Denying
+`audit` still permits separately authorized activity entries, notes and captions,
+but withholds the operation explanation and invalidates retained explanatory
+responses. Directive-read authority remains a separate requirement.
+The fixed excerpt precedence intentionally sacrifices earlier narrative fields
+before instruction text, independent of their relative sizes. Current writers cap
+reason at140 characters and directive text at1000, so explanation reduction is a
+defensive path for enlarged/legacy inputs; it does not justify raising those caps.
+Empty directive text is the activity omission sentinel only with text_truncated;
+current directive creation rejects empty instructions. Full audit capture remains
+the authoritative text when inspecting an excerpt.
