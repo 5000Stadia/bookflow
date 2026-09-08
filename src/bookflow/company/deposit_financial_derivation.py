@@ -103,6 +103,22 @@ def begin_revision(read: CompanyFacts, header, revision, *, kind) -> RevisionSta
     dv.require(manifest.high_water==revision['high_water'])
     parent=kind+'_id'
     dv.require(revision[parent]==header['id'])
+    # Validate one predecessor before source graph admission, never recursively
+    # decode the chain. Presence is mandatory; old ordinal reorders stay readable.
+    if revision['version']==1:
+        dv.require(revision['previous_revision_id'] is None,'revision_chain')
+    else:
+        rt=getattr(c,'deposit_'+kind+'_revisions')
+        previous=read.company.conn.execute(sa.select(rt).where(
+            rt.c.id==revision['previous_revision_id'],rt.c[parent]==header['id'],
+            rt.c.version==revision['version']-1)).mappings().one_or_none()
+        dv.require(previous is not None,'revision_chain')
+        try:prior=Manifest.model_validate_json(previous['snapshot'])
+        except ValidationError:raise BookflowError('E_VALIDATION',details={'reason':'invalid_manifest'}) from None
+        dv.validate_manifest(prior)
+        dv.require(q.digest(prior.model_dump(mode='json'))==previous['manifest_hash'],'manifest_hash')
+        dv.require(prior.high_water==previous['high_water'])
+        dv.require_occurrence_retention(prior,manifest,strict_ordinals=False)
     from bookflow.company.deposit_draft_history import DraftHistoryProof
     proof=DraftHistoryProof(read,header,revision,kind)
     st=getattr(c,'deposit_'+kind+'_sources')

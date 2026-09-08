@@ -188,7 +188,9 @@ def changes(s,previous,inp,*,edit=None):
         if prior is None:maximum+=1
         row=additional_patch(s,entry,prior,maximum);additional[row.row_id]=row
     header=patch_header(s,previous.header,inp.header) if hasattr(inp,'header') else previous.header
-    return manifest(previous.currency,header,sources.values(),additional.values(),maximum)
+    result=manifest(previous.currency,header,sources.values(),additional.values(),maximum)
+    v.require_occurrence_retention(previous,result,strict_ordinals=True)
+    return result
 
 
 def from_deposit(s,identity,version,*,copy_voided=False):

@@ -94,7 +94,11 @@ def validate_manifest(manifest):
         require(all(x.key in source.semantic_presence for x in source.components))
         require(row.memo_origin!='source' or row.memo==source.source_memo)
         require(len({o.key for o in row.occurrences})==len(row.occurrences) and len({o.ordinal for o in row.occurrences})==len(row.occurrences))
-        require({o.key for o in row.occurrences if o.present}==set(source.semantic_presence))
+        # Never-positive zero keys need no ordinal yet. Extra present zero keys
+        # remain legal, including equality-era snapshots and retained ordinals.
+        positive={x.key for x in source.components}
+        present={o.key for o in row.occurrences if o.present}
+        require(positive<=present<=set(source.semantic_presence))
     from bookflow.company import custom_fields as cf
     for key,v in manifest.header.custom_fields.items():
         require(key==v.definition_id)
@@ -106,6 +110,27 @@ def validate_manifest(manifest):
         require(v.kind=='choice' or v.choice_id is None)
     require(manifest.summary==summary(manifest.currency,manifest.header,manifest.sources,manifest.additional),'summary_mismatch')
     return manifest
+
+
+def require_occurrence_retention(previous, current, *, strict_ordinals):
+    """Same-row continuity: reads require presence; new writes also keep ordinals.
+
+    Old accepted selection histories can renumber retained keys, so stored reads
+    deliberately do not prove ordinal continuity or normalize those snapshots.
+    Only the immediate predecessor is compared; first/cloned revisions have no
+    prior draft row. Removed/re-added rows with new identities do not inherit.
+    """
+    prior={row.row_id:row for row in previous.sources}
+    for row in current.sources:
+        old=prior.get(row.row_id)
+        if old is None:continue
+        present={o.key:o.ordinal for o in row.occurrences if o.present}
+        semantic=set(row.source.semantic_presence)
+        for occurrence in old.occurrences:
+            if occurrence.present and occurrence.key in semantic:
+                require(occurrence.key in present,'occurrence_retention')
+                if strict_ordinals:
+                    require(present[occurrence.key]==occurrence.ordinal,'occurrence_retention')
 
 
 def decode_revision(s, header, revision, kind):

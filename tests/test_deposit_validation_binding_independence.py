@@ -178,6 +178,9 @@ def test_same_state_financial_loaders_for_admitted_bindings(state,record_propert
     assert stored(state)==before and state['host']._readers_attached==0
 
 
+# Zero-capacity correction assessment: predecessor lookup uses company.conn only;
+# retention compares stored manifests only. No binding/actor inputs or new
+# credential returns. Read presence and production ordinal checks are distinct.
 # Source assessment: staged derivation extraction after accepted precursor 9d214d30.
 # Financial functions now retain only CompanyFacts(company.conn). Wrappers retain
 # all admission and credential returns. OriginalDecode/require_original are pure
@@ -236,7 +239,7 @@ FLOW_OWNERS = {
     'deposit_operations': ('decode_output',),
     'deposit_draft_consumption': ('current', '_validate_consumed', 'validate_consumed'),
     'deposit_drafts': ('load', '_row'),
-    'deposit_draft_validation': ('admit', 'require', 'summary', 'validate_manifest', 'decode_revision'),
+    'deposit_draft_validation': ('admit', 'require', 'summary', 'validate_manifest', 'require_occurrence_retention', 'decode_revision'),
     'deposit_draft_history': ('require', 'HeaderEndpoint', 'DraftHistoryProof'),
     'deposit_draft_provider': ('validate_row_origins',),
     'deposit_read_facts': ('ValidatedDeposit', 'invalid', 'load_complete', '_history', '_navigation', '_associations'),
@@ -290,12 +293,12 @@ BINDING_RETURN = ('deposit_drafts', 'load', 'return (header, dict(revision), man
 # Filled once from the reviewed selections above. No update/generate mode exists
 # in the tests; an AST change requires a new source-flow assessment.
 FLOW_DIGESTS = {
-    'deposit_financial_derivation': '200ad5050ab32abf1fe6d2842f5f594cf8f736fdf175b5f2df0dd9bec763cf13',
+    'deposit_financial_derivation': 'fda2ad284000a592a008b2aa35b6a17746403675f72c21d0cb1fd61437b5b684',
     'deposit_operation_pages': '598b25b6bfcc974957e88b3786b1c9d3c6ace895cdf513a743fc31b7867c4d46',
     'deposit_operations': '1d0bf86ac1cddc8fb8453e03d26353b1878e6265f7a9fb14d546cb3fc07ba903',
     'deposit_draft_consumption': 'c5784f641df128518c9e02dfcee1e1ce50a7b1054b50d03750728e4bf995025d',
     'deposit_drafts': 'a23aec5ee36f84047923c530e4b238935f9dae6e78ab0fe95ffcef92783b0fc8',
-    'deposit_draft_validation': 'a55c0f68b9f6f1350fb5920dcced913a9f16300a490f29ff2a95828aa4ba89d7',
+    'deposit_draft_validation': 'de61fb710401fe789697a87e5268df0ea479ec38a3b13b13984e8e6b73881d5c',
     'deposit_draft_history': '73169adbc158396acca700937a5fe0c1220e5aa46834e81505afbacf70f1f0ee',
     'deposit_draft_provider': '81c88b8bf62391588eaabf31840cfc3e8793bd64c2b339d3be816c6ec5839020',
     'deposit_read_facts': '4cd2155f4ace68977b8efdec54d605166c3c92ab9d04d73a563f5713a9332b5a',

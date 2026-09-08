@@ -1,6 +1,6 @@
 """Private independent Payments dialog drafts and atomic parent source replacement."""
 import sqlalchemy as sa
-from bookflow.company import schema as c, deposit_drafts as drafts
+from bookflow.company import schema as c, deposit_drafts as drafts, deposits
 from bookflow.company import deposit_draft_models as m, deposit_draft_validation as v, deposit_source_queries as sources
 from bookflow.core.ids import new_id
 from bookflow.core.errors import BookflowError
@@ -49,6 +49,7 @@ def run(s,ctx,inp,verb,*,binding=None):
                 entry=m.SourcePatch(source=candidate.source.transaction_id,source_type=candidate.source.source_type,expected_version=candidate.source.expected_header_version)
                 selected[entry.source]=drafts.source_patch(s,entry,prior,maximum,edit=parent['edit_transaction_id'])
             result=drafts.manifest(previous.currency,previous.header,selected.values(),high_water=maximum)
+            v.require_occurrence_retention(previous,result,strict_ordinals=True)
         elif verb=='accept':
             if inp.draft!=parent['id']:raise BookflowError('E_VALIDATION',details={'field':'draft'})
             drafts._version(s,parent,inp.expected_draft_version)
@@ -58,8 +59,13 @@ def run(s,ctx,inp,verb,*,binding=None):
             for row in previous.sources:
                 prior=retained.get(row.source.transaction_id)
                 if prior is None:maximum+=1
-                rows.append(row.model_copy(update={'row_id':prior.row_id if prior else new_id(),'ordinal':prior.ordinal if prior else maximum}))
+                # Selection remove/re-add does not remove the parent row. Reconcile
+                # retained parent ordinals; truly new parent rows keep selection's.
+                occurrences=deposits.occurrences(row.source,prior.occurrences) if prior else row.occurrences
+                rows.append(row.model_copy(update={'row_id':prior.row_id if prior else new_id(),
+                    'ordinal':prior.ordinal if prior else maximum,'occurrences':occurrences}))
             parent_result=drafts.manifest(parent_value.currency,parent_value.header,rows,parent_value.additional,maximum)
+            v.require_occurrence_retention(parent_value,parent_result,strict_ordinals=True)
             # Parent date is checked, not only the selection's captured date.
             if v.stale_sources(s,parent_result,parent['edit_transaction_id']):raise BookflowError('E_PREVIEW_STALE')
             next_parent=drafts._next_header(s,ctx,parent)
