@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from bookflow.core.context import Context, Interface
 from bookflow.company import deposit_coordinate_persistence as persistence
 from bookflow.hub import audit_projection_deposit_coordinate as views
+from bookflow.hub import audit_projection_legacy as legacy
 from tests.test_deposit_coordinate_persistence import n2, driver, sale, prepare
 
 
@@ -21,7 +22,8 @@ def test_actual_coordinate_rows_preserve_before_inserted_current(client, sale, d
         before = tuple(session.company.raw.iterdump())
         cursor = session.company.raw.execute('SELECT * FROM deposit_operations WHERE id=?',(result.operation_id,))
         operation_raw = dict(zip((column[0] for column in cursor.description),cursor.fetchone(),strict=True))
-        operation = views.CoordinateOperation.model_validate(operation_raw)
+        operation = legacy.decode_company_snapshot(producer='deposit coordinate',record_type='deposit_operation',action='create',snapshot=operation_raw)
+        assert isinstance(operation, views.CoordinateOperation)
         assert operation.id == result.operation_id
         if operation.effect_snapshot.effect.source.action.kind == 'payment_update':
             for fault in ('key', 'event', 'manifest', 'request_presence'):

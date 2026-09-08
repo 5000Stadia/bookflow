@@ -657,6 +657,7 @@ def _kind_allowed(audience,company,kind):
 def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
     """One closed typed traversal; no SQL reflection, string rewriting or ACLs."""
     from . import audit_projection_legacy as legacy
+    from . import audit_projection_deposit_coordinate as coordinate
     if value is None:return None
     if type(value) is tuple:
         return tuple(_disclose_company(audience,company,item,reference_kind,cutoff=cutoff) for item in value)
@@ -690,6 +691,7 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
     groups=[]
     for base in type(value).__mro__:
         groups.extend(legacy._REFERENCE_GROUPS.get(base,()))
+        groups.extend(coordinate.REFERENCE_GROUPS.get(base,()))
     if reference_kind is not None:
         groups.append((tuple(key for key in ('id','label','version') if key in type(value).model_fields),reference_kind))
     for fields,kind in groups:
@@ -727,8 +729,9 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
         # Field admission applies to absent and populated captures alike. A
         # hidden reference becoming present must not expose its presence through
         # an empty object, collection size or version-only audit entry.
-        required=next((legacy._OBJECT_FIELD_REQUIREMENTS[base,key] for base in type(value).__mro__
-                       if (base,key) in legacy._OBJECT_FIELD_REQUIREMENTS),())
+        required=next((mapping[base,key] for base in type(value).__mro__
+                       for mapping in (coordinate.FIELD_REQUIREMENTS,legacy._OBJECT_FIELD_REQUIREMENTS)
+                       if (base,key) in mapping),())
         if route is not None:required=(*required,route)
         if any(not _kind_allowed(audience,company,kind) for kind in required):
             updates[key]=None;partial=True;continue
@@ -760,11 +763,12 @@ def _disclose_company(audience,company,value,reference_kind=None,*,cutoff=None):
         # optional reference or internal freshness assertion was supplied.
         hidden=set(value.input._internal)
         for base in type(value.input).__mro__:
-            for fields,kind in legacy._REFERENCE_GROUPS.get(base,()):
+            for fields,kind in (*legacy._REFERENCE_GROUPS.get(base,()),*coordinate.REFERENCE_GROUPS.get(base,())):
                 if not _kind_allowed(audience,company,kind):hidden.update(fields)
-            for (owner,field),requirements in legacy._OBJECT_FIELD_REQUIREMENTS.items():
-                if owner is base and any(not _kind_allowed(audience,company,kind) for kind in requirements):
-                    hidden.add(field)
+            for mapping in (legacy._OBJECT_FIELD_REQUIREMENTS,coordinate.FIELD_REQUIREMENTS):
+                for (owner,field),requirements in mapping.items():
+                    if owner is base and any(not _kind_allowed(audience,company,kind) for kind in requirements):
+                        hidden.add(field)
         updates['provided_fields']=tuple(field for field in value.provided_fields if field not in hidden)
         updates['context_provided_fields']=tuple(field for field in value.context_provided_fields if field not in value.context._internal)
     if partial:
