@@ -19,6 +19,37 @@ def test_actual_coordinate_rows_preserve_before_inserted_current(client, sale, d
             (result.operation_id,),
         ).fetchone()[0])
         before = tuple(session.company.raw.iterdump())
+        cursor = session.company.raw.execute('SELECT * FROM deposit_operations WHERE id=?',(result.operation_id,))
+        operation_raw = dict(zip((column[0] for column in cursor.description),cursor.fetchone(),strict=True))
+        operation = views.CoordinateOperation.model_validate(operation_raw)
+        assert operation.id == result.operation_id
+        if operation.effect_snapshot.effect.source.action.kind == 'payment_update':
+            for fault in ('key', 'event', 'manifest', 'request_presence'):
+                damaged = copy.deepcopy(operation_raw)
+                request = json.loads(damaged['request_snapshot'])
+                if fault == 'key': damaged['operation_key'] = 'different-coordinate-key'
+                elif fault == 'event': damaged['audit_event_id'] = post.current.id
+                elif fault == 'manifest': request['item_manifests']['request_sources']['count'] += 1
+                else: request['provided_fields'] = []
+                damaged['request_snapshot'] = json.dumps(request)
+                with pytest.raises(ValidationError): views.CoordinateOperation.model_validate(damaged)
+        operation.model_dump(mode='json',warnings='error')
+        complete = views.CoordinateOutput.model_validate(raw)
+        assert complete.operation_id == result.operation_id
+        assert complete.effect.source.action.kind == 'payment_update'
+        assert complete.effect.source.payment_effect.current.received_minor_units == 12000
+        assert complete.current.revision_bank_total == 19200
+        complete.model_dump(mode='json', warnings='error')
+        assert_all_captured_fields(complete, raw)
+        for fault in ('current', 'headers', 'source', 'rows', 'operation', 'input'):
+            broken = copy.deepcopy(raw)
+            if fault == 'current': broken['current']['version'] += 1
+            elif fault == 'headers': broken['current_headers'].pop()
+            elif fault == 'source': broken['effect']['source']['after_header']['id'] = post.current.id
+            elif fault == 'rows': broken['current_source_rows']['posting_lines'].pop()
+            elif fault == 'operation': broken['operation_id'] = post.current.id
+            else: broken['effect']['source']['action']['input']['payment'] = post.current.id
+            with pytest.raises(ValidationError): views.CoordinateOutput.model_validate(broken)
         decoded = []
         for captured in (raw['effect']['source']['before'], raw['effect']['source']['inserted'], raw['current_source_rows']):
             rows = views.CoordinateSourceRows.model_validate(captured)
@@ -78,3 +109,131 @@ def test_coordinate_source_owner_inventory_is_closed():
     for name, field in owners.SourceRows.model_fields.items():
         expected_row = field.annotation.__args__[0].__name__
         assert views.CoordinateSourceRows.model_fields[name].annotation.__args__[0] is actual[expected_row]
+
+
+def assert_all_captured_fields(value, raw):
+    from pydantic import BaseModel
+    from bookflow.hub.audit_projection_legacy import Origins, CustomCaptures
+    if isinstance(value, BaseModel):
+        if type(raw) is str:
+            raw = json.loads(raw)
+        if isinstance(value, Origins):
+            assert value.model_dump(mode='json') == {'values': [dict(field=k, origin=v) for k,v in sorted(raw.items())]}
+            return
+        if isinstance(value, CustomCaptures):
+            assert {row.definition_id for row in value.values} == set(raw)
+            for row in value.values: assert_all_captured_fields(row,raw[row.definition_id])
+            return
+        for key, original in raw.items():
+            names = [name for name,field in type(value).model_fields.items() if (field.alias or name) == key]
+            assert len(names) == 1, key
+            assert_all_captured_fields(getattr(value,names[0]),original)
+    elif isinstance(value, (tuple,list)):
+        assert len(value) == len(raw)
+        for projected, original in zip(value,raw,strict=True):
+            assert_all_captured_fields(projected,original)
+    elif isinstance(value,dict):
+        assert value.keys() == raw.keys()
+        for key in raw: assert_all_captured_fields(value[key],raw[key])
+    else:
+        assert value == raw
+
+
+@pytest.mark.parametrize('action,bank_total', [('payment_void',7200), ('sales_receipt_void',11200), ('sales_receipt_update',17200), ('direct_bank',7200), ('noop',17200)])
+def test_actual_coordinate_other_source_actions(client, sale, driver, n2, action, bank_total):
+    from bookflow.company.deposit_coordinate_models import CoordinateInput
+    inp, post, document, payment, receipt, invoice = n2
+    wire = inp.model_dump(mode='json',by_alias=True,exclude_unset=True)
+    if action in ('direct_bank','noop'):
+        wire['source_action']['input']['amount'] = '100' if action == 'noop' else '120'
+        if action == 'direct_bank':
+            wire['source_action']['input']['deposit_to'] = client.account.create(name='Coordinate audit direct bank',type='bank',company='Demo Plumbing Co')['id']
+            wire['replacement']['document']['sources'] = [dict(source_type='sales_receipt',source=receipt['id'],expected_version=2)]
+    elif action == 'payment_void':
+        wire['source_action'] = dict(kind=action,payment=payment['id'],expected_version=2,unapply='all_active')
+        wire['replacement']['document']['sources'] = [dict(source_type='sales_receipt',source=receipt['id'],expected_version=2)]
+    else:
+        wire['source_action'] = dict(kind=action,sales_receipt=receipt['id'],expected_version=2) if action.endswith('_void') else dict(kind=action,input=dict(sales_receipt=receipt['id'],expected_version=2,memo='Correct captured receipt memo'))
+        wire['replacement']['document']['sources'] = [dict(source_type='payment',source=payment['id'],expected_version=2)]
+        if action.endswith('_update'):
+            wire['replacement']['document']['sources'].append(dict(source_result=True,source=receipt['id']))
+    inp = CoordinateInput.model_validate(wire)
+    ctx = Context.new(Interface.python,'Coordinate action audit',reason='Correct deposited source')
+    with driver.session() as session:
+        result = persistence.execute(session,ctx,prepare(session,ctx,inp))
+        raw = json.loads(session.company.raw.execute('SELECT effect_snapshot FROM deposit_operations WHERE id=?',(result.operation_id,)).fetchone()[0])
+        before = tuple(session.company.raw.iterdump())
+        cursor = session.company.raw.execute('SELECT * FROM deposit_operations WHERE id=?',(result.operation_id,))
+        operation_raw = dict(zip((column[0] for column in cursor.description),cursor.fetchone(),strict=True))
+        operation = views.CoordinateOperation.model_validate(operation_raw)
+        assert operation.id == result.operation_id
+        if operation.effect_snapshot.effect.source.action.kind == 'payment_update':
+            for fault in ('key', 'event', 'manifest', 'request_presence'):
+                damaged = copy.deepcopy(operation_raw)
+                request = json.loads(damaged['request_snapshot'])
+                if fault == 'key': damaged['operation_key'] = 'different-coordinate-key'
+                elif fault == 'event': damaged['audit_event_id'] = post.current.id
+                elif fault == 'manifest': request['item_manifests']['request_sources']['count'] += 1
+                else: request['provided_fields'] = []
+                damaged['request_snapshot'] = json.dumps(request)
+                with pytest.raises(ValidationError): views.CoordinateOperation.model_validate(damaged)
+        operation.model_dump(mode='json',warnings='error')
+        value = views.CoordinateOutput.model_validate(raw)
+        assert_all_captured_fields(value,raw)
+        assert value.current.revision_bank_total == bank_total
+        assert value.effect.source.action.kind == wire['source_action']['kind']
+        if action.startswith('sales_receipt'):
+            assert value.effect.source.payment_effect is None
+        elif action == 'payment_void':
+            assert value.effect.source.payment_effect.current.status == 'voided'
+            assert value.effect.source.payment_effect.current.effective_received_minor_units == 0
+        if action == 'noop':
+            assert value.changed is False and value.new_effect is False
+        if action == 'direct_bank':
+            assert value.effect.source.bank_changes.after
+            assert value.effect.source.bank_changes.after[0].signed_debit == 12000
+        output = value.model_dump(mode='json',warnings='error')
+        assert 'facts_fingerprint' not in output and 'dependency_guard' not in output
+        assert 'current_draft' not in output
+        assert tuple(session.company.raw.iterdump()) == before
+
+
+def test_coordinate_receipt_fields_and_disclosure_descriptors():
+    from pydantic import TypeAdapter
+    from bookflow.company import deposit_coordinate_models as owner
+    from bookflow.company import reconciliation_models as bank
+    from bookflow.company import payment_outputs, sales_models
+    pairs = (
+        (views.CoordinateReceiptUpdateInput,sales_models.SalesReceiptUpdateInput),
+        (views.CoordinatePaymentUpdate,owner.PaymentUpdateAction),
+        (views.CoordinateReceiptUpdate,owner.SalesReceiptUpdateAction),
+        (views.CoordinatePaymentVoid,owner.PaymentVoidAction),
+        (views.CoordinateReceiptVoid,owner.SalesReceiptVoidAction),
+        (views.CoordinatePaymentOutput,payment_outputs.PaymentSourceOutput),
+        (views.CoordinateStatementRef,bank.StatementEffectRef),
+        (views.CoordinateMovement,bank.MovementKey),
+        (views.CoordinateStatementVersion,bank.StatementEffectVersion),
+        (views.CoordinateChangedEffects,bank.ChangedEffects),
+        (views.CoordinateUnsupportedPopulation,bank.UnsupportedPopulation),
+        (views.CoordinateCustomValue,owner.CoordinateCustomValue),
+        (views.CoordinateCustomChange,owner.CoordinateCustomChange),
+        (views.CoordinateSourceEvidence,owner.SourceEvidence),
+        (views.CoordinateIdentity,owner.CoordinateIdentity),
+        (views.CoordinateEffect,owner.CoordinateEffect),
+        (views.CoordinateOutput,owner.CoordinateOutput),
+        (views.CoordinateSourceResult,owner.SourceResult),
+        (views.CoordinateReplacementDocument,owner.CoordinateDocument),
+        (views.CoordinateDocumentReplacement,owner.DocumentReplacement),
+        (views.CoordinateVoidReplacement,owner.VoidReplacement),
+    )
+    for projected, original in pairs:
+        assert set(projected.model_fields)-{'projection_partial'} == set(original.model_fields)
+    assert set(views.CoordinateInput.model_fields)-{'projection_partial'} == set(owner.CoordinateInput.model_fields)-{'operation_key'}
+    for model, groups in views.REFERENCE_GROUPS.items():
+        for fields, _ in groups:
+            for field in fields:
+                assert field in model.model_fields
+                assert TypeAdapter(model.model_fields[field].annotation).validate_python(None) is None
+    for (model, field), _ in views.FIELD_REQUIREMENTS.items():
+        assert field in model.model_fields
+        assert TypeAdapter(model.model_fields[field].annotation).validate_python(None) is None
