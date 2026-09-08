@@ -171,7 +171,8 @@ from .session import Session
 
 @dataclass(frozen=True, slots=True)
 class ReaderIdentity:
-    root: Path
+    # Preserve the session root spelling as an explicit retained value.
+    root: str
     credential_kind: str
     actor: str
     actor_kind: str
@@ -250,7 +251,7 @@ class BoundReader:
             kind, admin = user[0], bool(user[1])
             principal, epoch, token = row['on_behalf_of'], row['authority_epoch'], row['id']
             credential_kind = row['kind']
-        identity = ReaderIdentity(self._session.data_root, credential_kind, actor,
+        identity = ReaderIdentity(str(self._session.data_root), credential_kind, actor,
                                   kind, admin, principal, epoch, token, admitted.login if type(admitted) is OSBinding else None)
         if self._identity is not None and identity != self._identity:
             fail('not_administrator', 'binding')
