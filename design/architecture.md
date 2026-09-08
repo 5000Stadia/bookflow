@@ -2056,3 +2056,5 @@ custom values. Unknown historical print visibility stays null. A line reduced to
 zero retains its semantic occurrence and ordinal, with no invented zero-value
 cash allocation; restoring its amount restores funding under that identity.
 Reports and public GUI/MCP integration remain separate consumers.
+
+Private deposit audit capture preparation adds closed ordinary lifecycle and consumed-composition views, validating original receipt/manifest contracts before projection. Consumed snapshot JSON becomes a typed composition; omitted legacy draft fields stay omitted. Internal fingerprints are not display fields. This is not registered audit history: operation requests, draft/selection touched records, reference masking, coordinate receipts and whole-event/publication coverage remain required before integration.

@@ -3921,3 +3921,297 @@ _RECOVERY_ACTIONS={
     'payment_selection_recovery_item':frozenset({('payment recovery upload','create')}),
     'payment_selection_recovery_active':frozenset({('payment recovery begin','create'),('payment recovery apply','delete'),('payment recovery abort','delete'),('payment recovery replace','delete'),('payment recovery replace','create')}),
 }
+
+
+# Private ordinary deposit receipt captures; registration follows whole-event coverage.
+class DepositAuditCashBack(View):
+    account: DepositAccount | None = None
+    units: int | None = None
+    memo: str | None = None
+    origins: dict[str,Literal['entered','default','source','unresolved']] = {}
+
+
+class DepositAuditCustomCapture(View):
+    definition_id: str
+    definition_version: int
+    name: str
+    kind: Literal['text','number','date','bool','choice']
+    required: bool
+    print_visible: bool | None
+    position: int = 0
+    original_value_id: str | None = None
+    canonical_text: str | None
+    choice_id: str | None = None
+    choice_label: str | None = None
+    origin: Literal['entered','default','source','unresolved']
+    expected_kind: Literal['text','number','date','bool','choice'] | None = None
+
+
+class DepositAuditHeader(View):
+    bank: DepositAccount | None = None
+    date: str | None = None
+    number: str | None = None
+    memo: str | None = None
+    label: str | None = None
+    cash_back: DepositAuditCashBack | None = None
+    custom_fields: dict[str,DepositAuditCustomCapture] = {}
+    origins: dict[str,Literal['entered','default','source','unresolved']] = {}
+
+
+class DepositAuditSource(View):
+    captured_header_version: int | None = None
+    row_id: str
+    ordinal: int
+    source: CashSource
+    memo: str | None
+    memo_origin: Literal['source','entered']
+    occurrences: tuple[ComponentOccurrence,...]
+
+
+class DepositAuditParty(View):
+    kind: Literal['customer','vendor','employee','other_name']
+    id: str
+
+
+class DepositAuditAdditional(View):
+    row_id: str
+    ordinal: int
+    received_from: DepositAuditParty | None = None
+    party_name: str | None = None
+    account: DepositAccount | None = None
+    units: int | None = None
+    memo: str | None = None
+    check_number: str | None = None
+    payment_method: Reference | None = None
+    class_ref: Reference | None = None
+    origins: dict[str,Literal['entered','default','source','unresolved']] = {}
+
+
+class DepositAuditSummary(View):
+    source_count: int
+    additional_count: int
+    source_total: int
+    known_additional_total: int
+    subtotal: int | None
+    bank_total: int | None
+    posting_total: int | None
+    issues: tuple[str,...]
+
+
+class DepositAuditManifest(View):
+    @model_validator(mode='before')
+    @classmethod
+    def owned_composition_contract(cls,value):
+        from bookflow.company.deposit_draft_models import Manifest
+        Manifest.model_validate_json(json.dumps(value,allow_nan=False))
+        return value
+
+    _internal: ClassVar[frozenset[str]]=frozenset(['high_water'])
+    currency: str
+    header: DepositAuditHeader
+    sources: tuple[DepositAuditSource,...] = ()
+    additional: tuple[DepositAuditAdditional,...] = ()
+    high_water: int
+    summary: DepositAuditSummary
+
+
+class DepositAuditSignedMoney(View):
+    minor_units: int
+    currency: str
+
+
+class DepositAuditCashBackInput(View):
+    account: str
+    amount: str | DepositAuditSignedMoney
+    memo: str | None = None
+
+
+class DepositAuditSourceInput(View):
+    source_type: Literal['payment','sales_receipt']
+    source: str
+    expected_version: int
+    memo_override: str | None = None
+
+
+class DepositAuditAdditionalInput(View):
+    line_id: str | None = None
+    received_from: DepositAuditParty
+    from_account: str
+    amount: str | DepositAuditSignedMoney
+    memo: str | None = None
+    check_number: str | None = None
+    payment_method: str | None = None
+    class_id: str | None = Field(None,alias='class')
+
+
+class DepositAuditInlineDocument(View):
+    mode: Literal['inline'] = 'inline'
+    deposit_to: str
+    date: str
+    number: str | None = None
+    memo: str | None = None
+    cash_back: DepositAuditCashBackInput | None = None
+    custom_fields: dict[str,str|bool|int|None] = {}
+    expected_custom_field_kinds: dict[str,Literal['text','number','date','bool','choice']] = {}
+    sources: tuple[DepositAuditSourceInput,...] = ()
+    additional: tuple[DepositAuditAdditionalInput,...] = ()
+
+
+class DepositAuditDraftDocument(View):
+    mode: Literal['draft']
+    draft: str
+    expected_version: int
+
+
+class DepositAuditPostInput(View):
+    _internal: ClassVar[frozenset[str]]=frozenset(['expected_facts_fingerprint', 'dependency_guard'])
+    expected_facts_fingerprint: str | None = None
+    document: DepositAuditInlineDocument | DepositAuditDraftDocument
+    dependency_guard: str | None = None
+
+
+class DepositAuditReplacementDocument(View):
+    mode: Literal['inline']
+    deposit_to: str
+    date: str
+    number: str
+    memo: str | None
+    cash_back: DepositAuditCashBackInput | None
+    custom_fields: dict[str,str|bool|int|None]
+    expected_custom_field_kinds: dict[str,Literal['text','number','date','bool','choice']]
+    sources: tuple[DepositAuditSourceInput,...]
+    additional: tuple[DepositAuditAdditionalInput,...]
+
+
+class DepositAuditUpdateInput(View):
+    _internal: ClassVar[frozenset[str]]=frozenset(['expected_facts_fingerprint', 'dependency_guard'])
+    expected_facts_fingerprint: str | None = None
+    deposit: str
+    expected_version: int
+    document: DepositAuditReplacementDocument | DepositAuditDraftDocument
+    dependency_guard: str | None = None
+
+
+class DepositAuditVoidInput(View):
+    _internal: ClassVar[frozenset[str]]=frozenset(['dependency_guard', 'expected_facts_fingerprint'])
+    deposit: str
+    expected_version: int
+    dependency_guard: str | None = None
+    expected_facts_fingerprint: str | None = None
+
+
+class DepositAuditConsumedDraftState(View):
+    _internal: ClassVar[frozenset[str]]=frozenset(['manifest_hash'])
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['version'])
+    id: str
+    version: int | None
+    state: Literal['consumed']
+    revision_id: str
+    manifest_hash: str
+    operation_id: str
+
+
+class DepositAuditDraftRowIdentity(View):
+    draft_row_id: str
+    financial_row_id: str
+    ordinal: int
+
+
+class DepositAuditDraftConsumptionReceipt(View):
+    @model_validator(mode='before')
+    @classmethod
+    def decode_composition(cls,value):
+        if type(value) is dict and type(value.get('snapshot')) is str:
+            value=dict(value,snapshot=json.loads(value['snapshot']))
+        return value
+
+    _internal: ClassVar[frozenset[str]]=frozenset(['manifest_hash'])
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['version'])
+    draft_id: str
+    version: int | None
+    revision_id: str
+    manifest_hash: str
+    snapshot: DepositAuditManifest
+    rows: tuple[DepositAuditDraftRowIdentity,...]
+
+
+class DepositAuditDocumentState(View):
+    _captured_nonnull: ClassVar[frozenset[str]]=frozenset(['version'])
+    id: str
+    version: int | None
+    revision_id: str
+    number: str
+    status: Literal['posted','voided']
+    revision_date: str
+    currency: str
+    revision_posting_total: int
+    revision_subtotal: int
+    revision_bank_total: int
+    revision_cash_back: int
+    effective_bank_total: int
+    active_source_ids: tuple[str,...]
+
+
+class DepositAuditMembershipChange(View):
+    source_id: str
+    claim_id: str
+    kind: Literal['claim','release']
+    reverses_membership_id: str | None
+    amount_minor_units: int
+    currency: str
+
+
+class DepositAuditHeaderChange(View):
+    id: str
+    before_version: int | None
+    after_version: int
+
+
+class DepositAuditBankEffect(View):
+    transaction_id: str
+    role: Literal['main_bank','cash_back','additional']
+    row_id: str
+    account_id: str
+    active: bool
+    signed_debit: int
+    statement_amount: int
+    date: str
+    currency: str
+
+
+class DepositAuditLifecycleEffect(View):
+    consumed_draft: DepositAuditDraftConsumptionReceipt | None = None
+    action: Literal['post','update','void']
+    before: DepositAuditDocumentState | None
+    after: DepositAuditDocumentState
+    financial: DepositFinancialCapture
+    reversal: DepositFinancialCapture | None = None
+    batch_ids: tuple[str,...]
+    memberships: tuple[DepositAuditMembershipChange,...]
+    headers: tuple[DepositAuditHeaderChange,...]
+    bank_effects: tuple[DepositAuditBankEffect,...]
+    audit_event_id: str
+
+
+class DepositAuditLifecycleOutput(View):
+    @model_validator(mode='before')
+    @classmethod
+    def owned_receipt_contract(cls,value):
+        # Validate the complete immutable producer contract before projection.
+        from bookflow.company.deposit_lifecycle_models import LifecycleOutput
+        LifecycleOutput.model_validate_json(json.dumps(value,allow_nan=False))
+        return value
+
+    _internal: ClassVar[frozenset[str]]=frozenset(['facts_fingerprint', 'dependency_guard'])
+    current_draft: DepositAuditConsumedDraftState | None = None
+    schema_version: Literal[1] = 1
+    command: Literal['deposit post','deposit update','deposit void']
+    operation_key: str
+    operation_id: str | None
+    changed: bool
+    new_effect: bool
+    idempotent_replay: bool = False
+    facts_fingerprint: str
+    dependency_guard: str
+    effect: DepositAuditLifecycleEffect
+    current: DepositAuditDocumentState
