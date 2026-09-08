@@ -2560,6 +2560,9 @@ def decode_company_snapshot(*, producer: str, record_type: str, action: str,
                             snapshot: Mapping[str,object]):
     if type(snapshot) is not dict:_format()
     model=_list_model(producer,record_type,action,snapshot)
+    if record_type=='deposit_operation':
+        if producer not in ('deposit post','deposit update','deposit void') or action!='create' or snapshot.get('command')!=producer:_format()
+        model=DepositOperationView
     if record_type=='payment_operation':
         if producer not in (*_PAYMENT_OPERATION_COMMANDS,'invoice update') or action!='create' or snapshot.get('command')!=producer:_format()
         model=InvoiceOperationView if producer=='invoice update' else PaymentOperationView
