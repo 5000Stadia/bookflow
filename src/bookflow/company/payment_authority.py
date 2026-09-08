@@ -115,7 +115,10 @@ _COORDINATE_TARGETS = {
     'sales_tax_attribution': ('sales_tax_attributions','revision_id'),
     'sales_tax_attribution_line': ('sales_tax_attribution_lines','document_line_id'),
 }
-_EVIDENCE_TARGETS = PAYMENT_TARGETS | _COORDINATE_TARGETS
+from bookflow.company import deposit_draft_evidence
+
+_DRAFT_TARGETS = {kind: (table, field) for kind, (table, field, _) in deposit_draft_evidence.AUDIT_ROOTS.items()}
+_EVIDENCE_TARGETS = PAYMENT_TARGETS | _COORDINATE_TARGETS | _DRAFT_TARGETS
 
 
 def _evidence_rows(db, table, field, value, cache):
@@ -138,6 +141,11 @@ def record_transactions(db, record_type, record_id, seen=None, cache=None):
     if identity in seen:
         return set()
     seen.add(identity)
+    if record_type in _DRAFT_TARGETS:
+        roots = deposit_draft_evidence.audit_roots(db, record_type, (record_id,))[record_id]
+        if isinstance(roots, Exception):
+            raise roots
+        return roots
     if record_type == 'attachment':
         links = [row['id'] for row in _evidence_rows(db, c.attachment_links, 'attachment_id', record_id, cache)]
         # Historical associations remain authority-bearing after unlink. An
@@ -294,6 +302,11 @@ class _EventCohort:
 
     def _load(self, kind, identifiers):
         from bookflow.company.records import _TARGETS
+        if kind in _DRAFT_TARGETS:
+            roots = deposit_draft_evidence.audit_roots(self.db, kind, identifiers)
+            for identifier, value in roots.items():
+                self.nodes[(kind, identifier)] = value if isinstance(value, Exception) else (value, [])
+            return
         if kind == 'attachment':
             rows = self._read(c.attachment_links, 'attachment_id', identifiers, ('attachment_id', 'id'))
             for identifier in identifiers:
