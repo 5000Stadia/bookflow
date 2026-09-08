@@ -54,3 +54,58 @@ def cursor_to_dicts(cursor):
 ))
 def test_remaining_lifecycle_events_project_completely(lifecycle_history, command):
     _check_event(lifecycle_history, command)
+
+
+@pytest.fixture(scope='module')
+def financial_history(_seeded_template, tmp_path_factory):
+    from bookflow.company import deposit_coordination as coordinate, deposit_coordinate_persistence as persistence
+    from bookflow.company.deposit_coordinate_models import CoordinateInput
+    from bookflow.core.publication import OSBinding
+    c = _history.__wrapped__(_seeded_template, tmp_path_factory)
+    client = bookflow.connect(data_root=str(c['root']))
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv('BOOKFLOW_DATA_ROOT', str(c['root']))
+        patch.delenv('BOOKFLOW_COMPANY', raising=False)
+        run = run_private.__wrapped__(client, patch)
+        def command(verb, **body):
+            return run(lambda s, ctx: deposit_drafts.run(s, ctx, deposit_drafts.INPUTS[verb].model_validate(body), verb))
+        deposit, version = run(lambda s, ctx: s.company.raw.execute(
+            "SELECT id,version FROM transactions WHERE type='deposit' LIMIT 1").fetchone())
+        # Both no-financial-effect and changed updates still consume their exact draft.
+        for changed in (False, True):
+            draft = command('create', from_deposit=deposit, expected_version=version)
+            if changed:
+                draft = command('update', draft=draft.id, expected_version=draft.version,
+                                header=dict(memo='Saved draft audit update'))
+            result = financial(run, dict(deposit=deposit, expected_version=version,
+                operation_key='audit-draft-update-' + str(changed),
+                document=dict(mode='draft', draft=draft.id, expected_version=draft.version)), 'update')
+            assert result.changed is changed
+            assert result.current_draft.state == 'consumed' and result.current_draft.id == draft.id
+            version = result.current.version
+        draft = command('create', from_deposit=deposit, expected_version=version)
+        source, source_version = run(lambda s, ctx: s.company.raw.execute(
+            "SELECT t.id,t.version FROM transactions t JOIN deposit_draft_sources d ON d.source_transaction_id=t.id WHERE d.revision_id=?", (draft.revision_id,)).fetchone())
+        inp = CoordinateInput.model_validate(dict(deposit=deposit, expected_version=version,
+            operation_key='audit-coordinate-draft-consume',
+            source_action=dict(kind='sales_receipt_update', input=dict(sales_receipt=source,
+                expected_version=source_version, memo='Retained source correction')),
+            replacement=dict(mode='document', document=dict(mode='draft', draft=draft.id,
+                expected_version=draft.version), draft_source_result='retain')))
+        def execute(s, ctx):
+            binding = OSBinding.from_session(s)
+            prepared = coordinate.prepare(s, ctx, inp, binding=binding)
+            prepared = coordinate.prepare(s, ctx, inp.model_copy(update={'dependency_guard': prepared.dependency_guard}), binding=binding)
+            return persistence.execute(s, ctx, prepared)
+        result = run(execute)
+        assert result.current_draft.state == 'consumed' and result.current_draft.id == draft.id
+        assert result.current.revision_bank_total == 6025
+        c['rows'] = run(lambda s, ctx: cursor_to_dicts(s.company.raw.execute(
+            'SELECT a.command,e.* FROM audit_entries e JOIN audit_events a ON a.id=e.event_id ORDER BY a.seq,e.id')))
+        c['rows'] = [r for r in c['rows'] if r['record_type'] in codec.MODELS]
+    return c
+
+
+@pytest.mark.parametrize('command', ('deposit update', 'deposit coordinate'))
+def test_financial_draft_consumption_events_project_completely(financial_history, command):
+    _check_event(financial_history, command)
