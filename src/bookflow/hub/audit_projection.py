@@ -935,7 +935,7 @@ def _company_explanation(audience,event,company):
         raise
 
 
-def project_event(audience,event_id,*,company=None,requirements=None,_seen_annotations=()):
+def project_event(audience,event_id,*,company=None,requirement_resolver=None,_seen_annotations=()):
     audience.validate()
     db,events,entries=_tables(audience,company)
     event=db.conn.execute(sa.select(events).where(events.c.id==event_id)).mappings().one_or_none()
@@ -943,7 +943,8 @@ def project_event(audience,event_id,*,company=None,requirements=None,_seen_annot
     if company is not None:
         from bookflow.company import payment_authority
         try:
-            actual=requirements if requirements is not None else payment_authority.event_requirements(db,event_id)
+            # Resolve this event exactly once inside the scalar omission boundary.
+            actual=requirement_resolver(event_id) if requirement_resolver is not None else payment_authority.event_requirements(db,event_id)
             # Keep existing whole-graph owner admission and add governed A rights.
             payment_authority.authorize_event(audience.reader.session,event_id,{event_id:actual})
             audience.require(company,actual)
@@ -1092,7 +1093,7 @@ def _visible_events(audience,company,*,descending,lower=None,upper=None,candidat
             cohort=_EventCohort(db,[row.id for row in rows])
         for row in rows:
             value=project_event(audience,row.id,company=company,
-                requirements=None if cohort is None else cohort.requirements(row.id))
+                requirement_resolver=None if cohort is None else cohort.requirements)
             if value is not None:yield row.seq,value
         last=rows[-1].seq
 
@@ -1268,7 +1269,7 @@ def _activity_rows(audience,selection,key,*,newest=False,upper=None,after=None):
         for row in rows:
             if row['event_id'] not in projected:
                 projected[row['event_id']]=project_event(audience,row['event_id'],company=selection.company,
-                    requirements=cohort.requirements(row['event_id']))
+                    requirement_resolver=cohort.requirements)
             event=projected[row['event_id']]
             if event is None:continue
             entry=next((x for x in event.entries if x.id==row['entry_id']),None)

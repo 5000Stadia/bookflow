@@ -8,6 +8,16 @@ from bookflow.company import payment_authority
 from tests.test_service_sales_lifecycle import sale, COMPANY
 from tests.test_payment_receipts import method
 from tests.test_work_billing_lifecycle import accepted, bill
+from bookflow.hub.permission_runtime import catalog_bundle
+from bookflow.storage.engine import open_database
+from tests.test_permission_snapshots import install_fixture_policy
+
+
+@pytest.fixture(autouse=True)
+def current_history_policy(root):
+    """Initialize current history policy on the ordinary disposable root copy."""
+    with open_database(root / "hub.db", writable=True) as db:
+        install_fixture_policy(db.raw, catalog_bundle())
 
 
 def test_attachment_and_annotation_audit_require_historical_work_graph(client, sale, monkeypatch):
@@ -42,7 +52,7 @@ def test_attachment_and_annotation_audit_require_historical_work_graph(client, s
     for event in [note_event, *attachment_events]:
         with pytest.raises(BookflowError) as caught:
             client.audit.show(event=event, company=COMPANY)
-        assert caught.value.code == 'E_PERMISSION'
+        assert caught.value.code == 'E_EVENT_NOT_FOUND'
     filtered = client.audit.list(record_type='note', record_id=note['id'], company=COMPANY)
     assert filtered['items'] == []
     assert ('customer-work', 'member') in seen
@@ -63,5 +73,5 @@ def test_batched_audit_disclosure_keeps_unknown_operation_ownership_closed(clien
     monkeypatch.setattr(payment_authority,'_evidence_rows',malformed)
     with pytest.raises(BookflowError) as caught:
         client.audit.show(event=event,company=COMPANY)
-    assert caught.value.code=='E_PERMISSION'
+    assert caught.value.code=='E_EVENT_NOT_FOUND'
     assert client.audit.list(record_type='payment_operation',record_id=operation,company=COMPANY)['items']==[]
