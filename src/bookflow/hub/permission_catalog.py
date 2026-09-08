@@ -143,6 +143,7 @@ def _declared_fields(annotation):
 
 
 def _field_types(annotation):
+    # Keep every declared field: native snapshot validation relies on completeness.
     if annotation.__module__ == __name__:
         return _declared_fields(annotation)
     return tuple(get_type_hints(annotation).items())

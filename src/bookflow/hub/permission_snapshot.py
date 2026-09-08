@@ -76,16 +76,16 @@ def _decode(value, annotation, field, *, native=False):
             _fail('invalid_type', field)
         return tuple(_decode(x, kind, field, native=native) for x, kind in zip(value, args))
     if is_dataclass(annotation):
-        hints = get_type_hints(annotation)
+        hints = c._field_types(annotation)
         if native:
             if type(value) is not annotation:
                 _fail('invalid_type', field)
-            for key, kind in hints.items():
+            for key, kind in hints:
                 _decode(getattr(value, key), kind, field, native=True)
             return value
-        if type(value) is not dict or set(value) != set(hints):
+        if type(value) is not dict or set(value) != {key for key, _ in hints}:
             _fail('invalid_fields', field)
-        return annotation(**{key: _decode(value[key], kind, field) for key, kind in hints.items()})
+        return annotation(**{key: _decode(value[key], kind, field) for key, kind in hints})
     if type(value) is not annotation:
         _fail('invalid_type', field)
     return value
