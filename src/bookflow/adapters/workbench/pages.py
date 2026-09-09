@@ -23,6 +23,7 @@ from bookflow.adapters.workbench import statements as S
 from bookflow.adapters.workbench import sales as Sales
 from bookflow.adapters.workbench import work as Work
 from bookflow.adapters.workbench import billing as Billing
+from bookflow.adapters.workbench import document_form as Document
 from bookflow.core import registry
 from bookflow.core.errors import BookflowError
 from bookflow.core.money import CURRENCIES
@@ -1255,6 +1256,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             # The visible filter form always starts fresh; continuation has its
             # own immutable filter fields and signed cursor in a separate form.
             described = [leaf for leaf in described if leaf["path"] != "cursor"]
+        document_form = Document.is_document(noun, verb)
+        if document_form:
+            described = Document.describe(described, noun)
         for index, leaf in enumerate(described, 1):
             leaf["index"] = index
             if noun == "customer":
@@ -1459,7 +1463,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       return_context=return_context, workflow_note=workflow_note,
                       reference_values=reference_values,
                       preferences_settings_url=f'/c/{company_id}/company/self/update' if authorized_company and _role_allows(registry.get('company update'), authorized_company, hub_admin=cred.hub_admin) else None,
-                      form_groups=Work.form_groups(described) if noun in Work.NOUNS and cmd.is_write else W.customer_form_groups(described) if noun == "customer" and verb in ("create", "update") else W.company_form_groups(described) if noun == 'company' and verb in ('new', 'update') else None)
+                      document=Document.context(noun, verb, described, originals, shown=shown,
+                          result=result if result and 'revision' in result else None, preview=preview,
+                          record_id=record_id, base=('/c/' + company_id + '/' + noun) if company_id else '') if document_form else None,
+                      form_groups=None if document_form else Work.form_groups(described) if noun in Work.NOUNS and cmd.is_write else W.customer_form_groups(described) if noun == "customer" and verb in ("create", "update") else W.company_form_groups(described) if noun == 'company' and verb in ('new', 'update') else None)
 
     def contact_copy_page(
         request: Request,
@@ -1652,6 +1659,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 headers={"Cache-Control": "no-store"},
             )
         target = _success_target(cmd, company_id, noun, record_id, out)
+        if (form.get("action") == "submit-new" and company_id
+                and Document.is_document(noun, verb) and verb in ("post", "create")):
+            target = f"/c/{company_id}/{noun}/{verb}"
         flash_id = flashes.put(session_token, {"command": cmd.name, "is_write": cmd.is_write, "result": out})
         location = f"{target}?flash={flash_id}"
         if request.headers.get("hx-request", "").lower() == "true":

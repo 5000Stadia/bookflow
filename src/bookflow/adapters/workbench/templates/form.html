@@ -1,11 +1,12 @@
-{% extends "base.html" %}{% block title %}{{ noun }} {{ verb }}{% endblock %}{% block body %}
+{% extends "base.html" %}{% block title %}{{ document.heading if document else noun ~ " " ~ verb }}{% endblock %}{% block body %}
 {% set base = ("/c/" ~ company_id ~ "/" ~ noun) if company_id else ("/hub/" ~ noun.replace(" ", "-")) %}
 {% set action = ((base ~ "/" ~ record_id) if record_id else base) ~ (("/" ~ verb) if verb else "") %}
 {% set invoice_correction_reason = noun == 'invoice' and verb == 'update' and attempted.get('f:operation_key') %}
 {% if billing and request.url.query %}{% set action = action ~ "?" ~ request.url.query %}{% endif %}
 <nav class="crumbs"><a href="{{ base }}">{{ noun }}</a> / {{ verb or "run" }}</nav>
-<h1>{{ noun }} {{ verb }}</h1>
-{% if noun in ('estimate','work-order') and verb in ('billing','invoice','sales-receipt') %}<p class="muted">Review quoted, billed and remaining work before preparing the next bill.</p><details><summary>Billing rules and command help</summary><p>{{ cmd.description }}</p></details>
+<h1>{{ document.heading if document else noun ~ " " ~ verb }}</h1>
+{% if document %}<p class="muted">{{ document.help }}</p><details class="technical-details"><summary>Command reference</summary><p>{{ cmd.description }}</p></details>
+{% elif noun in ('estimate','work-order') and verb in ('billing','invoice','sales-receipt') %}<p class="muted">Review quoted, billed and remaining work before preparing the next bill.</p><details><summary>Billing rules and command help</summary><p>{{ cmd.description }}</p></details>
 {% else %}<p class="muted">{{ cmd.description }}</p>{% endif %}
 {% if noun == 'journal' and verb in ('post', 'update') %}<p class="workflow-note">Enter a currency with an amount, such as <code>2345 JPY</code>. Rates mean home-currency units per one foreign unit. Leave Rate empty to use saved conversions or the exact-date rate. Changing a saved entry's date or memo preserves unchanged conversions; choose Refresh rates to reprice them.</p>{% endif %}
 {% if captured_foreign_lines %}<details><summary>Saved currency conversions</summary><div class="table-wrap"><table><thead><tr><th>Line</th><th>Original</th><th>Home amount</th><th>Rate</th><th>Source</th></tr></thead><tbody>{% for line in captured_foreign_lines %}<tr><td>{{ line.position }}</td><td>{{ line.original_amount.amount }} {{ line.original_currency }}</td><td>{{ line.amount.amount }} {{ line.currency }}</td><td>{{ line.rate_used }}</td><td>{{ line.rate_source }}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}
@@ -59,19 +60,19 @@
 {% endif %}
 {% endmacro %}
 
-{% macro structured_help(control, name) %}
+{% macro structured_help(control, name, compact=false) %}
 {% if control.any_json %}<label class="clear-control object-clear-control"><input type="checkbox" name="json:{{ name }}" value="1"{% if attempted.get("json:" ~ collection_attempt_key(attempted, name)) == "1" %} checked{% endif %}> Treat this field as a JSON value (objects, exact integers, quoted text or null)</label>{% endif %}
-{% if control.structured_schema %}<details class="structured-input-help"><summary>JSON object alternative</summary><p>This field also accepts a JSON object{% if control.nullable %}, or null to clear it{% endif %}. Enter it in the same field; its integer values are preserved exactly.</p><pre>{{ json.dumps(control.structured_schema, indent=1) }}</pre></details>{% endif %}
+{% if control.structured_schema and not compact %}<details class="structured-input-help"><summary>JSON object alternative</summary><p>This field also accepts a JSON object{% if control.nullable %}, or null to clear it{% endif %}. Enter it in the same field; its integer values are preserved exactly.</p><pre>{{ json.dumps(control.structured_schema, indent=1) }}</pre></details>{% endif %}
 {% endmacro %}
 
-{% macro collection_scalar(control, name, cur, id) %}
+{% macro collection_scalar(control, name, cur, id, compact=false) %}
 {% if control.reference %}{{ reference_control(control.reference, name, cur, id, reference_values.get(name), not control.required) }}
 {% elif control.kind == "json" %}<textarea id="{{ id }}" name="{{ name }}" rows="3" style="min-width:0;max-width:100%">{{ json.dumps(cur, indent=1, default=str) if cur is mapping or (cur is sequence and cur is not string) else cur if cur is not none else '' }}</textarea><small>JSON {{ control.json_shape }}{% if control.nullable %}; null clears this optional value{% endif %}.</small>
 {% elif control.kind == "choice" %}<select id="{{ id }}" name="{{ name }}"><option value="">(choose)</option>{% for choice in control.choices %}<option value="{{ choice }}"{% if cur == choice %} selected{% endif %}>{{ control.choice_labels.get(choice, choice) if control.choice_labels else choice }}</option>{% endfor %}</select>
 {% elif control.kind == "bool" %}<select id="{{ id }}" name="{{ name }}"><option value="unset">(unset)</option><option value="true"{% if cur == true or cur == "true" %} selected{% endif %}>true</option><option value="false"{% if cur == false or cur == "false" %} selected{% endif %}>false</option></select>
 {% else %}<input id="{{ id }}" name="{{ name }}" value="{{ cur if cur is not none else '' }}"{{ math_attrs(control, name) }}{% if control.math %} inputmode="decimal"{% elif control.kind == "number" %} inputmode="numeric"{% endif %}>{% endif %}
-{{ structured_help(control, name) }}
-{% if sales_form and control.name in ('description', 'unit', 'class_id', 'tax_code', 'price_level', 'estimated_unit_cost') %}<label class="clear-control"><input type="checkbox" name="clear:{{ name }}" value="1"{% if attempted.get('clear:' ~ name) == '1' %} checked{% endif %}> Clear {{ control.name.replace('_', ' ') }}</label>{% endif %}
+{{ structured_help(control, name, compact) }}
+{% if sales_form and control.name in ('description', 'unit', 'class_id', 'tax_code', 'price_level', 'estimated_unit_cost') and not (compact and control.reference) %}<label class="clear-control"><input type="checkbox" name="clear:{{ name }}" value="1"{% if attempted.get('clear:' ~ name) == '1' %} checked{% endif %}> Clear {{ control.label or control.name.replace('_', ' ') }}</label>{% endif %}
 {% endmacro %}
 
 {% macro collection_item(item, path, value, depth) %}
@@ -139,7 +140,7 @@
 {% elif l.kind == "bool" %}
 <select id="control-{{ index }}" name="{{ form_name }}"><option value="unset">(unset)</option><option value="true" {% if cur == true or cur == "true" %}selected{% endif %}>true</option><option value="false" {% if cur == false or cur == "false" %}selected{% endif %}>false</option></select>
 {% elif l.kind == "secret" %}<input id="control-{{ index }}" type="password" name="{{ form_name }}">
-{% elif l.kind == "collection" %}{{ collection_control(l.collection, l.path, l.collection["values"], 0, l.path) }}{% if not l.required %}<label class="clear-control object-clear-control"><input type="checkbox" name="empty:{{ l.path }}" value="1"{% if attempted.get('empty:' ~ l.path) == '1' %} checked{% endif %}> Set empty list (overrides entries; clear takes precedence)</label>{% endif %}
+{% elif l.kind == "collection" %}{{ collection_control(l.collection, l.path, l.collection["values"], 0, (l.label or l.path) if document else l.path) }}{% if not l.required and not document %}<label class="clear-control object-clear-control"><input type="checkbox" name="empty:{{ l.path }}" value="1"{% if attempted.get('empty:' ~ l.path) == '1' %} checked{% endif %}> Set empty list (overrides entries; clear takes precedence)</label>{% endif %}
 {% elif l.kind == "json" %}<textarea name="{{ form_name }}" id="control-{{ index }}" rows="6" spellcheck="false">{{ cur if cur is not none else '' }}</textarea>
 {% elif l.runtime %}
 <input type="hidden" name="cf-kind:{{ l.definition_id }}" value="{{ l.wire_kind }}">
@@ -181,11 +182,16 @@
 <input type="hidden" name="originals" value='{{ json.dumps(originals, default=str) | e }}'>
 {% if noun == 'report' and source_report_watermark is not none %}<input type="hidden" name="_source_report_watermark" value="{{ source_report_watermark }}">{% endif %}
 {% if return_context %}<input type="hidden" name="_return_token" value="{{ return_context.token }}"><input type="hidden" name="_return_target" value="{{ return_context.target }}">{% endif %}
-{% if form_groups %}{% for group in form_groups %}<details class="form-section"{% if group.open %} open{% endif %}><summary>{{ group.title }}</summary>{% for l in group.leaves %}{{ field(l, l.index) }}{% endfor %}</details>{% endfor %}{% else %}{% for l in leaves %}{{ field(l, loop.index) }}{% endfor %}{% endif %}
+{% if document %}{% include "sales_document_form.html" %}{% elif form_groups %}{% for group in form_groups %}<details class="form-section"{% if group.open %} open{% endif %}><summary>{{ group.title }}</summary>{% for l in group.leaves %}{{ field(l, l.index) }}{% endfor %}</details>{% endfor %}{% else %}{% for l in leaves %}{{ field(l, loop.index) }}{% endfor %}{% endif %}
 {% if runtime_fields %}<fieldset class="runtime-fields" style="min-width:0;max-width:100%;overflow-wrap:anywhere"><legend>Custom fields</legend>{% for l in runtime_fields %}{{ field(l, "custom-" ~ loop.index) }}{% endfor %}</fieldset>{% endif %}
 {% if captured_custom_fields %}<details><summary>Captured custom fields (stored revision)</summary><dl>{% for f in captured_custom_fields %}<dt>{{ f.name }} · {{ f.kind }}</dt><dd>{{ f.choice_label if f.kind == 'choice' else ('true' if f.value is sameas true else 'false' if f.value is sameas false else f.value) }}</dd>{% endfor %}</dl></details>{% endif %}
-{% for c in ctx_fields %}<div class="row"><label for="ctx-{{ c }}">{% if c == 'reason' and invoice_correction_reason %}Reason for invoice correction (required)<small>Explain the correction before previewing or saving.</small>{% else %}{{ c }}<small>context, sent as a header</small>{% endif %}</label><input id="ctx-{{ c }}" name="ctx:{{ c }}" value="{{ attempted.get('ctx:' ~ c, '') }}"{% if c == 'reason' and invoice_correction_reason %} required maxlength="140"{% endif %}><span></span></div>{% endfor %}
-<div class="row form-submit"><span></span><span>{% if cmd.is_write %}<button name="action" value="preview">Preview</button>{% endif %}<button name="action" value="submit">{{ ('Complete work' if verb == 'complete' else 'Create copy' if verb == 'copy' else 'Create estimate' if verb == 'estimate' else 'Create work order' if verb == 'work-order' else 'Create invoice' if verb == 'invoice' else 'Create sales receipt' if verb == 'sales-receipt' else 'Save' if cmd.is_write else 'Find work') if work_form else 'Run report' if noun == 'report' else ('Save ' ~ ('job' if originals.parent_id else 'customer') if noun == 'customer' and verb in ('create', 'update') else 'Submit') }}</button></span></div></form>
+{% if document %}<section class="document-band document-context" aria-label="Recording context">
+{% for c in ctx_fields %}{% if c == 'reason' %}<div class="row form-field"><label for="ctx-{{ c }}">{% if invoice_correction_reason %}Reason for this correction (required)<small>Say what changed and why before previewing or saving.</small>{% else %}Reason<small>Recorded with this change in the audit trail.</small>{% endif %}</label><div class="control-stack"><input id="ctx-{{ c }}" name="ctx:{{ c }}" value="{{ attempted.get('ctx:' ~ c, '') }}"{% if invoice_correction_reason %} required maxlength="140"{% endif %}></div><span></span></div>{% endif %}{% endfor %}
+{% if ctx_fields | reject('equalto', 'reason') | list %}<details class="technical-details"><summary>More recording context</summary>{% for c in ctx_fields %}{% if c != 'reason' %}<div class="row form-field"><label for="ctx-{{ c }}">{{ document.context_labels.get(c, c) }}<small>Recorded with this change; sent as a request header.</small></label><div class="control-stack"><input id="ctx-{{ c }}" name="ctx:{{ c }}" value="{{ attempted.get('ctx:' ~ c, '') }}"></div><span></span></div>{% endif %}{% endfor %}</details>{% endif %}
+</section>
+{% else %}{% for c in ctx_fields %}<div class="row"><label for="ctx-{{ c }}">{% if c == 'reason' and invoice_correction_reason %}Reason for invoice correction (required)<small>Explain the correction before previewing or saving.</small>{% else %}{{ c }}<small>context, sent as a header</small>{% endif %}</label><input id="ctx-{{ c }}" name="ctx:{{ c }}" value="{{ attempted.get('ctx:' ~ c, '') }}"{% if c == 'reason' and invoice_correction_reason %} required maxlength="140"{% endif %}><span></span></div>{% endfor %}{% endif %}
+{% if document %}<div class="document-actions"><button name="action" value="preview">Preview</button><button name="action" value="submit" class="primary-action">Save</button>{% if document.creating %}<button name="action" value="submit-new">Save &amp; New</button>{% endif %}<a class="cancel-action" href="{{ (base ~ '/' ~ record_id) if record_id else base }}">Cancel</a></div>
+{% else %}<div class="row form-submit"><span></span><span>{% if cmd.is_write %}<button name="action" value="preview">Preview</button>{% endif %}<button name="action" value="submit">{{ ('Complete work' if verb == 'complete' else 'Create copy' if verb == 'copy' else 'Create estimate' if verb == 'estimate' else 'Create work order' if verb == 'work-order' else 'Create invoice' if verb == 'invoice' else 'Create sales receipt' if verb == 'sales-receipt' else 'Save' if cmd.is_write else 'Find work') if work_form else 'Run report' if noun == 'report' else ('Save ' ~ ('job' if originals.parent_id else 'customer') if noun == 'customer' and verb in ('create', 'update') else 'Submit') }}</button></span></div>{% endif %}</form>
 
 {% include "annotations.html" %}
 {% endblock %}

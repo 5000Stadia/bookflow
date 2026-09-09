@@ -220,7 +220,7 @@ src/bookflow/
   adapters/http/app.py   FastAPI app from the registry: /commands/<noun.verb>, authoritative /companies/{id}/commands/<noun.verb>, /login, /logout, async /companies/{id}/events and /hub-events, exact generated /openapi.json, /health; credential/cookie handling and the same error documents as the CLI with HTTP statuses
   adapters/http/auth.py  argon2 passwords (constant-time on unknown users), bearer and session tokens stored as sha256, liveness refresh, login throttle
   adapters/http/local.py LocalListener on the Unix socket: peer identity from SO_PEERCRED, envelope identity fields discarded, 8 MiB frame cap and 30-second accepted-connection timeout
-  adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
+  adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), document_form.py (sales document bands, line grid columns and human labels), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
 ```
 
 Hub username resolution uses `hub/users.py`: Unicode NFC and case folding through a connection-local SQLite function, at most two candidate rows, and no match for ambiguous names. This lookup scans the users table; no schema migration or stored-name rewrite is required. Login resolves across all user kinds and active states before enforcing human/active status, verifies the password outside the read snapshot, then rechecks the username, user ID and password hash in the writer transaction before issuing a session. Password and token self-service resolves the selected account ID before allowing a case-variant username. Human creation rejects existing normalized names. OS-login mappings and passwords retain case sensitivity.
@@ -975,6 +975,22 @@ text mode remains text. Repeated JSON-mode controls retain submitted row identit
 through preview/error ordinal renaming. Numeric entry ignores JSON-mode values and
 rows overridden by an empty-list action. The company picker table owns horizontal
 scrolling within the shared responsive shell.
+
+Invoices, sales receipts and estimates render as a document window instead of the
+generated field list. `adapters/workbench/document_form.py` is presentation only: it
+places the typed leaves into a header band, one line grid, a footer band and two
+collapsed advanced sections, supplies human labels, and copies the server's computed
+money for display. Every control keeps the name the generated form gives it, so the
+browser submits the same command input an agent sends; the module places each leaf
+exactly once and anything it does not name reaches the reader in the advanced
+sections rather than disappearing. Line rows keep the shared collection contract
+(`data-collection`, `data-collection-items`, `data-collection-item`, the add
+template) so reference pickers, numeric entry, add/remove and line-origin
+preservation are unchanged. The grid scrolls inside its own container at every
+width. The Amount column is the server's computed net and is read-only; the
+whole-line amount price is a separate pricing input. Nothing on the page is
+calculated in the browser, and `sales-receipt` and `estimate` omit the invoice's
+payments-applied and balance-due footer. Save & New returns to a fresh document.
 
 Generated workbench forms preserve every model branch declared by a Pydantic
 string discriminator. A single discriminator control exposes the combined choices;

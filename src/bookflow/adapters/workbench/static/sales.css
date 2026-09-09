@@ -15,3 +15,88 @@
 .billing-selection select, .billing-selection input:not([type="checkbox"]) { box-sizing: border-box; width: 100%; min-width: 0; }
 .billing-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: .75rem; }
 .billing-line { margin: .8rem 0; }
+
+/* Sales document window: header band, line grid, footer band.
+   The grid scrolls inside its own container; the page never scrolls sideways. */
+.document-band { background: #fff; border: 1px solid #d0d9e4; border-radius: .35rem;
+  padding: .8rem; margin: .8rem 0; min-width: 0; }
+.document-band .band-title { font-size: 1rem; margin: 0 0 .5rem; color: #1f3a5f; }
+.document-row { display: grid; gap: .5rem .9rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); align-items: start; }
+.document-row-wide { grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); }
+.document-band .row.form-field { display: grid; grid-template-columns: minmax(0, 1fr);
+  gap: .15rem; padding: 0; border: 0; align-items: start; min-width: 0; }
+.document-band .row.form-field > label { font-size: .78rem; font-weight: 600; color: #3c4a5a;
+  text-transform: none; }
+.document-band .row.form-field > label small { display: block; font-weight: 400; color: #6b7684; }
+.document-band .clear-control { font-size: .75rem; color: #6b7684; }
+
+.document-addresses { display: grid; gap: .6rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); margin: .7rem 0; }
+.address-block { border: 1px solid #dce2e8; border-radius: .3rem; padding: .45rem .6rem;
+  background: #f8fafc; min-width: 0; }
+.address-block > summary { cursor: pointer; overflow-wrap: anywhere; }
+.address-title { font-weight: 600; color: #1f3a5f; }
+.address-summary { color: #555; font-size: .85rem; }
+.address-fields { display: grid; gap: .35rem .8rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); margin-top: .5rem; }
+
+/* The grid scrolls sideways inside itself and never widens the page. */
+.line-grid { overflow-x: auto; min-width: 0; border: 1px solid #d0d9e4; border-radius: .3rem;
+  background: #fff; }
+.line-head, .line-row { display: grid; grid-template-columns: var(--line-columns);
+  min-width: var(--line-width); gap: 0; }
+.line-head { background: #f0f0f0; font-size: .78rem; font-weight: 600; color: #1f3a5f; }
+.line-head .line-cell { padding: .35rem .45rem; border-bottom: 1px solid #ccd5dc; }
+.line-row { border-bottom: 1px solid #e6ebef; align-items: start; }
+.line-row:nth-child(even) { background: #fbfcfd; }
+/* Positioned so the visually hidden cell label is laid out inside its own cell rather
+   than against the page, which would widen the document on a phone. */
+.line-cell { padding: .3rem .3rem; min-width: 0; position: relative; }
+/* A grid cell holds a control, not a form row: its picker chrome stays small. */
+.line-cell .reference-picker { font-size: .72rem; }
+.line-cell .reference-clear { font-size: .7rem; padding: .1rem .3rem; margin: .15rem 0 0; }
+.line-cell .reference-actions a { display: block; margin: .1rem 0 0; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.line-cell [data-ref-status] { font-size: .7rem; line-height: 1.25; }
+/* Each grid control keeps a real label for assistive technology; the visible column
+   heading is the sighted reader's version of the same thing. */
+.line-cell-label { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.line-cell input, .line-cell select { font-size: 13px; padding: .2rem .3rem; }
+.line-cell .clear-control { font-size: .68rem; color: #7a838d; white-space: normal; }
+.line-amount { display: block; padding: .25rem 0; font-variant-numeric: tabular-nums;
+  text-align: right; font-weight: 600; }
+.line-cell-actions { display: flex; flex-wrap: wrap; gap: .2rem; align-items: start; }
+.line-cell-actions button { font-size: .75rem; padding: .15rem .35rem; margin: 0; }
+/* A line billed from quoted work is a read-only banner, not a grid row; it still
+   carries its own Remove, which is how its scope is released. */
+.line-row.line-row-allocated { display: block; min-width: 0; }
+.line-allocated { padding: .5rem; background: #f4f7fb; font-size: .85rem; }
+.line-row-allocated .line-cell-actions { justify-content: flex-end; padding: 0 .5rem .4rem; }
+.line-extras { grid-column: 1 / -1; padding: 0 .35rem .4rem; font-size: .8rem; }
+.line-extras > summary { cursor: pointer; color: #416da1; }
+.line-extra-fields { display: grid; gap: .35rem .8rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); padding: .4rem 0; }
+.line-add { margin: .5rem; position: sticky; left: .5rem; }
+
+.document-footer { display: grid; gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); align-items: start; }
+.document-footer .band-title { grid-column: 1 / -1; }
+.footer-inputs { display: grid; gap: .5rem .9rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); min-width: 0; }
+.footer-totals { min-width: 0; }
+.totals-list { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .2rem .8rem;
+  margin: 0; font-variant-numeric: tabular-nums; }
+.totals-list dt { color: #3c4a5a; }
+.totals-list dd { margin: 0; text-align: right; }
+
+.document-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center;
+  background: #eef3f9; border: 1px solid #d0d9e4; border-radius: .35rem;
+  padding: .7rem; margin: .8rem 0; }
+.document-actions .primary-action { font-weight: 600; }
+.document-actions .cancel-action { padding: .35rem .6rem; color: #1f3a5f; }
+
+@media (max-width: 700px) {
+  .document-band .row.form-field { grid-template-columns: minmax(0, 1fr); }
+}
