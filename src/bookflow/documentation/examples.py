@@ -60,6 +60,12 @@ EXAMPLES: dict[str, Example] = {
     "token revoke": Example(f"bookflow token revoke {ID} --json", {"token": ID}),
     "upgrade": Example("bookflow upgrade --json", {}),
     "user set-password": Example('bookflow user set-password "$USER" --password "$BOOKFLOW_PASSWORD" --json', {"username": "example-user", "password": "correct-horse-battery"}),
+    "user add": Example('bookflow user add jordan --display-name "Jordan Reyes" --company "Demo Plumbing Co" --role standard --json',
+                        {"username": "jordan", "display_name": "Jordan Reyes", "company": "Demo Plumbing Co", "role": "standard"}),
+    "membership grant": Example('bookflow membership grant jordan --company "Demo Plumbing Co" --role standard --json',
+                                {"user": "jordan", "company": "Demo Plumbing Co", "role": "standard"}),
+    "membership revoke": Example('bookflow membership revoke jordan --company "Demo Plumbing Co" --json',
+                                 {"user": "jordan", "company": "Demo Plumbing Co"}),
 }
 
 

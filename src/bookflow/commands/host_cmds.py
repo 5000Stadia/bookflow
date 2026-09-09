@@ -1,4 +1,5 @@
-"""The host process and the credentials it serves: `serve`, `user set-password`, `token issue/list/revoke`.
+"""The host process and the identities it serves: `serve`, `user add`, `user set-password`,
+`membership grant/revoke`, and `token issue/list/revoke`.
 
 Nothing here imports FastAPI, uvicorn, or the workbench at module scope: the CLI loads this module for
 `bookflow token --help` and `bookflow serve --help`, and cold start must not grow (row 3 plan, Edges).
@@ -11,14 +12,14 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from bookflow.commands.common import CommonOut, WriteOutput, common_out
 from bookflow.core.context import Context, client_version
 from bookflow.core.errors import BookflowError
-from bookflow.core.ids import is_ulid, normalize_ulid
+from bookflow.core.ids import is_ulid, new_id, normalize_ulid
 from bookflow.core.lazy import lazy
 from bookflow.core.models import ListOutput
 from bookflow.core.registry import Applied, Plan, Touched, command
@@ -29,6 +30,7 @@ h = lazy("bookflow.hub.schema")
 users = lazy("bookflow.hub.users")
 audit = lazy("bookflow.hub.audit")
 auth = lazy("bookflow.adapters.http.auth")
+access = lazy("bookflow.hub.access")
 
 log = logging.getLogger("bookflow.host")
 
@@ -491,6 +493,354 @@ def user_for_login(host, login: str) -> str:
     if not isinstance(table, dict) or not isinstance(table.get("user_id"), str):
         raise BookflowError("E_UNAUTHENTICATED", details={"reason": "this login is not mapped to a Bookflow user"})
     return table["user_id"]
+
+
+# ---------------------------------------------------------------- named people and their access
+
+RoleName = Literal["readonly", "standard", "admin", "owner"]
+ROLE_HELP = "Role at that scope: readonly reads, standard does the bookkeeping, admin also manages members, owner is the final say"
+INITIAL_PASSWORD_SHOWN_ONCE = ("This initial password is shown once; only its hash is stored. Give it to them, "
+                               "and have them change it with `user set-password`.")
+
+
+def _generate_password() -> str:
+    import secrets
+    return secrets.token_urlsafe(12)
+
+
+class MembershipOut(BaseModel):
+    membership_id: str
+    user_id: str
+    username: str
+    scope_type: str
+    scope_id: str
+    scope_name: str
+    organization_id: str
+    role: RoleName
+    granted_at: str | None
+    revoked_at: str | None
+    changed: bool
+
+
+class Scope(BaseModel):
+    """One resolved membership scope: a company, or a whole organization."""
+    scope_type: str
+    scope_id: str
+    scope_name: str
+    organization_id: str
+
+
+def resolve_scope(s: Session, company: str | None, organization: str | None) -> Scope:
+    """Exactly one scope, resolved through the actor's own visibility, so an invisible
+    company answers the same way an absent one does."""
+    from bookflow.core.dispatch import resolve_company, resolve_organization
+    if (company is None) == (organization is None):
+        raise BookflowError("E_VALIDATION", details={"fields": [
+            {"field": "company", "problem": "give exactly one of company or organization"}]})
+    if company is not None:
+        row = resolve_company(s, company, "option")
+        return Scope(scope_type="company", scope_id=row["id"], scope_name=row["display_name"],
+                     organization_id=row["organization_id"])
+    row = resolve_organization(s, organization)
+    return Scope(scope_type="organization", scope_id=row["id"], scope_name=row["display_name"],
+                 organization_id=row["id"])
+
+
+def membership_floor(role: str) -> str:
+    """`admin:members:<role>:<domain>` in the frozen catalog: admin to move a membership,
+    owner to hand out or take away ownership."""
+    return "owner" if role == "owner" else "admin"
+
+
+def authorize_membership_scope(s: Session, scope: Scope, required: str) -> None:
+    """A human administrator of that same scope. A hub administrator administers every scope."""
+    if s.actor.kind != "human":
+        raise BookflowError("E_PERMISSION", details={"capability": "membership", "required_role": "human"})
+    if s.is_hub_admin:
+        return
+    if scope.scope_type == "company":
+        _, actor_role = access.company_role(s, scope.scope_id, scope.organization_id)
+    else:
+        actor_role = access.org_role(s, scope.scope_id)
+    if not access.role_satisfies(actor_role, scope.scope_type, required, False):
+        raise BookflowError("E_PERMISSION", details={"capability": "membership",
+                                                     "required_role": required, "role": actor_role})
+
+
+def _membership_row(s: Session, user_id: str, scope: Scope) -> dict[str, Any] | None:
+    row = s.hub.conn.execute(sa.select(h.memberships).where(
+        h.memberships.c.user_id == user_id, h.memberships.c.scope_type == scope.scope_type,
+        h.memberships.c.scope_id == scope.scope_id)).mappings().first()
+    return dict(row) if row else None
+
+
+def _membership_out(row: dict[str, Any], user: dict[str, Any], scope: Scope, *, changed: bool) -> MembershipOut:
+    return MembershipOut(membership_id=row["id"], user_id=user["id"], username=user["username"],
+                         scope_type=scope.scope_type, scope_id=scope.scope_id, scope_name=scope.scope_name,
+                         organization_id=scope.organization_id, role=row["role"],
+                         granted_at=row["granted_at"], revoked_at=row["revoked_at"], changed=changed)
+
+
+def _grant(s: Session, ctx: Context, user: dict[str, Any], scope: Scope, role: str,
+           existing: dict[str, Any] | None) -> tuple[dict[str, Any], Touched | None]:
+    """The one place a membership is written. `user add` and `membership grant` share it."""
+    at = now_iso()
+    if existing is None:
+        row = {"id": new_id(), "user_id": user["id"], "scope_type": scope.scope_type, "scope_id": scope.scope_id,
+               "role": role, "grants": None, "denies": None, "granted_by": s.actor.id, "granted_at": at,
+               "revoked_at": None, "version": 1, "updated_at": at, "updated_by": s.actor.id, "updated_via": VIA(ctx)}
+        s.hub.conn.execute(h.memberships.insert().values(**row))
+        return row, Touched("membership", row["id"], "create", None, 1, row)
+    if existing["role"] == role and existing["revoked_at"] is None:
+        return existing, None
+    row = {**existing, "role": role, "revoked_at": None, "granted_by": s.actor.id, "granted_at": at,
+           "version": existing["version"] + 1, "updated_at": at, "updated_by": s.actor.id, "updated_via": VIA(ctx)}
+    s.hub.conn.execute(h.memberships.update().where(h.memberships.c.id == existing["id"]).values(
+        role=role, revoked_at=None, granted_by=s.actor.id, granted_at=at, version=row["version"],
+        updated_at=at, updated_by=s.actor.id, updated_via=VIA(ctx)))
+    return row, Touched("membership", row["id"], "update", existing["version"], row["version"], row, before=existing)
+
+
+# ---------------------------------------------------------------- user add
+
+class UserAddInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    username: str = Field(description="Login name for the new person; unique, ignoring case", min_length=1, max_length=64)
+    display_name: str | None = Field(None, description="Name shown in lists and the audit trail; defaults to the username", max_length=128)
+    password: str | None = Field(None, description="Their first password; omit it and Bookflow makes one and shows it once",
+                                 max_length=1024, json_schema_extra={"secret": True})
+    hub_admin: bool = Field(False, description="Also let them administer this installation: add users, attach companies, see every organization")
+    company: str | None = Field(None, description="Company to give them access to now; name or id")
+    organization: str | None = Field(None, description="Organization to give them access to now, covering all its companies; name or id")
+    role: RoleName = Field("standard", description=ROLE_HELP)
+
+
+class UserAddOutput(WriteOutput):
+    user_id: str
+    username: str
+    display_name: str
+    hub_admin: bool
+    password: str | None
+    membership: MembershipOut | None
+    message: str
+
+
+user_add = command("user add", scope="hub",
+                   description="Add a person who can log in from their own workstation, optionally giving them a company at the same time.",
+                   input_model=UserAddInput, output_model=UserAddOutput, writes={"hub"},
+                   positional=["username"], required_role="hub_admin",
+                   error_codes=["E_VALIDATION", "E_PERMISSION", "E_COMPANY_NOT_FOUND", "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND"],
+                   authorization="human hub administrator; the grant also needs administration of that scope")
+
+
+def authorize_user_add(inp: UserAddInput, ctx: Context, s: Session) -> Scope | None:
+    if s.actor.kind != "human":
+        raise BookflowError("E_PERMISSION", details={"capability": "user", "required_role": "human"})
+    if inp.company is None and inp.organization is None:
+        if inp.role != "standard":
+            raise BookflowError("E_VALIDATION", details={"fields": [
+                {"field": "role", "problem": "a role needs a company or an organization to apply to"}]})
+        return None
+    scope = resolve_scope(s, inp.company, inp.organization)
+    authorize_membership_scope(s, scope, membership_floor(inp.role))
+    return scope
+
+
+@user_add
+def plan_user_add(inp: UserAddInput, ctx: Context, s: Session) -> Plan:
+    scope = authorize_user_add(inp, ctx, s)
+    if users.username_key(inp.username) == "system" or users.username_matches(s.hub, inp.username):
+        raise BookflowError("E_VALIDATION", details={"fields": [{"field": "username", "problem": "already in use"}]})
+    display_name = inp.display_name or inp.username
+    membership = None if scope is None else MembershipOut(
+        membership_id="", user_id="", username=inp.username, scope_type=scope.scope_type, scope_id=scope.scope_id,
+        scope_name=scope.scope_name, organization_id=scope.organization_id, role=inp.role,
+        granted_at=None, revoked_at=None, changed=True)
+    preview = UserAddOutput(user_id="", username=inp.username, display_name=display_name, hub_admin=inp.hub_admin,
+                            password=None, membership=membership, message="A dry run adds nobody.")
+    return Plan(preview=preview, data={"input": inp, "display_name": display_name, "scope": scope})
+
+
+@user_add.applier
+def apply_user_add(plan: Plan, ctx: Context, s: Session) -> Applied:
+    inp, scope = plan.data["input"], plan.data["scope"]
+    generated = None if inp.password else _generate_password()
+    row = users.create_human(s, username=inp.username, display_name=plan.data["display_name"],
+                             created_by=s.actor.id, via=VIA(ctx), hub_admin=inp.hub_admin,
+                             password_hash=auth.hash_password(inp.password or generated))
+    touched = [Touched("user", row["id"], "create", None, 1, row)]
+    membership = None
+    if scope is not None:
+        m, m_touched = _grant(s, ctx, row, scope, inp.role, None)
+        membership = _membership_out(m, row, scope, changed=True)
+        if m_touched is not None:
+            touched.append(m_touched)
+        message = f"{row['username']} can log in and open {scope.scope_name}."
+    else:
+        message = (f"{row['username']} can log in but has no company yet; "
+                   f"give them one with `membership grant {row['username']} --company <company>`.")
+    if generated is not None:
+        message = INITIAL_PASSWORD_SHOWN_ONCE + " " + message
+    out = UserAddOutput(user_id=row["id"], username=row["username"], display_name=row["display_name"],
+                        hub_admin=bool(row["hub_admin"]), password=generated, membership=membership, message=message)
+    summary = f"added the user {row['username']}"
+    if scope is not None:
+        summary += f" with {inp.role} access to {scope.scope_name}"
+    return Applied(out, touched, summary)
+
+
+# ---------------------------------------------------------------- membership grant / revoke
+
+class MembershipGrantInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    user: str = Field(description="Username or id of the person receiving access", max_length=64)
+    company: str | None = Field(None, description="Company they may open; name or id")
+    organization: str | None = Field(None, description="Organization they may open, covering all its companies; name or id")
+    role: RoleName = Field("standard", description=ROLE_HELP)
+
+
+class MembershipSelector(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    user: str = Field(description="Username or id of the person losing access", max_length=64)
+    company: str | None = Field(None, description="Company they may no longer open; name or id")
+    organization: str | None = Field(None, description="Organization they may no longer open; name or id")
+
+
+class MembershipOutput(WriteOutput, MembershipOut):
+    """The membership itself, flat, so the target user id is the command's own output."""
+    message: str
+
+
+def _membership_target(s: Session, selector: str) -> dict[str, Any]:
+    row = _find_user(s, selector)
+    if row is None:
+        raise BookflowError("E_USER_NOT_FOUND", details={"user": selector})
+    if row["kind"] == "system":
+        raise BookflowError("E_VALIDATION", details={"fields": [
+            {"field": "user", "problem": "the system user holds no memberships"}]})
+    return row
+
+
+membership_grant = command("membership grant", scope="hub",
+                           description="Give a person access to a company or a whole organization, at one role.",
+                           input_model=MembershipGrantInput, output_model=MembershipOutput, writes={"hub"},
+                           positional=["user"],
+                           error_codes=["E_USER_NOT_FOUND", "E_VALIDATION", "E_PERMISSION",
+                                        "E_COMPANY_NOT_FOUND", "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND"],
+                           authorization="human administrator of that company or organization, or a hub administrator; owner to grant or move an owner")
+
+
+def authorize_membership_grant(inp: MembershipGrantInput, ctx: Context, s: Session):
+    # The scope and the authority to administer it come first, so that whether a
+    # username exists is only ever answered to someone who administers that scope.
+    scope = resolve_scope(s, inp.company, inp.organization)
+    authorize_membership_scope(s, scope, membership_floor(inp.role))
+    user = _membership_target(s, inp.user)
+    existing = _membership_row(s, user["id"], scope)
+    if existing is not None and existing["revoked_at"] is None:
+        # Moving an owner off ownership is an owner's act too, not only granting it.
+        authorize_membership_scope(s, scope, membership_floor(existing["role"]))
+    return user, scope, existing
+
+
+@membership_grant
+def plan_membership_grant(inp: MembershipGrantInput, ctx: Context, s: Session) -> Plan:
+    user, scope, existing = authorize_membership_grant(inp, ctx, s)
+    changed = existing is None or existing["role"] != inp.role or existing["revoked_at"] is not None
+    preview = _membership_out({"id": existing["id"] if existing else "", "role": inp.role,
+                               "granted_at": now_iso(), "revoked_at": None}, user, scope, changed=changed)
+    return Plan(preview=MembershipOutput(**preview.model_dump(), message=_grant_message(user, scope, inp.role, changed)),
+                data={"user": user, "scope": scope, "existing": existing, "role": inp.role})
+
+
+def _grant_message(user: dict[str, Any], scope: Scope, role: str, changed: bool) -> str:
+    if not changed:
+        return f"{user['username']} already had {role} access to {scope.scope_name}."
+    return f"{user['username']} has {role} access to {scope.scope_name}."
+
+
+@membership_grant.applier
+def apply_membership_grant(plan: Plan, ctx: Context, s: Session) -> Applied:
+    user, scope, existing = plan.data["user"], plan.data["scope"], plan.data["existing"]
+    role = plan.data["role"]
+    row, touched = _grant(s, ctx, user, scope, role, existing)
+    changed = touched is not None
+    out = MembershipOutput(**_membership_out(row, user, scope, changed=changed).model_dump(),
+                           message=_grant_message(user, scope, role, changed))
+    return Applied(out, [touched] if touched else [],
+                   f"gave {user['username']} {role} access to {scope.scope_name}" if changed else "already granted")
+
+
+membership_revoke = command("membership revoke", scope="hub",
+                            description="Take away a person's access to a company or organization; it stops on their next request.",
+                            input_model=MembershipSelector, output_model=MembershipOutput, writes={"hub"},
+                            positional=["user"],
+                            error_codes=["E_USER_NOT_FOUND", "E_RECORD_NOT_FOUND", "E_VALIDATION", "E_PERMISSION",
+                                         "E_COMPANY_NOT_FOUND", "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND"],
+                            authorization="human administrator of that company or organization, or a hub administrator; owner to revoke an owner")
+
+
+def authorize_membership_revoke(inp: MembershipSelector, ctx: Context, s: Session):
+    scope = resolve_scope(s, inp.company, inp.organization)
+    authorize_membership_scope(s, scope, "admin")
+    user = _membership_target(s, inp.user)
+    existing = _membership_row(s, user["id"], scope)
+    if existing is None:
+        raise BookflowError("E_RECORD_NOT_FOUND", details={"user": inp.user, "scope": scope.scope_type})
+    authorize_membership_scope(s, scope, membership_floor(existing["role"]))
+    return user, scope, existing
+
+
+@membership_revoke
+def plan_membership_revoke(inp: MembershipSelector, ctx: Context, s: Session) -> Plan:
+    user, scope, existing = authorize_membership_revoke(inp, ctx, s)
+    changed = existing["revoked_at"] is None
+    preview = _membership_out({**existing, "revoked_at": existing["revoked_at"] or now_iso()}, user, scope, changed=changed)
+    return Plan(preview=MembershipOutput(**preview.model_dump(), message=_revoke_message(user, scope, changed)),
+                data={"user": user, "scope": scope, "existing": existing})
+
+
+def _revoke_message(user: dict[str, Any], scope: Scope, changed: bool) -> str:
+    if not changed:
+        return f"{user['username']} already had no access to {scope.scope_name}."
+    return (f"{user['username']} can no longer open {scope.scope_name}. Any session or token they hold "
+            f"keeps working for whatever else they are a member of, and carries no access to this one.")
+
+
+@membership_revoke.applier
+def apply_membership_revoke(plan: Plan, ctx: Context, s: Session) -> Applied:
+    user, scope, existing = plan.data["user"], plan.data["scope"], plan.data["existing"]
+    if existing["revoked_at"] is not None:
+        out = MembershipOutput(**_membership_out(existing, user, scope, changed=False).model_dump(),
+                               message=_revoke_message(user, scope, False))
+        return Applied(out, [], "already revoked")
+    at = now_iso()
+    row = {**existing, "revoked_at": at, "version": existing["version"] + 1,
+           "updated_at": at, "updated_by": s.actor.id, "updated_via": VIA(ctx)}
+    s.hub.conn.execute(h.memberships.update().where(h.memberships.c.id == existing["id"]).values(
+        revoked_at=at, version=row["version"], updated_at=at, updated_by=s.actor.id, updated_via=VIA(ctx)))
+    out = MembershipOutput(**_membership_out(row, user, scope, changed=True).model_dump(),
+                           message=_revoke_message(user, scope, True))
+    return Applied(out, [Touched("membership", row["id"], "update", existing["version"], row["version"], row, before=existing)],
+                   f"took away {user['username']}'s access to {scope.scope_name}")
+
+
+def republish_membership(inp, ctx: Context, s: Session, *, revoke: bool) -> None:
+    """The publication re-check for both membership commands.
+
+    A member acting on their own membership has, by succeeding, changed the very
+    authority and the very visibility this would ask about: after handing back a
+    company, they can no longer resolve it. That case is settled exactly, and from
+    this request's own audit, by the permit's membership reconciliation, so asking
+    again here would refuse every honest self-revocation. Anyone acting on someone
+    else is re-checked in full against current state.
+    """
+    if _membership_target(s, inp.user)["id"] == s.actor.id:
+        return
+    if revoke:
+        authorize_membership_revoke(inp, ctx, s)
+    else:
+        authorize_membership_grant(inp, ctx, s)
 
 
 # ---------------------------------------------------------------- user set-password

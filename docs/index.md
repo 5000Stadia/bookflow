@@ -48,6 +48,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`job-type query`](cli/job-type-query.md)
 - [`journal`](cli/journal.md)
 - [`mcp`](cli/mcp.md)
+- [`membership`](cli/membership.md)
 - [`note`](cli/note.md)
 - [`organization`](cli/organization.md)
 - [`other-name`](cli/other-name.md)

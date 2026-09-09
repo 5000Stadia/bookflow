@@ -117,7 +117,8 @@ class OSBinding:
 
 # Only these current lifecycle operations may account for their own membership
 # row additions/removals. Each substitution must be in this request's hub audit.
-MEMBERSHIP_EFFECTS = frozenset({"company new", "company attach", "company detach", "demo reset"})
+MEMBERSHIP_EFFECTS = frozenset({"company new", "company attach", "company detach", "demo reset",
+                                "membership grant", "membership revoke"})
 
 
 @dataclass(repr=False)
@@ -376,6 +377,13 @@ class PublicationPermit:
             _, _, epoch = host_cmds.authorize_token_issue(inp, self.ctx, s)
             if "authority_epoch" in self.targets and epoch != self.targets["authority_epoch"]:
                 _deny()
+        elif name == "user add":
+            if self.inp.company is not None or self.inp.organization is not None:
+                scope = host_cmds.resolve_scope(s, self.inp.company, self.inp.organization)
+                host_cmds.authorize_membership_scope(s, scope, host_cmds.membership_floor(self.inp.role))
+        elif name in ("membership grant", "membership revoke"):
+            inp = self.inp.model_copy(update={"user": self.targets.get("user_id", self.inp.user)})
+            host_cmds.republish_membership(inp, self.ctx, s, revoke=name == "membership revoke")
         elif name == "token list" and self.inp.user is not None:
             host_cmds._target_user(s, self.inp.user)
         elif name == "token revoke":
