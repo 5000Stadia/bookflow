@@ -220,7 +220,7 @@ src/bookflow/
   adapters/http/app.py   FastAPI app from the registry: /commands/<noun.verb>, authoritative /companies/{id}/commands/<noun.verb>, /login, /logout, async /companies/{id}/events and /hub-events, exact generated /openapi.json, /health; credential/cookie handling and the same error documents as the CLI with HTTP statuses
   adapters/http/auth.py  argon2 passwords (constant-time on unknown users), bearer and session tokens stored as sha256, liveness refresh, login throttle
   adapters/http/local.py LocalListener on the Unix socket: peer identity from SO_PEERCRED, envelope identity fields discarded, 8 MiB frame cap and 30-second accepted-connection timeout
-  adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), document_form.py (sales document bands, line grid columns and human labels), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
+  adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), document_form.py (sales document bands, line grid columns and human labels), document_nav.py (the way back from a document to earlier documents of its type), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
 ```
 
 Hub username resolution uses `hub/users.py`: Unicode NFC and case folding through a connection-local SQLite function, at most two candidate rows, and no match for ambiguous names. This lookup scans the users table; no schema migration or stored-name rewrite is required. Login resolves across all user kinds and active states before enforcing human/active status, verifies the password outside the read snapshot, then rechecks the username, user ID and password hash in the writer transaction before issuing a session. Password and token self-service resolves the selected account ID before allowing a case-variant username. Human creation rejects existing normalized names. OS-login mappings and passwords retain case sensitivity.
@@ -1085,6 +1085,25 @@ width. The Amount column is the server's computed net and is read-only; the
 whole-line amount price is a separate pricing input. Nothing on the page is
 calculated in the browser, and `sales-receipt` and `estimate` omit the invoice's
 payments-applied and balance-due footer. Save & New returns to a fresh document.
+
+Every sales document page carries a toolbar back to the documents already written.
+`adapters/workbench/document_nav.py` builds it and `templates/document_nav.html` renders
+it, on `invoice`, `sales-receipt` and `estimate` and nowhere else. On a form it is links
+only and opens no read; the new-document form also carries a recent list the browser
+fetches from `/c/{company}/_recent/{noun}` after the form has rendered, so writing a new
+document never waits on reading old ones. A correction form carries no arrows, because
+stepping off it would discard what was typed. The saved-document page carries Previous
+and Next, which walk the sequence the noun's own query command pages: accounting date,
+then the document's stable id, which is the list's order and the order they were
+entered. Voided sales and inactive estimates stay in that sequence — the sales list
+shows voided documents by default, and a document outside its own sequence would have no
+arrows while you stand on it — so `estimate query` is called with `active=None`. A step
+with nowhere to go is disabled text carrying no destination, never a link. The arrows
+cost one bounded query on the saved-document page and a second only when a company holds
+more than one page (200) of that document type; past that size these query commands
+offer no way to look backwards from a document or to reach the newest few, so the
+Previous control and the recent list are disabled and say why. A descending direction on
+`SalesQueryInput` and `WorkQueryInput` is the one change that would close all of it.
 
 Generated workbench forms preserve every model branch declared by a Pydantic
 string discriminator. A single discriminator control exposes the combined choices;

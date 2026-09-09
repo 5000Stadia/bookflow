@@ -1,6 +1,7 @@
 {% extends "base.html" %}{% block title %}{{ noun }} {{ record_id }}{% endblock %}{% block body %}
 {% set base = ("/c/" ~ company_id ~ "/" ~ noun) if company_id else ("/hub/" ~ noun.replace(" ", "-")) %}
 <nav class="crumbs"><a href="{{ base }}">{{ meta.plural_label or noun }}</a> / {{ record_title }}</nav>
+{% if document_nav %}{% include "document_nav.html" %}{% endif %}
 {% if editing %}<div class="warn">Editing now: {% for e in editing %}{{ e.name or e.user_id }} ({{ e.interface }}, since {{ e.since }}){% if not loop.last %}, {% endif %}{% endfor %}</div>{% endif %}
 {% if presence %}<div hx-post="/c/{{ company_id }}/presence/set/{{ meta.record_type }}/{{ record.id if noun != 'company' else record.company_id }}" hx-trigger="load, every 30s" hx-swap="none"></div>
 <script>addEventListener('pagehide',()=>navigator.sendBeacon&&fetch('/c/{{ company_id }}/presence/clear/{{ meta.record_type }}/{{ record.id if noun != 'company' else record.company_id }}',{method:'POST',headers:{'X-Bookflow-Workbench':'1'},keepalive:true}))</script>{% endif %}

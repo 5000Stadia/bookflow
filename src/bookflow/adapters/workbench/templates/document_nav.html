@@ -1,0 +1,18 @@
+{# The way back from a document to the documents already written. Included by form.html
+   and record.html with `document_nav`; every destination is a real page, and a step that
+   has nowhere to go is disabled text rather than a link that goes nowhere. #}
+{% set n = document_nav %}
+<nav class="document-nav" aria-label="Other {{ n.plural | lower }}">
+<a class="document-nav-find" href="{{ n.list_url }}">{{ n.find_label }}</a>
+{% if n.record_url %}<a class="document-nav-back" href="{{ n.record_url }}">Back to this {{ n.singular }}</a>{% endif %}
+{% if n.steps %}<span class="document-nav-steps">
+{% if n.previous %}<a class="document-step" rel="prev" href="{{ n.previous.url }}"><span class="document-step-name">← Previous {{ n.singular }}</span><small>{{ n.previous.label }}</small></a>
+{% else %}<span class="document-step is-unavailable" aria-disabled="true"><span class="document-step-name">← Previous {{ n.singular }}</span><small>{{ 'This is the earliest ' ~ n.singular ~ '.' if n.at_start else 'Not available here.' }}</small></span>{% endif %}
+{% if n.next %}<a class="document-step" rel="next" href="{{ n.next.url }}"><span class="document-step-name">Next {{ n.singular }} →</span><small>{{ n.next.label }}</small></a>
+{% else %}<span class="document-step is-unavailable" aria-disabled="true"><span class="document-step-name">Next {{ n.singular }} →</span><small>{{ 'This is the latest ' ~ n.singular ~ '.' if n.at_end else 'Not available here.' }}</small></span>{% endif %}
+</span>{% endif %}
+{% if n.position %}<span class="document-nav-position">{{ n.position }} of {{ n.total }}</span>{% endif %}
+{% if n.steps %}<span class="document-nav-order">{{ n.order }}</span>{% endif %}
+{% if n.unavailable %}<span class="document-nav-order">{{ n.unavailable }}</span>{% endif %}
+{% if n.recent_url %}<div class="document-recent" hx-get="{{ n.recent_url }}" hx-trigger="load" hx-swap="innerHTML"><span class="muted">Recent {{ n.plural | lower }}…</span></div>{% endif %}
+</nav>
