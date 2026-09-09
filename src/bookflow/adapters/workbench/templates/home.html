@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block title %}{{ company.display_name }}{% endblock %}{% block body %}
+{% macro arrow() %}<li class="flow-arrow" aria-hidden="true"><svg viewBox="0 0 24 12" role="presentation" focusable="false"><path d="M1 6h18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M14 1.5 19.5 6 14 10.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></li>{% endmacro %}
+{% macro tile(item) %}
+{% if item.live %}<a class="flow-tile" href="{{ item.href }}"><span class="flow-tile-title">{{ item.step.title }}</span><span class="flow-tile-action">{{ item.step.action.label }}</span><span class="flow-tile-note">{{ item.step.summary }}</span></a>
+{% elif item.planned %}<div class="flow-tile flow-planned" aria-disabled="true" title="Planned: {{ item.step.action.label }}. Waiting on {{ item.reason }}."><span class="flow-tile-title">{{ item.step.title }}</span><span class="flow-tile-action">{{ item.step.action.label }}</span><span class="flow-tile-note">{{ item.step.summary }}</span><span class="flow-tile-wait">Planned — waiting on {{ item.reason }}.</span></div>
+{% else %}<div class="flow-tile flow-planned" aria-disabled="true" title="Not offered here: {{ item.reason }}."><span class="flow-tile-title">{{ item.step.title }}</span><span class="flow-tile-action">{{ item.step.action.label }}</span><span class="flow-tile-note">{{ item.step.summary }}</span><span class="flow-tile-wait">Not available — {{ item.reason }}.</span></div>{% endif %}
+{% endmacro %}
+<h1>{{ company.display_name }}</h1>
+<p class="muted">How work moves through the books. A dimmed step is planned: it names what it will do and what it is waiting on, and it does not open.</p>
+<div class="flow-board">
+{% for row in panels %}<section class="nav-group flow-panel" aria-labelledby="flow-panel-{{ row.panel.id }}">
+<h2 id="flow-panel-{{ row.panel.id }}">{{ row.panel.title }}</h2>
+<p class="muted flow-summary">{{ row.panel.summary }}</p>
+<ol class="flow-steps">{% for item in row.chain %}{% if not loop.first %}{{ arrow() }}{% endif %}<li class="flow-step">{{ tile(item) }}</li>{% endfor %}</ol>
+{% if row.asides %}<p class="flow-aside-heading">Also in this flow</p>
+<ul class="flow-asides">{% for item in row.asides %}<li>{{ tile(item) }}</li>{% endfor %}</ul>{% endif %}
+</section>{% endfor %}
+</div>
+<p class="actions"><a href="/c/{{ company_id }}/_planned">What is planned</a><a href="/c/{{ company_id }}/_all">All commands</a></p>
+{% endblock %}

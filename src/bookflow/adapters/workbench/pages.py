@@ -23,6 +23,7 @@ from bookflow.adapters.workbench import statements as S
 from bookflow.adapters.workbench import sales as Sales
 from bookflow.adapters.workbench import work as Work
 from bookflow.adapters.workbench import billing as Billing
+from bookflow.adapters.workbench import home as Home
 from bookflow.core import registry
 from bookflow.core.errors import BookflowError
 from bookflow.core.money import CURRENCIES
@@ -141,6 +142,13 @@ def _role_allows(cmd: registry.Command, record: dict[str, Any], *, hub_admin: bo
         return False
     role = record.get("role")
     return role in ROLE_RANK and ROLE_RANK[role] >= ROLE_FOR_REQUIRED[required]
+
+
+def _company_offers(cmd: registry.Command, company_view: dict[str, Any], *, hub_admin: bool = False) -> bool:
+    """Whether a company page may offer this command: the role allows it and the company enables it."""
+    return _role_allows(cmd, company_view, hub_admin=hub_admin) and (
+        company_view.get("info", {}).get("estimates_enabled", True)
+        or cmd.name not in ("estimate create", "estimate copy", "proposal estimate"))
 
 
 def _may_publish_presence(record: dict[str, Any], *, hub_admin: bool = False) -> bool:
@@ -430,7 +438,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             ctx['billing_reactivate_allowed'] = bool(company_view and _role_allows(
                 registry.get(source_kind + ' update'), company_view, hub_admin=credential(request).hub_admin))
         tpl = env.get_template(name)
-        response = HTMLResponse(tpl.render(request=request, static_urls=static_urls, hub_nouns=_nouns("hub"), company_nouns=_nouns("company"), json=json, **ctx),
+        response = HTMLResponse(tpl.render(request=request, static_urls=static_urls, hub_nouns=_nouns("hub"), company_nouns=_nouns("company"), workbench_menu=Home.MENU, json=json, **ctx),
                                 status_code=status_code)
         if ctx.get("flash_result") is not None:
             response.headers["Cache-Control"] = "no-store"
@@ -535,28 +543,99 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         ]
         return render("index.html", request, company=None, groups=_grouped_nouns(nouns, company=False))
 
+    def company_permits(request: Request, show: dict[str, Any]):
+        """One home for what this company and this credential offer; the grid and the board share it."""
+        is_hub_admin = credential(request).hub_admin
+        return lambda cmd: _company_offers(cmd, show, hub_admin=is_hub_admin)
+
+    def company_noun_rows(request: Request, show: dict[str, Any]) -> list[tuple[str, list[registry.Command]]]:
+        """The company's nouns and the verbs this credential may use, as the grid has always built them."""
+        permits = company_permits(request, show)
+        return [(n, [cmd for cmd in _verbs(n, "company") if permits(cmd)]) for n in _nouns("company")]
+
     @app.get("/c/{company_id}/", response_class=HTMLResponse)
     def company_index(company_id: str, request: Request):
+        """The home window: the flow board, resolved from the map against the registry."""
         try:
             show = run(request, "company show", {}, company_id)
         except BookflowError as e:
             return page_error(request, e)
-        is_hub_admin = credential(request).hub_admin
-        nouns = [
-            (n, [cmd for cmd in _verbs(n, "company") if _role_allows(cmd, show, hub_admin=is_hub_admin)
-                 and (show.get('info', {}).get('estimates_enabled', True)
-                      or cmd.name not in ('estimate create', 'estimate copy', 'proposal estimate'))])
-            for n in _nouns("company")
-        ]
         resp = render(
+            "home.html",
+            request,
+            company=show,
+            company_id=show["company_id"],
+            panels=Home.resolve(show["company_id"], permits=company_permits(request, show)),
+        )
+        resp.set_cookie(LAST_COMPANY, show["company_id"], samesite="lax", secure=secure_cookies, max_age=90 * 86400, path="/")  # a per-browser convenience, no identity in it
+        return resp
+
+    @app.get("/c/{company_id}/_all", response_class=HTMLResponse)
+    def company_all_commands(company_id: str, request: Request):
+        """Every noun and verb the registry offers: the machine index the home window used to be."""
+        try:
+            show = run(request, "company show", {}, company_id)
+        except BookflowError as e:
+            return page_error(request, e)
+        return render(
             "index.html",
             request,
             company=show,
             company_id=show["company_id"],
-            groups=_grouped_nouns(nouns, company=True),
+            page_title="All commands",
+            groups=_grouped_nouns(company_noun_rows(request, show), company=True),
         )
-        resp.set_cookie(LAST_COMPANY, show["company_id"], samesite="lax", secure=secure_cookies, max_age=90 * 86400, path="/")  # a per-browser convenience, no identity in it
-        return resp
+
+    @app.get("/c/{company_id}/_group/{slug}", response_class=HTMLResponse)
+    def company_group(company_id: str, slug: str, request: Request):
+        """One menu group: the same grouped-noun rendering, filtered to that group."""
+        entry = Home.MENU_BY_SLUG.get(slug)
+        if entry is None:
+            return page_error(request, BookflowError("E_USAGE", message=f"no such section `{slug}`"), company_id=company_id)
+        try:
+            show = run(request, "company show", {}, company_id)
+        except BookflowError as e:
+            return page_error(request, e)
+        selected = []
+        for group, noun_rows in _grouped_nouns(company_noun_rows(request, show), company=True):
+            kept = noun_rows if group in entry.groups else [row for row in noun_rows if row[0] in entry.nouns]
+            if kept:
+                selected.append((group, kept))
+        return render(
+            "index.html",
+            request,
+            company=show,
+            company_id=show["company_id"],
+            page_title=entry.label,
+            groups=selected,
+        )
+
+    @app.get("/c/{company_id}/_planned", response_class=HTMLResponse)
+    def planned_index(company_id: str, request: Request):
+        try:
+            show = run(request, "company show", {}, company_id)
+        except BookflowError as e:
+            return page_error(request, e)
+        return render("planned.html", request, company=show, company_id=show["company_id"],
+                      panels=Home.resolve(show["company_id"], permits=company_permits(request, show)),
+                      step=None, panel=None)
+
+    @app.get("/c/{company_id}/_planned/{step_id}", response_class=HTMLResponse)
+    def planned_step(company_id: str, step_id: str, request: Request):
+        """What a dimmed step will do and what it waits on; a step that has gone live redirects to it."""
+        try:
+            show = run(request, "company show", {}, company_id)
+        except BookflowError as e:
+            return page_error(request, e)
+        panels = Home.resolve(show["company_id"], permits=company_permits(request, show))
+        found = Home.find(panels, step_id)
+        if found is None:
+            return page_error(request, BookflowError("E_USAGE", message=f"no such step `{step_id}`"), company_id=company_id)
+        if found.live:
+            return RedirectResponse(found.href, status_code=303)
+        owner = next(panel for panel in panels if found in panel.steps)
+        return render("planned.html", request, company=show, company_id=show["company_id"],
+                      panels=panels, step=found, panel=owner)
 
     @app.get("/c/{company_id}/_references/{owner_noun}/{field}", response_class=HTMLResponse)
     def reference_suggestions(

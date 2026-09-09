@@ -60,7 +60,7 @@ def existing_site(root,client,tmp_path):
         b.evaluate(f'''(() => {{document.querySelector('[name="username"]').value={json.dumps(login)};
           document.querySelector('[name="password"]').value={json.dumps(PASSWORD)};
           document.querySelector('form[hx-post="/login"]').requestSubmit();}})()''')
-        b.wait_for('!!document.querySelector(".group-grid")')
+        b.wait_for('!!document.querySelector(".nav-group")')
         yield b,f'http://127.0.0.1:{port}/c/{company}'
     except BaseException:
         if b:

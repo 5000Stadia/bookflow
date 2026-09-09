@@ -17,8 +17,12 @@ def _browser(hosted) -> TestClient:
     return browser
 
 
-def test_company_home_uses_the_fixed_accounting_navigation_groups(hosted):
-    page = _browser(hosted).get(f"/c/{hosted.company_id}/")
+def test_the_all_commands_grid_uses_the_fixed_accounting_navigation_groups(hosted):
+    """The generated grid moved off the front door to `_all`; its grouping is unchanged."""
+    browser = _browser(hosted)
+    home = browser.get(f"/c/{hosted.company_id}/")
+    assert home.status_code == 200 and f'href="/c/{hosted.company_id}/_all"' in home.text
+    page = browser.get(f"/c/{hosted.company_id}/_all")
     assert page.status_code == 200
     headings = (
         "Company",

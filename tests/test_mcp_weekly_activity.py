@@ -187,7 +187,7 @@ def test_weekly_agent_principal_filters_pagination_and_dst_on_all_surfaces(hoste
         browser.evaluate(f'''(() => {{document.querySelector('[name=username]').value={json.dumps(hosted.login)};
             document.querySelector('[name=password]').value={json.dumps(PASSWORD)};
             document.querySelector('form[hx-post="/login"]').requestSubmit();}})()''')
-        browser.wait_for('!!document.querySelector(".group-grid")')
+        browser.wait_for('!!document.querySelector(".nav-group")')
         browser.navigate(live + f'/c/{hosted.company_id}/audit')
         browser.evaluate(f'''(() => {{const values={json.dumps(filters[0])};
             for(const [name,value] of Object.entries(values)) document.querySelector(`[name="${{name}}"]`).value=value;

@@ -20,7 +20,7 @@ def test_journal_generated_post_and_revision_views(browser_site, tmp_path, width
           document.querySelector('form[hx-post="/login"]').requestSubmit();
         }})()''')
         home = f'{browser_site.base_url}/c/{browser_site.company_id}/'
-        browser.wait_for(f'location.href === {json.dumps(home)} && !!document.querySelector(".group-grid")')
+        browser.wait_for(f'location.href === {json.dumps(home)} && !!document.querySelector(".nav-group")')
         browser.navigate(home + 'journal/post')
         browser.wait_for('!!document.querySelector("[data-collection-add]")')
         _assert_rendered_page(browser, 'journal post', viewport=(width, height))

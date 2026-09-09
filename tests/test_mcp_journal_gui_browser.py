@@ -21,7 +21,7 @@ def test_installed_agent_journal_visible_in_browser_register_and_expanded_audit(
           document.querySelector('[name="password"]').value={json.dumps(PASSWORD)};
           document.querySelector('form[hx-post="/login"]').requestSubmit();
         }})()""")
-        browser.wait_for('!!document.querySelector(".group-grid")')
+        browser.wait_for('!!document.querySelector(".nav-group")')
         base=live+'/c/'+hosted.company_id
         browser.navigate(base+'/journal/'+result['journal'])
         browser.wait_for("!!document.querySelector('section[aria-label=\"Journal entry\"]')")

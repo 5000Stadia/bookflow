@@ -413,18 +413,18 @@ def test_row5_login_list_detail_form_preview_and_audit_in_real_chrome(
         )
         company_home = f"{browser_site.base_url}/c/{browser_site.company_id}/"
         browser.wait_for(f"location.href === {json.dumps(company_home)}")
-        browser.wait_for("document.readyState === 'complete' && !!document.querySelector('.group-grid')")
+        browser.wait_for("document.readyState === 'complete' && !!document.querySelector('.nav-group')")
         _assert_rendered_page(browser, "company home", viewport=viewport)
         if width == 1280:
             for home in (company_home, f"{browser_site.base_url}/hub/"):
                 browser.navigate(home)
-                browser.wait_for("document.readyState === 'complete' && !!document.querySelector('.group-grid')")
+                browser.wait_for("document.readyState === 'complete' && !!document.querySelector('.nav-group')")
                 for card_width in (280, 320, 390, 700, 701, 820, 1024, 1280):
                     browser.viewport(card_width, height)
                     _assert_navigation_contained(browser)
             browser.viewport(width, height)
             browser.navigate(company_home)
-            browser.wait_for("document.readyState === 'complete' && !!document.querySelector('.group-grid')")
+            browser.wait_for("document.readyState === 'complete' && !!document.querySelector('.nav-group')")
 
         customer_list = f"/c/{browser_site.company_id}/customer"
         browser.evaluate(

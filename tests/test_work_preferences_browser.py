@@ -26,6 +26,9 @@ def test_policy_forms_final_bill_and_retained_estimate(register_browser, width, 
     source = command('estimate.update', dict(estimate=source['id'], expected_version=1, status='accepted', decision_note='Agreed'))
     base = f'{env.site.base_url}/c/{env.site.company_id}'
     b.navigate(base + '/')
+    b.wait_for('!!document.querySelector(".flow-board")')
+    assert b.evaluate('!!document.querySelector(\'a[href$="/estimate/create"]\')')
+    b.navigate(base + '/_all')
     b.wait_for('!!document.querySelector(".group-grid")')
     assert b.evaluate('!!document.querySelector(\'a[href$="/estimate/create"]\')')
     visit(b, base + '/company/self/update')
@@ -37,7 +40,15 @@ def test_policy_forms_final_bill_and_retained_estimate(register_browser, width, 
     _click(b, 'submit')
     b.wait_for('document.body.innerText.includes("Saved successfully")')
     assert not command('company.show', {})['info']['estimates_enabled']
+    # The home window offers the same step through the flow board, and withdraws it the same way.
     b.navigate(base + '/')
+    b.wait_for('!!document.querySelector(".flow-board")')
+    assert not b.evaluate('!!document.querySelector(\'a[href$="/estimate/create"]\')')
+    assert b.evaluate('''(() => {const tile = [...document.querySelectorAll('.flow-tile')]
+        .find(e => e.querySelector('.flow-tile-title').textContent === 'Estimate');
+        return tile.tagName === 'DIV' && tile.getAttribute('aria-disabled') === 'true';})()''')
+    _contained(b, width)
+    b.navigate(base + '/_all')
     b.wait_for('!!document.querySelector(".group-grid")')
     links = b.evaluate('Array.from(document.querySelectorAll("a"), a => a.pathname)')
     assert not any(path.endswith(('/estimate/create', '/estimate/copy', '/proposal/estimate')) for path in links)

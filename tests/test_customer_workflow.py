@@ -89,7 +89,7 @@ def _login(browser: _Cdp, base: str, login: str) -> None:
       document.querySelector('[name="password"]').value={json.dumps(PASSWORD)};
       document.querySelector('form[hx-post="/login"]').requestSubmit();
     }})()""")
-    browser.wait_for("document.readyState === 'complete' && !!document.querySelector('.group-grid')")
+    browser.wait_for("document.readyState === 'complete' && !!document.querySelector('.nav-group')")
     browser.call("Page.addScriptToEvaluateOnNewDocument", {"source": "window.workflowErrors=[];addEventListener('error',e=>workflowErrors.push(e.message));addEventListener('unhandledrejection',e=>workflowErrors.push(String(e.reason)));"})
 
 
