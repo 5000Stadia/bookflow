@@ -100,3 +100,27 @@
 @media (max-width: 700px) {
   .document-band .row.form-field { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* The way back to the documents already written. It wraps rather than widening the
+   page, and a step with nowhere to go is greyed text carrying no destination. */
+.document-nav { display: flex; flex-wrap: wrap; gap: .4rem .6rem; align-items: center;
+  background: #f4f7fb; border: 1px solid #d0d9e4; border-radius: .35rem;
+  padding: .5rem .6rem; margin: .5rem 0; min-width: 0; }
+.document-nav-find, .document-nav-back { font-weight: 600; color: #1f3a5f;
+  padding: .3rem .55rem; border: 1px solid #c3d0de; border-radius: .3rem; background: #fff; }
+.document-nav-steps { display: flex; flex-wrap: wrap; gap: .4rem; min-width: 0; }
+.document-step { display: block; max-width: 100%; min-width: 0; padding: .3rem .55rem;
+  border: 1px solid #c3d0de; border-radius: .3rem; background: #fff; color: #1f3a5f; }
+.document-step-name { display: block; font-size: .8rem; font-weight: 600; }
+.document-step small { display: block; color: #6b7684; font-size: .72rem;
+  overflow-wrap: anywhere; }
+.document-step.is-unavailable { background: #eceff3; border-style: dashed; color: #8a939e;
+  cursor: default; }
+.document-nav-position { font-size: .8rem; color: #3c4a5a; font-variant-numeric: tabular-nums; }
+.document-nav-order { flex-basis: 100%; font-size: .75rem; color: #6b7684;
+  overflow-wrap: anywhere; }
+.document-recent { flex-basis: 100%; min-width: 0; font-size: .8rem; }
+.document-recent-title { font-weight: 600; color: #1f3a5f; }
+.document-recent-list { list-style: none; display: flex; flex-wrap: wrap; gap: .3rem .7rem;
+  margin: .2rem 0; padding: 0; min-width: 0; }
+.document-recent-list li { min-width: 0; overflow-wrap: anywhere; }

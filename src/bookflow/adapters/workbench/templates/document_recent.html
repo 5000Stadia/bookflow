@@ -1,0 +1,8 @@
+{# The last few documents of this type, fetched after the form has rendered so that
+   writing a new one never waits on reading the old ones. #}
+{% set n = document_recent %}
+{% if n.documents %}<span class="document-recent-title">Recent {{ n.plural | lower }}</span>
+<ul class="document-recent-list">{% for row in n.documents %}<li><a href="{{ row.url }}">{{ row.label }}</a></li>{% endfor %}</ul>
+<a class="document-recent-all" href="{{ n.list_url }}">All {{ n.plural | lower }}</a>
+{% elif n.unavailable %}<span class="muted">{{ n.unavailable }}</span> <a href="{{ n.list_url }}">All {{ n.plural | lower }}</a>
+{% else %}<span class="muted">No {{ n.plural | lower }} yet.</span>{% endif %}

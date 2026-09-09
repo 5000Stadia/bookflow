@@ -25,6 +25,7 @@ from bookflow.adapters.workbench import work as Work
 from bookflow.adapters.workbench import billing as Billing
 from bookflow.adapters.workbench import home as Home
 from bookflow.adapters.workbench import document_form as Document
+from bookflow.adapters.workbench import document_nav as Nav
 from bookflow.core import registry
 from bookflow.core.errors import BookflowError
 from bookflow.core.money import CURRENCIES
@@ -841,6 +842,14 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         except BookflowError as err:
             return JSONResponse(err.to_dict(), status_code=STATUS.get(err.code, 400))
 
+    @app.get('/c/{company_id}/_recent/{noun}', response_class=HTMLResponse)
+    def recent_documents(company_id: str, noun: str, request: Request):
+        """The last few documents of a type, fetched after the new-document form renders."""
+        view = Nav.recent(lambda name, raw, company: run(request, name, raw, company), company_id, noun)
+        if view is None:
+            return Response(status_code=404)
+        return render('document_recent.html', request, company_id=company_id, document_recent=view)
+
     def noun_page(request: Request, company_id: str | None, noun: str):
         if company_id and noun == 'payment selection':
             return RedirectResponse('/c/' + company_id + '/payment-drafts', status_code=303)
@@ -1112,6 +1121,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       master_detail=master_detail,
                       billing=billing, billing_actions=bool(billing and _role_allows(registry.get(noun + " invoice"), role_view, hub_admin=cred.hub_admin)),
                       work=Work.detail_context(out, company_id) if noun in Work.NOUNS else None,
+                      document_nav=Nav.strip(lambda name, raw, company: run(request, name, raw, company), company_id, noun, out),
                       sale=Sales.detail_context(out, company_id) if command_noun in ('invoice', 'sales-receipt') else None,
                       audit_undo=audit_undo, contact_copy=contact_copy, workspace=workspace,
                       annotations=annotation_context,
@@ -1558,6 +1568,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       return_context=return_context, workflow_note=workflow_note,
                       reference_values=reference_values,
                       preferences_settings_url=f'/c/{company_id}/company/self/update' if authorized_company and _role_allows(registry.get('company update'), authorized_company, hub_admin=cred.hub_admin) else None,
+                      document_nav=Nav.form_bar(company_id, noun, verb, record_id) if document_form else None,
                       document=Document.context(noun, verb, described, originals, shown=shown,
                           result=result if result and 'revision' in result else None, preview=preview,
                           record_id=record_id, base=('/c/' + company_id + '/' + noun) if company_id else '') if document_form else None,
