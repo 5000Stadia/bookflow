@@ -39,7 +39,10 @@ def _financial(verb, model):
         error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_APPLICATION_CAPACITY', 'E_APPLICATION_INCOMPATIBLE',
             'E_APPLICATION_INACTIVE', 'E_PAYMENT_OPERATION_KEY_REUSED', 'E_SELECTION_CONSUMED', 'E_PREVIEW_STALE',
             'E_PERIOD_CLOSED', 'E_INACTIVE_REFERENCE', 'E_DUPLICATE_NUMBER', 'E_AMOUNT_PRECISION', 'E_VALUE_RANGE',
-            'E_REASON_REQUIRED', 'E_HAS_APPLICATIONS']+(['E_DEPOSIT_DEPENDENCY'] if verb in ('update','void') else [])+(['E_RECOVERY_PENDING'] if verb in ('receive','apply') else []))(planner)
+            'E_REASON_REQUIRED', 'E_HAS_APPLICATIONS']+(['E_DEPOSIT_DEPENDENCY'] if verb in ('update','void') else [])+(['E_RECOVERY_PENDING'] if verb in ('receive','apply') else [])
+            # Only a correction restates the payer's capacity, so only update can drop
+            # it below what is already applied (payment_corrections).
+            +(['E_APPLIED_EXCEEDS_TOTAL'] if verb == 'update' else []))(planner)
     cmd.ledger = True
     cmd.permanent_recovery = lambda inp, ctx, s: payment_operations.recover(inp, ctx, s, 'payment ' + verb)
     cmd.applier(payments.apply)
@@ -73,7 +76,12 @@ def _preparation(verb, model, output, planner):
         description=('Find invoices this payer can pay. ' if verb == 'invoices' else '') +
             'Read complete compatible payment candidates or calculate shared amount origins; page bounds never limit receipt intent.',
         input_model=model, output_model=output, required_role='member', capability='ledger.read',
-        error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_QUERY_STALE', 'E_APPLICATION_INCOMPATIBLE', 'E_INACTIVE_REFERENCE', 'E_AMOUNT_PRECISION'] + (['E_PAYMENT_PROFILE_INVALID'] if verb == 'query' else []))
+        error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_QUERY_STALE', 'E_APPLICATION_INCOMPATIBLE', 'E_INACTIVE_REFERENCE', 'E_AMOUNT_PRECISION']
+            # These three take mode and payment straight from the caller, so an
+            # existing_credit context naming a receipt that is not posted reaches
+            # payment_selection.context and is refused there.
+            + (['E_APPLICATION_INACTIVE'] if verb in ('invoices', 'suggest', 'calculate') else [])
+            + (['E_PAYMENT_PROFILE_INVALID'] if verb == 'query' else []))
     def plan(inp, ctx, s):
         return Plan(output(**planner(s, inp)))
     return plan

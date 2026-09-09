@@ -497,6 +497,7 @@ Example JSON output:
 | Code | Meaning |
 |---|---|
 | `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_APPLICATION_INACTIVE` | This application is already unapplied or its payment is voided. |
 | `E_APPLICATION_INCOMPATIBLE` | Application source and target must have the same party, receivable account and currency. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
@@ -830,6 +831,7 @@ Example JSON output:
 | Code | Meaning |
 |---|---|
 | `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_APPLICATION_INACTIVE` | This application is already unapplied or its payment is voided. |
 | `E_APPLICATION_INCOMPATIBLE` | Application source and target must have the same party, receivable account and currency. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
@@ -1938,6 +1940,7 @@ Example JSON output:
 | Code | Meaning |
 |---|---|
 | `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_APPLICATION_INACTIVE` | This application is already unapplied or its payment is voided. |
 | `E_APPLICATION_INCOMPATIBLE` | Application source and target must have the same party, receivable account and currency. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
@@ -2712,6 +2715,7 @@ Example JSON output:
 | `E_APPLICATION_CAPACITY` | The requested application exceeds the owned source or invoice capacity. |
 | `E_APPLICATION_INACTIVE` | This application is already unapplied or its payment is voided. |
 | `E_APPLICATION_INCOMPATIBLE` | Application source and target must have the same party, receivable account and currency. |
+| `E_APPLIED_EXCEEDS_TOTAL` | The corrected total is below active settlement capacity. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |

@@ -434,6 +434,7 @@ MATRIX['payment void'].update({
     'E_AMOUNT_PRECISION': _UNREACHED_HERE,
 })
 MATRIX['payment update'].update({
+    'E_APPLIED_EXCEEDS_TOTAL': 'the corrected total drops the payer capacity below what is already applied from it',
     'E_HAS_APPLICATIONS': 'the corrected receipt date is later than the effective date of a live application',
     'E_REASON_REQUIRED': 'the correction has no reason of 1 to 140 characters, or an agent/system write supplies neither reason nor directive',
     'E_VERSION_CONFLICT': 'stale expected_version on the receipt or on a related invoice named by invoice_versions',
@@ -494,6 +495,7 @@ MATRIX['payment selection query'] = {
 # versions, compatibility and row amounts.
 _PREPARATION_UNREACHED = 'inherited from the shared preparation-read list; no path in this command raises it'
 MATRIX['payment invoices'] = {
+    'E_APPLICATION_INACTIVE': 'an existing_credit context names a receipt that is not posted; mode and payment come straight from the caller, so this is reachable on a read',
     'E_RECORD_NOT_FOUND': 'customer, funding receipt or receivable account absent from the selected company',
     'E_QUERY_STALE': 'candidate facts changed between candidate pages; restart without a cursor',
     'E_INACTIVE_REFERENCE': 'inactive customer or receivable account',
@@ -502,6 +504,7 @@ MATRIX['payment invoices'] = {
     'E_AMOUNT_PRECISION': _PREPARATION_UNREACHED,
 }
 MATRIX['payment suggest'] = {
+    'E_APPLICATION_INACTIVE': 'an existing_credit context names a receipt that is not posted; mode and payment come straight from the caller, so this is reachable on a read',
     'E_RECORD_NOT_FOUND': 'customer, funding receipt or receivable account absent from the selected company',
     'E_QUERY_STALE': 'candidate facts changed between suggestion pages; restart without a cursor',
     'E_INACTIVE_REFERENCE': 'inactive customer or receivable account',
@@ -510,6 +513,7 @@ MATRIX['payment suggest'] = {
     'E_APPLICATION_INCOMPATIBLE': _PREPARATION_UNREACHED,
 }
 MATRIX['payment calculate'] = {
+    'E_APPLICATION_INACTIVE': 'an existing_credit context names a receipt that is not posted; mode and payment come straight from the caller, so this is reachable on a read',
     'E_RECORD_NOT_FOUND': 'customer, funding receipt, receivable account, draft or a named invoice absent from the selected company',
     'E_VERSION_CONFLICT': 'stale expected_version on a named invoice or on the referenced draft',
     'E_QUERY_STALE': "a selected invoice's amount due or the funding receipt version moved under the calculation, or the pinned facts changed between pages",
