@@ -735,6 +735,9 @@ def _read_calls(hosted):
         "payment settlement changes": ({"guard": payment["settlement_guard"], "limit": 2}, cid),
         "payment preview items": ({"request": request, "kind": "source_components",
             "facts_fingerprint": preview["facts_fingerprint"], "limit": 2}, cid),
+        # Undeposited receipts of every date, so the page and its signed cursor
+        # are the same document whichever producer authenticated the reader.
+        "deposit sources": ({"date": "9999-12-31", "limit": 2}, cid),
     })
     from bookflow.company.lists import LIST_DEFINITIONS
     from bookflow.company.query_projection import COLLECTIONS

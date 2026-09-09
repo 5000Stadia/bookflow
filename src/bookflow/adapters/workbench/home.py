@@ -101,9 +101,7 @@ PANELS: tuple[Panel, ...] = (
                 id="deposit",
                 title="Make deposit",
                 summary="Group received payments into one bank deposit.",
-                action=Action("Make a deposit", WRITE),
-                waits_on="a command that creates a deposit. No command anywhere writes one; the "
-                         "deposit work under way only reads deposits that already exist",
+                action=Action("Make a deposit", WRITE, ("deposit post",), "/deposit/post"),
             ),
             Step(
                 id="sales-receipt",
@@ -208,9 +206,7 @@ PANELS: tuple[Panel, ...] = (
                 id="banking-deposit",
                 title="Make deposit",
                 summary="Take undeposited receipts into a bank account.",
-                action=Action("Make a deposit", WRITE),
-                waits_on="a command that creates a deposit. No command anywhere writes one; the "
-                         "deposit work under way only reads deposits that already exist",
+                action=Action("Make a deposit", WRITE, ("deposit post",), "/deposit/post"),
             ),
             Step(
                 id="write-check",
