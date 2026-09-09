@@ -1137,6 +1137,13 @@ heads exist; below the breakpoint it becomes a real visible label, positioned st
 because an absolute one previously widened the layout viewport. The measurement that
 holds this is the grid's own `scrollWidth == clientWidth` at 390px, not the page's.
 
+Saved invoice and sales-receipt lines use the semantic `.sales-lines` table. On screens
+at most 700px wide each row becomes a grouped card with visible field labels, full-width
+item/description and quoted rate, paired quantity/unit and net/tax, and emphasised gross.
+The footer retains currency, net, tax and gross within the phone width. Pricing mode is
+in collapsed captured-rule details. These responsive rules apply only to screens; print
+uses the normal table. Work and journal detail tables retain their existing layouts.
+
 Every sales document page carries a toolbar back to the documents already written.
 `adapters/workbench/document_nav.py` builds it and `templates/document_nav.html` renders
 it, on `invoice`, `sales-receipt` and `estimate` and nowhere else. On a form it is links

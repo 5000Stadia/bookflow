@@ -303,3 +303,36 @@ def test_the_line_grid_has_nothing_to_scroll_sideways_at_phone_width(register_br
     assert grid['scroll'] <= grid['client'] + 1, grid
     _preview(b)
     _contained(b, 390)
+
+
+@pytest.mark.parametrize('document_type', ['invoice', 'sales_receipt'])
+def test_saved_sales_lines_fit_phone_and_keep_desktop_and_print_tables(register_browser, document_type):
+    from tests.test_sales_register_navigation import _create
+    env, b = register_browser, register_browser.browser
+    run = lambda name, data: _command(b, env.site, name.replace(' ', '.'), data)
+    sale, _, _ = _create(run, document_type, env.bank['id'])
+    noun = document_type.replace('_', '-')
+    b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/{noun}/{sale["id"]}')
+    b.wait_for('!!document.querySelector(".sales-lines")')
+    values = b.evaluate('[...document.querySelectorAll(".sales-lines tbody td")].map(e=>e.lastChild.textContent.trim())')
+    assert values[-3:] == [sale['revision']['lines'][0][key]['amount'] for key in ('net', 'tax', 'gross')]
+    for width in (390, 1280):
+        b.viewport(width, 900)
+        if width == 390:
+            assert b.evaluate('''(() => { const t=document.querySelector('.sales-lines');
+                return t.scrollWidth === t.clientWidth && t.parentElement.scrollWidth === t.parentElement.clientWidth;
+            })()''')
+            assert b.evaluate('''[...document.querySelectorAll('.sales-lines tbody td,.sales-lines tfoot th')]
+                .every(e=>e.scrollWidth===e.clientWidth && e.getBoundingClientRect().right<=innerWidth)''')
+            assert b.evaluate('getComputedStyle(document.querySelector(".sales-cell-label")).display') == 'block'
+        else:
+            assert b.evaluate('getComputedStyle(document.querySelector(".sales-lines")).display') == 'table'
+        assert 'USD' in b.evaluate('document.querySelector(".sales-lines tfoot").innerText')
+        assert sale['revision']['total']['amount'] in b.evaluate('document.querySelector(".sales-lines tfoot").innerText')
+    b.viewport(390, 900)
+    b.call('Emulation.setEmulatedMedia', {'media': 'print'})
+    try:
+        assert b.evaluate('getComputedStyle(document.querySelector(".sales-lines")).display') == 'table'
+        assert b.evaluate('getComputedStyle(document.querySelector(".sales-cell-label")).display') == 'none'
+    finally:
+        b.call('Emulation.setEmulatedMedia', {'media': ''})
