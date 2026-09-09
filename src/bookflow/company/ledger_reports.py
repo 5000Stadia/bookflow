@@ -24,7 +24,37 @@ from bookflow.core.session import now_iso
 from bookflow.company.query import permission_fingerprint
 
 I64_MIN, I64_MAX = -(2**63), 2**63 - 1
-REPORT_VERSION = "1"
+# Bumped when the shape or the row order of a report page changes, so a
+# continuation minted by an earlier version restarts instead of paging into a
+# different order.  "2": rows read in account-number order and trial-balance
+# rows carry the account number.
+REPORT_VERSION = "2"
+
+
+def account_order(prefix: str = "") -> str:
+    """Presentation order for account rows: account number, then name.
+
+    Accountants read a chart by number, so every report row set is ordered that
+    way before anything else about the account.  Numbers are one to seven ASCII
+    digits (`ck_accounts_number`), so CAST puts 999 before 1010 where the stored
+    text would not.  Unnumbered accounts follow the numbered ones in name order,
+    and the stable id breaks the remaining ties so OFFSET paging stays
+    deterministic.  Ordering only: no total, subtotal, grouping or section
+    boundary is computed from it.
+    """
+    return (f"{prefix}number IS NULL, CAST({prefix}number AS INTEGER), "
+            f"{prefix}full_name_key, {prefix}id")
+
+
+def _account_display(full_name, name, number, use_numbers, lowest_only) -> str:
+    """The one rule for showing an account on a report row.
+
+    The company decides whether numbers appear at all and whether a subaccount
+    is shown by its leaf name; `current_account_number` and the other current
+    fields on the row carry the unabbreviated facts either way.
+    """
+    label = str(name) if lowest_only else str(full_name)
+    return f"{number} · {label}" if use_numbers and number else label
 
 
 class StrictModel(BaseModel):
@@ -96,6 +126,9 @@ class ReportMetadata(StrictModel):
 class TrialBalanceRow(StrictModel):
     account_id: str
     current_account_label: str
+    current_account_name: str
+    current_account_number: str | None
+    display_account_label: str
     active: bool
     signed_net: MoneyOutput
     debit: MoneyOutput
@@ -283,11 +316,11 @@ def _state(s, inp, report, principal_id, account_id):
     if statement:
         label_query = "SELECT id, full_name, full_name_key, name, number, type, parent_id, active FROM accounts ORDER BY id"
     elif report == "trial-balance":
-        label_query = _EFFECTS + """SELECT a.id, a.full_name, a.active FROM accounts a
+        label_query = _EFFECTS + """SELECT a.id, a.full_name, a.name, a.number, a.active FROM accounts a
             LEFT JOIN balances b ON b.account_id=a.id
             WHERE :include_zero OR coalesce(b.closing,'0')!='0' ORDER BY a.id"""
     else:
-        label_query = _EFFECTS + """SELECT a.id, a.full_name FROM accounts a
+        label_query = _EFFECTS + """SELECT a.id, a.full_name, a.number FROM accounts a
             JOIN balances b ON b.account_id=a.id
             WHERE b.opening!='0' OR b.activity>0 ORDER BY a.id"""
     for row in raw.execute(label_query, {"date_to": inp.date_to,
@@ -297,11 +330,15 @@ def _state(s, inp, report, principal_id, account_id):
     currency = raw.execute("SELECT home_currency FROM company_info").fetchone()[0]
     revision = raw.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     extra_state = None
-    if statement:
+    # Trial balance and the statements all label rows through the company's
+    # account-number and lowest-subaccount preferences, so a change to either
+    # one has to stale a continuation the same way a renamed account does.
+    if statement or report == "trial-balance":
         extra_state = [tuple(raw.execute("""SELECT fiscal_year_start_month,
-            use_account_numbers, show_lowest_subaccount_only FROM company_info""").fetchone()),
-            raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]]
-    watermark = _hash([tuple(effect), labels.hexdigest(), currency, revision, extra_state]) if statement else _hash([tuple(effect), labels.hexdigest(), currency, revision])
+            use_account_numbers, show_lowest_subaccount_only FROM company_info""").fetchone())]
+        if statement:
+            extra_state.append(raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0])
+    watermark = _hash([tuple(effect), labels.hexdigest(), currency, revision, extra_state]) if extra_state is not None else _hash([tuple(effect), labels.hexdigest(), currency, revision])
     permissions = _hash([permission_fingerprint(s, principal_id), s.memberships])
     query = _hash([report, inp.model_dump(exclude={"cursor"})])
     company = str(s.company_row["id"])
@@ -356,8 +393,11 @@ def trial_balance(inp: TrialBalanceInput, s, *, principal_id=None) -> TrialBalan
         state, offset = _state(s, inp, "trial-balance", principal_id, None)
         raw, currency = s.company.raw, state.metadata.currency
         params = {"date_to": inp.date_to, "date_from": "0001-01-01", "account": None, "zero": inp.include_zero}
+        numbers, lowest = raw.execute(
+            "SELECT use_account_numbers, show_lowest_subaccount_only FROM company_info").fetchone()
         query = _EFFECTS + """, selected AS (
-            SELECT a.id, a.full_name, a.active, coalesce(b.closing,'0') AS net
+            SELECT a.id, a.full_name, a.name, a.number, a.active, coalesce(b.closing,'0') AS net,
+                a.full_name_key
             FROM accounts a LEFT JOIN balances b ON b.account_id=a.id
             WHERE :zero OR coalesce(b.closing,'0')!='0') """
         debit = credit = 0
@@ -368,9 +408,11 @@ def trial_balance(inp: TrialBalanceInput, s, *, principal_id=None) -> TrialBalan
             debit += max(net, 0)
             credit += max(-net, 0)
         totals = TrialBalanceTotals(debit=money(debit, currency), credit=money(credit, currency), signed_net=money(debit-credit, currency))
-        page = raw.execute(query + "SELECT * FROM selected ORDER BY id LIMIT :limit OFFSET :offset", {**params, "limit": inp.limit+1, "offset": offset}).fetchall()
-        rows = [TrialBalanceRow(account_id=r[0], current_account_label=r[1], active=bool(r[2]), signed_net=money(int(r[3]), currency),
-            debit=money(max(int(r[3]), 0), currency), credit=money(max(-int(r[3]), 0), currency)) for r in page[:inp.limit]]
+        page = raw.execute(query + f"SELECT * FROM selected ORDER BY {account_order()} LIMIT :limit OFFSET :offset", {**params, "limit": inp.limit+1, "offset": offset}).fetchall()
+        rows = [TrialBalanceRow(account_id=r[0], current_account_label=r[1], current_account_name=r[2],
+            current_account_number=r[3], display_account_label=_account_display(r[1], r[2], r[3], numbers, lowest),
+            active=bool(r[4]), signed_net=money(int(r[5]), currency),
+            debit=money(max(int(r[5]), 0), currency), credit=money(max(-int(r[5]), 0), currency)) for r in page[:inp.limit]]
         return TrialBalanceOutput(metadata=state.metadata, totals=totals, rows=rows, count=len(rows),
             next_cursor=_continuation(state, offset, len(rows), len(page)>inp.limit, s.company))
 
@@ -391,6 +433,9 @@ _GL = _EFFECTS + """, selected AS (
         debit_minor_units, credit_minor_units FROM running WHERE effective_date>=:date_from
  UNION ALL
  SELECT account_id, 2, '', '', 0, '', 'closing', closing, debits, credits FROM selected
+), ordered AS (
+ SELECT f.*, a.number AS account_number, a.full_name_key AS account_full_name_key
+ FROM flat f JOIN accounts a ON a.id=f.account_id
 )
 """
 
@@ -414,8 +459,10 @@ def general_ledger(inp: GeneralLedgerInput, s, *, principal_id=None) -> GeneralL
         totals = GeneralLedgerTotals(**{key: money(int(value or 0), currency) for key, value in zip(
             ("opening", "period_debits", "period_credits", "closing"), values)})
         # Window calculation is inside running, before this bounded page slice.
-        result = raw.execute(_GL + """, page AS (
-          SELECT * FROM flat ORDER BY account_id, phase, effective_date, batch_id, line_no, posting_line_id
+        result = raw.execute(_GL + f""", page AS (
+          SELECT account_id, phase, effective_date, batch_id, line_no, posting_line_id, kind, net, debit, credit
+          FROM ordered
+          ORDER BY {account_order("account_")}, phase, effective_date, batch_id, line_no, posting_line_id
           LIMIT :limit OFFSET :offset)
           SELECT p.*, a.full_name AS current_account_label, e.batch_kind, e.transaction_id,
             t.type AS transaction_type,
@@ -425,7 +472,7 @@ def general_ledger(inp: GeneralLedgerInput, s, *, principal_id=None) -> GeneralL
           LEFT JOIN effects e ON e.id=p.posting_line_id
           LEFT JOIN transaction_revisions r ON r.id=e.revision_id
           LEFT JOIN transactions t ON t.id=e.transaction_id
-          ORDER BY p.account_id, p.phase, p.effective_date, p.batch_id, p.line_no, p.posting_line_id
+          ORDER BY {account_order("a.")}, p.phase, p.effective_date, p.batch_id, p.line_no, p.posting_line_id
         """, {**params, "limit": inp.limit+1, "offset": offset})
         columns = [d[0] for d in result.description]
         page = [dict(zip(columns, row)) for row in result.fetchall()]

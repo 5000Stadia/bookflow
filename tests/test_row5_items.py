@@ -73,7 +73,7 @@ def test_every_item_type_has_a_complete_strict_exact_profile(client):
         "liability_account_id": account["Sales Tax Payable"],
     }, company=COMPANY)
     payloads = [
-        {"name": "Purchased service", "type": "service", "purchase_enabled": True, "purchase_description": "Purchased labor", "cost": "15", "expense_account_id": account["Professional Fees"]},
+        {"name": "Purchased service", "type": "service", "sales_enabled": False, "purchase_enabled": True, "purchase_description": "Purchased labor", "cost": "15", "expense_account_id": account["Professional Fees"]},
         {"name": "Nonstock fitting", "type": "non_inventory_part", "sales_enabled": True, "description": "Fitting", "price": "4.50", "income_account_id": account["Service Income"], "sales_tax_code_id": refs["tax_code"]},
         {"name": "Fuel surcharge", "type": "other_charge", "sales_enabled": True, "description": "Fuel", "charge_percent": "2.500000", "income_account_id": account["Service Income"], "sales_tax_code_id": refs["tax_code"]},
         {"name": "Invoice subtotal", "type": "subtotal", "description": "Subtotal"},
@@ -186,7 +186,7 @@ def test_vendor_rank_one_projection_and_custom_values_reconcile_atomically(clien
         "name": "Bin", "kind": "text", "scopes": ["item"],
     }, company=COMPANY)
     item = client.run("item create", {
-        "name": "Purchased labor", "type": "service", "purchase_enabled": True,
+        "name": "Purchased labor", "type": "service", "sales_enabled": False, "purchase_enabled": True,
         "purchase_description": "Subcontracted labor", "cost": "50",
         "expense_account_id": refs["accounts"]["Professional Fees"],
         "vendor_profiles": [
@@ -309,3 +309,53 @@ def test_assembly_cost_converts_member_units_to_the_purchase_unit(client):
     listed = client.run("item list", {"query": "Unit assembly"}, company=COMPANY)
     assert listed["items"][0]["bill_of_material_cost"] == assembly["bill_of_material_cost"]
     assert listed["items"][0]["members"][0]["unit_name"] == "Pack"
+
+
+# The types whose sales and purchase profiles are neither fixed by the type nor
+# both required: what a bookkeeper gets when they name a price and an income
+# account and say nothing about buying.
+_SALES_DEFAULT_TYPES = ("service", "non_inventory_part", "other_charge")
+
+
+def _sales_side(refs, item_type, name):
+    payload = {
+        "name": name, "type": item_type, "description": "Billed to the customer",
+        "price": "100.00", "income_account_id": refs["accounts"]["Service Income"],
+    }
+    if item_type == "service":
+        payload["sales_tax_code_id"] = refs["tax_code"]
+    return payload
+
+
+@pytest.mark.parametrize("item_type", _SALES_DEFAULT_TYPES)
+def test_sales_side_item_creates_without_naming_a_profile(client, item_type):
+    refs = _refs(client)
+    created = client.run("item create", _sales_side(refs, item_type, f"Default {item_type}"), company=COMPANY)
+    assert (created["sales_enabled"], created["purchase_enabled"]) == (True, False)
+    assert created["price"]["minor_units"] == 10000
+    assert client.run("item show", {"item": created["id"]}, company=COMPANY)["sales_enabled"] is True
+
+
+@pytest.mark.parametrize("item_type", _SALES_DEFAULT_TYPES)
+def test_explicit_profile_flags_are_honoured_over_the_default(client, item_type):
+    refs = _refs(client)
+    account = refs["accounts"]
+    purchase_only = client.run("item create", {
+        "name": f"Bought {item_type}", "type": item_type, "sales_enabled": False,
+        "purchase_enabled": True, "purchase_description": "Bought in",
+        "cost": "60.00", "expense_account_id": account["Subcontractors"],
+    }, company=COMPANY)
+    assert (purchase_only["sales_enabled"], purchase_only["purchase_enabled"]) == (False, True)
+    both = client.run("item create", {
+        **_sales_side(refs, item_type, f"Both {item_type}"), "purchase_enabled": True,
+        "purchase_description": "Bought in", "cost": "60.00",
+        "expense_account_id": account["Subcontractors"],
+    }, company=COMPANY)
+    assert (both["sales_enabled"], both["purchase_enabled"]) == (True, True)
+    # An explicit False is not quietly restored by the default, so an item with
+    # no side at all is still refused by the unchanged capacity rule.
+    error = _assert_error(client, "item create", {
+        **_sales_side(refs, item_type, f"Idle {item_type}"), "sales_enabled": False,
+    }, "E_VALIDATION")
+    assert error.details["fields"] == [
+        {"field": "sales_enabled", "problem": "at least one of sales or purchase must be enabled"}]

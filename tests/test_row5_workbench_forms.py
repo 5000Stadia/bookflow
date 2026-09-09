@@ -463,6 +463,7 @@ def test_nested_collection_references_are_scoped_search_controls_including_compo
     )
     purchased = {
         "type": "service",
+        "sales_enabled": False,
         "purchase_enabled": True,
         "purchase_description": "Nested reference service",
         "cost": "1",

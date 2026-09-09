@@ -147,13 +147,11 @@ def _statement(inp, s, *, profit_and_loss, principal_id):
             totals["difference"] = totals["assets"] - totals["liabilities_and_equity"]
             typed_totals = BalanceSheetTotals(**{key: ledger.money(value, currency) for key, value in totals.items()})
         page = list(_rows(raw.execute(query + f"""SELECT * FROM statement_accounts
-            ORDER BY {order}, full_name_key, id LIMIT :limit OFFSET :offset""",
+            ORDER BY {order}, {ledger.account_order()} LIMIT :limit OFFSET :offset""",
             {**params, "limit": inp.limit+1, "offset": offset})))
         rows = []
         for row in page[:inp.limit]:
-            label = row["name"] if lowest else row["full_name"]
-            if numbers and row["number"]:
-                label = f"{row['number']} · {label}"
+            label = ledger._account_display(row["full_name"], row["name"], row["number"], numbers, lowest)
             rows.append(StatementRow(account_id=row["id"], current_account_label=row["full_name"],
                 current_account_name=row["name"], current_account_number=row["number"],
                 display_account_label=label, account_type=row["type"], parent_id=row["parent_id"],

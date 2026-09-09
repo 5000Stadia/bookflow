@@ -9,7 +9,7 @@ from pydantic import ValidationError
 import bookflow
 from bookflow.company import schema, financial_statements as fs
 from bookflow.core.errors import BookflowError
-from tests.test_row8_reports import ledger, insert, all_pages  # noqa: F401
+from tests.test_row8_reports import ledger, insert, all_pages, numbered_ledger  # noqa: F401
 from tests.test_reference_year import reference_template, reference_client, EXPECTED, REFERENCE, cli_run  # noqa: F401
 
 
@@ -205,3 +205,20 @@ def test_company_copy_attach_reproduces_statements_without_original_hub(referenc
     for original,copied in ((profit,copied_pl),(balance,copied_bs)):
         assert copied["rows"] == original["rows"] and copied["totals"] == original["totals"]
     assert copied_bs["fiscal_year_start"] == "2026-07-01"
+
+
+def test_statements_order_rows_by_account_number_then_name(numbered_ledger):
+    s, _, _ = numbered_ledger
+    balance, asset_rows = all_pages(lambda **kw: bs(s, date_to="2026-01-31", **kw), limit=1)
+    assert [r.account_id for r in asset_rows] == ["k2", "k4"]           # 1010 then 1100
+    assert [r.display_account_label for r in asset_rows] == ["1010 · Zulu Bank Checking", "1100 · Accounts Receivable"]
+    assert {r.section for r in asset_rows} == {"assets"}
+    assert balance.totals.assets.minor_units == 0
+    assert balance.totals.difference.minor_units == 0
+
+    report, income_rows = all_pages(lambda **kw: pl(s, date_from="2026-01-01", date_to="2026-01-31", **kw), limit=1)
+    assert [r.account_id for r in income_rows] == ["k3", "k1"]          # 4000 then 4200
+    assert [r.display_account_label for r in income_rows] == ["4000 · Service Income", "4200 · Product Sales"]
+    # Presentation only: same rows, same signed amounts, same statement totals.
+    assert {r.account_id: r.amount.minor_units for r in income_rows} == {"k1": -50, "k3": 50}
+    assert report.totals.income.minor_units == 0
