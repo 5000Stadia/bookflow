@@ -2251,12 +2251,26 @@ the readset, the guard or the connected closure would refuse release after a
 hidden-only change, and an observable refusal is the same disclosure arriving
 through the release path. So the proof holds the reader identity, the closed
 request, the selected pin, the disclosed document or an exact closed failure, and
-the observation instant — and release re-runs the same producer at that instant
-and compares the document. Admission is not compared; it is re-performed, which
-denies a reader who actually lost access and stays silent for a change that
-reader could never observe. Pinning the instant is what lets a release compare
-the same document instead of refusing because the clock advanced past a dated
-cutoff; `deposit_queries._show` and the public producers take `at` for that.
+the observation instant. Release does **not** re-run the producer and does not
+compare the document: reconstructing the whole read on every check is the cost
+this family exists to avoid, and it bought a property a single trusted business
+does not need. Admission is not compared; it is re-performed, which denies a
+reader who actually lost access and stays silent for a change that reader could
+never observe. Release proves, per call, that the reader authenticates — which is
+where a token's revocation, principal epoch and expiry are decided — that the
+binding revalidates in the releasing session, that identity attribution holds,
+that the reader currently has admitted access to the selected company through the
+same actor-intersect-principal path, that the captured document belongs to that
+company, and that a captured failure is still that failure.
+
+What this deliberately gives up, under the trusted-deployment scope: a repaired
+history may leave an earlier captured unknown-history answer intact, and a
+regained same-company capability may leave a previously captured refusal intact.
+Neither is a fresh successful re-execution nor authorization to write, and a new
+request still computes its own current result. Financial validation and write
+retry semantics are unchanged. Pinning the instant still matters, so a dated
+cutoff cannot move under a release; `deposit_queries._show` and the public
+producers take `at` for that.
 
 `PublicationPermit` carries `deposit_proof` as a second, deliberately separate
 proof family. `finish` checks exact proof type, two-command ownership,
