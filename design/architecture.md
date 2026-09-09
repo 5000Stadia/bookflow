@@ -1142,7 +1142,15 @@ at most 700px wide each row becomes a grouped card with visible field labels, fu
 item/description and quoted rate, paired quantity/unit and net/tax, and emphasised gross.
 The footer retains currency, net, tax and gross within the phone width. Pricing mode is
 in collapsed captured-rule details. These responsive rules apply only to screens; print
-uses the normal table. Work and journal detail tables retain their existing layouts.
+uses the normal table. Saved proposal, estimate, work-order and journal detail tables
+use `document-detail.css`, linked by the base template. Explicit document selectors and
+a screen-only 700px breakpoint present semantic table rows as paired phone cards with
+full-width prose, visible field labels and emphasized totals; desktop and print retain
+tables. Work quantities, completion, billability, quoted-source indicators and
+annotation links retain their captured values, with price mode and markup in the
+collapsed internal cost/rules details. Journal cards retain debit/credit, optional
+original currency/rate and totals; revision accounting-history tables use the same
+scoped layout.
 
 Every sales document page carries a toolbar back to the documents already written.
 `adapters/workbench/document_nav.py` builds it and `templates/document_nav.html` renders

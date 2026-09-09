@@ -1,6 +1,6 @@
 {% set revision = record.revision %}
 {% set foreign_lines = revision.lines | selectattr('original_amount') | list %}
-<section class="workspace-card" aria-label="Journal entry">
+<section class="workspace-card document-detail" aria-label="Journal entry">
 <h2>Journal {{ revision.number }}</h2>
 {% if revision.number != record.number %}<p class="muted">Current journal number: {{ record.number }}</p>{% endif %}
 <p><strong>{{ revision.date }}</strong> · {{ record.status|capitalize }} · Revision {{ revision.revision_number }} · {{ revision.currency }}</p>
@@ -11,19 +11,19 @@
 {% if revision.revision_number > 1 %}<a href="{{ base }}/{{ record_id }}?revision_number={{ revision.revision_number - 1 }}">Previous revision</a>{% endif %}
 {% if revision.id != record.current_revision_id %}<a href="{{ base }}/{{ record_id }}?revision_number={{ revision.revision_number + 1 }}">Next revision</a><a href="{{ base }}/{{ record_id }}">Current revision</a>{% endif %}
 </nav>
-<div class="table-wrap"><table class="ledger-table">
-<thead><tr><th>Account</th><th>Description</th><th>Name</th><th>Class</th><th>Debit</th><th>Credit</th>{% if foreign_lines %}<th>Original / rate</th>{% endif %}</tr></thead>
-<tbody>{% for line in revision.lines %}<tr>
-<td>{{ line.account_snapshot.full_name or line.account_snapshot.name }}</td>
-<td>{{ line.description or '' }}</td><td>{{ line.party_name or '' }}</td><td>{{ line.class_name or '' }}</td>
-<td>{{ line.amount.amount if line.side == 'debit' else '' }}</td><td>{{ line.amount.amount if line.side == 'credit' else '' }}</td>
-{% if foreign_lines %}<td>{% if line.original_amount %}{{ line.original_amount.amount }} {{ line.original_amount.currency }} · {{ line.rate_used }} {{ revision.currency }} per {{ line.original_currency }} · {{ line.rate_source }}{% endif %}</td>{% endif %}
+<div class="table-wrap"><table class="ledger-table document-lines" role="table">
+<thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Account</th><th scope="col" role="columnheader">Description</th><th scope="col" role="columnheader">Name</th><th scope="col" role="columnheader">Class</th><th scope="col" role="columnheader">Debit</th><th scope="col" role="columnheader">Credit</th>{% if foreign_lines %}<th scope="col" role="columnheader">Original / rate</th>{% endif %}</tr></thead>
+<tbody role="rowgroup">{% for line in revision.lines %}<tr role="row">
+<td role="cell" data-label="Account" class="document-wide"><span class="document-cell-label" aria-hidden="true">Account</span>{{ line.account_snapshot.full_name or line.account_snapshot.name }}</td>
+<td role="cell" data-label="Description" class="document-wide document-prose"><span class="document-cell-label" aria-hidden="true">Description</span>{{ line.description or '' }}</td><td role="cell" data-label="Name" class=""><span class="document-cell-label" aria-hidden="true">Name</span>{{ line.party_name or '' }}</td><td role="cell" data-label="Class" class=""><span class="document-cell-label" aria-hidden="true">Class</span>{{ line.class_name or '' }}</td>
+<td role="cell" data-label="Debit" class="document-total"><span class="document-cell-label" aria-hidden="true">Debit</span>{{ line.amount.amount if line.side == 'debit' else '' }}</td><td role="cell" data-label="Credit" class="document-total"><span class="document-cell-label" aria-hidden="true">Credit</span>{{ line.amount.amount if line.side == 'credit' else '' }}</td>
+{% if foreign_lines %}<td role="cell" data-label="Original / rate" class="document-wide"><span class="document-cell-label" aria-hidden="true">Original / rate</span>{% if line.original_amount %}{{ line.original_amount.amount }} {{ line.original_amount.currency }} · {{ line.rate_used }} {{ revision.currency }} per {{ line.original_currency }} · {{ line.rate_source }}{% endif %}</td>{% endif %}
 </tr>{% endfor %}</tbody>
-<tfoot><tr><th colspan="4">Total ({{ revision.currency }})</th><th>{{ revision.debit_total.amount }}</th><th>{{ revision.credit_total.amount }}</th>{% if foreign_lines %}<td></td>{% endif %}</tr></tfoot>
+<tfoot role="rowgroup"><tr role="row"><th role="rowheader" scope="row" colspan="4" class="document-wide">Total ({{ revision.currency }})</th><th role="cell" data-label="Debit" class="document-total"><span class="document-cell-label" aria-hidden="true">Debit</span>{{ revision.debit_total.amount }}</th><th role="cell" data-label="Credit" class="document-total"><span class="document-cell-label" aria-hidden="true">Credit</span>{{ revision.credit_total.amount }}</th>{% if foreign_lines %}<td role="cell" class="document-empty"></td>{% endif %}</tr></tfoot>
 </table></div>
 </section>
-<section class="workspace-card" aria-label="Accounting history">
+<section class="workspace-card document-detail" aria-label="Accounting history">
 <h2>Accounting history for this revision</h2>
-<div class="table-wrap"><table class="ledger-table"><thead><tr><th>Effect</th><th>Accounting date</th><th>Recorded</th><th>Debits</th><th>Credits</th></tr></thead>
-<tbody>{% for batch in revision.batches %}<tr><td>{{ batch.kind|capitalize }}</td><td>{{ batch.effective_date }}</td><td>{{ batch.created_at }}</td><td>{{ batch.debit_total.amount }}</td><td>{{ batch.credit_total.amount }}</td></tr>{% endfor %}</tbody></table></div>
+<div class="table-wrap"><table class="ledger-table document-lines" role="table"><thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Effect</th><th scope="col" role="columnheader">Accounting date</th><th scope="col" role="columnheader">Recorded</th><th scope="col" role="columnheader">Debits</th><th scope="col" role="columnheader">Credits</th></tr></thead>
+<tbody role="rowgroup">{% for batch in revision.batches %}<tr role="row"><td role="cell" data-label="Effect" class="document-wide"><span class="document-cell-label" aria-hidden="true">Effect</span>{{ batch.kind|capitalize }}</td><td role="cell" data-label="Accounting date" class=""><span class="document-cell-label" aria-hidden="true">Accounting date</span>{{ batch.effective_date }}</td><td role="cell" data-label="Recorded" class=""><span class="document-cell-label" aria-hidden="true">Recorded</span>{{ batch.created_at }}</td><td role="cell" data-label="Debits" class="document-total"><span class="document-cell-label" aria-hidden="true">Debits</span>{{ batch.debit_total.amount }}</td><td role="cell" data-label="Credits" class="document-total"><span class="document-cell-label" aria-hidden="true">Credits</span>{{ batch.credit_total.amount }}</td></tr>{% endfor %}</tbody></table></div>
 </section>

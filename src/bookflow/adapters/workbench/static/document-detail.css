@@ -1,0 +1,32 @@
+/* Saved work and journal details share their table markup across screen sizes. */
+.document-detail .document-cell-label { display: none; }
+@media screen and (max-width: 700px) {
+  .document-detail { overflow-wrap: anywhere; }
+  .document-detail .document-lines { display: block; min-width: 0; width: 100%; }
+  .document-detail .document-lines thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);
+  }
+  .document-detail .document-lines tbody,
+  .document-detail .document-lines tfoot { display: block; }
+  .document-detail .document-lines tbody tr,
+  .document-detail .document-lines tfoot tr {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem .75rem;
+    margin: .5rem 0; padding: .6rem; border: 1px solid #c3d0de;
+    border-radius: .35rem; background: #fff;
+  }
+  .document-detail .document-lines td,
+  .document-detail .document-lines tfoot th {
+    min-width: 0; padding: .3rem 0; border: 0; white-space: normal;
+    overflow-wrap: anywhere; text-align: left; font-variant-numeric: tabular-nums;
+  }
+  .document-detail .document-lines .document-cell-label {
+    display: block; font-size: .75rem; font-weight: 600; color: #3c4a5a; margin-bottom: .15rem;
+  }
+  .document-detail .document-lines .document-wide { grid-column: 1 / -1; }
+  .document-detail .document-lines .document-prose { white-space: pre-wrap; }
+  .document-detail .document-lines .document-total,
+  .document-detail .document-totals {
+    background: #f4f7fb; padding: .4rem; font-size: 1.05rem; font-weight: 700;
+  }
+  .document-detail .document-lines .document-empty { display: none; }
+}

@@ -415,7 +415,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css", "payments.js", "payments.css", "deposit-picker.js", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css")
+        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "deposit-picker.js", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
