@@ -529,3 +529,16 @@ def test_trial_balance_continuation_stales_on_number_and_label_preferences(ledge
     with pytest.raises(BookflowError) as caught:
         tb(s, limit=1, cursor=first.next_cursor)
     assert caught.value.code == "E_QUERY_STALE"
+
+
+@pytest.mark.parametrize("preference", ["use_account_numbers", "show_lowest_subaccount_only"])
+def test_general_ledger_preference_change_stales_continuation(ledger, preference):
+    s, batch, _ = ledger
+    batch("2026-01-05", 7)
+    first = gl(s, limit=1)
+    assert first.next_cursor
+    s.company.raw.execute(f"UPDATE company_info SET {preference}=NOT {preference}")
+    with pytest.raises(BookflowError) as caught:
+        gl(s, limit=1, cursor=first.next_cursor)
+    assert caught.value.code == "E_QUERY_STALE"
+    assert gl(s, limit=1).rows

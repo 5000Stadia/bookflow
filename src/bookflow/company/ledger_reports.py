@@ -347,10 +347,10 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True):
     currency = raw.execute("SELECT home_currency FROM company_info").fetchone()[0]
     revision = raw.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     extra_state = None
-    # Trial balance and the statements all label rows through the company's
+    # Trial balance, general ledger and the statements label rows through the company's
     # account-number and lowest-subaccount preferences, so a change to either
     # one has to stale a continuation the same way a renamed account does.
-    if statement or report == "trial-balance":
+    if statement or report in {"trial-balance", "general-ledger"}:
         extra_state = [tuple(raw.execute("""SELECT fiscal_year_start_month,
             use_account_numbers, show_lowest_subaccount_only FROM company_info""").fetchone())]
         if statement:
