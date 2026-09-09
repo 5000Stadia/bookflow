@@ -210,3 +210,35 @@ def test_bounded_source_links_and_stale_restart(register_browser, monkeypatch):
     assert restart and 'links_cursor=' not in restart
     b.navigate(restart)
     b.wait_for('!!document.querySelector(".work-document a[rel=next]")')
+
+
+def test_completion_missing_start_keeps_phone_form_for_correction(register_browser, tmp_path):
+    env, b = register_browser, register_browser.browser
+    run = lambda name, data: _command(b, env.site, name, data)
+    customer = run('customer.create', dict(name='Completion customer'))['id']
+    order = run('work-order.create', dict(date='2026-01-14', customer=customer, title='Finish site inspection'))
+    b.viewport(390, 900)
+    base = f'{env.site.base_url}/c/{env.site.company_id}/work-order/{order["id"]}'
+    visit(b, base + '/complete')
+    _fill(b, 'f:actual_end', '2026-01-14T11:00:00Z')
+    _click(b, 'preview')
+    _error(b, 'E_VALIDATION')
+    assert 'actual_start' in b.evaluate('document.querySelector(".error").innerText')
+    assert 'record when work began' in b.evaluate('document.querySelector(".error").innerText')
+    assert _value(b, 'f:actual_end') == '2026-01-14T11:00:00Z'
+    assert _value(b, 'f:expected_version') == '1'
+    assert _value(b, 'f:actual_start') == ''
+    assert b.evaluate('location.pathname').endswith('/complete')
+    assert run('work-order.show', dict(work_order=order['id']))['version'] == 1
+    _contained(b, 390)
+    import base64
+    (tmp_path / 'missing-start-validation-390.png').write_bytes(base64.b64decode(
+        b.call('Page.captureScreenshot', {'format':'png', 'captureBeyondViewport':True})['data']))
+    _fill(b, 'f:actual_start', '2026-01-14T10:00:00Z')
+    preview(b)
+    _click(b, 'submit')
+    assert saved(b, 'work-order') == order['id']
+    completed = run('work-order.show', dict(work_order=order['id']))
+    assert completed['status'] == 'complete' and completed['version'] == 2
+    assert completed['revision']['facts']['actual_start'] == '2026-01-14T10:00:00Z'
+    assert completed['revision']['facts']['actual_end'] == '2026-01-14T11:00:00Z'

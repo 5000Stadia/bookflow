@@ -799,7 +799,10 @@ estimate and work-order contract. The shared registry exposes21 commands; all
 three nouns have create/update/copy/show/query/history plus proposal estimate,
 estimate work-order and work-order complete. Structured browser forms and detail,
 history and source views cover desktop and phone. Work completion records quantities
-and operational times without posting a sale or claiming payment.
+and operational times without posting a sale or claiming payment. Resulting state
+invariants are checked before tax preparation parses captured facts, so completion
+with a missing actual start or an end preceding its start returns field-specific
+`E_VALIDATION`; the browser retains the form for correction.
 
 company/work_models.py defines typed inputs; work_facts.py captures commercial and
 operational facts; work_defaults.py resolves captured and current selections;

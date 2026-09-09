@@ -362,14 +362,14 @@ def _state_invariants(kind, value):
         raise _invalid('expires_on', 'must not precede the document date')
     if kind != 'work_order':
         return
+    if status in ('in_progress', 'complete') and not f['actual_start']:
+        raise _invalid('actual_start', 'record when work began')
     for prefix in ('scheduled', 'actual'):
         start, end = f[prefix + '_start'], f[prefix + '_end']
         if end and (not start or clock.parse_iso(end) < clock.parse_iso(start)):
             raise _invalid(prefix + '_end', 'requires its start and cannot precede it')
     if status == 'scheduled' and not f['scheduled_start']:
         raise _invalid('scheduled_start', 'scheduled work needs a scheduled start')
-    if status in ('in_progress', 'complete') and not f['actual_start']:
-        raise _invalid('actual_start', 'record when work began')
     if status == 'complete' and (not f['actual_end'] or any(
             line['facts']['completed_quantity_microunits'] != line['facts']['quantity_microunits'] for line in value['lines'])):
         raise _invalid('status', 'complete work needs an actual end and all ordered quantities completed')
@@ -672,9 +672,10 @@ def prepare(s, ctx, inp, kind, operation):
             facts=resolved.model_dump(mode='json'), lines=line_values,
             custom_fields=_custom_semantic(custom_plan.snapshot))
         custom_snapshot = custom_plan.snapshot
+    # Report invalid completion timestamps before captured-fact parsing in tax preparation.
+    _state_invariants(kind, value)
     work_tax.prepare(s,header['id'],value)
     _lifecycle(kind, before, value, inp, ctx)
-    _state_invariants(kind, value)
     _dependencies(s, old, before, value)
     _accepted_group(s, header, value['status'])
     fingerprint = _fingerprint(s, inp, kind, operation, value, old_rev, warnings, header['id'])

@@ -132,11 +132,11 @@ def test_reopening_normalizes_old_end_before_new_start_validation(client, sale, 
     reopened = cli.run('work-order', 'update', order['id'], '--expected-version', '2', '--status', 'in_progress',
         '--actual-start', '2026-01-13T09:00:00Z', '--reason', 'Reopen work', '--company', COMPANY, '--json')
     assert reopened.returncode == 0, reopened.stdout + reopened.stderr
-    current = run(client, 'work-order', 'show', work_order=order['id'])
+    current = client.run('work-order show', dict(work_order=order['id']), company=COMPANY)
     assert current['version'] == 3 and current['status'] == 'in_progress'
     assert current['revision']['facts']['actual_start'] == '2026-01-13T09:00:00Z'
     assert current['revision']['facts']['actual_end'] is None
-    prior = run(client, 'work-order', 'show', work_order=order['id'], revision_number=2)
+    prior = client.run('work-order show', dict(work_order=order['id'], revision_number=2), company=COMPANY)
     assert prior['revision']['facts']['actual_end'] == '2026-01-12T12:00:00Z'
 
 
@@ -411,3 +411,25 @@ def test_generic_cached_conversion_refreshes_current_destination(client, sale):
     assert repeated['id'] == created['id'] and repeated['status'] == 'complete'
     assert repeated['idempotent_replay'] and not repeated['changed']
     assert repeated['version'] == 2
+
+
+@pytest.mark.parametrize('timestamps,field', [
+    ({}, 'actual_start'),
+    ({'actual_start': None}, 'actual_start'),
+    ({'actual_end': '2026-01-14T11:00:00Z'}, 'actual_start'),
+    ({'actual_start': '2026-01-14T12:00:00Z', 'actual_end': '2026-01-14T11:00:00Z'}, 'actual_end'),
+    ({'actual_start': '2099-01-14T12:00:00Z'}, 'actual_end'),
+])
+def test_completion_timestamp_errors_are_actionable_and_do_not_write(client, sale, timestamps, field):
+    order = make(client, sale, 'work-order')
+    data = dict(work_order=order['id'], expected_version=1, **timestamps)
+    for dry_run in (True, False):
+        with pytest.raises(BookflowError) as caught:
+            client.run('work-order complete', data, company=COMPANY, dry_run=dry_run)
+        assert caught.value.code == 'E_VALIDATION'
+        assert caught.value.details['fields'][0]['field'] == field
+        hint = 'began' if field == 'actual_start' else 'start'
+        assert hint in caught.value.details['fields'][0]['problem']
+        unchanged = client.run('work-order show', dict(work_order=order['id']), company=COMPANY)
+        assert unchanged['version'] == 1 and unchanged['status'] == 'draft'
+        assert unchanged['revision'] == order['revision']
