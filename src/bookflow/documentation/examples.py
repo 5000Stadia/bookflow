@@ -347,3 +347,41 @@ for _verb,_payload in _RECOVERY_EXAMPLES.items():
     if _verb in {'begin','upload','seal','apply','abort','replace'}:
         _args.extend(['--reason','Recover the complete intended draft'])
     EXAMPLES['payment recovery '+_verb]=Example(' '.join(_payment_shell.quote(arg) for arg in _args),_payload)
+
+# Deposits: bank the receipts sitting in Undeposited Funds.
+_DEPOSIT_PAYMENT = '01ARZ3NDEKTSV4RRFFQ69G5FB1'
+_DEPOSIT_RECEIPT = '01ARZ3NDEKTSV4RRFFQ69G5FB2'
+_DEPOSIT_ROWS = [dict(source_type='payment', source=_DEPOSIT_PAYMENT, expected_version=1),
+                 dict(source_type='sales_receipt', source=_DEPOSIT_RECEIPT, expected_version=1)]
+_DEPOSIT_DOCUMENT = dict(mode='inline', deposit_to='Checking', date='2026-06-03', memo='Saturday receipts',
+                         sources=_DEPOSIT_ROWS, additional=[])
+_DEPOSIT_REPLACEMENT = dict(_DEPOSIT_DOCUMENT, number='1', cash_back=None, custom_fields={},
+                            expected_custom_field_kinds={}, sources=_DEPOSIT_ROWS[:1])
+_DEPOSIT_SOURCE_ROWS = _payment_json.dumps(_DEPOSIT_ROWS, separators=(',', ':'))
+EXAMPLES.update({
+    'deposit sources': Example(
+        'bookflow deposit sources --date 2026-06-03 --limit 50 --company "Demo Plumbing Co" --json',
+        {'date': '2026-06-03', 'limit': 50}),
+    'deposit post': Example(
+        'bookflow deposit post --operation-key example-deposit-1 --document-mode inline'
+        ' --document-deposit-to Checking --document-date 2026-06-03 --document-memo "Saturday receipts"'
+        f" --document-sources '{_DEPOSIT_SOURCE_ROWS}'"
+        ' --company "Demo Plumbing Co" --reason "Bank Saturday receipts" --json',
+        dict(operation_key='example-deposit-1', document=_DEPOSIT_DOCUMENT)),
+    'deposit update': Example(
+        f'bookflow deposit update {ID} --expected-version 1 --operation-key example-deposit-2'
+        ' --document-mode inline --document-deposit-to Checking --document-date 2026-06-03'
+        ' --document-number 1 --document-memo "Saturday receipts" --document-custom-fields "{}"'
+        ' --document-expected-custom-field-kinds "{}"'
+        f""" --document-sources '{_payment_json.dumps(_DEPOSIT_ROWS[:1], separators=(',', ':'))}'"""
+        ' --document-additional "[]" --dependency-guard authenticated-guard-from-deposit-post-dry-run'
+        ' --company "Demo Plumbing Co" --reason "Remove a receipt banked in error" --json',
+        dict(deposit=ID, expected_version=1, operation_key='example-deposit-2',
+             dependency_guard='authenticated-guard-from-deposit-post-dry-run', document=_DEPOSIT_REPLACEMENT)),
+    'deposit void': Example(
+        f'bookflow deposit void {ID} --expected-version 2 --operation-key example-deposit-3'
+        ' --dependency-guard authenticated-guard-from-deposit-void-dry-run'
+        ' --company "Demo Plumbing Co" --reason "Deposit never reached the bank" --json',
+        dict(deposit=ID, expected_version=2, operation_key='example-deposit-3',
+             dependency_guard='authenticated-guard-from-deposit-void-dry-run')),
+})

@@ -205,21 +205,21 @@ def _resolve_one(step: home.Step, catalogue: dict[str, registry.Command]) -> hom
     return board[0].steps[0]
 
 
-VIEW_DEPOSITS = home.Step(
-    id="view-deposits", title="Deposits", summary="Deposits already recorded.",
-    action=home.Action("View deposits", home.READ, ("deposit list",), "/deposit"),
-    waits_on="deposit commands")
+VIEW_BILLS = home.Step(
+    id="view-bills", title="Bills", summary="Vendor bills already entered.",
+    action=home.Action("View bills", home.READ, ("bill list",), "/bill"),
+    waits_on="bill commands")
 
 
 def test_an_unregistered_command_is_a_placeholder():
-    assert registry.get("deposit list") is None, "this branch is supposed to be without deposit commands"
-    item = _resolve_one(VIEW_DEPOSITS, {})
+    assert registry.get("bill list") is None, "this branch is supposed to be without accounts payable"
+    item = _resolve_one(VIEW_BILLS, {})
     assert not item.live and item.href is None
-    assert item.reason == "deposit commands"
+    assert item.reason == "bill commands"
 
 
 def test_a_local_only_command_is_a_placeholder():
-    item = _resolve_one(VIEW_DEPOSITS, {"deposit list": _stub("deposit list", local_only=True)})
+    item = _resolve_one(VIEW_BILLS, {"bill list": _stub("bill list", local_only=True)})
     assert not item.live, "a command the host does not route is not something the browser may offer"
 
 
@@ -232,14 +232,14 @@ def test_a_working_command_with_no_destination_is_a_placeholder():
 
 
 def test_a_read_only_command_under_a_write_label_is_a_placeholder():
-    step = home.Step(id="mislabelled", title="Make deposit", summary="",
-                     action=home.Action("Make a deposit", home.WRITE, ("deposit list",), "/deposit"))
-    item = _resolve_one(step, {"deposit list": _stub("deposit list")})
+    step = home.Step(id="mislabelled", title="Enter bill", summary="",
+                     action=home.Action("Enter a bill", home.WRITE, ("bill list",), "/bill"))
+    item = _resolve_one(step, {"bill list": _stub("bill list")})
     assert not item.live and "only read" in item.reason
     # the same declaration, honestly labelled, passes the lookup half of the contract
-    honest = home.Step(id="honest", title="Deposits", summary="",
-                       action=home.Action("View deposits", home.READ, ("deposit list",), "/deposit"))
-    assert _resolve_one(honest, {"deposit list": _stub("deposit list")}).live
+    honest = home.Step(id="honest", title="Bills", summary="",
+                       action=home.Action("View bills", home.READ, ("bill list",), "/bill"))
+    assert _resolve_one(honest, {"bill list": _stub("bill list")}).live
 
 
 def test_the_map_never_labels_a_read_command_as_a_write():
@@ -266,20 +266,20 @@ def test_a_tile_flips_with_registry_state_and_no_template_edit(hosted):
 
     page = browser.get(f"/c/{hosted.company_id}/").text
     assert _tiles(page)["Invoice"][0] == "a"
-    assert _tiles(page)["Make deposit"][0] == "div"
+    assert _tiles(page)["Write check"][0] == "div"
 
 
 def test_registration_and_routing_alone_do_not_deliver_a_live_tile(hosted):
-    """Registering deposit commands would satisfy the lookups. The navigation witness still refuses."""
-    stub = {"deposit list": _stub("deposit list")}
-    item = _resolve_one(VIEW_DEPOSITS, stub)
+    """Registering bill commands would satisfy the lookups. The navigation witness still refuses."""
+    stub = {"bill list": _stub("bill list")}
+    item = _resolve_one(VIEW_BILLS, stub)
     assert item.live, "the lookup half of the contract is satisfied by registration alone"
 
     browser = _browser(hosted)
     reachable = home.ResolvedStep(step=item.step, live=True, reason="",
-                                  href=f"/c/{hosted.company_id}/deposit")
+                                  href=f"/c/{hosted.company_id}/bill")
     with pytest.raises(AssertionError):
-        navigate_witness(browser, reachable, "deposit")
+        navigate_witness(browser, reachable, "bill")
 
 
 def test_a_signed_in_reader_whose_command_refuses_sees_the_error_not_a_login(hosted, monkeypatch):

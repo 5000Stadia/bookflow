@@ -294,3 +294,36 @@ for _noun in ('estimate', 'work-order'):
 for _noun in ('invoice', 'sales-receipt'):
     for _verb in ('post', 'update', 'void'):
         MATRIX[f'{_noun} {_verb}']['E_WORK_DEPENDENCY'] = 'retained source-linked line or commercial scope changed'
+
+_DEPOSIT_WRITE_ERRORS = {
+    'E_RECORD_NOT_FOUND': 'deposit, receipt, account or party absent from the selected company',
+    'E_VERSION_CONFLICT': 'expected_version behind the current deposit or receipt header',
+    'E_PREVIEW_STALE': 'resolved facts, dependency guard or draft pin changed since the preview',
+    'E_PERIOD_CLOSED': 'deposit or reversal date inside the closing date',
+    'E_INACTIVE_REFERENCE': 'inactive bank, offset, cash-back account, party, class or payment method',
+    'E_DUPLICATE_NUMBER': 'deposit number already used',
+    'E_AMOUNT_PRECISION': 'amount with more decimals than the currency allows',
+    'E_VALUE_RANGE': 'posting total, leg or header version outside signed 64-bit range',
+    'E_REASON_REQUIRED': 'correction, void or coordination without a reason',
+    'E_SCHEMA_BEHIND': 'company database behind the deposit feature revision',
+    'E_DEPOSIT_SOURCE_INELIGIBLE': 'receipt is not posted undeposited home-currency cash',
+    'E_DEPOSIT_SOURCE_CLAIMED': 'receipt already belongs to another active deposit',
+    'E_DEPOSIT_SOURCE_INVALID': 'captured receipt cash provenance unsupported or inconsistent',
+    'E_DEPOSIT_DATE_BEFORE_SOURCE': 'deposit date earlier than a selected receipt',
+    'E_DEPOSIT_TOTAL': 'nonpositive subtotal, cash back above subtotal, or negative bank total',
+    'E_DEPOSIT_OPERATION_KEY_REUSED': 'permanent key already names a different deposit intent',
+    'E_DEPOSIT_DRAFT_STATE': 'pinned draft consumed, abandoned or pointing at another deposit',
+    'E_DEPOSIT_DEPENDENCY': 'receipt claimed by a deposit; an atomic coordinated correction is required',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+for _verb in ('post', 'update', 'void'):
+    MATRIX[f'deposit {_verb}'] = dict(_DEPOSIT_WRITE_ERRORS)
+MATRIX['deposit sources'] = {
+    'E_RECORD_NOT_FOUND': 'for_deposit names no deposit in the selected company',
+    'E_QUERY_STALE': 'candidate facts changed between bounded pages',
+    'E_VALIDATION': 'inverted receipt date range or a cursor from another filter',
+    'E_SCHEMA_BEHIND': 'company database behind the deposit feature revision',
+    'E_DEPOSIT_SOURCE_INVALID': 'captured receipt cash provenance unsupported or inconsistent',
+}

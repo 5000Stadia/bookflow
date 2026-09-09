@@ -189,19 +189,13 @@ def _bank(s,financial,data,revision,batch,pending,current,created,audited,*,void
         pending['bank_effect_versions'].append(version);current.append(dict(key_id=key['id'],version_id=version['id']))
 
 
-def _execute(s,ctx,plan):
-    """Re-resolve and validate inside caller's already-open writer transaction."""
-    if not s.company.raw.in_transaction or s.dry_run:
-        raise RuntimeError('Private deposit execution requires an owned writer transaction')
-    inp=lifecycle.INPUTS[plan.verb].model_validate_json(plan.input_json)
-    recovered=lifecycle.recover(s,ctx,inp,plan.verb,plan.binding)
-    if recovered is not None:return recovered,None
-    if plan.verb!='post' and getattr(inp,'dependency_guard',None) is None:
-        raise BookflowError('E_PREVIEW_STALE',details={'reason':'complete deposit guard required'})
-    # Retain the authenticated preview producer, including bearer liveness.
-    # Re-deriving OS identity here would change a hosted agent's admission.
-    fresh=lifecycle.prepare(s,ctx,inp,plan.verb,binding=plan.binding,expected_guard=plan.dependency_guard)
-    if fresh.facts_fingerprint!=plan.facts_fingerprint:raise BookflowError('E_PREVIEW_STALE')
+def compose(s,ctx,fresh):
+    """Pure complete composition of the aggregate, its output and its audit rows.
+
+    Writes nothing. `_execute` and the dry-run preview share this one producer,
+    so a preview can never disagree with what the commit would write.
+    """
+    inp=lifecycle.INPUTS[fresh.verb].model_validate_json(fresh.input_json)
     bundle=build(s,ctx,fresh)
     from bookflow.company.deposit_persistence_validation import validate
     validate(s,ctx,fresh,bundle)
@@ -239,6 +233,61 @@ def _execute(s,ctx,plan):
         created_at=data['at'],created_by=s.actor.id,created_via=ctx.interface.value,audit_event_id=data['event'])
     touched.append(Touched('deposit_operation',operation['id'],'create',None,1,effects.decoded(operation),db='company'))
     if fresh.custom_plan is not None and data['changed']:touched.extend(custom.touches(fresh.custom_plan))
+    collections=dict(request_sources=[r.model_dump(mode='json') for r in financial.intent.sources],request_additional=[r.model_dump(mode='json') for r in financial.intent.additional],
+        memberships=[r.model_dump(mode='json') for r in original.memberships],document_changes=[r.model_dump(mode='json') for r in original.headers],
+        cash_allocations=[r.model_dump(mode='json') for r in financial.cells],bank_changes=[r.model_dump(mode='json') for r in original.bank_effects])
+    return dict(input=inp,bundle=bundle,output=output,touched=touched,operation=operation,targets=targets,
+        consumed=consumed,collections=collections)
+
+
+def preview(s,ctx,fresh):
+    """Dry-run projection of a prepared aggregate; no row is written or reserved.
+
+    Every identity this operation would allocate is replaced by its logical
+    token, so a preview never publishes a provisional physical ID.
+    """
+    composed=compose(s,ctx,fresh)
+    data=composed['bundle']['data']
+    mapping=dict(data['mapping'])
+    mapping.setdefault(data['event'],'new-event')
+    mapping.setdefault(data['operation_id'],'new-operation')
+    counters={}
+    for name in ('transaction_revisions','posting_batches','deposit_memberships','document_line_identities',
+                 'deposit_row_keys','document_lines','deposit_component_keys','deposit_components',
+                 'posting_lines','posting_line_sources','deposit_cash_cells','bank_effect_keys','bank_effect_versions'):
+        label=dict(transaction_revisions='revision',posting_batches='batch',deposit_memberships='membership',
+                   document_line_identities='line',deposit_row_keys='rowkey',document_lines='docline',
+                   deposit_component_keys='compkey',deposit_components='component',posting_lines='posting',
+                   posting_line_sources='attribution',deposit_cash_cells='cell',bank_effect_keys='bankkey',
+                   bank_effect_versions='bankver')[name]
+        for row in composed['bundle']['pending'][name]:
+            identity=row.get('id') or row.get('revision_id')
+            if identity in mapping:continue
+            counters[label]=counters.get(label,0)+1
+            mapping[identity]='new-'+label+'-'+str(counters[label])
+    projected=lifecycle._logical(composed['output'].model_dump(mode='json'),mapping)
+    return LifecycleOutput.model_validate_json(q.canonical(projected)).model_copy(update={'operation_id':None})
+
+
+def _execute(s,ctx,plan):
+    """Re-resolve and validate inside caller's already-open writer transaction."""
+    if not s.company.raw.in_transaction or s.dry_run:
+        raise RuntimeError('Private deposit execution requires an owned writer transaction')
+    inp=lifecycle.INPUTS[plan.verb].model_validate_json(plan.input_json)
+    recovered=lifecycle.recover(s,ctx,inp,plan.verb,plan.binding)
+    if recovered is not None:return recovered,None
+    if plan.verb!='post' and getattr(inp,'dependency_guard',None) is None:
+        raise BookflowError('E_PREVIEW_STALE',details={'reason':'complete deposit guard required'})
+    # Retain the authenticated preview producer, including bearer liveness.
+    # Re-deriving OS identity here would change a hosted agent's admission.
+    fresh=lifecycle.prepare(s,ctx,inp,plan.verb,binding=plan.binding,expected_guard=plan.dependency_guard)
+    if fresh.facts_fingerprint!=plan.facts_fingerprint:raise BookflowError('E_PREVIEW_STALE')
+    composed=compose(s,ctx,fresh)
+    bundle=composed['bundle'];output=composed['output'];touched=composed['touched']
+    operation=composed['operation'];targets=composed['targets'];consumed=composed['consumed']
+    collections=composed['collections']
+    data=bundle['data'];h=bundle['header'];pending=bundle['pending'];old=data['before']
+    from bookflow.company import deposit_draft_consumption as consumption
     audit.write_event_to(s.company,ctx,'deposit '+fresh.verb,'Deposit '+fresh.verb,touched,actor_id=s.actor.id,actor_kind=s.actor.kind,
         directive_code=getattr(s,'directive_code',None),event_id=data['event'])
     if data['changed']:
@@ -262,9 +311,6 @@ def _execute(s,ctx,plan):
             s.company.conn.execute(stmt.on_conflict_do_update(index_elements=['name'],set_=data['sequence']))
     s.company.conn.execute(c.deposit_operations.insert().values(**operation))
     for target in targets:s.company.conn.execute(c.deposit_operation_targets.insert().values(operation_id=operation['id'],transaction_id=target))
-    collections=dict(request_sources=[r.model_dump(mode='json') for r in financial.intent.sources],request_additional=[r.model_dump(mode='json') for r in financial.intent.additional],
-        memberships=[r.model_dump(mode='json') for r in original.memberships],document_changes=[r.model_dump(mode='json') for r in original.headers],
-        cash_allocations=[r.model_dump(mode='json') for r in financial.cells],bank_changes=[r.model_dump(mode='json') for r in original.bank_effects])
     for kind,values in collections.items():
         for ordinal,value in enumerate(values):
             s.company.conn.execute(c.deposit_operation_items.insert().values(operation_id=operation['id'],kind=kind,ordinal=ordinal,facts_snapshot=q.canonical(value)))

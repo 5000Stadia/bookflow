@@ -324,6 +324,7 @@ def execution_map():
     from tests.test_mcp_registry_supporting import FAMILIES
     from tests.test_mcp_registry_payment_preparation import FAMILIES as PAYMENT_FAMILIES
     from tests.test_mcp_registry_payments import COMMANDS as PAYMENT_FINANCIAL
+    from tests.test_mcp_registry_deposits import COMMANDS as DEPOSIT_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -336,6 +337,7 @@ def execution_map():
                    'tests/test_mcp_registry_supporting.py::test_supporting_family_full_documents_and_rejections' if any(cmd.name in names for names in FAMILIES.values()) else
                    'tests/test_mcp_registry_payment_preparation.py::test_payment_preparation_four_surface_documents_context_and_rejections' if any(cmd.name in names for names in PAYMENT_FAMILIES.values()) else
                    'tests/test_mcp_registry_payments.py::test_payment_financial_lifecycle_full_documents_and_exact_ledger' if cmd.name in PAYMENT_FINANCIAL else
+                   'tests/test_mcp_registry_deposits.py::test_deposit_lifecycle_full_documents_and_exact_ledger' if cmd.name in DEPOSIT_COMMANDS else
                    'tests/test_mcp_registry_hub_reads.py::test_hub_read_full_documents_and_scope_boundaries' if any(cmd.name in names for names in HUB_FAMILIES.values()) else
                    'tests/test_mcp_registry_work.py::test_nonposting_work_lifecycle_full_documents_and_lineage' if any(cmd.name in names for names in WORK_FAMILIES.values()) else
                    'tests/test_mcp_registry_work_billing.py::test_work_billing_full_documents_retries_and_exact_batches' if any(cmd.name in names for names in BILLING_FAMILIES.values()) else
@@ -396,6 +398,9 @@ def variant_policies():
         ('anyOf', ('RegisterParty', 'null')): ([nested, parent, 'tests/test_mcp_address_payee_browser.py::test_top_level_register_payee_prefill_null_replacement_and_journal_destination'], []),
         ('anyOf', ('MoneyInput', 'string')): (['tests/test_mcp_nested_gui_browser.py::test_nested_collection_model_object_null_and_full_error', 'tests/test_mcp_money_gui_browser.py::test_structured_integer_money_object_exact_bytes_and_core_rejection'], []),
         ('anyOf', ('SalesMoneyInput', 'null', 'string')): ([money, 'tests/test_mcp_money_gui_browser.py::test_top_level_money_object_nullable_branch_and_complete_calculation', 'tests/test_mcp_sales_money_origin_browser.py::test_sales_line_money_object_null_rejection_and_current_default_origin'], []),
+        ('anyOf', ('SignedMoney', 'string')): ([
+            'tests/test_mcp_registry_deposits.py::test_deposit_lifecycle_full_documents_and_exact_ledger'],
+            ['the deposit witnesses enter signed decimal strings; the structured signed-money object has no dedicated browser case yet']),
         ('anyOf', ('SalesMoneyInput', 'string')): ([money, 'tests/test_mcp_money_gui_browser.py::test_top_level_money_object_nullable_branch_and_complete_calculation'], []),
         ('anyOf', ('any', 'null')): ([custom, 'tests/test_mcp_definition_kinds_browser.py::test_definition_all_kinds_default_empty_null_omission_and_choice_visibility', 'tests/test_mcp_any_value_browser.py::test_any_money_top_level_and_nested_json_values_and_unchanged_text'], []),
         ('anyOf', ('array', 'null')): ([custom, 'tests/test_mcp_nested_gui_browser.py::test_optional_nested_collection_order_empty_null_and_omission'], []),
@@ -408,6 +413,15 @@ def variant_policies():
             'tests/test_list_browsing_browser.py::test_reorder_reset_zero_missing_paging_and_stale_restart',
             'tests/test_list_browsing_text_date_browser.py::test_text_date_named_criteria_exact_wire_results_and_retained_identity'],
             ['Dedicated list chooser witnesses cover representative Boolean/number/choice/presence/text/date cases; untested operators, malformed-date interactions and all generated-form criterion branches remain open.']),
+        ('anyOf', ('CashBackInput', 'null')): ([
+            'tests/test_mcp_registry_deposits.py::test_deposit_lifecycle_full_documents_and_exact_ledger'],
+            ['the deposit correction witness supplies a cash-back line and the post witness omits it; explicit-null clearing has no dedicated browser case yet']),
+        ('oneOf', ('DraftDocument', 'InlineDocument')): ([
+            'tests/test_mcp_registry_deposits.py::test_deposit_lifecycle_full_documents_and_exact_ledger'],
+            ['durable deposit drafts and their selection dialog are not registered yet, so only the inline branch has a form']),
+        ('oneOf', ('DraftDocument', 'ReplacementDocument')): ([
+            'tests/test_mcp_registry_deposits.py::test_deposit_lifecycle_full_documents_and_exact_ledger'],
+            ['durable deposit drafts and their selection dialog are not registered yet, so only the inline branch has a form']),
         ('oneOf', ('InlineApplications', 'SelectionReference')): ([payment, 'tests/test_mcp_nested_payment_request_browser.py::test_all_six_nested_preview_request_branches_exact_input_results_and_inactive_controls'], []),
         ('oneOf', ('InlineCalculation', 'SelectionReference')): ([payment, 'tests/test_mcp_calculation_variant_browser.py::test_calculation_inline_null_origin_rejections_and_saved_selection'], ['parent-owned payment-selection workspace/navigation and combined-base acceptance']),
         ('oneOf', ('ApplyPreviewRequest', 'InvoiceUpdatePreviewRequest', 'ReceivePreviewRequest', 'UnapplyPreviewRequest', 'UpdatePreviewRequest', 'VoidPreviewRequest')): (['tests/test_mcp_nested_payment_request_browser.py::test_all_six_nested_preview_request_branches_exact_input_results_and_inactive_controls'], []),

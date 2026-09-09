@@ -45,11 +45,17 @@ def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_e
         if before_execute is not None:
             before_execute(session)
         permit = PublicationPermit.capture(cmd, raw, ctx, session, cred, selector, source, dry_run)
+        # Hand the authenticated producer to the session so a command family that
+        # revalidates bearer liveness inside its own transaction gets this
+        # credential rather than deriving an OS login the host does not have.
+        session.credential = cred
         try:
             result = execute(cmd, raw, ctx, session, company_selector=selector, company_source=source, dry_run=dry_run)
         except BookflowError:
             finish(session, succeeded=False)
             raise
+        finally:
+            session.credential = None
         finish(session, result=result)
         return result
 

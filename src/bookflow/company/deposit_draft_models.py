@@ -113,7 +113,8 @@ class SelectionQuery(Page):
     draft: ID | None = None
 class SourceFilter(StrictModel):
     date: _Date
-    payment_method_type: Literal['cash','check','credit_card','debit_card','e_check','ach','gift_card','other'] | None = None
+    # Same order as the payment-method kind enum: one shared schema definition.
+    payment_method_type: Literal['cash','check','credit_card','debit_card','gift_card','e_check','ach','other'] | None = None
     q: str | None = Field(default=None,max_length=2000)
     date_from: _Date | None = None
     date_to: _Date | None = None

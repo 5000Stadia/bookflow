@@ -1639,8 +1639,9 @@ a unique current receipt claim, and versioned bank-effect keys/current pointers.
 It preserves old history and local SQLite objects and adds no deleted status.
 New source attribution proves both the deposit-owned envelope and the separately
 owned receipt attribution. Null deposit attribution is omitted from older
-serialized source facts. This private increment registers no deposit commands,
-GUI, public lifecycle, Delete execution or reconciliation certificates.
+serialized source facts. That storage increment supplied no command surface;
+the registered deposit commands are described under *Deposit commands* below,
+and Delete execution and reconciliation certificates remain absent.
 
 `storage.migrate.FeatureRevision` and `feature_admission` provide the shared
 migration-ancestry boundary for independently owned features. Unknown revisions
@@ -2000,6 +2001,46 @@ aggregate checks before DML; no co0022 rewrite or activation is included here.
 Coordinate v2 receipts retain typed complete source before/inserted rows, source-owner effect collections, deposit effects, the generated identity manifest and full transaction authority targets. Recovery revalidates the actual execution binding and the complete saved graph before comparing intent; original effects are immutable and current states are loaded separately. Permanent item pages use explicit per-kind models and authenticated actor/principal-bound cursors. Preview pages apply only declared typed generated-reference substitutions to those collections. Immutable pages authorize the full saved graph on every call and do not reload unused current-state payloads. Coordinate audit row kinds have private scalar/cohort evidence mappings, without adding public annotation target types. Ordinary v1 history and audit encoding remain supported; coordinate history is selected by command/version before decoding.
 
 Company co0023, parent co0022, rebuilds only the two deposit operation tables to extend their command/item CHECKs, retaining raw values and supported local DDL. Shared audit preparation uses the existing encoder and preserves the ordinary writer's default behavior. No public deposit coordinator, draft/provider, Delete, reconciliation activation or permission/publication activation is supplied by these private owners.
+
+## Deposit commands
+
+`commands/deposit_cmds.py` registers `deposit post`, `deposit update`, `deposit
+void` and `deposit sources`. Each is a translation of the owned private aggregate
+and takes no accounting decision: the planner calls `deposit_lifecycle.prepare`,
+the applier calls `deposit_persistence.execute` inside the company transaction
+dispatch opens, and the aggregate writes its own audit event, so the command
+returns `Applied(..., audited=True)` with no dispatch entries of its own. A
+recovered permanent operation is returned by the planner and the applier writes
+nothing. Registration puts deposits on the CLI, HTTP, MCP and workbench like any
+other command; the home window's *Make deposit* tile is live and lands on
+`/deposit/post`.
+
+`company/deposit_outputs.py` is the closed public projection. The private
+`LifecycleOutput` carries physical posting, attribution and captured profile
+facts that belong to the ledger rather than to a command result, so the wire
+contract exposes the document, the receipts it banks, the money entered beside
+them, the cash-back line, each bank account's statement movement, the membership
+claims and releases, the posting batches and the audit event. `deposit sources`
+projects candidates the same way and adds the authorized count and subtotal of
+the whole filter. Every amount is minor units plus currency.
+
+`deposit_persistence.compose` is the one producer of an aggregate's rows, output,
+touches and operation receipt, and it writes nothing; `_execute` adds the DML and
+`preview` returns the same output with every identity this operation would
+allocate replaced by its logical token, so a dry run publishes no provisional
+physical ID. Preview and commit therefore cannot disagree.
+
+Hosted requests carry their authenticated producer on `Session.credential`, set by
+`adapters/http/execution.run_hosted` from the credential it already revalidated
+and cleared when the request leaves. The deposit commands pass it as the binding,
+so `deposit_dependency_history.execution_binding` revalidates the actual bearer or
+session cookie instead of deriving an OS login the host does not have. A local
+session leaves it None and the private layer builds its `OSBinding` as before.
+
+Correcting or voiding a deposit needs the authenticated `dependency_guard` its own
+dry run issues; committing without one is `E_PREVIEW_STALE`. Claiming a receipt
+bumps that receipt's header version, so a replacement reads its members back
+through `deposit sources` with `for_deposit`.
 
 Private coordinate persistence exposes `execute_applied` for a future owned adapter:
 its `Applied` is audited and not finalized, since the caller still owns commit.
