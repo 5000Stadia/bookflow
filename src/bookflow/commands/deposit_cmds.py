@@ -1,8 +1,9 @@
 """Deposits: bank the receipts sitting in Undeposited Funds.
 
-Every verb here is a thin translation of the owned private deposit aggregate
+Write verbs translate the owned private deposit aggregate
 (`company/deposit_lifecycle.py` plans it, `company/deposit_persistence.py` writes
-it in one transaction). No accounting decision is taken in this module.
+it in one transaction). Read verbs use the sealed public reader execution owner.
+No accounting decision is taken in this module.
 """
 from bookflow.core.registry import command, Plan, Applied
 from bookflow.company import deposit_lifecycle as lifecycle, deposit_persistence as persistence
@@ -77,3 +78,37 @@ deposit_void = _financial('void', VoidInput)
                  'E_DEPOSIT_SOURCE_INVALID'])
 def deposit_sources(inp, ctx, s):
     return Plan(outputs.sources_page(s, source_queries.query(s, inp, ctx=ctx, binding=_binding(s))))
+
+
+from bookflow.core.context import Context
+from bookflow.core.errors import BookflowError
+from bookflow.core.registry import command, Plan
+from bookflow.core.session import Session
+from bookflow.company.deposit_read_models import ShowInput, ItemsInput
+from bookflow.company.deposit_public_models import DepositDetail, DepositItemsPage
+
+_ERRORS = ['E_RECORD_NOT_FOUND', 'E_VALIDATION', 'E_PERMISSION', 'E_UNAUTHENTICATED',
+           'E_DEPOSIT_SOURCE_INVALID']
+
+
+@command('deposit show', scope='company',
+         description='Show one deposit: its selected revision header, exact totals and counts, current status, '
+                     'optional dated bank effect and the business references this member may see.',
+         input_model=ShowInput, output_model=DepositDetail,
+         required_role='member', capability='ledger.read', positional=['deposit'],
+         error_codes=_ERRORS)
+def deposit_show(inp: ShowInput, ctx: Context, s: Session) -> Plan:
+    raise BookflowError('E_INTERNAL', message='Deposit details require authenticated reader execution')
+
+
+@command('deposit items', scope='company',
+         description='Page one deposit revision\'s composition: contributing receipts, additional cash rows or '
+                     'cash allocations, keeping the selected revision across pages.',
+         input_model=ItemsInput, output_model=DepositItemsPage,
+         required_role='member', capability='ledger.read', positional=['deposit'],
+         error_codes=[*_ERRORS, 'E_QUERY_STALE'])
+def deposit_items(inp: ItemsInput, ctx: Context, s: Session) -> Plan:
+    raise BookflowError('E_INTERNAL', message='Deposit details require authenticated reader execution')
+
+
+DEPOSIT_COMMANDS = [deposit_show, deposit_items]

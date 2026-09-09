@@ -1,0 +1,88 @@
+{% extends "base.html" %}{% block title %}Deposit{% endblock %}{% block body %}
+<link rel="stylesheet" href="{{ static_urls['deposit.css'] }}">
+<nav class="crumbs deposit-crumbs"><a href="{{ company_url }}">Company</a> / {% if register_url %}<a href="{{ register_url }}">Bank register</a>{% else %}<a href="{{ accounts_url }}">Accounts and registers</a>{% endif %} / Deposit</nav>
+{% if unavailable %}
+<h1 class="deposit-heading">Deposit</h1>
+<section class="deposit-unavailable" role="status" aria-label="Deposit unavailable">
+<p class="deposit-unavailable-message">{{ unavailable }}</p>
+<p class="deposit-actions"><a href="{{ accounts_url }}">Return to the register</a><a href="{{ company_url }}">Company home</a><a href="{{ retry_url }}">Try this page again</a></p>
+{% if selection_label %}<p class="muted">Your selection is kept: {{ selection_label }}.</p>{% endif %}
+</section>
+{% else %}
+<h1 class="deposit-heading">Deposit {{ detail.selected.number }}</h1>
+<p class="deposit-lede"><span class="deposit-amount{% if detail.totals.bank_total.negative %} deposit-negative{% endif %}{% if detail.totals.bank_total.zero %} deposit-zero{% endif %}">{{ detail.totals.bank_total.label }}</span> into {{ detail.selected.deposit_to.display_label }} on {{ detail.selected.date }}</p>
+
+<section class="deposit-card" aria-label="Revision selection">
+<h2>Which revision you are reading</h2>
+{% if detail.selected_is_current %}<p>Captured revision {{ detail.selected.pin.revision_number }}, which is also the current revision.</p>
+{% else %}<p class="warn">You are reading captured revision {{ detail.selected.pin.revision_number }}. The current record is at version {{ detail.current.version }}.</p>{% endif %}
+<ul class="deposit-revisions">{% for revision in detail.revisions %}<li><a href="{{ revision.url }}"{% if revision.selected %} aria-current="true" class="deposit-selected-revision"{% endif %}>Revision {{ revision.revision_number }}</a>{% if revision.current %} <span class="muted">current</span>{% endif %}{% if revision.selected %} <span class="muted">reading now</span>{% endif %}</li>{% endfor %}</ul>
+</section>
+
+<div class="deposit-grid">
+<section class="deposit-card" aria-label="Captured on this revision">
+<h2>Captured on this revision</h2>
+<p class="muted">Exactly what this immutable revision recorded. These values never change.</p>
+<div class="deposit-fields">
+<div><b>Deposit number</b><span>{{ detail.selected.number }}</span></div>
+<div><b>Deposit date</b><span>{{ detail.selected.date }}</span></div>
+<div><b>Memo</b><span>{{ detail.selected.memo if detail.selected.memo else '—' }}</span></div>
+<div><b>Deposited to (captured)</b><span>{{ detail.selected.deposit_to.display_label }}{% if not detail.selected.deposit_to.redacted %}{% if detail.selected.deposit_to.number %} · {{ detail.selected.deposit_to.number }}{% endif %} · {{ detail.selected.deposit_to.account_type }}{% endif %}</span></div>
+<div><b>Cash back</b><span>{% if detail.selected.cash_back %}<span class="deposit-amount{% if detail.selected.cash_back.amount.negative %} deposit-negative{% endif %}">{{ detail.selected.cash_back.amount.label }}</span> to {{ detail.selected.cash_back.account.display_label }}{% if detail.selected.cash_back.memo %} · {{ detail.selected.cash_back.memo }}{% endif %}{% else %}None{% endif %}</span></div>
+<div><b>Issued by (captured)</b><span>{{ detail.selected.issuer.display_label }}{% if not detail.selected.issuer.redacted and detail.selected.issuer.legal_name %} · {{ detail.selected.issuer.legal_name }}{% endif %}</span></div>
+</div>
+<h3>Custom fields (captured)</h3>
+{% if detail.selected.custom_fields %}<ul class="deposit-custom">{% for field in detail.selected.custom_fields %}<li>{% if field.redacted %}<span class="deposit-redacted">{{ redacted_text }}</span>{% else %}<b>{{ field.name }}</b>: {{ field.canonical_text if field.canonical_text is not none else field.value }}{% endif %}</li>{% endfor %}</ul>
+{% else %}<p class="muted">No custom values were captured on this revision.</p>{% endif %}
+</section>
+
+<section class="deposit-card" aria-label="Current record">
+<h2>Current record</h2>
+<p class="muted">Freshly observed at {{ detail.current_observed_at }}. Separate from the captured revision above.</p>
+<div class="deposit-fields">
+<div><b>Current status</b><span>{{ detail.current.status }}</span></div>
+<div><b>Current version</b><span>{{ detail.current.version }}</span></div>
+<div><b>Current number</b><span>{{ detail.current.number }}</span></div>
+<div><b>Current date</b><span>{{ detail.current.revision_date }}</span></div>
+<div><b>Current bank total</b><span class="deposit-amount{% if detail.current.revision_bank_total.negative %} deposit-negative{% endif %}{% if detail.current.revision_bank_total.zero %} deposit-zero{% endif %}">{{ detail.current.revision_bank_total.label }}</span></div>
+<div><b>Effective bank movement</b><span class="deposit-amount{% if detail.current.effective_bank_total.negative %} deposit-negative{% endif %}{% if detail.current.effective_bank_total.zero %} deposit-zero{% endif %}">{{ detail.current.effective_bank_total.label }}</span></div>
+<div><b>Receipts currently claimed</b><span>{{ detail.current.active_source_count }}</span></div>
+</div>
+<h3>Current records this summary names</h3>
+{% if detail.current_references %}<ul class="deposit-current-references">{% for reference in detail.current_references %}<li><span class="muted">{{ reference.group.replace('_', ' ') }}</span> {{ reference.display_label }}{% if not reference.active %} <span class="muted">inactive</span>{% endif %}</li>{% endfor %}</ul>
+{% else %}<p class="muted">None.</p>{% endif %}
+</section>
+</div>
+
+<section class="deposit-card" aria-label="Totals">
+<h2>Totals of the captured revision</h2>
+<div class="table-wrap" role="region" aria-label="Scrollable totals" tabindex="0"><table class="deposit-totals"><tbody>
+{% for label, value in [('Contributing receipts', detail.totals.source_total), ('Additional cash in', detail.totals.positive_additional_total), ('Additional cash out', detail.totals.negative_additional_total), ('Subtotal', detail.totals.subtotal), ('Cash back', detail.totals.cash_back), ('Posting total', detail.totals.posting_total), ('Bank total', detail.totals.bank_total)] %}
+<tr><th scope="row">{{ label }}</th><td class="deposit-amount{% if value.negative %} deposit-negative{% endif %}{% if value.zero %} deposit-zero{% endif %}">{{ value.label }}{% if value.negative %} <span class="muted">reduces the bank effect</span>{% endif %}{% if value.zero %} <span class="muted">no effect</span>{% endif %}</td></tr>
+{% endfor %}
+</tbody></table></div>
+</section>
+
+<section class="deposit-card" aria-label="Composition">
+<h2>Composition</h2>
+<p>{{ detail.counts.sources }} contributing receipts · {{ detail.counts.additional }} additional cash rows · {{ detail.counts.cash_allocations }} cash allocations across {{ detail.counts.components }} components. The rows themselves are on their own pages.</p>
+<p class="deposit-kinds">{% for link in item_links %}<a href="{{ link.url }}">{{ link.label }}</a>{% endfor %}</p>
+</section>
+
+{% if detail.dated_state %}
+<section class="deposit-card" aria-label="Dated bank effect">
+<h2>Bank effect as of {{ detail.dated_state.as_of }}</h2>
+<p>{{ detail.dated_state.financial_state.replace('_', ' ') }} · bank movement <span class="deposit-amount{% if detail.dated_state.bank_movement.negative %} deposit-negative{% endif %}{% if detail.dated_state.bank_movement.zero %} deposit-zero{% endif %}">{{ detail.dated_state.bank_movement.label }}</span> · receipts totalling <span class="deposit-amount">{{ detail.dated_state.source_membership_total.label }}</span></p>
+<p class="muted">All knowledge as of {{ detail.dated_state.knowledge_observed_at }}{% if detail.dated_state.cutoff_after_evaluation_date %}; the cutoff is after the evaluation date{% endif %}.</p>
+</section>
+{% endif %}
+
+<section class="deposit-card" aria-label="Inspection and annotations">
+<h2>Inspection</h2>
+<p>Change history for inspection: {{ 'complete' if detail.inspection.history == 'complete' else 'unknown for at least one dependency' }}. This deposit has claimed {{ detail.inspection.source_count }} receipts in total.</p>
+<p>Notes: {{ detail.annotations.notes }} · attachments: {{ detail.annotations.attachments }}{% if detail.links %} · {{ detail.links | length }} linked{% endif %}.</p>
+</section>
+
+<p class="deposit-actions deposit-footer-actions"><a href="{{ company_url }}">Company home</a>{% if register_url %}<a href="{{ register_url }}">Back to the register</a>{% else %}<a href="{{ accounts_url }}">Accounts and registers</a>{% endif %}</p>
+{% endif %}
+{% endblock %}

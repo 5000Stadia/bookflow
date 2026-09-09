@@ -2,6 +2,326 @@
 
 # `deposit` commands
 
+## `deposit items`
+
+Page one deposit revision's composition: contributing receipts, additional cash rows or cash allocations, keeping the selected revision across pages.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | ledger.read |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/deposit.items` |
+| External binary body | none |
+
+### CLI
+
+`bookflow deposit items 01ARZ3NDEKTSV4RRFFQ69G5FAV --kind sources --revision-number 2 --page-limit 50 --company "Demo Plumbing Co" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `deposit` | `DEPOSIT` | string | yes | no | — | minimum length 1; maximum length 26; pattern "^[A-Za-z0-9_-]+$" |
+| `revision_number` | `--revision-number` | integer \| null | no | yes | null | — |
+| `kind` | `--kind` | literal["sources", "additional", "cash_allocations"] | yes | no | — | — |
+| `page.limit` | `--page-limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `page.cursor` | `--page-cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/deposit.items`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `schema_version` | literal[1] | no | no | 1 | — |
+| `company_id` | string | yes | no | — | — |
+| `deposit_id` | string | yes | no | — | — |
+| `selected` | object | yes | no | — | — |
+| `selected.deposit_id` | string | yes | no | — | — |
+| `selected.revision_id` | string | yes | no | — | — |
+| `selected.revision_number` | integer | yes | no | — | — |
+| `kind` | literal["sources", "additional", "cash_allocations"] | yes | no | — | — |
+| `items` | array[object \| object \| object] | yes | no | — | — |
+| `items[].row` | literal["source"] \| literal["additional"] \| literal["allocation"] | no | no | "source" | — |
+| `items[].row_id` | string | yes | no | — | — |
+| `items[].ordinal` | integer | no | no | — | Present in SourceRow, AdditionalRow. |
+| `items[].source` | object | no | no | — | Present in SourceRow. |
+| `items[].source.source_type` | literal["payment", "sales_receipt"] | no | no | — | Present in SourceRow. |
+| `items[].source.transaction_id` | string | no | no | — | Present in SourceRow. |
+| `items[].source.revision_id` | string | no | no | — | Present in SourceRow. |
+| `items[].source.expected_header_version` | integer | no | no | — | Present in SourceRow. |
+| `items[].source.number` | string | no | no | — | Present in SourceRow. |
+| `items[].receipt_date` | string | no | no | — | Present in SourceRow. |
+| `items[].amount` | object | yes | no | — | — |
+| `items[].amount.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `items[].amount.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `items[].memo` | string \| null | no | yes | — | Effective deposit-row memo. Present in SourceRow, AdditionalRow. |
+| `items[].memo_origin` | literal["source", "entered"] | no | no | — | Present in SourceRow. |
+| `items[].source_memo` | string \| null | no | yes | — | Present in SourceRow. |
+| `items[].check_reference` | string \| null | no | yes | — | Customer-supplied reference, distinct from the receipt number. Present in SourceRow. |
+| `items[].payer` | object | no | no | — | Present in SourceRow. |
+| `items[].payer.group` | literal["customer", "vendor", "employee", "other_name"] | no | no | — | Present in SourceRow. |
+| `items[].payer.disclosed` | boolean | no | no | — | False when this reader is not admitted to the party list. Present in SourceRow. |
+| `items[].payer.id` | string \| null | no | yes | — | Present in SourceRow. |
+| `items[].payer.label` | string \| null | no | yes | — | Captured party name as recorded on the deposit, not the current list name. Present in SourceRow. |
+| `items[].payer.version` | integer \| null | no | yes | — | Captured party list version, when the source recorded one. Present in SourceRow. |
+| `items[].from_account` | object | no | no | — | Present in SourceRow. |
+| `items[].from_account.group` | literal["account"] | no | no | "account" | Present in SourceRow. |
+| `items[].from_account.disclosed` | boolean | no | no | — | Present in SourceRow. |
+| `items[].from_account.id` | string \| null | no | yes | — | Present in SourceRow. |
+| `items[].from_account.name` | string \| null | no | yes | — | Present in SourceRow. |
+| `items[].from_account.full_name` | string \| null | no | yes | — | Present in SourceRow. |
+| `items[].from_account.number` | string \| null | no | yes | — | Present in SourceRow. |
+| `items[].from_account.account_type` | string \| null | no | yes | — | Present in SourceRow. |
+| `items[].from_account.normal_balance` | literal["debit", "credit"] \| null | no | yes | — | Present in SourceRow. |
+| `items[].payment_method` | object \| null | no | yes | — | Present in SourceRow, AdditionalRow. |
+| `items[].payment_method.group` | literal["payment_method"] | no | no | "payment_method" | Present in SourceRow, AdditionalRow. |
+| `items[].payment_method.disclosed` | boolean | no | no | — | Present in SourceRow, AdditionalRow. |
+| `items[].payment_method.id` | string \| null | no | yes | — | Present in SourceRow, AdditionalRow. |
+| `items[].payment_method.label` | string \| null | no | yes | — | Present in SourceRow, AdditionalRow. |
+| `items[].payment_method.version` | integer \| null | no | yes | — | Present in SourceRow, AdditionalRow. |
+| `items[].allocation_parties` | array[object] | no | no | — | Present in SourceRow. |
+| `items[].allocation_parties[].group` | literal["customer", "vendor", "employee", "other_name"] | no | no | — | Present in SourceRow. |
+| `items[].allocation_parties[].disclosed` | boolean | no | no | — | False when this reader is not admitted to the party list. Present in SourceRow. |
+| `items[].allocation_parties[].id` | string \| null | no | yes | — | Present in SourceRow. |
+| `items[].allocation_parties[].label` | string \| null | no | yes | — | Captured party name as recorded on the deposit, not the current list name. Present in SourceRow. |
+| `items[].allocation_parties[].version` | integer \| null | no | yes | — | Captured party list version, when the source recorded one. Present in SourceRow. |
+| `items[].allocation_classes` | array[object] | no | no | — | Present in SourceRow. |
+| `items[].allocation_classes[].group` | literal["class"] | no | no | "class" | Present in SourceRow. |
+| `items[].allocation_classes[].disclosed` | boolean | no | no | — | Present in SourceRow. |
+| `items[].allocation_classes[].id` | string \| null | no | yes | — | Present in SourceRow. |
+| `items[].allocation_classes[].label` | string \| null | no | yes | — | Present in SourceRow. |
+| `items[].components` | array[object] | no | no | — | Present in SourceRow. |
+| `items[].components[].ordinal` | integer | no | no | — | Present in SourceRow. |
+| `items[].components[].kind` | literal["payment", "sale_net", "sale_tax"] | no | no | — | Present in SourceRow. |
+| `items[].components[].present` | boolean | no | no | — | Present in SourceRow. |
+| `items[].current` | object | no | no | — | Present in SourceRow. |
+| `items[].current.transaction_id` | string | no | no | — | Present in SourceRow. |
+| `items[].current.status` | literal["posted", "voided"] | no | no | — | Present in SourceRow. |
+| `items[].current.version` | integer | no | no | — | Present in SourceRow. |
+| `items[].current.revision_id` | string | no | no | — | Present in SourceRow. |
+| `items[].current.claimed` | boolean | no | no | — | Present in SourceRow. |
+| `items[].current.claimed_by_this_deposit` | boolean | no | no | — | Present in SourceRow. |
+| `items[].current.payment_method_type` | string \| null | no | yes | — | Present in SourceRow. |
+| `items[].check_number` | string \| null | no | yes | — | Present in AdditionalRow. |
+| `items[].account` | object | no | no | — | Present in AdditionalRow. |
+| `items[].account.group` | literal["account"] | no | no | "account" | Present in AdditionalRow. |
+| `items[].account.disclosed` | boolean | no | no | — | Present in AdditionalRow. |
+| `items[].account.id` | string \| null | no | yes | — | Present in AdditionalRow. |
+| `items[].account.name` | string \| null | no | yes | — | Present in AdditionalRow. |
+| `items[].account.full_name` | string \| null | no | yes | — | Present in AdditionalRow. |
+| `items[].account.number` | string \| null | no | yes | — | Present in AdditionalRow. |
+| `items[].account.account_type` | literal["bank", "accounts_receivable", "other_current_asset", "fixed_asset", "other_asset", "accounts_payable", "credit_card", "other_current_liability", "long_term_liability", "equity", "income", "cost_of_goods_sold", "expense", "other_income", "other_expense", "non_posting"] \| null | no | yes | — | Present in AdditionalRow. |
+| `items[].account.normal_balance` | literal["debit", "credit"] \| null | no | yes | — | Present in AdditionalRow. |
+| `items[].account.system_role` | string \| null | no | yes | — | Present in AdditionalRow. |
+| `items[].account.active` | boolean \| null | no | yes | — | Present in AdditionalRow. |
+| `items[].account.currency` | string \| null | no | yes | — | Present in AdditionalRow. |
+| `items[].party` | object \| null | no | yes | — | Present in AdditionalRow. |
+| `items[].party.group` | literal["customer", "vendor", "employee", "other_name"] | no | no | — | Present in AdditionalRow. |
+| `items[].party.disclosed` | boolean | no | no | — | False when this reader is not admitted to the party list. Present in AdditionalRow. |
+| `items[].party.id` | string \| null | no | yes | — | Present in AdditionalRow. |
+| `items[].party.label` | string \| null | no | yes | — | Captured party name as recorded on the deposit, not the current list name. Present in AdditionalRow. |
+| `items[].party.version` | integer \| null | no | yes | — | Captured party list version, when the source recorded one. Present in AdditionalRow. |
+| `items[].class_reference` | object \| null | no | yes | — | Present in AdditionalRow. |
+| `items[].class_reference.group` | literal["class"] | no | no | "class" | Present in AdditionalRow. |
+| `items[].class_reference.disclosed` | boolean | no | no | — | Present in AdditionalRow. |
+| `items[].class_reference.id` | string \| null | no | yes | — | Present in AdditionalRow. |
+| `items[].class_reference.label` | string \| null | no | yes | — | Present in AdditionalRow. |
+| `items[].component_ordinal` | integer | no | no | — | Present in AllocationRow. |
+| `items[].bucket` | literal["main_bank", "cash_back", "additional"] | no | no | — | Present in AllocationRow. |
+| `items[].additional_row_id` | string \| null | no | yes | — | Business row identity of the offsetting additional row. Present in AllocationRow. |
+| `total_count` | integer | yes | no | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.posting_total` | object | yes | no | — | — |
+| `totals.posting_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.posting_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.source_total` | object | yes | no | — | — |
+| `totals.source_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.source_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.positive_additional_total` | object | yes | no | — | — |
+| `totals.positive_additional_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.positive_additional_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.negative_additional_total` | object | yes | no | — | — |
+| `totals.negative_additional_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.negative_additional_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.subtotal` | object | yes | no | — | — |
+| `totals.subtotal.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.subtotal.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.cash_back` | object | yes | no | — | — |
+| `totals.cash_back.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.cash_back.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.bank_total` | object | yes | no | — | — |
+| `totals.bank_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.bank_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `fingerprint` | string | yes | no | — | — |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `current` | object | yes | no | — | — |
+| `current.deposit_id` | string | yes | no | — | — |
+| `current.version` | integer | yes | no | — | — |
+| `current.revision_id` | string | yes | no | — | — |
+| `current.number` | string | yes | no | — | — |
+| `current.status` | literal["posted", "voided"] | yes | no | — | — |
+| `current.revision_date` | string | yes | no | — | — |
+| `current.revision_posting_total` | object | yes | no | — | — |
+| `current.revision_posting_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `current.revision_posting_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `current.revision_subtotal` | object | yes | no | — | — |
+| `current.revision_subtotal.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `current.revision_subtotal.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `current.revision_bank_total` | object | yes | no | — | — |
+| `current.revision_bank_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `current.revision_bank_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `current.revision_cash_back` | object | yes | no | — | — |
+| `current.revision_cash_back.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `current.revision_cash_back.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `current.effective_bank_total` | object | yes | no | — | — |
+| `current.effective_bank_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `current.effective_bank_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `current.active_source_count` | integer | yes | no | — | How many receipts this deposit currently claims. Their identities are composition-sized and travel on `deposit items --kind sources`. |
+| `current_observed_at` | string | yes | no | — | — |
+| `current_references` | array[object] | yes | no | — | Current masters named by the rows on this page; bounded by the page limit. |
+| `current_references[].group` | literal["account", "customer", "vendor", "employee", "other_name", "payment_method", "class", "custom_field", "company"] | yes | no | — | — |
+| `current_references[].id` | string | yes | no | — | — |
+| `current_references[].label` | string \| null | yes | yes | — | — |
+| `current_references[].active` | boolean \| null | yes | yes | — | — |
+| `current_references[].version` | integer \| null | yes | yes | — | — |
+| `current_references[].current_type` | string \| null | yes | yes | — | Current list subtype, when the master records one. |
+| `current_references[].available` | boolean | yes | no | — | False when the master no longer exists in the company. |
+
+Example JSON output:
+
+```json
+{
+  "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "current": {
+    "active_source_count": 1,
+    "deposit_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "effective_bank_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "number": "value",
+    "revision_bank_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "revision_cash_back": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "revision_date": "2026-01-01",
+    "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "revision_posting_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "revision_subtotal": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "status": "posted",
+    "version": 1
+  },
+  "current_observed_at": "2026-01-01T00:00:00Z",
+  "current_references": [],
+  "deposit_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "fingerprint": "value",
+  "items": [],
+  "kind": "sources",
+  "next_cursor": null,
+  "schema_version": 1,
+  "selected": {
+    "deposit_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "revision_number": 1
+  },
+  "total_count": 1,
+  "totals": {
+    "bank_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "cash_back": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "negative_additional_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "positive_additional_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "posting_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "source_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "subtotal": {
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DEPOSIT_SOURCE_INVALID` | The captured receipt cash provenance is unsupported or inconsistent. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `deposit post`
 
 Bank selected undeposited customer payments and sales receipts into one bank account as one deposit, with any other money entered beside them and an optional cash-back line; credits Undeposited Funds for each receipt and debits the bank for the net total. Discover the receipts, their ids and their expected versions with `deposit sources`.
@@ -302,6 +622,398 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 | `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `deposit show`
+
+Show one deposit: its selected revision header, exact totals and counts, current status, optional dated bank effect and the business references this member may see.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | ledger.read |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/deposit.show` |
+| External binary body | none |
+
+### CLI
+
+`bookflow deposit show 01ARZ3NDEKTSV4RRFFQ69G5FAV --revision-number 2 --as-of 2026-06-30 --company "Demo Plumbing Co" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `deposit` | `DEPOSIT` | string | yes | no | — | minimum length 1; maximum length 26; pattern "^[A-Za-z0-9_-]+$" |
+| `revision_number` | `--revision-number` | integer \| null | no | yes | null | — |
+| `as_of` | `--as-of` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/deposit.show`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `schema_version` | literal[1] | no | no | 1 | — |
+| `company_id` | string | yes | no | — | — |
+| `deposit_id` | string | yes | no | — | — |
+| `currency` | string | yes | no | — | — |
+| `selected` | object | yes | no | — | — |
+| `selected.pin` | object | yes | no | — | — |
+| `selected.pin.deposit_id` | string | yes | no | — | — |
+| `selected.pin.revision_id` | string | yes | no | — | — |
+| `selected.pin.revision_number` | integer | yes | no | — | — |
+| `selected.date` | string | yes | no | — | — |
+| `selected.number` | string | yes | no | — | — |
+| `selected.memo` | string \| null | yes | yes | — | — |
+| `selected.deposit_to` | object | yes | no | — | — |
+| `selected.deposit_to.group` | literal["account"] | no | no | "account" | — |
+| `selected.deposit_to.disclosed` | boolean | yes | no | — | — |
+| `selected.deposit_to.id` | string \| null | yes | yes | — | — |
+| `selected.deposit_to.name` | string \| null | yes | yes | — | — |
+| `selected.deposit_to.full_name` | string \| null | yes | yes | — | — |
+| `selected.deposit_to.number` | string \| null | yes | yes | — | — |
+| `selected.deposit_to.account_type` | literal["bank", "accounts_receivable", "other_current_asset", "fixed_asset", "other_asset", "accounts_payable", "credit_card", "other_current_liability", "long_term_liability", "equity", "income", "cost_of_goods_sold", "expense", "other_income", "other_expense", "non_posting"] \| null | yes | yes | — | — |
+| `selected.deposit_to.normal_balance` | literal["debit", "credit"] \| null | yes | yes | — | — |
+| `selected.deposit_to.system_role` | string \| null | yes | yes | — | — |
+| `selected.deposit_to.active` | boolean \| null | yes | yes | — | — |
+| `selected.deposit_to.currency` | string \| null | yes | yes | — | — |
+| `selected.cash_back` | object \| null | yes | yes | — | — |
+| `selected.cash_back.amount` | object | yes | no | — | — |
+| `selected.cash_back.amount.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `selected.cash_back.amount.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `selected.cash_back.memo` | string \| null | yes | yes | — | — |
+| `selected.cash_back.account` | object | yes | no | — | — |
+| `selected.cash_back.account.group` | literal["account"] | no | no | "account" | — |
+| `selected.cash_back.account.disclosed` | boolean | yes | no | — | — |
+| `selected.cash_back.account.id` | string \| null | yes | yes | — | — |
+| `selected.cash_back.account.name` | string \| null | yes | yes | — | — |
+| `selected.cash_back.account.full_name` | string \| null | yes | yes | — | — |
+| `selected.cash_back.account.number` | string \| null | yes | yes | — | — |
+| `selected.cash_back.account.account_type` | literal["bank", "accounts_receivable", "other_current_asset", "fixed_asset", "other_asset", "accounts_payable", "credit_card", "other_current_liability", "long_term_liability", "equity", "income", "cost_of_goods_sold", "expense", "other_income", "other_expense", "non_posting"] \| null | yes | yes | — | — |
+| `selected.cash_back.account.normal_balance` | literal["debit", "credit"] \| null | yes | yes | — | — |
+| `selected.cash_back.account.system_role` | string \| null | yes | yes | — | — |
+| `selected.cash_back.account.active` | boolean \| null | yes | yes | — | — |
+| `selected.cash_back.account.currency` | string \| null | yes | yes | — | — |
+| `selected.custom_fields` | array[object] | yes | no | — | — |
+| `selected.custom_fields[].group` | literal["custom_field"] | no | no | "custom_field" | — |
+| `selected.custom_fields[].disclosed` | boolean | yes | no | — | — |
+| `selected.custom_fields[].definition_id` | string \| null | yes | yes | — | — |
+| `selected.custom_fields[].definition_version` | integer \| null | yes | yes | — | — |
+| `selected.custom_fields[].name` | string \| null | yes | yes | — | — |
+| `selected.custom_fields[].kind` | literal["text", "number", "date", "bool", "choice"] \| null | yes | yes | — | — |
+| `selected.custom_fields[].value` | string \| boolean \| null | yes | yes | — | — |
+| `selected.custom_fields[].canonical_text` | string \| null | yes | yes | — | — |
+| `selected.custom_fields[].position` | integer \| null | yes | yes | — | — |
+| `selected.custom_fields[].choice_id` | string \| null | yes | yes | — | — |
+| `selected.custom_fields[].choice_label` | string \| null | yes | yes | — | — |
+| `selected.custom_fields[].print_visibility` | boolean \| null | yes | yes | — | — |
+| `selected.issuer` | object | yes | no | — | — |
+| `selected.issuer.group` | literal["company"] | no | no | "company" | — |
+| `selected.issuer.disclosed` | boolean | yes | no | — | — |
+| `selected.issuer.id` | string \| null | yes | yes | — | — |
+| `selected.issuer.display_name` | string \| null | yes | yes | — | — |
+| `selected.issuer.legal_name` | string \| null | yes | yes | — | — |
+| `selected.issuer.home_currency` | string \| null | yes | yes | — | — |
+| `selected.issuer.address_line1` | string \| null | yes | yes | — | — |
+| `selected.issuer.address_line2` | string \| null | yes | yes | — | — |
+| `selected.issuer.address_city` | string \| null | yes | yes | — | — |
+| `selected.issuer.address_state` | string \| null | yes | yes | — | — |
+| `selected.issuer.address_postal_code` | string \| null | yes | yes | — | — |
+| `selected.issuer.address_country` | string \| null | yes | yes | — | — |
+| `selected.issuer.legal_address_line1` | string \| null | yes | yes | — | — |
+| `selected.issuer.legal_address_line2` | string \| null | yes | yes | — | — |
+| `selected.issuer.legal_address_city` | string \| null | yes | yes | — | — |
+| `selected.issuer.legal_address_state` | string \| null | yes | yes | — | — |
+| `selected.issuer.legal_address_postal_code` | string \| null | yes | yes | — | — |
+| `selected.issuer.legal_address_country` | string \| null | yes | yes | — | — |
+| `selected.issuer.ship_address_line1` | string \| null | yes | yes | — | — |
+| `selected.issuer.ship_address_line2` | string \| null | yes | yes | — | — |
+| `selected.issuer.ship_address_city` | string \| null | yes | yes | — | — |
+| `selected.issuer.ship_address_state` | string \| null | yes | yes | — | — |
+| `selected.issuer.ship_address_postal_code` | string \| null | yes | yes | — | — |
+| `selected.issuer.ship_address_country` | string \| null | yes | yes | — | — |
+| `selected_is_current` | boolean | yes | no | — | — |
+| `current` | object | yes | no | — | — |
+| `current.deposit_id` | string | yes | no | — | — |
+| `current.version` | integer | yes | no | — | — |
+| `current.revision_id` | string | yes | no | — | — |
+| `current.number` | string | yes | no | — | — |
+| `current.status` | literal["posted", "voided"] | yes | no | — | — |
+| `current.revision_date` | string | yes | no | — | — |
+| `current.revision_posting_total` | object | yes | no | — | — |
+| `current.revision_posting_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `current.revision_posting_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `current.revision_subtotal` | object | yes | no | — | — |
+| `current.revision_subtotal.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `current.revision_subtotal.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `current.revision_bank_total` | object | yes | no | — | — |
+| `current.revision_bank_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `current.revision_bank_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `current.revision_cash_back` | object | yes | no | — | — |
+| `current.revision_cash_back.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `current.revision_cash_back.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `current.effective_bank_total` | object | yes | no | — | — |
+| `current.effective_bank_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `current.effective_bank_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `current.active_source_count` | integer | yes | no | — | How many receipts this deposit currently claims. Their identities are composition-sized and travel on `deposit items --kind sources`. |
+| `current_observed_at` | string | yes | no | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.posting_total` | object | yes | no | — | — |
+| `totals.posting_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.posting_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.source_total` | object | yes | no | — | — |
+| `totals.source_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.source_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.positive_additional_total` | object | yes | no | — | — |
+| `totals.positive_additional_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.positive_additional_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.negative_additional_total` | object | yes | no | — | — |
+| `totals.negative_additional_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.negative_additional_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.subtotal` | object | yes | no | — | — |
+| `totals.subtotal.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.subtotal.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.cash_back` | object | yes | no | — | — |
+| `totals.cash_back.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.cash_back.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.bank_total` | object | yes | no | — | — |
+| `totals.bank_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.bank_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `counts` | object | yes | no | — | — |
+| `counts.sources` | integer | yes | no | — | — |
+| `counts.additional` | integer | yes | no | — | — |
+| `counts.cash_allocations` | integer | yes | no | — | — |
+| `counts.components` | integer | yes | no | — | — |
+| `dated_state` | object \| null | yes | yes | — | — |
+| `dated_state.as_of` | string | yes | no | — | — |
+| `dated_state.basis` | literal["all_current_knowledge"] | no | no | "all_current_knowledge" | — |
+| `dated_state.knowledge_observed_at` | string | yes | no | — | — |
+| `dated_state.cutoff_after_evaluation_date` | boolean | yes | no | — | — |
+| `dated_state.financial_state` | literal["effective", "not_effective", "canceled"] | yes | no | — | — |
+| `dated_state.bank_movement` | object | yes | no | — | — |
+| `dated_state.bank_movement.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `dated_state.bank_movement.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `dated_state.source_membership_total` | object | yes | no | — | — |
+| `dated_state.source_membership_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `dated_state.source_membership_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `inspection` | object | yes | no | — | — |
+| `inspection.purpose` | literal["inspection_only"] | no | no | "inspection_only" | — |
+| `inspection.history` | literal["complete", "unknown_history"] | yes | no | — | complete when every disclosed dependency has readable history; unknown_history otherwise. unknown_history does not identify a cause and does not grant or withhold permission. |
+| `inspection.source_count` | integer | yes | no | — | How many receipts this deposit has ever claimed. Their identities are composition-sized and travel on `deposit items --kind sources`. |
+| `annotations` | object | yes | no | — | — |
+| `annotations.notes` | literal["available", "unavailable"] | yes | no | — | — |
+| `annotations.attachments` | literal["available", "unavailable"] | yes | no | — | — |
+| `revisions` | array[object] | yes | no | — | — |
+| `revisions[].revision_number` | integer | yes | no | — | — |
+| `revisions[].revision_id` | string | yes | no | — | — |
+| `revisions[].selected` | boolean | yes | no | — | — |
+| `revisions[].current` | boolean | yes | no | — | — |
+| `links` | array[object] | yes | no | — | — |
+| `links[].kind` | literal["note", "attachment"] | yes | no | — | — |
+| `links[].id` | string | yes | no | — | — |
+| `links[].attachment_id` | string \| null | yes | yes | — | — |
+| `links[].active` | boolean \| null | yes | yes | — | — |
+| `current_references` | array[object] | yes | no | — | Current masters named by this summary only. Composition references travel beside their rows on `deposit items`. |
+| `current_references[].group` | literal["account", "customer", "vendor", "employee", "other_name", "payment_method", "class", "custom_field", "company"] | yes | no | — | — |
+| `current_references[].id` | string | yes | no | — | — |
+| `current_references[].label` | string \| null | yes | yes | — | — |
+| `current_references[].active` | boolean \| null | yes | yes | — | — |
+| `current_references[].version` | integer \| null | yes | yes | — | — |
+| `current_references[].current_type` | string \| null | yes | yes | — | Current list subtype, when the master records one. |
+| `current_references[].available` | boolean | yes | no | — | False when the master no longer exists in the company. |
+
+Example JSON output:
+
+```json
+{
+  "annotations": {
+    "attachments": "available",
+    "notes": "available"
+  },
+  "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "counts": {
+    "additional": 1,
+    "cash_allocations": 1,
+    "components": 1,
+    "sources": 1
+  },
+  "currency": "USD",
+  "current": {
+    "active_source_count": 1,
+    "deposit_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "effective_bank_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "number": "value",
+    "revision_bank_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "revision_cash_back": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "revision_date": "2026-01-01",
+    "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "revision_posting_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "revision_subtotal": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "status": "posted",
+    "version": 1
+  },
+  "current_observed_at": "2026-01-01T00:00:00Z",
+  "current_references": [],
+  "dated_state": null,
+  "deposit_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "inspection": {
+    "history": "complete",
+    "purpose": "inspection_only",
+    "source_count": 1
+  },
+  "links": [],
+  "revisions": [],
+  "schema_version": 1,
+  "selected": {
+    "cash_back": null,
+    "custom_fields": [],
+    "date": "2026-01-01",
+    "deposit_to": {
+      "account_type": null,
+      "active": null,
+      "currency": null,
+      "disclosed": false,
+      "full_name": null,
+      "group": "account",
+      "id": null,
+      "name": null,
+      "normal_balance": null,
+      "number": null,
+      "system_role": null
+    },
+    "issuer": {
+      "address_city": null,
+      "address_country": null,
+      "address_line1": null,
+      "address_line2": null,
+      "address_postal_code": null,
+      "address_state": null,
+      "disclosed": false,
+      "display_name": null,
+      "group": "company",
+      "home_currency": null,
+      "id": null,
+      "legal_address_city": null,
+      "legal_address_country": null,
+      "legal_address_line1": null,
+      "legal_address_line2": null,
+      "legal_address_postal_code": null,
+      "legal_address_state": null,
+      "legal_name": null,
+      "ship_address_city": null,
+      "ship_address_country": null,
+      "ship_address_line1": null,
+      "ship_address_line2": null,
+      "ship_address_postal_code": null,
+      "ship_address_state": null
+    },
+    "memo": null,
+    "number": "value",
+    "pin": {
+      "deposit_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "revision_number": 1
+    }
+  },
+  "selected_is_current": false,
+  "totals": {
+    "bank_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "cash_back": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "negative_additional_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "positive_additional_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "posting_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "source_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "subtotal": {
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DEPOSIT_SOURCE_INVALID` | The captured receipt cash provenance is unsupported or inconsistent. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
 
 ## `deposit sources`
 

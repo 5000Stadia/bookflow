@@ -139,6 +139,7 @@ class PublicationPermit:
     targets: dict = field(default_factory=dict)
     projection: dict = field(default_factory=dict)
     input_error: dict | None = None
+    deposit_proof: object | None = field(default=None, repr=False)
 
     def retained(self):
         """Only owned values enter the bounded receipt cache, never host/registry handles."""
@@ -157,7 +158,15 @@ class PublicationPermit:
         if cmd is None:
             raise BookflowError("E_QUERY_STALE", details={"reason": "registry_changed"})
         raw = values.pop("input")
-        if values.get("input_error") is not None:
+        if values.get("deposit_proof") is not None:
+            from bookflow.core.deposit_request import COMMANDS as DEPOSIT_COMMANDS
+            from bookflow.core.publication_deposit import DepositProof
+            proof = values["deposit_proof"]
+            if (type(proof) is not DepositProof or raw is not None
+                    or cmd.name not in DEPOSIT_COMMANDS or proof.request.command != cmd.name):
+                _deny()
+            inp = None
+        elif values.get("input_error") is not None:
             if raw is not None or values.get("execution_succeeded"):
                 raise BookflowError("E_IO", details={"reason": "invalid_rejection_permit"})
             inp = None
@@ -188,8 +197,19 @@ class PublicationPermit:
         return cls(cmd, inp, ctx, _actor(s), frozenset(_membership(row) for row in s.memberships),
                    None, token, None, dry_run, input_error=input_error)
 
-    def finish(self, s, *, succeeded=True, result=None):
+    def finish(self, s, *, succeeded=True, result=None, deposit_proof=None):
         """Capture only a committed, same-request audit certificate, after execute."""
+        if deposit_proof is not None:
+            from bookflow.core.deposit_request import COMMANDS as DEPOSIT_COMMANDS
+            from bookflow.core.publication_deposit import DepositProof
+            if (type(deposit_proof) is not DepositProof or self.cmd.name not in DEPOSIT_COMMANDS
+                    or deposit_proof.request.command != self.cmd.name or self.cmd.is_write
+                    or succeeded != (deposit_proof.failure is None)
+                    or not deposit_proof.matches(result)):
+                _deny()
+            self.deposit_proof = deposit_proof
+            self.execution_succeeded = succeeded
+            return
         if self.cmd.scope == "company" and s.company_row is not None:
             self.company = s.company_row["id"], s.company_row["organization_id"]
         if succeeded and self.input_error is not None:
@@ -286,6 +306,10 @@ class PublicationPermit:
             _deny()
 
     def _check(self, host, cred, *, original_response=False):
+        if self.deposit_proof is not None:
+            from bookflow.core.publication_deposit import check_hosted
+            check_hosted(host, cred, self.ctx, self.deposit_proof)
+            return
         with publication_reader(host, cred) as s:
             try:
                 cred.revalidate(s.hub)

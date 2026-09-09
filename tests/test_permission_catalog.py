@@ -176,11 +176,11 @@ def test_frozen_manifest_digest_and_pure_import_boundary():
     assert c.FROZEN_CATALOG.version == 'deposit-write-receivables-and-identity-v1'
     assert c.catalog_manifest(c.FROZEN_CATALOG, c.FROZEN_MANIFEST.standalone_names) == c.FROZEN_MANIFEST
     raw = json.dumps(asdict(c.FROZEN_CATALOG), sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode()
-    assert c.FROZEN_MANIFEST.descriptor_sha256 == '36f1278f127a8d250ad39bf30ab1fd438f07d35209ed17028aebb3b743df22a7'
+    assert c.FROZEN_MANIFEST.descriptor_sha256 == 'd589203ef5de77afe86cbe5bccfaef7e77d897489912e52aa3d53daa64a13d62'
     for name in ('permission_catalog', 'permission_policy'):
         tree = ast.parse((ROOT / f'src/bookflow/hub/{name}.py').read_text())
         modules = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)} | {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
-        assert modules <= {'__future__', 'dataclasses', 'typing', 'types', 'enum', 'hashlib', 'json', 'permission_catalog'}
+        assert modules <= {'__future__', 'dataclasses', 'typing', 'types', 'enum', 'functools', 'hashlib', 'json', 'permission_catalog'}
 
 
 @pytest.mark.parametrize('field', ['commands', 'capabilities', 'defaults', 'company_actions', 'admin_actions', 'conditional_sources'])

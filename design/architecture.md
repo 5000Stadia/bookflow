@@ -2301,3 +2301,21 @@ Item profile validation reports missing type and enabled sales/purchase fields t
 Workbench forms use business-facing context labels and reason guidance. The JavaScript requirement is shown only when scripting is disabled; internal transport details are not ordinary form instructions.
 
 General-ledger opening, posting and closing rows expose current_account_name, current_account_number and display_account_label using the existing report account-display rule and company preferences. Captured account_snapshot remains historical; current labels do not rewrite it. Ordering, arithmetic and pagination are unchanged.
+Saved deposit reads coexist with the current deposit write aggregate (2026-09-09).
+`deposit show` and `deposit items` use the reviewed closed public models, field
+manifest and projection producers from history-public, with a sealed reader-bound
+publication proof on offline, hosted, forwarded CLI, MCP and browser execution.
+Only those two command names enter this read path; post/update/void/sources keep
+their current lifecycle, persistence and publication owners. The read authority's
+reference vocabulary is checked against the existing list definitions and
+permission catalog, without importing the audit/history projection family.
+The existing financial reader accepts selective note/attachment acquisition and
+a shared observation time; its financial/draft derivation is unchanged. Release
+checks reauthenticate the original producer and selected company without rebuilding
+the projection. Permission self-observation retains `activated=False`; only fixed
+schema reflection metadata is cached, never permission decisions or root facts.
+Workbench record routes reserve registered verb paths for their forms, link the
+saved confirmation to the real detail, and page composition separately in phone
+cards. Update/void forms take their optimistic version from the public current
+state. Deposit query remains unregistered; this increment does not complete the
+broader deposit/history module.
