@@ -101,12 +101,20 @@ VISIBILITY = _MembershipVisibility()
 
 
 def observe_current(tx) -> s.ObservedPair:
-    """Fresh complete policy_v1 observation on the caller's transaction."""
+    """Fresh complete observation of this root against itself, on the caller's transaction.
+
+    This is a read, not a policy transition: it needs the catalog in force, not a
+    stored activation copy of it. A root that has never been activated has no
+    such copy and there is no command that would make one, so demanding
+    policy_v1 here would leave every install unable to observe its own
+    memberships and so unable to read its own audit trail. Administration keeps
+    the strict requirement through assemble_pair.
+    """
     bundle = catalog_bundle()
     try:
         root = s.load_root(tx, catalog=bundle)
         return s.observe_pair(root, root, old_catalog=bundle, new_catalog=bundle,
-                              visibility=VISIBILITY)
+                              visibility=VISIBILITY, activated=False)
     except s.SnapshotError as exc:
         from .identity_admin import _translate_snapshot
         _translate_snapshot(exc)

@@ -457,7 +457,7 @@ def _load_root(tx: Database, *, catalog: CatalogBundle) -> RootFacts:
     return RootFacts(ReadStamp('hub0012',generation,mode,sha,facts_digest,bundle_digest), keys, *rows, actual)
 
 
-def _validated_root(root, bundle):
+def _validated_root(root, bundle, *, activated=True):
     _decode(root, RootFacts, 'root', native=True)
     if root.stamp.hub_revision != 'hub0012':
         _fail('schema_mismatch', 'revision')
@@ -465,11 +465,14 @@ def _validated_root(root, bundle):
         _fail('invalid_facts', 'state')
     if type(root) is not RootFacts or root.stamp.bundle_digest != _bundle(bundle):
         _fail('catalog_mismatch','bundle')
-    if root.stamp.mode!='policy_v1':
+    if activated and root.stamp.mode!='policy_v1':
         _fail('legacy_comparison_unavailable','mode')
     rows = (root.users,root.organizations,root.companies,root.memberships,root.assignments,root.authorities,root.role_defaults)
     _validate(rows,root.keys,root.catalog)
-    if _rows_digest(rows) != root.stamp.authority_rows_digest or root.catalog != c._normal_catalog(replace(bundle.descriptor,defaults=root.role_defaults)) or c.catalog_manifest(root.catalog).descriptor_sha256 != root.stamp.catalog_sha256:
+    # A legacy root stores no catalog copy, so its stamp digest must be absent;
+    # an activated root's must be the digest of the catalog in force.
+    expected_sha = c.catalog_manifest(root.catalog).descriptor_sha256 if root.stamp.mode=='policy_v1' else None
+    if _rows_digest(rows) != root.stamp.authority_rows_digest or root.catalog != c._normal_catalog(replace(bundle.descriptor,defaults=root.role_defaults)) or expected_sha != root.stamp.catalog_sha256:
         _fail('source_incomplete','root')
 
 def _patch_rows(original, changes, *, field, key, immutable=(), insert=False):
@@ -633,10 +636,20 @@ def _observe(root, scopes, subjects):
 
 
 def observe_pair(old: RootFacts, proposed: RootFacts, *, old_catalog: CatalogBundle,
-                 new_catalog: CatalogBundle, visibility: VisibilityProvider | None) -> ObservedPair:
-    """Complete raw-union observations and the supported live-union A comparison."""
+                 new_catalog: CatalogBundle, visibility: VisibilityProvider | None,
+                 activated: bool = True) -> ObservedPair:
+    """Complete raw-union observations and the supported live-union A comparison.
+
+    activated=False is the self-observation relaxation, and only that: one root
+    observed against itself. A never-activated root stores no catalog copy, but
+    it still carries the catalog its executable bundle defines, which is all a
+    reader of its own membership facts needs. Comparing two distinct roots is a
+    policy transition and still requires policy_v1.
+    """
+    if not activated and old is not proposed:
+        _fail('legacy_comparison_unavailable', 'mode')
     for root, bundle in ((old, old_catalog), (proposed, new_catalog)):
-        _validated_root(root, bundle)
+        _validated_root(root, bundle, activated=activated)
     if visibility is None or not callable(getattr(visibility, 'facts', None)):
         _fail('visibility_unresolved', 'visibility')
     raw_orgs = set(old.keys.organizations) | set(proposed.keys.organizations)

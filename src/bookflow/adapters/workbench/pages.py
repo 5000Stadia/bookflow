@@ -436,8 +436,24 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             response.headers["Cache-Control"] = "no-store"
         return response
 
+    def signed_in(request: Request) -> bool:
+        """Whether this request already carries a completed login."""
+        try:
+            credential(request, renew_cookie=False)
+        except BookflowError as e:
+            # A session cookie held back only by the workbench-header rule is
+            # still a login: the browser has one, it just cannot post with it.
+            return e.code == "E_WORKBENCH_HEADER"
+        except Exception:
+            return False
+        return True
+
     def page_error(request: Request, err: BookflowError, **ctx: Any) -> HTMLResponse:
-        if err.code in ("E_UNAUTHENTICATED", "E_LOGIN_FAILED"):
+        # Only a request without a usable credential is sent to the login page.
+        # A signed-in user whose page failed for some other reason must see that
+        # reason: bouncing them to a login they have already completed sends
+        # them back to the same failing page and loops forever.
+        if err.code in ("E_UNAUTHENTICATED", "E_LOGIN_FAILED") and not signed_in(request):
             from urllib.parse import quote
             target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
             return RedirectResponse("/login" + (f"?next={quote(target, safe='')}" if request.method == "GET" and target not in ("/", "/login") else ""), status_code=303)
