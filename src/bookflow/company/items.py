@@ -673,7 +673,17 @@ def _logical_defaults(item_type: str, parsed: ItemInput) -> tuple[bool, bool]:
         return True, False
     if item_type == "fixed_asset":
         return False, True
-    return bool(parsed.sales_enabled), bool(parsed.purchase_enabled)
+    # A service, a non-inventory part and an other charge are all things the
+    # company sells: each one is a line on an invoice, and its second, purchase
+    # side is an explicit choice a bookkeeper makes for subcontracted labor,
+    # parts bought for one job, or a passed-through charge.  Sales therefore
+    # defaults on and purchase defaults off.  An omitted flag is the only thing
+    # defaulted here; a flag the caller supplied is used exactly as supplied,
+    # including False.
+    return (
+        True if parsed.sales_enabled is None else parsed.sales_enabled,
+        False if parsed.purchase_enabled is None else parsed.purchase_enabled,
+    )
 
 
 def _owner_values(db: Database, parsed: ItemInput, *, supplied: set[str], reference_changes: set[str], creating: bool) -> dict[str, Any]:

@@ -699,6 +699,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows` | array[object] | yes | no | — | — |
 | `rows[].account_id` | string | yes | no | — | — |
 | `rows[].current_account_label` | string | yes | no | — | — |
+| `rows[].current_account_name` | string | yes | no | — | — |
+| `rows[].current_account_number` | string \| null | yes | yes | — | — |
+| `rows[].display_account_label` | string | yes | no | — | — |
 | `rows[].active` | boolean | yes | no | — | — |
 | `rows[].signed_net` | object | yes | no | — | — |
 | `rows[].signed_net.amount` | string | yes | no | — | — |

@@ -522,6 +522,7 @@ def test_undo_item_vendor_profile_restores_exact_child_values(client):
         {
             "name": "Undo purchased service",
             "type": "service",
+            "sales_enabled": False,
             "purchase_enabled": True,
             "purchase_description": "External work",
             "cost": "50.00",

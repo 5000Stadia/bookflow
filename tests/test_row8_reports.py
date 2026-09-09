@@ -436,3 +436,73 @@ def test_undisplayed_account_changes_do_not_invalidate_gl(ledger):
     # Notes and other non-displayed master facts do not alter report content.
     s.company.raw.execute("UPDATE accounts SET note='internal note',version=2 WHERE id='a'")
     assert gl(s, limit=1, cursor=second.next_cursor).metadata == first.metadata
+
+
+# A chart whose creation order, account-number order and name order all
+# disagree, which is the only kind that can tell the three apart.  Ids are
+# inserted k1..k4 in that sequence, so ordering by the stored record id is
+# ordering by creation.
+NUMBERED_ACCOUNTS = (
+    ("k1", "Product Sales", "4200", "income"),
+    ("k2", "Zulu Bank Checking", "1010", "bank"),
+    ("k3", "Service Income", "4000", "income"),
+    ("k4", "Accounts Receivable", "1100", "accounts_receivable"),
+)
+BY_NUMBER = ["k2", "k4", "k3", "k1"]    # 1010, 1100, 4000, 4200
+BY_CREATION = ["k1", "k2", "k3", "k4"]
+BY_NAME = ["k4", "k1", "k3", "k2"]
+
+
+@pytest.fixture
+def numbered_ledger(ledger):
+    s, batch, oracle = ledger
+    for ident, name, number, kind in NUMBERED_ACCOUNTS:
+        insert(s.company, schema.accounts, id=ident, name=name, name_key=name.lower(),
+               full_name=name, full_name_key=name.lower(), path=ident, depth=1, type=kind,
+               number=number, number_key=number, currency="USD", active=True)
+    batch("2026-01-10", 100, debit="k2", credit="k4")
+    batch("2026-01-11", 50, debit="k1", credit="k3")
+    return s, batch, oracle
+
+
+def test_trial_balance_and_ledger_order_by_account_number_then_name(numbered_ledger):
+    s, _, _ = numbered_ledger
+    assert BY_NUMBER != BY_CREATION != BY_NAME != BY_NUMBER
+    balance, rows = all_pages(lambda **kw: tb(s, **kw), limit=1)
+    assert [r.account_id for r in rows] == BY_NUMBER
+    assert [r.current_account_number for r in rows] == ["1010", "1100", "4000", "4200"]
+    # Presentation only: the same accounts, the same nets, the same totals.
+    assert {r.account_id: r.signed_net.minor_units for r in rows} == {"k1": 50, "k2": 100, "k3": -50, "k4": -100}
+    assert (balance.totals.debit.minor_units, balance.totals.credit.minor_units) == (150, 150)
+    assert tb(s).rows == rows
+
+    _, ledger_rows = all_pages(lambda **kw: gl(s, **kw), limit=1)
+    seen = [row.account_id for row in ledger_rows]
+    assert [account for index, account in enumerate(seen) if index == 0 or seen[index-1] != account] == BY_NUMBER
+    assert [r.kind for r in ledger_rows if r.account_id == "k2"] == ["opening", "posting", "closing"]
+    assert gl(s).rows == ledger_rows[:len(gl(s).rows)]
+
+
+def test_trial_balance_rows_carry_the_account_number(numbered_ledger):
+    s, _, _ = numbered_ledger
+    row = next(r for r in tb(s).rows if r.account_id == "k2")
+    assert (row.current_account_label, row.current_account_name, row.current_account_number) == (
+        "Zulu Bank Checking", "Zulu Bank Checking", "1010")
+    assert row.display_account_label == "1010 · Zulu Bank Checking"
+    s.company.raw.execute("UPDATE company_info SET use_account_numbers=0")
+    plain = next(r for r in tb(s).rows if r.account_id == "k2")
+    assert plain.display_account_label == "Zulu Bank Checking" and plain.current_account_number == "1010"
+
+
+@pytest.mark.parametrize("change", ["number", "preference"])
+def test_trial_balance_continuation_stales_on_number_and_label_preferences(ledger, change):
+    s, batch, _ = ledger
+    batch("2026-01-10", 1)
+    first = tb(s, limit=1)
+    if change == "number":
+        s.company.raw.execute("UPDATE accounts SET number='7000',number_key='7000',version=2 WHERE id='a'")
+    else:
+        s.company.raw.execute("UPDATE company_info SET use_account_numbers=0")
+    with pytest.raises(BookflowError) as caught:
+        tb(s, limit=1, cursor=first.next_cursor)
+    assert caught.value.code == "E_QUERY_STALE"

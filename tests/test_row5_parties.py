@@ -537,6 +537,7 @@ def test_active_item_purchase_profiles_block_vendor_deactivation(client):
         {
             "name": "Vendor-backed service",
             "type": "service",
+            "sales_enabled": False,
             "purchase_enabled": True,
             "purchase_description": "Externally supplied service",
             "cost": "25.00",

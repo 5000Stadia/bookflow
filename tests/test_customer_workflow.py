@@ -199,7 +199,7 @@ def test_real_browser_nested_component_unit_vendor_and_dynamic_identity(hosted, 
     ]}, company=company)
     hosted.ok("company update", {"units_of_measure_mode": "multiple_related_units"}, company=company)
     account = hosted.ok("account create", {"name": "Browser Expense", "type": "expense"}, company=company)
-    profile = {"type": "service", "purchase_enabled": True, "purchase_description": "Purchased component", "cost": "1", "expense_account_id": account["id"]}
+    profile = {"type": "service", "sales_enabled": False, "purchase_enabled": True, "purchase_description": "Purchased component", "cost": "1", "expense_account_id": account["id"]}
     component = hosted.ok("item create", {"name": "Browser Unit Component", **profile, "unit_of_measure_set_id": units["id"]}, company=company)
     no_unit = hosted.ok("item create", {"name": "Browser Bare Component", **profile}, company=company)
     vendor = hosted.ok("vendor create", {"name": "Browser Supply Vendor"}, company=company)

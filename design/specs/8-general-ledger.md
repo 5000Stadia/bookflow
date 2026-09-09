@@ -86,8 +86,15 @@ General ledger supplies opening balance, period debits and credits, closing bala
 and dated details over an inclusive period. Inactive historical accounts remain
 available. Running balances are computed before page slicing.
 
-General ledger groups by stable account ID, then orders by effective date, batch
-ID, line number and posting-line ID. Trial balance orders by stable account ID.
+General ledger groups by account, then orders by effective date, batch ID, line
+number and posting-line ID. Trial balance orders by account. Accounts are ordered
+for reading by account number as a number, then full name, then stable account ID,
+with unnumbered accounts after numbered ones; the profit-and-loss and balance-sheet
+statements apply the same account order within each section. Row order is
+presentation and changes no total, subtotal or section. Trial-balance rows carry
+the current account number and the number-and-name label the company's
+`use_account_numbers` and `show_lowest_subaccount_only` settings produce, as the
+statements do.
 Each page computes rows, whole-filter totals and metadata in one bounded read
 snapshot. Metadata includes company, period, accrual basis, report version, schema
 revision, generation time, home currency and audit watermark. Cash basis is rejected.
