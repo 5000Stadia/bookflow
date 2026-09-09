@@ -134,9 +134,17 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
         try:
             page = _decorate(run(request, "deposit query", raw, company_id))
         except BookflowError as exc:
-            message = ("This results page has changed or its continuation is invalid. Restart with your retained filters."
-                       if cursor and exc.code in {"E_QUERY_STALE", "E_VALIDATION"} else
-                       "Deposits could not be loaded. Check your filters and try again; if this continues, ask your company administrator.")
+            # A filter the reader can see and fix is named; only an unexplained
+            # refusal falls back to the general sentence.
+            if exc.details.get("field") == "deposit_to":
+                message = ("No bank account here matches that name or ID. Correct the bank filter, "
+                           "or clear it to see deposits into every bank.")
+            elif cursor and exc.code in {"E_QUERY_STALE", "E_VALIDATION"}:
+                message = ("This results page has changed or its continuation is invalid. "
+                           "Restart with your retained filters.")
+            else:
+                message = ("Deposits could not be loaded. Check your filters and try again; "
+                           "if this continues, ask your company administrator.")
             return render("deposit_list.html", request, page=None, error_code=exc.code, message=message,
                           status_code=409 if exc.code == "E_QUERY_STALE" else 400, **shared)
         return_to = _url(path, **filters, cursor=cursor)

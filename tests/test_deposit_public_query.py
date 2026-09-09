@@ -52,6 +52,11 @@ def test_public_query_totals_filters_sort_and_cursor_replay(books):
     assert shown['totals']==exact['items'][0]['totals']
     with pytest.raises(BookflowError) as error:query(books,status='deleted')
     assert error.value.code=='E_VALIDATION'
+    # A bank selector nobody here has is a filter mistake, and its refusal has to
+    # stay a closed outcome: the list-selector's open suggestions cannot be
+    # captured, and an uncaptured refusal reaches the reader as a permission denial.
+    with pytest.raises(BookflowError) as error:query(books,deposit_to='A bank that is not here')
+    assert error.value.code=='E_RECORD_NOT_FOUND' and error.value.details=={'field':'deposit_to'}
 
 
 @pytest.mark.timeout(120)
@@ -143,6 +148,11 @@ def test_actual_hosted_query_company_cursor_and_retained_release(books,tmp_path)
         assert wrong.status_code==422 and wrong.json()['code']=='E_VALIDATION'
         denied=hosted.call('deposit.query',{},company=cid,headers={'Authorization':'Bearer '+outsider['secret']})
         assert denied.json()['code']=='E_COMPANY_NOT_FOUND'
+        # Released through the real publication boundary, an unresolvable bank filter
+        # is still a not-found, not the boundary's own refusal.
+        absent=hosted.call('deposit.query',dict(deposit_to='A bank that is not here'),company=cid)
+        assert absent.status_code==404 and absent.json()['code']=='E_RECORD_NOT_FOUND'
+        assert absent.json()['details']=={'field':'deposit_to'}
         assert Cli(root).json('deposit','query','--company',cid)['total_count']==2
         with open_database(root/'hub.db',writable=False) as db:
             row=auth.resolve_token(db,token['secret'])

@@ -556,7 +556,16 @@ def query(s, inp, *, audience, at=None):
         if not audience.reference_admitted('accounts'):
             raise BookflowError('E_PERMISSION')
         from bookflow.company.accounts import resolve_account
-        bank = resolve_account(s.company, inp.deposit_to)['id']
+        try:
+            bank = resolve_account(s.company, inp.deposit_to)['id']
+        except BookflowError as unresolved:
+            # The list-selector refusal carries open `suggestions`, which a closed
+            # public failure cannot hold. Released unnarrowed it leaves the captured
+            # outcome path altogether and the reader is told, wrongly, that they may
+            # not run this command: a mistyped bank name reported as a denial.
+            if unresolved.code not in ('E_RECORD_NOT_FOUND', 'E_VALIDATION'):
+                raise
+            raise BookflowError(unresolved.code, details={'field': 'deposit_to'}) from None
     identities = list(s.company.conn.execute(sa.select(c.transactions.c.id).where(
         c.transactions.c.type == 'deposit').order_by(c.transactions.c.id)).scalars())
     allowed = [identity for identity in identities if _query_admitted(s, identity, audience, binding)]
