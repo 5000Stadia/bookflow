@@ -52,9 +52,18 @@ def _flatten(model: type[BaseModel], prefix: str = "") -> list[tuple[str, str, A
             while get_origin(annotation) is Annotated:
                 annotation = get_args(annotation)[0]
             combined = {}
-            for variant in get_args(annotation):
+            nullable_parent = type(None) in get_args(annotation)
+            variants = tuple(v for v in get_args(annotation) if v is not type(None))
+            present_in, required_in, defaults = {}, {}, {}
+            discriminator = prefix + name + "." + f.discriminator
+            for variant in variants:
+                tags = get_args(variant.model_fields[f.discriminator].annotation)
                 for leaf in _flatten(variant, prefix + name + "."):
                     path, flag, ann, description, required, default = leaf
+                    present_in.setdefault(path, []).extend(tags)
+                    defaults.setdefault(path, []).append(default)
+                    if required:
+                        required_in.setdefault(path, []).append(variant)
                     previous = combined.get(path)
                     if previous is None:
                         combined[path] = leaf
@@ -66,7 +75,24 @@ def _flatten(model: type[BaseModel], prefix: str = "") -> list[tuple[str, str, A
                             ann = old_ann
                         combined[path] = (path, flag, ann, description or previous[3],
                                           required and previous[4], default)
-            out.extend(combined.values())
+            for path, leaf in combined.items():
+                _, flag, ann, description, _, default = leaf
+                if required_in.get(path) or any(value != defaults[path][0] for value in defaults[path]):
+                    default = None
+                is_discriminator = path == discriminator
+                always_required = is_discriminator or len(required_in.get(path, ())) == len(variants)
+                required = f.is_required() and not nullable_parent and always_required
+                if not required and (always_required or required_in.get(path)):
+                    if always_required:
+                        condition = f"{prefix + name} is supplied"
+                    else:
+                        tags = [str(tag) for variant in required_in[path]
+                                for tag in get_args(variant.model_fields[f.discriminator].annotation)]
+                        condition = f"{discriminator} is {' or '.join(tags)}"
+                    description = (description + f" Required when {condition}.").strip()
+                if not required_in.get(path) and len(present_in[path]) < sum(len(get_args(v.model_fields[f.discriminator].annotation)) for v in variants):
+                    description = (description + f" Applies when {discriminator} is {' or '.join(map(str, present_in[path]))}.").strip()
+                out.append((path, flag, ann, description, required, default))
             continue
         ann = f.annotation
         base = ann
@@ -77,7 +103,13 @@ def _flatten(model: type[BaseModel], prefix: str = "") -> list[tuple[str, str, A
         if getattr(base, "__pydantic_root_model__", False):
             ann = base = base.model_fields["root"].annotation
         if inspect.isclass(base) and issubclass(base, BaseModel):
-            out += _flatten(base, prefix + name + ".")
+            children = _flatten(base, prefix + name + ".")
+            conditional = not f.is_required() or type(None) in get_args(f.annotation)
+            for path, flag, child_ann, description, required, default in children:
+                if conditional and required:
+                    description = (description + f" Required when {prefix + name} is supplied.").strip()
+                    required = False
+                out.append((path, flag, child_ann, description, required, default))
             continue
         required = f.is_required()
         default = None if required or f.default is PydanticUndefined else f.default
