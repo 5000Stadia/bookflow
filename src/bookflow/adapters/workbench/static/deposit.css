@@ -1,0 +1,58 @@
+/* Deposit detail and composition pages. Every rule is fluid: nothing on these
+   pages is given a fixed pixel width, so a 390px phone and a 1280px desktop lay
+   the same markup out without a horizontal page scroll. Wide, uniform tables
+   scroll inside their own .table-wrap rather than pushing the page sideways. */
+
+.deposit-crumbs{margin:0 0 .5rem;overflow-wrap:anywhere}
+.deposit-heading{margin:.2rem 0 .4rem;overflow-wrap:anywhere}
+.deposit-lede{margin:.2rem 0 1rem;overflow-wrap:anywhere}
+
+.deposit-card,.deposit-row-card{border:1px solid #d0d9e4;border-radius:.35rem;background:#fff;
+  margin:.75rem 0;padding:.8rem;min-width:0;overflow-wrap:anywhere}
+.deposit-card h2,.deposit-row-card h2{font-size:1.05rem;margin:0 0 .4rem}
+.deposit-card h3,.deposit-row-card h3{font-size:.95rem;margin:.8rem 0 .3rem;color:#1f3a5f}
+
+/* Two columns where there is room, one column below about 700px. minmax with
+   min(100%, ...) is what keeps the track from ever exceeding the viewport. */
+.deposit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr));gap:1rem}
+
+.deposit-fields{display:grid;grid-template-columns:minmax(0,11rem) minmax(0,1fr);gap:.2rem .7rem}
+.deposit-fields>div{display:contents}
+.deposit-fields b{color:#1f3a5f;font-weight:600}
+.deposit-fields span{min-width:0;overflow-wrap:anywhere}
+
+.deposit-amount{font-variant-numeric:tabular-nums;white-space:nowrap}
+.deposit-negative{color:#8a1c1c;font-weight:600}
+.deposit-zero{color:#4a5763}
+
+.deposit-redacted{color:#5a4a1c;background:#fdf6e3;border:1px dashed #c9b37a;border-radius:.2rem;
+  padding:0 .25rem;font-style:italic}
+
+.deposit-revisions,.deposit-custom,.deposit-current-references{margin:.3rem 0;padding-left:1.1rem}
+.deposit-revisions li,.deposit-custom li,.deposit-current-references li{margin:.15rem 0;overflow-wrap:anywhere}
+.deposit-selected-revision{font-weight:700}
+
+.deposit-kinds,.deposit-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin:.5rem 0}
+.deposit-kinds a,.deposit-actions a{display:inline-block;max-width:100%;box-sizing:border-box;
+  padding:.3rem .55rem;border:1px solid #d0d9e4;border-radius:.25rem;background:#f4f7fb;
+  color:#1f3a5f;text-decoration:none;overflow-wrap:anywhere}
+.deposit-kinds a.deposit-selected-kind{background:#1f3a5f;border-color:#1f3a5f;color:#fff}
+
+.deposit-totals{border-collapse:collapse;width:100%}
+.deposit-totals th{text-align:left;font-weight:600;padding:.25rem .6rem .25rem 0;white-space:nowrap}
+.deposit-totals td{padding:.25rem 0;text-align:right}
+.deposit-allocations{border-collapse:collapse;width:100%}
+.deposit-allocations th,.deposit-allocations td{padding:.25rem .5rem;border-bottom:1px solid #e6ebf1;text-align:left}
+.deposit-allocations td.deposit-amount{text-align:right}
+.deposit-id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.82rem;overflow-wrap:anywhere}
+
+.deposit-unavailable{border:1px solid #c9a227;border-left-width:.35rem;border-radius:.35rem;
+  background:#fdf6e3;padding:.9rem;margin:.75rem 0;min-width:0}
+.deposit-unavailable-message{margin:0 0 .6rem;overflow-wrap:anywhere}
+
+@media (max-width:700px){
+  .deposit-fields{grid-template-columns:minmax(0,1fr)}
+  .deposit-fields b{margin-top:.35rem}
+  .deposit-totals td{text-align:left}
+  .deposit-card,.deposit-row-card{padding:.65rem}
+}

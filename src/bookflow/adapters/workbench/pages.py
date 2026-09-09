@@ -399,7 +399,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css", "payments.js", "payments.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css")
+        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css", "payments.js", "payments.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css", "deposit.css")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -484,6 +484,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
 
     from bookflow.adapters.workbench import payments as Payments
     Payments.mount(app, render=render, run=run, credential=credential, page_error=page_error, role_allows=_role_allows,
+        form_page=lambda request, company_id, noun, verb: form_page(request, company_id, noun, verb, None))
+
+    # A deposit has its own pages, so they are installed here, ahead of the
+    # generic /c/{company_id}/{noun}/{record_id} record and verb routes below.
+    from bookflow.adapters.workbench import deposits as Deposits
+    Deposits.mount(app, render=render, run=run, credential=credential, page_error=page_error, role_allows=_role_allows,
         form_page=lambda request, company_id, noun, verb: form_page(request, company_id, noun, verb, None))
 
     @app.get("/static/{name}")

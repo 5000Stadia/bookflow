@@ -171,10 +171,10 @@ def test_explicit_admin_grant_only_and_unavailable_delete_contracts():
 
 
 def test_frozen_manifest_digest_and_pure_import_boundary():
-    assert c.FROZEN_CATALOG.version == 'deposit-lifecycle-co0021-v1'
+    assert c.FROZEN_CATALOG.version == 'deposit-public-detail-co0021-v1'
     assert c.catalog_manifest(c.FROZEN_CATALOG, c.FROZEN_MANIFEST.standalone_names) == c.FROZEN_MANIFEST
     raw = json.dumps(asdict(c.FROZEN_CATALOG), sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode()
-    assert hashlib.sha256(raw).hexdigest() == '7e213af6aca70c7836e11c59728ea33542d4528f001d6e1106c9472b414d3bd8'
+    assert hashlib.sha256(raw).hexdigest() == '9823c59e7689c3835b2be794284ee89c6e00e82e589f07adcd3d639dec90ab42'
     for name in ('permission_catalog', 'permission_policy'):
         tree = ast.parse((ROOT / f'src/bookflow/hub/{name}.py').read_text())
         modules = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)} | {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}

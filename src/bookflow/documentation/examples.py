@@ -337,3 +337,19 @@ for _verb,_payload in _RECOVERY_EXAMPLES.items():
     if _verb in {'begin','upload','seal','apply','abort','replace'}:
         _args.extend(['--reason','Recover the complete intended draft'])
     EXAMPLES['payment recovery '+_verb]=Example(' '.join(_payment_shell.quote(arg) for arg in _args),_payload)
+
+# Public deposit details. The deposit id comes from an ordinary register row
+# (`register query`, or the register link in the browser); nothing here needs a
+# private source identity. `deposit show` selects one immutable revision with
+# --revision-number and evaluates the dated bank effect with --as-of; the
+# composition itself is paged by `deposit items` one kind at a time.
+EXAMPLES.update({
+    "deposit show": Example(
+        f'bookflow deposit show {ID} --revision-number 2 --as-of 2026-06-30 --company "Demo Plumbing Co" --json',
+        {"deposit": ID, "revision_number": 2, "as_of": "2026-06-30"},
+    ),
+    "deposit items": Example(
+        f'bookflow deposit items {ID} --kind sources --revision-number 2 --page-limit 50 --company "Demo Plumbing Co" --json',
+        {"deposit": ID, "kind": "sources", "revision_number": 2, "page": {"limit": 50}},
+    ),
+})

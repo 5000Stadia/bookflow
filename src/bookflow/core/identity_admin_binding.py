@@ -261,6 +261,22 @@ class BoundReader:
             fail('not_administrator', 'binding')
         return identity
 
+    def execution_binding(self):
+        """This reader's own retained OS producer, for owners that require one.
+
+        The private execution bridge. The value is the OSBinding this reader
+        authenticated with, never a binding rebuilt from ReaderIdentity, and
+        never the internal TokenBinding a hosted token reader holds: the
+        financial owners revalidate an OSBinding or an HTTP Credential and
+        accept neither a synthesized value nor a serialized administration
+        token. A hosted token request supplies its own admitted Credential
+        instead of calling this.
+        """
+        self.authenticate()
+        if type(self._admitted) is not OSBinding:
+            fail('not_administrator', 'binding')
+        return self._admitted
+
     def observe(self):
         identity = self.authenticate()
         if self._observation is None:

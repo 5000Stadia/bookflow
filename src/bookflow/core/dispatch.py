@@ -472,6 +472,12 @@ def _run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: st
         return guard(lambda: run_command(s.data_root, cmd, raw_input, ctx,
                                          company_selector, company_source, dry_run), False)
 
+    from bookflow.core.deposit_request import COMMANDS as DEPOSIT_COMMANDS
+    if cmd.name in DEPOSIT_COMMANDS:
+        from bookflow.core.deposit_offline import run_command as run_deposit
+        return guard(lambda: run_deposit(s.data_root, cmd, raw_input, ctx,
+                                         company_selector, company_source, dry_run), False)
+
     def under_lock():
         with private_umask(), RootLock(s.data_root, cmd.name):
             try:

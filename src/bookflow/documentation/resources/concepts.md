@@ -388,3 +388,61 @@ The total-rounding proposal continues through `DEMO-TAX-EST` to `DEMO-TAX-WO`.
 `DEMO-TAX-WORK-INV` bills one service for six cents; five cents of net work remain,
 with one cent forecast tax if billed together. Physical completion leaves that
 remaining billing scope intact. Reference Plumbing Co has matching `REF-` examples.
+
+## Deposit details
+
+`deposit show` and `deposit items` are the registered reads for one bank deposit.
+There is no public deposit query, so a deposit is reached the ordinary way: from a
+row that already names it. `register query` on a bank account returns posted rows
+carrying `transaction_id`, `transaction_type` and `revision_number` and labels a
+deposit row `Deposit`; the browser register links that same row to its deposit
+details. That transaction id is the `deposit` both commands take. No internal
+receipt, row, component or operation identity is accepted as input, and none is
+needed to navigate.
+
+`deposit show` is a bounded summary. It returns the selected revision's header,
+exact `totals` and `counts`, the freshly observed `current` document facts, the
+business references that summary names, and `current_observed_at`, the instant the
+current facts were read; two reads of one revision differ only in that instant.
+Omitting `revision_number` selects the current revision. `revisions` lists every
+immutable revision with its `revision_number` and marks which one is `selected`
+and which is `current`, so a correction is read exactly as it stood by sending one
+of those numbers back, and `selected_is_current` says whether the two agree.
+`as_of` asks a different question and never chooses a revision: it evaluates the
+selected revision's dated bank effect under all current knowledge and returns
+`dated_state`, including `financial_state` and `bank_movement`. Without `as_of`,
+`dated_state` is null. `inspection.history` reports `complete` or
+`unknown_history`; unknown history names no cause and neither grants nor withholds
+permission.
+
+The composition is sized by the deposit rather than bounded, so `show` never
+returns it. `deposit items` pages it one `kind` at a time, and the three kinds
+answer three different questions. `sources` lists the contributing receipts: the
+captured receipt pin, receipt date, amount, effective memo and its origin, payer,
+from-account, payment method, and the components a cash allocation can refer to.
+`additional` lists the cash rows entered on the deposit itself, whose signed
+amounts may be negative and reduce the bank effect. `cash_allocations` is the
+derived split: each row names by `row_id` the source or additional row it came
+from, its `component_ordinal`, and the `bucket` the money landed in — `main_bank`,
+`cash_back`, or `additional` with its offsetting `additional_row_id`. Read
+`sources` and `additional` for the business rows and `cash_allocations` for how
+they were divided. `counts` on `show` gives all three sizes in advance.
+
+Pages continue on `page.cursor`. Send the first request without a cursor, then
+send the returned `next_cursor` back as `page.cursor` with the same deposit,
+`kind` and `revision_number`; a null `next_cursor` is the last page.
+`total_count` is the size of the whole collection, not of the page, and
+`fingerprint` identifies the disclosed relation the page came from and is stable
+across the pages of one collection. The cursor keeps the selected revision, so a
+correction posted while you are paging does not move you onto another
+composition, and it carries no authority of its own: every page is authorized
+again, including the sources a page depends on without showing. A change to what
+you are reading ends the continuation with `E_QUERY_STALE`; restart without a
+cursor and discard the accumulated pages rather than combining stale and fresh
+ones. A malformed or foreign cursor is rejected as invalid input rather than
+answered.
+
+The refusal is deliberately non-disclosing: `E_RECORD_NOT_FOUND` with no details,
+which does not distinguish a deposit that is absent from one this member may not
+read. Modifying or voiding a deposit is not part of this command surface. See
+[`deposit` commands](cli/deposit.md) for exact fields, defaults and error codes.

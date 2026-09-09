@@ -19,6 +19,23 @@ from bookflow.company.deposit_dependency_models import InspectionRoot
 from bookflow.core.errors import BookflowError
 
 # A distinct continuation domain over the accepted company signing material.
+#
+# G1 key provenance and its accepted limitation. The signing key is the company's
+# own `report_cursor_keys` row (`ledger_reports._cursor_key`), created once with
+# the company and read from the company database; this module creates no key and
+# holds none. `deposit_read_pages._scope` binds every public items token to that
+# key, to this domain string, to the company id and to the executing actor,
+# actor kind, principal and current authority epoch. A token therefore cannot be
+# replayed under the private `items` domain, under another company, or by another
+# subject, and it stops verifying the moment the principal binding epoch changes.
+#
+# The limitation, unchanged by this stage and registered as D3: that key has no
+# rotation. There is no command to roll it, no key id in the token, and no second
+# key to verify against, so a leaked key stays valid for the life of the company
+# and rotation would invalidate every outstanding continuation at once. Public
+# items cursors inherit that exposure exactly as the existing private cursors do.
+# Rotation belongs to its own allocation; nothing here should be read as closing
+# it.
 PURPOSE = 'public.items'
 
 # Unknown-history entry prefixes that name an optional master reference.
@@ -424,8 +441,13 @@ def _dated(state):
 # ------------------------------------------------------------------- producers
 
 
-def show(s, inp, *, audience):
-    """Bounded public detail for one deposit revision; composition stays on items."""
+def show(s, inp, *, audience, at=None):
+    """Bounded public detail for one deposit revision; composition stays on items.
+
+    ``at`` pins the observation instant. The publication owner re-executes this
+    producer at the instant its proof captured, so a release compares the same
+    document rather than refusing because the clock moved.
+    """
     inp = q.checked(inp, m.ShowInput)
     binding, evidence = _admit(s, audience, inp.deposit)
     # G3: the capability decision precedes association access, so a denied
@@ -433,7 +455,7 @@ def show(s, inp, *, audience):
     access = audience.annotation_access()
     acquire = tuple(name[:-1] for name, value in sorted(access.items()) if value == 'available')
     data = facts.load_complete(s, [inp.deposit], binding=binding, annotations=acquire)[0]
-    private = q._show(s, data, inp, binding, with_guard=False)
+    private = q._show(s, data, inp, binding, with_guard=False, at=at)
     history = _inspection_status(s, data, binding, audience)
     audience.validate()
     header = _selected_header(private.selected, private.currency, audience)
@@ -453,8 +475,11 @@ def show(s, inp, *, audience):
                                               _named_by_summary(header), audience))
 
 
-def items(s, inp, *, audience):
-    """One page of the selected revision's composition, over the disclosed relation."""
+def items(s, inp, *, audience, at=None):
+    """One page of the selected revision's composition, over the disclosed relation.
+
+    ``at`` pins the observation instant, for the same reason it does on `show`.
+    """
     inp = q.checked(inp, m.ItemsInput)
     binding, evidence = _admit(s, audience, inp.deposit)
     number = inp.revision_number
@@ -480,5 +505,5 @@ def items(s, inp, *, audience):
         company_id=s.company_row['id'], deposit_id=data.header['id'], selected=_pin(selected.pin),
         kind=inp.kind, items=chunk, total_count=len(rows), totals=_totals(q.totals(effect)),
         fingerprint=fingerprint, next_cursor=following, current=_current_state(q.current(data)),
-        current_observed_at=q.now(),
+        current_observed_at=at or q.now(),
         current_references=_current_references(data.references, _named_by_rows(chunk), audience))

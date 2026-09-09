@@ -32,6 +32,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`customer-type`](cli/customer-type.md)
 - [`customer-type query`](cli/customer-type-query.md)
 - [`demo`](cli/demo.md)
+- [`deposit`](cli/deposit.md)
 - [`directive`](cli/directive.md)
 - [`docs`](cli/docs.md)
 - [`employee`](cli/employee.md)

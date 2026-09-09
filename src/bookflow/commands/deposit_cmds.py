@@ -5,6 +5,13 @@ register/search/totals surface and every deposit write stay unregistered. Like
 the projected history family, these commands carry no plan-time implementation:
 the trusted execution owner runs them under an authenticated reader that also
 supplies the revalidatable binding the financial owners require.
+
+That owner is `core.publication_deposit`, reached through `core.deposit_offline`
+from `core.dispatch` and through the sibling branch in
+`adapters.http.execution`, which together cover every registered route. The
+refusals below are therefore unreachable guards, not the behaviour a caller
+sees; `tests/test_deposit_public_execution.py` witnesses that no route reaches
+them.
 """
 from bookflow.core.context import Context
 from bookflow.core.errors import BookflowError

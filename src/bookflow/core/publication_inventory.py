@@ -25,11 +25,26 @@ HUB = {
 }
 
 
+# Public deposit detail does not publish on selected company plus current
+# resources: its release re-runs the reader-bound producer and compares only the
+# document that reader was actually shown. Registration alone is not coverage, so
+# an unknown deposit command fails here instead of inheriting the generic
+# company policy.
+DEPOSIT = {
+    "deposit show": "reader_bound_public_detail_proof",
+    "deposit items": "reader_bound_public_detail_proof",
+}
+
+
 def policy(cmd):
     from bookflow.core.publication_payment import PAYMENT_COMMANDS
     planner = getattr(cmd, 'plan', None)
     if getattr(planner, '__module__', None) in {'bookflow.commands.payment_cmds', 'bookflow.commands.payment_recovery_cmds'} and cmd.name not in PAYMENT_COMMANDS:
         raise RuntimeError('Registered payment command lacks a publication dependency inventory: ' + cmd.name)
+    if getattr(planner, '__module__', None) == 'bookflow.commands.deposit_cmds':
+        if cmd.name not in DEPOSIT:
+            raise RuntimeError('Registered deposit command lacks a publication dependency inventory: ' + cmd.name)
+        return DEPOSIT[cmd.name]
     if cmd.local_only or cmd.standalone:
         return "local_only"
     if cmd.scope == "company":

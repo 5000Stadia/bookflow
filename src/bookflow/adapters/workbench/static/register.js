@@ -388,6 +388,10 @@
         journal_entry: {noun: 'journal', label: 'Journal'},
         invoice: {noun: 'invoice', label: 'Invoice'},
         sales_receipt: {noun: 'sales-receipt', label: 'Sales receipt'},
+        // A deposit has no registered history command, so its link opens the
+        // deposit detail page instead. Opening it is an attempt: a reader
+        // admitted here may still not be admitted to the whole deposit.
+        deposit: {noun: 'deposit', label: 'Deposit', action: 'Deposit details'},
       }[row.transaction_type];
       const values = [row.effective_date + '\n' + row.recorded_at,
         `${row.transaction_number} · ${document?.label || row.transaction_type || ''} · ${row.batch_kind}`, row.party_name, row.category_label,
@@ -395,7 +399,7 @@
         row.class_summary, money(row.increase), money(row.decrease), money(row.running_balance)];
       values.forEach((value, i) => tr.append(node('td', value || '', i >= 6 ? 'register-money' : '')));
       const actions = node('td'), journal = encodeURIComponent(row.transaction_id);
-      if (document) actions.append(link('History', `${base}/${document.noun}/${journal}?` + new URLSearchParams(row.revision_number ? {revision_number: row.revision_number} : {})));
+      if (document) actions.append(link(document.action || 'History', `${base}/${document.noun}/${journal}?` + new URLSearchParams(row.revision_number ? {revision_number: row.revision_number} : {})));
       if (c.writable && row.transaction_type === 'journal_entry') {
         actions.append(' ', link('Edit current', path + '?' + new URLSearchParams({edit: row.transaction_id})), ' ', link('Void current', `${base}/journal/${journal}/void`));
       }

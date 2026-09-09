@@ -31,7 +31,9 @@ def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_e
                       source_ref=ctx.source_ref, directive=ctx.directive_id,
                       idempotency_key=ctx.idempotency_key, dry_run=dry_run)
     from bookflow.core.history_commands import COMMANDS, prepare
+    from bookflow.core.deposit_request import COMMANDS as DEPOSIT_COMMANDS
     public_history = _semantic_history is None and cmd.name in COMMANDS
+    public_deposit = _semantic_history is None and cmd.name in DEPOSIT_COMMANDS
     permit = None
 
     def finish(session, **values):
@@ -96,6 +98,38 @@ def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_e
                         from bookflow.core.history_wire import bind
                         result, proof = bind(reader, proof)
                     finish(session, succeeded=proof.failure is None,result=result, audit_proof=proof)
+                    if proof.failure is not None:
+                        raise proof.failure.error()
+            except AdministrationError:
+                raise BookflowError('E_UNAUTHENTICATED') from None
+        elif public_deposit:
+            from bookflow.company import deposit_public_authority as pa
+            from bookflow.core import publication_deposit
+            from bookflow.core.deposit_request import prepare as prepare_deposit
+            from bookflow.core.identity_admin_binding import hosted_reader
+            from bookflow.hub.identity_admin import AdministrationError
+            try:
+                with hosted_reader(host, _reader_binding(host, cred, ctx.request_id),
+                                   request_id=ctx.request_id) as reader:
+                    identity = reader.authenticate()
+                    if ctx.on_behalf_of is not None and ctx.on_behalf_of != identity.principal:
+                        raise BookflowError('E_UNAUTHENTICATED')
+                    session = reader.session
+                    if before_execute is not None:
+                        before_execute(session)
+                        reader.authenticate()
+                    # The reader binds through a private TokenBinding, which the
+                    # financial owners do not accept. The original authenticated
+                    # OSBinding/Credential travels to deposit execution instead,
+                    # and the audience refuses one that does not agree with this
+                    # reader's root, actor, actor kind and principal.
+                    audience = pa.audience(reader, cred)
+                    request = prepare_deposit(reader, audience, cmd, raw, ctx, selector, source, dry_run)
+                    permit = PublicationPermit(cmd, None, ctx,
+                        (identity.actor, identity.actor_kind, identity.hub_admin),
+                        frozenset(), None, None)
+                    result, proof = publication_deposit.execute_detail(reader, request, cred, ctx=ctx)
+                    finish(session, succeeded=proof.failure is None, result=result, deposit_proof=proof)
                     if proof.failure is not None:
                         raise proof.failure.error()
             except AdministrationError:

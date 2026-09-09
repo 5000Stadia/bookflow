@@ -218,7 +218,9 @@ def sample_value(annotation: Any, name: str) -> Any:
     if origin is Literal:
         return args[0]
     if origin in (list, tuple, set):
-        return []
+        # A strict wire model rejects a list supplied for a tuple field, so sample
+        # the declared container rather than always a list.
+        return () if origin is tuple else []
     if origin is dict:
         return {}
     if inspect.isclass(base) and issubclass(base, Enum):
@@ -226,7 +228,9 @@ def sample_value(annotation: Any, name: str) -> Any:
     if getattr(base, "__pydantic_root_model__", False):
         return sample_value(base.model_fields["root"].annotation, name)
     if inspect.isclass(base) and issubclass(base, BaseModel):
-        return sample_model(base)
+        # Python mode keeps a declared tuple a tuple, which a strict parent
+        # requires; the top-level caller serializes to JSON once, at the end.
+        return sample_instance(base).model_dump()
     if base is str:
         return _sample_string(name)
     if base is int:
@@ -238,7 +242,13 @@ def sample_value(annotation: Any, name: str) -> Any:
     return None
 
 
-def sample_model(model: type[BaseModel]) -> dict[str, Any]:
+def sample_instance(model: type[BaseModel]) -> BaseModel:
+    """A validated sample of one model, before any JSON serialization.
+
+    Nested samples are dumped in Python mode, so a declared tuple is still a
+    tuple when its parent validates it. A strict wire model rejects the list
+    a JSON dump would have left there. Serialization happens once, at the top.
+    """
     values: dict[str, Any] = {}
     for name, field in model.model_fields.items():
         extra = field.json_schema_extra if isinstance(field.json_schema_extra, dict) else {}
@@ -254,7 +264,11 @@ def sample_model(model: type[BaseModel]) -> dict[str, Any]:
         else:
             value = sample_value(field.annotation, name)
         values[name] = value
-    return model.model_validate(values).model_dump(mode="json")
+    return model.model_validate(values)
+
+
+def sample_model(model: type[BaseModel]) -> dict[str, Any]:
+    return sample_instance(model).model_dump(mode="json")
 
 
 @dataclass(frozen=True)

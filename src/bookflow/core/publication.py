@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from bookflow.core.publication_audit import ProjectionProof
+    from bookflow.core.publication_deposit import DepositProof
 
 import sqlalchemy as sa
 
@@ -143,6 +144,9 @@ class PublicationPermit:
     projection: dict = field(default_factory=dict)
     input_error: dict | None = None
     audit_proof: 'ProjectionProof | None' = field(default=None, repr=False)
+    # A second reader-owned proof family, deliberately separate. The two are
+    # mutually exclusive everywhere: a mixed permit is a denial, not a merge.
+    deposit_proof: 'DepositProof | None' = field(default=None, repr=False)
 
     def retained(self):
         """Only owned values enter the bounded receipt cache, never host/registry handles."""
@@ -161,9 +165,19 @@ class PublicationPermit:
         if cmd is None:
             raise BookflowError("E_QUERY_STALE", details={"reason": "registry_changed"})
         raw = values.pop("input")
+        if values.get("audit_proof") is not None and values.get("deposit_proof") is not None:
+            _deny()
         if values.get("audit_proof") is not None:
             from bookflow.core.publication_audit import ProjectionProof
             if type(values['audit_proof']) is not ProjectionProof or raw is not None:
+                _deny()
+            inp = None
+        elif values.get("deposit_proof") is not None:
+            from bookflow.core.deposit_request import COMMANDS as DEPOSIT_COMMANDS
+            from bookflow.core.publication_deposit import DepositProof
+            proof = values["deposit_proof"]
+            if (type(proof) is not DepositProof or raw is not None
+                    or cmd.name not in DEPOSIT_COMMANDS or proof.request.command != cmd.name):
                 _deny()
             inp = None
         elif values.get("input_error") is not None:
@@ -197,8 +211,21 @@ class PublicationPermit:
         return cls(cmd, inp, ctx, _actor(s), frozenset(_membership(row) for row in s.memberships),
                    None, token, None, dry_run, input_error=input_error)
 
-    def finish(self, s, *, succeeded=True, result=None, audit_proof=None):
-        """Capture only a committed, same-request audit certificate, after execute."""
+    def finish(self, s, *, succeeded=True, result=None, audit_proof=None, deposit_proof=None):
+        """Capture only a committed, same-request execution certificate, after execute."""
+        if audit_proof is not None and deposit_proof is not None:
+            _deny()
+        if deposit_proof is not None:
+            from bookflow.core.deposit_request import COMMANDS as DEPOSIT_COMMANDS
+            from bookflow.core.publication_deposit import DepositProof
+            if (type(deposit_proof) is not DepositProof or self.cmd.name not in DEPOSIT_COMMANDS
+                    or deposit_proof.request.command != self.cmd.name or self.cmd.is_write
+                    or succeeded != (deposit_proof.failure is None)
+                    or not deposit_proof.matches(result)):
+                _deny()
+            self.deposit_proof = deposit_proof
+            self.execution_succeeded = succeeded
+            return
         if audit_proof is not None:
             from bookflow.core.publication_audit import ProjectionProof
             if (type(audit_proof) is not ProjectionProof or succeeded!=(audit_proof.failure is None)
@@ -299,6 +326,12 @@ class PublicationPermit:
             _deny()
 
     def _check(self, host, cred, *, original_response=False):
+        if self.deposit_proof is not None:
+            if self.audit_proof is not None:
+                _deny()
+            from bookflow.core.publication_deposit import check_hosted
+            check_hosted(host, cred, self.ctx, self.deposit_proof)
+            return
         if self.audit_proof is not None:
             from bookflow.core.publication_audit import check_hosted
             check_hosted(host, cred, self.ctx, self.audit_proof)

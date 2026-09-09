@@ -55,6 +55,22 @@ def client(root):
     return bookflow.connect(data_root=str(root))
 
 
+@pytest.fixture(scope="session")
+def public_deposit_world(_seeded_template, tmp_path_factory):
+    """One produced company shared by the public deposit detail witnesses.
+
+    Building it runs the genuine deposit lifecycle several times, so it is built
+    once per session and only when a test asks for it. Each module takes the
+    data-root lock for itself and gives it back.
+    """
+    from tests import deposit_public_support as support
+    world = support.build(_seeded_template, tmp_path_factory)
+    try:
+        yield world
+    finally:
+        support.stop(world)
+
+
 class Cli:
     def __init__(self, root: Path):
         self.root = root

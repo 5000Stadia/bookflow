@@ -1591,9 +1591,11 @@ sales-receipt update/void planners and final appliers reject active deposit
 claims through the migration-chain feature resolver. Pure source preparation
 remains available unchanged to the future atomic coordinator.
 
-This increment does not activate deposit public commands, drafts, Delete,
+That increment did not activate deposit public commands, drafts, Delete,
 coordination/all-active-unapply, granular permission setup, reconciliation,
-full-C delivery, or G3 queries/UI. Private deposit history A supplies authenticated immutable baselines and
+full-C delivery, or G3 queries/UI; the two registered public detail reads landed
+later and are described under *Public deposit detail* below. Drafts, Delete,
+reconciliation, deposit query and every deposit write remain unregistered. Private deposit history A supplies authenticated immutable baselines and
 attributed, paged business conflicts; this is not a claim of complete G2. Complete replacement
 source-memo omission selects the captured source memo; explicit null retains
 G1's entered blank. Account activity remains required for fresh postings;
@@ -1673,9 +1675,11 @@ receipts, with the live series checked against those effects, and number occupan
 has explicit negative relations. The private persister retains the existing
 preview credential and revalidates its produced guard without inserting internal
 guard fields into original request provenance. These readers do not write or
-repair company copies. Full-C audience/publication integration, public deposit
-commands, aggregate source persistence and performance acceptance
-remain separate; no alternate identity binding or live permission policy is added.
+repair company copies. Aggregate source persistence and the blueprint's final
+performance acceptance remain separate; no alternate identity binding or live
+permission policy is added here. The public audience, publication and the two
+registered detail commands built on these readers are described under *Public
+deposit detail* below.
 
 Deposit history orders company events by their company sequence first, then hub
 issuer events by their separate hub sequence, with stable record/field ties.
@@ -2208,3 +2212,70 @@ defensive path for enlarged/legacy inputs; it does not justify raising those cap
 Empty directive text is the activity omission sentinel only with text_truncated;
 current directive creation rejects empty instructions. Full audit capture remains
 the authoritative text when inspecting an excerpt.
+
+### Public deposit detail
+
+`deposit show` and `deposit items` are the only registered deposit commands.
+Deposit query, history, print and every deposit write stay unregistered, so
+nothing else may take the paths below.
+
+Neither command has a plan-time implementation: `commands/deposit_cmds.py` raises
+`E_INTERNAL`, exactly as `commands/audit_cmds.py` does for the projected history
+family, and that refusal is unreachable because both dispatch paths select the
+reader-bound owner first. `core/dispatch.py` selects `core/deposit_offline.py`
+after hosted forwarding and before any second `RootLock`, beside the history
+branch; `adapters/http/execution.py` has a sibling branch that covers HTTP, the
+workbench, the local command socket and MCP, since all four arrive through
+`run_hosted`.
+
+`core/deposit_request.py` prepares one request under the authenticated reader:
+context, activation, the company resolved against the audience's own visible
+scopes, and the strict input, frozen into a `DepositRequest` that carries no
+session, reader or binding. It is deliberately import-cheap, because dispatch
+consults its `COMMANDS` on every offline command.
+
+`company/deposit_public_authority.py` builds the sealed `DepositAudience` from a
+live `BoundReader` and the genuine producer binding. Offline execution takes that
+binding from `BoundReader.execution_binding()` — the private execution bridge,
+which returns the reader's own retained `OSBinding` and refuses the internal
+`TokenBinding` a hosted token reader holds. A hosted request instead passes the
+original authenticated `OSBinding`/`Credential` the adapter admitted. Nothing
+synthesizes a binding from a `ReaderIdentity`; the audience refuses one that does
+not agree with the reader's root, actor, actor kind and principal.
+
+`core/publication_deposit.py` owns the seal-required `DepositProof` and is the
+sole construction path. **The proof compares audience-derived facts only.** The
+private inspection guard's read digest is derived from readset relation anchors,
+so it moves when a reference the reader cannot see changes; a proof that captured
+the readset, the guard or the connected closure would refuse release after a
+hidden-only change, and an observable refusal is the same disclosure arriving
+through the release path. So the proof holds the reader identity, the closed
+request, the selected pin, the disclosed document or an exact closed failure, and
+the observation instant — and release re-runs the same producer at that instant
+and compares the document. Admission is not compared; it is re-performed, which
+denies a reader who actually lost access and stays silent for a change that
+reader could never observe. Pinning the instant is what lets a release compare
+the same document instead of refusing because the clock advanced past a dated
+cutoff; `deposit_queries._show` and the public producers take `at` for that.
+
+`PublicationPermit` carries `deposit_proof` as a second, deliberately separate
+proof family. `finish` checks exact proof type, two-command ownership,
+success/failure consistency and the result digest; `retained`/`from_retained`
+validate the branch and reject a mixed audit/deposit permit, a raw input beside a
+proof, and a proof whose request names another command; `check` delegates to
+`publication_deposit.check_hosted`, which opens a fresh reader, before any
+generic company publication. `core/publication_inventory.py` names the family
+explicitly, so an unknown deposit registration fails coverage instead of
+inheriting the generic company policy, and `hub/permission_catalog.py` carries
+the two descriptors and company actions (catalog version
+`deposit-public-detail-co0021-v1`).
+
+Public items continuations use the company's own `report_cursor_keys` material
+under the distinct `public.items` domain, bound to the company, the executing
+subject and the selected revision, over the disclosed public rows rather than the
+private ones. That key has no rotation and no key id travels in the token; the
+limitation is recorded beside `PURPOSE` in `company/deposit_public_reads.py` and
+remains open work. Every page reauthorizes the whole connected closure, so a
+capability lost between pages refuses the next page even when the visible rows
+are unchanged, and a cursor pinned to one immutable revision survives another
+revision becoming current.
