@@ -93,7 +93,8 @@ FIELDS: dict[str, dict[str, tuple]] = {
                   'Only admitted, actually callable destinations are emitted; operation, draft, '
                   'selection and bank-version links have no registered public command in this stage.'),
         'current_references': (_R, ('DepositDetail.current_references',),
-                               'Filtered to reference groups this audience is admitted to.'),
+                               'Reduced to the masters this bounded summary itself names, then to the '
+                               'reference groups this audience is admitted to.'),
         'dependencies': (_R, ('DepositDetail.inspection',),
                          'The private inspection guard stays internal; only an audience-safe status is derived.'),
     },
@@ -182,8 +183,9 @@ FIELDS: dict[str, dict[str, tuple]] = {
         'revision_bank_total': (_D, ('CurrentState.revision_bank_total',), ''),
         'revision_cash_back': (_D, ('CurrentState.revision_cash_back',), ''),
         'effective_bank_total': (_D, ('CurrentState.effective_bank_total',), ''),
-        'active_source_ids': (_D, ('CurrentState.active_source_ids',),
-                              'Receipts of this deposit, all inside the admitted aggregate closure.'),
+        'active_source_ids': (_R, ('CurrentState.active_source_count',),
+                              'Composition-sized: the bounded summary carries the count, and the '
+                              'identities travel beside their rows on the sources item page.'),
     },
     'deposit_read_models.Totals': {
         'posting_total': (_D, ('DepositTotals.posting_total',), ''),
@@ -233,7 +235,9 @@ FIELDS: dict[str, dict[str, tuple]] = {
     },
     'deposit_read_models.DependencySummary': {
         'purpose': (_D, ('InspectionSummary.purpose',), ''),
-        'source_ids': (_D, ('InspectionSummary.source_ids',), ''),
+        'source_ids': (_R, ('InspectionSummary.source_count',),
+                       'Composition-sized: the bounded summary carries the count, and the identities '
+                       'travel beside their rows on the sources item page.'),
         'guard': (_P, (), 'BaselineRecipe token. Its read_digest and endpoint derive from readset anchors this '
                           'reader may not see, so publishing it or any hash of it is a disclosure side channel.'),
         'history': (_R, ('InspectionSummary.history',),
@@ -253,7 +257,8 @@ FIELDS: dict[str, dict[str, tuple]] = {
         'current': (_D, ('DepositItemsPage.current',), ''),
         'current_observed_at': (_D, ('DepositItemsPage.current_observed_at',), ''),
         'current_references': (_R, ('DepositItemsPage.current_references',),
-                               'Filtered to reference groups this audience is admitted to.'),
+                               'Reduced to the masters the emitted rows of this page name, then to the '
+                               'reference groups this audience is admitted to.'),
     },
     'deposit_models.Additional': {
         'row_id': (_D, ('AdditionalRow.row_id',), ''),

@@ -43,6 +43,48 @@ def open_selected(reader, audience, company, ctx):
     return session
 
 
+BATCH = 200
+
+
+def graph_requirements(s, evidence):
+    """Complete current requirements of the admitted connected graph.
+
+    Reuses the registered payment/work owners exactly as the private legacy
+    checks do; it introduces no permission vocabulary of its own. The roots,
+    events and drafts come from the closure, never from a displayed page, so
+    off-page dependencies are covered.
+    """
+    from bookflow.company import payment_authority as authority_owner
+    required = set()
+    roots = sorted(set(evidence.roots))
+    for start in range(0, max(1, len(roots)), BATCH):
+        required.update(authority_owner.requirements(s.company, roots[start:start + BATCH]))
+    events = sorted(set(evidence.events))
+    for start in range(0, len(events), BATCH):
+        cohort = events[start:start + BATCH]
+        reader = authority_owner._EventCohort(s.company, cohort)
+        for event in cohort:
+            required.update(reader.requirements(event))
+        del reader
+    if evidence.drafts:
+        required.add(pa.READ_REQUIREMENT)
+    return tuple(sorted(required))
+
+
+def _require_graph(s, audience, evidence):
+    """The public granular boundary the retained legacy checks cannot supply.
+
+    hub.access.require_resource decides on legacy company roles and never applies
+    granular capability denies, so every requirement of the connected graph is
+    re-asked of the current actor/principal intersection here, before any
+    financial decode. Denial answers with the private reader's exact-read
+    non-disclosing not-found, never a distinguishable code or detail.
+    """
+    for capability, threshold in graph_requirements(s, evidence):
+        if not audience.admits(capability, threshold):
+            raise BookflowError('E_RECORD_NOT_FOUND')
+
+
 def _admit(s, audience, deposit):
     """Reauthorize this request, then take the private non-disclosing exact read.
 
@@ -54,8 +96,9 @@ def _admit(s, audience, deposit):
     pa.conform()
     binding = audience.binding()
     audience.require(s.company_row['id'])
-    authority.selected(s, deposit, binding=binding)
-    return binding
+    evidence = authority.selected(s, deposit, binding=binding)
+    _require_graph(s, audience, evidence)
+    return binding, evidence
 
 
 def _inspection_status(s, data, binding, audience):
@@ -159,18 +202,60 @@ def _custom_fields(values, audience):
     return tuple(result)
 
 
-def _current_references(navigation, audience):
+def _current_references(navigation, named, audience):
+    """Only the masters this response actually names, and only admitted groups.
+
+    ``named`` is the closed set of (navigation kind, identity) pairs the emitted
+    summary or page rows reference, so neither surface grows with the whole
+    connected graph.
+    """
     result = []
     for row in navigation:
         group = pa.REFERENCE_GROUPS.get(row.kind)
         if group is None:
             raise _internal('unknown navigation kind')
-        if not audience.reference_admitted(row.kind):
+        if (row.kind, row.id) not in named or not audience.reference_admitted(row.kind):
             continue
         result.append(w.CurrentReference(group=group, id=row.id, label=row.label, active=row.active,
                                          version=row.version, current_type=row.current_type,
                                          available=row.available))
     return tuple(result)
+
+
+def _name(named, table, reference):
+    """Record one emitted reference; a redacted group names nothing."""
+    if reference is not None and reference.disclosed and reference.id is not None:
+        named.add((table, reference.id))
+
+
+def _named_by_summary(header):
+    """Bank and cash-back accounts: every master the show summary itself names."""
+    named = set()
+    _name(named, 'accounts', header.deposit_to)
+    if header.cash_back is not None:
+        _name(named, 'accounts', header.cash_back.account)
+    return named
+
+
+def _named_by_rows(rows):
+    """Masters the emitted composition rows name; bounded by the page limit."""
+    named = set()
+    for row in rows:
+        if row.row == 'source':
+            _name(named, 'accounts', row.from_account)
+            _name(named, pa.PARTY_TABLES[row.payer.group], row.payer)
+            _name(named, 'payment_methods', row.payment_method)
+            for party in row.allocation_parties:
+                _name(named, pa.PARTY_TABLES[party.group], party)
+            for grouping in row.allocation_classes:
+                _name(named, 'classes', grouping)
+        elif row.row == 'additional':
+            _name(named, 'accounts', row.account)
+            if row.party is not None:
+                _name(named, pa.PARTY_TABLES[row.party.group], row.party)
+            _name(named, 'classes', row.class_reference)
+            _name(named, 'payment_methods', row.payment_method)
+    return named
 
 
 # ------------------------------------------------------------------- item rows
@@ -285,7 +370,7 @@ def _current_state(state):
         revision_bank_total=_amount(state.revision_bank_total, currency),
         revision_cash_back=_amount(state.revision_cash_back, currency),
         effective_bank_total=_amount(state.effective_bank_total, currency),
-        active_source_ids=state.active_source_ids)
+        active_source_count=len(state.active_source_ids))
 
 
 def _selected_header(selected, currency, audience):
@@ -342,31 +427,36 @@ def _dated(state):
 def show(s, inp, *, audience):
     """Bounded public detail for one deposit revision; composition stays on items."""
     inp = q.checked(inp, m.ShowInput)
-    binding = _admit(s, audience, inp.deposit)
-    data = facts.load_complete(s, [inp.deposit], binding=binding)[0]
+    binding, evidence = _admit(s, audience, inp.deposit)
+    # G3: the capability decision precedes association access, so a denied
+    # annotation kind is never acquired, not merely dropped from the result.
+    access = audience.annotation_access()
+    acquire = tuple(name[:-1] for name, value in sorted(access.items()) if value == 'available')
+    data = facts.load_complete(s, [inp.deposit], binding=binding, annotations=acquire)[0]
     private = q._show(s, data, inp, binding, with_guard=False)
     history = _inspection_status(s, data, binding, audience)
-    access = audience.annotation_access()
     audience.validate()
+    header = _selected_header(private.selected, private.currency, audience)
     return w.DepositDetail(
         company_id=private.company_id, deposit_id=private.selected.pin.deposit, currency=private.currency,
-        selected=_selected_header(private.selected, private.currency, audience),
+        selected=header,
         selected_is_current=private.selected_is_current,
         current=_current_state(private.current), current_observed_at=private.current_observed_at,
         totals=_totals(private.totals), counts=_counts(private.counts),
         dated_state=_dated(private.dated_state),
         inspection=w.InspectionSummary(purpose=private.dependencies.purpose, history=history,
-                                       source_ids=private.dependencies.source_ids),
+                                       source_count=len(private.dependencies.source_ids)),
         annotations=w.AnnotationAccess(**access),
         revisions=_revisions(data, private),
         links=_annotation_links(private, access),
-        current_references=_current_references(private.current_references, audience))
+        current_references=_current_references(private.current_references,
+                                              _named_by_summary(header), audience))
 
 
 def items(s, inp, *, audience):
     """One page of the selected revision's composition, over the disclosed relation."""
     inp = q.checked(inp, m.ItemsInput)
-    binding = _admit(s, audience, inp.deposit)
+    binding, evidence = _admit(s, audience, inp.deposit)
     number = inp.revision_number
     if inp.page.cursor:
         position = pages.decode(s, binding, PURPOSE, inp.page.cursor)['position']
@@ -374,7 +464,8 @@ def items(s, inp, *, audience):
                 or (number is not None and number != position[0])):
             raise BookflowError('E_VALIDATION', details={'field': 'cursor'})
         number = position[0]
-    data = facts.load_complete(s, [inp.deposit], binding=binding)[0]
+    # No page emits an annotation link, so no association is ever acquired here.
+    data = facts.load_complete(s, [inp.deposit], binding=binding, annotations=())[0]
     selected = q.selected(data, number)
     effect = data.effects[selected.pin.revision_id]
     currency = effect.intent.currency
@@ -390,4 +481,4 @@ def items(s, inp, *, audience):
         kind=inp.kind, items=chunk, total_count=len(rows), totals=_totals(q.totals(effect)),
         fingerprint=fingerprint, next_cursor=following, current=_current_state(q.current(data)),
         current_observed_at=q.now(),
-        current_references=_current_references(data.references, audience))
+        current_references=_current_references(data.references, _named_by_rows(chunk), audience))

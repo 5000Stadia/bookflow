@@ -12,6 +12,8 @@ import pytest
 from bookflow.company import deposit_public_authority as pa
 from bookflow.company import deposit_public_reads as reads
 from bookflow.company import deposit_queries as q
+from bookflow.company import deposit_read_authority as private_authority
+from bookflow.company import deposit_read_facts as private_facts
 from bookflow.company import deposit_read_models as m
 from bookflow.company import deposit_read_pages as pages
 from bookflow.core.errors import BookflowError
@@ -166,7 +168,7 @@ def test_show_projects_the_disclosed_relation_and_never_the_private_guard(public
     assert private.dependencies.guard and private.dependencies.history == 'complete'
     assert 'guard' not in payload and private.dependencies.guard not in payload
     assert detail.inspection.history == 'complete'
-    assert detail.inspection.source_ids == private.dependencies.source_ids
+    assert detail.inspection.source_count == len(private.dependencies.source_ids) == 1
     # Private-domain fingerprints and identities never travel.
     assert not any(value in payload for value in private.fingerprints.values())
     assert detail.selected.deposit_to.disclosed and detail.selected.deposit_to.id == world['bank']
@@ -177,8 +179,10 @@ def test_show_projects_the_disclosed_relation_and_never_the_private_guard(public
     assert detail.annotations.notes == 'available' and detail.annotations.attachments == 'available'
     assert [link.id for link in detail.links if link.kind == 'note'] == [world['note']]
     assert [(row.revision_number, row.selected, row.current) for row in detail.revisions] == [(1, True, True)]
-    assert {row.group for row in detail.current_references} <= set(pa.REFERENCE_GROUPS.values())
-    assert world['bank'] in {row.id for row in detail.current_references}
+    assert detail.current.active_source_count == 1
+    # A bounded summary names only its own masters: the bank and the cash-back account.
+    assert {row.group for row in detail.current_references} == {'account'}
+    assert {row.id for row in detail.current_references} == {world['bank'], world['till']}
 
 
 def test_items_page_every_kind_over_the_public_continuation_domain(public_world):
@@ -341,3 +345,180 @@ def test_the_audience_requires_its_own_reader_and_matching_binding(public_world)
                           admitted.hub_admin, None, None)
         with pytest.raises(BookflowError):
             pa.audience(reader, other)
+
+
+# ---------------------------------------------------------------- enforcement
+
+
+@pytest.fixture(scope='module')
+def work_linked(public_world):
+    """A deposit whose connected graph carries a real customer-work requirement."""
+    from tests.test_deposit_draft_financial import financial, run_private
+    from tests.test_work_billing_lifecycle import accepted, bill
+    world = public_world
+    with without_host(world):
+        client = world['client']
+        sales = {'customer': world['customer'], 'item': 'Sale witness service'}
+        invoice = bill(client, accepted(client, sales), key='enforcement-work')
+        payment = client.run('payment receive', dict(
+            customer=world['customer'], date='2026-06-02', amount='1.00',
+            payment_method=world['method'], operation_key='enforcement-work-pay',
+            applications=dict(mode='inline', items=[dict(invoice=invoice['id'], expected_version=1,
+                                                         amount='1.00')])), company=COMPANY)
+        with pytest.MonkeyPatch.context() as patch:
+            private = run_private.__wrapped__(client, patch)
+            posted = financial(private, dict(operation_key='enforcement-work-deposit', document=dict(
+                mode='inline', deposit_to=world['bank'], date='2026-06-03',
+                sources=[dict(source_type='payment', source=payment['id'], expected_version=1)])))
+    return dict(deposit=posted.current.id, payment=payment['id'])
+
+
+def test_a_denied_connected_work_capability_is_enforced_before_any_decode(public_world, work_linked):
+    """Reviewer BLOCK 1: legacy require_resource never applies granular denies."""
+    from bookflow.company import payment_authority
+    world = public_world
+    deposit = work_linked['deposit']
+    with reading(world) as (session, audience, binding):
+        allowed = reads.show(session, m.ShowInput(deposit=deposit), audience=audience)
+        assert allowed.deposit_id == deposit
+        required = payment_authority.requirements(session.company, [work_linked['payment']])
+        assert ('customer-work', 'member') in required
+    with denying(world, ('customer-work',)):
+        with reading(world) as (session, audience, binding):
+            # The retained legacy check still admits; the public boundary must not.
+            assert not audience.admits('customer-work')
+            assert payment_authority.requirements(session.company, [work_linked['payment']]) == required
+            assert ('customer-work', 'member') in reads.graph_requirements(
+                session, private_authority.selected(session, deposit, binding=binding))
+            for call in (lambda: reads.show(session, m.ShowInput(deposit=deposit), audience=audience),
+                         lambda: reads.items(session, m.ItemsInput(deposit=deposit, kind='sources'),
+                                             audience=audience),
+                         lambda: reads.items(session, m.ItemsInput(deposit=deposit, kind='cash_allocations'),
+                                             audience=audience)):
+                with pytest.raises(BookflowError) as caught:
+                    call()
+                # Exact-read non-disclosure: identical to an absent record.
+                assert caught.value.code == 'E_RECORD_NOT_FOUND' and not caught.value.details
+            # A deposit with no work-linked dependency stays readable for the same reader.
+            assert reads.show(session, m.ShowInput(deposit=world['deposit']),
+                              audience=audience).deposit_id == world['deposit']
+
+
+def test_denied_annotation_kinds_are_never_acquired(public_world, monkeypatch):
+    """Reviewer BLOCK 2: the capability decision precedes association access."""
+    from bookflow.company import deposit_read_facts
+    world = public_world
+    seen = []
+    original = deposit_read_facts._associations
+
+    def observed(s, identity, links, kinds=('note', 'attachment')):
+        seen.append(tuple(kinds))
+        return original(s, identity, links, kinds)
+    monkeypatch.setattr(deposit_read_facts, '_associations', observed)
+    with denying(world, ('note', 'attachment')):
+        with reading(world) as (session, audience, binding):
+            detail = reads.show(session, m.ShowInput(deposit=world['deposit']), audience=audience)
+            assert detail.links == ()
+            assert detail.annotations.notes == detail.annotations.attachments == 'unavailable'
+    assert seen == [], 'Denied annotation associations were acquired before the access decision'
+    with denying(world, ('attachment',)):
+        with reading(world) as (session, audience, binding):
+            detail = reads.show(session, m.ShowInput(deposit=world['deposit']), audience=audience)
+            assert detail.annotations.notes == 'available'
+            assert detail.annotations.attachments == 'unavailable'
+            assert [link.kind for link in detail.links] == ['note']
+    assert seen == [('note',)], seen
+    seen.clear()
+    with reading(world) as (session, audience, binding):
+        reads.items(session, m.ItemsInput(deposit=world['deposit'], kind='sources'), audience=audience)
+    assert seen == [], 'Item pages emit no annotation link and must acquire none'
+
+
+REFERENCE_CASES = (
+    ('account', 'accounts'),
+    ('customer', 'customers'),
+    ('class', 'classes'),
+    ('payment-method', 'payment_methods'),
+)
+
+
+def _groups_disclosed(detail, additional, sources):
+    row = next(r for r in additional if r.amount.minor_units == 1000)
+    return {
+        'accounts': detail.selected.deposit_to.disclosed and row.account.disclosed
+                    and sources[0].from_account.disclosed,
+        'customers': row.party.disclosed and sources[0].payer.disclosed,
+        'classes': row.class_reference.disclosed,
+        'payment_methods': row.payment_method.disclosed and sources[0].payment_method.disclosed,
+    }
+
+
+def test_the_projector_enforces_each_declared_reference_group_independently(public_world):
+    """Enforcement, not declaration: one denied group redacts only its own fields."""
+    world = public_world
+    with reading(world) as (session, audience, binding):
+        detail = reads.show(session, m.ShowInput(deposit=world['deposit']), audience=audience)
+        additional, _ = collect(session, audience, world['deposit'], 'additional', limit=25)
+        sources, _ = collect(session, audience, world['deposit'], 'sources', limit=25)
+    assert all(_groups_disclosed(detail, additional, sources).values())
+    for capability, table in REFERENCE_CASES:
+        with denying(world, (capability,)):
+            with reading(world) as (session, audience, binding):
+                assert not audience.reference_admitted(table)
+                detail = reads.show(session, m.ShowInput(deposit=world['deposit']), audience=audience)
+                additional, page = collect(session, audience, world['deposit'], 'additional', limit=25)
+                sources, _ = collect(session, audience, world['deposit'], 'sources', limit=25)
+        state = _groups_disclosed(detail, additional, sources)
+        assert state[table] is False, (capability, state)
+        assert all(value for name, value in state.items() if name != table), (capability, state)
+        assert all(row.group != pa.REFERENCE_GROUPS[table] for row in detail.current_references)
+        assert all(row.group != pa.REFERENCE_GROUPS[table] for row in page.current_references)
+        if capability == 'payment-method':
+            assert sources[0].current.payment_method_type is None
+    with denying(world, ('custom-field',)):
+        with reading(world) as (session, audience, binding):
+            assert not reads.show(session, m.ShowInput(deposit=world['deposit']),
+                                  audience=audience).selected.custom_fields[0].disclosed
+    with denying(world, ('company',)):
+        with reading(world) as (session, audience, binding):
+            assert not reads.show(session, m.ShowInput(deposit=world['deposit']),
+                                  audience=audience).selected.issuer.disclosed
+
+
+def test_the_summary_and_each_page_carry_only_the_references_they_name(public_world):
+    """Neither surface grows with the connected graph."""
+    world = public_world
+    with reading(world) as (session, audience, binding):
+        detail = reads.show(session, m.ShowInput(deposit=world['deposit']), audience=audience)
+        whole = reads.items(session, m.ItemsInput(deposit=world['deposit'], kind='additional',
+                                                  page=m.PageInput(limit=25)), audience=audience)
+        first = reads.items(session, m.ItemsInput(deposit=world['deposit'], kind='additional',
+                                                  page=m.PageInput(limit=1)), audience=audience)
+        second = reads.items(session, m.ItemsInput(
+            deposit=world['deposit'], kind='additional',
+            page=m.PageInput(limit=1, cursor=first.next_cursor)), audience=audience)
+        sources = reads.items(session, m.ItemsInput(deposit=world['deposit'], kind='sources',
+                                                    page=m.PageInput(limit=25)), audience=audience)
+        cells = reads.items(session, m.ItemsInput(deposit=world['deposit'], kind='cash_allocations',
+                                                  page=m.PageInput(limit=25)), audience=audience)
+        complete = private_facts.load_complete(session, [world['deposit']], binding=binding,
+                                               annotations=())[0]
+        graph = len({(row.kind, row.id) for row in complete.references})
+    # The show summary names only the bank and cash-back accounts, not the whole graph.
+    assert {row.id for row in detail.current_references} == {world['bank'], world['till']}
+    assert len(detail.current_references) < graph
+    # Allocation rows name no master at all.
+    assert cells.current_references == ()
+    # A page names only its own rows' masters, and the whole collection still
+    # names fewer than the connected graph.
+    assert len(whole.current_references) < graph and len(sources.current_references) < graph
+    assert {row.id for row in first.current_references} <= {row.id for row in whole.current_references}
+    assert len(second.current_references) < len(whole.current_references)
+    assert ({row.id for row in first.current_references} | {row.id for row in second.current_references}
+            == {row.id for row in whole.current_references})
+    # The class and method belong to the positive row only; the negative row omits them.
+    assert world['grouping'] in {row.id for row in first.current_references}
+    assert world['grouping'] not in {row.id for row in second.current_references}
+    assert world['method'] not in {row.id for row in second.current_references}
+    # The deposit bank account is a summary master, never a source-row master.
+    assert world['bank'] not in {row.id for row in sources.current_references}

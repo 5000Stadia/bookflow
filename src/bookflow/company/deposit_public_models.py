@@ -188,7 +188,7 @@ class CurrentState(Public):
     revision_bank_total: Money
     revision_cash_back: Money
     effective_bank_total: Money
-    active_source_ids: tuple[str, ...] = Field(description='Receipts this deposit currently claims.')
+    active_source_count: int = Field(description='How many receipts this deposit currently claims. Their identities are composition-sized and travel on `deposit items --kind sources`.')
 
 
 class DepositTotals(Public):
@@ -225,7 +225,9 @@ class InspectionSummary(Public):
     history: Literal['complete', 'unknown_history'] = Field(
         description='complete when every disclosed dependency has readable history; unknown_history otherwise. '
                     'unknown_history does not identify a cause and does not grant or withhold permission.')
-    source_ids: tuple[str, ...] = Field(description='Receipt identities this deposit has ever claimed.')
+    source_count: int = Field(
+        description='How many receipts this deposit has ever claimed. Their identities are '
+                    'composition-sized and travel on `deposit items --kind sources`.')
 
 
 class AnnotationAccess(Public):
@@ -271,7 +273,9 @@ class DepositDetail(Public):
     annotations: AnnotationAccess
     revisions: tuple[RevisionLink, ...]
     links: tuple[AnnotationLink, ...]
-    current_references: tuple[CurrentReference, ...]
+    current_references: tuple[CurrentReference, ...] = Field(
+        description='Current masters named by this summary only. Composition references travel '
+                    'beside their rows on `deposit items`.')
 
 
 # -------------------------------------------------------------------- item rows
@@ -367,4 +371,5 @@ class DepositItemsPage(Public):
     next_cursor: str | None
     current: CurrentState
     current_observed_at: str
-    current_references: tuple[CurrentReference, ...]
+    current_references: tuple[CurrentReference, ...] = Field(
+        description='Current masters named by the rows on this page; bounded by the page limit.')
