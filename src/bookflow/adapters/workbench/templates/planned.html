@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% block title %}{{ step.step.title if step else "What is planned" }}{% endblock %}{% block body %}
+{% if step %}
+<nav class="crumbs"><a href="/c/{{ company_id }}/">Home window</a> · <a href="/c/{{ company_id }}/_planned">What is planned</a></nav>
+<h1>{{ step.step.title }}</h1>
+<p>{{ step.step.summary }}</p>
+<div class="field"><div>What it will do</div><div>{{ step.step.action.label }} — this step {{ "writes to the books" if step.step.action.kind == "write" else "only reads" }}.</div></div>
+<div class="field"><div>{{ "Waiting on" if step.planned else "Not available because of" }}</div><div>{{ step.reason }}</div></div>
+<div class="field"><div>Where it sits</div><div>{{ step.step.title }} in the {{ panel.panel.title }} flow.</div></div>
+{% if step.planned %}<p class="muted">Nothing on the home window opens this step. It is here so the shape of the product is
+visible before the step exists, and it becomes a working page the moment its commands and its form land.</p>
+{% else %}<p class="muted">This step is built, but this company or your role does not offer it, so the home window shows it dimmed rather than as a link that would fail.</p>{% endif %}
+{% else %}
+<nav class="crumbs"><a href="/c/{{ company_id }}/">Home window</a></nav>
+<h1>What is planned</h1>
+<p class="muted">Every dimmed step on the home window, what it will do, and what it is waiting on.</p>
+{% for row in panels %}{% if row.planned %}<section class="nav-group">
+<h2>{{ row.panel.title }}</h2>
+{% for item in row.planned %}<div class="noun-row"><h3><a href="/c/{{ company_id }}/_planned/{{ item.step.id }}">{{ item.step.title }}</a></h3>
+<p>{{ item.step.action.label }} — {{ item.step.summary }}</p>
+<p class="muted">Waiting on {{ item.reason }}.</p></div>{% endfor %}
+</section>{% endif %}{% endfor %}
+{% endif %}
+{% endblock %}

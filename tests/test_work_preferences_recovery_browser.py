@@ -105,7 +105,7 @@ def recovery_browser(fragmented_root, tmp_path, monkeypatch):
         b.evaluate(f'''document.querySelector('[name=username]').value={json.dumps(os_login())};
             document.querySelector('[name=password]').value={json.dumps(PASSWORD)};
             document.querySelector('form[hx-post="/login"]').requestSubmit()''')
-        b.wait_for('!!document.querySelector(".group-grid")')
+        b.wait_for('!!document.querySelector(".nav-group")')
         yield SimpleNamespace(browser=b, site=site)
     finally:
         if b: b.close()

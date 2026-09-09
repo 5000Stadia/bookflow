@@ -89,7 +89,7 @@ def test_browser_resumes_201_of_403_from_complete_durable_outbox(register_browse
     try:
         other_browser.navigate(register_browser.site.base_url+'/login')
         other_browser.evaluate("(()=>{document.querySelector('[name=username]').value="+json.dumps(register_browser.site.login)+";document.querySelector('[name=password]').value="+json.dumps(PASSWORD)+";document.querySelector('form[hx-post=\"/login\"]').requestSubmit();})()")
-        other_browser.wait_for("!!document.querySelector('.group-grid')")
+        other_browser.wait_for("!!document.querySelector('.nav-group')")
         for width in (1280,390):
             other_browser.viewport(width,900);other_browser.navigate(base+'/receive-payments?selection='+selection)
             other_browser.wait_for("document.querySelector('#payment-workspace')?.dataset.loaded==='true'",timeout=180)

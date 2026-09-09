@@ -59,7 +59,7 @@ def _login(browser, site):
       document.querySelector('[name="password"]').value = {json.dumps(PASSWORD)};
       document.querySelector('form[hx-post="/login"]').requestSubmit();
     }})()""")
-    browser.wait_for("!!document.querySelector('.group-grid')")
+    browser.wait_for("!!document.querySelector('.nav-group')")
 
 
 def _api(browser, site, name, raw):

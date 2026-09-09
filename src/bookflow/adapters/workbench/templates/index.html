@@ -1,5 +1,6 @@
-{% extends "base.html" %}{% block title %}{{ company.display_name if company else "Hub" }}{% endblock %}{% block body %}
-<h1>{{ company.display_name if company else "Hub" }}</h1>
+{% extends "base.html" %}{% set heading = page_title or (company.display_name if company else "Hub") %}{% block title %}{{ heading }}{% endblock %}{% block body %}
+<h1>{{ heading }}</h1>
+{% if company and page_title %}<nav class="crumbs"><a href="/c/{{ company_id }}/">Home window</a></nav>{% endif %}
 <div class="group-grid">{% for group, nouns in groups %}<section class="nav-group"><h2>{{ group }}</h2>
 {% for noun, verbs in nouns %}<div class="noun-row"><h3>{{ noun }}</h3><p class="actions">
 {% set base = ("/c/" ~ company_id ~ "/" ~ noun) if company else ("/hub/" ~ noun.replace(" ", "-")) %}

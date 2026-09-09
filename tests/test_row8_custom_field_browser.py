@@ -203,7 +203,7 @@ def test_readonly_chrome_captured_inactive_values_and_forged_write(register_brow
     b.evaluate(f"""(() => {{document.querySelector('[name=username]').value='cf-reader';
       document.querySelector('[name=password]').value={json.dumps(PASSWORD)};
       document.querySelector('form[hx-post="/login"]').requestSubmit();}})()""")
-    b.wait_for("!!document.querySelector('.group-grid')")
+    b.wait_for("!!document.querySelector('.nav-group')")
     b.navigate(env.url)
     b.wait_for("!!document.querySelector('#register-config')")
     assert not b.evaluate("!!document.querySelector('#register-form')")

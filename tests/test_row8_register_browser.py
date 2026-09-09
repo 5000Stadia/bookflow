@@ -55,7 +55,7 @@ def register_browser(browser_site, tmp_path):
           document.querySelector('[name="password"]').value = {json.dumps(PASSWORD)};
           document.querySelector('form[hx-post="/login"]').requestSubmit();
         }})()""")
-        browser.wait_for("!!document.querySelector('.group-grid')")
+        browser.wait_for("!!document.querySelector('.nav-group')")
         bank = _command(browser, browser_site, "account.create", {"name": "CDP bank", "type": "bank"})
         expense = _command(browser, browser_site, "account.create", {"name": "CDP supplies", "type": "expense"})
         url = f"{browser_site.base_url}/c/{browser_site.company_id}/account/{bank['id']}/register"

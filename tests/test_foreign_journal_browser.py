@@ -108,7 +108,7 @@ def test_rate_navigation_filters_and_paging(register_browser, width):
     for date, currency in ((DATE, 'JPY'), (DATE, 'EUR'), ('2026-03-12', 'JPY')):
         _command(b, env.site, 'rate.set', {'date':date,'from_currency':currency,'rate':'0.0068'})
     base = f'{env.site.base_url}/c/{env.site.company_id}'
-    b.navigate(base + '/')
+    b.navigate(base + '/_all')
     b.wait_for('!!document.querySelector(".group-grid")')
     link = b.evaluate("[...document.querySelectorAll('.nav-group a')].find(a=>a.getAttribute('href').endsWith('/rate/query')).href")
     b.navigate(link)
