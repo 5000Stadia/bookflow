@@ -30,8 +30,22 @@ def _layouts(b, tmp_path, name):
     assert b.evaluate('''[...document.querySelectorAll('.document-lines tbody tr')].every(e=>
         getComputedStyle(e).display==='grid' && getComputedStyle(e).gridTemplateColumns.split(' ').length===2)''')
     # Real accessibility tree keeps table, row, column header and cell roles after CSS layout changes.
-    roles = {n.get('role', {}).get('value') for n in b.call('Accessibility.getFullAXTree', {})['nodes'] if not n.get('ignored')}
-    assert {'table', 'row', 'columnheader', 'cell'} <= roles, roles
+    ax_nodes = b.call('Accessibility.getFullAXTree', {})['nodes']
+    by_id = {node['nodeId']: node for node in ax_nodes}
+    document = b.call('DOM.getDocument', {})['root']['nodeId']
+    tables = b.call('DOM.querySelectorAll', {'nodeId': document, 'selector': '.document-lines'})['nodeIds']
+    assert tables
+    for table_id in tables:
+        backend_id = b.call('DOM.describeNode', {'nodeId': table_id})['node']['backendNodeId']
+        root = next(node for node in ax_nodes if node.get('backendDOMNodeId') == backend_id)
+        assert not root.get('ignored') and root['role']['value'] == 'table', root
+        pending, roles = [root['nodeId']], set()
+        while pending:
+            node = by_id[pending.pop()]
+            if not node.get('ignored'):
+                roles.add(node.get('role', {}).get('value'))
+            pending.extend(node.get('childIds', []))
+        assert {'table', 'row', 'columnheader', 'cell'} <= roles, roles
     (tmp_path / f'{name}-390.png').write_bytes(base64.b64decode(b.call('Page.captureScreenshot', {'format':'png', 'captureBeyondViewport':True})['data']))
     # Disabling only this stylesheet reproduces the original table overflow.
     assert b.evaluate('''(() => {const sheet=[...document.styleSheets].find(s=>s.href?.includes('/document-detail.css'));
