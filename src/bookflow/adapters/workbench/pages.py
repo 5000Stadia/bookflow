@@ -673,7 +673,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         field: str,
         request: Request,
     ):
-        """Return at most 25 active same-company choices for a declared reference."""
+        """Return at most 25 same-company choices under the declared reference policy."""
         try:
             cred = credential(request)
             company_view = run(request, "company show", {}, company_id)
@@ -784,8 +784,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 if len(options) == 25:
                     break
             return HTMLResponse("".join(options), headers={"Cache-Control": "no-store"})
+        include_inactive = getattr(reference, "include_inactive", False)
+        query_input = {"query": query, "projection": "reference", "limit": 25}
+        if include_inactive:
+            query_input["include_inactive"] = True
         try:
-            output = run(request, list_command.name, {"query": query, "projection": "reference", "limit": 25}, company_id)
+            output = run(request, list_command.name, query_input, company_id)
         except BookflowError as err:
             return page_error(request, err)
         relationship_versions: dict[str, int] = {}
@@ -811,9 +815,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         options = []
         for row in output.get("items", [])[:25]:
             stable_id = row.get(identifier) or row.get("id")
-            if stable_id is None or not row.get("active", True):
+            if stable_id is None or (not include_inactive and not row.get("active", True)):
                 continue
             label = str(row["label"])
+            if not row.get("active", True):
+                label += " (inactive)"
             relationship_version = relationship_versions.get(str(stable_id), "")
             options.append(
                 f'<option value="{escape(str(stable_id), quote=True)}" '

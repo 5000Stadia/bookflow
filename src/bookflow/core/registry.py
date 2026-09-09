@@ -364,6 +364,9 @@ def noun_meta(noun: str) -> dict[str, Any]:
         if noun in ('invoice', 'sales-receipt'):
             from bookflow.company.sales_contract import FORM_DEFINITIONS
             meta['form_definition'] = FORM_DEFINITIONS[noun]
+        if noun == 'report':
+            from bookflow.company.report_contract import FORM
+            meta['form_definition'] = FORM
         return meta
     show = REGISTRY.get(f"{noun} show")
     identifier = show.positional[0] if show and show.positional else None
