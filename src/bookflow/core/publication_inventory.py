@@ -24,6 +24,8 @@ HUB = {
     "user add": "current_hub_admin_and_resolved_grant_scope",
     "membership grant": "resolved_target_user_and_current_scope_administration",
     "membership revoke": "resolved_target_user_and_current_scope_administration",
+    "user list": "returned_listing_audience_and_current_scope_administration",
+    "membership list": "returned_listing_audience_and_current_scope_administration",
     "upgrade": "returned_company_registrations_and_shared_may_write",
 }
 

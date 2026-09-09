@@ -128,6 +128,114 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 
+## `user list`
+
+List the people on this installation, with the agent principals that act for them. Filtered by company or organization it answers who can reach it, through their own membership or their organization's; hub administrators reach every company without one and are listed unfiltered, with hub_admin set.
+
+| Contract | Value |
+|---|---|
+| Scope | hub |
+| Kind | read |
+| Required role | the principals you administer: everyone for a hub administrator, the members of a company or organization you administer, and always yourself |
+| Capability | user |
+| Feature | — |
+| HTTP | `POST /commands/user.list` |
+| External binary body | none |
+
+### CLI
+
+`bookflow user list --company "Demo Plumbing Co" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `company` | `--company` | string \| null | no | yes | null | Only the principals whose membership reaches this company; name or id |
+| `organization` | `--organization` | string \| null | no | yes | null | Only the principals whose membership reaches this organization; name or id |
+| `kind` | `--kind` | literal["human", "agent", "system"] \| null | no | yes | null | Only principals of this kind; omit for all of them |
+| `include_inactive` | `--include-inactive` | boolean | no | no | false | Also list principals whose account has been deactivated |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+
+### HTTP
+
+Route: `POST /commands/user.list`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `items` | array[object] | yes | no | — | — |
+| `items[].id` | string | yes | no | — | — |
+| `items[].version` | integer | yes | no | — | — |
+| `items[].created_at` | string | yes | no | — | — |
+| `items[].created_by` | string | yes | no | — | — |
+| `items[].created_via` | string | yes | no | — | — |
+| `items[].updated_at` | string | yes | no | — | — |
+| `items[].updated_by` | string | yes | no | — | — |
+| `items[].updated_via` | string | yes | no | — | — |
+| `items[].user_id` | string | yes | no | — | — |
+| `items[].username` | string | yes | no | — | — |
+| `items[].display_name` | string | yes | no | — | — |
+| `items[].kind` | literal["human", "agent", "system"] | yes | no | — | human is a person who logs in; agent acts for one; system is Bookflow's own actor |
+| `items[].hub_admin` | boolean | yes | no | — | Administers the whole installation: adds people, attaches companies, sees every organization |
+| `items[].active` | boolean | yes | no | — | — |
+| `items[].acts_for` | string \| null | yes | yes | — | Username of the human this principal acts for; null for a person |
+| `items[].acts_for_user_id` | string \| null | yes | yes | — | — |
+| `items[].added_at` | string | yes | no | — | When this principal was added, in your zone |
+| `items[].added_by_name` | string \| null | yes | yes | — | — |
+| `count` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "items": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `user set-password`
 
 Set a user's password so they can log in to the workbench.

@@ -580,6 +580,8 @@ def _read_calls(hosted):
         "organization list": ({}, None),
         "organization show": ({"organization": org["organization_id"]}, None),
         "token list": ({}, None),
+        "user list": ({}, None),
+        "membership list": ({}, None),
         "chart list": ({}, None),
         "chart show": ({"template_id": "general"}, None),
         "profile list": ({}, None),

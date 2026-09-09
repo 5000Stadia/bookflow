@@ -125,6 +125,112 @@ Example JSON output:
 | `E_USER_NOT_FOUND` | No such user. |
 | `E_VALIDATION` | Invalid input. |
 
+## `membership list`
+
+List who holds access to what, and at which role. Give --company or --organization for who can reach it, --user for what one person can reach, or neither for your own access and everyone in what you administer.
+
+| Contract | Value |
+|---|---|
+| Scope | hub |
+| Kind | read |
+| Required role | the memberships you administer: every one for a hub administrator, those of a company or organization you administer, and always your own |
+| Capability | membership |
+| Feature | — |
+| HTTP | `POST /commands/membership.list` |
+| External binary body | none |
+
+### CLI
+
+`bookflow membership list --user jordan --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `user` | `--user` | string \| null | no | yes | null | Only this person's access; username or id |
+| `company` | `--company` | string \| null | no | yes | null | Only access reaching this company; name or id |
+| `organization` | `--organization` | string \| null | no | yes | null | Only access reaching this organization; name or id |
+| `include_inactive` | `--include-inactive` | boolean | no | no | false | Also list access that has been revoked |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+
+### HTTP
+
+Route: `POST /commands/membership.list`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `items` | array[object] | yes | no | — | — |
+| `items[].membership_id` | string | yes | no | — | — |
+| `items[].user_id` | string | yes | no | — | — |
+| `items[].username` | string | yes | no | — | — |
+| `items[].display_name` | string | yes | no | — | — |
+| `items[].kind` | literal["human", "agent", "system"] | yes | no | — | — |
+| `items[].acts_for` | string \| null | yes | yes | — | Username of the human this principal acts for; null for a person |
+| `items[].scope_type` | string | yes | no | — | company, or organization for access covering all of its companies |
+| `items[].scope_id` | string | yes | no | — | — |
+| `items[].scope_name` | string | yes | no | — | — |
+| `items[].organization_id` | string | yes | no | — | — |
+| `items[].role` | literal["readonly", "standard", "admin", "owner"] | yes | no | — | Role at that scope: readonly reads, standard does the bookkeeping, admin also manages members, owner is the final say |
+| `items[].active` | boolean | yes | no | — | Whether this access is in force; false once it has been revoked |
+| `items[].granted_at` | string \| null | yes | yes | — | — |
+| `items[].granted_by_name` | string \| null | yes | yes | — | — |
+| `items[].revoked_at` | string \| null | yes | yes | — | — |
+| `count` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "items": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_USER_NOT_FOUND` | No such user. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `membership revoke`
 
 Take away a person's access to a company or organization; it stops on their next request.

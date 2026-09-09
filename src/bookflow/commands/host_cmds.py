@@ -552,19 +552,26 @@ def membership_floor(role: str) -> str:
     return "owner" if role == "owner" else "admin"
 
 
+def actor_scope_role(s: Session, scope: Scope) -> str | None:
+    """The actor's own role at that scope, by the rules `company_role` and `org_role` already use."""
+    if scope.scope_type == "company":
+        _, actor_role = access.company_role(s, scope.scope_id, scope.organization_id)
+        return actor_role
+    return access.org_role(s, scope.scope_id)
+
+
+def administers_scope(s: Session, scope: Scope, required: str) -> bool:
+    """The one place scope administration is decided. The writes raise on it; the listings filter on it."""
+    return s.is_hub_admin or access.role_satisfies(actor_scope_role(s, scope), scope.scope_type, required, False)
+
+
 def authorize_membership_scope(s: Session, scope: Scope, required: str) -> None:
     """A human administrator of that same scope. A hub administrator administers every scope."""
     if s.actor.kind != "human":
         raise BookflowError("E_PERMISSION", details={"capability": "membership", "required_role": "human"})
-    if s.is_hub_admin:
-        return
-    if scope.scope_type == "company":
-        _, actor_role = access.company_role(s, scope.scope_id, scope.organization_id)
-    else:
-        actor_role = access.org_role(s, scope.scope_id)
-    if not access.role_satisfies(actor_role, scope.scope_type, required, False):
-        raise BookflowError("E_PERMISSION", details={"capability": "membership",
-                                                     "required_role": required, "role": actor_role})
+    if not administers_scope(s, scope, required):
+        raise BookflowError("E_PERMISSION", details={"capability": "membership", "required_role": required,
+                                                     "role": actor_scope_role(s, scope)})
 
 
 def _membership_row(s: Session, user_id: str, scope: Scope) -> dict[str, Any] | None:
@@ -841,6 +848,292 @@ def republish_membership(inp, ctx: Context, s: Session, *, revoke: bool) -> None
         authorize_membership_revoke(inp, ctx, s)
     else:
         authorize_membership_grant(inp, ctx, s)
+
+
+# ---------------------------------------------------------------- who exists, and who holds what
+
+ADMINISTERING_ROLES = ("admin", "owner")
+KindName = Literal["human", "agent", "system"]
+
+
+@dataclass(frozen=True)
+class Audience:
+    """What one listing may show, decided before any user is looked up.
+
+    `scopes` is None for a hub administrator, who administers every scope. Otherwise a
+    named company or organization is resolved by `resolve_scope` through the actor's own
+    visibility, exactly as the membership writes resolve theirs, so a scope the caller
+    cannot see answers as one that does not exist. `self_only` is a member of that scope
+    who does not administer it: they may see their own access to it and nobody else's.
+    `include_own` carries the caller's own memberships everywhere when no scope was named,
+    because what a person holds is never news to that person.
+    """
+    scopes: tuple[Scope, ...] | None
+    self_only: bool = False
+    include_own: bool = False
+
+
+def _named_scopes(s: Session, rows: list[dict[str, Any]]) -> tuple[Scope, ...]:
+    """Membership rows as resolved scopes, with the display names their listings print."""
+    company_ids = {r["scope_id"] for r in rows if r["scope_type"] == "company"}
+    org_ids = {r["scope_id"] for r in rows if r["scope_type"] == "organization"}
+    companies = {r["id"]: r for r in s.hub.conn.execute(sa.select(
+        h.companies.c.id, h.companies.c.display_name, h.companies.c.organization_id).where(
+        h.companies.c.id.in_(company_ids))).mappings()} if company_ids else {}
+    org_ids |= {r["organization_id"] for r in companies.values()}
+    organizations = {r["id"]: r["display_name"] for r in s.hub.conn.execute(sa.select(
+        h.organizations.c.id, h.organizations.c.display_name).where(
+        h.organizations.c.id.in_(org_ids))).mappings()} if org_ids else {}
+    scopes = []
+    for row in rows:
+        if row["scope_type"] == "company":
+            found = companies.get(row["scope_id"])
+            if found is None:  # a company removed from the registry; its memberships name nothing
+                continue
+            scopes.append(Scope(scope_type="company", scope_id=found["id"], scope_name=found["display_name"],
+                                organization_id=found["organization_id"]))
+        elif row["scope_id"] in organizations:
+            scopes.append(Scope(scope_type="organization", scope_id=row["scope_id"],
+                                scope_name=organizations[row["scope_id"]], organization_id=row["scope_id"]))
+    return tuple(scopes)
+
+
+def listing_audience(s: Session, company: str | None, organization: str | None) -> Audience:
+    """Resolve the scope first, then decide the audience; no user is looked up before this."""
+    if company is not None and organization is not None:
+        raise BookflowError("E_VALIDATION", details={"fields": [
+            {"field": "company", "problem": "name at most one of company or organization"}]})
+    if company is not None or organization is not None:
+        scope = resolve_scope(s, company, organization)
+        return Audience((scope,), self_only=not administers_scope(s, scope, "admin"))
+    if s.is_hub_admin:
+        return Audience(None)
+    administered = [m for m in s.memberships if m["role"] in ADMINISTERING_ROLES]
+    return Audience(_named_scopes(s, administered), include_own=True)
+
+
+def _reaches(scope: Scope):
+    """Every membership row that grants access inside this scope.
+
+    The same rule `company_role` and `visible_org_ids` read: a company is reached by its
+    own membership or by its organization's, and an organization by its own membership or
+    by one of its companies'. A listing that dropped the covering row would answer "who can
+    open this company" with a name missing, which is worse than saying nothing.
+    """
+    m = h.memberships.c
+    own = sa.and_(m.scope_type == scope.scope_type, m.scope_id == scope.scope_id)
+    if scope.scope_type == "company":
+        return sa.or_(own, sa.and_(m.scope_type == "organization", m.scope_id == scope.organization_id))
+    inside = sa.select(h.companies.c.id).where(h.companies.c.organization_id == scope.scope_id)
+    return sa.or_(own, sa.and_(m.scope_type == "company", m.scope_id.in_(inside)))
+
+
+def audience_criterion(s: Session, audience: Audience):
+    """The membership rows this audience may read."""
+    if audience.scopes is None:
+        crit = sa.true()
+    else:
+        crit = sa.false()
+        for scope in audience.scopes:
+            crit = sa.or_(crit, _reaches(scope))
+    if audience.self_only:
+        return sa.and_(crit, h.memberships.c.user_id == s.actor.id)
+    if audience.include_own:
+        return sa.or_(crit, h.memberships.c.user_id == s.actor.id)
+    return crit
+
+
+def visible_user_ids(s: Session, audience: Audience) -> set[str] | None:
+    """The people this audience may name. None means everyone, for a hub administrator."""
+    if audience.scopes is None:
+        return None
+    ids = set(s.hub.conn.execute(sa.select(h.memberships.c.user_id).where(
+        audience_criterion(s, audience), h.memberships.c.revoked_at.is_(None))).scalars())
+    if audience.self_only or audience.include_own:
+        ids.add(s.actor.id)
+    return ids
+
+
+def listed_scope_keys(audience: Audience) -> frozenset[tuple[str, str]] | None:
+    """What the answer depended on, for the publication permit to re-ask about.
+
+    None is the hub administrator's audience: every scope there is, which no restricted
+    audience can be mistaken for.
+    """
+    if audience.scopes is None:
+        return None
+    return frozenset((scope.scope_type, scope.scope_id) for scope in audience.scopes)
+
+
+def _listing_target(s: Session, selector: str, visible: set[str] | None) -> dict[str, Any]:
+    """A person named as a filter, resolved only inside what this caller can already reach.
+
+    A name nobody holds and a name held by somebody out of reach answer identically, so
+    the filter never reports whether a username exists to a caller who cannot see it.
+    """
+    row = _find_user(s, selector)
+    if row is None or (visible is not None and row["id"] not in visible):
+        raise BookflowError("E_USER_NOT_FOUND", details={"user": selector})
+    return row
+
+
+# ---------------------------------------------------------------- user list
+
+class UserOut(CommonOut):
+    user_id: str
+    username: str
+    display_name: str
+    kind: KindName = Field(description="human is a person who logs in; agent acts for one; system is Bookflow's own actor")
+    hub_admin: bool = Field(description="Administers the whole installation: adds people, attaches companies, sees every organization")
+    active: bool
+    acts_for: str | None = Field(description="Username of the human this principal acts for; null for a person")
+    acts_for_user_id: str | None
+    added_at: str = Field(description="When this principal was added, in your zone")
+    added_by_name: str | None
+
+
+class UserListInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    company: str | None = Field(None, description="Only the principals whose membership reaches this company; name or id")
+    organization: str | None = Field(None, description="Only the principals whose membership reaches this organization; name or id")
+    kind: KindName | None = Field(None, description="Only principals of this kind; omit for all of them")
+    include_inactive: bool = Field(False, description="Also list principals whose account has been deactivated")
+
+
+user_list = command("user list", scope="hub",
+                    description=("List the people on this installation, with the agent principals that act for them. "
+                                 "Filtered by company or organization it answers who can reach it, through their own "
+                                 "membership or their organization's; hub administrators reach every company without "
+                                 "one and are listed unfiltered, with hub_admin set."),
+                    input_model=UserListInput, output_model=ListOutput[UserOut],
+                    error_codes=["E_VALIDATION", "E_PERMISSION", "E_COMPANY_NOT_FOUND", "E_COMPANY_AMBIGUOUS",
+                                 "E_ORGANIZATION_NOT_FOUND"],
+                    authorization="the principals you administer: everyone for a hub administrator, the members of a "
+                                  "company or organization you administer, and always yourself")
+
+
+@user_list
+def plan_user_list(inp: UserListInput, ctx: Context, s: Session) -> Plan:
+    audience = listing_audience(s, inp.company, inp.organization)
+    visible = visible_user_ids(s, audience)
+    q = sa.select(h.users).order_by(h.users.c.username)
+    if visible is not None:
+        q = q.where(h.users.c.id.in_(visible) if visible else sa.false())
+    if inp.kind is not None:
+        q = q.where(h.users.c.kind == inp.kind)
+    if not inp.include_inactive:
+        q = q.where(h.users.c.active.is_(True))
+    rows = [dict(r) for r in s.hub.conn.execute(q).mappings().all()]
+    owners = {r["owner_user_id"] for r in rows if r["owner_user_id"]}
+    names = users.user_names(s, {r["created_by"] for r in rows})
+    handles = {r["id"]: r["username"] for r in s.hub.conn.execute(sa.select(
+        h.users.c.id, h.users.c.username).where(h.users.c.id.in_(owners))).mappings()} if owners else {}
+    items = [_user_out(s, r, names, handles) for r in rows]
+    return Plan(preview=ListOutput[UserOut](items=items, count=len(items)))
+
+
+def _user_out(s: Session, row: dict[str, Any], names: dict[str, str], handles: dict[str, str]) -> UserOut:
+    return UserOut(**common_out(s, row), user_id=row["id"], username=row["username"], display_name=row["display_name"],
+                   kind=row["kind"], hub_admin=bool(row["hub_admin"]), active=bool(row["active"]),
+                   acts_for=handles.get(row["owner_user_id"]) if row["owner_user_id"] else None,
+                   acts_for_user_id=row["owner_user_id"], added_at=localize(s, row["created_at"]),
+                   added_by_name=names.get(row["created_by"]))
+
+
+# ---------------------------------------------------------------- membership list
+
+class MembershipRow(BaseModel):
+    membership_id: str
+    user_id: str
+    username: str
+    display_name: str
+    kind: KindName
+    acts_for: str | None = Field(description="Username of the human this principal acts for; null for a person")
+    scope_type: str = Field(description="company, or organization for access covering all of its companies")
+    scope_id: str
+    scope_name: str
+    organization_id: str
+    role: RoleName = Field(description=ROLE_HELP)
+    active: bool = Field(description="Whether this access is in force; false once it has been revoked")
+    granted_at: str | None
+    granted_by_name: str | None
+    revoked_at: str | None
+
+
+class MembershipListInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    user: str | None = Field(None, description="Only this person's access; username or id", max_length=64)
+    company: str | None = Field(None, description="Only access reaching this company; name or id")
+    organization: str | None = Field(None, description="Only access reaching this organization; name or id")
+    include_inactive: bool = Field(False, description="Also list access that has been revoked")
+
+
+membership_list = command("membership list", scope="hub",
+                          description=("List who holds access to what, and at which role. Give --company or "
+                                       "--organization for who can reach it, --user for what one person can reach, "
+                                       "or neither for your own access and everyone in what you administer."),
+                          input_model=MembershipListInput, output_model=ListOutput[MembershipRow],
+                          error_codes=["E_USER_NOT_FOUND", "E_VALIDATION", "E_PERMISSION", "E_COMPANY_NOT_FOUND",
+                                       "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND"],
+                          authorization="the memberships you administer: every one for a hub administrator, those of a "
+                                        "company or organization you administer, and always your own")
+
+
+@membership_list
+def plan_membership_list(inp: MembershipListInput, ctx: Context, s: Session) -> Plan:
+    # The scope, and the authority over it, come first: a company this caller cannot see
+    # answers as one that does not exist, before --user is looked up at all.
+    audience = listing_audience(s, inp.company, inp.organization)
+    q = sa.select(h.memberships).where(audience_criterion(s, audience))
+    if inp.user is not None:
+        q = q.where(h.memberships.c.user_id == _listing_target(s, inp.user, visible_user_ids(s, audience))["id"])
+    if not inp.include_inactive:
+        q = q.where(h.memberships.c.revoked_at.is_(None))
+    rows = [dict(r) for r in s.hub.conn.execute(q).mappings().all()]
+    scopes = {(scope.scope_type, scope.scope_id): scope for scope in _named_scopes(s, rows)}
+    people = {r["id"]: dict(r) for r in s.hub.conn.execute(sa.select(h.users).where(
+        h.users.c.id.in_({r["user_id"] for r in rows}))).mappings()} if rows else {}
+    handles = {r["id"]: r["username"] for r in s.hub.conn.execute(sa.select(
+        h.users.c.id, h.users.c.username).where(h.users.c.id.in_(
+            {p["owner_user_id"] for p in people.values() if p["owner_user_id"]}))).mappings()} if people else {}
+    granters = users.user_names(s, {r["granted_by"] for r in rows})
+    items = [_membership_row_out(s, row, people[row["user_id"]], scopes[(row["scope_type"], row["scope_id"])], handles, granters)
+             for row in rows
+             if row["user_id"] in people and (row["scope_type"], row["scope_id"]) in scopes]
+    items.sort(key=lambda row: (row.scope_name, row.username))
+    return Plan(preview=ListOutput[MembershipRow](items=items, count=len(items)))
+
+
+def _membership_row_out(s: Session, row: dict[str, Any], user: dict[str, Any], scope: Scope,
+                        handles: dict[str, str], granters: dict[str, str]) -> MembershipRow:
+    return MembershipRow(membership_id=row["id"], user_id=user["id"], username=user["username"],
+                         display_name=user["display_name"], kind=user["kind"],
+                         acts_for=handles.get(user["owner_user_id"]) if user["owner_user_id"] else None,
+                         scope_type=scope.scope_type, scope_id=scope.scope_id, scope_name=scope.scope_name,
+                         organization_id=scope.organization_id, role=row["role"], active=row["revoked_at"] is None,
+                         granted_at=localize(s, row["granted_at"]), granted_by_name=granters.get(row["granted_by"]),
+                         revoked_at=localize(s, row["revoked_at"]))
+
+
+LISTING_UNCHECKED = object()
+"""Preparation runs the listing predicate before there is any answer for it to depend on."""
+
+
+def republish_listing(inp, ctx: Context, s: Session, scopes=LISTING_UNCHECKED) -> None:
+    """The publication predicate for both listings, and their preparation predicate.
+
+    The answer depended on exactly one thing: the audience this caller had when it was
+    computed. Re-deciding that audience against current state re-resolves each named scope
+    through current visibility and re-asks who administers it, so a scope lost between
+    execution and release takes the answer with it.
+    """
+    audience = listing_audience(s, inp.company, inp.organization)
+    if scopes is not LISTING_UNCHECKED:
+        current = listed_scope_keys(audience)
+        if current is not None and (scopes is None or not scopes <= current):
+            raise BookflowError("E_PERMISSION", details={"capability": "membership", "required_role": "admin"})
+    if getattr(inp, "user", None) is not None:
+        _listing_target(s, inp.user, visible_user_ids(s, audience))
 
 
 # ---------------------------------------------------------------- user set-password

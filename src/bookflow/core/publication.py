@@ -215,6 +215,10 @@ class PublicationPermit:
                 from bookflow.hub.audit import visible_record_ids
                 ids = visible_record_ids(s)
                 self.projection["audit_records"] = None if ids is None else frozenset(ids)
+            elif self.cmd.name in {"user list", "membership list"}:
+                from bookflow.commands import host_cmds
+                self.projection["identity_scopes"] = host_cmds.listed_scope_keys(
+                    host_cmds.listing_audience(s, self.inp.company, self.inp.organization))
         if succeeded and result is not None:
             from bookflow.core import publication_payment
             if publication_payment.captures(self.cmd):
@@ -384,6 +388,11 @@ class PublicationPermit:
         elif name in ("membership grant", "membership revoke"):
             inp = self.inp.model_copy(update={"user": self.targets.get("user_id", self.inp.user)})
             host_cmds.republish_membership(inp, self.ctx, s, revoke=name == "membership revoke")
+        elif name in ("user list", "membership list"):
+            if "identity_scopes" in self.projection:
+                host_cmds.republish_listing(self.inp, self.ctx, s, self.projection["identity_scopes"])
+            else:
+                host_cmds.republish_listing(self.inp, self.ctx, s)
         elif name == "token list" and self.inp.user is not None:
             host_cmds._target_user(s, self.inp.user)
         elif name == "token revoke":

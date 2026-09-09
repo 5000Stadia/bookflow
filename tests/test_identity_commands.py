@@ -462,3 +462,245 @@ def test_losing_one_company_does_not_lose_the_others(office):
     assert [row["company_id"] for row in remaining["items"]] == [office.second]
     assert office.ok(jordan, "customer.create", {"name": "Still Working"}, company=office.second)
     assert office.call(jordan, "customer.create", {"name": "Not Here"}, company=office.first).status_code == 404
+
+
+# ---------------------------------------------------------------- witness 5: seeing what exists
+
+def add_sam(office, **extra):
+    """Somebody who exists but is nobody's colleague unless the test says so."""
+    return office.admin("user.add", {"username": "sam", "password": "a-long-enough-password", **extra})
+
+
+def usernames(listing):
+    return {row["username"] for row in listing["items"]}
+
+
+def test_an_administrator_can_answer_who_holds_what_in_both_directions(office):
+    """The two questions an administrator actually asks, from the same two commands."""
+    added = add_jordan(office)
+    office.admin("membership.grant", {"user": "jordan", "company": office.second, "role": "readonly"})
+    add_sam(office, company=office.first, role="admin")
+
+    # Who can reach this company?
+    here = office.admin("membership.list", {"company": office.first})
+    assert {(row["username"], row["role"]) for row in here["items"]} == {
+        ("jordan", "standard"), ("sam", "admin"), (office.login, "owner")}
+    assert here["count"] == 3 and all(row["scope_id"] == office.first for row in here["items"])
+    assert usernames(office.admin("user.list", {"company": office.first})) == {"jordan", "sam", office.login}
+
+    # What can this person reach?
+    theirs = office.admin("membership.list", {"user": "jordan"})
+    assert {(row["scope_id"], row["role"]) for row in theirs["items"]} == {
+        (office.first, "standard"), (office.second, "readonly")}
+    assert all(row["user_id"] == added["user_id"] for row in theirs["items"])
+    assert {row["scope_name"] for row in theirs["items"]} == {"Demo Plumbing Co", "Northwind Roofing"}
+
+    # And the two together: one company, one person.
+    both = office.admin("membership.list", {"user": "jordan", "company": office.second})
+    assert [row["role"] for row in both["items"]] == ["readonly"]
+
+
+def test_a_listing_to_one_company_reveals_nothing_about_its_sibling(office):
+    """The read half of test_a_grant_to_one_company_reveals_nothing_about_its_sibling.
+
+    Jordan administers the first company, which is as much authority as anyone
+    below a hub administrator holds. The sibling still has to be unreachable by
+    listing, by naming, and by asking after somebody who only lives there.
+    """
+    added = add_jordan(office, role="admin")
+    jordan = office.login_as("jordan", added["password"])
+    other = office.admin("company.show", company=office.second)["display_name"]
+    add_sam(office, company=office.second, role="standard")  # sam exists only in the sibling
+
+    people = office.ok(jordan, "user.list")
+    assert usernames(people) == {"jordan", office.login}, "an administrator sees the people they administer"
+    assert other not in json.dumps(people) and office.second not in json.dumps(people)
+
+    held = office.ok(jordan, "membership.list")
+    assert {(row["username"], row["scope_id"]) for row in held["items"]} == {
+        ("jordan", office.first), (office.login, office.first)}
+    assert other not in json.dumps(held) and office.second not in json.dumps(held)
+
+    # Naming the sibling answers exactly as a company that does not exist, by id and
+    # by name, and the miss cannot suggest what it missed.
+    for command in ("user.list", "membership.list"):
+        by_id = office.call(jordan, command, {"company": office.second})
+        assert by_id.status_code == 404 and by_id.json()["code"] == "E_COMPANY_NOT_FOUND", command
+        by_name = office.call(jordan, command, {"company": other})
+        assert by_name.status_code == 404 and by_name.json()["code"] == "E_COMPANY_NOT_FOUND", command
+        assert other not in json.dumps(by_name.json()), command
+
+    # And asking after the person who lives there is answered exactly as asking
+    # after a name nobody holds, so the listing never says whether a username exists.
+    hidden = office.call(jordan, "membership.list", {"user": "sam"})
+    invented = office.call(jordan, "membership.list", {"user": "not-a-real-person"})
+    assert hidden.status_code == invented.status_code == 404
+    assert hidden.json()["code"] == invented.json()["code"] == "E_USER_NOT_FOUND"
+    assert set(hidden.json()["details"]) == set(invented.json()["details"])
+
+    # The organization above their company would hand over every sibling at once to
+    # anyone who administered it. Administering one company inside it is not that, so
+    # the answer narrows to the caller's own access and names nothing else.
+    organization = office.admin("company.show", company=office.first)["organization_id"]
+    escalated = office.ok(jordan, "membership.list", {"organization": organization})
+    assert [(row["username"], row["scope_id"]) for row in escalated["items"]] == [("jordan", office.first)]
+    assert other not in json.dumps(escalated) and office.second not in json.dumps(escalated)
+    assert usernames(office.ok(jordan, "user.list", {"organization": organization})) == {"jordan"}
+
+
+def test_an_ordinary_member_cannot_enumerate_the_installation(office):
+    added = add_jordan(office)
+    jordan = office.login_as("jordan", added["password"])
+    add_sam(office, company=office.first, role="standard")
+
+    # Their own access, and nobody else's, whether they name their company or not.
+    assert usernames(office.ok(jordan, "user.list")) == {"jordan"}
+    assert usernames(office.ok(jordan, "user.list", {"company": office.first})) == {"jordan"}
+    held = office.ok(jordan, "membership.list")
+    assert [(row["username"], row["scope_id"], row["role"]) for row in held["items"]] == [
+        ("jordan", office.first, "standard")]
+    assert usernames(office.ok(jordan, "membership.list", {"company": office.first})) == {"jordan"}
+
+    # A colleague they cannot administer is not named, and asking after them is
+    # answered as an invented name is.
+    assert "sam" not in json.dumps(office.ok(jordan, "user.list"))
+    denied = office.call(jordan, "membership.list", {"user": "sam"})
+    assert denied.status_code == 404 and denied.json()["code"] == "E_USER_NOT_FOUND"
+
+    # Naming both scopes at once is a validation error, not a wider answer.
+    organization = office.admin("company.show", company=office.first)["organization_id"]
+    both = office.call(jordan, "membership.list", {"company": office.first, "organization": organization})
+    assert both.status_code == 422 and both.json()["code"] == "E_VALIDATION"
+
+
+def test_organization_wide_access_is_listed_under_every_company_it_reaches(office):
+    """A listing that dropped the covering row would answer "who can open this" with a
+    name missing, which is a wrong answer rather than a quiet one."""
+    organization = office.admin("company.show", company=office.first)["organization_id"]
+    office.admin("user.add", {"username": "morgan", "organization": organization, "role": "standard"})
+
+    for company in (office.first, office.second):
+        row = next(r for r in office.admin("membership.list", {"company": company})["items"]
+                   if r["username"] == "morgan")
+        assert row["scope_type"] == "organization" and row["scope_id"] == organization
+        assert row["scope_name"] and row["role"] == "standard"
+        assert "morgan" in usernames(office.admin("user.list", {"company": company}))
+
+    # And the organization reads the other way: its own row plus the companies under it.
+    inside = office.admin("membership.list", {"organization": organization})
+    assert {row["scope_type"] for row in inside["items"]} == {"organization", "company"}
+    assert {row["scope_id"] for row in inside["items"]} >= {organization, office.first, office.second}
+
+
+def test_an_agent_principal_is_listed_beside_the_person_it_acts_for(office):
+    """`kind` and `acts_for` label an agent; nothing hides it, because a principal that
+    can post to the books belongs in the answer to "who can reach this company"."""
+    from tests.conftest import make_actor
+    added = add_jordan(office)
+    # No registered command creates an agent identity -- `admin:agents` is in the frozen
+    # catalog and marked unavailable -- so the fixture stands in for the one row 7 adds.
+    make_actor(office.root, "jordan-agent", kind="agent", owner_user_id=added["user_id"],
+               company_role=(office.first, "standard"))
+
+    people = {row["username"]: row for row in office.admin("user.list")["items"]}
+    assert people["jordan-agent"]["kind"] == "agent"
+    assert people["jordan-agent"]["acts_for"] == "jordan"
+    assert people["jordan-agent"]["acts_for_user_id"] == added["user_id"]
+    assert people["jordan"]["kind"] == "human" and people["jordan"]["acts_for"] is None
+    assert people["jordan"]["hub_admin"] is False and people[office.login]["hub_admin"] is True
+    assert people["jordan"]["added_at"] and people["jordan"]["added_by_name"] == office.login
+
+    # The default listing hides nobody; `kind` narrows it when that is what you want.
+    assert "jordan-agent" not in usernames(office.admin("user.list", {"kind": "human"}))
+    assert usernames(office.admin("user.list", {"kind": "agent"})) == {"jordan-agent"}
+
+    # And the same label travels on the membership, where the access actually is.
+    held = {row["username"]: row for row in office.admin("membership.list", {"company": office.first})["items"]}
+    assert held["jordan-agent"]["kind"] == "agent" and held["jordan-agent"]["acts_for"] == "jordan"
+
+
+def test_a_revoked_membership_leaves_the_listing_and_is_asked_for_by_name(office):
+    add_jordan(office)
+    office.admin("membership.revoke", {"user": "jordan", "company": office.first})
+
+    current = office.admin("membership.list", {"company": office.first})
+    assert "jordan" not in usernames(current)
+    assert usernames(office.admin("user.list", {"company": office.first})) == {office.login}
+
+    history = office.admin("membership.list", {"company": office.first, "include_inactive": True})
+    gone = next(row for row in history["items"] if row["username"] == "jordan")
+    assert gone["active"] is False and gone["revoked_at"] and gone["granted_by_name"] == office.login
+
+    # The person is still on the installation; it is the access that ended.
+    assert "jordan" in usernames(office.admin("user.list"))
+
+
+def test_a_deactivated_person_leaves_the_listing_until_it_is_asked_for(office):
+    from bookflow.hub import schema as hub_schema
+    from bookflow.storage.engine import open_database
+    added = add_jordan(office)
+    # Nothing registered deactivates a person yet; this stands in for the command
+    # that will, exactly as make_actor stands in for the ones that now exist.
+    with open_database(office.root / "hub.db", writable=True) as db:
+        db.raw.execute("BEGIN IMMEDIATE")
+        db.conn.execute(hub_schema.users.update().where(
+            hub_schema.users.c.id == added["user_id"]).values(active=False))
+        db.raw.execute("COMMIT")
+
+    assert "jordan" not in usernames(office.admin("user.list"))
+    shown = office.admin("user.list", {"include_inactive": True})
+    assert next(row for row in shown["items"] if row["username"] == "jordan")["active"] is False
+
+
+def test_both_listings_are_on_every_surface(office):
+    """HTTP is every other test in this file; here are the registry, the CLI, and what
+    an agent discovers. The real MCP client witness is tests/test_identity_mcp.py."""
+    from bookflow.adapters.mcp import catalog
+    from bookflow.core import registry
+    from tests.conftest import Cli
+    registry.load_all()
+    for name in ("user list", "membership list"):
+        cmd = registry.get(name)
+        assert cmd is not None and not cmd.local_only and not cmd.standalone
+        assert cmd in registry.routed_commands()
+        assert cmd.scope == "hub" and not cmd.is_write
+        assert not any(field.is_required() for field in cmd.input_model.model_fields.values())
+
+    # The CLI, through the running host, exactly as a second workstation reaches it.
+    add_jordan(office)
+    cli = Cli(office.root)
+    assert "jordan" in usernames(cli.json("user", "list"))
+    held = cli.json("membership", "list", "--company", office.first)
+    assert {row["username"] for row in held["items"]} == {"jordan", office.login}
+    assert cli.json("user", "list", "--kind", "human")["count"] >= 2
+
+    # And what an agent discovers before it calls anything.
+    for prefix, expected in (("user", "user list"), ("membership", "membership list")):
+        page = catalog.list_commands(prefix=prefix, limit=50)
+        assert expected in {row["name"] for row in page["commands"]}
+    for name, filters in (("user list", {"company", "organization", "kind", "include_inactive"}),
+                          ("membership list", {"user", "company", "organization", "include_inactive"})):
+        described = catalog.command_help(name, view="full")
+        assert set(described["input_schema"]["properties"]) == filters, name
+        assert described["output_schema"]["properties"].keys() >= {"items", "count"}, name
+
+
+def test_the_workbench_renders_both_listings(office):
+    """The browser is the primary human surface, so the answer has to be a page."""
+    add_jordan(office)
+    people = office.installer.get("/hub/user")
+    assert people.status_code == 200 and "jordan" in people.text
+    assert 'href="/hub/user/add"' in people.text and "include inactive" in people.text
+
+    members = office.installer.get("/hub/membership")
+    assert members.status_code == 200
+    assert "Demo Plumbing Co" in members.text and "standard" in members.text
+    assert 'href="/hub/membership/grant"' in members.text
+
+    # Every link either of these pages renders still lands on a usable page.
+    import re
+    for noun in ("user", "membership"):
+        for link in sorted(set(re.findall(r'href="(/hub/[^"]+)"', office.installer.get(f"/hub/{noun}").text))):
+            landed = office.installer.get(link)
+            assert landed.status_code == 200, (link, landed.text)
+            assert "no such" not in landed.text and "has no show command" not in landed.text, link

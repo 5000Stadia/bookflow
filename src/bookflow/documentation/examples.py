@@ -66,6 +66,8 @@ EXAMPLES: dict[str, Example] = {
                                 {"user": "jordan", "company": "Demo Plumbing Co", "role": "standard"}),
     "membership revoke": Example('bookflow membership revoke jordan --company "Demo Plumbing Co" --json',
                                  {"user": "jordan", "company": "Demo Plumbing Co"}),
+    "user list": Example('bookflow user list --company "Demo Plumbing Co" --json', {"company": "Demo Plumbing Co"}),
+    "membership list": Example('bookflow membership list --user jordan --json', {"user": "jordan"}),
 }
 
 

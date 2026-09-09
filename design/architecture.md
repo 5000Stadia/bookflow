@@ -266,6 +266,21 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
   only when the target is someone else. Memberships are read fresh on every request, so a revocation
   takes effect on the next call, on the next drain of an open event stream, and through an
   already-issued bearer token, none of which carry authority of their own.
+- `user list` and `membership list` read the same identity back. Both decide one `host_cmds.Audience`
+  before any user is looked up: a hub administrator sees every scope; a named `--company` or
+  `--organization` is resolved by the same `resolve_scope` the writes use and then narrowed to the
+  caller's own rows unless `host_cmds.administers_scope` says they administer it; with no scope named
+  the audience is the scopes the caller administers plus their own memberships everywhere. A scope
+  filter admits the membership rows that reach inside it, by the rule `access.company_role` and
+  `access.visible_org_ids` already read, so a company lists the organization-scope memberships that
+  cover it and an organization lists the company-scope memberships inside it. `--user` is resolved
+  only within that audience, so a name nobody holds and a name held by somebody out of reach both
+  answer `E_USER_NOT_FOUND`. `user list` returns `kind`, `hub_admin`, `active`, `added_at` and
+  `acts_for`, which names the human an agent principal acts for; agents are labelled, never hidden,
+  and `--kind` narrows to one. `membership list` returns the role, the scope, `active` and
+  `revoked_at`. Both capture their audience's scopes in the publication permit and re-decide it on
+  release through `host_cmds.republish_listing`, so a scope lost between execution and publication
+  takes the answer with it.
 
 - `hub/credentials.py` validates active identities and agent principal/assignment/suspension/epoch state for token authentication and issuance. The JSON HTTP/workbench command executor revalidates the admitted bearer or cookie through that same verifier inside the actual writer or reader session, before planning, preview, replay or effects. The private credential handle also checks that token id, user id, kind and principal match admission; no secret enters business input, Context or audit. This execution check preserves authorized self-revocation and does not claim a post-execution publication fence. Agent token principal and epoch are stored with the hash in one insert. Membership grants/denies and capability/feature projections remain compatibility state; full role/capability intersection, atomic membership reductions, reauthorization commands and publication fences remain Row7 integration work.
 - `company/journal_models.py`, `journals.py` and `journal_outputs.py` validate and project domestic journals with two through 200 positive, balanced entered lines. Stable headers retain immutable revisions and commercial lines. Posting batches and accounting lines retain exact source allocations. Corrections reverse the previous batch at its original accounting date and append a replacement; void appends an exact reversal and retains the header. SQLite rejects modification/deletion of historical rows and header deletion. Period checks and full-aggregate version conflicts run again in the writer transaction.
@@ -430,10 +445,12 @@ Generated-documentation verification in `tests/test_docs_generation.py`, `tests/
 ## Known gaps carried to later rows
 
 - No command deactivates a user account or maps an OS login to one; `active` is enforced everywhere a
-  credential is resolved, but only a direct write sets it, which is why tests still create actors
-  through the repository layer (tests/conftest.py::make_actor). Removing someone's access is
-  `membership revoke`. There is no `membership list`: what a person holds is read from the hub audit
-  trail or the memberships table.
+  credential is resolved, and `user list` reports it and hides an inactive principal unless
+  `--include-inactive` asks for it, but only a direct write sets it, which is why tests still create
+  actors through the repository layer (tests/conftest.py::make_actor). Removing someone's access is
+  `membership revoke`.
+- `user list` and `membership list` return every row their audience admits; neither pages, as no
+  hub-scope `* list` command does.
 - The currency table holds 155 codes; the remaining ISO 4217 codes are added on request.
 - Agent creation, assignment and reauthorization commands are not yet exposed. Existing agents remain suspended after upgrade. Credential invariant tests provision eligible authority explicitly through isolated repository fixtures; direct dispatch reason/provenance tests also construct internal agent sessions. CLI/Python token mode and full current-authority execution/publication fencing remain Row7 work.
 - The full budget fixture (5,000 creates and 5,000 updates) is run on demand with `BOOKFLOW_BUDGET_N=5000`; it measured audit 8.1 MB against live 1.6 MB, ratio 5.16, in 192 s; the default suite runs 200 rows.

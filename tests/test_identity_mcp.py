@@ -39,7 +39,8 @@ def test_an_agent_over_mcp_can_set_a_workstation_up_end_to_end(office, live, tmp
                     listed = await session.call_tool("bookflow_list_commands", {"prefix": prefix})
                     assert not listed.is_error, listed
                     names |= {row["name"] for row in listed.structured_content["commands"]}
-                assert {"user add", "membership grant", "membership revoke"} <= names, names
+                assert {"user add", "user list", "membership grant", "membership list",
+                        "membership revoke"} <= names, names
 
                 helped = await session.call_tool("bookflow_help", {"command": "membership grant"})
                 assert not helped.is_error and "role" in str(helped.structured_content)
@@ -64,6 +65,16 @@ def test_an_agent_over_mcp_can_set_a_workstation_up_end_to_end(office, live, tmp
                 revoked = await run("membership revoke", {"user": "morgan", "company": office.second},
                                     reason="Front desk no longer needs the other book")
                 assert revoked["changed"] and revoked["revoked_at"]
+
+                # And the agent can read back what it just set up, both ways round.
+                people = await run("user list", {"company": office.first})
+                assert "morgan" in {row["username"] for row in people["items"]}
+                assert all(row["kind"] and row["added_at"] for row in people["items"])
+                held = await run("membership list", {"user": "morgan"})
+                assert [(row["scope_id"], row["role"]) for row in held["items"]] == [(office.first, "standard")]
+                withdrawn = await run("membership list", {"user": "morgan", "include_inactive": True})
+                assert {row["scope_id"] for row in withdrawn["items"]} == {office.first, office.second}
+                assert [row["active"] for row in withdrawn["items"] if row["scope_id"] == office.second] == [False]
 
     anyio.run(witness)
 
