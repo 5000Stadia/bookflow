@@ -179,6 +179,17 @@ MATRIX['register calculate'] = {code: _LEDGER_WRITE_ERRORS[code] for code in (
 MATRIX['register query'] = dict(MATRIX['report general-ledger'])
 MATRIX['register query'].update({code: _LEDGER_WRITE_ERRORS[code] for code in ('E_INACTIVE_REFERENCE', 'E_AMOUNT_PRECISION')})
 
+_DEPOSIT_READ_ERRORS = {
+    'E_RECORD_NOT_FOUND': 'deposit absent from the selected company, or inside an aggregate this reader is denied',
+    'E_VALIDATION': 'malformed selection, null instead of an omitted field, or an invalid continuation token',
+    'E_PERMISSION': 'the selected company denies ledger.read to the actor or its bound principal',
+    'E_UNAUTHENTICATED': 'the authenticated reader or its binding no longer agrees with the request',
+    'E_DEPOSIT_SOURCE_INVALID': 'the captured receipt cash provenance is unsupported or inconsistent',
+}
+MATRIX['deposit show'] = dict(_DEPOSIT_READ_ERRORS)
+MATRIX['deposit items'] = dict(_DEPOSIT_READ_ERRORS,
+    E_QUERY_STALE='the selected composition changed between pages; restart without a cursor')
+
 for _verb in ('show', 'list', 'query', 'activate', 'deactivate'):
     MATRIX['customer ' + _verb]['E_VALUE_RANGE'] = 'exact own or family receivable balance exceeds signed 64-bit range'
 
