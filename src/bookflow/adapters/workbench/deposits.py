@@ -1,4 +1,4 @@
-"""Ordinary browser entry to the two registered public deposit reads.
+"""Ordinary browser entry to registered public deposit reads.
 
 The pages render exactly what `deposit show` and `deposit items` return and
 nothing else. Existing deposit writes keep their generated form routes. The detail page is the bounded summary alone: the composition is
@@ -12,7 +12,7 @@ deposit, never a promise that it will open, and the refusal is rendered as one
 actionable sentence that is identical for a record that is gone and for one this
 reader may not see.
 """
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit
 
 from fastapi import Request
 
@@ -25,6 +25,21 @@ KINDS = (("sources", "Contributing receipts"),
          ("cash_allocations", "Cash allocations"))
 KIND_LABELS = dict(KINDS)
 PAGE_LIMIT = 50
+LIST_LIMIT = 25
+FILTERS = ("deposit_to", "status", "date_from", "date_to", "number", "q", "sort", "direction")
+TOTAL_LABELS = (("source_total", "Contributing receipts"), ("positive_additional_total", "Additional cash in"),
+                ("negative_additional_total", "Additional cash out"), ("subtotal", "Subtotal"),
+                ("cash_back", "Cash back"), ("posting_total", "Posting total"), ("bank_total", "Revision bank total"))
+
+def _list_return(request, company_id):
+    base = f"/c/{quote(company_id, safe='')}/deposit"
+    value = request.query_params.get("return_to", "")
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return base
+    return value if not parsed.scheme and not parsed.netloc and parsed.path == base and not parsed.fragment else base
+
 
 # The accepted disposition for a closure denial: one sentence, the same for a
 # genuinely missing record and for a denied one, naming no connected record and
@@ -104,8 +119,43 @@ def _selection_label(selection: dict, kind: str | None, cursor: str | None) -> s
 def mount(app, *, render, run, credential, page_error, role_allows, form_page):
     """Install the deposit pages. Registered before the generic record routes."""
 
+    @app.get("/c/{company_id}/deposit")
+    def deposit_list(request: Request, company_id: str):
+        path = f"/c/{quote(company_id, safe="")}/deposit"
+        filters = {key: request.query_params.get(key, "") for key in FILTERS}
+        filters["sort"] = filters["sort"] or "date"
+        filters["direction"] = filters["direction"] or "desc"
+        raw = {key: value for key, value in filters.items() if value != ""}
+        cursor = request.query_params.get("cursor")
+        raw["page"] = dict(limit=LIST_LIMIT, **({"cursor": cursor} if cursor else {}))
+        restart = _url(path, **filters)
+        shared = dict(company_id=company_id, list_url=path, filters=filters, restart_url=restart,
+                      total_labels=TOTAL_LABELS, company_url=f"/c/{quote(company_id, safe="")}/")
+        try:
+            page = _decorate(run(request, "deposit query", raw, company_id))
+        except BookflowError as exc:
+            # A filter the reader can see and fix is named; only an unexplained
+            # refusal falls back to the general sentence.
+            if exc.details.get("field") == "deposit_to":
+                message = ("No bank account here matches that name or ID. Correct the bank filter, "
+                           "or clear it to see deposits into every bank.")
+            elif cursor and exc.code in {"E_QUERY_STALE", "E_VALIDATION"}:
+                message = ("This results page has changed or its continuation is invalid. "
+                           "Restart with your retained filters.")
+            else:
+                message = ("Deposits could not be loaded. Check your filters and try again; "
+                           "if this continues, ask your company administrator.")
+            return render("deposit_list.html", request, page=None, error_code=exc.code, message=message,
+                          status_code=409 if exc.code == "E_QUERY_STALE" else 400, **shared)
+        return_to = _url(path, **filters, cursor=cursor)
+        for row in page["items"]:
+            row["url"] = _url(path + "/" + quote(row["selected"]["pin"]["deposit_id"], safe=""), return_to=return_to)
+        return render("deposit_list.html", request, page=page, error_code=None, message=None,
+                      next_url=_url(path, **filters, cursor=page["next_cursor"]) if page["next_cursor"] else None,
+                      previous_url=_url(path, **filters, cursor=page["previous_cursor"]) if page["previous_cursor"] else None, **shared)
+
     def context(company_id: str, deposit_id: str, selection: dict, *,
-                kind: str | None = None, cursor: str | None = None) -> dict:
+                kind: str | None = None, cursor: str | None = None, return_to: str | None = None) -> dict:
         """Links every deposit page shares, all of them inside this company."""
         company = quote(company_id, safe="")
         detail = f"/c/{company}/deposit/{quote(deposit_id, safe='')}"
@@ -113,12 +163,13 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
             company_id=company_id, deposit_id=deposit_id, selection=selection,
             kind=kind, redacted_text=REDACTED,
             selection_label=_selection_label(selection, kind, cursor),
-            detail_url=_url(detail, **selection),
+            list_url=return_to or f"/c/{company}/deposit",
+            detail_url=_url(detail, **selection, return_to=return_to),
             items_base=detail + "/items",
             company_url=f"/c/{company}/",
             accounts_url=f"/c/{company}/account",
             item_links=[dict(kind=name, label=label, current=(name == kind),
-                             url=_url(detail + "/items", kind=name, **selection))
+                             url=_url(detail + "/items", kind=name, **selection, return_to=return_to))
                         for name, label in KINDS])
 
     def unavailable(request: Request, company_id: str, deposit_id: str, selection: dict,
@@ -128,7 +179,7 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
                       unavailable=UNAVAILABLE, register_url=None,
                       retry_url=request.url.path + (
                           "?" + request.url.query if request.url.query else ""),
-                      **context(company_id, deposit_id, selection, kind=kind, cursor=cursor))
+                      **context(company_id, deposit_id, selection, kind=kind, cursor=cursor, return_to=_list_return(request, company_id)))
 
     @app.get("/c/{company_id}/deposit/{deposit_id}")
     def deposit_detail(request: Request, company_id: str, deposit_id: str):
@@ -150,13 +201,13 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
         path = f"/c/{quote(company_id, safe='')}/deposit/{quote(deposit_id, safe='')}"
         dated = {"as_of": selection["as_of"]} if "as_of" in selection else {}
         for revision in detail["revisions"]:
-            revision["url"] = _url(path, revision_number=revision["revision_number"], **dated)
+            revision["url"] = _url(path, revision_number=revision["revision_number"], **dated, return_to=_list_return(request, company_id))
         account = detail["selected"]["deposit_to"]
         register = (f"/c/{quote(company_id, safe='')}/account/"
                     f"{quote(account['id'], safe='')}/register") if account.get("id") else None
         return render("deposit_detail.html", request, detail=detail, unavailable=None,
                       register_url=register, retry_url=None,
-                      **context(company_id, deposit_id, selection))
+                      **context(company_id, deposit_id, selection, return_to=_list_return(request, company_id)))
 
     @app.get("/c/{company_id}/deposit/{deposit_id}/items")
     def deposit_items(request: Request, company_id: str, deposit_id: str):
@@ -166,7 +217,7 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
             selection = _selection(request)
         except BookflowError as exc:
             return page_error(request, exc, company_id=company_id)
-        shared = context(company_id, deposit_id, selection, kind=kind, cursor=cursor)
+        shared = context(company_id, deposit_id, selection, kind=kind, cursor=cursor, return_to=_list_return(request, company_id))
         # `as_of` picks a dated bank effect on the summary; the composition of an
         # immutable revision has no such dimension. It rides the links instead,
         # so returning to the summary keeps the reader's whole selection.
@@ -187,10 +238,10 @@ def mount(app, *, render, run, credential, page_error, role_allows, form_page):
                     exc.code == "E_VALIDATION" and exc.details.get("field") == "cursor"):
                 return render("deposit_items.html", request, page=None, stale=True, next_url=None,
                               status_code=409 if exc.code == "E_QUERY_STALE" else 400,
-                              restart_url=_url(shared["items_base"], kind=kind, **selection),
+                              restart_url=_url(shared["items_base"], kind=kind, **selection, return_to=shared["list_url"]),
                               **shared)
             return page_error(request, exc, company_id=company_id)
         return render("deposit_items.html", request, page=page, stale=False, restart_url=None,
                       next_url=_url(shared["items_base"], kind=kind,
-                                    cursor=page["next_cursor"], **selection)
+                                    cursor=page["next_cursor"], **selection, return_to=shared["list_url"])
                       if page["next_cursor"] else None, **shared)

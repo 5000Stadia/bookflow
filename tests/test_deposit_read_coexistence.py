@@ -129,14 +129,14 @@ def test_deposit_catalog_and_publication_inventory_keep_both_owners():
     from bookflow.hub import permission_catalog as catalog
     registry.load_all()
     deposit_public_authority.conform()
-    assert registry.get('deposit query') is None
+    assert registry.get('deposit query') is not None
     commands = {x.name:x for x in catalog.FROZEN_COMMANDS if x.name.startswith('deposit ')}
     actions = {x.key:x for x in catalog.FROZEN_COMPANY_ACTIONS if x.key.startswith('deposit ')}
-    assert commands.keys() == actions.keys() == {'deposit '+x for x in ('show','items','post','sources','update','void')}
+    assert commands.keys() == actions.keys() == {'deposit '+x for x in ('query','show','items','post','sources','update','void')}
     for name in commands:
         cmd = registry.get(name)
         assert (commands[name].capability, commands[name].threshold) == (cmd.capability,cmd.required_role)
         assert actions[name].requirements == (catalog.Requirement(cmd.capability,cmd.required_role),)
         policy = publication_inventory.policy(cmd)
-        assert policy == ('reader_bound_public_detail_proof' if name in ('deposit show','deposit items')
+        assert policy == ('reader_bound_public_detail_proof' if name in ('deposit query','deposit show','deposit items')
                           else 'selected_company_and_current_resources')

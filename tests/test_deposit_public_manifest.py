@@ -18,8 +18,8 @@ def test_manifest_matches_the_reachable_private_graph_exactly():
     models = manifest.reachable(manifest._roots())
     assert {manifest._name(model) for model in models} == set(manifest.FIELDS)
     # The complete closure, not just the two output roots.
-    assert len(models) == len(manifest.FIELDS) == 48
-    assert sum(len(fields) for fields in manifest.FIELDS.values()) == 358
+    assert len(models) == len(manifest.FIELDS) == 50
+    assert sum(len(fields) for fields in manifest.FIELDS.values()) == 369
 
 
 def test_every_field_carries_exactly_one_known_disposition():
@@ -91,7 +91,7 @@ def test_an_innocuously_named_nested_field_fails_the_closure():
     probe_show = type('DepositShow', (m.DepositShow,), dict(swap))
     probe_page = type('DepositItemPage', (m.DepositItemPage,), dict(swap))
     with pytest.raises(BookflowError) as caught:
-        manifest.conform(roots=(probe_show, probe_page))
+        manifest.conform(roots=(probe_show, probe_page, m.DepositPage))
     assert caught.value.code == 'E_INTERNAL'
     assert caught.value.details['reason'] == 'field set differs for deposit_read_models.Navigation'
     assert caught.value.details['detail'] == ['friendly_hint']
@@ -126,7 +126,7 @@ def test_an_unnamed_public_field_fails_the_closure():
     probe = _same_name(w.InspectionSummary, 'InspectionSummary',
                        'bookflow.company.deposit_public_models', read_digest=str | None)
     with pytest.raises(BookflowError) as caught:
-        manifest.conform(public_roots=(w.DepositDetail, w.DepositItemsPage, probe))
+        manifest.conform(public_roots=(w.DepositDetail, w.DepositItemsPage, w.DepositQueryPage, probe))
     assert caught.value.details['reason'] == 'public field with no declared source'
     assert caught.value.details['detail'] == ['InspectionSummary.read_digest']
 

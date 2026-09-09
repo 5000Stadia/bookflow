@@ -1,4 +1,5 @@
 {% extends "base.html" %}{% block title %}Deposit composition{% endblock %}{% block body %}
+<p class="deposit-list-back"><a href="{{ list_url }}">Back to saved deposits</a></p>
 <link rel="stylesheet" href="{{ static_urls['deposit.css'] }}">
 <nav class="crumbs deposit-crumbs"><a href="{{ company_url }}">Company</a> / <a href="{{ detail_url }}">Deposit</a> / Composition</nav>
 <h1 class="deposit-heading">{{ item_links | selectattr('current') | map(attribute='label') | first | default('Composition') }}</h1>

@@ -1,6 +1,6 @@
 """Public deposit detail preparation and its bounded retained request.
 
-The two registered deposit read commands carry no plan-time implementation. Like
+The registered deposit read commands carry no plan-time implementation. Like
 the projected history family they are prepared here, under the actual
 authenticated reader, and executed by the publication owner in
 ``publication_deposit``. Nothing in this module reads deposit facts: it settles
@@ -15,15 +15,15 @@ from dataclasses import dataclass
 
 from bookflow.core.errors import BookflowError
 
-# Only public deposit detail reads use this path. Existing writes and sources
-# keep their ordinary execution path; deposit query remains unregistered.
-COMMANDS = frozenset({'deposit show', 'deposit items'})
+# Only public deposit reads use this path. Existing writes and sources
+# keep their ordinary execution path.
+COMMANDS = frozenset({'deposit show', 'deposit items', 'deposit query'})
 
 
 def input_model(command):
     """The strict input each public deposit command owns."""
-    from bookflow.company.deposit_read_models import ItemsInput, ShowInput
-    return {'deposit show': ShowInput, 'deposit items': ItemsInput}.get(command)
+    from bookflow.company.deposit_read_models import ItemsInput, ShowInput, QueryInput
+    return {'deposit show': ShowInput, 'deposit items': ItemsInput, 'deposit query': QueryInput}.get(command)
 
 
 def resolve_company(reader, audience, selector, source):

@@ -35,7 +35,7 @@ def policy(cmd):
     planner = getattr(cmd, 'plan', None)
     if getattr(planner, '__module__', None) in {'bookflow.commands.payment_cmds', 'bookflow.commands.payment_recovery_cmds'} and cmd.name not in PAYMENT_COMMANDS:
         raise RuntimeError('Registered payment command lacks a publication dependency inventory: ' + cmd.name)
-    if cmd.name in {'deposit show', 'deposit items'}:
+    if cmd.name in {'deposit show', 'deposit items', 'deposit query'}:
         return 'reader_bound_public_detail_proof'
     if cmd.local_only or cmd.standalone:
         return "local_only"

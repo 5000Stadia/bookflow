@@ -2331,3 +2331,20 @@ invalid request while preserving the attempted filters. Shared document-detail
 screen-only cards retain one semantic table for desktop and print; report CSS is
 scoped to .basic-report. Calculation, report inputs, cursor validation and financial
 history remain owned by the unchanged core commands.
+
+Public deposit query phase (2026-09-09): the existing authenticated read family
+now also produces a closed DepositQueryPage. It admits the selected company,
+checks each complete connected aggregate, loads existing financial facts once for
+the admitted set, projects governed headers/received-from references, then filters,
+sorts and pages. Whole-match totals reuse deposit_queries.query_totals; no posting,
+draft or financial-validation algorithm changes. An explicitly denied graph is
+omitted; unclassified missing/permission evidence fails the complete query instead
+of publishing partial counts/totals. Bank reference redaction preserves admitted
+amounts, while an explicit bank filter requires reference admission before lookup.
+Public query cursors bind every non-page input including defaults, sort/direction,
+and the complete projected relation; page-size changes follow the existing offset
+pager. Query publication retains a company-scoped page proof rather than a single
+revision pin, with unchanged D11 identity/credential/company release checks. Public
+writes and source discovery keep their existing execution path.
+
+The saved-deposit list at `/c/{company}/deposit` renders the registered public query page through the deposit workbench adapter. Filters and continuation tokens remain command inputs; all whole-match and revision/effective amounts come from the public projection, and the whole-match totals are labelled apart from the rows on this page because they are computed over the whole match and do not move with page size. A voided deposit keeps its revision amount in those totals and contributes no effective bank movement. A semantic table becomes screen-only phone cards using document-detail styles, keeping its explicit table/row/columnheader/cell roles at phone width. Detail, revision and composition links carry a validated same-company list return location and fall back to the plain list for anything else. Changed filters start a fresh result, previous and next retain them, and a staled or invalid continuation keeps the entered filters and offers an explicit restart. An explicit bank filter matching no account here refuses as `E_RECORD_NOT_FOUND` on field `deposit_to`: the list selector's own refusal carries open suggestions, which a closed public deposit failure cannot hold, so an unnarrowed refusal leaves the captured-outcome path and reaches the reader as a permission denial rather than a correctable filter mistake.

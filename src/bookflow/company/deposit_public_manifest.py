@@ -30,18 +30,23 @@ DISPOSITIONS = ('disclosed', 'reference_group', 'projected', 'derived', 'private
 
 
 def _roots():
-    from bookflow.company.deposit_read_models import DepositShow, DepositItemPage
-    return (DepositShow, DepositItemPage)
+    from bookflow.company.deposit_read_models import DepositShow, DepositItemPage, DepositPage
+    return (DepositShow, DepositItemPage, DepositPage)
 
 
 def _public_roots():
-    from bookflow.company.deposit_public_models import DepositDetail, DepositItemsPage
-    return (DepositDetail, DepositItemsPage)
+    from bookflow.company.deposit_public_models import DepositDetail, DepositItemsPage, DepositQueryPage
+    return (DepositDetail, DepositItemsPage, DepositQueryPage)
 
 
 # Public fields with no private counterpart: wire constants, audience-derived
 # availability, and continuation material minted in the public domain.
 PUBLIC_CONSTRUCTED = {
+    'DepositQueryPage.schema_version': 'Public query contract version.',
+    'DepositQueryPage.company_id': 'Authenticated selected company.',
+    'DepositQueryPage.currency': 'Selected company home currency.',
+    'DepositQueryRow.received_from': 'Curated governed payer and additional-party references, from CashSource.profile and Additional.dimensions; no other profile fields.',
+
     'PartyReference.disclosed': 'Audience admission for the party list resource.',
     'ClassReference.group': 'Constant wire group name.',
     'ClassReference.disclosed': 'Audience admission for the class list resource.',
@@ -76,6 +81,21 @@ _R = 'derived'
 _N = 'projected'
 
 FIELDS: dict[str, dict[str, tuple]] = {
+    'deposit_read_models.DepositRow': {
+        'selected': (_D, ('DepositQueryRow.selected',), ''),
+        'current': (_D, ('DepositQueryRow.current',), ''),
+        'totals': (_D, ('DepositQueryRow.totals',), ''),
+        'counts': (_D, ('DepositQueryRow.counts',), ''),
+    },
+    'deposit_read_models.DepositPage': {
+        'items': (_D, ('DepositQueryPage.items',), ''),
+        'total_count': (_D, ('DepositQueryPage.total_count',), ''),
+        'totals': (_D, ('DepositQueryPage.totals',), ''),
+        'effective_bank_total': (_D, ('DepositQueryPage.effective_bank_total',), ''),
+        'fingerprint': (_R, ('DepositQueryPage.fingerprint',), 'Reissued over complete public matching relation and semantic filters.'),
+        'next_cursor': (_R, ('DepositQueryPage.next_cursor',), 'Reissued in public.query domain.'),
+        'previous_cursor': (_R, ('DepositQueryPage.previous_cursor',), 'Reissued in public.query domain.'),
+    },
     # ------------------------------------------------------------- show root
     'deposit_read_models.DepositShow': {
         'schema_version': (_R, ('DepositDetail.schema_version',), 'The public contract carries its own version.'),

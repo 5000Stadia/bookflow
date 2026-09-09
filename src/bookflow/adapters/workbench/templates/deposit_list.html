@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% block title %}Saved deposits{% endblock %}{% block body %}
+<link rel="stylesheet" href="{{ static_urls['deposit.css'] }}">
+<section class="deposit-list document-detail">
+<nav class="crumbs"><a href="{{ company_url }}">Company</a> / Saved deposits</nav>
+<h1>Saved deposits</h1>
+<form id="deposit-filters" method="get" action="{{ list_url }}">
+{% for key,label in [('deposit_to','Bank name or ID'),('date_from','Date from'),('date_to','Date to'),('number','Exact deposit number'),('q','Search number, memo or received from')] %}
+<label>{{ label }}<input name="{{ key }}" value="{{ filters[key] }}" type="{{ 'date' if key in ['date_from','date_to'] else 'text' }}"></label>
+{% endfor %}
+{% for key,label,options in [('status','Status',[('','All posted and voided'),('posted','Posted'),('voided','Voided')]),('sort','Sort by',[('date','Date'),('number','Number'),('bank_total','Revision bank total')]),('direction','Direction',[('desc','Descending'),('asc','Ascending')])] %}
+<label>{{ label }}<select name="{{ key }}">{% if filters[key] and filters[key] not in options|map(attribute=0)|list %}<option selected value="{{ filters[key] }}">{{ filters[key] }}</option>{% endif %}{% for value,title in options %}<option value="{{ value }}"{% if filters[key]==value %} selected{% endif %}>{{ title }}</option>{% endfor %}</select></label>
+{% endfor %}
+<button type="submit">Find deposits</button><a href="{{ list_url }}">Clear filters</a>
+</form>
+{% if error_code %}<section class="deposit-unavailable" role="status"><p>{{ message }}</p><p>{{ error_code }}</p><a id="deposit-restart" href="{{ restart_url }}">Restart with these filters</a></section>{% else %}
+<section class="deposit-card" aria-label="All matching deposits totals">
+<h2>Totals for all {{ page.total_count }} matching deposits</h2>
+<p>These totals include every match, not just this page. Voided deposits retain their revision amounts and have zero effective bank movement.</p>
+<dl class="deposit-list-totals">{% for key,label in total_labels %}<div data-total="{{ key }}"><dt>{{ label }}</dt><dd>{{ page.totals[key].label }}</dd></div>{% endfor %}<div data-total="effective_bank_total"><dt>Effective bank movement</dt><dd>{{ page.effective_bank_total.label }}</dd></div></dl>
+</section>
+<p id="deposit-page-count">{{ page['items']|length }} deposits on this page · {{ page.total_count }} matching deposits</p>
+<nav class="deposit-actions" aria-label="Deposit pages">{% if previous_url %}<a rel="prev" href="{{ previous_url }}">Previous page</a>{% endif %}{% if next_url %}<a rel="next" href="{{ next_url }}">Next page</a>{% endif %}<a href="{{ restart_url }}">Restart results</a></nav>
+{% if page['items'] %}<div class="deposit-list-wrap"><table id="deposit-list-lines" class="document-lines" role="table"><caption>Saved deposits — current revisions</caption>
+<thead role="rowgroup"><tr role="row">{% for label in ['Deposit','Bank and memo','Current status','Revision bank amount','Effective bank movement'] %}<th scope="col" role="columnheader">{{ label }}</th>{% endfor %}</tr></thead>
+<tbody role="rowgroup">{% for row in page['items'] %}<tr role="row" data-deposit="{{ row.selected.pin.deposit_id }}">
+<td role="cell"><span class="document-cell-label" aria-hidden="true">Deposit</span><a class="deposit-open" href="{{ row.url }}">{{ row.selected.number }}</a><br>{{ row.selected.date }}<br>Revision {{ row.selected.pin.revision_number }}</td>
+<td role="cell" class="document-wide document-prose"><span class="document-cell-label" aria-hidden="true">Bank and memo</span>{{ row.selected.deposit_to.display_label }}<p>{{ row.selected.memo or '—' }}</p><details><summary>Received from and composition totals</summary><ul>{% for party in row.received_from %}<li>{{ party.display_label }}</li>{% else %}<li>No received-from labels</li>{% endfor %}</ul><p>{{ row.counts.sources }} receipts · {{ row.counts.additional }} additional rows · {{ row.counts.cash_allocations }} cash allocations · {{ row.counts.components }} components</p><dl>{% for key,label in total_labels %}<dt>{{ label }}</dt><dd>{{ row.totals[key].label }}</dd>{% endfor %}</dl></details></td>
+<td role="cell"><span class="document-cell-label" aria-hidden="true">Current status</span>{{ row.current.status }} · version {{ row.current.version }}</td>
+<td role="cell" class="document-total" data-amount="revision"><span class="document-cell-label" aria-hidden="true">Revision bank amount</span>{{ row.current.revision_bank_total.label }}</td>
+<td role="cell" class="document-total" data-amount="effective"><span class="document-cell-label" aria-hidden="true">Effective bank movement</span>{{ row.current.effective_bank_total.label }}</td>
+</tr>{% endfor %}</tbody></table></div>{% else %}<p role="status">No deposits match these filters. Change or clear the filters to try again.</p>{% endif %}
+{% endif %}</section>{% endblock %}
