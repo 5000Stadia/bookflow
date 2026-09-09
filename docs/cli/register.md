@@ -611,6 +611,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].kind` | literal["opening", "posting", "closing"] | yes | no | — | — |
 | `rows[].account_id` | string | yes | no | — | — |
 | `rows[].current_account_label` | string | yes | no | — | — |
+| `rows[].current_account_name` | string | yes | no | — | — |
+| `rows[].current_account_number` | string \| null | yes | yes | — | — |
+| `rows[].display_account_label` | string | yes | no | — | — |
 | `rows[].signed_balance` | object | yes | no | — | — |
 | `rows[].signed_balance.amount` | string | yes | no | — | — |
 | `rows[].signed_balance.currency` | string | yes | no | — | — |

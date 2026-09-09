@@ -152,6 +152,9 @@ class GeneralLedgerRow(StrictModel):
     kind: Literal["opening", "posting", "closing"]
     account_id: str
     current_account_label: str
+    current_account_name: str
+    current_account_number: str | None
+    display_account_label: str
     signed_balance: MoneyOutput
     debit: MoneyOutput
     credit: MoneyOutput
@@ -475,6 +478,8 @@ def general_ledger(inp: GeneralLedgerInput, s, *, principal_id=None) -> GeneralL
         state, offset = _state(s, inp, "general-ledger", principal_id, account_id)
         raw, currency = s.company.raw, state.metadata.currency
         params = {"date_from": inp.date_from, "date_to": inp.date_to, "account": account_id}
+        numbers, lowest = raw.execute(
+            "SELECT use_account_numbers, show_lowest_subaccount_only FROM company_info").fetchone()
         values = raw.execute(_GL + """SELECT bookflow_sum_int(opening), bookflow_sum_int(debits),
             bookflow_sum_int(credits), bookflow_sum_int(closing) FROM selected""", params).fetchone()
         totals = GeneralLedgerTotals(**{key: money(int(value or 0), currency) for key, value in zip(
@@ -485,7 +490,8 @@ def general_ledger(inp: GeneralLedgerInput, s, *, principal_id=None) -> GeneralL
           FROM ordered
           ORDER BY {account_order("account_")}, phase, effective_date, batch_id, line_no, posting_line_id
           LIMIT :limit OFFSET :offset)
-          SELECT p.*, a.full_name AS current_account_label, e.batch_kind, e.transaction_id,
+          SELECT p.*, a.full_name AS current_account_label, a.name AS current_account_name,
+            a.number AS current_account_number, e.batch_kind, e.transaction_id,
             t.type AS transaction_type,
             e.revision_id, r.number AS transaction_number, e.reverses_batch_id, e.replaces_batch_id,
             e.recorded_at, e.account_snapshot, e.party_name, e.class_name, e.description
@@ -500,6 +506,9 @@ def general_ledger(inp: GeneralLedgerInput, s, *, principal_id=None) -> GeneralL
         rows = []
         for row in page[:inp.limit]:
             row.pop("phase")
+            row["display_account_label"] = _account_display(
+                row["current_account_label"], row["current_account_name"],
+                row["current_account_number"], numbers, lowest)
             row["signed_balance"] = money(int(row.pop("net")), currency)
             row["debit"], row["credit"] = money(int(row["debit"]), currency), money(int(row["credit"]), currency)
             if row["kind"] != "posting":

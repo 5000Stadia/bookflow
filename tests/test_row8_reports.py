@@ -169,6 +169,29 @@ def test_running_window_order_and_snapshots_before_page_slice(ledger):
     assert [r.signed_balance.minor_units for r in rows if r.kind == "closing"] == [43, -43]
 
 
+@pytest.mark.parametrize("numbers,lowest,label", [
+    (True, False, "1010 · Assets:Checking"),
+    (False, False, "Assets:Checking"),
+    (True, True, "1010 · Checking"),
+    (False, True, "Checking"),
+])
+def test_general_ledger_current_account_display_preserves_captured_account(ledger, numbers, lowest, label):
+    s, batch, _ = ledger
+    batch("2026-01-05", 7)
+    s.company.raw.execute("UPDATE accounts SET name='Checking',full_name='Assets:Checking',number='1010' WHERE id='a'")
+    s.company.raw.execute("UPDATE company_info SET use_account_numbers=?,show_lowest_subaccount_only=?", (numbers, lowest))
+    page, rows = all_pages(lambda **kw: gl(s, **kw), limit=2)
+    account_rows = [r for r in rows if r.account_id == "a"]
+    assert {r.kind for r in account_rows} == {"opening", "posting", "closing"}
+    for row in account_rows:
+        assert row.display_account_label == label
+        assert row.current_account_number == "1010"
+        assert row.current_account_label == "Assets:Checking"
+        if row.kind == "posting":
+            assert row.account_snapshot["name"] == "historical-a"
+    assert page.totals.period_debits.minor_units == page.totals.period_credits.minor_units == 7
+
+
 def test_backdated_between_pages_stales_before_rows_and_restart_reconciles(ledger):
     s, batch, _ = ledger
     batch("2026-01-20", 20)
