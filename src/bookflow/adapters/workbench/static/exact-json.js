@@ -3,7 +3,7 @@
   const limit=BigInt(Number.MAX_SAFE_INTEGER);
   function parse(text) {
     let prefix;
-    do {prefix='bookflow-exact-'+crypto.randomUUID()+':';} while(text.includes(prefix));
+    do {prefix='bookflow-exact-'+Array.from(crypto.getRandomValues(new Uint8Array(16)),n=>n.toString(16).padStart(2,'0')).join('')+':';} while(text.includes(prefix));
     const protectedText=text.replace(/"(?:\\.|[^"\\])*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/g, token=>{
       if(!/^-?\d+$/.test(token)) return token;
       const value=BigInt(token);

@@ -2268,3 +2268,17 @@ results; it is not a public permission certificate. Registration, fullC fresh
 publication, GUI/MCP workflows, CSV/HTML/device rendering and future Delete
 integration remain separately required. No schema, financial posting algorithm,
 report recognition policy or reconciliation activation changes here.
+
+### Deposit receipt picker
+
+The generated `deposit post` workbench form defaults to inline mode and supplies its
+operation key. `deposit-picker.js` populates the bank selection from `account list`
+and paginated receipt selection from `deposit sources`, including captured source
+versions. It writes the existing typed collection controls. The shared generated
+form and sales preview transport own submission, fingerprint invalidation and retries;
+no browser accounting is added. The preview and session-bound success flash show
+server bank totals and receipt amounts. The integration has no registered deposit
+show command, so success returns to the company home with that confirmation.
+Advanced mode and custom fields remain available; correction/draft workspaces are
+separate from this ordinary new-deposit picker. Exact JSON uses getRandomValues for
+its temporary integer-token prefix, including on plain HTTP LAN workstations.

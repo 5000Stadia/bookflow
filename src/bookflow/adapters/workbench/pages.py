@@ -25,6 +25,7 @@ from bookflow.adapters.workbench import sales as Sales
 from bookflow.adapters.workbench import work as Work
 from bookflow.adapters.workbench import billing as Billing
 from bookflow.adapters.workbench import home as Home
+from bookflow.core.money import Money
 from bookflow.adapters.workbench import document_form as Document
 from bookflow.adapters.workbench import document_nav as Nav
 from bookflow.adapters.workbench import list_paging as Paging
@@ -414,7 +415,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css", "payments.js", "payments.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css")
+        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css", "payments.js", "payments.css", "deposit-picker.js", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -445,7 +446,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             ctx['billing_reactivate_allowed'] = bool(company_view and _role_allows(
                 registry.get(source_kind + ' update'), company_view, hub_admin=credential(request).hub_admin))
         tpl = env.get_template(name)
-        response = HTMLResponse(tpl.render(request=request, static_urls=static_urls, hub_nouns=_nouns("hub"), company_nouns=_nouns("company"), workbench_menu=Home.MENU, json=json, **ctx),
+        response = HTMLResponse(tpl.render(request=request, static_urls=static_urls, hub_nouns=_nouns("hub"), company_nouns=_nouns("company"), workbench_menu=Home.MENU, json=json, display_money=lambda value: Money(value["minor_units"], value["currency"]).to_dict()["amount"], **ctx),
                                 status_code=status_code)
         if ctx.get("flash_result") is not None:
             response.headers["Cache-Control"] = "no-store"
@@ -1236,6 +1237,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         elif cmd.version_source and record_id is None:
             return page_error(request, BookflowError("E_USAGE", message="open this update from a record page"))
         originals = originals or {}
+        if noun == 'deposit' and verb == 'post' and not attempted:
+            attempted.update({'f:operation_key': 'WB-' + secrets.token_urlsafe(24), 'f:document.mode': 'inline'})
         if noun == 'invoice' and verb == 'update' and shown and not attempted:
             settlement = run(request, 'invoice settlement', {'invoice': shown['id']}, company_id)
             attempted['f:operation_key'] = 'WB-' + secrets.token_urlsafe(24)
@@ -1353,7 +1356,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         described = F.describe_fields(noun, verb, cmd.input_model, originals, attempted)
         if noun == 'invoice' and verb == 'update':
             described = [leaf for leaf in described if leaf['path'] not in ('operation_key', 'settlement_guard', 'settlement_versions')]
-        sales_form = (noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')) or (noun in Work.NOUNS and cmd.is_write)
+        sales_form = (noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')) or (noun in Work.NOUNS and cmd.is_write) or (noun == 'deposit' and verb == 'post')
         if noun in Work.NOUNS:
             described = Work.describe(described, noun)
             workflow_note = 'Non-posting customer work. Cost estimates and notes are internal. Completion does not mean billed or paid. Choose one selling-price input per line; use defaults → unit_price returns to catalog.'
@@ -1365,6 +1368,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         if Billing.is_conversion(noun, verb):
             described = [leaf for leaf in described if leaf['path'] not in ('line_ids', 'selections', 'percent')]
             workflow_note = 'Bill remaining work, original-scope percentages, or per-line quantities and net amounts. Completion is separate. A sales receipt records a paid sale; it cannot settle an existing invoice.'
+        if noun == 'deposit' and verb == 'post':
+            labels = {'document.deposit_to': 'Deposit to bank', 'document.date': 'Deposit date', 'document.number': 'Deposit number (automatic when blank)', 'document.memo': 'Memo', 'document.sources': 'Payments and sales receipts to bank', 'document.additional': 'Other money', 'document.cash_back.account': 'Cash back account', 'document.cash_back.amount': 'Cash back amount', 'document.cash_back.memo': 'Cash back memo'}
+            for leaf in described:
+                if leaf['path'] in labels:
+                    leaf['label'] = labels[leaf['path']]
         if sales_form:
             described = [leaf for leaf in described if leaf['path'] != 'expected_facts_fingerprint']
         if noun == 'sales-receipt' and verb == 'update':
@@ -1571,6 +1579,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       work_history=result if noun in Work.NOUNS and verb == "history" else None,
                       work_results=result if noun in Work.NOUNS and verb == "query" else None,
                       sales_form=sales_form, sales_scope=cred.token_id,
+                      deposit_receipts=([{**row, "display_amount": Money(row["amount"]["minor_units"], row["amount"]["currency"]).to_dict()["amount"]} for row in result.get("receipts", [])] if noun == "deposit" and result else []),
+                      deposit_bank_total=(Money(result["deposit"]["bank_total"]["minor_units"], result["deposit"]["bank_total"]["currency"]).to_dict()["amount"] if noun == "deposit" and result and "deposit" in result else None),
                       sales_fingerprint=(result.get('facts_fingerprint', '') if preview and result else
                           '' if error and error.get('code') in ('E_PREVIEW_STALE', 'E_VERSION_CONFLICT') else attempted.get('f:expected_facts_fingerprint', '')),
                       sale=Sales.detail_context(result, company_id, preview=preview) if result and (noun in ('invoice', 'sales-receipt') or Billing.is_conversion(noun, verb)) and 'revision' in result else None,
@@ -1720,7 +1730,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             raw, headers, preview = F.translate(cmd, translated_form, comparison if comparison else None)
             if Billing.is_conversion(noun, verb):
                 raw = Billing.selection(raw, form)
-            if (noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')) or (noun in Work.NOUNS and cmd.is_write):
+            if (noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')) or (noun in Work.NOUNS and cmd.is_write) or (noun == 'deposit' and verb == 'post'):
                 if noun == 'invoice' and verb == 'update' and form.get('action') == 'review-settlement':
                     current = run(request, 'invoice settlement', {'invoice': record_id}, company_id)
                     form = dict(form, **{'f:settlement_guard': current['settlement_guard'],
