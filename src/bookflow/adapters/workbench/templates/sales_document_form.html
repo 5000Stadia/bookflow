@@ -1,0 +1,97 @@
+{# Document window for one sales document. Included by form.html, which owns the <form>
+   element and defines field(), collection_control() and collection_scalar(). Every control
+   keeps its generated name, so this submits the same input an agent sends. #}
+{% set d = document %}
+
+{% macro band_value(l) %}{{ l.reference.current.label if l.reference and l.reference.current else (form_value(l, originals, attempted) or '') }}{% endmacro %}
+
+{# compact drops the JSON-object help from a grid cell; it is an agent affordance and
+   the command still accepts the object either way. #}
+{% macro line_child(child, path, value, compact=false) %}
+{% set child_name = "c:" ~ path ~ ":" ~ child.name %}
+{% set child_id = child_name.replace(':', '-').replace('.', '-') %}
+{% if child.kind == "collection" %}{{ collection_control(child.collection, path ~ ":" ~ child.name, value or [], 1, child.label or child.name) }}
+{% else %}{{ collection_scalar(child, child_name, value, child_id, compact) }}{% endif %}
+{% endmacro %}
+
+{% macro row_actions() %}
+<div class="line-cell line-cell-actions"><button type="button" data-collection-up aria-label="Move this line up">↑</button><button type="button" data-collection-down aria-label="Move this line down">↓</button><button type="button" data-collection-remove>Remove</button></div>
+{% endmacro %}
+
+{% macro line_row(item, path, value, amounts) %}
+{% set allocated = allocated_lines.get(value.get('line_id')) if allocated_lines and value is mapping else none %}
+<div class="line-row{% if allocated %} line-row-allocated{% endif %}" data-collection-item>
+{% if allocated %}
+<input type="hidden" name="c:{{ path }}:line_id" value="{{ allocated.line_id }}">
+<input type="hidden" name="c:{{ path }}:item" value="{{ allocated.item_id }}">
+<div class="line-allocated" data-allocated-line><strong>Billed from quoted work · priced on the source</strong><br>{{ allocated.item_snapshot.item.label }} · {{ allocated.description or '' }}<br>Quantity {{ allocated.quantity }} of an originally quoted {{ allocated.quoted_quantity }} · Rate {{ allocated.unit_price.amount if allocated.unit_price else 'priced as a whole-line amount' }}<br>Net {{ allocated.net.amount }} · Tax {{ allocated.tax.amount }} · Gross {{ allocated.gross.amount }} {{ allocated.currency }}<br>Remove the whole line to release its scope; add an ordinary line for an extra charge.</div>
+{{ row_actions() }}
+{% else %}
+<input type="hidden" name="c:{{ path }}:line_id" value="{{ value.get('line_id') or '' if value is mapping else '' }}">
+{% for column in d.columns %}
+{% set cell_id = (("c:" ~ path ~ ":" ~ column.field.name) if column.field else ("price-mode:" ~ path)).replace(':', '-').replace('.', '-') %}
+<div class="line-cell">
+{% if column.name == '@amount' %}<span class="line-cell-label">{{ column.label }}</span><span class="line-amount">{{ amounts.amount if amounts else '—' }}</span>
+{% elif column.name == '@pricing' %}<label class="line-cell-label" for="{{ cell_id }}">{{ column.label }}</label><select id="{{ cell_id }}" name="price-mode:{{ path }}"><option value="">Keep entered pricing</option>{% for mode, label in [('catalog','Catalog price'),('manual','Rate you enter'),('markup','Cost plus markup'),('amount','Whole-line amount')] %}{% if work_form or mode != 'markup' %}<option value="{{ mode }}"{% if attempted.get('price-mode:' ~ path) == mode %} selected{% endif %}>{{ label }}</option>{% endif %}{% endfor %}</select>
+{% elif column.field %}<label class="line-cell-label" for="{{ cell_id }}">{{ column.label }}</label>{{ line_child(column.field, path, value.get(column.field.name) if value is mapping else none, true) }}
+{% endif %}
+</div>
+{% endfor %}
+{{ row_actions() }}
+{% if d.line_extras %}<details class="line-extras"><summary>More on this line</summary><div class="line-extra-fields">
+{% for child in d.line_extras %}
+{% set child_name = "c:" ~ path ~ ":" ~ child.name %}
+<div class="collection-field"><label for="{{ child_name.replace(':', '-').replace('.', '-') }}">{{ child.label or child.name }}{% if child.required %} *{% endif %}<small>{{ child.description }}</small></label>{{ line_child(child, path, value.get(child.name) if value is mapping else none) }}</div>
+{% endfor %}
+</div></details>{% endif %}
+{% endif %}
+</div>
+{% endmacro %}
+
+<section class="document-band" aria-label="{{ d.title }} header">
+<div class="document-row">{% for l in d.primary %}{{ field(l, l.index) }}{% endfor %}</div>
+{% if d.addresses %}<div class="document-addresses">
+{% for group in d.addresses %}
+{% set parts = [] %}
+{% for l in group.leaves %}{% set part = band_value(l) | trim %}{% if part %}{% set _ = parts.append(part) %}{% endif %}{% endfor %}
+<details class="address-block"{% if error %} open{% endif %}>
+<summary><span class="address-title">{{ group.title }}</span> <span class="address-summary">{{ parts | join(', ') if parts else 'Not entered — the customer record supplies it' }}</span></summary>
+<div class="address-fields">{% for l in group.leaves %}{{ field(l, l.index) }}{% endfor %}</div>
+</details>
+{% endfor %}
+</div>{% endif %}
+{% if d.terms %}<div class="document-row">{% for l in d.terms %}{{ field(l, l.index) }}{% endfor %}</div>{% endif %}
+</section>
+
+{% if d.scope %}<section class="document-band" aria-label="Scope"><h2 class="band-title">Scope</h2>
+<div class="document-row document-row-wide">{% for l in d.scope %}{{ field(l, l.index) }}{% endfor %}</div></section>{% endif %}
+
+{% if d.lines %}
+<section class="document-band" aria-label="Lines"><h2 class="band-title">Lines</h2>
+<div class="line-grid" data-collection data-collection-path="{{ d.lines.path }}" style="--line-columns: {{ d.grid_template }}; --line-width: {{ d.grid_width }}">
+<input type="hidden" name="collection:{{ d.lines.path }}" value="1">
+<div class="line-head" aria-hidden="true">{% for column in d.columns %}<span class="line-cell">{{ column.label }}</span>{% endfor %}<span class="line-cell line-cell-actions">Row</span></div>
+<div class="line-body" data-collection-items>{% for value in d.lines.collection["values"] %}{{ line_row(d.lines.collection.item, d.lines.path ~ ":" ~ loop.index0, value, d.line_amount(value.get('line_id') if value is mapping else none, loop.index0)) }}{% endfor %}</div>
+<template data-collection-template data-index-token="__INDEX0__">{{ line_row(d.lines.collection.item, d.lines.path ~ ":__INDEX0__", {}, none) }}</template>
+<button type="button" data-collection-add class="line-add">Add a line</button>
+</div>
+</section>
+{% endif %}
+
+<section class="document-band document-footer" aria-label="{{ d.title }} footer"><h2 class="band-title">Footer</h2>
+<div class="footer-inputs">{% for l in d.footer %}{{ field(l, l.index) }}{% endfor %}</div>
+<div class="footer-totals" aria-label="Computed totals">
+{% if d.computed %}<dl class="totals-list">
+<dt>Subtotal</dt><dd>{{ d.computed.subtotal }}</dd>
+<dt>Tax</dt><dd>{{ d.computed.tax }}</dd>
+<dt>Total</dt><dd><strong>{{ d.computed.total }} {{ d.computed.currency }}</strong></dd>
+{% if d.settled and d.computed.applied is defined %}<dt>Payments Applied</dt><dd>{{ d.computed.applied }}</dd>
+<dt>Balance Due</dt><dd><strong>{{ d.computed.due }} {{ d.computed.currency }}</strong></dd>{% endif %}
+</dl>
+<p class="muted">Computed by the server from {{ d.origin }}. Nothing on this page is calculated in the browser.</p>
+{% else %}<p class="muted">Preview to see the subtotal, tax and total the server computes.</p>{% endif %}
+</div>
+</section>
+
+{% if d.pricing %}<details class="technical-details"><summary>Pricing and tax rules</summary>{% for l in d.pricing %}{{ field(l, l.index) }}{% endfor %}</details>{% endif %}
+{% if d.record %}<details class="technical-details"><summary>Saved version and record defaults</summary>{% for l in d.record %}{{ field(l, l.index) }}{% endfor %}</details>{% endif %}
