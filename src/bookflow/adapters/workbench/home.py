@@ -255,11 +255,12 @@ PANELS: tuple[Panel, ...] = (
             Step(
                 id="reports",
                 title="Reports",
-                summary="Trial balance, profit and loss, balance sheet, general ledger.",
+                summary="A/R aging, open invoices, trial balance, profit and loss, balance sheet, general ledger.",
                 action=Action(
                     "Choose a report to run",
                     READ,
-                    ("report trial-balance", "report profit-and-loss", "report balance-sheet", "report general-ledger"),
+                    ("report ar-aging", "report open-invoices", "report trial-balance",
+                     "report profit-and-loss", "report balance-sheet", "report general-ledger"),
                     "/_group/reports",
                 ),
             ),

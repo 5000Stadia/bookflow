@@ -735,6 +735,61 @@ for trial balance, 897.67/899.82 ms for P&L and 1266.23/1283.83 ms for balance s
 Company record/audit counts were unchanged. This is a bounded read sample, not
 the separate 100,000 transaction storage workload or a universal latency guarantee.
 
+## Receivables aging and open invoices
+
+`company/receivable_reports.py` supplies `report ar-aging` and `report
+open-invoices` through the shared registry and reports capability, with the same
+period metadata, HMAC continuation, streamed whole-filter totals and signed64
+checks as the other reports. Both take `as_of`, the single inclusive bound the
+report metadata carries as `period.date_to`; no schema, cached balance or
+posting-cost change is introduced.
+
+Both start from Accounts Receivable posting effects on or before `as_of` and add
+two signed rows for every active settlement application: a negative one against
+the invoice, under the customer its current revision names, and a positive one
+against the paying receipt, under the party its permanent component key owns. An
+application is active when it is an `apply` dated on or before `as_of` with no
+`unapply` dated on or before `as_of`. The redistribution moves an amount between
+two rows and never creates or destroys one, so the aging total is the Accounts
+Receivable balance the balance sheet and trial balance report for the same date,
+whatever the settlement history is. Amounts are grouped losslessly twice: once
+per document and party, once per party and column, both through
+`bookflow_sum_int`, which accepts its own lossless integer text.
+
+An invoice ages on the captured due date of its current revision; everything
+else that reaches receivable -- unapplied customer credit, a receivable journal
+entry -- ages on its accounting date. Column edges are computed once in Python
+as four exact whole-day boundary dates and compared in SQL as ISO text, so no
+calendar arithmetic and no float ever enters the query; an as-of date inside the
+first 90 days of year 1 clamps instead of underflowing. An invoice due exactly
+30 days before `as_of` is 1-30 and one due exactly 31 days before is 31-60;
+`bucket_of` is the Python twin of the same rule and both are pinned by test.
+
+Aging rows are customers and jobs in hierarchy-name order, one row each, holding
+Current, 1-30, 31-60, 61-90, Over 90 and a total; a row whose columns are all
+zero -- a paid invoice, a voided one, a fully applied receipt -- is omitted,
+which cannot move a total. A receivable posting under no customer, or under a
+party that is not a customer, keeps its own row labelled "No name" so the tie
+survives it. Open invoices are unpaid and partly paid invoices only, oldest due
+date first, with due date, days past due, column, original amount, applied
+amount and remaining balance, optionally filtered to one customer or to past-due
+rows; it excludes credit, so it exceeds Accounts Receivable by whatever credit
+stands unapplied.
+
+Their continuations extend the shared HMAC state with customer presentation, the
+settlement identity count and the company audit watermark, because applications
+post nothing and the posting-effect watermark alone cannot see an apply or an
+unapply. The customer filter's resolved stable ID rides in the cursor, so
+renaming that customer stales the continuation instead of failing to resolve on
+page two; `ledger_reports._state` takes `account_scoped=False` for that, which
+keeps the ID out of the posting-account filter.
+
+Workbench `receivables.py` and `receivables.html` project these results without
+accounting logic: an aging column table with jobs indented under their parent and
+each customer linking to their own open invoices, and an open-invoice table
+linking each number to its invoice. Both carry a Next page form that preserves
+the validated filter and signed cursor. The home window's Reports tile names both.
+
 ## Customer work documents
 
 [Customer work](customer-work.md) owns the nonposting proposal, alternative

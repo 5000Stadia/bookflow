@@ -20,6 +20,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from bookflow.adapters.workbench import forms as F
 from bookflow.adapters.workbench import workflows as W
 from bookflow.adapters.workbench import statements as S
+from bookflow.adapters.workbench import receivables as Receivable
 from bookflow.adapters.workbench import sales as Sales
 from bookflow.adapters.workbench import work as Work
 from bookflow.adapters.workbench import billing as Billing
@@ -1552,6 +1553,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       sale=Sales.detail_context(result, company_id, preview=preview) if result and (noun in ('invoice', 'sales-receipt') or Billing.is_conversion(noun, verb)) and 'revision' in result else None,
                       sales_history=result if noun in ('invoice', 'sales-receipt') and verb == 'history' else None,
                       statement=S.view(result, report_input, company_id) if result and report_input is not None and cmd.name in S.COMMANDS else None,
+                      receivables=Receivable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Receivable.COMMANDS else None,
                       source_report_watermark=source_report_watermark,
                       preview=preview, get=F.get_path, form_value=F.form_value,
                       collection_attempt_key=F.collection_attempt_key,

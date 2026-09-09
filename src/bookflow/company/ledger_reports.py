@@ -303,18 +303,32 @@ def _decode_cursor(encoded_cursor, db):
         raise _invalid_cursor() from None
 
 
-def _state(s, inp, report, principal_id, account_id):
+def _state(s, inp, report, principal_id, account_id, *, account_scoped=True):
+    """Continuation state; account_id is the stable ID this cursor carries.
+
+    A report that pages one account narrows its own effect and label scans to
+    it. A report that carries a different stable ID in the same cursor slot --
+    the customer a receivables report was filtered to -- passes
+    account_scoped=False, so the ID identifies the continuation without
+    pretending to be a posting account.
+    """
     raw = s.company.raw
+    scope = account_id if account_scoped else None
     # Immutable rows can only append. Count plus maximal identities detect even
     # backdated additions whose accounting date precedes the previous page.
     effect = raw.execute("""SELECT count(*), max(l.id), max(b.id)
         FROM posting_lines l JOIN posting_batches b ON b.id=l.batch_id
         WHERE b.effective_date<=:date_to AND (:account IS NULL OR l.account_id=:account)
-        """, {"date_to": inp.date_to, "account": account_id}).fetchone()
+        """, {"date_to": inp.date_to, "account": scope}).fetchone()
     labels = hashlib.sha256()
     statement = report in {"profit-and-loss", "balance-sheet"}
+    receivable = report in {"ar-aging", "open-invoices"}
     if statement:
         label_query = "SELECT id, full_name, full_name_key, name, number, type, parent_id, active FROM accounts ORDER BY id"
+    elif receivable:
+        # Receivables rows are customers, not accounts, and the hierarchy name
+        # is both the row label and the row order.
+        label_query = "SELECT id, full_name, full_name_key, name, parent_id, active FROM customers ORDER BY id"
     elif report == "trial-balance":
         label_query = _EFFECTS + """SELECT a.id, a.full_name, a.name, a.number, a.active FROM accounts a
             LEFT JOIN balances b ON b.account_id=a.id
@@ -324,7 +338,7 @@ def _state(s, inp, report, principal_id, account_id):
             JOIN balances b ON b.account_id=a.id
             WHERE b.opening!='0' OR b.activity>0 ORDER BY a.id"""
     for row in raw.execute(label_query, {"date_to": inp.date_to,
-            "date_from": getattr(inp, "date_from", "0001-01-01"), "account": account_id,
+            "date_from": getattr(inp, "date_from", "0001-01-01"), "account": scope,
             "include_zero": getattr(inp, "include_zero", False)}):
         labels.update(json.dumps(tuple(row), separators=(",", ":")).encode())
     currency = raw.execute("SELECT home_currency FROM company_info").fetchone()[0]
@@ -338,6 +352,13 @@ def _state(s, inp, report, principal_id, account_id):
             use_account_numbers, show_lowest_subaccount_only FROM company_info""").fetchone())]
         if statement:
             extra_state.append(raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0])
+    elif receivable:
+        # A receivables row moves with settlement history, which posts nothing,
+        # so the posting effect alone cannot see an apply or an unapply.
+        extra_state = [tuple(raw.execute(
+            "SELECT count(*), max(id) FROM applications WHERE effective_date<=:date_to",
+            {"date_to": inp.date_to}).fetchone()),
+            raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]]
     watermark = _hash([tuple(effect), labels.hexdigest(), currency, revision, extra_state]) if extra_state is not None else _hash([tuple(effect), labels.hexdigest(), currency, revision])
     permissions = _hash([permission_fingerprint(s, principal_id), s.memberships])
     query = _hash([report, inp.model_dump(exclude={"cursor"})])

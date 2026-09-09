@@ -17,7 +17,8 @@ FAMILIES = {
     'annotations': ('directive add', 'directive show', 'directive list', 'directive deactivate',
                     'note add', 'note show', 'note list', 'note edit'),
     'links': ('customer link-vendor', 'customer unlink-vendor', 'other-name convert'),
-    'reports': ('report trial-balance', 'report general-ledger', 'report balance-sheet', 'report profit-and-loss'),
+    'reports': ('report trial-balance', 'report general-ledger', 'report balance-sheet', 'report profit-and-loss',
+                'report ar-aging', 'report open-invoices'),
 }
 
 
@@ -89,7 +90,9 @@ def test_supporting_family_full_documents_and_rejections(root, tmp_path, family)
                         raw = {**EXAMPLES[command].input, 'limit': 200}
                         result = await call(command, raw, dry_run=False)
                         assert result['next_cursor'] is None
-                        assert (await call(command, {**raw, 'date_to': 'invalid-date'}, rejected=True))['code'] == 'E_VALIDATION'
+                        # Each report names its own inclusive bound; reject a bad one there.
+                        bound = 'date_to' if 'date_to' in raw else 'as_of'
+                        assert (await call(command, {**raw, bound: 'invalid-date'}, rejected=True))['code'] == 'E_VALIDATION'
                 assert set(calls) == set(FAMILIES[family])
                 # Valid input shapes with an inaccessible company exercise routing
                 # rejection without conflating CLI syntax with business validation.

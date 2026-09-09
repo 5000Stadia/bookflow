@@ -236,6 +236,15 @@ for _report in ('profit-and-loss', 'balance-sheet'):
         'E_QUERY_STALE': 'posting or display facts changed between statement pages',
         'E_VALUE_RANGE': 'public account amount or statement total exceeds signed 64-bit range',
     }
+MATRIX['report ar-aging'] = {
+    'E_QUERY_STALE': 'posting, settlement or customer display facts changed between aging pages',
+    'E_VALUE_RANGE': 'public aging column or aging total exceeds signed 64-bit range',
+}
+MATRIX['report open-invoices'] = {
+    'E_QUERY_STALE': 'posting, settlement or customer display facts changed between open-invoice pages',
+    'E_VALUE_RANGE': 'public invoice amount or open-invoice total exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'customer filter does not resolve',
+}
 
 for _verb in ('post', 'update'):
     MATRIX['journal ' + _verb]['E_NO_EXCHANGE_RATE'] = 'no exact-date original-to-home rate and no manual override'
