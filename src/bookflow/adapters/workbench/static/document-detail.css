@@ -30,3 +30,23 @@
   }
   .document-detail .document-lines .document-empty { display: none; }
 }
+
+/* Basic reports reuse the same screen-only phone cards and print table markup. */
+.basic-report .report-totals { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,14rem),1fr)); gap: .6rem; }
+.basic-report .report-totals>div { border: 1px solid #c3d0de; padding: .6rem; background: #f4f7fb; }
+.basic-report dd { margin: .15rem 0 .5rem; overflow-wrap: anywhere; }
+.basic-report .report-totals dd { font-weight: 700; font-variant-numeric: tabular-nums; }
+.basic-report .document-lines { table-layout: fixed; }
+.basic-report .document-lines td { overflow-wrap: anywhere; }
+.basic-report .report-description { white-space: pre-wrap; }
+.basic-report .report-state { display: block; font-size: .85rem; }
+.basic-report .report-current,.basic-report .report-captured { margin-top: .4rem; }
+.basic-report .report-captured dl { font-size: .85rem; }
+@media print {
+  .basic-report .document-lines { min-width: 0; }
+  .basic-report .report-lines-wrap { overflow: visible; }
+  .basic-report #statement-next-page,.basic-report .report-structured { display: none; }
+}
+@media screen and (max-width: 700px) {
+  .basic-report .document-lines caption { display: block; text-align: left; padding: .4rem 0; }
+}

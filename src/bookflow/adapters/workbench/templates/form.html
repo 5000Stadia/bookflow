@@ -25,7 +25,8 @@
 <a href="{{ base }}/{{ sales_history.id }}?revision_number={{ revision.revision_number }}">Read internal snapshots for sales revision {{ revision.revision_number }}</a>
 </section>{% endif %}{% endfor %}
 {% if sales_history.next_cursor %}<a href="{{ base }}/{{ sales_history.id }}/history?limit={{ (attempted.get('f:limit') or request.query_params.get('limit', '50'))|urlencode }}&amp;cursor={{ sales_history.next_cursor|urlencode }}" rel="next">Next revisions</a>{% endif %}</section>
-{% elif statement %}{% include "statement.html" %}{% elif receivables %}{% include "receivables.html" %}{% elif result and not billing %}<div class="{{ 'warn' if preview else 'field' }}"><b>{{ "Preview (nothing written)" if preview else "Result" }}</b><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></div>{% endif %}
+{% elif statement %}{% if statement.basic_report %}{% include "basic_report.html" %}{% else %}{% include "statement.html" %}{% endif %}{% elif receivables %}{% include "receivables.html" %}{% elif result and not billing %}<div class="{{ 'warn' if preview else 'field' }}"><b>{{ "Preview (nothing written)" if preview else "Result" }}</b><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></div>{% endif %}
+{% if noun == 'report' and verb in ('trial-balance', 'general-ledger') and error and error.code == 'E_QUERY_STALE' %}<p class="workflow-note" id="report-restart">The books or report settings changed. Your filters are retained below; run the report again to start at the first page.</p>{% endif %}
 {% if billing_progress %}{% include "billing_progress.html" %}{% endif %}
 {% include "billing_effect.html" %}
 {% if error and error.details.problem %}<p class="warn">{{ error.details.problem }}{% if error.details.recommended_net_amount %} Current recommended net: {{ error.details.recommended_net_amount.amount }} {{ error.details.recommended_net_amount.currency }}.{% endif %}</p>{% endif %}

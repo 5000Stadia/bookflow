@@ -1,0 +1,40 @@
+{% macro label(text) %}<span class="document-cell-label" aria-hidden="true">{{ text }}</span>{% endmacro %}
+<section id="basic-report" class="document-detail basic-report" aria-label="{{ 'General ledger' if statement.general_ledger else 'Trial balance' }}">
+<p>{{ company_label }} · {{ statement.metadata.basis|capitalize }} · {{ statement.metadata.currency }} ·
+{% if statement.metadata.period.date_from %}{{ statement.metadata.period.date_from }} through {% else %}As of {% endif %}{{ statement.metadata.period.date_to }}</p>
+<h2>Whole-report totals — all pages</h2>
+<dl class="report-totals">
+{% for key, value in statement.totals.items() %}<div data-total="{{ key }}"><dt>{{ key.replace('_', ' ')|capitalize }}</dt><dd>{{ value.amount }} {{ value.currency }}</dd></div>{% endfor %}
+</dl>
+<p id="report-page-count">{{ statement.count }} rows on this page{% if statement.next_cursor %}; more available{% endif %}. {% if statement.general_ledger %}Opening and closing rows also count toward the page limit. Balances are debit minus credit.{% else %}Each row is an account's ending balance. Zero accounts appear only when requested.{% endif %}</p>
+<div class="table-wrap report-lines-wrap"><table class="ledger-table document-lines" id="report-lines" role="table">
+<caption>{{ 'General ledger entries' if statement.general_ledger else 'Ending account balances' }} · {{ statement.metadata.currency }}</caption>
+<thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Account</th>
+{% if statement.general_ledger %}<th scope="col" role="columnheader">Date / reference</th><th scope="col" role="columnheader">Description / captured details</th>{% endif %}
+<th scope="col" role="columnheader">Debit</th><th scope="col" role="columnheader">Credit</th><th scope="col" role="columnheader">{{ 'Running balance' if statement.general_ledger else 'Signed net' }}</th></tr></thead>
+<tbody role="rowgroup">
+{% for row in statement.rows %}<tr role="row" data-kind="{{ row.kind if statement.general_ledger else 'account' }}" data-account="{{ row.account_id }}">
+<td role="cell" class="document-wide">{{ label('Account') }}<a href="{{ row.ledger_url }}">{{ row.display_account_label }}</a>
+{% if not statement.general_ledger %}{% if not row.active %}<span class="report-state">Inactive</span>{% endif %}{% if row.signed_net.minor_units == 0 %}<span class="report-state">Zero balance</span>{% endif %}{% endif %}
+<details class="report-current"><summary>Current account details</summary><div>{{ row.current_account_label }}{% if row.current_account_number %} · {{ row.current_account_number }}{% endif %}</div></details>
+</td>
+{% if statement.general_ledger %}
+<td role="cell" class="document-wide">{{ label('Date / reference') }}<strong>{{ row.kind|capitalize }}</strong>{% if row.effective_date %}<div>{{ row.effective_date }}</div>{% endif %}
+{% if row.transaction_type %}<div>{{ row.transaction_type.replace('_', ' ')|capitalize }} {{ row.transaction_number or '' }}</div>{% endif %}{% if row.batch_kind %}<div>{{ row.batch_kind|capitalize }} effect</div>{% endif %}</td>
+<td role="cell" class="document-wide document-prose">{{ label('Description / captured details') }}<div class="report-description">{{ row.description or '' }}</div>
+{% if row.kind == 'posting' %}<details class="report-captured"><summary>Captured posting details</summary>
+{% if row.party_name %}<p>Party: {{ row.party_name }}</p>{% endif %}{% if row.class_name %}<p>Class: {{ row.class_name }}</p>{% endif %}
+<dl>{% for key, value in (row.account_snapshot or {}).items() %}<dt>{{ key.replace('_', ' ')|capitalize }} (captured account)</dt><dd>{{ value if value is not none else '—' }}</dd>{% endfor %}
+{% for key in ('recorded_at', 'transaction_id', 'revision_id', 'batch_id', 'posting_line_id', 'line_no', 'reverses_batch_id', 'replaces_batch_id') %}{% if row[key] is not none %}<dt>{{ key.replace('_', ' ')|capitalize }}</dt><dd>{{ row[key] }}</dd>{% endif %}{% endfor %}</dl></details>{% endif %}</td>
+{% endif %}
+<td role="cell" data-value="debit">{{ label('Debit') }}{{ row.debit.amount }}</td><td role="cell" data-value="credit">{{ label('Credit') }}{{ row.credit.amount }}</td>
+<td role="cell" class="document-total" data-value="balance">{{ label('Running balance' if statement.general_ledger else 'Signed net') }}{{ row.signed_balance.amount if statement.general_ledger else row.signed_net.amount }}</td>
+</tr>{% else %}<tr role="row"><td role="cell" colspan="{{ 6 if statement.general_ledger else 4 }}">No matching report rows.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if statement.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="statement-next-page">
+{% for name, value in statement.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+{% if source_report_watermark is not none %}<input type="hidden" name="_source_report_watermark" value="{{ source_report_watermark }}">{% endif %}
+<button name="action" value="submit">Next {{ 'ledger' if statement.general_ledger else 'account' }} page</button></form>{% endif %}
+<p class="muted">Generated {{ statement.metadata.generation_time }} · Change the filters below to start a new report. Account labels are current; captured posting details retain the historical facts.</p>
+<details class="report-structured"><summary>Structured report data</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
+</section>

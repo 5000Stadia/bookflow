@@ -2319,3 +2319,15 @@ saved confirmation to the real detail, and page composition separately in phone
 cards. Update/void forms take their optimistic version from the public current
 state. Deposit query remains unregistered; this increment does not complete the
 broader deposit/history module.
+
+Basic browser reports (2026-09-09): the statement presentation owner also renders
+trial balance and general ledger, using only the existing typed command results.
+The basic-report template shows exact supplied totals separately from page counts,
+current account labels, debit/credit/net or running balances, and expandable
+captured posting facts. Company-local account links open the current ledger for
+the reported period. Continuation submits the retained validated filters in its
+own form; the visible filter form omits the cursor and restarts after a stale or
+invalid request while preserving the attempted filters. Shared document-detail
+screen-only cards retain one semantic table for desktop and print; report CSS is
+scoped to .basic-report. Calculation, report inputs, cursor validation and financial
+history remain owned by the unchanged core commands.

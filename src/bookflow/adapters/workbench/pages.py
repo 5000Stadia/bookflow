@@ -1596,7 +1596,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                           '' if error and error.get('code') in ('E_PREVIEW_STALE', 'E_VERSION_CONFLICT') else attempted.get('f:expected_facts_fingerprint', '')),
                       sale=Sales.detail_context(result, company_id, preview=preview) if result and (noun in ('invoice', 'sales-receipt') or Billing.is_conversion(noun, verb)) and 'revision' in result else None,
                       sales_history=result if noun in ('invoice', 'sales-receipt') and verb == 'history' else None,
-                      statement=S.view(result, report_input, company_id) if result and report_input is not None and cmd.name in S.COMMANDS else None,
+                      statement=S.view(result, report_input, company_id, cmd.name) if result and report_input is not None and cmd.name in S.COMMANDS else None,
                       receivables=Receivable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Receivable.COMMANDS else None,
                       source_report_watermark=source_report_watermark,
                       preview=preview, get=F.get_path, form_value=F.form_value,
