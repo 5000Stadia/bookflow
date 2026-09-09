@@ -36,22 +36,50 @@ DEFAULT_ADDRESSES = (('Bill To', 'billing_address'), ('Ship To', 'shipping_addre
 
 NUMBER_LABELS = {'invoice': 'Invoice #', 'sales-receipt': 'Sale #', 'estimate': 'Estimate #'}
 
-# Grid columns, in document order. ``@pricing`` and ``@amount`` are not line fields:
-# the pricing selector chooses which of the exclusive price inputs is live, and the
-# amount is copied from the server's computed result.
+# Grid columns, in document order. Every one of them is a value a person reads off the
+# line or types into it. ``@amount`` is the exception the reader still expects to see:
+# it is not a line field but the server's own computed net, copied here.
+#
+# The pricing selector is deliberately not among them. It chooses which of the exclusive
+# price inputs is live — a rule for the whole line rather than one of its numbers — and
+# between Quantity and Rate it read as though it were one. It lives in the row's own
+# panel with the other per-line machinery instead, where it is still one click away.
 SALE_GRID = (('item', 'Item'), ('description', 'Description'), ('quantity', 'Quantity'),
-             ('unit', 'Unit'), ('@pricing', 'Pricing'), ('unit_price', 'Rate'),
+             ('unit', 'Unit of measure'), ('unit_price', 'Rate'),
              ('class_id', 'Class'), ('@amount', 'Amount'), ('tax_code', 'Tax'))
 
 WORK_GRID = (('item', 'Item'), ('description', 'Description'), ('quantity', 'Quantity'),
-             ('unit', 'Unit'), ('@pricing', 'Pricing'), ('estimated_unit_cost', 'Cost'),
+             ('unit', 'Unit of measure'), ('estimated_unit_cost', 'Cost'),
              ('markup_percent', 'Markup %'), ('unit_price', 'Rate'), ('class_id', 'Class'),
              ('@amount', 'Amount'), ('tax_code', 'Tax'))
+
+# What each column head means, written for the person who has to tell two of them apart.
+# A bookkeeper reading this grid asked what Unit was next to Quantity; a head that needs
+# that question asked is a head that has not explained itself. The same words are the
+# control's own description wherever the row panel holds it instead of the grid.
+COLUMN_HINTS = {
+    'item': 'What is charged for',
+    'description': 'How the line reads on the document',
+    'quantity': 'How many',
+    'unit': 'How they are counted — each, hour, foot',
+    'unit_price': 'Price of one',
+    'estimated_unit_cost': 'Your cost of one; internal',
+    'markup_percent': 'Added to your cost',
+    'class_id': 'Class this line is tracked under',
+    '@amount': 'Quantity × rate, from the server',
+    'tax_code': 'Taxable or not',
+}
+
+# The pricing selector, in the row's own panel rather than in the columns.
+LINE_PRICING = {'label': 'How this line is priced',
+                'description': 'Which of the price inputs this line uses. It is a rule for '
+                               'the whole line, not a number: the amount stays whatever the '
+                               'server computes from it.'}
 
 # Grid track per column, with the rem each one contributes to the grid's own width.
 # The grid scrolls inside its container at that width; the page never scrolls sideways.
 WIDTHS = {'item': ('minmax(9rem, 1.2fr)', 9), 'description': ('minmax(9rem, 1.5fr)', 9),
-          'quantity': ('4.5rem', 4.5), 'unit': ('6.5rem', 6.5), '@pricing': ('7rem', 7),
+          'quantity': ('4.5rem', 4.5), 'unit': ('7rem', 7),
           'unit_price': ('5.5rem', 5.5), 'estimated_unit_cost': ('6rem', 6),
           'markup_percent': ('5rem', 5), 'class_id': ('6.5rem', 6.5),
           '@amount': ('5.5rem', 5.5), 'tax_code': ('6.5rem', 6.5)}
@@ -86,7 +114,8 @@ LABELS = {
 }
 
 LINE_LABELS = {
-    'item': 'Item', 'description': 'Description', 'quantity': 'Quantity', 'unit': 'Unit',
+    'item': 'Item', 'description': 'Description', 'quantity': 'Quantity',
+    'unit': 'Unit of measure',
     'unit_price': 'Rate', 'class_id': 'Class', 'tax_code': 'Tax', 'net_amount': 'Whole-line amount',
     'markup_percent': 'Cost markup percent', 'price_level': 'Price level',
     'price_basis_amount': 'Price basis amount', 'estimated_unit_cost': 'Estimated cost per unit',
@@ -168,6 +197,8 @@ def describe(leaves, noun):
             for child in leaf['collection']['item']['fields']:
                 child['label'] = LINE_LABELS.get(child['name'],
                                                  child['name'].replace('_id', '').replace('_', ' ').capitalize())
+                if child['name'] in COLUMN_HINTS and not child.get('description'):
+                    child['description'] = COLUMN_HINTS[child['name']]
                 if child['kind'] == 'collection' and child['name'] == 'use_defaults':
                     child['collection']['item']['choice_labels'] = DEFAULT_CHOICE_LABELS
         if path in DESCRIPTIONS:
@@ -219,7 +250,7 @@ def layout(noun, leaves):
     record += [leaf for leaf in leaves if leaf['path'] not in placed]
     line_fields = list(lines['collection']['item']['fields']) if lines is not None else []
     named = {name for name, _ in grid if not name.startswith('@')}
-    columns = [{'name': name, 'label': label,
+    columns = [{'name': name, 'label': label, 'hint': COLUMN_HINTS.get(name),
                 'field': next((child for child in line_fields if child['name'] == name), None)}
                for name, label in grid]
     extras = ([child for child in line_fields
@@ -230,6 +261,7 @@ def layout(noun, leaves):
     tracks = [WIDTHS.get(column['name'], ('9rem', 9)) for column in columns] + [ACTIONS_WIDTH]
     return {'primary': primary, 'addresses': addresses, 'terms': terms, 'scope': scope,
             'lines': lines, 'columns': columns, 'line_extras': extras,
+            'line_pricing': LINE_PRICING,
             'footer': footer, 'pricing': pricing, 'record': record,
             'grid_template': ' '.join(track for track, _ in tracks),
             'grid_width': format(sum(width for _, width in tracks), 'g') + 'rem'}

@@ -73,8 +73,37 @@ def test_the_line_grid_carries_every_line_field_as_a_column_or_in_the_row_panel(
     shown = {column['name'] for column in bands['columns'] if column['field']}
     shown |= {child['name'] for child in bands['line_extras']}
     assert fields - shown == {'line_id'}, fields - shown
-    assert [column['label'] for column in bands['columns']][:4] == ['Item', 'Description', 'Quantity', 'Unit']
+    assert [column['label'] for column in bands['columns']][:4] == [
+        'Item', 'Description', 'Quantity', 'Unit of measure']
     assert [column['label'] for column in bands['columns']][-2:] == ['Amount', 'Tax']
+    # Every head says what it means, because a reader asked what Unit was next to Quantity.
+    assert all(column['hint'] for column in bands['columns']), bands['columns']
+
+
+@pytest.mark.parametrize('noun,verb', DOCUMENTS)
+def test_the_pricing_rule_is_in_the_row_panel_and_not_in_the_columns(noun, verb):
+    """It chooses which price input is live: a rule for the line, not one of its numbers."""
+    bands = D.layout(noun, _leaves(noun, verb))
+    assert '@pricing' not in {column['name'] for column in bands['columns']}
+    assert 'Pricing' not in {column['label'] for column in bands['columns']}
+    assert bands['line_pricing']['label'] and bands['line_pricing']['description']
+
+
+@pytest.mark.parametrize('noun,verb', DOCUMENTS)
+def test_the_pricing_control_still_submits_the_name_it_always_did(hosted, noun, verb):
+    browser = _browser(hosted)
+    company = hosted.company_id
+    if verb == 'update':
+        page = browser.get(f'/c/{company}/{noun}/{_seed(hosted, noun)}/update')
+    else:
+        page = browser.get(f'/c/{company}/{noun}/{verb}')
+    assert page.status_code == 200, page.text[:600]
+    assert 'name="price-mode:lines:__INDEX0__"' in page.text
+    # Reachable, and reachable from the row's own panel rather than from the columns.
+    panel = re.search(r'(?s)<details class="line-extras">.*?</details>', page.text)
+    assert panel is not None and 'price-mode:' in panel.group(0)
+    grid_head = re.search(r'(?s)<div class="line-head".*?</div>', page.text)
+    assert grid_head is not None and 'Pricing' not in grid_head.group(0)
 
 
 def test_the_estimate_carries_acceptance_only_where_the_command_accepts_it():

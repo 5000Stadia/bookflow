@@ -14,6 +14,8 @@
 {% else %}{{ collection_scalar(child, child_name, value, child_id, compact) }}{% endif %}
 {% endmacro %}
 
+{% macro price_mode(path, id) %}<select id="{{ id }}" name="price-mode:{{ path }}"><option value="">Keep entered pricing</option>{% for mode, label in [('catalog','Catalog price'),('manual','Rate you enter'),('markup','Cost plus markup'),('amount','Whole-line amount')] %}{% if work_form or mode != 'markup' %}<option value="{{ mode }}"{% if attempted.get('price-mode:' ~ path) == mode %} selected{% endif %}>{{ label }}</option>{% endif %}{% endfor %}</select>{% endmacro %}
+
 {% macro row_actions() %}
 <div class="line-cell line-cell-actions"><button type="button" data-collection-up aria-label="Move this line up">↑</button><button type="button" data-collection-down aria-label="Move this line down">↓</button><button type="button" data-collection-remove>Remove</button></div>
 {% endmacro %}
@@ -29,16 +31,17 @@
 {% else %}
 <input type="hidden" name="c:{{ path }}:line_id" value="{{ value.get('line_id') or '' if value is mapping else '' }}">
 {% for column in d.columns %}
-{% set cell_id = (("c:" ~ path ~ ":" ~ column.field.name) if column.field else ("price-mode:" ~ path)).replace(':', '-').replace('.', '-') %}
-<div class="line-cell">
-{% if column.name == '@amount' %}<span class="line-cell-label">{{ column.label }}</span><span class="line-amount">{{ amounts.amount if amounts else '—' }}</span>
-{% elif column.name == '@pricing' %}<label class="line-cell-label" for="{{ cell_id }}">{{ column.label }}</label><select id="{{ cell_id }}" name="price-mode:{{ path }}"><option value="">Keep entered pricing</option>{% for mode, label in [('catalog','Catalog price'),('manual','Rate you enter'),('markup','Cost plus markup'),('amount','Whole-line amount')] %}{% if work_form or mode != 'markup' %}<option value="{{ mode }}"{% if attempted.get('price-mode:' ~ path) == mode %} selected{% endif %}>{{ label }}</option>{% endif %}{% endfor %}</select>
-{% elif column.field %}<label class="line-cell-label" for="{{ cell_id }}">{{ column.label }}</label>{{ line_child(column.field, path, value.get(column.field.name) if value is mapping else none, true) }}
+{% set cell_id = (("c:" ~ path ~ ":" ~ column.field.name) if column.field else ("amount:" ~ path)).replace(':', '-').replace('.', '-') %}
+<div class="line-cell" data-line-column="{{ column.name }}"{% if column.hint %} title="{{ column.hint }}"{% endif %}>
+{% if column.name == '@amount' %}<span class="line-cell-label"><span class="line-cell-name">{{ column.label }}</span>{% if column.hint %}<small class="line-cell-hint"> — {{ column.hint }}</small>{% endif %}</span><span class="line-amount">{{ amounts.amount if amounts else '—' }}</span>
+{% elif column.field %}<label class="line-cell-label" for="{{ cell_id }}"><span class="line-cell-name">{{ column.label }}</span>{% if column.hint %}<small class="line-cell-hint"> — {{ column.hint }}</small>{% endif %}</label>{{ line_child(column.field, path, value.get(column.field.name) if value is mapping else none, true) }}
 {% endif %}
 </div>
 {% endfor %}
 {{ row_actions() }}
-{% if d.line_extras %}<details class="line-extras"><summary>More on this line</summary><div class="line-extra-fields">
+{% if d.line_extras or d.line_pricing %}<details class="line-extras"><summary>More on this line</summary><div class="line-extra-fields">
+{% if d.line_pricing %}{% set mode_id = ("price-mode:" ~ path).replace(':', '-').replace('.', '-') %}
+<div class="collection-field"><label for="{{ mode_id }}">{{ d.line_pricing.label }}<small>{{ d.line_pricing.description }}</small></label>{{ price_mode(path, mode_id) }}</div>{% endif %}
 {% for child in d.line_extras %}
 {% set child_name = "c:" ~ path ~ ":" ~ child.name %}
 <div class="collection-field"><label for="{{ child_name.replace(':', '-').replace('.', '-') }}">{{ child.label or child.name }}{% if child.required %} *{% endif %}<small>{{ child.description }}</small></label>{{ line_child(child, path, value.get(child.name) if value is mapping else none) }}</div>
@@ -70,7 +73,7 @@
 <section class="document-band" aria-label="Lines"><h2 class="band-title">Lines</h2>
 <div class="line-grid" data-collection data-collection-path="{{ d.lines.path }}" style="--line-columns: {{ d.grid_template }}; --line-width: {{ d.grid_width }}">
 <input type="hidden" name="collection:{{ d.lines.path }}" value="1">
-<div class="line-head" aria-hidden="true">{% for column in d.columns %}<span class="line-cell">{{ column.label }}</span>{% endfor %}<span class="line-cell line-cell-actions">Row</span></div>
+<div class="line-head" aria-hidden="true">{% for column in d.columns %}<span class="line-cell"{% if column.hint %} title="{{ column.hint }}"{% endif %}>{{ column.label }}{% if column.hint %}<small class="line-head-hint">{{ column.hint }}</small>{% endif %}</span>{% endfor %}<span class="line-cell line-cell-actions">Row</span></div>
 <div class="line-body" data-collection-items>{% for value in d.lines.collection["values"] %}{{ line_row(d.lines.collection.item, d.lines.path ~ ":" ~ loop.index0, value, d.line_amount(value.get('line_id') if value is mapping else none, loop.index0)) }}{% endfor %}</div>
 <template data-collection-template data-index-token="__INDEX0__">{{ line_row(d.lines.collection.item, d.lines.path ~ ":__INDEX0__", {}, none) }}</template>
 <button type="button" data-collection-add class="line-add">Add a line</button>

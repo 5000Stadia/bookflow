@@ -1,5 +1,4 @@
 <section id="financial-statement" aria-label="Financial statement">
-<h2>{{ 'Profit and loss' if verb == 'profit-and-loss' else 'Balance sheet' }}</h2>
 <p>{{ company_label }} · {{ statement.metadata.basis|capitalize }} · {{ statement.metadata.currency }} ·
 {% if statement.metadata.period.date_from %}{{ statement.metadata.period.date_from }} through {% else %}As of {% endif %}{{ statement.metadata.period.date_to }}</p>
 {% if statement.fiscal_year_start %}<p>Current fiscal year starts {{ statement.fiscal_year_start }}. Prior earnings and current-year income are calculated; posted equity is shown separately.</p>{% endif %}

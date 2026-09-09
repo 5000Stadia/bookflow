@@ -41,12 +41,18 @@
 .address-fields { display: grid; gap: .35rem .8rem;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); margin-top: .5rem; }
 
-/* The grid scrolls sideways inside itself and never widens the page. */
+/* Wide enough for a desktop, the grid scrolls sideways inside itself and never widens
+   the page. Narrow enough for a phone, it stops being a wide table at all — see the
+   stacked-card rules at the end of this file. */
 .line-grid { overflow-x: auto; min-width: 0; border: 1px solid #d0d9e4; border-radius: .3rem;
   background: #fff; }
 .line-head, .line-row { display: grid; grid-template-columns: var(--line-columns);
   min-width: var(--line-width); gap: 0; }
 .line-head { background: #f0f0f0; font-size: .78rem; font-weight: 600; color: #1f3a5f; }
+/* The head says what the column is and, once for the whole grid rather than once per
+   row, what it means: a reader asked what Unit was next to Quantity. */
+.line-head-hint { display: block; font-size: .68rem; font-weight: 400; color: #5c6874;
+  line-height: 1.2; overflow-wrap: anywhere; }
 .line-head .line-cell { padding: .35rem .45rem; border-bottom: 1px solid #ccd5dc; }
 .line-row { border-bottom: 1px solid #e6ebef; align-items: start; }
 .line-row:nth-child(even) { background: #fbfcfd; }
@@ -99,6 +105,59 @@
 
 @media (max-width: 700px) {
   .document-band .row.form-field { grid-template-columns: minmax(0, 1fr); }
+
+  /* A phone does not drag a thousand-pixel table through a three-hundred-pixel window.
+     A line item carries a lot of horizontal information, so below this width it stops
+     being a row of a wide table and becomes its own block: the prose fields full width,
+     the small numbers paired two to a row, the server's amount as the block's footer,
+     and the row's own controls at the end of it. `.line-row-allocated` already stops
+     being a grid row this way; this is the same move for an ordinary line. */
+  .line-grid { border: 0; background: transparent; }
+  .line-head { display: none; }
+  .line-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    min-width: 0; gap: .1rem .5rem; margin: .6rem 0; padding: .5rem;
+    border: 1px solid #c3d0de; border-radius: .35rem; background: #fff; }
+  .line-row:nth-child(even) { background: #fff; }
+  /* A billed-from-quoted-work line stays the read-only banner it already was, with the
+     Remove that releases its scope. */
+  .line-row.line-row-allocated { display: block; padding: 0; }
+
+  /* What the line is for reads across the block; the numbers pair up beside each other,
+     which is what keeps the block about nine rows tall instead of fourteen. */
+  .line-cell { display: block; padding: .25rem 0; border: 0; }
+  .line-cell[data-line-column="item"] { order: 1; grid-column: 1 / -1; }
+  .line-cell[data-line-column="description"] { order: 2; grid-column: 1 / -1; }
+  .line-cell[data-line-column="quantity"] { order: 3; }
+  .line-cell[data-line-column="unit"] { order: 4; }
+  .line-cell[data-line-column="unit_price"] { order: 5; }
+  .line-cell[data-line-column="tax_code"] { order: 6; }
+  .line-cell[data-line-column="estimated_unit_cost"] { order: 7; }
+  .line-cell[data-line-column="markup_percent"] { order: 8; }
+  .line-cell[data-line-column="class_id"] { order: 9; }
+
+  /* The number a person checks, as the block's own footer. Still the server's figure. */
+  .line-cell[data-line-column="@amount"] { order: 10; grid-column: 1 / -1;
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline;
+    gap: .5rem; margin-top: .35rem; padding: .4rem .4rem .3rem;
+    border-top: 1px solid #dde3ea; background: #f4f7fb; }
+  .line-amount { text-align: right; padding: 0; font-size: 1.05rem; font-weight: 700; }
+
+  .line-extras { order: 11; grid-column: 1 / -1; padding: .3rem 0 0; }
+  .line-cell-actions { order: 12; grid-column: 1 / -1; justify-content: flex-end;
+    padding-top: .3rem; }
+
+  /* The column heads are gone, so each control carries its own visible name instead.
+     Static positioning matters: absolute labels once widened the layout viewport. */
+  .line-cell-label { position: static; display: block; width: auto; height: auto;
+    margin: 0 0 .1rem; padding: 0; overflow: visible; clip-path: none;
+    white-space: normal; border: 0; font-size: .72rem; line-height: 1.15;
+    font-weight: 600; color: #3c4a5a; }
+  /* One block per line already repeats every name; the explanation stays for assistive
+     technology and does not repeat down the page. */
+  .line-cell-hint { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+  .line-cell input, .line-cell select { box-sizing: border-box; width: 100%; min-width: 0; }
+  .line-add { position: static; margin: .5rem 0; }
 }
 
 /* The way back to the documents already written. It wraps rather than widening the

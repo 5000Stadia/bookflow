@@ -27,6 +27,8 @@ from bookflow.adapters.workbench import billing as Billing
 from bookflow.adapters.workbench import home as Home
 from bookflow.adapters.workbench import document_form as Document
 from bookflow.adapters.workbench import document_nav as Nav
+from bookflow.adapters.workbench import list_paging as Paging
+from bookflow.adapters.workbench import naming as Naming
 from bookflow.core import registry
 from bookflow.core.errors import BookflowError
 from bookflow.core.money import CURRENCIES
@@ -38,6 +40,8 @@ HERE = Path(__file__).parent
 LAST_COMPANY = "bookflow_company"
 FLASH_TTL_SECONDS = 60.0
 env = Environment(loader=FileSystemLoader(str(HERE / "templates")), autoescape=select_autoescape(["html"]))
+# One humaniser for every template, so no table anywhere heads a column with a field name.
+env.filters["label"] = Naming.column_label
 
 
 class _FlashStore:
@@ -364,7 +368,7 @@ def _matching_vendor_link(
 def _inactive_toggle(path: str, request: Request, *, include: bool) -> str:
     """Toggle inactive rows without discarding any other list-page state."""
     pairs = [(key, value) for key, value in request.query_params.multi_items()
-             if key not in ("include_inactive", "cursor")]
+             if key not in ("include_inactive", *Paging.CARRIED)]
     if not include:
         pairs.append(("include_inactive", "1"))
     query = urlencode(pairs)
@@ -891,7 +895,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             if not all_page_verbs:
                 return page_error(request, BookflowError("E_USAGE", message=f"no such noun `{noun}`"))
             # a noun without a list (presence) still has a page: its actions
-            return render("list.html", request, has_show=registry.get(f"{noun} show") is not None, company_id=company_id, noun=noun, items=[], columns=[], meta=_noun_meta(noun),
+            return render("list.html", request, has_show=registry.get(f"{noun} show") is not None, company_id=company_id, noun=noun, items=[], columns=[], meta=meta,
+                          heading=Naming.list_heading(noun, meta), paging=Paging.controls(request.url.path, request.query_params, None),
                           has_inactive=False, include=False, verbs=page_verbs, extra={"note": "this noun has no list; use its actions"})
         if definition is not None and company_id:
             from bookflow.adapters.workbench import browsing
@@ -918,7 +923,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         for field in ("query", "sort", "direction", "date_from", "date_to", "status", "from_currency", "customer", "number", "title", "active", "minimum_net", "maximum_net"):
             value = request.query_params.get(field)
             if value and field in cmd.input_model.model_fields:
-                raw[field] = value
+                # The same typed translator the generated form uses, so a flag arrives
+                # as a flag and "unset" arrives as no filter at all.
+                raw[field] = F.query_value(cmd.input_model, field, value)
+        if noun in Paging.NEWEST_FIRST and "direction" in cmd.input_model.model_fields:
+            # A document list opens on what was written last, not on the oldest record.
+            raw.setdefault("direction", "desc")
         filters = [value for value in request.query_params.getlist("filter") if value.strip()]
         if filters and "filter" in cmd.input_model.model_fields:
             raw["filter"] = filters
@@ -928,7 +938,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             out = run(request, cmd.name, raw, company_id if cmd.scope == "company" else None)
         except BookflowError as e:
             if e.code == "E_QUERY_STALE":
-                restart = request.url.path + "?" + urlencode([(k, v) for k, v in request.query_params.multi_items() if k != "cursor"])
+                # Restart keeps the filters and drops the whole walk, cursors and all.
+                restart = request.url.path + "?" + urlencode([(k, v) for k, v in request.query_params.multi_items() if k not in Paging.CARRIED])
                 return render("error.html", request, error={**e.to_dict(), "message": "The list changed while you were browsing. Restart to see current results."}, restart_url=restart)
             return page_error(request, e)
         meta = _noun_meta(noun)
@@ -975,7 +986,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             selected_sort=raw.get("sort", ""),
             selected_direction=raw.get("direction", "asc"),
             selected_columns=",".join(columns),
-            next_url=(request.url.path + "?" + urlencode([(k, v) for k, v in request.query_params.multi_items() if k != "cursor"] + [("cursor", out["next_cursor"])])) if out.get("next_cursor") else None,
+            heading=Naming.list_heading(noun, meta),
+            paging=Paging.controls(request.url.path, request.query_params, out.get("next_cursor")),
             extra={k: v for k, v in out.items() if k not in ("items", "next_cursor", "projection")},
         )
 
@@ -1543,6 +1555,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         ):
             return_context = {"token": return_token, "target": return_target}
         return render("form.html", request, company_id=company_id, noun=noun, verb=verb, cmd=cmd, leaves=described, originals=originals,
+                      heading=Naming.heading(noun, verb, meta),
                       attempted=attempted, record_id=record_id, runtime_fields=runtime_fields,
                       captured_custom_fields=(shown or {}).get("revision", {}).get("custom_fields", []),
                       captured_foreign_lines=[line for line in (shown or {}).get("revision", {}).get("lines", []) if line.get("original_amount")],

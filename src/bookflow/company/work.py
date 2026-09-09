@@ -229,7 +229,11 @@ def page(s, ctx, inp, kind, *, history=False):
             query = query.where(r.c.net_minor_units >= low)
         if high is not None:
             query = query.where(r.c.net_minor_units <= high)
-        query = query.order_by(r.c.date, t.c.id)
+        # Descending is the exact reverse of the stated order, so the row before a
+        # given document is the row after it here. The cursor carries the direction
+        # that minted it: page_state rejects a continuation whose contract has changed.
+        order = (r.c.date, t.c.id)
+        query = query.order_by(*([column.desc() for column in order] if inp.direction == 'desc' else order))
     found = [dict(row) for row in s.company.conn.execute(query.offset(state.offset).limit(inp.limit + 1)).mappings()]
     more, found = len(found) > inp.limit, found[:inp.limit]
     shared = dict(count=len(found), has_more=more, next_cursor=continuation(state, len(found), more), audit_watermark=state.sequence)

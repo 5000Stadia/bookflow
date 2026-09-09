@@ -13,7 +13,7 @@ WRITE_DESCRIPTIONS = {
 }
 READ_DESCRIPTIONS = {
     'show': 'Show current or historical work facts, exact quoted totals, costs, completed quantities and source links; internal notes remain internal.',
-    'query': 'Find work by customer, number, title, date, status, availability and net amount. Continue bounded pages while the company audit watermark is unchanged.',
+    'query': 'Find work by customer, number, title, date, status, availability and net amount, oldest first or newest first. Continue bounded pages while the company audit watermark is unchanged.',
     'history': 'Page immutable work revisions in revision order, including decision evidence, linked source revisions and current document identity.',
 }
 

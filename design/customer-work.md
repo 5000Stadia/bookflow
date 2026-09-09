@@ -46,8 +46,10 @@ merge disjoint fields. Every supplied null has an explicit clear/reject meaning.
 
 Show selects current or a positive revision_number. Query filters exact customer,
 number/title text, date interval, status, active (default true; null means both),
-and inclusive minimum/maximum net amount. It orders by date then stable id,
-limits50/default,200/max, and uses the existing scope/permission-hash-checked audit-watermark continuation.
+and inclusive minimum/maximum net amount. It orders by date then stable id in the
+direction asked for (`asc` default, `desc` for the most recent first),
+limits50/default,200/max, and uses the existing scope/permission-hash-checked audit-watermark continuation,
+which a changed direction invalidates like any other changed argument.
 History is revision-number ordered and bounded. Show includes at most200 source
 links and an explicit next_links_cursor; passing links_cursor to show traverses
 them under the same company/permission/audit-watermark checks. Links expose both
