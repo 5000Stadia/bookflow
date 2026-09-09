@@ -56,3 +56,25 @@
   .deposit-totals td{text-align:left}
   .deposit-card,.deposit-row-card{padding:.65rem}
 }
+
+/* Saved list: exact source values, one table shared with phone cards and print. */
+.deposit-list #deposit-filters{display:flex;flex-wrap:wrap;align-items:end;gap:.7rem;margin:1rem 0}
+.deposit-list #deposit-filters label{display:flex;flex-direction:column;flex:1 1 12rem;min-width:0}
+.deposit-list #deposit-filters input,.deposit-list #deposit-filters select{width:100%;min-width:0;box-sizing:border-box}
+.deposit-list-totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr));gap:.6rem}
+.deposit-list dd{margin:.2rem 0 .7rem;font-variant-numeric:tabular-nums}
+.deposit-list-totals dd{font-weight:700}
+.deposit-list .document-lines{width:100%;table-layout:fixed;border-collapse:collapse}
+.deposit-list .document-lines td,.deposit-list .document-lines th{padding:.6rem;vertical-align:top;text-align:left;overflow-wrap:anywhere}
+.deposit-list .document-lines td{border-bottom:1px solid #c3d0de}
+.deposit-list .document-lines caption{text-align:left;font-weight:600}
+.deposit-list .document-prose p{white-space:pre-wrap}
+.deposit-list .document-lines .document-total{font-variant-numeric:tabular-nums;font-weight:700}
+@media screen and (max-width:700px){
+ .deposit-list .document-lines caption{display:block;width:100%;box-sizing:border-box}
+ .deposit-list .document-lines tr>td:nth-child(1),.deposit-list .document-lines tr>td:nth-child(3){grid-column:1 / -1}
+}
+@media print{
+ .deposit-list #deposit-filters,.deposit-list .deposit-actions,.deposit-list-back{display:none}
+ .deposit-list .document-lines{display:table;min-width:0}
+}

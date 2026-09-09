@@ -203,6 +203,12 @@ PANELS: tuple[Panel, ...] = (
                 action=Action("Post a journal entry", WRITE, ("journal post",), "/journal/post"),
             ),
             Step(
+                id="saved-deposits",
+                title="Saved deposits",
+                summary="Find deposits, compare current bank effects and open their composition.",
+                action=Action("Saved deposits", READ, ("deposit query",), "/deposit"),
+            ),
+            Step(
                 id="banking-deposit",
                 title="Make deposit",
                 summary="Take undeposited receipts into a bank account.",

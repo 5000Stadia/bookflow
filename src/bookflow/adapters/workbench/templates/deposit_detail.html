@@ -1,6 +1,7 @@
 {% extends "base.html" %}{% block title %}Deposit{% endblock %}{% block body %}
+<p class="deposit-list-back"><a href="{{ list_url }}">Back to saved deposits</a></p>
 <link rel="stylesheet" href="{{ static_urls['deposit.css'] }}">
-<nav class="crumbs deposit-crumbs"><a href="{{ company_url }}">Company</a> / {% if register_url %}<a href="{{ register_url }}">Bank register</a>{% else %}<a href="{{ accounts_url }}">Accounts and registers</a>{% endif %} / Deposit</nav>
+<nav class="crumbs deposit-crumbs"><a href="{{ company_url }}">Company</a> / {% if register_url %}<a href="{{ register_url }}">Bank register</a>{% else %}<a href="{{ accounts_url }}">Accounts and registers</a>{% endif %} / <a href="{{ list_url }}">Saved deposits</a> / Deposit</nav>
 {% if unavailable %}
 <h1 class="deposit-heading">Deposit</h1>
 <section class="deposit-unavailable" role="status" aria-label="Deposit unavailable">

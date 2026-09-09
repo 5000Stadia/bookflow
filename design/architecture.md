@@ -2347,3 +2347,5 @@ pager. Query publication retains a company-scoped page proof rather than a singl
 revision pin, with unchanged D11 identity/credential/company release checks. Public
 writes and source discovery keep their existing execution path. List templates
 remain unimplemented pending the measured population checkpoint.
+
+The saved-deposit list at `/c/{company}/deposit` renders the registered public query page through the deposit workbench adapter. Filters and continuation tokens remain command inputs; all whole-match and revision/effective amounts come from the public projection. A semantic table becomes screen-only phone cards using document-detail styles. Detail, revision and composition links carry a validated same-company list return location. The UI checkpoint includes a rendering smoke witness; complete paging, stale recovery and actual MCP journey verification remain pending.
