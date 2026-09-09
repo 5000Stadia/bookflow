@@ -73,6 +73,11 @@ class Admission:
                 raise AdmissionCancelled('publication admission closed')
             return ReadGeneration(self, self._epoch)
 
+    def check_generation(self, generation):
+        """Validate a reader snapshot against the existing admission generation."""
+        with self._mutex:
+            self._valid(generation)
+
     def _valid(self, generation):
         if (type(generation) is not ReadGeneration or generation.owner is not self
                 or generation.epoch is not self._epoch or self._barrier is not None):

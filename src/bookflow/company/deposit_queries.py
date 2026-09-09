@@ -73,8 +73,8 @@ def immutable(values):
     return [v.model_dump(mode='json',exclude={'current'}) if isinstance(v,m.SourceItem) else v.model_dump(mode='json') for v in values]
 
 
-def _show(s,data,inp,binding,*,with_guard=True):
-    sel=selected(data,inp.revision_number);effect=data.effects[sel.pin.revision_id];at=now();dated=None
+def _show(s,data,inp,binding,*,with_guard=True,at=None):
+    sel=selected(data,inp.revision_number);effect=data.effects[sel.pin.revision_id];at=at or now();dated=None
     groups=collections(data,sel.pin)
     fps={kind:pages.fingerprint(s,binding,'items',[sel.pin.model_dump(),kind,immutable(values)]) for kind,values in groups.items()}
     if inp.as_of:

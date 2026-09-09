@@ -112,7 +112,11 @@ def resolve_company(s: Session, selector: str | None, source: str) -> dict[str, 
     """Blueprint 5.3. Returns the hub company row or raises E_COMPANY_NOT_FOUND / E_COMPANY_AMBIGUOUS."""
     if selector is None:
         raise BookflowError("E_COMPANY_NOT_FOUND", message="No company selected; give --company, set BOOKFLOW_COMPANY, or run `bookflow company use <company>`.", details={"source": "none"})
-    vis = access.visible_company_filter(s)
+    return _resolve_visible_company(s, selector, source, access.visible_company_filter(s))
+
+
+def _resolve_visible_company(s, selector, source, vis):
+    """Shared name matching over a caller-owned current visibility predicate."""
     q = sa.select(h.companies).where(vis)
     if is_ulid(selector):
         row = s.hub.conn.execute(q.where(h.companies.c.id == normalize_ulid(selector))).mappings().first()
@@ -461,6 +465,12 @@ def _run(cmd: Command, raw_input: dict[str, Any], ctx: Context, *, data_root: st
         forwarded = try_forward(s.data_root, cmd, raw_input, ctx, company_selector, company_source, dry_run)
     if forwarded is not None:
         return forwarded
+
+    from bookflow.core.deposit_request import COMMANDS as DEPOSIT_COMMANDS
+    if cmd.name in DEPOSIT_COMMANDS:
+        from bookflow.core import deposit_offline
+        return guard(lambda: deposit_offline.run_command(s.data_root, cmd, raw_input, ctx,
+                    company_selector, company_source, dry_run), False)
 
     def under_lock():
         with private_umask(), RootLock(s.data_root, cmd.name):

@@ -1,0 +1,85 @@
+{% extends "base.html" %}{% block title %}Deposit composition{% endblock %}{% block body %}
+<link rel="stylesheet" href="{{ static_urls['deposit.css'] }}">
+<nav class="crumbs deposit-crumbs"><a href="{{ company_url }}">Company</a> / <a href="{{ detail_url }}">Deposit</a> / Composition</nav>
+<h1 class="deposit-heading">{{ item_links | selectattr('current') | map(attribute='label') | first | default('Composition') }}</h1>
+<p class="deposit-kinds">{% for link in item_links %}<a href="{{ link.url }}"{% if link.current %} aria-current="page" class="deposit-selected-kind"{% endif %}>{{ link.label }}</a>{% endfor %}</p>
+{% if stale %}
+<section class="deposit-card" role="status" aria-label="Page expired">
+<h2>This page moved on</h2>
+<p>The composition changed while you were paging through it. Your selection is kept{% if selection_label %}: {{ selection_label }}{% endif %}.</p>
+<p class="deposit-actions"><a href="{{ restart_url }}">Start this collection again</a><a href="{{ detail_url }}">Back to the deposit</a></p>
+</section>
+{% else %}
+<p class="deposit-lede">Captured revision {{ page.selected.revision_number }}{% if page.selected.revision_id != page.current.revision_id %} <span class="warn">(the current record is at version {{ page.current.version }})</span>{% else %} <span class="muted">(also the current revision)</span>{% endif %} · {{ page['items'] | length }} of {{ page.total_count }} rows on this page</p>
+
+{% if not page['items'] %}<p class="muted">This revision has no rows of this kind.</p>{% endif %}
+
+{% if page.kind == 'sources' %}
+{% for row in page['items'] %}
+<section class="deposit-row-card" aria-label="Contributing receipt {{ row.ordinal }}">
+<h2>Receipt {{ row.source.number }} <span class="muted">{{ row.source.source_type.replace('_', ' ') }}</span> <span class="deposit-amount{% if row.amount.negative %} deposit-negative{% endif %}{% if row.amount.zero %} deposit-zero{% endif %}">{{ row.amount.label }}</span></h2>
+<div class="deposit-fields">
+<div><b>Row</b><span>{{ row.ordinal }}</span></div>
+<div><b>Receipt date (captured)</b><span>{{ row.receipt_date }}</span></div>
+<div><b>Memo</b><span>{{ row.memo if row.memo else '—' }} <span class="muted">from the {{ row.memo_origin }}</span></span></div>
+<div><b>Receipt memo (captured)</b><span>{{ row.source_memo if row.source_memo else '—' }}</span></div>
+<div><b>Customer reference</b><span>{{ row.check_reference if row.check_reference else '—' }}</span></div>
+<div><b>Payer (captured)</b><span{% if row.payer.redacted %} class="deposit-redacted"{% endif %}>{{ row.payer.display_label }}</span></div>
+<div><b>From account (captured)</b><span{% if row.from_account.redacted %} class="deposit-redacted"{% endif %}>{{ row.from_account.display_label }}{% if not row.from_account.redacted and row.from_account.number %} · {{ row.from_account.number }}{% endif %}</span></div>
+<div><b>Payment method (captured)</b><span{% if row.payment_method and row.payment_method.redacted %} class="deposit-redacted"{% endif %}>{% if row.payment_method %}{{ row.payment_method.display_label }}{% else %}—{% endif %}</span></div>
+<div><b>Allocated to (captured)</b><span>{% if row.allocation_parties %}{% for party in row.allocation_parties %}<span{% if party.redacted %} class="deposit-redacted"{% endif %}>{{ party.display_label }}</span>{% if not loop.last %}, {% endif %}{% endfor %}{% else %}—{% endif %}</span></div>
+<div><b>Classes (captured)</b><span>{% if row.allocation_classes %}{% for grouping in row.allocation_classes %}<span{% if grouping.redacted %} class="deposit-redacted"{% endif %}>{{ grouping.display_label }}</span>{% if not loop.last %}, {% endif %}{% endfor %}{% else %}—{% endif %}</span></div>
+<div><b>Components</b><span>{% for component in row.components %}{{ component.ordinal }} · {{ component.kind.replace('_', ' ') }}{% if not component.present %} <span class="muted">absent</span>{% endif %}{% if not loop.last %}; {% endif %}{% endfor %}</span></div>
+</div>
+<h3>Current receipt</h3>
+<div class="deposit-fields">
+<div><b>Current status</b><span>{{ row.current.status }}</span></div>
+<div><b>Current version</b><span>{{ row.current.version }}</span></div>
+<div><b>Claimed by a deposit</b><span>{{ 'yes' if row.current.claimed else 'no' }}{% if row.current.claimed %} · {{ 'by this deposit' if row.current.claimed_by_this_deposit else 'by another deposit' }}{% endif %}</span></div>
+<div><b>Current payment method type</b><span>{{ row.current.payment_method_type if row.current.payment_method_type else '—' }}</span></div>
+</div>
+</section>
+{% endfor %}
+
+{% elif page.kind == 'additional' %}
+{% for row in page['items'] %}
+<section class="deposit-row-card" aria-label="Additional cash row {{ row.ordinal }}">
+<h2>Row {{ row.ordinal }} <span class="deposit-amount{% if row.amount.negative %} deposit-negative{% endif %}{% if row.amount.zero %} deposit-zero{% endif %}">{{ row.amount.label }}</span>{% if row.amount.negative %} <span class="muted">reduces the bank effect</span>{% endif %}{% if row.amount.zero %} <span class="muted">no effect</span>{% endif %}</h2>
+<div class="deposit-fields">
+<div><b>Memo</b><span>{{ row.memo if row.memo else '—' }}</span></div>
+<div><b>Check number</b><span>{{ row.check_number if row.check_number else '—' }}</span></div>
+<div><b>Account (captured)</b><span{% if row.account.redacted %} class="deposit-redacted"{% endif %}>{{ row.account.display_label }}{% if not row.account.redacted and row.account.number %} · {{ row.account.number }}{% endif %}</span></div>
+<div><b>Received from (captured)</b><span{% if row.party and row.party.redacted %} class="deposit-redacted"{% endif %}>{% if row.party %}{{ row.party.display_label }}{% else %}—{% endif %}</span></div>
+<div><b>Class (captured)</b><span{% if row.class_reference and row.class_reference.redacted %} class="deposit-redacted"{% endif %}>{% if row.class_reference %}{{ row.class_reference.display_label }}{% else %}—{% endif %}</span></div>
+<div><b>Payment method (captured)</b><span{% if row.payment_method and row.payment_method.redacted %} class="deposit-redacted"{% endif %}>{% if row.payment_method %}{{ row.payment_method.display_label }}{% else %}—{% endif %}</span></div>
+</div>
+</section>
+{% endfor %}
+
+{% else %}
+<div class="table-wrap" role="region" aria-label="Scrollable cash allocations" tabindex="0"><table class="deposit-allocations">
+<thead><tr><th>Business row</th><th>Component</th><th>Goes to</th><th>Offsetting row</th><th>Amount</th></tr></thead>
+<tbody>{% for row in page['items'] %}<tr><td class="deposit-id">{{ row.row_id }}</td><td>{{ row.component_ordinal }}</td><td>{{ row.bucket.replace('_', ' ') }}</td><td class="deposit-id">{{ row.additional_row_id if row.additional_row_id else '—' }}</td><td class="deposit-amount{% if row.amount.negative %} deposit-negative{% endif %}{% if row.amount.zero %} deposit-zero{% endif %}">{{ row.amount.label }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% endif %}
+
+{% if next_url %}<p class="pagination"><a href="{{ next_url }}" rel="next">Next page of {{ item_links | selectattr('current') | map(attribute='label') | first | default('rows') | lower }}</a></p>{% endif %}
+
+<section class="deposit-card" aria-label="Totals">
+<h2>Totals of the captured revision</h2>
+<div class="table-wrap" role="region" aria-label="Scrollable totals" tabindex="0"><table class="deposit-totals"><tbody>
+{% for label, value in [('Contributing receipts', page.totals.source_total), ('Additional cash in', page.totals.positive_additional_total), ('Additional cash out', page.totals.negative_additional_total), ('Subtotal', page.totals.subtotal), ('Cash back', page.totals.cash_back), ('Posting total', page.totals.posting_total), ('Bank total', page.totals.bank_total)] %}
+<tr><th scope="row">{{ label }}</th><td class="deposit-amount{% if value.negative %} deposit-negative{% endif %}{% if value.zero %} deposit-zero{% endif %}">{{ value.label }}{% if value.negative %} <span class="muted">reduces the bank effect</span>{% endif %}{% if value.zero %} <span class="muted">no effect</span>{% endif %}</td></tr>
+{% endfor %}
+</tbody></table></div>
+</section>
+
+<section class="deposit-card" aria-label="Current records named by this page">
+<h2>Current records this page names</h2>
+<p class="muted">Observed at {{ page.current_observed_at }}, separately from the captured values above.</p>
+{% if page.current_references %}<ul class="deposit-current-references">{% for reference in page.current_references %}<li><span class="muted">{{ reference.group.replace('_', ' ') }}</span> {{ reference.display_label }}{% if not reference.active %} <span class="muted">inactive</span>{% endif %}</li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
+</section>
+{% endif %}
+
+<p class="deposit-actions deposit-footer-actions"><a href="{{ detail_url }}">Back to the deposit</a><a href="{{ company_url }}">Company home</a><a href="{{ accounts_url }}">Accounts and registers</a></p>
+{% endblock %}

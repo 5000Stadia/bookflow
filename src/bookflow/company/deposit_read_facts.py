@@ -32,7 +32,7 @@ def invalid(error):
     raise BookflowError('E_DEPOSIT_SOURCE_INVALID') from None
 
 
-def load_complete(s,deposit_ids,*,binding):
+def load_complete(s,deposit_ids,*,binding,annotations=('note','attachment')):
     from bookflow.company import deposit_read_manifest as manifest
     authority.authenticate(s,binding)
     ids=tuple(sorted(set(deposit_ids)))
@@ -109,7 +109,7 @@ def load_complete(s,deposit_ids,*,binding):
             v.lifecycle(graph,header)
             _bank(s,graph,effects,header)
             for version in graph['bank_effect_versions']:links[identity].append(EvidenceLink(kind='bank_version',id=version['id'],related_id=version['key_id'],active=bool(version['active'])))
-            _associations(s,identity,links[identity])
+            if annotations:_associations(s,identity,links[identity],annotations)
             semantic=_history(graph,event_rows,outputs)
             navigation=_navigation(s,effects)
             result_sources={key:(source_graphs[key],source_headers[key],source_claims.get(key)) for key in source_ids}
@@ -200,8 +200,10 @@ def _navigation(s,effects):
     return tuple(result)
 
 
-def _associations(s,identity,links):
-    for r in s.company.conn.execute(sa.select(c.notes).where(c.notes.c.record_type=='transaction',c.notes.c.record_id==identity)).mappings():
-        links.append(EvidenceLink(kind='note',id=r['id']))
-    for r in s.company.conn.execute(sa.select(c.attachment_links).where(c.attachment_links.c.record_type=='transaction',c.attachment_links.c.record_id==identity)).mappings():
-        links.append(EvidenceLink(kind='attachment',id=r['id'],related_id=r['attachment_id'],active=r['active'],label=r['caption']))
+def _associations(s,identity,links,kinds=('note','attachment')):
+    if 'note' in kinds:
+        for r in s.company.conn.execute(sa.select(c.notes).where(c.notes.c.record_type=='transaction',c.notes.c.record_id==identity)).mappings():
+            links.append(EvidenceLink(kind='note',id=r['id']))
+    if 'attachment' in kinds:
+        for r in s.company.conn.execute(sa.select(c.attachment_links).where(c.attachment_links.c.record_type=='transaction',c.attachment_links.c.record_id==identity)).mappings():
+            links.append(EvidenceLink(kind='attachment',id=r['id'],related_id=r['attachment_id'],active=r['active'],label=r['caption']))
