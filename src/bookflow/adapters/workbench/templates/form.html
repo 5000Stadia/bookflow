@@ -6,6 +6,7 @@
 <nav class="crumbs"><a href="{{ base }}">{{ noun }}</a> / {{ verb or "run" }}</nav>
 {% if document_nav %}{% include "document_nav.html" %}{% endif %}
 <h1>{{ document.heading if document else heading }}</h1>
+{% if noun == 'item' and verb == 'create' %}<p class="workflow-note">For a service you sell, enter a description, income account, price and sales tax code. For an item you purchase, enable purchases and enter its purchase description, expense account and cost. Inventory uses a cost-of-goods-sold account instead of an expense account.</p>{% endif %}
 {% if document %}<p class="muted">{{ document.help }}</p><details class="technical-details"><summary>Command reference</summary><p>{{ cmd.description }}</p></details>
 {% elif noun == 'deposit' and verb == 'post' %}<p class="muted">Bank your received payments together as one deposit.</p><details><summary>Command reference</summary><p>{{ cmd.description }}</p></details>
 {% elif noun in ('estimate','work-order') and verb in ('billing','invoice','sales-receipt') %}<p class="muted">Review quoted, billed and remaining work before preparing the next bill.</p><details><summary>Billing rules and command help</summary><p>{{ cmd.description }}</p></details>

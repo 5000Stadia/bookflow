@@ -581,8 +581,7 @@ def _validate_profile(parsed: ItemInput, supplied: set[str]) -> None:
     if foreign:
         raise _validation(foreign[0], f"is not allowed for item type {item_type}")
     missing = sorted(field for field in profile.required if not _required(getattr(parsed, field)))
-    if missing:
-        raise _validation(missing[0], f"is required for item type {item_type}")
+    missing_fields = {field: f"is required for item type {item_type}" for field in missing}
 
     sales, purchase = _logical_defaults(item_type, parsed)
     if item_type in {"service", "non_inventory_part", "other_charge"} and not (sales or purchase):
@@ -593,12 +592,12 @@ def _validate_profile(parsed: ItemInput, supplied: set[str]) -> None:
     if sales and item_type in sided_types:
         for field in ("description", "income_account_id"):
             if not _required(getattr(parsed, field)):
-                raise _validation(field, "is required when sales are enabled")
+                missing_fields.setdefault(field, "is required when sales are enabled")
         if item_type == "service" and parsed.sales_tax_code_id is None:
-            raise _validation("sales_tax_code_id", "is required when service sales are enabled")
+            missing_fields.setdefault("sales_tax_code_id", "is required when service sales are enabled")
         if item_type != "other_charge" or parsed.charge_percent is None:
             if parsed.price is None:
-                raise _validation("price", "is required when sales are enabled")
+                missing_fields.setdefault("price", "is required when sales are enabled")
     if purchase and item_type in sided_types:
         required_purchase_fields = (
             ("purchase_description", "cogs_account_id")
@@ -607,10 +606,14 @@ def _validate_profile(parsed: ItemInput, supplied: set[str]) -> None:
         )
         for field in required_purchase_fields:
             if not _required(getattr(parsed, field)):
-                raise _validation(field, "is required when purchase is enabled")
+                missing_fields.setdefault(field, "is required when purchase is enabled")
         if item_type != "other_charge" or parsed.charge_percent is None:
             if parsed.cost is None:
-                raise _validation("cost", "is required when purchase is enabled")
+                missing_fields.setdefault("cost", "is required when purchase is enabled")
+    if missing_fields:
+        raise BookflowError("E_VALIDATION", details={"fields": [
+            {"field": field, "problem": problem} for field, problem in missing_fields.items()
+        ]})
     if not purchase and (parsed.preferred_vendor_id is not None or parsed.vendor_profiles):
         raise _validation("vendor_profiles", "requires an enabled purchase profile")
     if item_type == "other_charge" and parsed.charge_percent is not None:

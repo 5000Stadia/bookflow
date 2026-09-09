@@ -2295,3 +2295,5 @@ separate from this ordinary new-deposit picker. Exact JSON uses getRandomValues 
 its temporary integer-token prefix, including on plain HTTP LAN workstations.
 
 Work completion with an end timestamp but no start names `actual_start` (record when work began); timestamp-order checks still handle an end before its supplied start.
+
+Item profile validation reports missing type and enabled sales/purchase fields together in E_VALIDATION.fields. Zero prices and costs remain valid. Item creation shows sales/purchase setup guidance; accounting reference and profile rules remain authoritative.

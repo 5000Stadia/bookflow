@@ -54,6 +54,26 @@ def _assert_error(client, command: str, payload: dict[str, Any], code: str) -> B
     return caught.value
 
 
+def test_missing_service_fields_are_reported_together_then_corrected(client):
+    refs = _refs(client)
+    before = client.run("item list", {}, company=COMPANY)
+    error = _assert_error(client, "item create", {"name": "One correction", "type": "service"}, "E_VALIDATION")
+    assert {f["field"] for f in error.details["fields"]} == {
+        "description", "income_account_id", "price", "sales_tax_code_id"}
+    assert client.run("item list", {}, company=COMPANY) == before
+    created = _service(client, refs, name="One correction", price="0")
+    assert created["price"]["minor_units"] == 0
+
+
+def test_missing_purchase_fields_do_not_request_disabled_sales_fields(client):
+    error = _assert_error(client, "item create", {
+        "name": "Purchase service", "type": "service",
+        "sales_enabled": False, "purchase_enabled": True,
+    }, "E_VALIDATION")
+    assert {f["field"] for f in error.details["fields"]} == {
+        "purchase_description", "expense_account_id", "cost"}
+
+
 def test_every_item_type_has_a_complete_strict_exact_profile(client):
     refs = _refs(client)
     account = refs["accounts"]
