@@ -282,16 +282,17 @@ def test_registration_and_routing_alone_do_not_deliver_a_live_tile(hosted):
         navigate_witness(browser, reachable, "deposit")
 
 
-def test_a_destination_that_sends_a_signed_in_reader_to_login_never_passes_the_witness(hosted, monkeypatch):
-    """A different failure shape from a broken handler, and the one a bare 200 check would miss.
+def test_a_signed_in_reader_whose_command_refuses_sees_the_error_not_a_login(hosted, monkeypatch):
+    """The integration guarantee: a completed login is never answered with "log in again".
 
-    A route whose command refuses the credential answers 303 to /login, and the login page then
-    answers 200. A tile like that is a login loop, not a feature, so the witness must refuse it.
+    This pair used to be one test asserting the opposite, because `page_error` answered ANY
+    E_UNAUTHENTICATED with a 303 to /login regardless of session — an infinite loop for a reader
+    who had already logged in. That is fixed, so the signed-in half now asserts the fix, and the
+    witness half below produces the redirect the honest way, by not logging in at all.
     """
     browser = _browser(hosted)
     audit = next(item for panel in resolved(hosted.company_id)
                  for item in panel.steps if item.step.id == "audit")
-    navigate_witness(browser, audit, "audit")
 
     def refused(*args, **kwargs):
         raise BookflowError("E_UNAUTHENTICATED", message="No valid credential: log in, or send a bearer token.")
@@ -299,11 +300,27 @@ def test_a_destination_that_sends_a_signed_in_reader_to_login_never_passes_the_w
     command = registry.get("audit list")
     assert command is not None and command.name in {c.name for c in registry.routed_commands()}
     monkeypatch.setattr(command, "plan", refused)
-    trapped = browser.get(audit.href, follow_redirects=False)
+    answered = browser.get(audit.href, follow_redirects=False)
+    assert answered.status_code != 303, "a signed-in reader must never be sent back to the login page"
+    assert 'name="password"' not in answered.text, "a signed-in reader must never be shown a login form"
+
+
+def test_a_destination_that_sends_a_reader_to_login_never_passes_the_witness(hosted):
+    """A different failure shape from a broken handler, and the one a bare 200 check would miss.
+
+    A reader without a session is legitimately redirected to /login, and the login page then
+    answers 200. A witness that followed redirects, or that checked only the final status, would
+    call that a working tile. The witness must refuse it: the first response has to be the page
+    that was asked for.
+    """
+    stranger = TestClient(hosted.handle.app)
+    audit = next(item for panel in resolved(hosted.company_id)
+                 for item in panel.steps if item.step.id == "audit")
+    trapped = stranger.get(audit.href, follow_redirects=False)
     assert trapped.status_code == 303 and trapped.headers["location"].startswith("/login")
-    assert browser.get(trapped.headers["location"]).status_code == 200, "the login page itself answers 200"
+    assert stranger.get(trapped.headers["location"]).status_code == 200, "the login page itself answers 200"
     with pytest.raises(AssertionError):
-        navigate_witness(browser, audit, "audit")
+        navigate_witness(stranger, audit, "audit")
 
 
 def test_a_registered_command_whose_handler_fails_never_passes_the_witness(hosted, monkeypatch):
