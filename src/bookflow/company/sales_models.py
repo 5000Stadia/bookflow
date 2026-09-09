@@ -231,9 +231,9 @@ class SettlementPaymentVersion(StrictModel):
 
 class InvoiceUpdateInput(SalesUpdateInput, InvoiceFields):
     invoice: Selector
-    operation_key: Annotated[str, Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$')] | None = None
-    settlement_versions: list[SettlementPaymentVersion] = Field(default_factory=list)
-    settlement_guard: str | None = Field(default=None, max_length=2048)
+    operation_key: Annotated[str, Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$')] | None = Field(default=None, description='Required when the invoice has active payment applications. Choose one unique key for this correction and reuse it for preview, save and retries. When supplied, also give a reason of 1–140 characters.')
+    settlement_versions: list[SettlementPaymentVersion] = Field(default_factory=list, description='For a changed invoice with active payment applications, supply every funding payment and its current expected_version, or supply settlement_guard instead. Read invoice settlement to review current settlement evidence; do not provide both alternatives.')
+    settlement_guard: str | None = Field(default=None, max_length=2048, description='For a changed invoice with active payment applications, pass the guard returned by invoice settlement (or the settlement_dependencies error), or supply settlement_versions instead. After a stale rejection, review current settlement and preview again; do not provide both alternatives.')
 
     @model_validator(mode='after')
     def settlement_input(self):

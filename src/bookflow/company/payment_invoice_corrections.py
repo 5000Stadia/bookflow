@@ -23,7 +23,7 @@ def prepare(s, ctx, inp):
     apps = query.active_applications(s, invoice=facts['header']['id'])
     funding = {row['paying_transaction_id']: query.payment_facts(s, row['paying_transaction_id'], write=True) for row in apps}
     if apps and not inp.operation_key:
-        raise BookflowError('E_VALIDATION', details={'field': 'operation_key', 'reason': 'applied_invoice_correction'})
+        raise BookflowError('E_VALIDATION', message='This invoice has applied payments. Supply one operation_key for this correction and a reason; reuse the key for preview, save and retries.', details={'field': 'operation_key', 'reason': 'applied_invoice_correction'})
     if apps and inp.expected_version is None:
         raise BookflowError('E_VALIDATION', details={'field': 'expected_version'})
     if inp.operation_key and (not ctx.reason or not ctx.reason.strip() or len(ctx.reason) > 140):
@@ -48,7 +48,7 @@ def prepare(s, ctx, inp):
                         raise BookflowError('E_VALIDATION', message='Supply each payment version once.')
                     supplied[identifier] = ref.expected_version
                 if set(supplied) != set(funding):
-                    raise BookflowError('E_PREVIEW_STALE', details={'reason': 'settlement_dependencies',
+                    raise BookflowError('E_PREVIEW_STALE', message='Review invoice settlement, supply its settlement_guard or current settlement_versions for every applied payment, then preview again. The current guard is also included in this error.', details={'reason': 'settlement_dependencies',
                         'settlement_guard': dependencies.issue(s, 'invoice', facts['header']['id'])})
                 for identifier, payment in funding.items():
                     dependencies.payment_version(s, payment['header'], supplied[identifier])
