@@ -72,10 +72,11 @@ def _machine_zone() -> str | None:
         return None
 
 
-def create_human(s: Session, *, username: str, display_name: str, created_by: str, via: str, hub_admin: bool) -> dict[str, Any]:
+def create_human(s: Session, *, username: str, display_name: str, created_by: str, via: str, hub_admin: bool,
+                 password_hash: str | None = None) -> dict[str, Any]:
     if username_matches(s.hub, username):
         raise BookflowError("E_VALIDATION", details={"fields": [{"field": "username", "problem": "already in use"}]})
     row = {"id": new_id(), "kind": "human", "username": username, "display_name": display_name, "owner_user_id": None,
-           "password_hash": None, "hub_admin": hub_admin, "timezone": _machine_zone(), "active": True, **common(created_by, via)}
+           "password_hash": password_hash, "hub_admin": hub_admin, "timezone": _machine_zone(), "active": True, **common(created_by, via)}
     s.hub.conn.execute(h.users.insert().values(**row))
     return row

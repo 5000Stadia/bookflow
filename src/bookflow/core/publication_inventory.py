@@ -21,6 +21,9 @@ HUB = {
     "token list": "resolved_target_and_actor_projection",
     "token revoke": "resolved_target_and_exact_own_revocation_certificate",
     "user set-password": "resolved_human_target_and_current_self_or_admin",
+    "user add": "current_hub_admin_and_resolved_grant_scope",
+    "membership grant": "resolved_target_user_and_current_scope_administration",
+    "membership revoke": "resolved_target_user_and_current_scope_administration",
     "upgrade": "returned_company_registrations_and_shared_may_write",
 }
 

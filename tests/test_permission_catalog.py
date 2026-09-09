@@ -147,13 +147,15 @@ def test_exact_requirement_universes_and_effective_literal_migration_seeds():
 
 def test_explicit_admin_grant_only_and_unavailable_delete_contracts():
     expected_admin = {
-        c.AdminAction('admin:users', 'hub', 'hub_admin', True, False),
+        # `user add` and `membership grant`/`revoke` make user and member
+        # administration available; no command performs agent administration.
+        c.AdminAction('admin:users', 'hub', 'hub_admin', True, True),
         c.AdminAction('admin:agents', 'hub', 'hub_admin', True, False),
         c.AdminAction('admin:company:new', 'organization', 'admin', False, True),
     }
     for role, floor in (('readonly', 'admin'), ('standard', 'admin'), ('admin', 'admin'), ('owner', 'owner')):
         for domain in ('organization', 'company'):
-            expected_admin.add(c.AdminAction(f'admin:members:{role}:{domain}', domain, floor, True, False))
+            expected_admin.add(c.AdminAction(f'admin:members:{role}:{domain}', domain, floor, True, True))
     for key in ('organization:new', 'organization:rename', 'company:attach', 'company:detach', 'demo:reset'):
         expected_admin.add(c.AdminAction('admin:' + key, 'hub', 'hub_admin', False, True))
     assert set(c.FROZEN_ADMIN_ACTIONS) == expected_admin
@@ -171,10 +173,10 @@ def test_explicit_admin_grant_only_and_unavailable_delete_contracts():
 
 
 def test_frozen_manifest_digest_and_pure_import_boundary():
-    assert c.FROZEN_CATALOG.version == 'deposit-lifecycle-co0021-v1'
+    assert c.FROZEN_CATALOG.version == 'identity-commands-row7-v1'
     assert c.catalog_manifest(c.FROZEN_CATALOG, c.FROZEN_MANIFEST.standalone_names) == c.FROZEN_MANIFEST
     raw = json.dumps(asdict(c.FROZEN_CATALOG), sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode()
-    assert hashlib.sha256(raw).hexdigest() == '7e213af6aca70c7836e11c59728ea33542d4528f001d6e1106c9472b414d3bd8'
+    assert hashlib.sha256(raw).hexdigest() == '7f6381732c0a8bd81326572ad20455367d3e2cf9add51bf9b0844b7a3e2bbc56'
     for name in ('permission_catalog', 'permission_policy'):
         tree = ast.parse((ROOT / f'src/bookflow/hub/{name}.py').read_text())
         modules = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)} | {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}

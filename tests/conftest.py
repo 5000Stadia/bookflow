@@ -84,7 +84,12 @@ def cli(root):
 def make_actor(root: Path, username: str, *, hub_admin: bool = False, org_role: tuple[str, str] | None = None,
                company_role: tuple[str, str] | None = None, login: str | None = None,
                kind: str = "human", owner_user_id: str | None = None) -> str:
-    """Test-only fixture standing in for row 7's `user add` and `membership grant`."""
+    """Test-only: insert a user and memberships directly, and map an OS login to them.
+
+    `user add` and `membership grant` now do the first two parts as real commands
+    (see tests/test_identity_commands.py); no command maps an OS login, which is what
+    keeps this fixture. New tests about identity should use the commands.
+    """
     from bookflow.core.config import Config
     from bookflow.core.ids import new_id
     from bookflow.core.session import now_iso

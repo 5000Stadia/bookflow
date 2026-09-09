@@ -15,7 +15,7 @@
 <label>Original currency<input name="from_currency" value="{{ rate_filters.get('from_currency', '') }}" maxlength="3" placeholder="JPY"></label>
 <label>Page size<input name="limit" inputmode="numeric" data-math-scale="0" value="{{ rate_filters.get('limit', 50) }}"></label>
 <button>Apply</button><a href="{{ base }}">Reset</a></form>{% endif %}
-<p class="actions">{% for v in verbs %}{% if v.is_write and not v.version_source and not v.positional %}<a href="{{ base }}/{{ v.verb }}">{{ v.verb }}</a>{% endif %}{% endfor %}
+<p class="actions">{% for v in verbs %}{% if v.is_write and not v.version_source and (not v.positional or not has_show) %}<a href="{{ base }}/{{ v.verb }}">{{ v.verb }}</a>{% endif %}{% endfor %}
 {% if has_inactive %}<a href="{{ inactive_toggle }}">{{ "hide" if include else "include" }} inactive</a>{% endif %}</p>
 {% if meta.definition %}<form method="get" class="list-tools"><label>Search<input name="query" value="{{ query }}" placeholder="Search {{ meta.plural_label | lower }}"></label>
 <label>Filters{% for filter in filters %}<input name="filter" value="{{ filter }}" placeholder="field=value">{% endfor %}<input name="filter" value="" placeholder="field=value"></label>

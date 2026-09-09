@@ -181,7 +181,7 @@ src/bookflow/
     migrate.py           + migrate_company(): the one owner of company migrations: migrate entry by the system user, baseline entry, marker, hub projection entry
   hub/
     schema.py            users, api_tokens, agent_principals, agent_authority, organizations, companies, memberships, role_capabilities, features, audit_events, audit_entries; co-located table and column descriptions
-    users.py             bootstrap users, common() field helper, user_names()
+    users.py             bootstrap users, create_human(password_hash=...), common() field helper, user_names()
     access.py            memberships, org_role(), company_role() -> (access, role), visibility filters, role_satisfies()
     organizations.py     create (folder + marker + row), get, bump
     companies.py         register, get, list_visible, update, delete_company_rows, delete_organization_rows
@@ -249,6 +249,24 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - Company API paths require a ULID. An accompanying `X-Bookflow-Company` must be the same ULID after normalization; mismatch is `E_VALIDATION` before visibility lookup. Header-only company selection through `/commands/<noun.verb>` retains the ordinary selector rules.
 - Session and bearer liveness refreshes are throttled to five minutes. A browser session's database expiry and cookie `Max-Age` renew together; SSE does not renew the cookie. Password changes revoke every other session for the target and preserve bearer tokens.
 - Hub head `hub0009` adds assigned agent principals, authority epochs and token epoch bindings. Legacy agents become suspended without inferred assignments; existing agent tokens are revoked. Conversion and its safe system audit event commit in the same migration transaction. Human credentials and history survive. Hub head `hub0010` adds domestic ledger and report capabilities. Company head `co0007` adds journal document and posting history with retention triggers and a journal number sequence.
+- `commands/host_cmds.py` also registers the three identity commands that make more than one
+  workstation possible: `user add`, `membership grant` and `membership revoke`. `user add` is
+  `hub_admin`, human-only, and creates one human with `users.create_human`; given `--company` or
+  `--organization` it makes the first grant in the same transaction and the same audit event.
+  Supplying no password generates one and returns it once, in the shape `token issue` uses for its
+  secret; supplying one returns null there. Both membership commands resolve their scope through
+  `dispatch.resolve_company` / `resolve_organization`, so a scope the actor cannot see answers
+  exactly as an absent one does, and then require, from `hub/access.py`, administration of that same
+  scope — owner to grant, move or revoke an owner — which is the `admin:members:<role>:<domain>` row
+  of the frozen catalog rather than a new model. Both write through one `_grant`/revoke pair, so a
+  revoked row is reactivated in place rather than duplicated against the `uq_membership` constraint.
+  They are in `publication.MEMBERSHIP_EFFECTS`, so a member who hands back their own access still
+  receives the answer: the permit reconciles the actor's own membership change against this request's
+  own audit, and `host_cmds.republish_membership` therefore re-checks current scope administration
+  only when the target is someone else. Memberships are read fresh on every request, so a revocation
+  takes effect on the next call, on the next drain of an open event stream, and through an
+  already-issued bearer token, none of which carry authority of their own.
+
 - `hub/credentials.py` validates active identities and agent principal/assignment/suspension/epoch state for token authentication and issuance. The JSON HTTP/workbench command executor revalidates the admitted bearer or cookie through that same verifier inside the actual writer or reader session, before planning, preview, replay or effects. The private credential handle also checks that token id, user id, kind and principal match admission; no secret enters business input, Context or audit. This execution check preserves authorized self-revocation and does not claim a post-execution publication fence. Agent token principal and epoch are stored with the hash in one insert. Membership grants/denies and capability/feature projections remain compatibility state; full role/capability intersection, atomic membership reductions, reauthorization commands and publication fences remain Row7 integration work.
 - `company/journal_models.py`, `journals.py` and `journal_outputs.py` validate and project domestic journals with two through 200 positive, balanced entered lines. Stable headers retain immutable revisions and commercial lines. Posting batches and accounting lines retain exact source allocations. Corrections reverse the previous batch at its original accounting date and append a replacement; void appends an exact reversal and retains the header. SQLite rejects modification/deletion of historical rows and header deletion. Period checks and full-aggregate version conflicts run again in the writer transaction.
 - Journal numbering, header pointers, principal snapshots, revisions, posting effects, audit and idempotency share the company transaction. Ledger services preallocate their audit ID and return `Applied(audited=True)` without committing. Dispatch rolls a ledger no-op back to its business savepoint before retaining its retry result, so a ledger no-op does not refresh company principals. Ordinary list no-ops retain their principal-mirroring and projection-repair behavior.
@@ -411,7 +429,11 @@ Generated-documentation verification in `tests/test_docs_generation.py`, `tests/
 
 ## Known gaps carried to later rows
 
-- No `user add` or `membership grant`; tests insert users through the repository layer (tests/conftest.py::make_actor).
+- No command deactivates a user account or maps an OS login to one; `active` is enforced everywhere a
+  credential is resolved, but only a direct write sets it, which is why tests still create actors
+  through the repository layer (tests/conftest.py::make_actor). Removing someone's access is
+  `membership revoke`. There is no `membership list`: what a person holds is read from the hub audit
+  trail or the memberships table.
 - The currency table holds 155 codes; the remaining ISO 4217 codes are added on request.
 - Agent creation, assignment and reauthorization commands are not yet exposed. Existing agents remain suspended after upgrade. Credential invariant tests provision eligible authority explicitly through isolated repository fixtures; direct dispatch reason/provenance tests also construct internal agent sessions. CLI/Python token mode and full current-authority execution/publication fencing remain Row7 work.
 - The full budget fixture (5,000 creates and 5,000 updates) is run on demand with `BOOKFLOW_BUDGET_N=5000`; it measured audit 8.1 MB against live 1.6 MB, ratio 5.16, in 192 s; the default suite runs 200 rows.
