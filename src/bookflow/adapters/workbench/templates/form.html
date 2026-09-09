@@ -160,7 +160,7 @@
 {% else %}<input id="control-{{ index }}" name="{{ form_name }}" value="{{ cur if cur is not none else '' }}"{{ math_attrs(l, form_name) }} {% if l.math %}inputmode="decimal"{% elif l.kind == "number" %}inputmode="numeric"{% endif %}>{% endif %}
 {{ structured_help(l, form_name) }}
 </div>
-<span>{% for parent in l.object_controls or [] %}<label class="clear-control object-clear-control"><input type="checkbox" name="clear:{{ parent }}" value="1" {% if attempted.get("clear:" ~ parent) == "1" %}checked{% endif %}> clear entire {{ parent }} (overrides child fields)</label>{% endfor %}{% if cmd.clearable and not l.runtime and l.nullable and l.kind != "json" and not (noun == 'journal' and l.path == 'rate') %}<label class="clear-control"><input type="checkbox" name="clear:{{ l.path }}" value="1" {% if attempted.get("clear:" ~ l.path) == "1" %}checked{% endif %}> clear</label>{% endif %}</span>
+<span>{% for parent in l.object_controls or [] %}<label class="clear-control object-clear-control"><input type="checkbox" name="clear:{{ parent }}" value="1" {% if attempted.get("clear:" ~ parent) == "1" %}checked{% endif %}> Clear the entire {{ parent.replace('_', ' ') }} (overrides the fields inside it)</label>{% endfor %}{% if cmd.clearable and not l.runtime and l.nullable and l.kind != "json" and not (noun == 'journal' and l.path == 'rate') %}<label class="clear-control"><input type="checkbox" name="clear:{{ l.path }}" value="1" {% if attempted.get("clear:" ~ l.path) == "1" %}checked{% endif %}> clear</label>{% endif %}</span>
 </div>
 {% endmacro %}
 
