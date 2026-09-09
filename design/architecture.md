@@ -2293,3 +2293,5 @@ show command, so success returns to the company home with that confirmation.
 Advanced mode and custom fields remain available; correction/draft workspaces are
 separate from this ordinary new-deposit picker. Exact JSON uses getRandomValues for
 its temporary integer-token prefix, including on plain HTTP LAN workstations.
+
+Work completion with an end timestamp but no start names `actual_start` (record when work began); timestamp-order checks still handle an end before its supplied start.
