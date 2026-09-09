@@ -24,18 +24,42 @@ def _guards(value, key=None):
     if isinstance(value, (list, tuple)):
         return [_guards(item) for item in value]
     if key == 'dependency_guard' and isinstance(value, str):
-        body, signature = value.split('.')
-        payload = json.loads(base64.urlsafe_b64decode(body + '=' * (-len(body) % 4)))
+        # One base64url string of payload bytes followed by a 32-byte signature — not a
+        # dotted JWT. deposit_dependency_history.issue encodes b64(raw + signature) and its
+        # reader checks len(raw) > 32; this test asserted a '.' separator that never existed
+        # and could not have been noticed, because it had never been executed.
+        raw = base64.urlsafe_b64decode(value + '=' * (-len(value) % 4))
+        assert len(raw) > 32, 'guard carries a payload and a 32-byte signature'
+        payload = json.loads(raw[:-32])
         assert set(payload) == {'v', 'mode', 'company_id', 'actor_id', 'actor_kind', 'principal_id',
                                 'root', 'endpoint', 'issuer_entry', 'intent_digest', 'read_digest'}
-        assert len(base64.urlsafe_b64decode(signature + '=' * (-len(signature) % 4))) == 32
         return {name: '<graph-digest>' if name.endswith('_digest') else item
                 for name, item in sorted(payload.items())}
     return value
 
 
+def _provenance(value):
+    """Drop the MCP adapter's own error annotation before comparing surfaces.
+
+    `adapters/mcp/responses.annotate` adds operation / stage / outcome / operation_ref to an
+    error's details, documented in design/specs/9-mcp-adapter.md as adapter provenance: it tells
+    an agent whether its write was submitted before the failure, which is what makes a safe retry
+    possible. That is a deliberate MCP-only annotation, not a divergence in the command's answer,
+    so it is excluded from the cross-surface comparison rather than asserted away.
+    """
+    if isinstance(value, dict):
+        if set(value) >= {'code', 'message', 'details'} and isinstance(value.get('details'), dict):
+            details = {k: v for k, v in value['details'].items()
+                       if k not in ('operation', 'stage', 'outcome', 'operation_ref')}
+            return {**{k: _provenance(v) for k, v in value.items()}, 'details': details}
+        return {k: _provenance(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_provenance(item) for item in value]
+    return value
+
+
 def normalize_deposit(documents, root, baseline_ids):
-    return normalize(_guards(documents), root, baseline_ids)
+    return normalize(_provenance(_guards(documents)), root, baseline_ids)
 
 
 @pytest.fixture
