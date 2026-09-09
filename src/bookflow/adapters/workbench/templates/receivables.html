@@ -1,0 +1,26 @@
+<section id="receivables-report" aria-label="Receivables report">
+<h2>{{ 'A/R aging summary' if verb == 'ar-aging' else 'Open invoices' }}</h2>
+<p>{{ company_label }} · {{ receivables.metadata.basis|capitalize }} · {{ receivables.metadata.currency }} · As of {{ receivables.as_of }}</p>
+{% if verb == 'ar-aging' %}
+<p class="muted">Invoices are aged on their due date and carry what is still owed on them. An invoice due exactly 30 days before the as-of date is in 1-30. Unapplied customer credit and any receivable journal entry age on their own date, so the Total column equals Accounts Receivable on the balance sheet for the same date. A customer with nothing in any column is omitted.</p>
+<div class="table-wrap"><table id="receivables-totals"><caption>Whole-report totals — all pages</caption><thead><tr>{% for key in receivables.columns %}<th scope="col">{{ receivables.headings[key] }}</th>{% endfor %}<th scope="col">Total</th></tr></thead><tbody>
+<tr>{% for key in receivables.columns %}<td data-total="{{ key }}">{{ receivables.totals[key].amount }}</td>{% endfor %}<td data-total="total">{{ receivables.totals.total.amount }}</td></tr>
+</tbody></table></div>
+<p>{{ receivables.count }} customers on this page{% if receivables.next_cursor %}; more available{% endif %}. Select a customer to list that customer's open invoices. A job is its own row under the name of its parent.</p>
+<div class="table-wrap"><table id="receivables-aging"><thead><tr><th scope="col">Customer</th>{% for key in receivables.columns %}<th scope="col">{{ receivables.headings[key] }}</th>{% endfor %}<th scope="col">Total</th></tr></thead><tbody>
+{% for row in receivables.rows %}<tr><th scope="row"{% if row.parent_id %} style="padding-left:1.5rem"{% endif %} title="{{ row.current_customer_label or '' }}">{% if row.detail_url %}<a href="{{ row.detail_url }}">{{ row.display_customer_label }}</a>{% else %}{{ row.display_customer_label }}{% endif %}{% if row.active is not none and not row.active %} (inactive){% endif %}</th>{% for key in receivables.columns %}<td>{{ row[key].amount }}</td>{% endfor %}<td>{{ row.total.amount }}</td></tr>{% else %}<tr><td colspan="7">No customer owes anything on this date.</td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}
+<p class="muted">Unpaid and partly paid invoices, oldest due date first. Balance is what is still owed after everything applied to the invoice on or before the as-of date. Paid and voided invoices are omitted. This lists invoices only, so its Balance total is receivables before unapplied customer credit; the A/R aging summary is the report that ties to Accounts Receivable.</p>
+<div class="table-wrap"><table id="receivables-totals"><caption>Whole-report totals — all pages</caption><thead><tr><th scope="col">Amount</th><th scope="col">Applied</th><th scope="col">Balance</th></tr></thead><tbody>
+<tr>{% for key in ('amount', 'applied', 'balance') %}<td data-total="{{ key }}">{{ receivables.totals[key].amount }}</td>{% endfor %}</tr>
+</tbody></table></div>
+<p>{{ receivables.count }} invoices on this page{% if receivables.next_cursor %}; more available{% endif %}. Select an invoice number to open it.</p>
+<div class="table-wrap"><table id="receivables-open"><thead><tr><th scope="col">Due</th><th scope="col">Days past due</th><th scope="col">Column</th><th scope="col">Invoice</th><th scope="col">Customer</th><th scope="col">Amount</th><th scope="col">Applied</th><th scope="col">Balance</th></tr></thead><tbody>
+{% for row in receivables.rows %}<tr><td>{{ row.due_date }}</td><td>{{ row.days_past_due }}</td><td>{{ receivables.headings[row.aging_bucket] }}</td><td><a href="{{ row.detail_url }}">{{ row.number }}</a></td><td title="{{ row.current_customer_label or '' }}">{{ row.display_customer_label }}</td><td>{{ row.amount.amount }}</td><td>{{ row.applied.amount }}</td><td>{{ row.balance.amount }}</td></tr>{% else %}<tr><td colspan="8">No invoice is open on this date.</td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% if receivables.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="receivables-next-page">{% for name, value in receivables.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}<button name="action" value="submit">Next page</button></form>{% endif %}
+<p class="muted">Generated {{ receivables.metadata.generation_time }} · Audit watermark {{ receivables.metadata.audit_watermark }}. Any audited company change requires restarting the report. Change the filters below to start a new report.</p>
+<details><summary>Structured report data</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
+</section>

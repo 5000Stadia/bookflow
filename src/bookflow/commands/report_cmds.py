@@ -8,6 +8,26 @@ from bookflow.company.financial_statements import (
     ProfitAndLossInput, ProfitAndLossOutput, BalanceSheetInput, BalanceSheetOutput,
     profit_and_loss, balance_sheet,
 )
+from bookflow.company.receivable_reports import (
+    ArAgingInput, ArAgingOutput, OpenInvoicesInput, OpenInvoicesOutput,
+    ar_aging, open_invoices,
+)
+
+
+@command("report ar-aging", scope="company", required_role="member", capability="reports",
+    description="Accrual receivables aged by invoice due date as of as_of, one row per customer or job, in Current, 1-30, 31-60, 61-90 and Over 90 columns. An invoice due exactly 30 days before as_of is 1-30. Invoices carry their remaining balance; unapplied customer credit and receivable journal entries age by accounting date, so the aging total equals Accounts Receivable on the balance sheet for the same date. All-zero customers are omitted; totals cover every customer and rows are paged.",
+    input_model=ArAgingInput, output_model=ArAgingOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_ar_aging(inp, ctx, s):
+    return Plan(preview=ar_aging(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report open-invoices", scope="company", required_role="member", capability="reports",
+    description="Unpaid and partly paid invoices as of as_of, oldest due date first, each with its due date, days past due, aging column, original amount, applied amount and remaining balance. Paid and voided invoices are omitted. This lists invoices only, so its total is receivables before unapplied customer credit; use report ar-aging for the balance that ties to Accounts Receivable. Totals cover the whole filter and rows are paged.",
+    input_model=OpenInvoicesInput, output_model=OpenInvoicesOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND"])
+def plan_open_invoices(inp, ctx, s):
+    return Plan(preview=open_invoices(inp, s, principal_id=ctx.on_behalf_of))
 
 
 @command("report trial-balance", scope="company", required_role="member", capability="reports",

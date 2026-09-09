@@ -176,7 +176,7 @@ def test_frozen_manifest_digest_and_pure_import_boundary():
     assert c.FROZEN_CATALOG.version == 'identity-commands-row7-v1'
     assert c.catalog_manifest(c.FROZEN_CATALOG, c.FROZEN_MANIFEST.standalone_names) == c.FROZEN_MANIFEST
     raw = json.dumps(asdict(c.FROZEN_CATALOG), sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode()
-    assert hashlib.sha256(raw).hexdigest() == '7f6381732c0a8bd81326572ad20455367d3e2cf9add51bf9b0844b7a3e2bbc56'
+    assert hashlib.sha256(raw).hexdigest() == 'c4fc3f62afda6fba4d60bed71278d460586b3e6115458af540f0a303abd41c11'
     for name in ('permission_catalog', 'permission_policy'):
         tree = ast.parse((ROOT / f'src/bookflow/hub/{name}.py').read_text())
         modules = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)} | {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
