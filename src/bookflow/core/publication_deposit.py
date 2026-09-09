@@ -4,22 +4,28 @@ The sibling of ``publication_audit`` for the two registered deposit reads. A
 proof is a process-owned value, never a token, a cursor or an activation switch,
 and a fresh reader is mandatory for every hosted release check.
 
-**The proof compares audience-derived facts only, and that is load bearing.**
+**The proof carries audience-derived facts only, and that is load bearing.**
 The private inspection guard's ``read_digest`` is derived from readset relation
-anchors, so it moves whenever a reference the reader may not see changes.
-Keeping that guard off the wire is necessary but not sufficient: a proof that
-captured the private readset, the guard, or the connected closure would refuse
-release after a hidden-only change, and an observable refusal is the same
-disclosure arriving through the release path instead of the response body. So
-the only things compared here are the disclosed document this reader received
-and the exact failure it received instead — both already audience-filtered by
-the public projector. Admission is not compared; it is re-performed, by running
-the same producer again, which denies for a reader who has actually lost access
-and stays silent for a change that reader could never observe.
+anchors, so it moves whenever a reference the reader may not see changes. A
+proof that captured the private readset, the guard, or the connected closure
+would let a hidden-only change produce an observable refusal, which is the same
+disclosure arriving through the release path instead of the response body. So a
+proof holds only what this reader was actually shown: the disclosed document, or
+the exact closed failure it received instead.
 
-The observation instant travels in the proof for the same reason. Re-execution
-pins it, so a release compares the same document rather than refusing because
-the clock advanced past a dated cutoff.
+**Release re-establishes authority; it does not re-read.** Under the accepted
+D11 narrowing, reconstructing and comparing the whole audience-filtered result
+at every release lost its justification, and so did treating an ordinary
+same-company edit as invalidating an already captured coherent read merely
+because a current label moved. What release still proves, every time and never
+inferred from an unchanged epoch or from a reused earlier answer, is written out
+in :func:`revalidate_proof`. Cross-company leakage stays a blocking boundary;
+same-company inference does not. The financial validation itself is undiminished
+- it runs in full at execution, which is now the only place this module reads.
+
+The observation instant still travels in the proof, because the disclosed
+document quotes it and any re-execution of the same request has to be able to
+reproduce that document rather than differ only by the clock.
 """
 from dataclasses import dataclass
 import hashlib
@@ -103,6 +109,8 @@ class DepositProof:
             raise TypeError('captured observation instant required')
         pin = ()
         if document is not None:
+            if document.get('company_id') != request.company:
+                raise TypeError('the disclosed document must belong to the requested company')
             selected = document['selected']
             selected = selected['pin'] if request.command == 'deposit show' else selected
             pin = (selected['deposit_id'], selected['revision_id'], selected['revision_number'])
@@ -119,6 +127,16 @@ class DepositProof:
 
     def matches(self, result):
         return self.digest == _digest(result)
+
+
+def _scoped(proof):
+    """Every released value belongs to the company the request names.
+
+    Checked where the proof is built and again at every release, so a document
+    projected in one company can never leave through a request for another.
+    """
+    if proof.document is not None and proof.document.get('company_id') != proof.request.company:
+        _deny()
 
 
 def _produce(session, request, audience, at):
@@ -153,22 +171,47 @@ def execute_detail(reader: BoundReader, request: DepositRequest, binding, *, ctx
 
 
 def revalidate_proof(reader: BoundReader, proof: DepositProof, binding, *, ctx=None):
-    """Re-run the same request under current authority and compare what it discloses."""
+    """Re-establish authority for one already captured result, without re-reading.
+
+    Everything below is evaluated on every call. Nothing is memoized across the
+    parts of one response and nothing is inferred from an unchanged epoch: a
+    credential can expire between two parts of the same delivery with no commit
+    anywhere, so a release that reused an earlier answer would let an expired
+    credential finish reading.
+
+    Proved here, every time:
+
+    * the supplied producer is genuinely this reader's own and the reader still
+      authenticates, which for a token credential is where revocation, the
+      principal authority epoch and **expiry** are decided;
+    * the credential itself still revalidates in the session that releases it;
+    * the captured result is attributed to the identity now asking for it;
+    * that identity currently holds admitted access to the **selected company**,
+      through the same actor-and-principal intersection execution used;
+    * the captured result belongs to that company, so nothing crosses one;
+    * a captured failure is still the failure this company answers with, when
+      the company itself is what refuses.
+
+    Deliberately not proved here, under the accepted narrowing: that the whole
+    audience-filtered document would come out identical if the read ran again.
+    An ordinary same-company edit no longer invalidates a coherent captured
+    read. Nothing about the connected closure is re-derived either, because
+    deriving it is the read.
+    """
     if type(proof) is not DepositProof:
         _deny()
+    _scoped(proof)
     audience = pa.audience(reader, binding)
     if audience.identity != proof.identity:
         _deny()
     try:
         session = reads.open_selected(reader, audience, proof.request.company, ctx)
-        value = _produce(session, proof.request, audience, proof.observed_at)
+        binding.revalidate(session.hub)
     except BookflowError as error:
         if proof.failure is None or CapturedFailure.capture(error) != proof.failure:
             _deny()
         audience.validate()
         return
-    if proof.failure is not None or not proof.matches(value.model_dump(mode='json')):
-        _deny()
     audience.validate()
 
 

@@ -10,6 +10,7 @@ import contextlib
 import copy
 import dataclasses
 import json
+from datetime import timedelta
 
 import pytest
 
@@ -46,14 +47,19 @@ def request_for(world, command, **raw):
 class Prepared:
     """One executed request plus the permit that will publish it."""
 
-    def __init__(self, world, command, at=FIXED, **raw):
+    def __init__(self, world, command, at=FIXED, credential=None, **raw):
+        from bookflow.adapters.http.execution import _reader_binding
         from bookflow.core import identity_admin_binding as ib
         self.ctx = Context.new('python', 'Public deposit publication witness')
         self.command = registry.REGISTRY[command]
         from bookflow.core.config import os_login
-        self.binding = OSBinding.capture(world['host'], os_login())
+        # An OS producer by default; a bearer credential where the witness needs
+        # one, because only a token credential can expire.
+        self.binding = credential or OSBinding.capture(world['host'], os_login())
+        admitted = (self.binding if credential is None
+                    else _reader_binding(world['host'], credential, self.ctx.request_id))
         self.request = request_for(world, command, **raw)
-        with ib.hosted_reader(world['host'], self.binding, request_id=self.ctx.request_id) as reader:
+        with ib.hosted_reader(world['host'], admitted, request_id=self.ctx.request_id) as reader:
             identity = reader.authenticate()
             self.result, self.proof = owner.execute_detail(reader, self.request, self.binding,
                                                            ctx=self.ctx, at=at)
@@ -123,8 +129,14 @@ def test_a_hidden_only_change_never_refuses_release(world, command, raw):
 
     Prepare under a class deny, change that class, release. The private
     inspection guard moves - it is derived from readset relation anchors - so a
-    proof that compared the readset, the guard, or the connected closure would
-    deny here. The public document is unchanged, so release is silent.
+    proof that captured the readset, the guard, or the connected closure would
+    deny here.
+
+    Under the narrowed release check this is now true twice over: release
+    compares no document at all. What the byte-identity assertion below still
+    earns on its own is that the *projector* is audience-safe, which is what
+    keeps a hidden change out of the response body as well as out of the
+    release path.
     """
     denied = ('class',)
     set_denies(world, denied)
@@ -152,28 +164,65 @@ def test_a_hidden_only_change_never_refuses_release(world, command, raw):
         set_denies(world, ())
 
 
-def test_a_disclosed_change_does_refuse_release(world):
-    """The same mutation shape, on a master this reader is admitted to.
+def test_an_ordinary_same_company_edit_no_longer_refuses_release(world):
+    """The narrowing, stated as the behaviour it changes.
 
-    The pair matters more than either half: renaming the denied class and
-    renaming the admitted bank account are the same kind of change to the same
-    kind of record. Only admission differs, and only the admitted one refuses.
+    Renaming the deposit's own bank account is an ordinary same-company edit by
+    someone who may make it, and the reader is admitted to that account, so the
+    label it would read really did move. Before the narrowing this refused,
+    because release reconstructed and compared the whole document. It no longer
+    does: an already captured coherent read is not invalidated by a later
+    same-company edit. The refusals that remain are authority refusals, and they
+    are witnessed separately below.
     """
     prepared = Prepared(world, 'deposit show', deposit=world['deposit'])
     named = {row['id']: row['label'] for row in prepared.result['current_references']}
     assert world['bank'] in named
     prepared.release(world)
     rename(world, 'account', 'account', world['bank'], 'Public detail bank renamed')
-    with pytest.raises(BookflowError) as caught:
-        prepared.release(world)
-    assert caught.value.code == 'E_PERMISSION'
-    assert caught.value.details == {'stage': 'publication', 'reason': 'authority_changed',
-                                    'outcome': 'unknown'}
-    # And the refusal really is about the disclosed label, not the clock.
+    # The edit is real and this reader can see it.
     with support.reading(world) as (session, audience, binding):
         after = owner._produce(session, prepared.request, audience, prepared.proof.observed_at)
     changed = {row.id: row.label for row in after.current_references}
     assert changed[world['bank']] == 'Public detail bank renamed' != named[world['bank']]
+    assert after.model_dump(mode='json') != prepared.result
+    # And release is silent about it.
+    prepared.release(world)
+
+
+def test_release_performs_no_deposit_projection_at_all(world):
+    """Enforcement, not declaration: one projection per request, at execution.
+
+    The counter is the same one the surface measurements used. If release ever
+    reconstructs the result again - for any reason, on any surface - this goes
+    red rather than merely getting slower.
+    """
+    from bookflow.company import deposit_public_reads as reads_module
+    from bookflow.core import publication_deposit
+    tally = []
+    originals = {}
+
+    def wrap(module, name):
+        originals[(module, name)] = getattr(module, name)
+
+        def counting(*args, **rest):
+            tally.append(name)
+            return originals[(module, name)](*args, **rest)
+        setattr(module, name, counting)
+
+    wrap(reads_module, 'show')
+    wrap(reads_module, 'items')
+    wrap(publication_deposit, 'revalidate_proof')
+    try:
+        prepared = Prepared(world, 'deposit show', deposit=world['deposit'])
+        assert tally.count('show') == 1, tally
+        tally.clear()
+        prepared.release(world)
+        prepared.release(world)
+        assert tally == ['revalidate_proof', 'revalidate_proof'], tally
+    finally:
+        for (module, name), original in originals.items():
+            setattr(module, name, original)
 
 
 def test_revocation_between_prepare_and_release_refuses(world):
@@ -186,8 +235,14 @@ def test_revocation_between_prepare_and_release_refuses(world):
     prepared.release(world)
 
 
-def test_a_retained_denial_releases_and_a_regained_capability_refuses(world):
-    """A failure proof is held to the same standard as a success proof."""
+def test_a_retained_denial_still_releases_after_the_capability_returns(world):
+    """A retained non-disclosing refusal is a coherent captured result.
+
+    It is also the *more* restrictive answer, so releasing it to a reader who
+    has since regained the connected capability discloses nothing. Before the
+    narrowing this refused; the refusal was the expensive re-read, not a
+    boundary.
+    """
     with denying(world, ('customer-work',)):
         prepared = Prepared(world, 'deposit show', deposit=world['work'])
         assert prepared.proof.failure is not None
@@ -196,9 +251,12 @@ def test_a_retained_denial_releases_and_a_regained_capability_refuses(world):
         assert prepared.proof.failure.code == 'E_RECORD_NOT_FOUND'
         assert prepared.proof.failure.details == ()
         prepared.release(world)
-    with pytest.raises(BookflowError) as caught:
-        prepared.release(world)
-    assert caught.value.code == 'E_PERMISSION'
+    prepared.release(world)
+    # Losing access to the company itself is a different question, and still refuses.
+    with denying(world, ('ledger.read',)):
+        with pytest.raises(BookflowError) as caught:
+            prepared.release(world)
+        assert caught.value.code == 'E_PERMISSION'
 
 
 # ------------------------------------------------- unknown history, both ways
@@ -272,8 +330,13 @@ def test_damage_outside_the_reference_groups_is_never_hidden(world):
                 assert detail.inspection.history == 'unknown_history', denies
 
 
-def test_a_repaired_history_refuses_release(world, monkeypatch):
-    """Prepared unknown and unguarded, repaired complete: release must refuse."""
+def test_a_repaired_history_no_longer_refuses_release(world, monkeypatch):
+    """Prepared unknown and unguarded, repaired complete: release stays silent.
+
+    The owning plan required this to refuse. The accepted narrowing supersedes
+    that clause: a history repair is an ordinary same-company change, and the
+    captured `unknown_history` answer was coherent when it was taken.
+    """
     from bookflow.company import deposit_dependency_history as history_owner
     with support.reading(world) as (session, audience, binding):
         assert reads.show(session, m.ShowInput(deposit=world['deposit']),
@@ -284,8 +347,123 @@ def test_a_repaired_history_refuses_release(world, monkeypatch):
         prepared = Prepared(world, 'deposit show', deposit=world['deposit'])
         assert prepared.result['inspection']['history'] == 'unknown_history'
         prepared.release(world)
+    with support.reading(world) as (session, audience, binding):
+        assert reads.show(session, m.ShowInput(deposit=world['deposit']),
+                          audience=audience).inspection.history == 'complete'
+    prepared.release(world)
+
+
+# ------------------------------------------- what release still refuses
+
+
+def bearer(world, *, days=1, label='Publication expiry bearer'):
+    """A real bearer credential with a real expiry, issued with the host down."""
+    from bookflow.adapters.http.app import Credential
+    from bookflow.core.config import Config, os_login
+    support.stop(world)
+    issued = world['client'].token.issue(label=label, days=days)
+    uid = Config.load(world['root'] / 'config.toml').user_table(os_login())['user_id']
+    support.start(world, serving=True)
+    return Credential(uid, issued['token_id'], 'bearer', issued['label'],
+                      actor_kind='human', secret=issued['secret']), issued
+
+
+def token_row(world, token_id):
+    import sqlite3
+    connection = sqlite3.connect(world['root'] / 'hub.db')
+    try:
+        connection.row_factory = sqlite3.Row
+        row = connection.execute('SELECT * FROM api_tokens WHERE id=?', (token_id,)).fetchone()
+        generation = connection.execute('SELECT generation FROM permission_state WHERE id=1').fetchone()[0]
+        return dict(row), generation
+    finally:
+        connection.close()
+
+
+def test_an_expired_credential_refuses_between_parts(world, monkeypatch):
+    """Expiry is clock-dependent and moves with no commit, so it is re-asked.
+
+    A response is released part by part, and each part re-checks. This runs two
+    checks on one already captured result and moves only the clock between them.
+    Nothing is written: the token row and the permission generation are asserted
+    identical across the move. A release that reused its earlier answer - or
+    that inferred safety from an unchanged epoch - would let the second part go
+    out on an expired credential.
+    """
+    from bookflow.core import clock
+    credential, issued = bearer(world)
+    prepared = Prepared(world, 'deposit show', deposit=world['deposit'], credential=credential)
+    assert prepared.proof.failure is None
+    before, generation = token_row(world, credential.token_id)
+    assert before['expires_at'] and before['revoked_at'] is None
+    # Part one releases.
+    prepared.release(world)
+    later = clock.now() + timedelta(days=days_until(before['expires_at']) + 1)
+    monkeypatch.setattr(clock, 'now', lambda: later)
+    # Part two, same result, same permit, only the clock moved.
     with pytest.raises(BookflowError) as caught:
         prepared.release(world)
+    assert caught.value.code == 'E_UNAUTHENTICATED'
+    after, generation_after = token_row(world, credential.token_id)
+    assert after == before and generation_after == generation, 'the clock moved, nothing committed'
+    monkeypatch.undo()
+    # And it comes back when the clock does, so the refusal was the expiry.
+    prepared.release(world)
+
+
+def days_until(expires_at):
+    from bookflow.core import clock
+    return max(1, (clock.parse_iso(expires_at) - clock.now()).days + 1)
+
+
+def second_company(world):
+    """One more company in the same organization, created with the host down."""
+    if world.get('other_cid'):
+        return world['other_cid']
+    support.stop(world)
+    created = world['client'].run('company new', dict(
+        organization='Demo Holdings LLC', legal_name='Public Detail Second Co',
+        display_name='Public Detail Second Co', home_currency='USD'))
+    support.start(world, serving=True)
+    world['other_cid'] = created['id'] if 'id' in created else created['company_id']
+    return world['other_cid']
+
+
+def test_a_captured_result_cannot_cross_a_company_boundary(world):
+    """Cross-company leakage stays blocking; the narrowing does not touch it.
+
+    Access is per company, so a result captured in one company is released only
+    while its reader still holds that company - proved here by denying the read
+    in this company while the same reader keeps another one.
+    """
+    other = second_company(world)
+    assert other != world['cid']
+    prepared = Prepared(world, 'deposit show', deposit=world['deposit'])
+    assert prepared.result['company_id'] == prepared.request.company == world['cid']
+    prepared.release(world)
+    with denying(world, ('ledger.read',)):
+        with pytest.raises(BookflowError) as caught:
+            prepared.release(world)
+        assert caught.value.code == 'E_PERMISSION'
+        # The denial really is scoped to one company: the same reader, in the
+        # same moment, still opens the other one.
+        with support.reading_hub(world) as (reader, audience, binding, ctx):
+            reads.open_selected(reader, audience, other, ctx)
+    prepared.release(world)
+
+
+def test_a_document_from_another_company_can_never_be_sealed_or_released(world):
+    """The scope check is enforced where a proof is built and again at release."""
+    prepared = Prepared(world, 'deposit show', deposit=world['deposit'])
+    foreign = dict(prepared.result, company_id=second_company(world))
+    with pytest.raises(TypeError):
+        owner.DepositProof(prepared.proof.identity, prepared.request, foreign,
+                           _seal=owner._SEAL, observed_at=FIXED)
+    mutated = owner.DepositProof(prepared.proof.identity, prepared.request, dict(prepared.result),
+                                 _seal=owner._SEAL, observed_at=FIXED)
+    object.__setattr__(mutated, 'document', foreign)
+    with pytest.raises(BookflowError) as caught:
+        owner._scoped(mutated)
     assert caught.value.code == 'E_PERMISSION'
 
 

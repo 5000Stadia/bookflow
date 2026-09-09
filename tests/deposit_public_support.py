@@ -242,6 +242,20 @@ def reading(world, *, ctx=None):
 
 
 @contextmanager
+def reading_hub(world, *, ctx=None):
+    """An authenticated reader and its audience, with no company opened yet."""
+    from bookflow.company import deposit_public_authority as pa
+    from bookflow.core import identity_admin_binding as ib
+    from bookflow.core.config import os_login
+    from bookflow.core.context import Context
+    from bookflow.core.publication import OSBinding
+    ctx = ctx or Context.new('python', 'Public deposit hub witness')
+    admitted = OSBinding.capture(world['host'], os_login())
+    with ib.hosted_reader(world['host'], admitted, request_id=ctx.request_id) as reader:
+        yield reader, pa.audience(reader, admitted), admitted, ctx
+
+
+@contextmanager
 def offline_reading(world, *, ctx=None):
     """A reader with no host at all, over the private execution bridge."""
     from bookflow.company import deposit_public_authority as pa
