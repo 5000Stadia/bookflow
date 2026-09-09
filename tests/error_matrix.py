@@ -327,3 +327,310 @@ MATRIX['deposit sources'] = {
     'E_SCHEMA_BEHIND': 'company database behind the deposit feature revision',
     'E_DEPOSIT_SOURCE_INVALID': 'captured receipt cash provenance unsupported or inconsistent',
 }
+
+# --- Row 5 bounded discovery: option catalogs and owned collections ----------
+# Both commands page through query.page_state, so their cursor guard is the same
+# company audit sequence the ordinary `query` verb pins.
+_OPTIONS_ERRORS = {
+    'E_LIST_FILTER': 'kind=choices names a definition this list does not own, or one whose kind is not choice',
+    'E_QUERY_STALE': 'company audit changed after the first options page; restart without a cursor',
+}
+_CHILDREN_ERRORS = {
+    'E_LIST_FILTER': 'column names no owned collection of this list',
+    'E_QUERY_STALE': 'company audit changed after the first collection page; restart without a cursor',
+    'E_RECORD_NOT_FOUND': 'the owning record selector resolves to no row in this list',
+}
+for _noun in _SUPPORTING_LIST_NOUNS:
+    MATRIX[f'{_noun} query options'] = dict(_OPTIONS_ERRORS)
+for _noun in ('custom-field', 'item', 'price-level', 'unit-of-measure', 'vendor'):
+    MATRIX[f'{_noun} query children'] = dict(_CHILDREN_ERRORS)
+
+# --- Settlement: sale-side declarations --------------------------------------
+# The six sales writes share one declaration list, but only `invoice update`
+# routes into payment_invoice_corrections/payment_restatement, and only
+# InvoiceUpdateInput carries operation_key. The other five inherit these three
+# codes with no path that raises them; the declarations, not the rows, are the
+# drift.
+_SALES_SETTLEMENT_UNREACHED = {
+    'E_HAS_APPLICATIONS': 'inherited from the shared sales-write list; no path in this command raises it',
+    'E_APPLIED_EXCEEDS_TOTAL': 'inherited from the shared sales-write list; only invoice update restates settlement',
+    'E_PAYMENT_OPERATION_KEY_REUSED': 'inherited from the shared sales-write list; only invoice update accepts operation_key',
+}
+MATRIX['invoice update'].update({
+    'E_HAS_APPLICATIONS': 'the correction moves the settlement owner (payer, receivable account or currency) or dates the invoice after a live application',
+    'E_APPLIED_EXCEEDS_TOTAL': 'the corrected invoice total is below the amount already applied to it',
+    'E_PAYMENT_OPERATION_KEY_REUSED': 'operation_key already names a different original invoice correction',
+})
+MATRIX['invoice post'].update(_SALES_SETTLEMENT_UNREACHED)
+MATRIX['invoice void'].update(_SALES_SETTLEMENT_UNREACHED)
+MATRIX['invoice void']['E_HAS_APPLICATIONS'] = 'the invoice still carries active applications; unapply them before voiding'
+for _verb in ('post', 'update', 'void'):
+    MATRIX[f'sales-receipt {_verb}'].update(_SALES_SETTLEMENT_UNREACHED)
+for _verb in ('update', 'void'):
+    MATRIX[f'sales-receipt {_verb}']['E_DEPOSIT_DEPENDENCY'] = 'a deposit claims this receipt; correct the receipt and the deposit in one coordinated write'
+
+# --- Settlement: payment writes ----------------------------------------------
+# receive/apply run payments.prepare; unapply/void divert to payment_cancellation
+# and update to payment_corrections, so the five verbs reach quite different
+# parts of the shared declaration.
+_PAYMENT_WRITE_ERRORS = {
+    'E_RECORD_NOT_FOUND': 'receipt, invoice, customer, receivable or deposit-to account, payment method or shared draft absent from the selected company',
+    'E_VERSION_CONFLICT': 'stale expected_version on the receipt, on a selected invoice, or on the shared draft',
+    'E_APPLICATION_CAPACITY': 'an application exceeds the cash received, the credit still owned by that party, or the invoice amount due',
+    'E_APPLICATION_INCOMPATIBLE': 'a selected invoice has a different customer family, receivable account or currency than the credit',
+    'E_APPLICATION_INACTIVE': 'the receipt is not posted, or a named application was already reversed',
+    'E_PAYMENT_OPERATION_KEY_REUSED': 'operation_key already names a different original settlement request',
+    'E_SELECTION_CONSUMED': 'the named shared draft was already consumed by a settlement operation',
+    'E_PREVIEW_STALE': 'expected_facts_fingerprint, or the facts re-resolved inside the write transaction, differ from the previewed settlement',
+    'E_PERIOD_CLOSED': 'the receipt, replacement or application date is on or before the closing date',
+    'E_INACTIVE_REFERENCE': 'inactive customer, receivable account, deposit-to account or payment method',
+    'E_DUPLICATE_NUMBER': 'the supplied receipt number belongs to another payment',
+    'E_AMOUNT_PRECISION': 'a money input has more decimal places than the home currency supports',
+    'E_VALUE_RANGE': 'a posting amount, component capacity or accumulated total exceeds signed 64-bit range',
+    'E_REASON_REQUIRED': 'a void or correction has no reason, or an agent/system write supplies neither reason nor directive',
+    'E_HAS_APPLICATIONS': 'active applications block this change; unapply them first',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+_UNREACHED_HERE = 'inherited from the shared payment-write list; no path in this verb raises it'
+for _verb in ('receive', 'apply', 'unapply', 'void', 'update'):
+    MATRIX[f'payment {_verb}'] = dict(_PAYMENT_WRITE_ERRORS)
+for _verb in ('receive', 'apply'):
+    MATRIX[f'payment {_verb}']['E_RECOVERY_PENDING'] = 'the named shared draft has an unresolved recovery attempt; settle it with payment recovery first'
+    MATRIX[f'payment {_verb}']['E_HAS_APPLICATIONS'] = _UNREACHED_HERE
+for _verb in ('update', 'void'):
+    MATRIX[f'payment {_verb}']['E_DEPOSIT_DEPENDENCY'] = 'a deposit claims this receipt; correct the receipt and the deposit in one coordinated write'
+MATRIX['payment receive'].update({
+    'E_VERSION_CONFLICT': 'stale expected_version on a selected invoice or on the named shared draft',
+    'E_APPLICATION_CAPACITY': 'the applications total more than the cash received, or one exceeds its invoice amount due',
+    'E_DUPLICATE_NUMBER': 'the supplied receipt number is already allocated to another payment',
+    'E_APPLICATION_INACTIVE': _UNREACHED_HERE,
+})
+MATRIX['payment apply'].update({
+    'E_APPLICATION_CAPACITY': 'the application exceeds the credit still available on the receipt, or the invoice amount due',
+    'E_APPLICATION_INACTIVE': 'the receipt being applied is not posted',
+    'E_DUPLICATE_NUMBER': _UNREACHED_HERE,
+})
+MATRIX['payment unapply'].update({
+    'E_APPLICATION_INACTIVE': 'a named application is absent or already reversed, or the receipt is not posted',
+    'E_VERSION_CONFLICT': 'stale expected_version on the receipt or on an invoice named by invoice_expected_version',
+    'E_HAS_APPLICATIONS': _UNREACHED_HERE,
+    'E_APPLICATION_CAPACITY': _UNREACHED_HERE,
+    'E_APPLICATION_INCOMPATIBLE': _UNREACHED_HERE,
+    'E_SELECTION_CONSUMED': _UNREACHED_HERE,
+    'E_DUPLICATE_NUMBER': _UNREACHED_HERE,
+    'E_AMOUNT_PRECISION': _UNREACHED_HERE,
+})
+MATRIX['payment void'].update({
+    'E_HAS_APPLICATIONS': 'the receipt still carries active applications; unapply them before voiding',
+    'E_REASON_REQUIRED': 'the void has no reason of 1 to 140 characters, or an agent/system write supplies neither reason nor directive',
+    'E_VERSION_CONFLICT': 'stale expected_version on the receipt',
+    'E_APPLICATION_INACTIVE': _UNREACHED_HERE,
+    'E_APPLICATION_CAPACITY': _UNREACHED_HERE,
+    'E_APPLICATION_INCOMPATIBLE': _UNREACHED_HERE,
+    'E_SELECTION_CONSUMED': _UNREACHED_HERE,
+    'E_DUPLICATE_NUMBER': _UNREACHED_HERE,
+    'E_AMOUNT_PRECISION': _UNREACHED_HERE,
+})
+MATRIX['payment update'].update({
+    'E_HAS_APPLICATIONS': 'the corrected receipt date is later than the effective date of a live application',
+    'E_REASON_REQUIRED': 'the correction has no reason of 1 to 140 characters, or an agent/system write supplies neither reason nor directive',
+    'E_VERSION_CONFLICT': 'stale expected_version on the receipt or on a related invoice named by invoice_versions',
+    'E_PREVIEW_STALE': 'the supplied settlement_guard no longer matches, or invoice_versions omits a related invoice; a fresh guard is returned',
+    'E_DUPLICATE_NUMBER': 'the corrected receipt number belongs to another payment',
+    'E_APPLICATION_INACTIVE': _UNREACHED_HERE,
+    'E_APPLICATION_CAPACITY': _UNREACHED_HERE,
+    'E_APPLICATION_INCOMPATIBLE': _UNREACHED_HERE,
+    'E_SELECTION_CONSUMED': _UNREACHED_HERE,
+})
+
+# --- Settlement: shared nonposting drafts ------------------------------------
+_SELECTION_WRITE_ERRORS = {
+    'E_RECORD_NOT_FOUND': 'draft, funding receipt, selected invoice, customer or receivable account absent from the selected company',
+    'E_VERSION_CONFLICT': 'stale expected_version on the draft, on a selected invoice, or on the adopted funding receipt',
+    'E_SELECTION_CONSUMED': 'the draft was already consumed by a settlement operation and no longer accepts edits',
+    'E_APPLICATION_INCOMPATIBLE': 'a selected invoice has a different customer family, receivable account or currency than the draft context',
+    'E_PREVIEW_STALE': "a selected invoice's amount due changed, or the manifest re-derived inside the write transaction differs from the previewed one",
+    'E_INACTIVE_REFERENCE': 'inactive customer or receivable account',
+    'E_AMOUNT_PRECISION': 'a header or row amount has more decimal places than the home currency supports',
+    'E_RECOVERY_PENDING': 'this draft has an unresolved recovery attempt; resolve it before editing',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+_UNREACHED_DRAFT = 'inherited from the shared draft-write list; no path in this verb raises it'
+for _verb in ('create', 'update', 'clear'):
+    MATRIX[f'payment selection {_verb}'] = dict(_SELECTION_WRITE_ERRORS)
+MATRIX['payment selection create'].update({
+    'E_RECORD_NOT_FOUND': 'funding receipt, customer or receivable account absent from the selected company',
+    'E_PREVIEW_STALE': 'the draft context re-derived inside the write transaction differs from the previewed one',
+    'E_AMOUNT_PRECISION': 'the header amount has more decimal places than the home currency supports',
+    'E_VERSION_CONFLICT': _UNREACHED_DRAFT,
+    'E_SELECTION_CONSUMED': _UNREACHED_DRAFT,
+    'E_APPLICATION_INCOMPATIBLE': _UNREACHED_DRAFT,
+    'E_RECOVERY_PENDING': _UNREACHED_DRAFT,
+})
+MATRIX['payment selection clear'].update({
+    'E_APPLICATION_INCOMPATIBLE': _UNREACHED_DRAFT,
+    'E_AMOUNT_PRECISION': _UNREACHED_DRAFT,
+})
+MATRIX['payment selection show'] = {
+    'E_RECORD_NOT_FOUND': 'draft or requested revision absent from the selected company',
+    'E_RECOVERY_PENDING': "the draft's recovery barrier is inconsistent, or a consumed draft has no readable operation",
+}
+MATRIX['payment selection items'] = {
+    'E_RECORD_NOT_FOUND': 'draft or pinned revision absent from the selected company',
+    'E_QUERY_STALE': 'the pinned revision manifest changed between manifest pages; restart without a cursor',
+}
+MATRIX['payment selection query'] = {
+    'E_QUERY_STALE': 'company audit changed between draft pages; restart without a cursor',
+    'E_RECOVERY_PENDING': "a listed draft's recovery barrier is inconsistent, or a consumed draft has no readable operation",
+}
+
+# --- Settlement: preparation reads -------------------------------------------
+# One declaration list covers four reads that do very different work: only
+# `calculate` resolves caller-supplied applications, so only it checks invoice
+# versions, compatibility and row amounts.
+_PREPARATION_UNREACHED = 'inherited from the shared preparation-read list; no path in this command raises it'
+MATRIX['payment invoices'] = {
+    'E_RECORD_NOT_FOUND': 'customer, funding receipt or receivable account absent from the selected company',
+    'E_QUERY_STALE': 'candidate facts changed between candidate pages; restart without a cursor',
+    'E_INACTIVE_REFERENCE': 'inactive customer or receivable account',
+    'E_VERSION_CONFLICT': _PREPARATION_UNREACHED,
+    'E_APPLICATION_INCOMPATIBLE': _PREPARATION_UNREACHED,
+    'E_AMOUNT_PRECISION': _PREPARATION_UNREACHED,
+}
+MATRIX['payment suggest'] = {
+    'E_RECORD_NOT_FOUND': 'customer, funding receipt or receivable account absent from the selected company',
+    'E_QUERY_STALE': 'candidate facts changed between suggestion pages; restart without a cursor',
+    'E_INACTIVE_REFERENCE': 'inactive customer or receivable account',
+    'E_AMOUNT_PRECISION': 'the suggested amount has more decimal places than the home currency supports',
+    'E_VERSION_CONFLICT': _PREPARATION_UNREACHED,
+    'E_APPLICATION_INCOMPATIBLE': _PREPARATION_UNREACHED,
+}
+MATRIX['payment calculate'] = {
+    'E_RECORD_NOT_FOUND': 'customer, funding receipt, receivable account, draft or a named invoice absent from the selected company',
+    'E_VERSION_CONFLICT': 'stale expected_version on a named invoice or on the referenced draft',
+    'E_QUERY_STALE': "a selected invoice's amount due or the funding receipt version moved under the calculation, or the pinned facts changed between pages",
+    'E_APPLICATION_INCOMPATIBLE': 'a named invoice has a different customer family, receivable account or currency than the calculation context',
+    'E_INACTIVE_REFERENCE': 'inactive customer or receivable account',
+    'E_AMOUNT_PRECISION': 'a header or row amount has more decimal places than the home currency supports',
+}
+MATRIX['payment query'] = {
+    'E_RECORD_NOT_FOUND': 'a customer, component customer or payment method filter resolves to nothing',
+    'E_QUERY_STALE': 'company audit changed between receipt pages; restart without a cursor',
+    'E_PAYMENT_PROFILE_INVALID': 'a stored receipt profile snapshot no longer decodes into a payment profile',
+    'E_VERSION_CONFLICT': _PREPARATION_UNREACHED,
+    'E_APPLICATION_INCOMPATIBLE': _PREPARATION_UNREACHED,
+    'E_INACTIVE_REFERENCE': _PREPARATION_UNREACHED,
+    'E_AMOUNT_PRECISION': _PREPARATION_UNREACHED,
+}
+
+# --- Settlement: reads over committed effect ---------------------------------
+MATRIX['payment show'] = {'E_RECORD_NOT_FOUND': 'receipt or requested revision absent from the selected company'}
+MATRIX['payment history'] = {
+    'E_RECORD_NOT_FOUND': 'receipt, or a profile or audit event its history cites, absent from the selected company',
+    'E_QUERY_STALE': 'company audit changed between history pages; restart without a cursor',
+}
+MATRIX['payment settlement'] = {
+    'E_RECORD_NOT_FOUND': 'receipt absent from the selected company',
+    'E_QUERY_STALE': 'company audit changed between component or application pages; restart without a cursor',
+}
+MATRIX['invoice settlement'] = {
+    'E_RECORD_NOT_FOUND': 'invoice absent from the selected company',
+    'E_QUERY_STALE': 'company audit changed between settlement pages; restart without a cursor',
+}
+MATRIX['payment settlement changes'] = {
+    'E_RECORD_NOT_FOUND': 'the guard names an owner absent from the selected company',
+    'E_PREVIEW_STALE': 'the settlement_guard is unsigned, malformed, or issued for another company or owner',
+    'E_QUERY_STALE': 'the intervening-change set moved between pages; restart without a cursor',
+}
+MATRIX['application show'] = {'E_RECORD_NOT_FOUND': 'application or its exact inverse absent from the selected company'}
+MATRIX['application history'] = {
+    'E_RECORD_NOT_FOUND': 'application, or an audit event its history cites, absent from the selected company',
+    'E_QUERY_STALE': 'company audit changed between history pages; restart without a cursor',
+}
+MATRIX['payment operation show'] = {'E_RECORD_NOT_FOUND': 'operation_key names no permanent operation in the selected company'}
+MATRIX['payment operation items'] = {
+    'E_RECORD_NOT_FOUND': 'operation_key names no permanent operation in the selected company',
+    'E_QUERY_STALE': 'the stored operation effect changed between effect pages; restart without a cursor',
+}
+# payment preview items re-runs the write preparation purely. It converts the
+# four codes below into E_PREVIEW_STALE before returning, so they are declared
+# but never surface from this command.
+_PREVIEW_CONVERTED = 'raised by the re-run preparation but converted to E_PREVIEW_STALE before it leaves this command'
+MATRIX['payment preview items'] = {
+    'E_RECORD_NOT_FOUND': 'receipt, invoice, draft or referenced record absent from the selected company',
+    'E_PREVIEW_STALE': 'the intent is already committed, the recomputed facts fingerprint differs from the supplied one, the cursor does not belong to this page contract, or a converted staleness cause (see below)',
+    'E_PERIOD_CLOSED': 'the prospective receipt or application date is on or before the closing date',
+    'E_INACTIVE_REFERENCE': 'the prospective write references an inactive customer, account or payment method',
+    'E_APPLICATION_INCOMPATIBLE': 'a prospective application targets a different customer family, receivable account or currency',
+    'E_VERSION_CONFLICT': _PREVIEW_CONVERTED,
+    'E_APPLICATION_CAPACITY': _PREVIEW_CONVERTED,
+    'E_SELECTION_CONSUMED': _PREVIEW_CONVERTED,
+    'E_QUERY_STALE': _PREVIEW_CONVERTED,
+}
+
+# --- Settlement: durable recovery of an interrupted draft edit ---------------
+# All twelve commands are declared from one ERRORS list in
+# commands/payment_recovery_cmds.py, so each row below narrows that list to what
+# the command's own path can produce.
+_RECOVERY_MEANINGS = {
+    'E_RECORD_NOT_FOUND': 'recovery, draft, draft revision or a named invoice absent from the selected company',
+    'E_VERSION_CONFLICT': 'stale expected_recovery_version, or the draft moved off the anchor version and revision this attempt was opened against',
+    'E_RECOVERY_PENDING': "the draft's recovery barrier is inconsistent, or another attempt is already live on it",
+    'E_RECOVERY_INCOMPLETE': 'the declared entries are not all uploaded in contiguous chunks, or the stored entries do not rebuild the declared intent hash',
+    'E_RECOVERY_KEY_REUSED': 'recovery_key already names a different attempt, a retried action carries a different request, or a chunk repeats an invoice already stored',
+    'E_RECOVERY_FINALIZED': 'the attempt is no longer the live one for its draft, or has left the state this action needs',
+    'E_PREVIEW_STALE': 'expected_facts_fingerprint differs from the recomputed comparison',
+    'E_QUERY_STALE': 'the comparison generation or intent hash moved, or the pinned facts changed between pages',
+    'E_SELECTION_CONSUMED': 'the draft was consumed by a settlement operation and cannot open or take an attempt',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+_UNREACHED_RECOVERY = 'inherited from the shared recovery declaration list; no path in this command raises it'
+_RECOVERY_REACHABLE = {
+    'begin': ('E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_RECOVERY_PENDING', 'E_RECOVERY_KEY_REUSED',
+              'E_RECOVERY_FINALIZED', 'E_SELECTION_CONSUMED'),
+    'upload': ('E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_RECOVERY_PENDING', 'E_RECOVERY_INCOMPLETE',
+               'E_RECOVERY_KEY_REUSED', 'E_RECOVERY_FINALIZED'),
+    'seal': ('E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_RECOVERY_PENDING', 'E_RECOVERY_INCOMPLETE',
+             'E_RECOVERY_KEY_REUSED', 'E_RECOVERY_FINALIZED'),
+    'apply': ('E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_RECOVERY_PENDING', 'E_RECOVERY_INCOMPLETE',
+              'E_RECOVERY_KEY_REUSED', 'E_RECOVERY_FINALIZED', 'E_PREVIEW_STALE', 'E_QUERY_STALE'),
+    'abort': ('E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_RECOVERY_PENDING', 'E_RECOVERY_KEY_REUSED',
+              'E_RECOVERY_FINALIZED'),
+    'replace': ('E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_RECOVERY_PENDING', 'E_RECOVERY_KEY_REUSED',
+                'E_RECOVERY_FINALIZED', 'E_SELECTION_CONSUMED'),
+    'show': ('E_RECORD_NOT_FOUND', 'E_RECOVERY_PENDING'),
+    'compare': ('E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_RECOVERY_PENDING', 'E_RECOVERY_INCOMPLETE',
+                'E_RECOVERY_FINALIZED', 'E_QUERY_STALE'),
+    'compare-items': ('E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_RECOVERY_PENDING', 'E_RECOVERY_INCOMPLETE',
+                      'E_RECOVERY_FINALIZED', 'E_QUERY_STALE'),
+    'items': ('E_RECORD_NOT_FOUND', 'E_QUERY_STALE'),
+    'query': ('E_RECORD_NOT_FOUND', 'E_RECOVERY_PENDING', 'E_QUERY_STALE'),
+}
+_PIPELINE = ('E_IDEMPOTENCY_MISMATCH', 'E_DIRECTIVE_NOT_FOUND', 'E_DIRECTIVE_INACTIVE')
+for _verb, _reachable in _RECOVERY_REACHABLE.items():
+    _write = _verb in ('begin', 'upload', 'seal', 'apply', 'abort', 'replace')
+    # The three pipeline codes are added to every write by the registry and are
+    # raised by dispatch, so they reach every write verb below.
+    MATRIX[f'payment recovery {_verb}'] = {
+        code: _RECOVERY_MEANINGS[code] if code in _reachable or code in _PIPELINE else _UNREACHED_RECOVERY
+        for code in _RECOVERY_MEANINGS
+        if _write or code not in _PIPELINE
+    }
+MATRIX['payment recovery begin']['E_RECOVERY_KEY_REUSED'] = 'recovery_key already names another attempt, or a retry of this begin carries a different request'
+MATRIX['payment recovery upload']['E_RECOVERY_INCOMPLETE'] = 'the chunk is not the exact declared length for its index'
+MATRIX['payment recovery upload']['E_RECOVERY_KEY_REUSED'] = 'a retry of this chunk carries a different request, or the chunk repeats an invoice already stored'
+MATRIX['payment recovery seal']['E_RECOVERY_INCOMPLETE'] = 'entries are missing, out of range, disagree with their stored chunks, or do not rebuild the declared intent hash'
+MATRIX['payment recovery apply']['E_RECOVERY_INCOMPLETE'] = 'the sealed attempt is incomplete, or the comparison still holds hard blockers'
+MATRIX['payment recovery apply']['E_QUERY_STALE'] = 'the supplied attempt generation or intent hash no longer matches the stored attempt'
+MATRIX['payment recovery replace']['E_SELECTION_CONSUMED'] = 'the draft was consumed by a settlement operation and cannot take a replacement attempt'
+MATRIX['payment recovery show']['E_RECOVERY_PENDING'] = "the draft's recovery barrier is inconsistent, or a consumed draft has no readable operation"
+MATRIX['payment recovery query']['E_RECOVERY_PENDING'] = "a listed draft's recovery barrier is inconsistent, or a consumed draft has no readable operation"
+MATRIX['payment recovery query']['E_RECORD_NOT_FOUND'] = 'a listed draft named by a live attempt is absent from the selected company'
+MATRIX['payment recovery query']['E_QUERY_STALE'] = 'company audit changed between attempt pages; restart without a cursor'
+MATRIX['payment recovery items']['E_QUERY_STALE'] = 'the attempt intent hash or version changed between entry, chunk or gap pages; restart without a cursor'
