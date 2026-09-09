@@ -53,6 +53,10 @@ def render_table(items: list[dict[str, Any]], columns: list[str] | None = None) 
         for key, value in item.items():
             if key not in cols and _money(value) is not None:
                 cols.append(key)
+    money_cols = [c for c in cols if any(_money(i.get(c)) is not None for i in items)]
+    if money_cols:
+        labels = [c for c in cols if c in {"display_name", "full_name", "name", "number", "code"}]
+        cols = labels + money_cols + [c for c in cols if c not in labels and c not in money_cols]
     widths = {c: max(len(c), *(len(_cell(i.get(c))) for i in items)) for c in cols}
     head = "  ".join(c.ljust(widths[c]) for c in cols)
     rows = ["  ".join(_cell(i.get(c)).ljust(widths[c]) for c in cols) for i in items]
