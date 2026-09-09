@@ -8,6 +8,17 @@ from typing import Any
 
 from bookflow.core.errors import BookflowError
 from bookflow.core.models import list_columns
+from bookflow.core.money import Money, is_currency
+
+
+def _money(v: Any) -> Money | None:
+    """Recognize only complete money values, never infer a currency or scale."""
+    if (isinstance(v, dict) and {"minor_units", "currency"} <= v.keys()
+            and v.keys() <= {"minor_units", "currency", "amount"}
+            and type(v["minor_units"]) is int
+            and isinstance(v["currency"], str) and is_currency(v["currency"])):
+        return Money(v["minor_units"], v["currency"])
+    return None
 
 
 def emit_error(err: BookflowError, as_json: bool) -> int:
@@ -22,6 +33,9 @@ def emit_error(err: BookflowError, as_json: bool) -> int:
 
 
 def _cell(v: Any) -> str:
+    money = _money(v)
+    if money is not None:
+        return str(money)
     if v is None:
         return ""
     if isinstance(v, bool):
@@ -34,7 +48,11 @@ def _cell(v: Any) -> str:
 def render_table(items: list[dict[str, Any]], columns: list[str] | None = None) -> str:
     if not items:
         return "(none)"
-    cols = columns or [k for k in items[0] if not isinstance(items[0][k], (dict, list))]
+    cols = list(columns) if columns is not None else [k for k in items[0] if not isinstance(items[0][k], (dict, list))]
+    for item in items:
+        for key, value in item.items():
+            if key not in cols and _money(value) is not None:
+                cols.append(key)
     widths = {c: max(len(c), *(len(_cell(i.get(c))) for i in items)) for c in cols}
     head = "  ".join(c.ljust(widths[c]) for c in cols)
     rows = ["  ".join(_cell(i.get(c)).ljust(widths[c]) for c in cols) for i in items]
@@ -45,7 +63,9 @@ def render_fields(obj: dict[str, Any], indent: int = 0) -> str:
     lines = []
     pad = " " * indent
     for k, v in obj.items():
-        if isinstance(v, dict):
+        if _money(v) is not None:
+            lines.append(f"{pad}{k}: {_cell(v)}")
+        elif isinstance(v, dict):
             lines.append(f"{pad}{k}:")
             lines.append(render_fields(v, indent + 2))
         elif isinstance(v, list) and v and isinstance(v[0], dict):
