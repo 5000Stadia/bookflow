@@ -113,6 +113,13 @@ def items(s,inp,*,binding):
     return m.DepositItemPage(selected=sel.pin,kind=inp.kind,items=rows,total_count=len(values),totals=totals(data.effects[sel.pin.revision_id]),fingerprint=fp,next_cursor=next_,current=current(data),current_observed_at=now(),current_references=data.references)
 
 
+def query_totals(values, currency):
+    """Whole matching revision totals and current effective bank net, before paging."""
+    sums = {key: money(sum(getattr(row.totals, key).minor_units for row in values), currency)
+            for key in m.Totals.model_fields}
+    return m.Totals(**sums), money(sum(row.current.effective_bank_total for row in values), currency)
+
+
 def query(s,inp,*,binding):
     inp=checked(inp,m.QueryInput);authority.authenticate(s,binding)
     if inp.status=='deleted' or (inp.status is None and inp.include_deleted):raise BookflowError('E_VALIDATION',details={'reason':'feature_unavailable','feature':'transaction_deleted'})
@@ -140,10 +147,10 @@ def query(s,inp,*,binding):
         if inp.q and inp.q.casefold() not in text:continue
         values.append(m.DepositRow(selected=sel,current=current(data),totals=totals(effect),counts=counts(effect)))
     values.sort(key=lambda r:({'date':r.selected.date,'number':r.selected.number,'bank_total':r.totals.bank_total.minor_units}[inp.sort],r.current.id),reverse=inp.direction=='desc')
-    currency=s.company_info_row['home_currency'];sums={k:money(sum(getattr(r.totals,k).minor_units for r in values),currency) for k in m.Totals.model_fields}
+    currency=s.company_info_row['home_currency'];summed,effective=query_totals(values,currency)
     contract=inp.model_dump(mode='json',exclude={'page'},exclude_unset=True)
     rows,fp,next_,previous=pages.page(s,binding,'query',values,[contract,[r.model_dump(mode='json') for r in values]],inp.page.limit,inp.page.cursor)
-    return m.DepositPage(items=rows,total_count=len(values),totals=m.Totals(**sums),effective_bank_total=money(sum(r.current.effective_bank_total for r in values),currency),fingerprint=fp,next_cursor=next_,previous_cursor=previous)
+    return m.DepositPage(items=rows,total_count=len(values),totals=summed,effective_bank_total=effective,fingerprint=fp,next_cursor=next_,previous_cursor=previous)
 
 
 def history(s,inp,*,binding):

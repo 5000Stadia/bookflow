@@ -1,6 +1,6 @@
 """Public deposit detail execution receipt, rechecked by the publication owner.
 
-The sibling of ``publication_audit`` for the two registered deposit reads. A
+The sibling of ``publication_audit`` for the registered deposit reads. A
 proof is a process-owned value, never a token, a cursor or an activation switch,
 and a fresh reader is mandatory for every hosted release check.
 
@@ -111,9 +111,10 @@ class DepositProof:
         if document is not None:
             if document.get('company_id') != request.company:
                 raise TypeError('the disclosed document must belong to the requested company')
-            selected = document['selected']
-            selected = selected['pin'] if request.command == 'deposit show' else selected
-            pin = (selected['deposit_id'], selected['revision_id'], selected['revision_number'])
+            if request.command != 'deposit query':
+                selected = document['selected']
+                selected = selected['pin'] if request.command == 'deposit show' else selected
+                pin = (selected['deposit_id'], selected['revision_id'], selected['revision_number'])
         output = document if failure is None else failure.error().to_dict()
         for key, value in dict(identity=identity, request=request, pin=pin, document=document,
                                failure=failure, observed_at=observed_at,
@@ -140,6 +141,8 @@ def _scoped(proof):
 
 
 def _produce(session, request, audience, at):
+    if request.command == 'deposit query':
+        return reads.query(session, request.input, audience=audience, at=at)
     if request.command == 'deposit show':
         return reads.show(session, request.input, audience=audience, at=at)
     return reads.items(session, request.input, audience=audience, at=at)

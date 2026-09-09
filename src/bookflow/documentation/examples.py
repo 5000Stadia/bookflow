@@ -401,3 +401,8 @@ EXAMPLES.update({
         {"deposit": ID, "kind": "sources", "revision_number": 2, "page": {"limit": 50}},
     ),
 })
+
+EXAMPLES['deposit query'] = Example(
+    'bookflow deposit query --date-from 2026-06-01 --date-to 2026-06-30 --sort date --direction desc --page-limit 25 --company "Demo Plumbing Co" --json',
+    {'date_from':'2026-06-01','date_to':'2026-06-30','sort':'date','direction':'desc','page':{'limit':25}},
+)

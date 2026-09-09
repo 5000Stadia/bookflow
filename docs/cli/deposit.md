@@ -623,6 +623,310 @@ Example JSON output:
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 | `E_VERSION_CONFLICT` | The record changed since the version you read. |
 
+## `deposit query`
+
+Find saved deposits by bank, current status, revision date, exact number or captured number/memo/received-from text. Sort by date, number or revision bank total. Whole matching totals include voided revision amounts; effective bank total excludes their bank effect. Previous/next pages retain filters, sort and direction; restart stale results. Deleted deposits are not yet supported.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | ledger.read |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/deposit.query` |
+| External binary body | none |
+
+### CLI
+
+`bookflow deposit query --date-from 2026-06-01 --date-to 2026-06-30 --sort date --direction desc --page-limit 25 --company "Demo Plumbing Co" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `deposit_to` | `--deposit-to` | string \| null | no | yes | null | — |
+| `status` | `--status` | literal["posted", "voided", "deleted"] \| null | no | yes | null | — |
+| `date_from` | `--date-from` | string \| null | no | yes | null | — |
+| `date_to` | `--date-to` | string \| null | no | yes | null | — |
+| `number` | `--number` | string \| null | no | yes | null | — |
+| `q` | `--q` | string \| null | no | yes | null | — |
+| `sort` | `--sort` | literal["date", "number", "bank_total"] | no | no | "date" | — |
+| `direction` | `--direction` | literal["asc", "desc"] | no | no | "desc" | — |
+| `include_deleted` | `--include-deleted` | boolean | no | no | false | — |
+| `page.limit` | `--page-limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `page.cursor` | `--page-cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/deposit.query`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `schema_version` | literal[1] | no | no | 1 | — |
+| `company_id` | string | yes | no | — | — |
+| `currency` | string | yes | no | — | — |
+| `items` | array[object] | yes | no | — | — |
+| `items[].selected` | object | yes | no | — | — |
+| `items[].selected.pin` | object | yes | no | — | — |
+| `items[].selected.pin.deposit_id` | string | yes | no | — | — |
+| `items[].selected.pin.revision_id` | string | yes | no | — | — |
+| `items[].selected.pin.revision_number` | integer | yes | no | — | — |
+| `items[].selected.date` | string | yes | no | — | — |
+| `items[].selected.number` | string | yes | no | — | — |
+| `items[].selected.memo` | string \| null | yes | yes | — | — |
+| `items[].selected.deposit_to` | object | yes | no | — | — |
+| `items[].selected.deposit_to.group` | literal["account"] | no | no | "account" | — |
+| `items[].selected.deposit_to.disclosed` | boolean | yes | no | — | — |
+| `items[].selected.deposit_to.id` | string \| null | yes | yes | — | — |
+| `items[].selected.deposit_to.name` | string \| null | yes | yes | — | — |
+| `items[].selected.deposit_to.full_name` | string \| null | yes | yes | — | — |
+| `items[].selected.deposit_to.number` | string \| null | yes | yes | — | — |
+| `items[].selected.deposit_to.account_type` | literal["bank", "accounts_receivable", "other_current_asset", "fixed_asset", "other_asset", "accounts_payable", "credit_card", "other_current_liability", "long_term_liability", "equity", "income", "cost_of_goods_sold", "expense", "other_income", "other_expense", "non_posting"] \| null | yes | yes | — | — |
+| `items[].selected.deposit_to.normal_balance` | literal["debit", "credit"] \| null | yes | yes | — | — |
+| `items[].selected.deposit_to.system_role` | string \| null | yes | yes | — | — |
+| `items[].selected.deposit_to.active` | boolean \| null | yes | yes | — | — |
+| `items[].selected.deposit_to.currency` | string \| null | yes | yes | — | — |
+| `items[].selected.cash_back` | object \| null | yes | yes | — | — |
+| `items[].selected.cash_back.amount` | object | yes | no | — | — |
+| `items[].selected.cash_back.amount.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `items[].selected.cash_back.amount.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `items[].selected.cash_back.memo` | string \| null | yes | yes | — | — |
+| `items[].selected.cash_back.account` | object | yes | no | — | — |
+| `items[].selected.cash_back.account.group` | literal["account"] | no | no | "account" | — |
+| `items[].selected.cash_back.account.disclosed` | boolean | yes | no | — | — |
+| `items[].selected.cash_back.account.id` | string \| null | yes | yes | — | — |
+| `items[].selected.cash_back.account.name` | string \| null | yes | yes | — | — |
+| `items[].selected.cash_back.account.full_name` | string \| null | yes | yes | — | — |
+| `items[].selected.cash_back.account.number` | string \| null | yes | yes | — | — |
+| `items[].selected.cash_back.account.account_type` | literal["bank", "accounts_receivable", "other_current_asset", "fixed_asset", "other_asset", "accounts_payable", "credit_card", "other_current_liability", "long_term_liability", "equity", "income", "cost_of_goods_sold", "expense", "other_income", "other_expense", "non_posting"] \| null | yes | yes | — | — |
+| `items[].selected.cash_back.account.normal_balance` | literal["debit", "credit"] \| null | yes | yes | — | — |
+| `items[].selected.cash_back.account.system_role` | string \| null | yes | yes | — | — |
+| `items[].selected.cash_back.account.active` | boolean \| null | yes | yes | — | — |
+| `items[].selected.cash_back.account.currency` | string \| null | yes | yes | — | — |
+| `items[].selected.custom_fields` | array[object] | yes | no | — | — |
+| `items[].selected.custom_fields[].group` | literal["custom_field"] | no | no | "custom_field" | — |
+| `items[].selected.custom_fields[].disclosed` | boolean | yes | no | — | — |
+| `items[].selected.custom_fields[].definition_id` | string \| null | yes | yes | — | — |
+| `items[].selected.custom_fields[].definition_version` | integer \| null | yes | yes | — | — |
+| `items[].selected.custom_fields[].name` | string \| null | yes | yes | — | — |
+| `items[].selected.custom_fields[].kind` | literal["text", "number", "date", "bool", "choice"] \| null | yes | yes | — | — |
+| `items[].selected.custom_fields[].value` | string \| boolean \| null | yes | yes | — | — |
+| `items[].selected.custom_fields[].canonical_text` | string \| null | yes | yes | — | — |
+| `items[].selected.custom_fields[].position` | integer \| null | yes | yes | — | — |
+| `items[].selected.custom_fields[].choice_id` | string \| null | yes | yes | — | — |
+| `items[].selected.custom_fields[].choice_label` | string \| null | yes | yes | — | — |
+| `items[].selected.custom_fields[].print_visibility` | boolean \| null | yes | yes | — | — |
+| `items[].selected.issuer` | object | yes | no | — | — |
+| `items[].selected.issuer.group` | literal["company"] | no | no | "company" | — |
+| `items[].selected.issuer.disclosed` | boolean | yes | no | — | — |
+| `items[].selected.issuer.id` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.display_name` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.legal_name` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.home_currency` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.address_line1` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.address_line2` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.address_city` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.address_state` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.address_postal_code` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.address_country` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.legal_address_line1` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.legal_address_line2` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.legal_address_city` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.legal_address_state` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.legal_address_postal_code` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.legal_address_country` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.ship_address_line1` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.ship_address_line2` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.ship_address_city` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.ship_address_state` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.ship_address_postal_code` | string \| null | yes | yes | — | — |
+| `items[].selected.issuer.ship_address_country` | string \| null | yes | yes | — | — |
+| `items[].current` | object | yes | no | — | — |
+| `items[].current.deposit_id` | string | yes | no | — | — |
+| `items[].current.version` | integer | yes | no | — | — |
+| `items[].current.revision_id` | string | yes | no | — | — |
+| `items[].current.number` | string | yes | no | — | — |
+| `items[].current.status` | literal["posted", "voided"] | yes | no | — | — |
+| `items[].current.revision_date` | string | yes | no | — | — |
+| `items[].current.revision_posting_total` | object | yes | no | — | — |
+| `items[].current.revision_posting_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `items[].current.revision_posting_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `items[].current.revision_subtotal` | object | yes | no | — | — |
+| `items[].current.revision_subtotal.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `items[].current.revision_subtotal.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `items[].current.revision_bank_total` | object | yes | no | — | — |
+| `items[].current.revision_bank_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `items[].current.revision_bank_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `items[].current.revision_cash_back` | object | yes | no | — | — |
+| `items[].current.revision_cash_back.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `items[].current.revision_cash_back.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `items[].current.effective_bank_total` | object | yes | no | — | — |
+| `items[].current.effective_bank_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `items[].current.effective_bank_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `items[].current.active_source_count` | integer | yes | no | — | How many receipts this deposit currently claims. Their identities are composition-sized and travel on `deposit items --kind sources`. |
+| `items[].totals` | object | yes | no | — | — |
+| `items[].totals.posting_total` | object | yes | no | — | — |
+| `items[].totals.posting_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `items[].totals.posting_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `items[].totals.source_total` | object | yes | no | — | — |
+| `items[].totals.source_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `items[].totals.source_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `items[].totals.positive_additional_total` | object | yes | no | — | — |
+| `items[].totals.positive_additional_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `items[].totals.positive_additional_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `items[].totals.negative_additional_total` | object | yes | no | — | — |
+| `items[].totals.negative_additional_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `items[].totals.negative_additional_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `items[].totals.subtotal` | object | yes | no | — | — |
+| `items[].totals.subtotal.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `items[].totals.subtotal.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `items[].totals.cash_back` | object | yes | no | — | — |
+| `items[].totals.cash_back.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `items[].totals.cash_back.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `items[].totals.bank_total` | object | yes | no | — | — |
+| `items[].totals.bank_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `items[].totals.bank_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `items[].counts` | object | yes | no | — | — |
+| `items[].counts.sources` | integer | yes | no | — | — |
+| `items[].counts.additional` | integer | yes | no | — | — |
+| `items[].counts.cash_allocations` | integer | yes | no | — | — |
+| `items[].counts.components` | integer | yes | no | — | — |
+| `items[].received_from` | array[object] | yes | no | — | — |
+| `items[].received_from[].group` | literal["customer", "vendor", "employee", "other_name"] | yes | no | — | — |
+| `items[].received_from[].disclosed` | boolean | yes | no | — | False when this reader is not admitted to the party list. |
+| `items[].received_from[].id` | string \| null | yes | yes | — | — |
+| `items[].received_from[].label` | string \| null | yes | yes | — | Captured party name as recorded on the deposit, not the current list name. |
+| `items[].received_from[].version` | integer \| null | yes | yes | — | Captured party list version, when the source recorded one. |
+| `total_count` | integer | yes | no | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.posting_total` | object | yes | no | — | — |
+| `totals.posting_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.posting_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.source_total` | object | yes | no | — | — |
+| `totals.source_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.source_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.positive_additional_total` | object | yes | no | — | — |
+| `totals.positive_additional_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.positive_additional_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.negative_additional_total` | object | yes | no | — | — |
+| `totals.negative_additional_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.negative_additional_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.subtotal` | object | yes | no | — | — |
+| `totals.subtotal.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.subtotal.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.cash_back` | object | yes | no | — | — |
+| `totals.cash_back.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.cash_back.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `totals.bank_total` | object | yes | no | — | — |
+| `totals.bank_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `totals.bank_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `effective_bank_total` | object | yes | no | — | — |
+| `effective_bank_total.minor_units` | integer | yes | no | — | Exact signed amount in the currency minor unit; never a float. |
+| `effective_bank_total.currency` | string | yes | no | — | ISO currency code of this amount. |
+| `fingerprint` | string | yes | no | — | — |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `previous_cursor` | string \| null | yes | yes | — | — |
+
+Example JSON output:
+
+```json
+{
+  "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "currency": "USD",
+  "effective_bank_total": {
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "fingerprint": "value",
+  "items": [],
+  "next_cursor": null,
+  "previous_cursor": null,
+  "schema_version": 1,
+  "total_count": 1,
+  "totals": {
+    "bank_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "cash_back": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "negative_additional_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "positive_additional_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "posting_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "source_total": {
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "subtotal": {
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DEPOSIT_SOURCE_INVALID` | The captured receipt cash provenance is unsupported or inconsistent. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+
 ## `deposit show`
 
 Show one deposit: its selected revision header, exact totals and counts, current status, optional dated bank effect and the business references this member may see.

@@ -84,8 +84,8 @@ from bookflow.core.context import Context
 from bookflow.core.errors import BookflowError
 from bookflow.core.registry import command, Plan
 from bookflow.core.session import Session
-from bookflow.company.deposit_read_models import ShowInput, ItemsInput
-from bookflow.company.deposit_public_models import DepositDetail, DepositItemsPage
+from bookflow.company.deposit_read_models import ShowInput, ItemsInput, QueryInput
+from bookflow.company.deposit_public_models import DepositDetail, DepositItemsPage, DepositQueryPage
 
 _ERRORS = ['E_RECORD_NOT_FOUND', 'E_VALIDATION', 'E_PERMISSION', 'E_UNAUTHENTICATED',
            'E_DEPOSIT_SOURCE_INVALID']
@@ -111,4 +111,13 @@ def deposit_items(inp: ItemsInput, ctx: Context, s: Session) -> Plan:
     raise BookflowError('E_INTERNAL', message='Deposit details require authenticated reader execution')
 
 
-DEPOSIT_COMMANDS = [deposit_show, deposit_items]
+@command('deposit query', scope='company',
+         description='Find saved deposits by bank, current status, revision date, exact number or captured number/memo/received-from text. Sort by date, number or revision bank total. Whole matching totals include voided revision amounts; effective bank total excludes their bank effect. Previous/next pages retain filters, sort and direction; restart stale results. Deleted deposits are not yet supported.',
+         input_model=QueryInput, output_model=DepositQueryPage,
+         required_role='member', capability='ledger.read',
+         error_codes=[*_ERRORS, 'E_QUERY_STALE', 'E_COMPANY_NOT_FOUND'])
+def deposit_query(inp: QueryInput, ctx: Context, s: Session) -> Plan:
+    raise BookflowError('E_INTERNAL', message='Deposit query requires authenticated reader execution')
+
+
+DEPOSIT_COMMANDS = [deposit_show, deposit_items, deposit_query]

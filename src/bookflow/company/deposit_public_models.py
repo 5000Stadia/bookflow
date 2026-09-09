@@ -373,3 +373,24 @@ class DepositItemsPage(Public):
     current_observed_at: str
     current_references: tuple[CurrentReference, ...] = Field(
         description='Current masters named by the rows on this page; bounded by the page limit.')
+
+
+class DepositQueryRow(Public):
+    selected: SelectedHeader
+    current: CurrentState
+    totals: DepositTotals
+    counts: DepositCounts
+    received_from: tuple[PartyReference, ...]
+
+
+class DepositQueryPage(Public):
+    schema_version: Literal[1] = 1
+    company_id: str
+    currency: str
+    items: tuple[DepositQueryRow, ...]
+    total_count: int
+    totals: DepositTotals
+    effective_bank_total: Money
+    fingerprint: str
+    next_cursor: str | None
+    previous_cursor: str | None

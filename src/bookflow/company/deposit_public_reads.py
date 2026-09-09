@@ -1,4 +1,4 @@
-"""Public deposit detail producer: admission, private financial reuse, projection.
+"""Public deposit read producers: admission, private financial reuse, projection.
 
 The private readers in ``deposit_queries`` own admission, financial validation
 and continuation mechanics; nothing here recomputes them. This module adds the
@@ -507,3 +507,88 @@ def items(s, inp, *, audience, at=None):
         fingerprint=fingerprint, next_cursor=following, current=_current_state(q.current(data)),
         current_observed_at=at or q.now(),
         current_references=_current_references(data.references, _named_by_rows(chunk), audience))
+
+
+def _query_admitted(s, identity, audience, binding):
+    """Only an evaluated aggregate requirement denial means an omitted deposit.
+
+    Exact-read selected() normalizes unresolved evidence to not-found. A complete
+    query cannot interpret that normalization as permission to publish partial totals.
+    """
+    try:
+        evidence = authority.admit(s, [identity], binding=binding)
+        requirements = graph_requirements(s, evidence)
+    except BookflowError as error:
+        if error.code in ('E_PERMISSION', 'E_RECORD_NOT_FOUND'):
+            raise BookflowError('E_DEPOSIT_SOURCE_INVALID') from None
+        raise
+    return all(audience.admits(capability, threshold) for capability, threshold in requirements)
+
+
+def _received_from(effect, audience):
+    parties = []
+    for row in effect.intent.sources:
+        profile = row.source.profile
+        payer = profile.payer if row.source.source_type == 'payment' else profile.customer
+        parties.append(_party('customer', payer.id, payer.label, payer.version, audience))
+    for row in effect.intent.additional:
+        d = row.dimensions
+        if d.party_id is not None:
+            parties.append(_party(d.party_kind, d.party_id, d.party_name, None, audience))
+    return _unique(parties)
+
+
+def query(s, inp, *, audience, at=None):
+    """Complete public matching relation; one financial load, never show per row."""
+    import sqlalchemy as sa
+    from bookflow.company import schema as c
+    inp = q.checked(inp, m.QueryInput)
+    manifest.conform()
+    binding = audience.binding()
+    audience.require(s.company_row['id'])
+    authority.authenticate(s, binding)
+    if inp.status == 'deleted' or (inp.status is None and inp.include_deleted):
+        raise BookflowError('E_VALIDATION', details={'reason':'feature_unavailable','feature':'transaction_deleted'})
+    bank = None
+    if inp.deposit_to:
+        # Optional bank disclosure does not govern the deposit's financial admission.
+        # An explicit filter, however, may not resolve an unavailable reference.
+        if not audience.reference_admitted('accounts'):
+            raise BookflowError('E_PERMISSION')
+        from bookflow.company.accounts import resolve_account
+        bank = resolve_account(s.company, inp.deposit_to)['id']
+    identities = list(s.company.conn.execute(sa.select(c.transactions.c.id).where(
+        c.transactions.c.type == 'deposit').order_by(c.transactions.c.id)).scalars())
+    allowed = [identity for identity in identities if _query_admitted(s, identity, audience, binding)]
+    matches = []
+    currency = s.company_info_row['home_currency']
+    for data in facts.load_complete(s, allowed, binding=binding, annotations=()):
+        selected = q.selected(data)
+        effect = data.effects[selected.pin.revision_id]
+        private = m.DepositRow(selected=selected, current=q.current(data), totals=q.totals(effect), counts=q.counts(effect))
+        row = w.DepositQueryRow(selected=_selected_header(selected, currency, audience),
+            current=_current_state(private.current), totals=_totals(private.totals), counts=_counts(private.counts),
+            received_from=_received_from(effect, audience))
+        text = ' '.join([row.selected.number, row.selected.memo or ''] +
+                        [party.label for party in row.received_from if party.disclosed and party.label]).casefold()
+        if bank and row.selected.deposit_to.id != bank: continue
+        if inp.status and row.current.status != inp.status: continue
+        if inp.date_from and row.selected.date < inp.date_from: continue
+        if inp.date_to and row.selected.date > inp.date_to: continue
+        if inp.number is not None and row.selected.number != inp.number: continue
+        if inp.q and inp.q.casefold() not in text: continue
+        matches.append((row, private))
+    matches.sort(key=lambda pair: ({'date':pair[0].selected.date, 'number':pair[0].selected.number,
+        'bank_total':pair[0].totals.bank_total.minor_units}[inp.sort], pair[0].current.deposit_id),
+        reverse=inp.direction == 'desc')
+    totals, effective = q.query_totals([private for _, private in matches], currency)
+    values = [row for row, _ in matches]
+    # Include defaults, sort and direction even when the caller omitted them.
+    # Page size stays adjustable under the existing offset/previous-page rules.
+    contract = inp.model_dump(mode='json', exclude={'page'})
+    chunk, fingerprint, following, previous = pages.page(s, binding, 'public.query', values,
+        [contract, [row.model_dump(mode='json') for row in values]], inp.page.limit, inp.page.cursor)
+    audience.validate()
+    return w.DepositQueryPage(company_id=s.company_row['id'], currency=currency, items=chunk,
+        total_count=len(values), totals=_totals(totals), effective_bank_total=_money(effective),
+        fingerprint=fingerprint, next_cursor=following, previous_cursor=previous)

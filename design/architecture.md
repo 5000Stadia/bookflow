@@ -2331,3 +2331,19 @@ invalid request while preserving the attempted filters. Shared document-detail
 screen-only cards retain one semantic table for desktop and print; report CSS is
 scoped to .basic-report. Calculation, report inputs, cursor validation and financial
 history remain owned by the unchanged core commands.
+
+Public deposit query phase (2026-09-09): the existing authenticated read family
+now also produces a closed DepositQueryPage. It admits the selected company,
+checks each complete connected aggregate, loads existing financial facts once for
+the admitted set, projects governed headers/received-from references, then filters,
+sorts and pages. Whole-match totals reuse deposit_queries.query_totals; no posting,
+draft or financial-validation algorithm changes. An explicitly denied graph is
+omitted; unclassified missing/permission evidence fails the complete query instead
+of publishing partial counts/totals. Bank reference redaction preserves admitted
+amounts, while an explicit bank filter requires reference admission before lookup.
+Public query cursors bind every non-page input including defaults, sort/direction,
+and the complete projected relation; page-size changes follow the existing offset
+pager. Query publication retains a company-scoped page proof rather than a single
+revision pin, with unchanged D11 identity/credential/company release checks. Public
+writes and source discovery keep their existing execution path. List templates
+remain unimplemented pending the measured population checkpoint.
