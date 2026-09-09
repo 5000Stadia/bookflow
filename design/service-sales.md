@@ -39,7 +39,9 @@ idempotency keys. Writes use the ledger guard and a single company transaction.
 Both nouns have independent numbering sequences starting at 1, empty prefix;
 explicit trimmed case-sensitive numbers reserve only that type's number. Failed
 writes and replay consume no number. Query filters date range, customer, number,
-status; limit 1–200, default 50, signed continuation invalidated by company writes.
+status; it orders by accounting date then stable id in the direction asked for
+(`asc` default, `desc` for the most recent first); limit 1–200, default 50, signed
+continuation invalidated by company writes and by a changed direction.
 History uses the same limit bounds, signed cursor binding and company-audit
 invalidation as query, including type/document/principal/permissions; an audited
 write invalidates the current-header-plus-history page rather than mixing states.

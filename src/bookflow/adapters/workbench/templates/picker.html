@@ -1,4 +1,4 @@
 {% extends "base.html" %}{% block title %}Companies{% endblock %}{% block body %}
-<h1>Companies</h1><div class="table-wrap"><table><tr>{% for c in columns or [] %}<th>{{ c }}</th>{% endfor %}<th>schema revision</th><th>schema state</th><th></th></tr>
+<h1>Companies</h1><div class="table-wrap"><table><tr>{% for c in columns or [] %}<th>{{ c | label }}</th>{% endfor %}<th>schema revision</th><th>schema state</th><th></th></tr>
 {% for it in companies %}<tr>{% for c in columns or [] %}<td>{% if c == "display_name" %}<a href="/c/{{ it.company_id }}/">{{ it[c] }}</a>{% else %}{{ it[c] if it[c] is not none else "" }}{% endif %}</td>{% endfor %}<td><code>{{ it.schema_revision }}</code></td><td>{{ "current" if it.schema_revision == schema_head else "behind" }}</td><td>{% if it.schema_revision != schema_head %}<a href="/hub/upgrade">upgrade</a>{% endif %}</td></tr>{% endfor %}</table></div>
 <p><a href="/hub/">Hub commands</a></p>{% endblock %}

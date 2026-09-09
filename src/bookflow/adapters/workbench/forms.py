@@ -508,6 +508,17 @@ def _coerce_scalar(annotation: Any, value: str) -> Any:
     return value
 
 
+def query_value(model: type[BaseModel], field: str, value: str) -> Any:
+    """One list-filter control's string, in the type its own command declares for it.
+
+    A list filter is the same typed leaf the generated form submits, so it is read by
+    the same translator rather than handed to the command as a string: "true"/"false"
+    for a flag, and "unset" for one deliberately left open, which is how "All" on a
+    list is said to a command whose flag is nullable.
+    """
+    return _coerce_scalar(model.model_fields[field].annotation, value)
+
+
 def _collection_indexes(path, form):
     prefix = _collection_prefix(path)
     marker_prefix = "collection:" + ":".join(path) + ":"

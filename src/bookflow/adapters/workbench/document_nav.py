@@ -3,10 +3,11 @@
 Navigation and presentation only. Nothing here writes, invents a command or computes an
 amount: every figure shown is copied from the summary its own query command returned.
 
-**The order the arrows walk** is the order the list page shows, because it is the only
-order these query commands offer: accounting date, then the document's own stable id,
-which for documents dated the same day is the order they were entered. ``ORDER`` says
-exactly that on the page, so a user can predict where an arrow lands before pressing it.
+**The order the arrows walk** is the order the list page shows: accounting date, then
+the document's own stable id, which for documents dated the same day is the order they
+were entered. ``ORDER`` says exactly that on the page, so a user can predict where an
+arrow lands before pressing it. Which end of that order the list opens on is the list's
+own choice and does not change what "previous" and "next" mean here.
 
 **Voided and closed documents stay in the sequence.** A voided invoice is a document you
 still need to reach — often the one you are looking for. The sales list shows voided
@@ -17,16 +18,19 @@ command otherwise defaults to active-only and a closed estimate would be outside
 sequence.
 
 **What this costs.** ``form_bar`` opens no read at all — it is links. ``strip`` costs one
-bounded query, and a second only for a company holding more than ``PAGE`` documents of
-that type. ``recent`` is fetched by the browser after the form has rendered, so no form
-render waits on it.
+bounded query for a company whose documents of this type fit in a page, and three for one
+past that size: the page-sized probe that establishes it, then one window either side.
+``recent`` costs one query of ``RECENT`` rows and is fetched by the browser after the
+form has rendered, so no form render waits on it.
 
-**The limit, stated rather than hidden.** ``<noun> query`` pages oldest-first from an
-offset and offers no descending order and no "the document before this one" anchor, so
-neither the document before a given one nor the newest few can be found in bounded work
-once a company holds more than one page of them. Past that size the affected control is
-disabled and says so instead of guessing. One command change closes all of it: a
-descending direction on the sales and work query inputs.
+**How both ends are reached at any size.** ``<noun> query`` takes a ``direction``, and
+descending is the exact reverse of the order above — the document before a given one is
+the document after it in the descending page. So past one page ``strip`` anchors two
+bounded windows on the document's own date: descending from it for the document before,
+ascending from it for the document after. ``recent`` asks for the newest ``RECENT``
+directly. Neither control is disabled by company size any more. What is still not
+answered past one page is the document's position in the whole list, which would cost an
+unbounded count, so no position is shown rather than a wrong one.
 """
 from urllib.parse import quote
 
@@ -46,8 +50,6 @@ ORDER = ('Ordered by document date, then by the order they were entered — '
          'the same order as the list.')
 
 UNPLACEABLE = 'This one could not be placed in the list; open the list to find it.'
-TOO_MANY = ('There are more {plural} than one page holds, so the {singular} before this '
-            'one cannot be found from here. Use the list and its filters.')
 
 
 def _article(word):
@@ -87,21 +89,49 @@ def _step(base, row):
             'number': row.get('number'), 'label': ' · '.join(str(part) for part in parts)}
 
 
-def _sequence(read, company_id, noun, record):
-    """The stretch of the sequence this document sits in, and whether its ends are real.
+def _window(read, company_id, noun, raw):
+    out = read(noun + ' query', _raw(noun, raw), company_id)
+    return out['items'], bool(out.get('has_more'))
+
+
+def _place(items, document_id):
+    return next((position for position, row in enumerate(items)
+                 if row.get('id') == document_id), None)
+
+
+def _neighbours(read, company_id, noun, record):
+    """The documents either side of this one, and whether its ends are the list's ends.
 
     One query answers everything for a company whose documents of this type fit in a
-    page. Past that, the query is anchored on the document's own date, which reaches
-    everything after it but nothing before the day it falls on.
+    page, and it can also say where in the whole list this document sits. Past that,
+    two windows anchored on the document's own date answer both sides in bounded work:
+    descending walks back from it, ascending walks forward, and each is the exact
+    reverse of the other. ``None`` means this document could not be placed at all.
     """
-    whole = read(noun + ' query', _raw(noun, {'limit': PAGE}), company_id)
-    if not whole.get('has_more'):
-        return whole['items'], True, True
+    document_id = record['id']
+    items, more = _window(read, company_id, noun, {'limit': PAGE})
+    if not more:
+        here = _place(items, document_id)
+        if here is None:
+            return None
+        return {'previous': items[here - 1] if here else None,
+                'next': items[here + 1] if here + 1 < len(items) else None,
+                'at_start': here == 0, 'at_end': here + 1 == len(items),
+                'position': here + 1, 'total': len(items)}
     date = record.get('date') or (record.get('revision') or {}).get('date')
     if not date:
-        return [], False, False
-    forward = read(noun + ' query', _raw(noun, {'limit': PAGE, 'date_from': date}), company_id)
-    return forward['items'], False, not forward.get('has_more')
+        return None
+    back, back_more = _window(read, company_id, noun,
+                              {'limit': PAGE, 'date_to': date, 'direction': 'desc'})
+    ahead, ahead_more = _window(read, company_id, noun, {'limit': PAGE, 'date_from': date})
+    here, there = _place(back, document_id), _place(ahead, document_id)
+    if here is None or there is None:
+        return None
+    return {'previous': back[here + 1] if here + 1 < len(back) else None,
+            'next': ahead[there + 1] if there + 1 < len(ahead) else None,
+            'at_start': here + 1 == len(back) and not back_more,
+            'at_end': there + 1 == len(ahead) and not ahead_more,
+            'position': None, 'total': None}
 
 
 def form_bar(company_id, noun, verb, record_id):
@@ -134,29 +164,17 @@ def strip(read, company_id, noun, record):
         return view
     view['steps'] = True
     try:
-        items, from_start, to_end = _sequence(read, company_id, noun, record)
+        found = _neighbours(read, company_id, noun, record)
     except BookflowError:
         view['steps'] = False
         return view
-    index = next((position for position, row in enumerate(items)
-                  if row.get('id') == document_id), None)
-    if index is None:
+    if found is None:
         view['unavailable'] = UNPLACEABLE
         return view
-    if index > 0:
-        view['previous'] = _step(view['base'], items[index - 1])
-    else:
-        view['at_start'] = from_start
-    if index + 1 < len(items):
-        view['next'] = _step(view['base'], items[index + 1])
-    else:
-        view['at_end'] = to_end
-    if from_start:
-        view['position'], view['total'] = index + 1, len(items)
-    elif view['previous'] is None:
-        # Only the step that genuinely cannot be answered says so.
-        view['unavailable'] = TOO_MANY.format(plural=view['plural'].lower(),
-                                              singular=view['singular'])
+    view.update({key: found[key] for key in ('at_start', 'at_end', 'position', 'total')})
+    for step in ('previous', 'next'):
+        if found[step] is not None:
+            view[step] = _step(view['base'], found[step])
     return view
 
 
@@ -166,16 +184,11 @@ def recent(read, company_id, noun, limit=RECENT):
         return None
     view = _shell(company_id, noun)
     try:
-        out = read(noun + ' query', _raw(noun, {'limit': PAGE}), company_id)
+        # The newest few, asked for directly: one page of `limit` at any company size.
+        items, _ = _window(read, company_id, noun, {'limit': limit, 'direction': 'desc'})
     except BookflowError:
         view['documents'] = []
         view['unavailable'] = 'The list of ' + view['plural'].lower() + ' is not available here.'
         return view
-    if out.get('has_more'):
-        # Oldest-first paging cannot reach the newest without walking every page.
-        view['documents'] = []
-        view['unavailable'] = ('There are more ' + view['plural'].lower()
-                               + ' than one page holds; open the list to search them.')
-        return view
-    view['documents'] = [_step(view['base'], row) for row in reversed(out['items'][-limit:])]
+    view['documents'] = [_step(view['base'], row) for row in items]
     return view

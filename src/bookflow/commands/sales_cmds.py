@@ -65,7 +65,7 @@ def _read(document_type, verb, model, output_model):
     cmd = command(
         noun + ' ' + verb, scope='company', description={
             'show': 'Show a sale and its current or selected immutable revision, captured commercial and custom facts, ordered lines, tax components and separate posting batch totals.',
-            'query': 'Page sales in accounting-date and stable-id order with exact customer, date, status and number filters; restart on company audit changes.',
+            'query': 'Page sales in accounting-date and stable-id order, oldest first or newest first, with exact customer, date, status and number filters; restart on company audit changes.',
             'history': 'Page immutable sale revisions in revision-number order with current header/version and correction and void batches; restart on company audit changes.',
         }[verb],
         input_model=model, output_model=output_model,

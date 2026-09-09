@@ -220,7 +220,7 @@ src/bookflow/
   adapters/http/app.py   FastAPI app from the registry: /commands/<noun.verb>, authoritative /companies/{id}/commands/<noun.verb>, /login, /logout, async /companies/{id}/events and /hub-events, exact generated /openapi.json, /health; credential/cookie handling and the same error documents as the CLI with HTTP statuses
   adapters/http/auth.py  argon2 passwords (constant-time on unknown users), bearer and session tokens stored as sha256, liveness refresh, login throttle
   adapters/http/local.py LocalListener on the Unix socket: peer identity from SO_PEERCRED, envelope identity fields discarded, 8 MiB frame cap and 30-second accepted-connection timeout
-  adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), document_form.py (sales document bands, line grid columns and human labels), document_nav.py (the way back from a document to earlier documents of its type), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
+  adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), document_form.py (sales document bands, line grid columns with a hint per head, human labels, the per-line pricing rule in the row panel), document_nav.py (the way back from a document to earlier documents of its type), list_paging.py (which lists open on the newest record, and the walk forwards and back through a list's pages), naming.py (page titles and column heads in a person's words), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
 ```
 
 Hub username resolution uses `hub/users.py`: Unicode NFC and case folding through a connection-local SQLite function, at most two candidate rows, and no match for ambiguous names. This lookup scans the users table; no schema migration or stored-name rewrite is required. Login resolves across all user kinds and active states before enforcing human/active status, verifies the password outside the read snapshot, then rechecks the username, user ID and password hash in the writer transaction before issuing a session. Password and token self-service resolves the selected account ID before allowing a case-variant username. Human creation rejects existing normalized names. OS-login mappings and passwords retain case sensitivity.
@@ -789,6 +789,8 @@ accounting logic: an aging column table with jobs indented under their parent an
 each customer linking to their own open invoices, and an open-invoice table
 linking each number to its invoice. Both carry a Next page form that preserves
 the validated filter and signed cursor. The home window's Reports tile names both.
+Neither section repeats the page's own title: every report page is titled with the
+report, from `naming.REPORTS`, rather than with the command that produces it.
 
 ## Customer work documents
 
@@ -1070,6 +1072,32 @@ through preview/error ordinal renaming. Numeric entry ignores JSON-mode values a
 rows overridden by an empty-list action. The company picker table owns horizontal
 scrolling within the shared responsive shell.
 
+No workbench page is titled with a command name and no table heads a column with a
+field name. `adapters/workbench/naming.py` is presentation only: `heading` titles every
+generated form and report page (`document_form.heading` keeps the three sales documents,
+whose titles carry the document's own number), `list_heading` titles every list with its
+records, and `column_label` is registered as the `label` Jinja filter so any template
+humanises a raw key the same way. `column_label` is a rule first — the storage suffixes
+(`_minor_units`, `_id`, …) and the underscores come off and what is left is
+capitalised — and reads its corrections from the maps already written in
+`document_form.py` and `query_catalog.py` rather than starting a third one.
+
+`SalesQueryInput` and `WorkQueryInput` take `direction` (`asc` default, `desc`), which
+reverses the accounting-date then stable-id order exactly. The cursor contract needs no
+new guard: `query.page_state` fingerprints the whole input except the cursor, so a
+continuation minted in one direction is rejected as an invalid cursor in the other, the
+same way `ledger_reports` hashes its own report input. `adapters/workbench/list_paging.py`
+opens the lists of written documents (`invoice`, `sales-receipt`, `proposal`, `estimate`,
+`work-order`) on `desc` and every other list on the order its records already carry, and
+builds the list's paging controls. Because a query command mints only a forward
+continuation, the walk back lives in the page's own address: `trail` carries the cursors
+of the pages already passed through and `page` carries the number, bounded at
+`DEPTH` entries so the URL cannot grow without limit; past that the walk back stops
+being offered and the first page — which needs no cursor — is offered instead. List
+filter values are translated by `forms.query_value`, the same typed translator the
+generated forms use, so a flag arrives as a flag and `unset` means no filter at all,
+which is what the estimate list's All availability sends.
+
 Invoices, sales receipts and estimates render as a document window instead of the
 generated field list. `adapters/workbench/document_form.py` is presentation only: it
 places the typed leaves into a header band, one line grid, a footer band and two
@@ -1080,11 +1108,34 @@ exactly once and anything it does not name reaches the reader in the advanced
 sections rather than disappearing. Line rows keep the shared collection contract
 (`data-collection`, `data-collection-items`, `data-collection-item`, the add
 template) so reference pickers, numeric entry, add/remove and line-origin
-preservation are unchanged. The grid scrolls inside its own container at every
-width. The Amount column is the server's computed net and is read-only; the
-whole-line amount price is a separate pricing input. Nothing on the page is
-calculated in the browser, and `sales-receipt` and `estimate` omit the invoice's
+preservation are unchanged. The Amount column is the server's computed net and is
+read-only; the whole-line amount price is a separate pricing input. Nothing on the page
+is calculated in the browser, and `sales-receipt` and `estimate` omit the invoice's
 payments-applied and balance-due footer. Save & New returns to a fresh document.
+
+Every column head carries a short hint from `COLUMN_HINTS`, shown once under the head
+rather than once per row, because a bookkeeper reading the grid asked what Unit meant
+next to Quantity; the same words are the control's own description wherever the row
+panel holds it instead. The unit column is headed `Unit of measure` for the same reason
+and is shown for every company. The pricing selector is not a column: it chooses which
+of the exclusive price inputs is live — a rule for the whole line rather than one of its
+numbers — so it lives in the row's own `More on this line` panel beside `net_amount`,
+under its generated `price-mode:` name, and the columns are the values a person reads
+left to right.
+
+**Above 700px the line grid is a table that scrolls inside its own container; below it,
+each line is a block.** A line item carries more horizontal information than a phone can
+show, and a grid that only kept the *page* from scrolling still dragged a ~1030px table
+through a ~340px window. Under the breakpoint `.line-row` stops being a grid row the way
+`.line-row-allocated` already does and becomes a two-column block: item and description
+full width with their labels above, the small numbers paired two to a row (quantity
+beside unit, rate beside tax) by `order` on `data-line-column`, the server's amount as an
+emphasised right-aligned footer, `More on this line` collapsed under it, and the row's
+own controls — including the Remove that releases a billed-from-quoted-work line's scope
+— at the end of the block. `.line-cell-label` is visually hidden only while the column
+heads exist; below the breakpoint it becomes a real visible label, positioned statically,
+because an absolute one previously widened the layout viewport. The measurement that
+holds this is the grid's own `scrollWidth == clientWidth` at 390px, not the page's.
 
 Every sales document page carries a toolbar back to the documents already written.
 `adapters/workbench/document_nav.py` builds it and `templates/document_nav.html` renders
@@ -1099,11 +1150,14 @@ entered. Voided sales and inactive estimates stay in that sequence — the sales
 shows voided documents by default, and a document outside its own sequence would have no
 arrows while you stand on it — so `estimate query` is called with `active=None`. A step
 with nowhere to go is disabled text carrying no destination, never a link. The arrows
-cost one bounded query on the saved-document page and a second only when a company holds
-more than one page (200) of that document type; past that size these query commands
-offer no way to look backwards from a document or to reach the newest few, so the
-Previous control and the recent list are disabled and say why. A descending direction on
-`SalesQueryInput` and `WorkQueryInput` is the one change that would close all of it.
+cost one bounded query on the saved-document page while a company's documents of that
+type fit in one page (200), and three past that size: the page-sized probe that
+establishes it, then a descending window anchored on the document's own date for the step
+back and an ascending one for the step forward, each the exact reverse of the other. The recent list asks `direction`
+for the newest few directly. Company size disables neither control; what is not answered
+past one page is the document's position in the whole list, which would cost an unbounded
+count, so no position is shown rather than a wrong one. A document neither window can
+place says so instead of guessing.
 
 Generated workbench forms preserve every model branch declared by a Pydantic
 string discriminator. A single discriminator control exposes the combined choices;

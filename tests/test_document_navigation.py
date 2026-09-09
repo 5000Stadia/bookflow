@@ -229,7 +229,7 @@ def test_the_recent_panel_lists_the_newest_documents_first(hosted, noun):
     panel = _browser(hosted).get(f"/c/{books['company']}/_recent/{noun}")
     assert panel.status_code == 200, panel.text[:600]
     shown = re.findall(r'href="/c/[^/]+/' + noun + r'/([^"]+)"', panel.text)
-    assert shown == list(reversed(order[-Nav.RECENT:]))
+    assert shown == list(reversed(order))[:Nav.RECENT]
 
 
 def test_the_recent_panel_refuses_a_noun_that_is_not_a_sales_document(hosted):
@@ -253,9 +253,11 @@ def test_a_correction_form_offers_the_list_and_no_arrows(hosted, noun):
 
 # ------------------------------------------------------- the sequence module directly
 
-def test_more_documents_than_one_page_disables_the_step_it_cannot_answer():
-    """Past one page the query cannot look backwards, so that arrow says so."""
+def test_more_documents_than_one_page_still_answers_both_steps():
+    """Past one page each side is a window anchored on this document's own date."""
     pages = [{'items': [{'id': 'b', 'number': '2', 'date': '2026-04-02'}], 'has_more': True},
+             {'items': [{'id': 'b', 'number': '2', 'date': '2026-04-02'},
+                        {'id': 'a', 'number': '1', 'date': '2026-04-01'}], 'has_more': True},
              {'items': [{'id': 'b', 'number': '2', 'date': '2026-04-02'},
                         {'id': 'c', 'number': '3', 'date': '2026-04-03'}], 'has_more': False}]
     calls = []
@@ -265,19 +267,24 @@ def test_more_documents_than_one_page_disables_the_step_it_cannot_answer():
         return pages[len(calls) - 1]
 
     view = Nav.strip(read, 'CO', 'invoice', {'id': 'b', 'date': '2026-04-02'})
-    assert [raw.get('date_from') for raw in calls] == [None, '2026-04-02']
-    assert view['previous'] is None and view['at_start'] is False
+    assert [raw.get('date_to') for raw in calls] == [None, '2026-04-02', None]
+    assert [raw.get('date_from') for raw in calls] == [None, None, '2026-04-02']
+    assert [raw.get('direction') for raw in calls] == [None, 'desc', None]
+    assert view['previous']['url'] == '/c/CO/invoice/a'
     assert view['next']['url'] == '/c/CO/invoice/c'
-    assert view['at_end'] is False
-    assert 'more invoices than one page holds' in view['unavailable']
+    # Neither end is this one: a document sits on each side of it.
+    assert view['at_start'] is False and view['at_end'] is False
+    assert view['unavailable'] is None
+    # Where in the whole list this sits would cost an unbounded count; none is claimed.
     assert view['position'] is None
 
 
 def test_a_neighbour_on_the_same_date_is_still_answered_past_one_page():
-    """Past a page the arrow that can be answered is answered, and says nothing false."""
+    """Past a page the arrows still land on the same date, in the entry order."""
     pages = [{'items': [], 'has_more': True},
-             {'items': [{'id': 'a', 'number': '1', 'date': '2026-04-02'},
-                        {'id': 'b', 'number': '2', 'date': '2026-04-02'}], 'has_more': True}]
+             {'items': [{'id': 'b', 'number': '2', 'date': '2026-04-02'},
+                        {'id': 'a', 'number': '1', 'date': '2026-04-02'}], 'has_more': True},
+             {'items': [{'id': 'b', 'number': '2', 'date': '2026-04-02'}], 'has_more': True}]
     calls = []
 
     def read(name, raw, company):
@@ -288,6 +295,16 @@ def test_a_neighbour_on_the_same_date_is_still_answered_past_one_page():
     assert view['previous']['url'] == '/c/CO/invoice/a'
     assert view['next'] is None and view['at_end'] is False
     assert view['unavailable'] is None
+
+
+def test_a_document_the_windows_cannot_place_says_so_rather_than_guessing():
+    """Nothing is invented for a document neither window could find."""
+    def read(name, raw, company):
+        return {'items': [{'id': 'x', 'number': '9', 'date': '2026-04-02'}], 'has_more': True}
+
+    view = Nav.strip(read, 'CO', 'invoice', {'id': 'b', 'date': '2026-04-02'})
+    assert view['previous'] is None and view['next'] is None
+    assert view['unavailable'] == Nav.UNPLACEABLE
 
 
 def test_one_page_answers_everything_with_one_read():

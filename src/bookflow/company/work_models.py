@@ -293,6 +293,10 @@ class WorkQueryInput(SalesPageInput):
     active: bool | None = True
     minimum_net: str | SalesMoneyInput | None = None
     maximum_net: str | SalesMoneyInput | None = None
+    direction: Literal['asc', 'desc'] = Field(default='asc',
+        description='Order of the document-date then stable-id page: asc pages the oldest document '
+                    'first, desc the most recent first. A cursor belongs to the direction that minted '
+                    'it; changing direction rejects it, so restart without a cursor.')
 
     @model_validator(mode='after')
     def interval(self):

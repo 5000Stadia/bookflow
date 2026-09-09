@@ -273,7 +273,13 @@ def test_adding_and_removing_lines_keeps_the_values_already_entered(register_bro
 
 
 @pytest.mark.parametrize('noun', ['invoice', 'estimate'])
-def test_the_line_grid_scrolls_inside_itself_at_phone_width(register_browser, noun):
+def test_the_line_grid_has_nothing_to_scroll_sideways_at_phone_width(register_browser, noun):
+    """A phone gets a block per line, not a wide table dragged through a narrow window.
+
+    This used to assert the opposite — that the grid scrolled inside itself while the
+    page did not. The page was fine and the grid was 1032px inside a 340px window, which
+    is the thing a person complained about, so the contract is now the grid's own.
+    """
     env, b = register_browser, register_browser.browser
     run = _books(b, env.site)
     b.viewport(390, 844)
@@ -294,7 +300,6 @@ def test_the_line_grid_scrolls_inside_itself_at_phone_width(register_browser, no
     grid = b.evaluate('''(() => {const g = document.querySelector(".line-grid");
         return {scroll: g.scrollWidth, client: g.clientWidth,
                 overflow: getComputedStyle(g).overflowX};})()''')
-    assert grid['overflow'] in ('auto', 'scroll')
-    assert grid['scroll'] > grid['client'], grid
+    assert grid['scroll'] <= grid['client'] + 1, grid
     _preview(b)
     _contained(b, 390)

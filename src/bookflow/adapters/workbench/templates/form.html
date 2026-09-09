@@ -1,11 +1,11 @@
-{% extends "base.html" %}{% block title %}{{ document.heading if document else noun ~ " " ~ verb }}{% endblock %}{% block body %}
+{% extends "base.html" %}{% block title %}{{ document.heading if document else heading }}{% endblock %}{% block body %}
 {% set base = ("/c/" ~ company_id ~ "/" ~ noun) if company_id else ("/hub/" ~ noun.replace(" ", "-")) %}
 {% set action = ((base ~ "/" ~ record_id) if record_id else base) ~ (("/" ~ verb) if verb else "") %}
 {% set invoice_correction_reason = noun == 'invoice' and verb == 'update' and attempted.get('f:operation_key') %}
 {% if billing and request.url.query %}{% set action = action ~ "?" ~ request.url.query %}{% endif %}
 <nav class="crumbs"><a href="{{ base }}">{{ noun }}</a> / {{ verb or "run" }}</nav>
 {% if document_nav %}{% include "document_nav.html" %}{% endif %}
-<h1>{{ document.heading if document else noun ~ " " ~ verb }}</h1>
+<h1>{{ document.heading if document else heading }}</h1>
 {% if document %}<p class="muted">{{ document.help }}</p><details class="technical-details"><summary>Command reference</summary><p>{{ cmd.description }}</p></details>
 {% elif noun in ('estimate','work-order') and verb in ('billing','invoice','sales-receipt') %}<p class="muted">Review quoted, billed and remaining work before preparing the next bill.</p><details><summary>Billing rules and command help</summary><p>{{ cmd.description }}</p></details>
 {% else %}<p class="muted">{{ cmd.description }}</p>{% endif %}

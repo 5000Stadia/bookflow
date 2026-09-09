@@ -1400,7 +1400,7 @@ Example JSON output:
 
 ## `sales-receipt query`
 
-Page sales in accounting-date and stable-id order with exact customer, date, status and number filters; restart on company audit changes.
+Page sales in accounting-date and stable-id order, oldest first or newest first, with exact customer, date, status and number filters; restart on company audit changes.
 
 | Contract | Value |
 |---|---|
@@ -1427,6 +1427,7 @@ Page sales in accounting-date and stable-id order with exact customer, date, sta
 | `customer` | `--customer` | string \| null | no | yes | null | — |
 | `number` | `--number` | string \| null | no | yes | null | — |
 | `status` | `--status` | literal["posted", "voided"] \| null | no | yes | null | — |
+| `direction` | `--direction` | literal["asc", "desc"] | no | no | "asc" | Order of the accounting-date then stable-id page: asc pages the oldest sale first, desc the most recent first. A cursor belongs to the direction that minted it; changing direction rejects it, so restart without a cursor. |
 
 ### Command and context options
 

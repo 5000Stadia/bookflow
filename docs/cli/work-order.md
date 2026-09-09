@@ -3875,7 +3875,7 @@ Example JSON output:
 
 ## `work-order query`
 
-Find work by customer, number, title, date, status, availability and net amount. Continue bounded pages while the company audit watermark is unchanged.
+Find work by customer, number, title, date, status, availability and net amount, oldest first or newest first. Continue bounded pages while the company audit watermark is unchanged.
 
 | Contract | Value |
 |---|---|
@@ -3906,6 +3906,7 @@ Find work by customer, number, title, date, status, availability and net amount.
 | `active` | `--active` | boolean \| null | no | yes | true | — |
 | `minimum_net` | `--minimum-net` | string \| object \| null | no | yes | null | — |
 | `maximum_net` | `--maximum-net` | string \| object \| null | no | yes | null | — |
+| `direction` | `--direction` | literal["asc", "desc"] | no | no | "asc" | Order of the document-date then stable-id page: asc pages the oldest document first, desc the most recent first. A cursor belongs to the direction that minted it; changing direction rejects it, so restart without a cursor. |
 
 ### Command and context options
 

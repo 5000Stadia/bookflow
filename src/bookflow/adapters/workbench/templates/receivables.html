@@ -1,5 +1,4 @@
 <section id="receivables-report" aria-label="Receivables report">
-<h2>{{ 'A/R aging summary' if verb == 'ar-aging' else 'Open invoices' }}</h2>
 <p>{{ company_label }} · {{ receivables.metadata.basis|capitalize }} · {{ receivables.metadata.currency }} · As of {{ receivables.as_of }}</p>
 {% if verb == 'ar-aging' %}
 <p class="muted">Invoices are aged on their due date and carry what is still owed on them. An invoice due exactly 30 days before the as-of date is in 1-30. Unapplied customer credit and any receivable journal entry age on their own date, so the Total column equals Accounts Receivable on the balance sheet for the same date. A customer with nothing in any column is omitted.</p>

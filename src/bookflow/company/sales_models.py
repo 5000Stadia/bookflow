@@ -303,6 +303,10 @@ class SalesQueryInput(SalesPageInput):
     customer: Selector | None = None
     number: str | None = Field(default=None, max_length=64)
     status: Literal["posted", "voided"] | None = None
+    direction: Literal["asc", "desc"] = Field(default="asc",
+        description="Order of the accounting-date then stable-id page: asc pages the oldest sale first, "
+                    "desc the most recent first. A cursor belongs to the direction that minted it; "
+                    "changing direction rejects it, so restart without a cursor.")
 
     @model_validator(mode="after")
     def dates(self):
