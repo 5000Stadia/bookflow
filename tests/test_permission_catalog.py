@@ -51,6 +51,11 @@ def test_complete_unfiltered_registry_descriptors_and_action_owners():
 
 # Hand-disposed conditional resource producers. Graph discovery remains with these
 # owners; no target graph is executed or replaced by static permission admission.
+# The accepted descriptor's digest, pinned in exactly one place. A second copy of this
+# literal is how tests/test_identity_admin_catalog.py drifted to a value matching no
+# catalog at all, and stayed that way unnoticed while its fixture could not run.
+FROZEN_DESCRIPTOR_SHA256 = '0d153b8a941c25e3b826a9b0679be1655cc47498a10ea6b1c7f080b11bf12ca2'
+
 RESOURCE_PAIRS = {
     # Mirrored from permission_runtime.CURRENT_SOURCES, which already declared every owner
     # with its call-site lines. The frozen catalog had absorbed only 16 of 22 and its
@@ -192,7 +197,7 @@ def test_frozen_manifest_digest_and_pure_import_boundary():
     assert c.FROZEN_CATALOG.version == 'deposit-write-receivables-and-identity-v1'
     assert c.catalog_manifest(c.FROZEN_CATALOG, c.FROZEN_MANIFEST.standalone_names) == c.FROZEN_MANIFEST
     raw = json.dumps(asdict(c.FROZEN_CATALOG), sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode()
-    assert c.FROZEN_MANIFEST.descriptor_sha256 == '0d153b8a941c25e3b826a9b0679be1655cc47498a10ea6b1c7f080b11bf12ca2'
+    assert c.FROZEN_MANIFEST.descriptor_sha256 == FROZEN_DESCRIPTOR_SHA256
     for name in ('permission_catalog', 'permission_policy'):
         tree = ast.parse((ROOT / f'src/bookflow/hub/{name}.py').read_text())
         modules = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)} | {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
