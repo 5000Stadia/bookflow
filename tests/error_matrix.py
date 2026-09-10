@@ -680,3 +680,40 @@ for _name in ('deposit show', 'deposit items', 'deposit query'):
     MATRIX.setdefault(_name, {}).update(_DEPOSIT_READ_ERRORS)
 for _name in ('deposit items', 'deposit query'):
     MATRIX[_name]['E_QUERY_STALE'] = 'the page fingerprint moved under the cursor; restart without one'
+
+# The bill is the payables mirror of the invoice, so it refuses for the invoice's reasons on
+# the other side of the books: an ineligible or ambiguous payable account, an expense line that
+# names an account no expense can go to, and a due date before the bill's own.
+MATRIX["bill post"] = {
+    "E_RECORD_NOT_FOUND": "unknown vendor, account, terms, class or job",
+    "E_INACTIVE_REFERENCE": "deactivated vendor, account, terms, class or job",
+    "E_VALIDATION": "no single active Accounts Payable account, an ineligible account on the header or a line, or a due date before the bill date",
+    "E_VALUE_RANGE": "amount outside signed 64-bit minor units",
+    "E_AMOUNT_PRECISION": "more decimals than the home currency has",
+    "E_PERIOD_CLOSED": "bill date on or before the closing date",
+    "E_DUPLICATE_NUMBER": "explicit --number already used by another bill",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["bill update"] = dict(MATRIX["bill post"], **{
+    "E_RECORD_NOT_FOUND": "unknown bill, vendor, account, terms, class or job",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_PERIOD_CLOSED": "original or new bill date on or before the closing date",
+    "E_HAS_APPLICATIONS": "a payment has been applied to this bill",
+    "E_VALIDATION": "a voided bill, a retired line identity, an ineligible account, or a due date before the bill date",
+})
+MATRIX["bill void"] = {
+    "E_RECORD_NOT_FOUND": "unknown bill",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_REASON_REQUIRED": "no --reason",
+    "E_VALIDATION": "--reason longer than 140 characters",
+    "E_PERIOD_CLOSED": "bill date on or before the closing date",
+    "E_HAS_APPLICATIONS": "a payment has been applied to this bill",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["bill show"] = {"E_RECORD_NOT_FOUND": "unknown bill or revision number"}
+MATRIX["bill query"] = {"E_RECORD_NOT_FOUND": "unknown vendor filter", "E_QUERY_STALE": "company audit changed between bill pages"}
+MATRIX["bill history"] = {"E_RECORD_NOT_FOUND": "unknown bill", "E_QUERY_STALE": "company audit changed between history pages"}

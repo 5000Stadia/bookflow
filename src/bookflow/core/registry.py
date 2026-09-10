@@ -263,6 +263,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.billing_cmds": ["estimate", "work-order"],
     "bookflow.commands.register_cmds": ["register"],
     "bookflow.commands.check_cmds": ["check", "card-charge"],
+    "bookflow.commands.bill_cmds": ["bill"],
     "bookflow.commands.transfer_cmds": ["transfer"],
     "bookflow.commands.report_cmds": ["report"],
     "bookflow.commands.rate_cmds": ["rate"],
@@ -352,6 +353,7 @@ NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
     "company": {"record_type": "company_info", "identifier": None},
     "journal": {"record_type": "transaction", "identifier": "journal", "output_identifier": "id", "ui_group": "Accounting", "display_field": "number", "singular_label": "Journal", "plural_label": "Journals"},
     "register": {"record_type": None, "identifier": None, "ui_group": "Accounting"},
+    "bill": {"record_type": "transaction", "identifier": "bill", "output_identifier": "id", "display_field": "number", "singular_label": "Bill", "plural_label": "Bills"},
     "check": {"record_type": "transaction", "identifier": None, "output_identifier": "id", "ui_group": "Vendors and purchases", "display_field": "number", "singular_label": "Check", "plural_label": "Checks"},
     "card-charge": {"record_type": "transaction", "identifier": None, "output_identifier": "id", "ui_group": "Vendors and purchases", "display_field": "number", "singular_label": "Credit card charge", "plural_label": "Credit card charges"},
     "transfer": {"record_type": "transaction", "identifier": None, "output_identifier": "id", "ui_group": "Accounting", "display_field": "number", "singular_label": "Transfer", "plural_label": "Transfers"},
@@ -375,6 +377,9 @@ def noun_meta(noun: str) -> dict[str, Any]:
         if noun in ('check', 'card-charge'):
             from bookflow.company.check_contract import FORM_DEFINITIONS
             meta['form_definition'] = FORM_DEFINITIONS[noun]
+        if noun == 'bill':
+            from bookflow.company.bill_contract import FORM
+            meta['form_definition'] = FORM
         if noun == 'transfer':
             from bookflow.company.transfer_contract import FORM
             meta['form_definition'] = FORM

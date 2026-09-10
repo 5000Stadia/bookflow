@@ -16,7 +16,7 @@ from bookflow.company import schema as c
 from bookflow.company.deposit_draft_schema import guards
 from bookflow.company.deposit_dependencies import RECONCILIATION
 from bookflow.storage.engine import open_database
-from bookflow.storage.migrate import migrate_to_head,feature_admission
+from bookflow.storage.migrate import HEADS,migrate_to_head,feature_admission
 from bookflow.core.errors import BookflowError
 from tests.payment_raw_evidence import table,attachments
 
@@ -33,13 +33,13 @@ def test_literal_ddl_metadata_fk_targets_fresh_and_noop(tmp_path):
             target=fk.referred_table;columns=tuple(e.column.name for e in fk.elements)
             assert columns in [tuple(target.primary_key.columns.keys())]+[tuple(x.columns.keys()) for x in target.constraints if x.__class__.__name__=='UniqueConstraint']
     with open_database(tmp_path/'fresh.db',writable=True,create=True) as db:
-        assert migrate_to_head(db,'company',None)==(None,'co0024')
+        assert migrate_to_head(db,'company',None)==(None,HEADS['company'])
         assert all(db.raw.execute('SELECT count(*) FROM '+n).fetchone()==(0,) for n in M.NEW_TABLES)
         assert db.raw.execute('PRAGMA main.foreign_key_check').fetchall()==[]
         assert db.raw.execute('PRAGMA main.integrity_check').fetchall()==[('ok',)]
         assert feature_admission(db,RECONCILIATION,resolver=None) is None
         before=list(db.raw.iterdump())
-        assert migrate_to_head(db,'company',None)==('co0024','co0024')
+        assert migrate_to_head(db,'company',None)==(HEADS['company'],HEADS['company'])
         assert list(db.raw.iterdump())==before
 
 @pytest.fixture(scope='module')
@@ -77,9 +77,15 @@ def test_raw_values_local_objects_backup_copy_upgrade_and_old_refusal(predecesso
         before={n:table(raw,n) for n in names};ddl=raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema').fetchall()
     files=attachments(root)
     with open_database(path,writable=True) as db:
-        assert migrate_to_head(db,'company',tmp_path/'backups')==('co0023','co0024')
+        assert migrate_to_head(db,'company',tmp_path/'backups')==('co0023',HEADS['company'])
         assert {n:table(db.raw,n) for n in names}==before
-        assert set(ddl)<=set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema'))
+        current=set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema'))
+        # co0025 widens the transaction-type and entered-line-kind CHECKs, which SQLite can only
+        # do by rebuilding those two tables and reinstating their type guard. Nothing else in a
+        # co0023 database may change, and those three must change together.
+        rebuilt={'transactions','document_lines','document_lines_type_insert'}
+        assert {row for row in ddl if row[1] not in rebuilt}<=current
+        assert {row[1] for row in set(ddl)-current}==rebuilt
         assert all(db.raw.execute('SELECT count(*) FROM '+n).fetchone()==(0,) for n in M.NEW_TABLES)
         assert db.raw.execute('PRAGMA main.foreign_key_check').fetchall()==[]
     assert attachments(root)==files

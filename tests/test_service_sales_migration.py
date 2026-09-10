@@ -3,6 +3,7 @@ import ast
 import importlib
 import inspect
 import shutil
+import re
 import sqlite3
 
 import pytest
@@ -151,15 +152,26 @@ def test_frozen_ddl_matches_declared_columns_keys_checks(old, tmp_path, monkeypa
                 expected = expected.to_metadata(sa.MetaData())
                 current_check, = (constraint for constraint in expected.constraints if constraint.name == 'ck_document_line_kind_side')
                 expected.constraints.remove(current_check)
-                expected.append_constraint(sa.CheckConstraint(str(current_check.sqltext).replace("kind IN ('sale', 'payment')", "kind = 'sale'"), name=current_check.name))
+                # Later migrations keep widening this kind list; co0009 knew only the sale.
+                expected.append_constraint(sa.CheckConstraint(re.sub(r"kind IN \('sale'[^)]*\)", "kind = 'sale'", str(current_check.sqltext)), name=current_check.name))
             if name == 'posting_line_sources':
+                # co0014 added the payment component and co0020 the deposit one, each with its
+                # own FK and a place in the exclusivity CHECK. This fixture owns co0009, which
+                # knew only the sale tax component.
                 expected = expected.to_metadata(sa.MetaData())
-                payment_fk, = (constraint for constraint in expected.foreign_key_constraints if constraint.name == 'fk_source_payment_component')
-                expected.constraints.remove(payment_fk)
-                for element in payment_fk.elements:
-                    expected.foreign_keys.remove(element)
-                    element.parent.foreign_keys.remove(element)
-                expected._columns.remove(expected.c.payment_component_id)
+                for constraint_name, column in (('fk_source_payment_component', 'payment_component_id'),
+                                                ('fk_source_deposit_component', 'deposit_component_id')):
+                    foreign, = (constraint for constraint in expected.foreign_key_constraints
+                                if constraint.name == constraint_name)
+                    expected.constraints.remove(foreign)
+                    for element in foreign.elements:
+                        expected.foreign_keys.remove(element)
+                        element.parent.foreign_keys.remove(element)
+                    expected._columns.remove(expected.c[column])
+                exclusive = [constraint for constraint in expected.constraints
+                             if constraint.name == 'ck_source_component_exclusive']
+                for constraint in exclusive:
+                    expected.constraints.remove(constraint)
             if name == 'sales_line_profiles':
                 # co0011/12 introduced amount/allocated pricing; this owns co0009.
                 # Undo only those declared deltas, retaining every other assertion.
