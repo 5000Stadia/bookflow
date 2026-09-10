@@ -1491,14 +1491,16 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
                 assert page.text.count(f'name="clear:{parent}"') == 1, (cmd.name, parent)
             if leaf["path"] == "custom_fields" and (
                 getattr(definition, "runtime_field_provider", None) == "custom-fields"
-                or (cmd.noun in ("journal", "register", "invoice", "sales-receipt")
+                or (cmd.noun in ("journal", "register", "invoice", "sales-receipt",
+                                 "check", "card-charge")
                     and cmd.verb in ("post", "update"))
                 or cmd.noun in ("proposal", "estimate", "work-order")
             ):
                 assert 'name="f:custom_fields"' not in page.text, cmd.name
                 assert 'name="cf:' in page.text, cmd.name
             elif leaf["path"] == "custom_field_kinds" and cmd.noun in (
-                "journal", "register", "invoice", "sales-receipt", "proposal", "estimate", "work-order"
+                "journal", "register", "invoice", "sales-receipt", "proposal", "estimate",
+                "work-order", "check", "card-charge"
             ):
                 assert 'name="f:custom_field_kinds"' not in page.text, cmd.name
                 kinds = re.findall(r'name="cf-kind:([^"]+)"', page.text)

@@ -262,6 +262,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.work_cmds": ["proposal", "estimate", "work-order"],
     "bookflow.commands.billing_cmds": ["estimate", "work-order"],
     "bookflow.commands.register_cmds": ["register"],
+    "bookflow.commands.check_cmds": ["check", "card-charge"],
     "bookflow.commands.report_cmds": ["report"],
     "bookflow.commands.rate_cmds": ["rate"],
     "bookflow.commands.activity_cmds": ["activity"],
@@ -350,6 +351,8 @@ NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
     "company": {"record_type": "company_info", "identifier": None},
     "journal": {"record_type": "transaction", "identifier": "journal", "output_identifier": "id", "ui_group": "Accounting", "display_field": "number", "singular_label": "Journal", "plural_label": "Journals"},
     "register": {"record_type": None, "identifier": None, "ui_group": "Accounting"},
+    "check": {"record_type": "transaction", "identifier": None, "output_identifier": "id", "ui_group": "Vendors and purchases", "display_field": "number", "singular_label": "Check", "plural_label": "Checks"},
+    "card-charge": {"record_type": "transaction", "identifier": None, "output_identifier": "id", "ui_group": "Vendors and purchases", "display_field": "number", "singular_label": "Credit card charge", "plural_label": "Credit card charges"},
     "report": {"record_type": None, "identifier": None, "ui_group": "Accounting"},
     "rate": {"record_type": "exchange_rate", "identifier": "rate_id", "output_identifier": "id", "ui_group": "Accounting"},
     "audit": {"record_type": "audit_event", "identifier": "event"},
@@ -367,6 +370,9 @@ def noun_meta(noun: str) -> dict[str, Any]:
         if noun == 'report':
             from bookflow.company.report_contract import FORM
             meta['form_definition'] = FORM
+        if noun in ('check', 'card-charge'):
+            from bookflow.company.check_contract import FORM_DEFINITIONS
+            meta['form_definition'] = FORM_DEFINITIONS[noun]
         return meta
     show = REGISTRY.get(f"{noun} show")
     identifier = show.positional[0] if show and show.positional else None

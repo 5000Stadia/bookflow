@@ -135,6 +135,18 @@
   .line-cell[data-line-column="markup_percent"] { order: 8; }
   .line-cell[data-line-column="class_id"] { order: 9; }
 
+  /* The Expenses grid becomes the same block, in its own reading order: what the money was
+     spent on across the block, the amount and the class beside each other, then what the
+     line was for. The amount here is typed rather than computed by the server, so it takes
+     an ordinary paired slot instead of the block's footer. Scoped to this collection so the
+     shared class column keeps its place in a sale. */
+  [data-collection-path="expenses"] .line-cell[data-line-column="account"] {
+    order: 1; grid-column: 1 / -1; }
+  [data-collection-path="expenses"] .line-cell[data-line-column="amount"] { order: 2; }
+  [data-collection-path="expenses"] .line-cell[data-line-column="class_id"] { order: 3; }
+  [data-collection-path="expenses"] .line-cell[data-line-column="memo"] {
+    order: 4; grid-column: 1 / -1; }
+
   /* The number a person checks, as the block's own footer. Still the server's figure. */
   .line-cell[data-line-column="@amount"] { order: 10; grid-column: 1 / -1;
     display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline;

@@ -269,17 +269,33 @@ def _reference_label(
 
 
 def _reference_target(
-    targets: tuple[str, ...],
+    reference: Any,
     noun: str,
     originals: dict[str, Any],
     attempted: dict[str, str],
 ) -> tuple[str | None, str | None]:
+    targets = reference.target_nouns
     if len(targets) == 1:
         return targets[0], None
-    discriminator = "name_type" if noun == "sales-rep" else None
+    # Which control chooses the list this picker searches. A reference that names its own
+    # field carries it; the sales rep's is the one that predates the declaration.
+    discriminator = getattr(reference, "discriminator", None) or (
+        "name_type" if noun == "sales-rep" else None)
     chosen = F.selected_value(discriminator, originals, attempted) if discriminator else None
     normalized = str(chosen).replace("_", "-") if chosen else None
     return (normalized if normalized in targets else None), discriminator
+
+
+def _document_base(company_id: str | None, noun: str) -> str:
+    """Where a document window's Cancel goes back to.
+
+    A document with a list of its own goes back to that list. The money-out documents have no
+    list yet, so they go back to the home board, which is where they were opened from -- never
+    to a list route that would answer with an error page.
+    """
+    if not company_id:
+        return ''
+    return f"/c/{company_id}/" if noun in Document.MONEY_OUT else f"/c/{company_id}/{noun}"
 
 
 def _form_reference(definition: Any, noun: str, path: str) -> Any | None:
@@ -383,7 +399,8 @@ def _success_target(cmd: registry.Command, company_id: str | None, noun: str, re
     route_noun = noun.replace(" ", "-")
     if company_id and cmd.name == "rate set" and output.get("id"):
         return f"/c/{company_id}/rate/{output['id']}"
-    if company_id and cmd.name in ("register post", "register update") and output.get("id"):
+    if company_id and cmd.name in ("register post", "register update", "check post",
+                                   "card-charge post") and output.get("id"):
         return f"/c/{company_id}/journal/{output['id']}"
     if Billing.is_conversion(noun, cmd.verb) and output.get('id'):
         return f"/c/{company_id}/{output['type'].replace('_', '-')}/{output['id']}"
@@ -1256,6 +1273,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         originals = originals or {}
         if noun == 'deposit' and verb == 'post' and not attempted:
             attempted.update({'f:operation_key': 'WB-' + secrets.token_urlsafe(24), 'f:document.mode': 'inline'})
+        if noun in Document.MONEY_OUT and verb == 'post':
+            # Open the payee picker on the list a check usually pays, and keep it honest when
+            # nobody is entered: a leaf equal to its original is not submitted, so seeding the
+            # kind of name here both selects Vendor and leaves the whole pay_to object out of
+            # the command until a name is actually chosen.
+            originals = {**originals, 'pay_to': {'name_type': 'vendor'}}
         if noun == 'invoice' and verb == 'update' and shown and not attempted:
             settlement = run(request, 'invoice settlement', {'invoice': shown['id']}, company_id)
             attempted['f:operation_key'] = 'WB-' + secrets.token_urlsafe(24)
@@ -1440,7 +1463,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 if reference is None:
                     continue
                 targets = reference.target_nouns
-                target, discriminator = _reference_target(targets, noun, originals, attempted)
+                target, discriminator = _reference_target(reference, noun, originals, attempted)
                 value = F.selected_value(leaf["path"], originals, attempted)
                 current = None
                 owned_addresses = getattr(reference, 'owned_collection', None) == 'shipping_addresses'
@@ -1553,7 +1576,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         except BookflowError as err:
             return page_error(request, err)
         runtime_scope = (noun.replace('-', '_') if noun in ('invoice', 'sales-receipt') and verb in ('post', 'update') else
-                         "journal_entry" if noun in ("journal", "register") and verb in ("post", "update") else
+                         "journal_entry" if (noun in ("journal", "register", *Document.MONEY_OUT)
+                                             and verb in ("post", "update")) else
                          definition.record_type if definition is not None and definition.runtime_field_provider == "custom-fields" else None)
         if noun in Work.NOUNS and 'custom_fields' in cmd.input_model.model_fields:
             runtime_scope = verb.replace('-', '_') if Billing.is_conversion(noun, verb) else 'estimate' if verb == 'estimate' else 'work_order' if verb == 'work-order' else noun.replace('-', '_')
@@ -1610,10 +1634,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       return_context=return_context, workflow_note=workflow_note,
                       reference_values=reference_values,
                       preferences_settings_url=f'/c/{company_id}/company/self/update' if authorized_company and _role_allows(registry.get('company update'), authorized_company, hub_admin=cred.hub_admin) else None,
-                      document_nav=Nav.form_bar(company_id, noun, verb, record_id) if document_form else None,
+                      document_nav=Nav.form_bar(company_id, noun, verb, record_id) if document_form and noun in Nav.NOUNS else None,
                       document=Document.context(noun, verb, described, originals, shown=shown,
                           result=result if result and 'revision' in result else None, preview=preview,
-                          record_id=record_id, base=('/c/' + company_id + '/' + noun) if company_id else '') if document_form else None,
+                          record_id=record_id, error=error,
+                          base=_document_base(company_id, noun)) if document_form else None,
                       form_groups=None if document_form else Work.form_groups(described) if noun in Work.NOUNS and cmd.is_write else W.customer_form_groups(described) if noun == "customer" and verb in ("create", "update") else W.company_form_groups(described) if noun == 'company' and verb in ('new', 'update') else None)
 
     def contact_copy_page(

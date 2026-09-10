@@ -70,7 +70,7 @@
 <div class="document-row document-row-wide">{% for l in d.scope %}{{ field(l, l.index) }}{% endfor %}</div></section>{% endif %}
 
 {% if d.lines %}
-<section class="document-band" aria-label="Lines"><h2 class="band-title">Lines</h2>
+<section class="document-band" aria-label="{{ d.lines_title }}"><h2 class="band-title">{{ d.lines_title }}</h2>
 <div class="line-grid" data-collection data-collection-path="{{ d.lines.path }}" style="--line-columns: {{ d.grid_template }}; --line-width: {{ d.grid_width }}">
 <input type="hidden" name="collection:{{ d.lines.path }}" value="1">
 <div class="line-head" aria-hidden="true">{% for column in d.columns %}<span class="line-cell"{% if column.hint %} title="{{ column.hint }}"{% endif %}>{{ column.label }}{% if column.hint %}<small class="line-head-hint">{{ column.hint }}</small>{% endif %}</span>{% endfor %}<span class="line-cell line-cell-actions">Row</span></div>
@@ -84,15 +84,12 @@
 <section class="document-band document-footer" aria-label="{{ d.title }} footer"><h2 class="band-title">Footer</h2>
 <div class="footer-inputs">{% for l in d.footer %}{{ field(l, l.index) }}{% endfor %}</div>
 <div class="footer-totals" aria-label="Computed totals">
-{% if d.computed %}<dl class="totals-list">
-<dt>Subtotal</dt><dd>{{ d.computed.subtotal }}</dd>
-<dt>Tax</dt><dd>{{ d.computed.tax }}</dd>
-<dt>Total</dt><dd><strong>{{ d.computed.total }} {{ d.computed.currency }}</strong></dd>
-{% if d.settled and d.computed.applied is defined %}<dt>Payments Applied</dt><dd>{{ d.computed.applied }}</dd>
-<dt>Balance Due</dt><dd><strong>{{ d.computed.due }} {{ d.computed.currency }}</strong></dd>{% endif %}
+{% if d.totals %}<dl class="totals-list">
+{% for row in d.totals %}<dt>{{ row.label }}</dt><dd>{% if row.strong %}<strong>{{ row.value }}</strong>{% else %}{{ row.value }}{% endif %}</dd>{% endfor %}
 </dl>
+{% if d.reconciliation %}<p class="{{ 'muted' if d.reconciled else 'warn' }}" data-reconciliation>{{ d.reconciliation }}</p>{% endif %}
 <p class="muted">Computed by the server from {{ d.origin }}. Nothing on this page is calculated in the browser.</p>
-{% else %}<p class="muted">Preview to see the subtotal, tax and total the server computes.</p>{% endif %}
+{% else %}<p class="muted">{{ d.totals_empty }}</p>{% endif %}
 </div>
 </section>
 

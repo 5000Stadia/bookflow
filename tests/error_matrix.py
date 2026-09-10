@@ -201,6 +201,19 @@ MATRIX['register calculate'] = {code: _LEDGER_WRITE_ERRORS[code] for code in (
 MATRIX['register query'] = dict(MATRIX['report general-ledger'])
 MATRIX['register query'].update({code: _LEDGER_WRITE_ERRORS[code] for code in ('E_INACTIVE_REFERENCE', 'E_AMOUNT_PRECISION')})
 
+# The money-out documents are the register split under their own names, so they raise the
+# ledger's own codes; only the unbalanced one reads differently, because what it names is the
+# difference between the expense lines and the figure on the face of the document.
+for _noun in ('check', 'card-charge'):
+    MATRIX[_noun + ' post'] = {code: _LEDGER_WRITE_ERRORS[code] for code in (
+        'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_PERIOD_CLOSED', 'E_DUPLICATE_NUMBER',
+        'E_VALUE_RANGE', 'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED', 'E_IDEMPOTENCY_MISMATCH',
+        'E_DIRECTIVE_NOT_FOUND', 'E_DIRECTIVE_INACTIVE')}
+    MATRIX[_noun + ' post'].update({
+        'E_VALIDATION': 'account is not the kind that funds this document, or a line names an unusable account',
+        'E_UNBALANCED_ENTRY': 'expense lines do not add up to the amount on the face of the document',
+    })
+
 for _verb in ('show', 'list', 'query', 'activate', 'deactivate'):
     MATRIX['customer ' + _verb]['E_VALUE_RANGE'] = 'exact own or family receivable balance exceeds signed 64-bit range'
 

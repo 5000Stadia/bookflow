@@ -486,6 +486,55 @@ pending write per tab, including its payload and retry key, before submission;
 uncertain results require resolving that same intent before another write.
 
 
+### Money-out documents: check and card charge
+
+`check post` and `card-charge post` are the document surface over the account register.
+`company/check_models.py` holds their inputs and `company/checks.py` translates them into a
+`RegisterPostInput` and hands it to `registers.translate` and the journal writer, so money
+posts by exactly one path and these commands take no accounting decision. `journals.persist_prepared`
+is called with the document's own command name, so the audit trail says `check post` rather
+than the register underneath it.
+
+Two nouns rather than one with a payment-type flag. A check is drawn on a `bank` account and a
+card charge on a `credit_card` account; each refuses the other's account type by name. The
+funding account is credited either way, which is `direction: decrease` on the debit-normal bank
+and `direction: increase` on the credit-normal card — `DIRECTION` in `check_models.py` holds
+that pair and it is the only place the register's vocabulary appears. Only the check carries
+`number`, so the check number is absent from the card charge's schema, its CLI flags, its MCP
+input schema and its form rather than being accepted and ignored.
+
+`expenses` is one to 199 lines of account, amount, memo, class and optional party, and they must
+add up to `amount` exactly. A total that does not is `E_UNBALANCED_ENTRY` before anything is
+written, carrying `expense_total`, `amount` and `difference` as exact money plus
+`difference_minor_units` signed toward the lines, so the message and the document footer can both
+name the difference. The write output is `MoneyOutWriteOutput`: the journal write output plus a
+`document` summary holding the kind, the funding account and type, the amount, the exact expense
+total and the line count. That summary is what the footer displays; nothing is recomputed in the
+browser.
+
+Correction is `register update` and voiding is `journal void`, the same as every other register
+entry: the document is a journal, its reversal posts at the original date and the revisions stay.
+
+**Where an Items tab attaches.** The line collection is named `expenses`, not `lines`. A second
+line kind arrives as a sibling collection `items` on the same input models, translated into
+allocations appended after the expense allocations in the same ordered list; the header, the
+totals, the refusal rule and the stored journal do not move, because a journal revision already
+stores an ordered line list with a `kind` per line and the sales documents already put non-journal
+line kinds in it. In the window, `document_form.layout` selects the grid and the collection by
+noun and returns `lines_title`; a second grid is a second band with its own column tuple beside
+this one, and the phone block rules are scoped by `[data-collection-path=...]` so a second grid
+gets its own reading order without touching this one. Nothing here builds, implies or reserves
+inventory behaviour.
+
+`adapters/workbench/document_form.py` serves both money-out documents from the same
+document-window layout as the sales documents: `MONEY_OUT` selects the header band
+(`MONEY_OUT_PRIMARY`), the `EXPENSE_GRID` columns and the money-out footer, and `NOUN_LABELS` /
+`NOUN_DESCRIPTIONS` put each document's own words on the shared controls. The footer's rows come
+from `money_out_totals`, which reads the server's `document` summary after a preview and the
+refusal's own figures after a refusal, so the reconciliation is visible on the page that refused.
+`pay_to` is a multi-target reference resolved by the `discriminator` declared on
+`ReferenceDefinition`, which generalises the mechanism the sales-rep picker already used.
+
 ### Ledger performance measurements
 
 Audit entry snapshots are encoded in their existing format and inserted as one

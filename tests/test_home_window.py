@@ -266,7 +266,9 @@ def test_a_tile_flips_with_registry_state_and_no_template_edit(hosted):
 
     page = browser.get(f"/c/{hosted.company_id}/").text
     assert _tiles(page)["Invoice"][0] == "a"
-    assert _tiles(page)["Write check"][0] == "div"
+    # Reconcile is the planned half of this pair: its commands do not exist yet, so the same
+    # map and the same template render it as an inert div rather than a link.
+    assert _tiles(page)["Reconcile"][0] == "div"
 
 
 def test_registration_and_routing_alone_do_not_deliver_a_live_tile(hosted):

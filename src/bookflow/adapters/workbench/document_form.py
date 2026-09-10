@@ -13,7 +13,14 @@ from bookflow.core.money import Money
 
 NOUNS = ('invoice', 'sales-receipt', 'estimate')
 
-TITLES = {'invoice': 'Invoice', 'sales-receipt': 'Sales receipt', 'estimate': 'Estimate'}
+# The money-out documents: a check written on a bank account, a charge made on a credit card.
+# They open in this same window and use this same grid; what differs is the account that funds
+# them, whether a check number applies, and the words on the form. They are deliberately not in
+# NOUNS -- those three have list pages and document arrows, and these do not yet.
+MONEY_OUT = ('check', 'card-charge')
+
+TITLES = {'invoice': 'Invoice', 'sales-receipt': 'Sales receipt', 'estimate': 'Estimate',
+          'check': 'Check', 'card-charge': 'Credit card charge'}
 
 # Header band, first row: who and when, in the order a document window reads.
 PRIMARY = ('customer', 'title', 'class_id', 'date', 'number', 'expires_on', 'status', 'decision_note')
@@ -34,7 +41,8 @@ RECORD = ('expected_version', 'active', 'acknowledge_expired', 'refresh_defaults
 ADDRESSES = {'sales-receipt': (('Sold To', 'billing_address'), ('Ship To', 'shipping_address'))}
 DEFAULT_ADDRESSES = (('Bill To', 'billing_address'), ('Ship To', 'shipping_address'))
 
-NUMBER_LABELS = {'invoice': 'Invoice #', 'sales-receipt': 'Sale #', 'estimate': 'Estimate #'}
+NUMBER_LABELS = {'invoice': 'Invoice #', 'sales-receipt': 'Sale #', 'estimate': 'Estimate #',
+                 'check': 'Check No.'}
 
 # Grid columns, in document order. Every one of them is a value a person reads off the
 # line or types into it. ``@amount`` is the exception the reader still expects to see:
@@ -53,6 +61,22 @@ WORK_GRID = (('item', 'Item'), ('description', 'Description'), ('quantity', 'Qua
              ('markup_percent', 'Markup %'), ('unit_price', 'Rate'), ('class_id', 'Class'),
              ('@amount', 'Amount'), ('tax_code', 'Tax'))
 
+# The header of a money-out document, in the order it reads: the account it is drawn on, who
+# the money went to, when, its number, and the figure on its face.
+MONEY_OUT_PRIMARY = ('account', 'pay_to.name_type', 'pay_to.name_id', 'date', 'number',
+                     'amount', 'class_id')
+MONEY_OUT_FOOTER = ('memo',)
+
+# The Expenses grid. ``amount`` here is a number a person types rather than a server
+# computation, so there is no ``@amount`` column: what the server computes is the total of
+# these lines, and the footer shows it against the amount on the face of the document.
+#
+# The collection behind this grid is named ``expenses`` rather than ``lines`` precisely so
+# that the Items tab this document is going to grow arrives as a second named collection
+# beside it instead of as a rewrite of this one.
+EXPENSE_GRID = (('account', 'Account'), ('amount', 'Amount'), ('memo', 'Memo'),
+                ('class_id', 'Class'))
+
 # What each column head means, written for the person who has to tell two of them apart.
 # A bookkeeper reading this grid asked what Unit was next to Quantity; a head that needs
 # that question asked is a head that has not explained itself. The same words are the
@@ -68,6 +92,9 @@ COLUMN_HINTS = {
     'class_id': 'Class this line is tracked under',
     '@amount': 'Quantity × rate, from the server',
     'tax_code': 'Taxable or not',
+    'account': 'What the money was spent on',
+    'amount': 'How much of the total this line is',
+    'memo': 'What this line was for',
 }
 
 # The pricing selector, in the row's own panel rather than in the columns.
@@ -82,7 +109,9 @@ WIDTHS = {'item': ('minmax(9rem, 1.2fr)', 9), 'description': ('minmax(9rem, 1.5f
           'quantity': ('4.5rem', 4.5), 'unit': ('7rem', 7),
           'unit_price': ('5.5rem', 5.5), 'estimated_unit_cost': ('6rem', 6),
           'markup_percent': ('5rem', 5), 'class_id': ('6.5rem', 6.5),
-          '@amount': ('5.5rem', 5.5), 'tax_code': ('6.5rem', 6.5)}
+          '@amount': ('5.5rem', 5.5), 'tax_code': ('6.5rem', 6.5),
+          'account': ('minmax(9rem, 1.4fr)', 9), 'amount': ('6.5rem', 6.5),
+          'memo': ('minmax(9rem, 1.6fr)', 9)}
 ACTIONS_WIDTH = ('4.5rem', 4.5)
 
 # Per-line controls that belong to pricing machinery rather than the document grid.
@@ -122,6 +151,9 @@ LINE_LABELS = {
     'billable': 'Billable', 'completed_quantity': 'Completed quantity',
     'refresh_defaults': 'Reprice this line from the current records',
     'use_defaults': 'Fields on this line to return to their defaults',
+    'account': 'Account', 'amount': 'Amount', 'memo': 'Memo',
+    'class_mode': 'How this line is classed',
+    'party': 'Customer, job or other name this line is for',
 }
 
 DESCRIPTIONS = {
@@ -161,13 +193,43 @@ HELP = {
     'invoice': 'A posted invoice records the sale in the books. It is not sent or emailed to the customer.',
     'sales-receipt': 'A sales receipt records a sale that was paid at the time. It cannot settle an existing invoice.',
     'estimate': 'An estimate is not posted to the books. It records what the work will cost and what was agreed.',
+    'check': 'A check records money leaving a bank account. Nothing is printed or sent: the number is the '
+             'one written on the check itself. The expense lines have to add up to the amount.',
+    'card-charge': 'A credit card charge records a purchase put on a company card. What is owed on the card '
+                   'goes up until the card is paid. The expense lines have to add up to the amount.',
 }
+
+# The same window, in each document's own words. A label or an explanation here overrides the
+# shared ones below it, which is what lets one layout serve a sale and a check without either
+# of them reading as the other.
+NOUN_LABELS = {
+    'check': {'account': 'Bank Account', 'pay_to.name_type': 'Kind of name',
+              'pay_to.name_id': 'Pay to the Order of', 'amount': 'Amount of this check'},
+    'card-charge': {'account': 'Credit Card', 'pay_to.name_type': 'Kind of name',
+                    'pay_to.name_id': 'Purchased From', 'amount': 'Amount of this charge'},
+}
+
+NOUN_DESCRIPTIONS = {
+    'check': {'account': 'The bank account this check is written on.',
+              'pay_to.name_type': 'Which list the name comes from. Choose this before searching.',
+              'pay_to.name_id': 'Search by name, then choose the match.',
+              'amount': 'The figure on the face of the check. The expense lines below have to add up to it.',
+              'number': 'The number written on the check. Leave it empty to take the next one.'},
+    'card-charge': {'account': 'The credit card account this purchase was charged to.',
+                    'pay_to.name_type': 'Which list the name comes from. Choose this before searching.',
+                    'pay_to.name_id': 'Search by name, then choose the match.',
+                    'amount': 'What was charged. The expense lines below have to add up to it.'},
+}
+
+# What the money-out footer calls the figure on the face of the document.
+FACE_LABELS = {'check': 'Amount of this check', 'card-charge': 'Amount of this charge'}
 
 
 def is_document(noun, verb):
     """Whether this command opens as a document window rather than a generated form."""
     return ((noun in ('invoice', 'sales-receipt') and verb in ('post', 'update'))
-            or (noun == 'estimate' and verb in ('create', 'update')))
+            or (noun == 'estimate' and verb in ('create', 'update'))
+            or (noun in MONEY_OUT and verb == 'post'))
 
 
 def heading(noun, verb, originals):
@@ -180,10 +242,14 @@ def heading(noun, verb, originals):
 
 def describe(leaves, noun):
     """Human labels over the typed leaves; the wire names and controls stay untouched."""
+    own_labels = NOUN_LABELS.get(noun, {})
+    own_descriptions = NOUN_DESCRIPTIONS.get(noun, {})
     for leaf in leaves:
         path = leaf['path']
         tail = path.rsplit('.', 1)[-1]
-        if path.startswith(('billing_address.', 'shipping_address.')):
+        if path in own_labels:
+            leaf['label'] = own_labels[path]
+        elif path.startswith(('billing_address.', 'shipping_address.')):
             leaf['label'] = LABELS.get(tail, tail.replace('_', ' ').capitalize())
         elif path == 'number':
             leaf['label'] = NUMBER_LABELS[noun]
@@ -193,7 +259,7 @@ def describe(leaves, noun):
             leaf['label'] = tail.replace('_id', '').replace('_', ' ').capitalize()
         if leaf['kind'] == 'collection' and path == 'use_defaults':
             leaf['collection']['item']['choice_labels'] = DEFAULT_CHOICE_LABELS
-        if path == 'lines':
+        if path in ('lines', 'expenses'):
             for child in leaf['collection']['item']['fields']:
                 child['label'] = LINE_LABELS.get(child['name'],
                                                  child['name'].replace('_id', '').replace('_', ' ').capitalize())
@@ -201,7 +267,9 @@ def describe(leaves, noun):
                     child['description'] = COLUMN_HINTS[child['name']]
                 if child['kind'] == 'collection' and child['name'] == 'use_defaults':
                     child['collection']['item']['choice_labels'] = DEFAULT_CHOICE_LABELS
-        if path in DESCRIPTIONS:
+        if path in own_descriptions:
+            leaf['description'] = own_descriptions[path]
+        elif path in DESCRIPTIONS:
             leaf['description'] = DESCRIPTIONS[path]
     return leaves
 
@@ -222,7 +290,8 @@ def _address_group(title, prefix, leaves, placed):
 def layout(noun, leaves):
     """Bands of the document window, and every leaf placed exactly once."""
     by_path, placed = {leaf['path']: leaf for leaf in leaves}, set()
-    grid = WORK_GRID if noun == 'estimate' else SALE_GRID
+    money_out = noun in MONEY_OUT
+    grid = EXPENSE_GRID if money_out else WORK_GRID if noun == 'estimate' else SALE_GRID
 
     def take(paths):
         found = []
@@ -233,17 +302,18 @@ def layout(noun, leaves):
                 found.append(leaf)
         return found
 
-    primary, terms = take(PRIMARY), take(TERMS)
-    addresses = [group for group in
+    primary = take(MONEY_OUT_PRIMARY if money_out else PRIMARY)
+    terms = [] if money_out else take(TERMS)
+    addresses = [] if money_out else [group for group in
                  (_address_group(title, prefix, leaves, placed)
                   for title, prefix in ADDRESSES.get(noun, DEFAULT_ADDRESSES))
                  if group is not None]
-    scope = take(SCOPE)
-    lines = by_path.get('lines')
+    scope = [] if money_out else take(SCOPE)
+    lines = by_path.get('expenses' if money_out else 'lines')
     if lines is not None:
-        placed.add('lines')
-    footer = take(FOOTER)
-    pricing = take(PRICING)
+        placed.add(lines['path'])
+    footer = take(MONEY_OUT_FOOTER if money_out else FOOTER)
+    pricing = [] if money_out else take(PRICING)
     record = take(RECORD)
     # Anything this layout does not name still reaches the reader, rather than
     # disappearing from a form that must stay input-identical to the command.
@@ -261,7 +331,8 @@ def layout(noun, leaves):
     tracks = [WIDTHS.get(column['name'], ('9rem', 9)) for column in columns] + [ACTIONS_WIDTH]
     return {'primary': primary, 'addresses': addresses, 'terms': terms, 'scope': scope,
             'lines': lines, 'columns': columns, 'line_extras': extras,
-            'line_pricing': LINE_PRICING,
+            'line_pricing': None if money_out else LINE_PRICING,
+            'lines_title': 'Expenses' if money_out else 'Lines',
             'footer': footer, 'pricing': pricing, 'record': record,
             'grid_template': ' '.join(track for track, _ in tracks),
             'grid_width': format(sum(width for _, width in tracks), 'g') + 'rem'}
@@ -291,10 +362,54 @@ def computed(record):
     return out
 
 
+def _row(label, value, strong=False):
+    return {'label': label, 'value': value, 'strong': strong}
+
+
+def sale_totals(figures, settled):
+    """The sales footer, unchanged: every figure copied from the server's own result."""
+    if figures is None:
+        return []
+    rows = [_row('Subtotal', figures['subtotal']), _row('Tax', figures['tax']),
+            _row('Total', f"{figures['total']} {figures['currency']}", True)]
+    if settled and 'applied' in figures:
+        rows += [_row('Payments Applied', figures['applied']),
+                 _row('Balance Due', f"{figures['due']} {figures['currency']}", True)]
+    return rows
+
+
+def money_out_totals(noun, result, error):
+    """The money-out footer: what the lines add up to, and whether it agrees with the face.
+
+    Both branches are the server's arithmetic. The success branch copies the document summary
+    the command returned; the refusal branch copies the three figures the refusal carried,
+    which is how the footer can still show the reconciliation on the page that refused.
+    """
+    face = FACE_LABELS[noun]
+    document = result.get('document') if isinstance(result, dict) else None
+    if isinstance(document, dict):
+        currency = document['currency']
+        return ([_row('Expenses', f"{document['expense_total']['amount']} {currency}"),
+                 _row(face, f"{document['amount']['amount']} {currency}", True)],
+                'The expense lines add up to what this document is written for.', True)
+    details = (error or {}).get('details') if isinstance(error, dict) else None
+    if isinstance(details, dict) and isinstance(details.get('difference'), dict):
+        currency = details['currency']
+        over = details['difference_minor_units'] > 0
+        return ([_row('Expenses', f"{details['expense_total']['amount']} {currency}"),
+                 _row(face, f"{details['amount']['amount']} {currency}"),
+                 _row('Over' if over else 'Short by',
+                      f"{details['difference']['amount']} {currency}", True)],
+                'The expense lines do not add up to what this document is written for. '
+                'Nothing was written.', False)
+    return [], None, None
+
+
 def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=False,
-            record_id=None, base=''):
+            record_id=None, base='', error=None):
     """Everything the document template needs, with money taken from the server alone."""
-    figures = computed(result) or computed(shown)
+    money_out = noun in MONEY_OUT
+    figures = None if money_out else (computed(result) or computed(shown))
     fresh = result is not None
 
     def line_amount(line_id, index):
@@ -305,11 +420,23 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
             row = figures['lines'][index]
         return row
 
+    if money_out:
+        totals, reconciliation, reconciled = money_out_totals(noun, result, error)
+        empty = ('Preview to see what the expense lines add up to and whether it agrees '
+                 'with the amount above.')
+    else:
+        totals = sale_totals(figures, noun == 'invoice')
+        reconciliation, reconciled = None, None
+        empty = 'Preview to see the subtotal, tax and total the server computes.'
+
     return dict(layout(noun, leaves),
                 noun=noun, verb=verb, title=TITLES[noun],
                 heading=heading(noun, verb, originals),
                 help=HELP[noun], computed=figures, line_amount=line_amount,
+                totals=totals, totals_empty=empty,
+                reconciliation=reconciliation, reconciled=reconciled,
                 preview=preview, creating=verb in ('post', 'create'),
                 settled=noun == 'invoice', base=base, record_id=record_id,
                 context_labels=CONTEXT_LABELS,
-                origin='the last preview' if fresh else 'the saved document')
+                origin=('the values you entered' if money_out and not fresh else
+                        'the last preview' if fresh else 'the saved document'))

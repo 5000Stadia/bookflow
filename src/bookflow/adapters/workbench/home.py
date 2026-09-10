@@ -176,6 +176,13 @@ PANELS: tuple[Panel, ...] = (
                 waits_on="bill payment commands",
             ),
             Step(
+                id="vendor-check",
+                title="Pay a vendor",
+                summary="Write a check straight out of a bank account, without entering a bill first.",
+                action=Action("Write a check to a vendor", WRITE, ("check post",), "/check/post"),
+                aside=True,
+            ),
+            Step(
                 id="vendor-credit",
                 title="Vendor credit",
                 summary="Record a credit a vendor owes you.",
@@ -218,8 +225,14 @@ PANELS: tuple[Panel, ...] = (
                 id="write-check",
                 title="Write check",
                 summary="Pay someone straight out of a bank account.",
-                action=Action("Write a check", WRITE),
-                waits_on="check commands",
+                action=Action("Write a check", WRITE, ("check post",), "/check/post"),
+            ),
+            Step(
+                id="card-charge",
+                title="Credit card charge",
+                summary="Record a purchase put on a company credit card.",
+                action=Action("Enter a credit card charge", WRITE, ("card-charge post",),
+                              "/card-charge/post"),
             ),
             Step(
                 id="transfer",

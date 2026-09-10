@@ -192,6 +192,17 @@ EXAMPLES.update({
     "register query": Example(
         'bookflow register query --account Checking --date-from 2026-01-01 --date-to 2026-12-31 --limit 25 --company "Demo Plumbing Co" --json',
         {"account": "Checking", "date_from": "2026-01-01", "date_to": "2026-12-31", "limit": 25}),
+    "check post": Example(
+        'bookflow check post --account Checking --pay-to-name-type vendor --pay-to-name-id "Northside Supply" --date 2026-04-02 --number 1042 --amount 284.60 --memo "March supplies" --expenses \'[{"account":"Office Supplies","amount":"184.60","memo":"Parts"},{"account":"Professional Fees","amount":"100.00","memo":"Filing"}]\' --company "Demo Plumbing Co" --reason "Pay Northside Supply" --json',
+        {"account": "Checking", "pay_to": {"name_type": "vendor", "name_id": "Northside Supply"},
+         "date": "2026-04-02", "number": "1042", "amount": "284.60", "memo": "March supplies",
+         "expenses": [{"account": "Office Supplies", "amount": "184.60", "memo": "Parts"},
+                      {"account": "Professional Fees", "amount": "100.00", "memo": "Filing"}]}),
+    "card-charge post": Example(
+        'bookflow card-charge post --account "Company Credit Card" --pay-to-name-type vendor --pay-to-name-id "Northside Supply" --date 2026-04-03 --amount 75.25 --memo "Fuel on the company card" --expenses \'[{"account":"Office Supplies","amount":"75.25"}]\' --company "Demo Plumbing Co" --reason "Record a card purchase" --json',
+        {"account": "Company Credit Card", "pay_to": {"name_type": "vendor", "name_id": "Northside Supply"},
+         "date": "2026-04-03", "amount": "75.25", "memo": "Fuel on the company card",
+         "expenses": [{"account": "Office Supplies", "amount": "75.25"}]}),
 })
 
 

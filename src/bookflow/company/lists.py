@@ -67,6 +67,9 @@ class ReferenceDefinition:
     policy: ReferencePolicy = "soft"
     many: bool = False
     child_units: bool = False
+    # When a reference accepts several lists, the form control whose value chooses between
+    # them, by its own path. Without one a multi-target picker has nothing to search.
+    discriminator: str | None = None
 
     @property
     def target_nouns(self) -> tuple[str, ...]:
