@@ -1,0 +1,39 @@
+{% macro label(text) %}<span class="document-cell-label" aria-hidden="true">{{ text }}</span>{% endmacro %}
+<section id="customer-statement" class="document-detail basic-report customer-statement" aria-label="Customer statement">
+<p>{{ company_label }} · {{ customer_statement.metadata.basis|capitalize }} · {{ customer_statement.metadata.currency }} · {{ customer_statement.date_from }} through {{ customer_statement.as_of }}</p>
+<p class="muted">What {{ 'this customer' if customer_statement.one_customer else 'each customer' }} was carrying on {{ customer_statement.date_from }}, then every invoice, payment, credit and adjustment in date order with the balance after each one, then what is owed on {{ customer_statement.as_of }}. A document that was voided is not here because it is worth nothing on its own date, not because it was filtered out of the list. This is a statement to read on screen: Bookflow keeps the books and has no way to hand one to a customer, so nothing here offers to.</p>
+
+<h2>Whole-report totals — all pages</h2>
+<dl class="report-totals" id="statement-totals">
+{% for key, heading in customer_statement.total_columns %}<div data-total="{{ key }}"><dt>{{ heading }}</dt><dd>{{ customer_statement.totals[key].amount }} {{ customer_statement.totals[key].currency }}</dd></div>{% endfor %}
+</dl>
+
+<h2>What is owed, by age — all pages, as of {{ customer_statement.as_of }}</h2>
+<dl class="report-totals" id="statement-aging">
+{% for key, heading in customer_statement.aging_columns %}<div data-aging="{{ key }}"><dt>{{ heading }}</dt><dd>{{ customer_statement.aging[key].amount }} {{ customer_statement.aging[key].currency }}</dd></div>{% endfor %}
+</dl>
+<p class="muted">Invoices are aged on their due date and carry what is still owed on them; an invoice due exactly 30 days before {{ customer_statement.as_of }} is in 1-30. Unapplied customer credit and any receivable adjustment age on their own date. The Total is the Balance due above{% if not customer_statement.one_customer %}, and it is Accounts Receivable on the balance sheet for the same date{% endif %}.</p>
+
+<p id="statement-page-count">{{ customer_statement.count }} rows on this page{% if customer_statement.next_cursor %}; more available{% endif %}. Balance forward and Balance due rows also count toward the page limit, and the balance beside a row is the balance for the whole customer, not for the page. A customer who owed nothing and did nothing is not printed at all.</p>
+<div class="table-wrap report-lines-wrap"><table class="ledger-table document-lines" id="statement-lines" role="table">
+<caption>Account activity · {{ customer_statement.metadata.currency }}</caption>
+<thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Customer</th><th scope="col" role="columnheader">Date</th><th scope="col" role="columnheader">Entry</th><th scope="col" role="columnheader">Amount</th><th scope="col" role="columnheader">Balance</th></tr></thead>
+<tbody role="rowgroup">
+{% for row in customer_statement.rows %}<tr role="row" data-kind="{{ row.kind }}" data-entry="{{ row.entry }}" data-customer="{{ row.customer_id or '' }}">
+<td role="cell" class="document-wide">{{ label('Customer') }}{% if row.customer_url %}<a href="{{ row.customer_url }}">{{ row.display_customer_label }}</a>{% else %}{{ row.display_customer_label }}{% endif %}{% if row.active is not none and not row.active %}<span class="report-state">Inactive</span>{% endif %}</td>
+<td role="cell">{{ label('Date') }}{{ row.date or '—' }}</td>
+<td role="cell" class="document-wide">{{ label('Entry') }}<strong>{{ customer_statement.entries[row.entry] }}</strong>
+{% if row.number %}{% if row.document_url %}<a href="{{ row.document_url }}">{{ row.number }}</a>{% else %}{{ row.number }}{% endif %}{% endif %}
+{% if row.due_date %}<span class="report-state">Due {{ row.due_date }}</span>{% endif %}
+{% if row.memo %}<div class="report-description">{{ row.memo }}</div>{% endif %}</td>
+<td role="cell" data-value="amount">{{ label('Amount') }}{{ row.amount.amount }}</td>
+<td role="cell" class="document-total" data-value="balance">{{ label('Balance') }}{{ row.balance.amount }}</td>
+</tr>{% else %}<tr role="row"><td role="cell" colspan="5">No customer has a balance or any activity in this period.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if customer_statement.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="customer-statement-next-page">
+{% for name, value in customer_statement.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+{% if source_report_watermark is not none %}<input type="hidden" name="_source_report_watermark" value="{{ source_report_watermark }}">{% endif %}
+<button name="action" value="submit">Next statement page</button></form>{% endif %}
+<p class="muted">Generated {{ customer_statement.metadata.generation_time }} · Audit watermark {{ customer_statement.metadata.audit_watermark }}. Any audited company change requires starting the statement again. Change the filters below to run a new one.</p>
+<details class="report-structured"><summary>Structured report data</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
+</section>

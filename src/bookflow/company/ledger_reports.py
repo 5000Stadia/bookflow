@@ -324,9 +324,11 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True):
         WHERE b.effective_date<=:date_to AND (:account IS NULL OR l.account_id=:account)
         """, {"date_to": inp.date_to, "account": scope}).fetchone()
     labels = hashlib.sha256()
-    statement = report in {"profit-and-loss", "balance-sheet"}
-    receivable = report in {"ar-aging", "open-invoices"}
-    if statement:
+    # `financial` is the two financial statements. The customer statement is a
+    # receivables report and takes the receivable branch, like its two neighbours.
+    financial = report in {"profit-and-loss", "balance-sheet"}
+    receivable = report in {"ar-aging", "open-invoices", "statement"}
+    if financial:
         label_query = "SELECT id, full_name, full_name_key, name, number, type, parent_id, active FROM accounts ORDER BY id"
     elif receivable:
         # Receivables rows are customers, not accounts, and the hierarchy name
@@ -350,10 +352,10 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True):
     # Trial balance, general ledger and the statements label rows through the company's
     # account-number and lowest-subaccount preferences, so a change to either
     # one has to stale a continuation the same way a renamed account does.
-    if statement or report in {"trial-balance", "general-ledger"}:
+    if financial or report in {"trial-balance", "general-ledger"}:
         extra_state = [tuple(raw.execute("""SELECT fiscal_year_start_month,
             use_account_numbers, show_lowest_subaccount_only FROM company_info""").fetchone())]
-        if statement:
+        if financial:
             extra_state.append(raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0])
     elif receivable:
         # A receivables row moves with settlement history, which posts nothing,

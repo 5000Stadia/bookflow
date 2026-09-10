@@ -10,7 +10,7 @@ from bookflow.company.financial_statements import (
 )
 from bookflow.company.receivable_reports import (
     ArAgingInput, ArAgingOutput, OpenInvoicesInput, OpenInvoicesOutput,
-    ar_aging, open_invoices,
+    StatementInput, StatementOutput, ar_aging, open_invoices, statement,
 )
 
 
@@ -28,6 +28,14 @@ def plan_ar_aging(inp, ctx, s):
     error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND"])
 def plan_open_invoices(inp, ctx, s):
     return Plan(preview=open_invoices(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report statement", scope="company", required_role="member", capability="reports",
+    description="What a customer's account did between date_from and date_to: an opening balance, then every invoice, payment, credit and receivable adjustment in date order with a running balance, then the closing balance, with the A/R aging columns for the same customers as of date_to at the foot. One customer with customer, or every customer with a balance or with activity in the period. A voided document has no row because it is worth nothing on its own date, not because a status was filtered; applying a receipt to that same customer's invoice changes nothing the customer owes and has no row. New cash is owned by the party whose invoice it settles, so a parent's receipt that pays a job's invoice appears on the job's statement for the settled part and on the parent's for the rest. A closing balance is the same figure report ar-aging shows for that customer, and the closing total is Accounts Receivable on the balance sheet for date_to. Totals cover the whole filter and rows are paged; a page never breaks the running balance because it is computed over the whole customer first.",
+    input_model=StatementInput, output_model=StatementOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND"])
+def plan_statement(inp, ctx, s):
+    return Plan(preview=statement(inp, s, principal_id=ctx.on_behalf_of))
 
 
 @command("report trial-balance", scope="company", required_role="member", capability="reports",
