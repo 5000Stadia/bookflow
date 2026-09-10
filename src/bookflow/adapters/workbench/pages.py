@@ -1419,7 +1419,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         if noun == 'sales-receipt' and verb == 'update':
             # The dedicated decimal control uses the shared typed form translator.
             described = [leaf for leaf in described if leaf['path'] != 'amount_received']
-        if cmd.name in S.COMMANDS or cmd.name in Statement.COMMANDS:
+        if cmd.name in S.COMMANDS or cmd.name in Statement.COMMANDS or cmd.name in Receivable.COMMANDS:
             # The visible filter form always starts fresh; continuation has its
             # own immutable filter fields and signed cursor in a separate form.
             # A cursor left in the visible form is worse than absent: the next
