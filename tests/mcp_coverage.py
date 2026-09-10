@@ -53,9 +53,11 @@ attachment unlink
 audit list
 audit show
 audit tail
+card-charge post
 chart apply
 chart list
 chart show
+check post
 class activate
 class create
 class deactivate
@@ -103,6 +105,13 @@ customer-type query
 customer-type show
 customer-type update
 demo reset
+deposit items
+deposit post
+deposit query
+deposit show
+deposit sources
+deposit update
+deposit void
 directive add
 directive deactivate
 directive list
@@ -163,6 +172,9 @@ journal show
 journal update
 journal void
 mcp
+membership grant
+membership list
+membership revoke
 note add
 note edit
 note list
@@ -179,6 +191,17 @@ other-name list
 other-name query
 other-name show
 other-name update
+payment recovery abort
+payment recovery apply
+payment recovery begin
+payment recovery compare
+payment recovery compare-items
+payment recovery items
+payment recovery query
+payment recovery replace
+payment recovery seal
+payment recovery show
+payment recovery upload
 payment-method activate
 payment-method create
 payment-method deactivate
@@ -212,9 +235,12 @@ register calculate
 register post
 register query
 register update
+report ar-aging
 report balance-sheet
 report general-ledger
+report open-invoices
 report profit-and-loss
+report statement
 report trial-balance
 sales-receipt history
 sales-receipt post
@@ -254,6 +280,7 @@ term update
 token issue
 token list
 token revoke
+transfer post
 undo
 unit-of-measure activate
 unit-of-measure create
@@ -263,6 +290,8 @@ unit-of-measure query
 unit-of-measure show
 unit-of-measure update
 upgrade
+user add
+user list
 user set-password
 vendor activate
 vendor create
@@ -325,6 +354,10 @@ def execution_map():
     from tests.test_mcp_registry_payment_preparation import FAMILIES as PAYMENT_FAMILIES
     from tests.test_mcp_registry_payments import COMMANDS as PAYMENT_FINANCIAL
     from tests.test_mcp_registry_deposits import COMMANDS as DEPOSIT_COMMANDS
+    from tests.test_mcp_registry_identity import COMMANDS as IDENTITY_COMMANDS
+    from tests.test_money_out_documents import COMMANDS as MONEY_OUT_COMMANDS
+    from tests.test_transfer_funds import COMMANDS as TRANSFER_COMMANDS
+    from tests.test_payment_recovery_interfaces import COMMANDS as RECOVERY_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -338,6 +371,10 @@ def execution_map():
                    'tests/test_mcp_registry_payment_preparation.py::test_payment_preparation_four_surface_documents_context_and_rejections' if any(cmd.name in names for names in PAYMENT_FAMILIES.values()) else
                    'tests/test_mcp_registry_payments.py::test_payment_financial_lifecycle_full_documents_and_exact_ledger' if cmd.name in PAYMENT_FINANCIAL else
                    'tests/test_mcp_registry_deposits.py::test_deposit_lifecycle_full_documents_and_exact_ledger' if cmd.name in DEPOSIT_COMMANDS else
+                   'tests/test_mcp_registry_identity.py::test_identity_lifecycle_full_documents_owned_password_and_rejected_state' if cmd.name in IDENTITY_COMMANDS else
+                   'tests/test_money_out_documents.py::test_the_same_check_and_card_charge_through_python_cli_http_and_mcp' if cmd.name in MONEY_OUT_COMMANDS else
+                   'tests/test_transfer_funds.py::test_the_same_transfer_through_python_cli_http_and_mcp' if cmd.name in TRANSFER_COMMANDS else
+                   'tests/test_payment_recovery_interfaces.py::test_complete_recovery_contract_on_all_four_interfaces' if cmd.name in RECOVERY_COMMANDS else
                    'tests/test_mcp_registry_hub_reads.py::test_hub_read_full_documents_and_scope_boundaries' if any(cmd.name in names for names in HUB_FAMILIES.values()) else
                    'tests/test_mcp_registry_work.py::test_nonposting_work_lifecycle_full_documents_and_lineage' if any(cmd.name in names for names in WORK_FAMILIES.values()) else
                    'tests/test_mcp_registry_work_billing.py::test_work_billing_full_documents_retries_and_exact_batches' if any(cmd.name in names for names in BILLING_FAMILIES.values()) else
@@ -396,6 +433,12 @@ def variant_policies():
         ('anyOf', ('Address', 'null')): ([parent, 'tests/test_mcp_address_payee_browser.py::test_sales_address_default_explicit_null_and_return_to_current_default'], []),
         ('anyOf', ('AddressInput', 'null')): ([parent, 'tests/test_mcp_address_payee_browser.py::test_party_address_create_patch_clear_and_omission'], []),
         ('anyOf', ('RegisterParty', 'null')): ([nested, parent, 'tests/test_mcp_address_payee_browser.py::test_top_level_register_payee_prefill_null_replacement_and_journal_destination'], []),
+        ('anyOf', ('CheckParty', 'null')): ([
+            'tests/test_money_out_browser.py::test_the_check_window_posts_the_check_the_command_posts',
+            'tests/test_money_out_browser.py::test_the_expenses_grid_has_nothing_to_scroll_sideways_at_phone_width'],
+            ['the document payee is driven at /pay_to on both nouns — a vendor chosen on the check window, '
+             'and the picker left at its opening value at 390px on check and card charge alike; the per-line '
+             '/expenses/[]/party alternative has no column in the Expenses grid and no browser case at all']),
         ('anyOf', ('MoneyInput', 'string')): (['tests/test_mcp_nested_gui_browser.py::test_nested_collection_model_object_null_and_full_error', 'tests/test_mcp_money_gui_browser.py::test_structured_integer_money_object_exact_bytes_and_core_rejection'], []),
         ('anyOf', ('SalesMoneyInput', 'null', 'string')): ([money, 'tests/test_mcp_money_gui_browser.py::test_top_level_money_object_nullable_branch_and_complete_calculation', 'tests/test_mcp_sales_money_origin_browser.py::test_sales_line_money_object_null_rejection_and_current_default_origin'], []),
         ('anyOf', ('SignedMoney', 'string')): ([

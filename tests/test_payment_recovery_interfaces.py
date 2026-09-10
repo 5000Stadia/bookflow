@@ -8,6 +8,9 @@ from tests.test_service_sales_lifecycle import sale
 from tests.test_payment_recovery import setup,declaration
 from tests.payment_recovery_support import launcher,provenance,source_environment
 
+VERBS=('begin','upload','seal','compare','compare-items','apply','abort','replace','show','items','query')
+COMMANDS=frozenset('payment recovery '+verb for verb in VERBS)
+
 @pytest.mark.timeout(600)
 def test_complete_recovery_contract_on_all_four_interfaces(client,sale,root,tmp_path,monkeypatch):
     draft,first,_=setup(client,sale)
@@ -59,7 +62,7 @@ def test_complete_recovery_contract_on_all_four_interfaces(client,sale,root,tmp_
                 assert (await call('query',dict(selection=draft['id'])))['total_count']==3
                 assert (await call('begin',begin))['original_receipt']==begun['original_receipt']
                 seen={name for name,_ in matrix.documents[surface]}
-                assert {'payment recovery '+verb for verb in ('begin','upload','seal','compare','compare-items','apply','abort','replace','show','items','query')}<=seen
+                assert COMMANDS<=seen
             (tmp_path/'interfaces.json').write_text(json.dumps(matrix.documents,indent=2))
         finally:
             await matrix.close()

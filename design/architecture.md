@@ -1205,10 +1205,10 @@ error without queuing a business execution. Its rejection delivery owns cleanup
 and can retain the same guarded error receipt. Recovery of a failed download
 redelivers only its error document; it never reopens the missing binary resource.
 
-The Row9 test ledger tests/mcp_coverage.py explicitly classifies all301 registered
+The Row9 test ledger tests/mcp_coverage.py explicitly classifies all 330 registered
 commands by routed JSON, advisory, finite poll/local follow, binary direction,
 local lifecycle or standalone protocol. Four-interface execution scenarios cover
-296 hosted commands. Five local lifecycle commands map actual local execution
+325 hosted commands. Five local lifecycle commands map actual local execution
 witnesses and explicit installed-MCP/HTTP rejection boundaries; they are not
 counted as hosted execution parity. The ledger gate rejects unclassified or
 pending execution rows. This is execution coverage, not full Row9 acceptance.
@@ -1216,7 +1216,7 @@ The actual all-command form check emits schema-path/control/variant/context
 mapping, separate from the still-incomplete browser interaction/output/success
 mapping and parent-owned fresh blind acceptance.
 
-The material-variant ledger groups 1963 hosted schema alternatives into 16
+The material-variant ledger groups 2072 hosted schema alternatives into 21
 structural groups; these counts are not browser journeys. Command-specific
 witness links cover authored address/default/payee, definition kinds, calculation,
 line origins, explicit Any JSON, discriminator visibility and hub destinations at

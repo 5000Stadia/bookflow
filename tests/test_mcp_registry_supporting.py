@@ -18,7 +18,7 @@ FAMILIES = {
                     'note add', 'note show', 'note list', 'note edit'),
     'links': ('customer link-vendor', 'customer unlink-vendor', 'other-name convert'),
     'reports': ('report trial-balance', 'report general-ledger', 'report balance-sheet', 'report profit-and-loss',
-                'report ar-aging', 'report open-invoices'),
+                'report ar-aging', 'report open-invoices', 'report statement'),
 }
 
 
@@ -88,6 +88,10 @@ def test_supporting_family_full_documents_and_rejections(root, tmp_path, family)
                 else:
                     for command in FAMILIES[family]:
                         raw = {**EXAMPLES[command].input, 'limit': 200}
+                        if command == 'report statement':
+                            # One customer's own account: the documented example names a
+                            # seeded customer, and this scenario reads its own instead.
+                            raw['customer'] = customer['id']
                         result = await call(command, raw, dry_run=False)
                         assert result['next_cursor'] is None
                         # Each report names its own inclusive bound; reject a bad one there.

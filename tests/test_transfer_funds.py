@@ -362,6 +362,9 @@ def test_the_footer_says_what_each_end_did_in_the_words_that_end_uses(books):
 
 # ---------------------------------------------------------------- every surface, same result
 
+COMMANDS = frozenset(('transfer post',))
+
+
 @pytest.mark.timeout(300)
 def test_the_same_transfer_through_python_cli_http_and_mcp(root, tmp_path):
     pytest.importorskip('mcp')
@@ -398,7 +401,7 @@ def test_the_same_transfer_through_python_cli_http_and_mcp(root, tmp_path):
                 assert 'Parity income' in refused['message']
                 same = {**move, 'to_account': checking}
                 assert (await call('transfer post', same, rejected=True))['code'] == 'E_VALIDATION'
-                assert set(calls) == {'transfer post'}
+                assert set(calls) == COMMANDS
                 for name, data in list(calls.items()):
                     assert (await call(name, data, company=GHOST,
                                        rejected=True))['code'] == 'E_COMPANY_NOT_FOUND'

@@ -14,7 +14,8 @@ from tests.test_mcp_registry_work import GHOST
 from tests.test_payment_receipts import posted, method
 from tests.test_service_sales_lifecycle import sale, COMPANY
 
-COMMANDS = frozenset({'deposit sources', 'deposit post', 'deposit update', 'deposit void'})
+COMMANDS = frozenset({'deposit sources', 'deposit post', 'deposit update', 'deposit void',
+                      'deposit query', 'deposit show', 'deposit items'})
 
 
 def _guards(value, key=None):
@@ -58,8 +59,30 @@ def _provenance(value):
     return value
 
 
+def _digests(value, key=None):
+    """Reduce the opaque read digests to their pattern of equality across one clone.
+
+    `deposit_read_pages.fingerprint` is an HMAC over the rows a read returned, so it
+    carries this clone's own generated deposit identities and can never equal another
+    clone's. What has to match across surfaces is the pattern it makes: the same read of
+    unchanged books gives one value, and a read after a correction or a void gives
+    another. Numbering distinct values in order of first appearance keeps exactly that.
+    """
+    if isinstance(value, dict):
+        if key == 'fingerprints':
+            return {name: _digests(item, 'fingerprint') for name, item in value.items()}
+        return {name: _digests(item, name) for name, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_digests(item) for item in value]
+    if key == 'fingerprint' and isinstance(value, str):
+        assert re.fullmatch(r'[0-9a-f]{64}', value), value
+        return _digests.seen.setdefault(value, '<read-digest-' + str(len(_digests.seen)) + '>')
+    return value
+
+
 def normalize_deposit(documents, root, baseline_ids):
-    return normalize(_provenance(_guards(documents)), root, baseline_ids)
+    _digests.seen = {}
+    return normalize(_digests(_provenance(_guards(documents))), root, baseline_ids)
 
 
 @pytest.fixture
@@ -119,6 +142,22 @@ def test_deposit_lifecycle_full_documents_and_exact_ledger(root, undeposited, tm
                                    rejected=True))['code'] == 'E_DEPOSIT_OPERATION_KEY_REUSED'
                 deposits[surface] = banked['deposit']['id']
 
+                # What was banked, read back the three ways an agent reads it.
+                listing = dict(date_from='2026-06-03', date_to='2026-06-03', page=dict(limit=25))
+                saved = await call('deposit query', listing)
+                assert saved['total_count'] == 1 and saved['next_cursor'] is None
+                assert saved['items'][0]['current']['deposit_id'] == banked['deposit']['id']
+                # The same read of unchanged books answers with the same freshness digest.
+                assert (await call('deposit query', listing))['fingerprint'] == saved['fingerprint']
+                shown = await call('deposit show', dict(deposit=banked['deposit']['id']))
+                assert shown['totals']['bank_total']['minor_units'] == 15700
+                assert shown['totals'] == saved['items'][0]['totals']
+                banked_sources = await call('deposit items', dict(deposit=banked['deposit']['id'],
+                                                                  kind='sources', page=dict(limit=50)))
+                assert banked_sources['total_count'] == 2 and banked_sources['next_cursor'] is None
+                assert {row['source']['transaction_id'] for row in banked_sources['items']} == \
+                    {row['source'] for row in rows}
+
                 # Claiming a receipt bumps its header, so a correction reads the members back.
                 members = await call('deposit sources', dict(date='2026-06-03', limit=200,
                                                              for_deposit=banked['deposit']['id']))
@@ -142,6 +181,17 @@ def test_deposit_lifecycle_full_documents_and_exact_ledger(root, undeposited, tm
                 assert preview['dry_run'] and preview['deposit']['status'] == 'voided'
                 cancelled = await call('deposit void', dict(void, dependency_guard=preview['dependency_guard']))
                 assert cancelled['deposit']['status'] == 'voided'
+
+                # The saved reads follow the correction and the cancellation.
+                after = await call('deposit show', dict(deposit=banked['deposit']['id']))
+                assert after['current']['status'] == 'voided'
+                assert after['current']['effective_bank_total']['minor_units'] == 0
+                assert (await call('deposit items', dict(deposit=banked['deposit']['id'],
+                                                         kind='additional', page=dict(limit=50))))['total_count'] == 1
+                final = await call('deposit query', listing)
+                assert final['total_count'] == 1 and final['items'][0]['current']['status'] == 'voided'
+                # Books that moved answer with a different digest, which is what stales a cursor.
+                assert final['fingerprint'] != saved['fingerprint']
 
                 assert set(calls) == COMMANDS
                 for name, data in calls.items():
