@@ -12,10 +12,6 @@ from bookflow.core import registry
 from bookflow.hub import permission_catalog as c
 
 ROOT = Path(__file__).resolve().parents[1]
-# The descriptor every test pins the frozen catalog by. One literal, imported by the tests
-# that need it: a second copy is a second thing to keep true, and the last one went stale
-# unnoticed against a catalog that had moved.
-FROZEN_DESCRIPTOR_SHA256 = 'ec084887bbd75ed9f3945f52385376f3f97a355ade3c0e4cbb2e65f115dee6c5'
 R = c.Requirement
 
 
@@ -58,7 +54,7 @@ def test_complete_unfiltered_registry_descriptors_and_action_owners():
 # The accepted descriptor's digest, pinned in exactly one place. A second copy of this
 # literal is how tests/test_identity_admin_catalog.py drifted to a value matching no
 # catalog at all, and stayed that way unnoticed while its fixture could not run.
-FROZEN_DESCRIPTOR_SHA256 = '0d153b8a941c25e3b826a9b0679be1655cc47498a10ea6b1c7f080b11bf12ca2'
+FROZEN_DESCRIPTOR_SHA256 = 'ec084887bbd75ed9f3945f52385376f3f97a355ade3c0e4cbb2e65f115dee6c5'
 
 RESOURCE_PAIRS = {
     # Mirrored from permission_runtime.CURRENT_SOURCES, which already declared every owner
