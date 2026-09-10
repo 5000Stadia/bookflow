@@ -422,3 +422,36 @@ EXAMPLES['deposit query'] = Example(
     'bookflow deposit query --date-from 2026-06-01 --date-to 2026-06-30 --sort date --direction desc --page-limit 25 --company "Demo Plumbing Co" --json',
     {'date_from':'2026-06-01','date_to':'2026-06-30','sort':'date','direction':'desc','page':{'limit':25}},
 )
+
+
+# A bill is the payables mirror of the invoice, so its examples read like the invoice's: a
+# vendor instead of a customer, an expenses grid instead of item lines, and a supplier
+# reference that is the vendor's own number rather than ours.
+EXAMPLES.update({
+    "bill post": Example(
+        'bookflow bill post --vendor "Northside Supply" --date 2026-04-02 --supplier-reference INV-7742'
+        ' --memo "March parts" --expenses \'[{"account":"Office Supplies","amount":"184.60","memo":"Parts"},'
+        '{"account":"Professional Fees","amount":"100.00","memo":"Filing"}]\''
+        ' --company "Demo Plumbing Co" --reason "Enter the March bill" --json',
+        {"vendor": "Northside Supply", "date": "2026-04-02", "supplier_reference": "INV-7742",
+         "memo": "March parts",
+         "expenses": [{"account": "Office Supplies", "amount": "184.60", "memo": "Parts"},
+                      {"account": "Professional Fees", "amount": "100.00", "memo": "Filing"}]}),
+    "bill show": Example(
+        f'bookflow bill show {ID} --company "Demo Plumbing Co" --json', {"bill": ID}),
+    "bill update": Example(
+        f'bookflow bill update {ID} --memo "March parts and filing" --expected-version 1'
+        ' --company "Demo Plumbing Co" --reason "Clarify the bill memo" --json',
+        {"bill": ID, "memo": "March parts and filing", "expected_version": 1}),
+    "bill void": Example(
+        f'bookflow bill void {ID} --expected-version 1 --company "Demo Plumbing Co"'
+        ' --reason "Billed to the wrong company" --json',
+        {"bill": ID, "expected_version": 1}),
+    "bill query": Example(
+        'bookflow bill query --vendor "Northside Supply" --due-to 2026-04-30 --status posted --limit 25'
+        ' --company "Demo Plumbing Co" --json',
+        {"vendor": "Northside Supply", "due_to": "2026-04-30", "status": "posted", "limit": 25}),
+    "bill history": Example(
+        f'bookflow bill history {ID} --limit 25 --company "Demo Plumbing Co" --json',
+        {"bill": ID, "limit": 25}),
+})

@@ -19,6 +19,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`application`](cli/application.md)
 - [`attachment`](cli/attachment.md)
 - [`audit`](cli/audit.md)
+- [`bill`](cli/bill.md)
 - [`card-charge`](cli/card-charge.md)
 - [`chart`](cli/chart.md)
 - [`check`](cli/check.md)
@@ -98,6 +99,8 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 ## Schema reference
 
 - [`company/accounts`](schema/company/accounts.md)
+- [`company/ap_obligation_components`](schema/company/ap_obligation_components.md)
+- [`company/ap_obligation_keys`](schema/company/ap_obligation_keys.md)
 - [`company/application_allocations`](schema/company/application_allocations.md)
 - [`company/applications`](schema/company/applications.md)
 - [`company/attachment_collection`](schema/company/attachment_collection.md)
@@ -173,6 +176,8 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`company/price_level_items`](schema/company/price_level_items.md)
 - [`company/price_levels`](schema/company/price_levels.md)
 - [`company/principals`](schema/company/principals.md)
+- [`company/purchase_expense_lines`](schema/company/purchase_expense_lines.md)
+- [`company/purchase_profiles`](schema/company/purchase_profiles.md)
 - [`company/reconciliation_accounts`](schema/company/reconciliation_accounts.md)
 - [`company/reconciliation_active_certificates`](schema/company/reconciliation_active_certificates.md)
 - [`company/reconciliation_attempt_active`](schema/company/reconciliation_attempt_active.md)
