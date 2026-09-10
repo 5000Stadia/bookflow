@@ -1718,6 +1718,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     from bookflow.adapters.workbench.register import install as install_register
     install_register(app, render=render, run=run, credential=credential, page_error=page_error)
 
+    # Installed before the generic `<noun>/<record>/<verb>` route below, which would
+    # otherwise read `print` as a command name and answer `unknown command print`.
+    from bookflow.adapters.workbench.document_print import install as install_document_print
+    install_document_print(app, run=run, page_error=page_error)
+
     @app.get("/hub/{noun}/{record_id}/{verb}", response_class=HTMLResponse)
     def hub_record_form(noun: str, record_id: str, verb: str, request: Request):
         return form_page(request, None, noun.replace("-", " "), verb, record_id)

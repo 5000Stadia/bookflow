@@ -394,11 +394,13 @@ def test_the_host_and_the_workbench_serve_the_statement(hosted):  # noqa: F811
         assert f"<dt>{heading}</dt>" in page, heading
     assert "Balance forward" in page and "Balance due" in page
     assert "STM-VOID" not in page
-    # Nothing on the page offers to hand it to anyone: the product cannot, and a
-    # control that says otherwise is the defect this check exists to catch.
-    offers = [text for text in re.findall(r"<(?:button|a)\b[^>]*>(.*?)</(?:button|a)>", page, re.S)
+    # The page hands a statement over exactly one way -- a printable PDF for one
+    # customer -- and offers nothing else. A control that offers to send it is the
+    # defect this check exists to catch, because Bookflow still cannot send anything.
+    offers = [text.strip() for text in re.findall(r"<(?:button|a)\b[^>]*>(.*?)</(?:button|a)>", page, re.S)
               if re.search(r"send|e-?mail|print|deliver|post it|mail", text, re.I)]
-    assert offers == [] and "mailto:" not in page, offers
+    assert offers and set(offers) == {"Print / save PDF"}, offers
+    assert f"/c/{cid}/report/statement/print?" in page and "mailto:" not in page
 
     # Each document opens where it was written; each customer opens their own statement.
     assert f'href="/c/{cid}/invoice/' in page and ">STM-200</a>" in page

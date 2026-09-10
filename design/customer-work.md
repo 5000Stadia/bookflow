@@ -358,7 +358,9 @@ cost/markup/catalog/amount pricing; CW08 includes alternative selection and sepa
 availability. Financial behavior within CW19–27 is defined by [linked work billing](work-billing.md)
 and [progress billing](progress-billing.md); print suppression and formal change-order
 approval remain staged. CW29–30 and32–41 retain their payment/cost/report dependencies;
-CW11 and42–43 require templates/rendering/delivery, and CW46–48 require inventory,
+CW11 and42 require templates. CW43 is partly met: an estimate renders and prints as a
+PDF from its own page, per [printed documents](printed-documents.md), while queued
+printing, export options and delivery remain staged. CW46–48 require inventory,
 special sales lines and source capture.
 
 CW09 company controls are defined by [customer-work preferences](customer-work-preferences.md):

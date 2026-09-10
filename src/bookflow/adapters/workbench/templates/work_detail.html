@@ -2,6 +2,7 @@
 <section class="workspace-card sales-document work-document document-detail" aria-label="{{ work.title }}">
 <h2>{{ work.title }} {{ r.number }} · {{ r.title }}</h2>
 <p><strong>{{ 'Preview — nothing written' if work.preview else r.status.replace('_', ' ')|capitalize }}</strong> · {{ r.date }} · Revision {{ r.revision_number }} · {{ 'Active' if r.active else 'Inactive' }}</p>
+{% if work.print_url %}<p class="actions document-print"><a class="primary-action" href="{{ work.print_url }}" target="_blank" rel="noopener">Print / save PDF</a></p>{% endif %}
 <p class="workflow-note">Non-posting customer work. Completed does not mean billed or paid.</p>
 {% for warning in work.record.warnings or [] %}<p class="warn">{{ warning }}</p>{% endfor %}
 <h3>Customer / job</h3><p>{{ p.customer.label }}</p>
