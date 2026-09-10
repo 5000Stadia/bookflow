@@ -12,6 +12,10 @@ from bookflow.core import registry
 from bookflow.hub import permission_catalog as c
 
 ROOT = Path(__file__).resolve().parents[1]
+# The descriptor every test pins the frozen catalog by. One literal, imported by the tests
+# that need it: a second copy is a second thing to keep true, and the last one went stale
+# unnoticed against a catalog that had moved.
+FROZEN_DESCRIPTOR_SHA256 = 'ec084887bbd75ed9f3945f52385376f3f97a355ade3c0e4cbb2e65f115dee6c5'
 R = c.Requirement
 
 
@@ -52,26 +56,33 @@ def test_complete_unfiltered_registry_descriptors_and_action_owners():
 # Hand-disposed conditional resource producers. Graph discovery remains with these
 # owners; no target graph is executed or replaced by static permission admission.
 RESOURCE_PAIRS = {
-    # Accepted G1 private resolver; its literal admission remains ledger.post standard.
-    'deposit_resolution.resolve': {('ledger.post', 'standard')},
+    # Mirrored from permission_runtime.CURRENT_SOURCES, which already declared every owner
+    # with its call-site lines. The frozen catalog had absorbed only 16 of 22 and its
+    # payment_authority line numbers had drifted, so this was one stale copy of a current
+    # declaration rather than an undecided disposition. Reconciliation and transaction
+    # deletion register no commands today; none of their sites is reachable.
     'billing_edits.carry_allocations': {('customer-work', 'standard')},
     'billing_edits.protect_sale': {('customer-work', 'standard')},
     'billing_queries.authorize_sale': {('customer-work', 'member'), ('customer-work', 'standard')},
     'billing_queries.sale_source_links': {('customer-work', 'member')},
     'billing_queries.sale_source_output': {('customer-work', 'member')},
-    'payment_authority.authorize': {('ledger.read', 'member'), ('ledger.post', 'standard'), ('customer-work', 'member'), ('customer-work', 'standard')},
-    # _PublicationSelectionCohort.requirements: read/write ledger, plus work
-    # on complete historical selection/operation roots and paid targets.
-    'payment_authority.authorize_publication_selections': {('ledger.read', 'member'), ('ledger.post', 'standard'), ('customer-work', 'member'), ('customer-work', 'standard')},
-    'payment_authority.authorize_publication_transactions': {('ledger.read', 'member'), ('ledger.post', 'standard'), ('customer-work', 'member'), ('customer-work', 'standard')},
-    'payment_authority.authorize_query': {('ledger.read', 'member'), ('ledger.post', 'standard'), ('customer-work', 'member'), ('customer-work', 'standard')},
-    'payment_authority.authorize_event': {('ledger.read', 'member'), ('customer-work', 'member')},
-    # fe3 publication addition since the plan's c8 source: same read predicates.
-    'payment_authority.authorize_events': {('ledger.read', 'member'), ('customer-work', 'member')},
-    'payment_authority.denied_events': {('ledger.read', 'member'), ('customer-work', 'member')},
+    'deposit_resolution.resolve': {('ledger.post', 'standard')},
+    'payment_authority.authorize': {('customer-work', 'member'), ('customer-work', 'standard'), ('ledger.post', 'standard'), ('ledger.read', 'member')},
+    'payment_authority.authorize_event': {('customer-work', 'member'), ('ledger.read', 'member')},
+    'payment_authority.authorize_events': {('customer-work', 'member'), ('ledger.read', 'member')},
+    'payment_authority.authorize_publication_selections': {('customer-work', 'member'), ('customer-work', 'standard'), ('ledger.post', 'standard'), ('ledger.read', 'member')},
+    'payment_authority.authorize_publication_transactions': {('customer-work', 'member'), ('customer-work', 'standard'), ('ledger.post', 'standard'), ('ledger.read', 'member')},
+    'payment_authority.authorize_query': {('customer-work', 'member'), ('customer-work', 'standard'), ('ledger.post', 'standard'), ('ledger.read', 'member')},
+    'payment_authority.denied_events': {('customer-work', 'member'), ('ledger.read', 'member')},
     'payment_authority.readable_predicate': {('customer-work', 'member')},
     'payment_preparation.payment_page': {('customer-work', 'member')},
     'payment_recovery.readable_selection': {('customer-work', 'member')},
+    'reconciliation_adapters.authority': {('ledger.read', 'member')},
+    'reconciliation_adapters.population': {('ledger.read', 'member')},
+    'reconciliation_adapters.prepare_prospective': {('customer-work', 'member')},
+    'reconciliation_proposals.preview': {('ledger.post', 'standard')},
+    'transaction_deletion_facts.admit': {('ledger.read', 'member'), ('transaction.invoice.delete', 'standard'), ('transaction.journal_entry.delete', 'standard'), ('transaction.payment.delete', 'standard'), ('transaction.sales_receipt.delete', 'standard')},
+    'transaction_deletion_facts.load': {('customer-work', 'standard')},
 }
 
 
@@ -132,9 +143,10 @@ def test_exact_requirement_universes_and_effective_literal_migration_seeds():
         effective.update(rows)
     expected = tuple(c.DefaultEntry(role, R(cap, threshold)) for role, cap, threshold in sorted(effective, key=lambda x: ((*c.ROLES, 'hub_admin').index(x[0]), x[1], c.THRESHOLDS.index(x[2]))))
     assert c.FROZEN_DEFAULTS == expected
+    # Registration comes from what commands declare. A conditional source says where a
+    # graph requirement is produced; it registers nothing, so it is not a term here.
     registered = {R(d.capability, d.threshold) for d in c.FROZEN_COMMANDS}
     registered.update(r for d in c.FROZEN_COMMANDS for r in d.resources)
-    registered.update(r for s in c.CONDITIONAL_RESOURCE_SOURCES for r in s.requirements)
     assert set(c.FROZEN_MANIFEST.registered_requirements) == registered
     assert {d.requirement for d in expected} <= registered  # no invented legacy atom
     company = {R(d.capability, d.threshold) for d in c.FROZEN_COMMANDS if d.routed_scope == 'company'}
@@ -142,6 +154,14 @@ def test_exact_requirement_universes_and_effective_literal_migration_seeds():
     company.update(r for s in c.CONDITIONAL_RESOURCE_SOURCES for r in s.requirements)
     company.update(R(n, 'standard') for n in c.DELETE_NAMES)
     assert set(c.FROZEN_MANIFEST.company_requirements) == company
+    # Sources are admitted against the company universe, so the only atoms they can carry
+    # that no command registers are the four Delete standards. Equality is the point in
+    # both directions: nothing else may appear here, since it would be a requirement with
+    # no way to be granted, and every Delete standard must appear, since an unavailable
+    # delete contract still has to name where its graph requirement is produced.
+    source_atoms = {r for s in c.CONDITIONAL_RESOURCE_SOURCES for r in s.requirements}
+    assert source_atoms <= set(c.FROZEN_MANIFEST.company_requirements)
+    assert source_atoms - registered == {R(n, 'standard') for n in c.DELETE_NAMES}
     assert set(c.FROZEN_MANIFEST.capability_names) == {r.capability for r in registered | company}
 
 
@@ -176,7 +196,7 @@ def test_frozen_manifest_digest_and_pure_import_boundary():
     assert c.FROZEN_CATALOG.version == 'deposit-write-receivables-and-identity-v1'
     assert c.catalog_manifest(c.FROZEN_CATALOG, c.FROZEN_MANIFEST.standalone_names) == c.FROZEN_MANIFEST
     raw = json.dumps(asdict(c.FROZEN_CATALOG), sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode()
-    assert c.FROZEN_MANIFEST.descriptor_sha256 == '54a4f521647ed666bfbc1ee32310d7b0706c8c8dfb66d0e59606c11892c2bde0'
+    assert c.FROZEN_MANIFEST.descriptor_sha256 == FROZEN_DESCRIPTOR_SHA256
     for name in ('permission_catalog', 'permission_policy'):
         tree = ast.parse((ROOT / f'src/bookflow/hub/{name}.py').read_text())
         modules = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)} | {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
@@ -201,3 +221,31 @@ def test_catalog_references_and_delete_defaults_reject():
     for value in bad:
         with pytest.raises(c.PolicyInputError):
             c.catalog_manifest(value)
+
+
+def test_a_source_may_name_an_unregistered_delete_atom_and_still_register_nothing():
+    """A conditional source says where a graph requirement is produced, not that anything
+    may be granted. It is admitted against the company universe, so it may legitimately
+    name a Delete standard that no command registers -- and naming it must leave
+    registration, availability and the capability universe exactly as they were."""
+    delete = R(c.DELETE_NAMES[0], 'standard')
+    assert delete in set(c.FROZEN_MANIFEST.company_requirements)
+    assert delete not in set(c.FROZEN_MANIFEST.registered_requirements)
+    site = (('src/bookflow/company/synthetic.py', 1),)
+    grown = c.catalog_manifest(
+        replace(c.FROZEN_CATALOG, conditional_sources=c.FROZEN_CATALOG.conditional_sources
+                + (c.ResourceSource('bookflow.company.synthetic.owner', site, (delete,)),)),
+        c.FROZEN_MANIFEST.standalone_names)
+    for field in ('registered_requirements', 'company_requirements', 'capability_names',
+                  'company_action_keys', 'admin_action_keys', 'command_names'):
+        assert getattr(grown, field) == getattr(c.FROZEN_MANIFEST, field), field
+    # The inventory is still described rather than absorbed silently.
+    assert grown.descriptor_sha256 != c.FROZEN_MANIFEST.descriptor_sha256
+    # An atom outside the company universe stays invalid, whether the capability is
+    # unknown or the threshold is one this capability never admits in a company.
+    for requirement in (R('unknown', 'member'), R('customer-work', 'admin')):
+        with pytest.raises(c.PolicyInputError) as e:
+            c.catalog_manifest(replace(
+                c.FROZEN_CATALOG, conditional_sources=c.FROZEN_CATALOG.conditional_sources
+                + (c.ResourceSource('bookflow.company.synthetic.other', site, (requirement,)),)))
+        assert e.value.category is c.InputErrorCategory.invalid_catalog

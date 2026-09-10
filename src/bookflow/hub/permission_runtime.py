@@ -10,44 +10,18 @@ import json
 from . import permission_catalog as c, permission_policy as a, permission_snapshot as s
 from .agent_authority import fail
 
-# Verified accepted base for the resource inventory, not this module's final
-# commit (which cannot name itself). Union review verifies actual call-site parity.
+# The commit at which call-site parity between the code and the inventory was last
+# verified by union review. Not this module's own commit, which cannot name itself.
 SOURCE_COMMIT = '3990636d2a2d3c683a0e806e6635a4a64c0075b0'
 
 
-# Explicit source-only delta from the accepted descriptor. No capability,
-# threshold, default, action or availability policy changes. Existing roots must
-# go through the separately admitted catalog transition, never automatic adoption.
-_PAYMENT_LINES = {
-    'authorize_event': (415,), 'authorize_events': (430,), 'denied_events': (448,),
-    'authorize_publication_transactions': (525, 527),
-    'authorize_publication_selections': (675,),
-}
-CURRENT_SOURCES = tuple(sorted((
-    c.ResourceSource('bookflow.company.transaction_deletion_facts.admit',
-        (('src/bookflow/company/transaction_deletion_facts.py', 100),
-         ('src/bookflow/company/transaction_deletion_facts.py', 101)),
-        (c.Requirement('transaction.journal_entry.delete','standard'),
-         c.Requirement('transaction.invoice.delete','standard'),
-         c.Requirement('transaction.sales_receipt.delete','standard'),
-         c.Requirement('transaction.payment.delete','standard'),
-         c.Requirement('ledger.read','member'))),
-    c.ResourceSource('bookflow.company.transaction_deletion_facts.load',
-        (('src/bookflow/company/transaction_deletion_facts.py', 152),),
-        (c.Requirement('customer-work','standard'),)),
-    *(replace(source, call_sites=tuple(('src/bookflow/company/payment_authority.py', line)
-        for line in _PAYMENT_LINES[source.owner.rsplit('.', 1)[-1]]))
-      if source.owner.startswith('bookflow.company.payment_authority.') and source.owner.rsplit('.', 1)[-1] in _PAYMENT_LINES
-      else source for source in c.CONDITIONAL_RESOURCE_SOURCES),
-    c.ResourceSource('bookflow.company.reconciliation_adapters.authority',
-        (('src/bookflow/company/reconciliation_adapters.py', 80),), (c.Requirement('ledger.read','member'),)),
-    c.ResourceSource('bookflow.company.reconciliation_adapters.population',
-        (('src/bookflow/company/reconciliation_adapters.py', 261),), (c.Requirement('ledger.read','member'),)),
-    c.ResourceSource('bookflow.company.reconciliation_adapters.prepare_prospective',
-        (('src/bookflow/company/reconciliation_adapters.py', 393),), (c.Requirement('customer-work','member'),)),
-    c.ResourceSource('bookflow.company.reconciliation_proposals.preview',
-        (('src/bookflow/company/reconciliation_proposals.py', 37),), (c.Requirement('ledger.post','standard'),)),
-), key=lambda source: source.owner))
+# The accepted descriptor now carries every conditional source at its current call
+# sites, so this bridge holds no delta and CURRENT_SOURCES is the frozen inventory
+# itself. The seam stays because the next drift between the code and the descriptor
+# lands here first, ahead of the catalog transition that absorbs it. Nothing here may
+# change a capability, threshold, default, action or availability; existing roots go
+# through that separately admitted transition, never automatic adoption.
+CURRENT_SOURCES = c.CONDITIONAL_RESOURCE_SOURCES
 CURRENT_CATALOG = replace(c.FROZEN_CATALOG, conditional_sources=CURRENT_SOURCES)
 CURRENT_MANIFEST = c.catalog_manifest(CURRENT_CATALOG, c.FROZEN_MANIFEST.standalone_names)
 

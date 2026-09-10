@@ -30,8 +30,15 @@ def test_bundle_source_base_identity_and_owned_current_snapshot(path):
 
 
 def test_historical_descriptor_is_not_auto_adopted(path):
+    # A root still holding a descriptor from before an inventory was absorbed. Build it
+    # here on purpose: BUNDLE is the current catalog, so a root holding BUNDLE is the
+    # matching case, not the historical one this covers.
+    absorbed='bookflow.company.transaction_deletion_facts.admit'
+    historical=replace(BUNDLE,descriptor=replace(BUNDLE.descriptor,conditional_sources=tuple(
+        x for x in BUNDLE.descriptor.conditional_sources if x.owner!=absorbed)))
+    assert historical.descriptor!=BUNDLE.descriptor
     with open_database(path,writable=True) as db:
-        install_fixture_policy(db.raw,BUNDLE)
+        install_fixture_policy(db.raw,historical)
     with open_database(path,writable=False) as db:
         before=snapshot(db.raw)
         with pytest.raises(s.SnapshotError):s.load_root(db,catalog=r.catalog_bundle())
