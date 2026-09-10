@@ -214,6 +214,17 @@ for _noun in ('check', 'card-charge'):
         'E_UNBALANCED_ENTRY': 'expense lines do not add up to the amount on the face of the document',
     })
 
+# A transfer is the same register entry with a single category, so it raises the same ledger
+# codes. It never reports an unbalanced entry, because both legs are the one amount, and it
+# never reports a duplicate number, because it takes no number of its own.
+MATRIX['transfer post'] = {code: _LEDGER_WRITE_ERRORS[code] for code in (
+    'E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_PERIOD_CLOSED',
+    'E_VALUE_RANGE', 'E_AMOUNT_PRECISION', 'E_REASON_REQUIRED', 'E_IDEMPOTENCY_MISMATCH',
+    'E_DIRECTIVE_NOT_FOUND', 'E_DIRECTIVE_INACTIVE')}
+MATRIX['transfer post']['E_VALIDATION'] = (
+    'an end of the transfer is not a balance-sheet account the company owns, the same account '
+    'is named at both ends, or an account is kept in another currency')
+
 for _verb in ('show', 'list', 'query', 'activate', 'deactivate'):
     MATRIX['customer ' + _verb]['E_VALUE_RANGE'] = 'exact own or family receivable balance exceeds signed 64-bit range'
 

@@ -535,6 +535,60 @@ refusal's own figures after a refusal, so the reconciliation is visible on the p
 `pay_to` is a multi-target reference resolved by the `discriminator` declared on
 `ReferenceDefinition`, which generalises the mechanism the sales-rep picker already used.
 
+### Transfers between the company's own accounts
+
+`transfer post` is the same document surface over the same register.
+`company/transfer_models.py` holds its input and `company/transfers.py` translates it into a
+`RegisterPostInput` whose selected account is the account the money leaves and whose `category`
+is the account it arrives in, then hands that to `registers.translate` and the journal writer.
+`journals.persist_prepared` is called with `transfer post`, so the audit trail names the
+document. The register's single-category shape is used rather than a one-line allocation list
+because a transfer is exactly two legs of one amount: the same memo reaches both legs the way it
+does for any categorised register entry, and there is no reconciliation rule to run.
+
+One rule sets both signs: credit the account it leaves, debit the account it arrives in.
+`CREDITED_BY` and `DEBITED_BY` in `transfer_models.py` map an account's normal balance to the
+register direction that produces each side, and they are the only place the register's
+increase/decrease vocabulary appears. A debit-normal account is credited by decreasing and a
+credit-normal one by increasing, so a bank paying a card down decreases the bank and debits the
+card — which is what paying a card off is — and the same rule read the other way is a cash
+advance raising what is owed.
+
+`ELIGIBLE` in `company/transfers.py` is every balance-sheet posting type except
+`accounts_receivable` and `accounts_payable`: `bank`, `credit_card`, `other_current_asset`,
+`fixed_asset`, `other_asset`, `other_current_liability`, `long_term_liability`, `equity`. Keeping
+every profit-and-loss type off both ends is what makes "a transfer changes no profit" structural
+rather than a property to be tested for. The two party ledgers are refused although they are
+balance-sheet accounts, because every posting line on them names a customer or a vendor
+(`journals.line_values`) and a transfer names nobody. `REFUSED` names the rest with the reason and
+the document that does own that movement; `ELIGIBLE` and `REFUSED` together cover every member of
+`accounts.AccountType`, and `tests/test_transfer_funds.py` holds that to be true so a new account
+type cannot fall through. The same account at both ends is refused before the register would
+report it as an offset collision, so the message names the account. Both refusals carry
+`fields[0].field` as `from_account` or `to_account`, which is what puts the error on the control a
+person was filling in.
+
+The write output is `TransferWriteOutput`: the journal write output plus a `document` summary
+holding the amount and, for each end, the account id, its name, its type, its normal balance, the
+side it took, and whether its own figure went up or down. That summary is what the footer
+displays; nothing is recomputed in the browser.
+
+Correction is `register update` and voiding is `journal void`, the same as every other register
+entry. There is no `transfer` list page yet, so the window's Cancel returns to the home board
+(`Document.NO_LIST`) and a successful save lands on the posted journal.
+
+In `adapters/workbench/document_form.py` the transfer is the one document with no line grid:
+`layout` returns `lines: None`, which leaves the grid band out of the rendered page rather than
+drawing an empty one, and `TRANSFER_PRIMARY` plus `TRANSFER_FOOTER` place the whole form.
+`transfer_totals` builds the footer from the `document` summary, saying what each end did in that
+end's own words — a card or a loan reports what you owe on it. The header band's existing
+`repeat(auto-fit, minmax(min(100%, 13rem), 1fr))` is what stacks it one field per row on a phone;
+no new CSS was needed and none was added.
+
+Both account pickers search the whole chart, because `ReferenceDefinition` carries no filter and
+adding one would trade a refusal that says which account and why for a list that silently omits
+it.
+
 ### Ledger performance measurements
 
 Audit entry snapshots are encoded in their existing format and inserted as one

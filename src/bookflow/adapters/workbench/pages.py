@@ -289,13 +289,13 @@ def _reference_target(
 def _document_base(company_id: str | None, noun: str) -> str:
     """Where a document window's Cancel goes back to.
 
-    A document with a list of its own goes back to that list. The money-out documents have no
-    list yet, so they go back to the home board, which is where they were opened from -- never
-    to a list route that would answer with an error page.
+    A document with a list of its own goes back to that list. The money-out documents and the
+    transfer have no list yet, so they go back to the home board, which is where they were
+    opened from -- never to a list route that would answer with an error page.
     """
     if not company_id:
         return ''
-    return f"/c/{company_id}/" if noun in Document.MONEY_OUT else f"/c/{company_id}/{noun}"
+    return f"/c/{company_id}/" if noun in Document.NO_LIST else f"/c/{company_id}/{noun}"
 
 
 def _form_reference(definition: Any, noun: str, path: str) -> Any | None:
@@ -400,7 +400,7 @@ def _success_target(cmd: registry.Command, company_id: str | None, noun: str, re
     if company_id and cmd.name == "rate set" and output.get("id"):
         return f"/c/{company_id}/rate/{output['id']}"
     if company_id and cmd.name in ("register post", "register update", "check post",
-                                   "card-charge post") and output.get("id"):
+                                   "card-charge post", "transfer post") and output.get("id"):
         return f"/c/{company_id}/journal/{output['id']}"
     if Billing.is_conversion(noun, cmd.verb) and output.get('id'):
         return f"/c/{company_id}/{output['type'].replace('_', '-')}/{output['id']}"

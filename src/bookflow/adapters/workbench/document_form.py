@@ -1,4 +1,8 @@
-"""Document-window layout for sales documents: header band, line grid, footer band.
+"""Document-window layout: header band, line grid where there is one, footer band.
+
+Three families share this window. The sales documents have a priced line grid; the money-out
+documents have an expenses grid; a transfer has no grid at all, because it is two legs of one
+amount and there is nothing to itemise.
 
 Presentation only. Every control keeps the form name the generated form gives it, so
 the browser submits exactly the command input an agent sends over MCP. Nothing here
@@ -19,8 +23,18 @@ NOUNS = ('invoice', 'sales-receipt', 'estimate')
 # NOUNS -- those three have list pages and document arrows, and these do not yet.
 MONEY_OUT = ('check', 'card-charge')
 
+# The transfer: money moved between two of the company's own accounts. It opens in this same
+# window and shares the header band, and it is the one document here with no line grid at
+# all -- a transfer has exactly two legs of one amount, so a grid would ask for the amount
+# twice and leave room for a row that could never balance.
+TRANSFER = 'transfer'
+
+# Documents with no list page and no arrows of their own; Cancel returns them to the board
+# they were opened from.
+NO_LIST = (*MONEY_OUT, TRANSFER)
+
 TITLES = {'invoice': 'Invoice', 'sales-receipt': 'Sales receipt', 'estimate': 'Estimate',
-          'check': 'Check', 'card-charge': 'Credit card charge'}
+          'check': 'Check', 'card-charge': 'Credit card charge', 'transfer': 'Transfer'}
 
 # Header band, first row: who and when, in the order a document window reads.
 PRIMARY = ('customer', 'title', 'class_id', 'date', 'number', 'expires_on', 'status', 'decision_note')
@@ -66,6 +80,11 @@ WORK_GRID = (('item', 'Item'), ('description', 'Description'), ('quantity', 'Qua
 MONEY_OUT_PRIMARY = ('account', 'pay_to.name_type', 'pay_to.name_id', 'date', 'number',
                      'amount', 'class_id')
 MONEY_OUT_FOOTER = ('memo',)
+
+# The whole of a transfer: where it comes from, where it goes, when, and how much. The memo
+# sits in the footer with every other document's memo.
+TRANSFER_PRIMARY = ('from_account', 'to_account', 'date', 'amount')
+TRANSFER_FOOTER = ('memo',)
 
 # The Expenses grid. ``amount`` here is a number a person types rather than a server
 # computation, so there is no ``@amount`` column: what the server computes is the total of
@@ -197,6 +216,9 @@ HELP = {
              'one written on the check itself. The expense lines have to add up to the amount.',
     'card-charge': 'A credit card charge records a purchase put on a company card. What is owed on the card '
                    'goes up until the card is paid. The expense lines have to add up to the amount.',
+    'transfer': 'A transfer moves money between two accounts the company already owns. It is neither income '
+                'nor expense, so it changes no profit. Both accounts have to be balance-sheet accounts: a '
+                'bank, a credit card, another asset, a loan, or equity.',
 }
 
 # The same window, in each document's own words. A label or an explanation here overrides the
@@ -207,6 +229,8 @@ NOUN_LABELS = {
               'pay_to.name_id': 'Pay to the Order of', 'amount': 'Amount of this check'},
     'card-charge': {'account': 'Credit Card', 'pay_to.name_type': 'Kind of name',
                     'pay_to.name_id': 'Purchased From', 'amount': 'Amount of this charge'},
+    'transfer': {'from_account': 'Transfer Funds From', 'to_account': 'Transfer Funds To',
+                 'amount': 'Transfer Amount'},
 }
 
 NOUN_DESCRIPTIONS = {
@@ -219,17 +243,30 @@ NOUN_DESCRIPTIONS = {
                     'pay_to.name_type': 'Which list the name comes from. Choose this before searching.',
                     'pay_to.name_id': 'Search by name, then choose the match.',
                     'amount': 'What was charged. The expense lines below have to add up to it.'},
+    'transfer': {'from_account': 'The account the money comes out of. It is credited, so a bank '
+                                 'balance falls and what is owed on a card rises.',
+                 'to_account': 'The account the money goes into. It is debited, so a bank balance '
+                               'rises and what is owed on a card falls.',
+                 'amount': 'How much moves. Both accounts move by exactly this.'},
 }
 
 # What the money-out footer calls the figure on the face of the document.
 FACE_LABELS = {'check': 'Amount of this check', 'card-charge': 'Amount of this charge'}
+
+# How a transfer's own footer names each end's figure. On a card or a loan the number that
+# moves is what you owe on it, and saying the account "goes down" when the debt does would
+# read as the money going the other way. Equity is credit-normal too and is not a debt, so it
+# keeps its own name.
+OWED_TYPES = ('credit_card', 'other_current_liability', 'long_term_liability')
+EFFECT_WORDS = {'increase': 'goes up', 'decrease': 'goes down'}
 
 
 def is_document(noun, verb):
     """Whether this command opens as a document window rather than a generated form."""
     return ((noun in ('invoice', 'sales-receipt') and verb in ('post', 'update'))
             or (noun == 'estimate' and verb in ('create', 'update'))
-            or (noun in MONEY_OUT and verb == 'post'))
+            or (noun in MONEY_OUT and verb == 'post')
+            or (noun == TRANSFER and verb == 'post'))
 
 
 def heading(noun, verb, originals):
@@ -290,8 +327,11 @@ def _address_group(title, prefix, leaves, placed):
 def layout(noun, leaves):
     """Bands of the document window, and every leaf placed exactly once."""
     by_path, placed = {leaf['path']: leaf for leaf in leaves}, set()
+    transfer = noun == TRANSFER
     money_out = noun in MONEY_OUT
-    grid = EXPENSE_GRID if money_out else WORK_GRID if noun == 'estimate' else SALE_GRID
+    header_only = transfer or money_out
+    grid = () if transfer else EXPENSE_GRID if money_out else \
+        WORK_GRID if noun == 'estimate' else SALE_GRID
 
     def take(paths):
         found = []
@@ -302,18 +342,20 @@ def layout(noun, leaves):
                 found.append(leaf)
         return found
 
-    primary = take(MONEY_OUT_PRIMARY if money_out else PRIMARY)
-    terms = [] if money_out else take(TERMS)
-    addresses = [] if money_out else [group for group in
+    primary = take(TRANSFER_PRIMARY if transfer else MONEY_OUT_PRIMARY if money_out else PRIMARY)
+    terms = [] if header_only else take(TERMS)
+    addresses = [] if header_only else [group for group in
                  (_address_group(title, prefix, leaves, placed)
                   for title, prefix in ADDRESSES.get(noun, DEFAULT_ADDRESSES))
                  if group is not None]
-    scope = [] if money_out else take(SCOPE)
-    lines = by_path.get('expenses' if money_out else 'lines')
+    scope = [] if header_only else take(SCOPE)
+    # A transfer has no line collection at all, which is what leaves the grid band out of
+    # the page rather than rendering an empty one.
+    lines = None if transfer else by_path.get('expenses' if money_out else 'lines')
     if lines is not None:
         placed.add(lines['path'])
-    footer = take(MONEY_OUT_FOOTER if money_out else FOOTER)
-    pricing = [] if money_out else take(PRICING)
+    footer = take(TRANSFER_FOOTER if transfer else MONEY_OUT_FOOTER if money_out else FOOTER)
+    pricing = [] if header_only else take(PRICING)
     record = take(RECORD)
     # Anything this layout does not name still reaches the reader, rather than
     # disappearing from a form that must stay input-identical to the command.
@@ -331,7 +373,7 @@ def layout(noun, leaves):
     tracks = [WIDTHS.get(column['name'], ('9rem', 9)) for column in columns] + [ACTIONS_WIDTH]
     return {'primary': primary, 'addresses': addresses, 'terms': terms, 'scope': scope,
             'lines': lines, 'columns': columns, 'line_extras': extras,
-            'line_pricing': None if money_out else LINE_PRICING,
+            'line_pricing': None if header_only else LINE_PRICING,
             'lines_title': 'Expenses' if money_out else 'Lines',
             'footer': footer, 'pricing': pricing, 'record': record,
             'grid_template': ' '.join(track for track, _ in tracks),
@@ -405,11 +447,36 @@ def money_out_totals(noun, result, error):
     return [], None, None
 
 
+def _leg_figure(leg):
+    """What this end's own figure is called: on a card or a loan it is what you owe."""
+    return (f'what you owe on {leg["name"]}' if leg['type'] in OWED_TYPES else leg['name'])
+
+
+def transfer_totals(result):
+    """The transfer footer: where the money went, and what each end did.
+
+    Every figure is copied from the document summary the command returned. A refusal
+    computes nothing, so it shows nothing rather than a figure the server never produced.
+    """
+    document = result.get('document') if isinstance(result, dict) else None
+    if not isinstance(document, dict):
+        return [], None, None
+    currency, source, target = document['currency'], document['from_account'], document['to_account']
+    figure = f"{document['amount']['amount']} {currency}"
+    said = (f'{_leg_figure(source)} {EFFECT_WORDS[source["effect"]]} {figure} and '
+            f'{_leg_figure(target)} {EFFECT_WORDS[target["effect"]]} {figure}.')
+    return ([_row('Out of ' + source['name'], figure),
+             _row('Into ' + target['name'], figure, True)],
+            said[0].upper() + said[1:] + ' Neither end is income or expense, so this changes '
+            'no profit.', True)
+
+
 def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=False,
             record_id=None, base='', error=None):
     """Everything the document template needs, with money taken from the server alone."""
+    transfer = noun == TRANSFER
     money_out = noun in MONEY_OUT
-    figures = None if money_out else (computed(result) or computed(shown))
+    figures = None if transfer or money_out else (computed(result) or computed(shown))
     fresh = result is not None
 
     def line_amount(line_id, index):
@@ -420,7 +487,10 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
             row = figures['lines'][index]
         return row
 
-    if money_out:
+    if transfer:
+        totals, reconciliation, reconciled = transfer_totals(result)
+        empty = 'Preview to see what each of the two accounts does.'
+    elif money_out:
         totals, reconciliation, reconciled = money_out_totals(noun, result, error)
         empty = ('Preview to see what the expense lines add up to and whether it agrees '
                  'with the amount above.')
@@ -438,5 +508,5 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
                 preview=preview, creating=verb in ('post', 'create'),
                 settled=noun == 'invoice', base=base, record_id=record_id,
                 context_labels=CONTEXT_LABELS,
-                origin=('the values you entered' if money_out and not fresh else
+                origin=('the values you entered' if (transfer or money_out) and not fresh else
                         'the last preview' if fresh else 'the saved document'))

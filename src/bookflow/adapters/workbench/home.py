@@ -238,8 +238,7 @@ PANELS: tuple[Panel, ...] = (
                 id="transfer",
                 title="Transfer funds",
                 summary="Move money between two of your own accounts.",
-                action=Action("Transfer funds", WRITE),
-                waits_on="funds transfer commands",
+                action=Action("Transfer funds", WRITE, ("transfer post",), "/transfer/post"),
             ),
             Step(
                 id="reconcile",

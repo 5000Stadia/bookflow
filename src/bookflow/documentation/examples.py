@@ -203,6 +203,10 @@ EXAMPLES.update({
         {"account": "Company Credit Card", "pay_to": {"name_type": "vendor", "name_id": "Northside Supply"},
          "date": "2026-04-03", "amount": "75.25", "memo": "Fuel on the company card",
          "expenses": [{"account": "Office Supplies", "amount": "75.25"}]}),
+    "transfer post": Example(
+        'bookflow transfer post --from-account Checking --to-account "Company Credit Card" --date 2026-04-04 --amount 500.00 --memo "Pay the card down" --company "Demo Plumbing Co" --reason "Pay the card down" --json',
+        {"from_account": "Checking", "to_account": "Company Credit Card",
+         "date": "2026-04-04", "amount": "500.00", "memo": "Pay the card down"}),
 })
 
 

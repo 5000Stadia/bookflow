@@ -692,7 +692,7 @@ Each type has its own document profile and a fixed posting rule. The table gives
 | bill_payment | `bill pay` | vendor | Dr AP; Cr bank or credit card; applies to open bills |
 | check | `check write` | any | Cr bank; Dr per line |
 | credit_card_charge | `charge post` | vendor | Cr credit card; Dr per line |
-| transfer | `transfer post` | none | Dr to account; Cr from account |
+| transfer | `transfer post` | none | Dr to account; Cr from account; both ends are balance-sheet accounts the company owns, never the receivable or payable ledgers and never a profit-and-loss account |
 | inventory_adjustment | `inventory adjust` | none | Dr or Cr Inventory Asset; offset to adjustment account |
 | vendor_credit | `vendor-credit post` | vendor | purchase credit: Dr AP; Cr the credited expense/asset accounts; inventory returned only for explicitly returned quantities |
 | estimate | `estimate create` | customer or job | non-posting; converts to an invoice in full or by progress percentage or selected lines |
