@@ -36,7 +36,7 @@ from urllib.parse import quote
 
 from bookflow.core.errors import BookflowError
 
-NOUNS = ('invoice', 'sales-receipt', 'estimate')
+NOUNS = ('invoice', 'sales-receipt', 'estimate', 'bill')
 
 # The largest page every one of these query commands accepts.
 PAGE = 200
@@ -44,7 +44,8 @@ RECENT = 5
 
 LABELS = {'invoice': ('invoice', 'Invoices'),
           'sales-receipt': ('sales receipt', 'Sales receipts'),
-          'estimate': ('estimate', 'Estimates')}
+          'estimate': ('estimate', 'Estimates'),
+          'bill': ('bill', 'Bills')}
 
 ORDER = ('Ordered by document date, then by the order they were entered — '
          'the same order as the list.')
@@ -79,7 +80,10 @@ def _step(base, row):
     """One arrow's destination, labelled with what the user will recognise it by."""
     total = row.get('total') or {}
     status = row.get('status')
-    parts = [part for part in (row.get('number'), row.get('date'), row.get('customer_name'),
+    # Whose document it is, named for whichever side of the books it sits on: a sale carries a
+    # customer and a bill carries a vendor, and one arrow label reads both.
+    parts = [part for part in (row.get('number'), row.get('date'),
+                               row.get('customer_name') or row.get('vendor_name'),
                                total.get('amount')) if part]
     if status in ('voided', 'cancelled'):
         parts.append(status)
