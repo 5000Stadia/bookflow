@@ -4,6 +4,7 @@ import ast
 import importlib
 import inspect
 import json
+import re
 import sqlite3
 from pathlib import Path
 
@@ -19,7 +20,33 @@ HUB0007 = importlib.import_module("bookflow.storage.hub_migrations.versions.0007
 HUB0008 = importlib.import_module("bookflow.storage.hub_migrations.versions.0008_attachment_capabilities")
 HUB0010 = importlib.import_module("bookflow.storage.hub_migrations.versions.0010_ledger_capabilities")
 HUB0011 = importlib.import_module("bookflow.storage.hub_migrations.versions.0011_customer_work_capabilities")
-CURRENT_ROLE_CAPABILITY_SEED = tuple(sorted(HUB0005.ROLE_CAPABILITY_SEED + HUB0007.ROLE_CAPABILITY_SEED + HUB0008.ROLE_CAPABILITY_SEED + HUB0010.ROLE_CAPABILITY_SEED + HUB0011.ROLE_CAPABILITY_SEED))
+def _role_capability_modules():
+    """The hub migrations whose capability seed is still in force, newest replace onward.
+
+    A migration that clears `role_capabilities` in its `upgrade()` supersedes every seed
+    before it; the rest add to what is there. Both facts are in the migration source, so
+    this reads the chain instead of naming modules by hand - a hand-listed set is what
+    silently left the membership and user rows six behind the command registry.
+    """
+    versions = Path(__file__).resolve().parents[1] / "src/bookflow/storage/hub_migrations/versions"
+    seeding = [path for path in sorted(versions.glob("[0-9]*.py"))
+               if "ROLE_CAPABILITY_SEED" in path.read_text()]
+    replaces = []
+    for index, path in enumerate(seeding):
+        upgrade = next((node for node in ast.parse(path.read_text()).body
+                        if isinstance(node, ast.FunctionDef) and node.name == "upgrade"), None)
+        body = ast.get_source_segment(path.read_text(), upgrade) if upgrade else ""
+        # `.delete()` closed immediately clears the table; `.delete().where(...)` does not.
+        if re.search(r"\.delete\(\)\s*\)", body or ""):
+            replaces.append(index)
+    return [importlib.import_module(f"bookflow.storage.hub_migrations.versions.{path.stem}")
+            for path in seeding[max(replaces, default=0):]]
+
+
+CURRENT_ROLE_CAPABILITY_SEED = tuple(sorted(
+    row for module in _role_capability_modules() for row in module.ROLE_CAPABILITY_SEED))
+
+
 CO0002 = importlib.import_module("bookflow.storage.company_migrations.versions.0002_contract")
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -131,12 +158,36 @@ def test_non_initial_migrations_do_not_import_live_schema():
     assert violations == []
 
 
+def _chain_head(chain: str) -> str:
+    """The revision no later migration supersedes, read from the migration files.
+
+    `HEADS` in migrate.py is hand-maintained. Pinning the same literal here asserts only
+    that someone edited two files together, and it goes stale on every new migration -
+    which is how this file came to be red for a dozen revisions. Deriving the head
+    asserts what actually matters: that HEADS names the real end of the chain, and that
+    the chain has exactly one end.
+    """
+    versions = Path(__file__).resolve().parents[1] / "src/bookflow/storage" / f"{chain}_migrations/versions"
+    revisions, superseded = set(), set()
+    for path in sorted(versions.glob("[0-9]*.py")):
+        assigned = {target.id: node.value.value
+                    for node in ast.parse(path.read_text()).body if isinstance(node, ast.Assign)
+                    for target in node.targets
+                    if isinstance(target, ast.Name) and isinstance(node.value, ast.Constant)}
+        revisions.add(assigned["revision"])
+        if assigned.get("down_revision"):
+            superseded.add(assigned["down_revision"])
+    heads = revisions - superseded
+    assert len(heads) == 1, f"{chain} chain has {len(heads)} heads: {sorted(heads)}"
+    return heads.pop()
+
+
 def test_fresh_init_has_current_compatibility_schema(tmp_path):
     root = tmp_path / "fresh"
     bookflow.connect(data_root=str(root)).init()
 
-    assert current_revision_raw(root / "hub.db") == "hub0011"
-    assert HEADS == {"hub": "hub0011", "company": "co0013"}
+    assert current_revision_raw(root / "hub.db") == HEADS["hub"]
+    assert HEADS == {"hub": _chain_head("hub"), "company": _chain_head("company")}
     assert str(hub_schema.memberships.c.grants.type) == "TEXT" and hub_schema.memberships.c.grants.nullable
     assert str(hub_schema.memberships.c.denies.type) == "TEXT" and hub_schema.memberships.c.denies.nullable
     assert [column.name for column in hub_schema.role_capabilities.primary_key.columns] == [
@@ -171,7 +222,7 @@ def test_populated_hub0004_upgrade_refreshes_complete_capabilities(tmp_path):
 
     backups = tmp_path / "backups"
     with open_database(hub, writable=True) as db:
-        assert migrate_to_head(db, "hub", backups) == ("hub0004", "hub0011")
+        assert migrate_to_head(db, "hub", backups) == ("hub0004", HEADS["hub"])
         seeded = tuple(db.raw.execute(
             "SELECT role, capability, required_role FROM role_capabilities "
             "ORDER BY role, capability, required_role"
@@ -198,7 +249,7 @@ def test_populated_co0003_upgrade_allows_job_delivery_inheritance(tmp_path):
     _make_revision(company, "company", "co0003", populate)
     backups = tmp_path / "backups"
     with open_database(company, writable=True) as db:
-        assert migrate_to_head(db, "company", backups) == ("co0003", "co0013")
+        assert migrate_to_head(db, "company", backups) == ("co0003", HEADS["company"])
         column = next(
             row for row in db.raw.execute("PRAGMA table_info(customers)")
             if row[1] == "preferred_delivery_method"
@@ -235,7 +286,7 @@ def test_populated_hub0002_upgrade_adds_compatibility_schema_and_verified_backup
 
     backups = tmp_path / "backups"
     with open_database(hub, writable=True) as db:
-        assert migrate_to_head(db, "hub", backups) == ("hub0002", "hub0011")
+        assert migrate_to_head(db, "hub", backups) == ("hub0002", HEADS["hub"])
         membership = db.raw.execute(
             "SELECT id, user_id, scope_type, scope_id, role, grants, denies FROM memberships WHERE id='M1'"
         ).fetchone()
