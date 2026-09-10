@@ -1,7 +1,7 @@
 {% macro label(text) %}<span class="document-cell-label" aria-hidden="true">{{ text }}</span>{% endmacro %}
 <section id="customer-statement" class="document-detail basic-report customer-statement" aria-label="Customer statement">
 <p>{{ company_label }} · {{ customer_statement.metadata.basis|capitalize }} · {{ customer_statement.metadata.currency }} · {{ customer_statement.date_from }} through {{ customer_statement.as_of }}</p>
-<p class="muted">What {{ 'this customer' if customer_statement.one_customer else 'each customer' }} was carrying on {{ customer_statement.date_from }}, then every invoice, payment, credit and adjustment in date order with the balance after each one, then what is owed on {{ customer_statement.as_of }}. A document that was voided is not here because it is worth nothing on its own date, not because it was filtered out of the list. This is a statement to read on screen: Bookflow keeps the books and has no way to hand one to a customer, so nothing here offers to.</p>
+<p class="muted">What {{ 'this customer' if customer_statement.one_customer else 'each customer' }} was carrying on {{ customer_statement.date_from }}, then every invoice, payment, credit and adjustment in date order with the balance after each one, then what is owed on {{ customer_statement.as_of }}. A document that was voided is not here because it is worth nothing on its own date, not because it was filtered out of the list. Print beside a customer's opening balance opens that customer's statement as a PDF, to print or to save and send yourself; emailing from Bookflow is not available yet.</p>
 
 <h2>Whole-report totals — all pages</h2>
 <dl class="report-totals" id="statement-totals">
@@ -20,7 +20,8 @@
 <thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Customer</th><th scope="col" role="columnheader">Date</th><th scope="col" role="columnheader">Entry</th><th scope="col" role="columnheader">Amount</th><th scope="col" role="columnheader">Balance</th></tr></thead>
 <tbody role="rowgroup">
 {% for row in customer_statement.rows %}<tr role="row" data-kind="{{ row.kind }}" data-entry="{{ row.entry }}" data-customer="{{ row.customer_id or '' }}">
-<td role="cell" class="document-wide">{{ label('Customer') }}{% if row.customer_url %}<a href="{{ row.customer_url }}">{{ row.display_customer_label }}</a>{% else %}{{ row.display_customer_label }}{% endif %}{% if row.active is not none and not row.active %}<span class="report-state">Inactive</span>{% endif %}</td>
+<td role="cell" class="document-wide">{{ label('Customer') }}{% if row.customer_url %}<a href="{{ row.customer_url }}">{{ row.display_customer_label }}</a>{% else %}{{ row.display_customer_label }}{% endif %}{% if row.active is not none and not row.active %}<span class="report-state">Inactive</span>{% endif %}
+{% if row.print_url %}<a class="statement-print" href="{{ row.print_url }}" target="_blank" rel="noopener">Print / save PDF</a>{% endif %}</td>
 <td role="cell">{{ label('Date') }}{{ row.date or '—' }}</td>
 <td role="cell" class="document-wide">{{ label('Entry') }}<strong>{{ customer_statement.entries[row.entry] }}</strong>
 {% if row.number %}{% if row.document_url %}<a href="{{ row.document_url }}">{{ row.number }}</a>{% else %}{{ row.number }}{% endif %}{% endif %}

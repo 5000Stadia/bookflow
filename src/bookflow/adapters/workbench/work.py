@@ -6,6 +6,7 @@ from bookflow.company.tax_policy import POLICY_LABELS, POLICY_EXPLANATIONS
 from bookflow.company.sales_contract import FORM_DEFINITIONS, SalesFormDefinition
 from bookflow.company.lists import ReferenceDefinition
 from bookflow.adapters.workbench.sales import _id, preserve_line_origins
+from bookflow.adapters.workbench.document_print import document_url
 
 NOUNS = ('proposal', 'estimate', 'work-order')
 FORM = SalesFormDefinition(tuple(r for r in FORM_DEFINITIONS['invoice'].references
@@ -80,8 +81,12 @@ def detail_context(record, company_id, *, preview=False):
         related.append(dict(label=('Source ' if source else 'Destination ') + link[side + '_number'],
             url=url, revision_url=url + '?revision_number=' + str(link['source_version'] if source else 1),
             status=link[side + '_status'], relation=link['relation'].replace('_', ' ')))
+    # An estimate is a document a customer receives, so it prints; a work order and a
+    # proposal are internal and have no customer-facing form to hand over.
+    print_url = (document_url(company_id, 'estimate', record['id'])
+                 if record['kind'] == 'estimate' and not preview else None)
     return dict(record=record, revision=r, facts=r['facts'], profile=r['facts']['profile'],
-        preview=preview, base=base, related=related,
+        preview=preview, base=base, related=related, print_url=print_url,
         tax_labels=POLICY_LABELS, tax_explanations=POLICY_EXPLANATIONS,
         title=record['kind'].replace('_', ' ').capitalize())
 

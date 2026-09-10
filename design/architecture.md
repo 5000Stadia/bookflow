@@ -220,8 +220,19 @@ src/bookflow/
   adapters/http/app.py   FastAPI app from the registry: /commands/<noun.verb>, authoritative /companies/{id}/commands/<noun.verb>, /login, /logout, async /companies/{id}/events and /hub-events, exact generated /openapi.json, /health; credential/cookie handling and the same error documents as the CLI with HTTP statuses
   adapters/http/auth.py  argon2 passwords (constant-time on unknown users), bearer and session tokens stored as sha256, liveness refresh, login throttle
   adapters/http/local.py LocalListener on the Unix socket: peer identity from SO_PEERCRED, envelope identity fields discarded, 8 MiB frame cap and 30-second accepted-connection timeout
-  adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), document_form.py (sales document bands, line grid columns with a hint per head, human labels, the per-line pricing rule in the row panel), document_nav.py (the way back from a document to earlier documents of its type), list_paging.py (which lists open on the newest record, and the walk forwards and back through a list's pages), naming.py (page titles and column heads in a person's words), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
+  adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), document_form.py (sales document bands, line grid columns with a hint per head, human labels, the per-line pricing rule in the row panel), document_nav.py (the way back from a document to earlier documents of its type), document_print.py (the four print routes that answer PDF bytes), list_paging.py (which lists open on the newest record, and the walk forwards and back through a list's pages), naming.py (page titles and column heads in a person's words), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
+  documents/model.py     command output -> PrintedDocument: parties, header fields, columns, rows, totals, grids, notes; no PDF, no HTTP, no arithmetic
+  documents/pdf.py       the one layout: Letter, half-inch margins, repeated column headings, unsplit line items, Page X of Y (reportlab)
+  documents/render.py    render(read, company_id, kind, identity) -> Rendered(filename, media_type, content, title); the seam a later attach or send command calls
 ```
+
+`bookflow/documents/` produces the four customer-facing documents as PDF and is the only
+place their layout lives; [printed documents](printed-documents.md) states what each one
+carries, which facts are captured and which are current, and what is deliberately absent.
+`render` takes a `read` callable rather than a request, so the web routes in
+`adapters/workbench/document_print.py`, and any later command that attaches or sends a
+copy, produce identical bytes from the same description. Permission and company isolation
+stay in the commands `read` runs.
 
 Hub username resolution uses `hub/users.py`: Unicode NFC and case folding through a connection-local SQLite function, at most two candidate rows, and no match for ambiguous names. This lookup scans the users table; no schema migration or stored-name rewrite is required. Login resolves across all user kinds and active states before enforcing human/active status, verifies the password outside the read snapshot, then rechecks the username, user ID and password hash in the writer transaction before issuing a session. Password and token self-service resolves the selected account ID before allowing a case-variant username. Human creation rejects existing normalized names. OS-login mappings and passwords retain case sensitivity.
 

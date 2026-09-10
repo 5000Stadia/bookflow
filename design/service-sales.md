@@ -449,8 +449,9 @@ printed facts. Desktop1280 and phone390 remain usable without text escaping card
 
 Generated CLI/help/schema docs and examples cover every new command and staged
 limitations. Examples use ordinary phrases: make an invoice; record a paid sale;
-correct invoice; void invoice. Sending remains visibly unavailable until delivery
-exists. Both seeds exercise every command in read or intentionally disposable
+correct invoice; void invoice. An invoice or receipt prints as a PDF from its own
+page, described in [printed documents](printed-documents.md). Sending remains visibly
+unavailable until delivery exists. Both seeds exercise every command in read or intentionally disposable
 write scenarios, including taxed service and a receipt; fixed-year reference
 expectations are updated from explicit accounting effects. Preserve existing demo
 records and refresh the LAN demo only after a reviewed increment and closed backup.
