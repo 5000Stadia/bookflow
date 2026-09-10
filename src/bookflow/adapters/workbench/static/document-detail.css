@@ -50,3 +50,15 @@
 @media screen and (max-width: 700px) {
   .basic-report .document-lines caption { display: block; text-align: left; padding: .4rem 0; }
 }
+
+/* A customer statement is a basic report with a balance row at each end of a
+   customer, so it reuses those blocks and only marks the two balance rows. */
+.customer-statement tbody tr[data-kind="opening"] td,
+.customer-statement tbody tr[data-kind="closing"] td { background: #f4f7fb; font-weight: 600; }
+.customer-statement td[data-value="amount"],
+.customer-statement td[data-value="balance"] { font-variant-numeric: tabular-nums; }
+.customer-statement .report-state { color: #3c4a5a; }
+/* Six aging columns read as one row of columns on a desktop and stack on a
+   phone, which the wider totals measure would break onto two rows either way. */
+.customer-statement #statement-aging { grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); }
+@media print { .customer-statement #customer-statement-next-page { display: none; } }

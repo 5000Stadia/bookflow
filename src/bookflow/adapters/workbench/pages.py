@@ -21,6 +21,7 @@ from bookflow.adapters.workbench import forms as F
 from bookflow.adapters.workbench import workflows as W
 from bookflow.adapters.workbench import statements as S
 from bookflow.adapters.workbench import receivables as Receivable
+from bookflow.adapters.workbench import customer_statement as Statement
 from bookflow.adapters.workbench import sales as Sales
 from bookflow.adapters.workbench import work as Work
 from bookflow.adapters.workbench import billing as Billing
@@ -1418,9 +1419,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         if noun == 'sales-receipt' and verb == 'update':
             # The dedicated decimal control uses the shared typed form translator.
             described = [leaf for leaf in described if leaf['path'] != 'amount_received']
-        if cmd.name in S.COMMANDS:
+        if cmd.name in S.COMMANDS or cmd.name in Statement.COMMANDS:
             # The visible filter form always starts fresh; continuation has its
             # own immutable filter fields and signed cursor in a separate form.
+            # A cursor left in the visible form is worse than absent: the next
+            # filter change would submit last page's continuation with it and be
+            # refused as mismatched instead of running the report asked for.
             described = [leaf for leaf in described if leaf["path"] != "cursor"]
         document_form = Document.is_document(noun, verb)
         if document_form:
@@ -1628,6 +1632,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       sales_history=result if noun in ('invoice', 'sales-receipt') and verb == 'history' else None,
                       statement=S.view(result, report_input, company_id, cmd.name) if result and report_input is not None and cmd.name in S.COMMANDS else None,
                       receivables=Receivable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Receivable.COMMANDS else None,
+                      customer_statement=Statement.view(result, report_input, company_id) if result and report_input is not None and cmd.name in Statement.COMMANDS else None,
                       source_report_watermark=source_report_watermark,
                       preview=preview, get=F.get_path, form_value=F.form_value,
                       collection_attempt_key=F.collection_attempt_key,

@@ -784,14 +784,16 @@ for trial balance, 897.67/899.82 ms for P&L and 1266.23/1283.83 ms for balance s
 Company record/audit counts were unchanged. This is a bounded read sample, not
 the separate 100,000 transaction storage workload or a universal latency guarantee.
 
-## Receivables aging and open invoices
+## Receivables aging, open invoices and customer statements
 
-`company/receivable_reports.py` supplies `report ar-aging` and `report
-open-invoices` through the shared registry and reports capability, with the same
+`company/receivable_reports.py` supplies `report ar-aging`, `report
+open-invoices` and `report statement` through the shared registry and reports
+capability, with the same
 period metadata, HMAC continuation, streamed whole-filter totals and signed64
-checks as the other reports. Both take `as_of`, the single inclusive bound the
-report metadata carries as `period.date_to`; no schema, cached balance or
-posting-cost change is introduced.
+checks as the other reports. The aging and the open-invoice list take `as_of`, the
+single inclusive bound the report metadata carries as `period.date_to`; the
+statement takes `date_from` and `date_to` and carries both; no schema, cached
+balance or posting-cost change is introduced.
 
 Both start from Accounts Receivable posting effects on or before `as_of` and add
 two signed rows for every active settlement application: a negative one against
@@ -825,6 +827,48 @@ amount and remaining balance, optionally filtered to one customer or to past-due
 rows; it excludes credit, so it exceeds Accounts Receivable by whatever credit
 stands unapplied.
 
+### The customer statement
+
+`report statement` reads the same effects along the date axis instead of the age
+axis: for one customer, or for every customer with a balance or with activity, an
+opening balance, then that customer's rows in date order with a running balance,
+then the closing balance, with the aging columns at the foot for the same
+customers as of `date_to`.
+
+A row is one document's effect on one customer's receivable on one date, grouped
+losslessly at that grain. Rows and balances come from the same three signed
+sources the aging sums, with one difference: a settlement whose paying component
+key and whose invoice customer are the same customer contributes no row, because
+its two halves are equal and opposite inside that one customer and printing both
+would show a balance moving that never moved. Where they differ -- a receipt
+owned by one customer settling another's invoice -- both halves are printed, on
+the two statements they belong to. Across the whole report those halves still
+cancel. No command available today produces that second case: new cash is owned
+by the party whose invoice it settles, `payment apply` demands a funding
+component key already owned by the invoice's customer, and re-parting an invoice
+that carries an active settlement is refused with `E_HAS_APPLICATIONS`. That is what makes the identity exact rather than incidental: a
+customer's closing balance is the same expression `report ar-aging` sums for that
+customer, so the two agree row for row, and the closing total is Accounts
+Receivable on the balance sheet for `date_to`. New cash is owned by the party
+whose invoice it settles, so a parent's receipt that pays a job's invoice already
+lands on the job's statement for the settled part and on the parent's for the
+rest.
+
+Opening is every effect dated before `date_from`; closing is every effect on or
+before `date_to`; the rows between them are the effects in the period whose
+grouped amount is not zero. A voided document therefore has no row because its
+reversal carries the original date and the pair is worth nothing on that date --
+no status is consulted anywhere in the query, and a period containing the day the
+document was written still shows nothing for it. A customer who owed nothing, was
+owed nothing and did nothing is not printed at all, which cannot move a total; a
+customer named in the request always gets a statement, even an empty one. The
+running balance is a window partitioned by customer and computed before the page
+slice, so page two continues the balance rather than restarting it, and totals
+and the aging foot cover the whole match on every page. `E_INTERNAL` guards
+three arithmetic identities on every run: opening plus charges plus credits
+equals closing, the aging columns sum to the aging total, and that total equals
+the closing balance.
+
 Their continuations extend the shared HMAC state with customer presentation, the
 settlement identity count and the company audit watermark, because applications
 post nothing and the posting-effect watermark alone cannot see an apply or an
@@ -833,13 +877,24 @@ renaming that customer stales the continuation instead of failing to resolve on
 page two; `ledger_reports._state` takes `account_scoped=False` for that, which
 keeps the ID out of the posting-account filter.
 
-Workbench `receivables.py` and `receivables.html` project these results without
-accounting logic: an aging column table with jobs indented under their parent and
-each customer linking to their own open invoices, and an open-invoice table
-linking each number to its invoice. Both carry a Next page form that preserves
-the validated filter and signed cursor. The home window's Reports tile names both.
-Neither section repeats the page's own title: every report page is titled with the
-report, from `naming.REPORTS`, rather than with the command that produces it.
+Workbench `receivables.py` and `receivables.html` project the first two results
+without accounting logic: an aging column table with jobs indented under their
+parent and each customer linking to their own open invoices, and an open-invoice
+table linking each number to its invoice. `customer_statement.py` and
+`customer_statement.html` do the same for the statement, reusing the
+`document-detail` and `basic-report` blocks rather than a third copy of them: the
+whole-report balances and the aging foot are the `report-totals` grid, and the
+rows are a `document-lines` table that becomes one labelled block per row below
+700px, checked at 390px as the table's own scrollWidth against its own
+clientWidth. Each row opens its document where it was written and each customer
+opens their own statement. The page says in words that it is a statement to read
+on screen: this product prints nothing and delivers nothing, and a browser
+witness asserts that no control on the page offers to. All three carry a Next
+page form that preserves the validated filter and signed cursor. The home
+window's Reports tile names all three, and the Customers panel's Statement tile
+is live and lands on the statement form. No section repeats the page's own title:
+every report page is titled with the report, from `naming.REPORTS`, rather than
+with the command that produces it.
 
 ## Customer work documents
 

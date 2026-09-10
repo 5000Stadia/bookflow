@@ -658,6 +658,7 @@ def _read_calls(hosted):
         "register query": ({"account": "Checking", "date_from": "2026-01-01", "date_to": "2026-12-31"}, cid),
         "register calculate": ({"account": "Checking", "direction": "decrease", "allocations": [{"account": "Professional Fees", "amount": "125.00"}]}, cid),
         "report ar-aging": ({"as_of": "2026-12-31"}, cid),
+        "report statement": ({"date_from": "2026-01-01", "date_to": "2026-12-31"}, cid),
         "report open-invoices": ({"as_of": "2026-12-31"}, cid),
         "report profit-and-loss": ({"date_from": "2026-01-01", "date_to": "2026-12-31"}, cid),
         "report balance-sheet": ({"date_to": "2026-12-31"}, cid),

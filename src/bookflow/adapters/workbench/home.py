@@ -113,9 +113,8 @@ PANELS: tuple[Panel, ...] = (
             Step(
                 id="statement",
                 title="Statement",
-                summary="Send a customer a dated summary of what they owe.",
-                action=Action("Run customer statements", WRITE),
-                waits_on="statement commands and a statement run form",
+                summary="A customer's whole account over a period: what they owed, what changed, what is left.",
+                action=Action("Open a customer statement", READ, ("report statement",), "/report/statement"),
                 aside=True,
             ),
             Step(
@@ -270,12 +269,13 @@ PANELS: tuple[Panel, ...] = (
             Step(
                 id="reports",
                 title="Reports",
-                summary="A/R aging, open invoices, trial balance, profit and loss, balance sheet, general ledger.",
+                summary="Customer statements, A/R aging, open invoices, trial balance, profit and loss, balance sheet, general ledger.",
                 action=Action(
                     "Choose a report to run",
                     READ,
-                    ("report ar-aging", "report open-invoices", "report trial-balance",
-                     "report profit-and-loss", "report balance-sheet", "report general-ledger"),
+                    ("report statement", "report ar-aging", "report open-invoices",
+                     "report trial-balance", "report profit-and-loss", "report balance-sheet",
+                     "report general-ledger"),
                     "/_group/reports",
                 ),
             ),

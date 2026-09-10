@@ -253,6 +253,11 @@ MATRIX['report ar-aging'] = {
     'E_QUERY_STALE': 'posting, settlement or customer display facts changed between aging pages',
     'E_VALUE_RANGE': 'public aging column or aging total exceeds signed 64-bit range',
 }
+MATRIX['report statement'] = {
+    'E_QUERY_STALE': 'posting, settlement or customer display facts changed between statement pages',
+    'E_VALUE_RANGE': 'public statement amount, running balance or statement total exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'customer filter does not resolve',
+}
 MATRIX['report open-invoices'] = {
     'E_QUERY_STALE': 'posting, settlement or customer display facts changed between open-invoice pages',
     'E_VALUE_RANGE': 'public invoice amount or open-invoice total exceeds signed 64-bit range',

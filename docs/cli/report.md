@@ -1003,6 +1003,247 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report statement`
+
+What a customer's account did between date_from and date_to: an opening balance, then every invoice, payment, credit and receivable adjustment in date order with a running balance, then the closing balance, with the A/R aging columns for the same customers as of date_to at the foot. One customer with customer, or every customer with a balance or with activity in the period. A voided document has no row because it is worth nothing on its own date, not because a status was filtered; applying a receipt to that same customer's invoice changes nothing the customer owes and has no row. New cash is owned by the party whose invoice it settles, so a parent's receipt that pays a job's invoice appears on the job's statement for the settled part and on the parent's for the rest. A closing balance is the same figure report ar-aging shows for that customer, and the closing total is Accounts Receivable on the balance sheet for date_to. Totals cover the whole filter and rows are paged; a page never breaks the running balance because it is computed over the whole customer first.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.statement` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report statement --date-from 2026-01-01 --date-to 2026-12-31 --customer "Adams Plumbing" --company "Demo Plumbing Co" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date of the statement period, YYYY-MM-DD; everything before it is the opening balance.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD; the closing balance and the aging columns are as of this date.; minimum length 10; maximum length 10 |
+| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `customer` | `--customer` | string \| null | no | yes | null | Optional customer or job ID or canonical full name; a job is its own customer and is not included with its parent. Omit for every customer with a balance or with activity in the period. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.statement`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.opening` | object | yes | no | — | — |
+| `totals.opening.amount` | string | yes | no | — | — |
+| `totals.opening.currency` | string | yes | no | — | — |
+| `totals.opening.minor_units` | integer | yes | no | — | — |
+| `totals.charges` | object | yes | no | — | — |
+| `totals.charges.amount` | string | yes | no | — | — |
+| `totals.charges.currency` | string | yes | no | — | — |
+| `totals.charges.minor_units` | integer | yes | no | — | — |
+| `totals.credits` | object | yes | no | — | — |
+| `totals.credits.amount` | string | yes | no | — | — |
+| `totals.credits.currency` | string | yes | no | — | — |
+| `totals.credits.minor_units` | integer | yes | no | — | — |
+| `totals.closing` | object | yes | no | — | — |
+| `totals.closing.amount` | string | yes | no | — | — |
+| `totals.closing.currency` | string | yes | no | — | — |
+| `totals.closing.minor_units` | integer | yes | no | — | — |
+| `aging` | object | yes | no | — | — |
+| `aging.current` | object | yes | no | — | — |
+| `aging.current.amount` | string | yes | no | — | — |
+| `aging.current.currency` | string | yes | no | — | — |
+| `aging.current.minor_units` | integer | yes | no | — | — |
+| `aging.days_1_30` | object | yes | no | — | — |
+| `aging.days_1_30.amount` | string | yes | no | — | — |
+| `aging.days_1_30.currency` | string | yes | no | — | — |
+| `aging.days_1_30.minor_units` | integer | yes | no | — | — |
+| `aging.days_31_60` | object | yes | no | — | — |
+| `aging.days_31_60.amount` | string | yes | no | — | — |
+| `aging.days_31_60.currency` | string | yes | no | — | — |
+| `aging.days_31_60.minor_units` | integer | yes | no | — | — |
+| `aging.days_61_90` | object | yes | no | — | — |
+| `aging.days_61_90.amount` | string | yes | no | — | — |
+| `aging.days_61_90.currency` | string | yes | no | — | — |
+| `aging.days_61_90.minor_units` | integer | yes | no | — | — |
+| `aging.over_90` | object | yes | no | — | — |
+| `aging.over_90.amount` | string | yes | no | — | — |
+| `aging.over_90.currency` | string | yes | no | — | — |
+| `aging.over_90.minor_units` | integer | yes | no | — | — |
+| `aging.total` | object | yes | no | — | — |
+| `aging.total.amount` | string | yes | no | — | — |
+| `aging.total.currency` | string | yes | no | — | — |
+| `aging.total.minor_units` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].kind` | literal["opening", "activity", "closing"] | yes | no | — | — |
+| `rows[].entry` | literal["balance_forward", "invoice", "sales_receipt", "payment", "deposit", "journal_entry", "applied_credit", "balance_due"] | yes | no | — | — |
+| `rows[].customer_id` | string \| null | yes | yes | — | — |
+| `rows[].current_customer_label` | string \| null | yes | yes | — | — |
+| `rows[].current_customer_name` | string \| null | yes | yes | — | — |
+| `rows[].display_customer_label` | string | yes | no | — | — |
+| `rows[].parent_id` | string \| null | yes | yes | — | — |
+| `rows[].active` | boolean \| null | yes | yes | — | — |
+| `rows[].date` | string \| null | yes | yes | — | — |
+| `rows[].transaction_id` | string \| null | yes | yes | — | — |
+| `rows[].number` | string \| null | yes | yes | — | — |
+| `rows[].document_date` | string \| null | yes | yes | — | — |
+| `rows[].due_date` | string \| null | yes | yes | — | — |
+| `rows[].memo` | string \| null | yes | yes | — | — |
+| `rows[].amount` | object | yes | no | — | — |
+| `rows[].amount.amount` | string | yes | no | — | — |
+| `rows[].amount.currency` | string | yes | no | — | — |
+| `rows[].amount.minor_units` | integer | yes | no | — | — |
+| `rows[].balance` | object | yes | no | — | — |
+| `rows[].balance.amount` | string | yes | no | — | — |
+| `rows[].balance.currency` | string | yes | no | — | — |
+| `rows[].balance.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "aging": {
+    "current": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "days_1_30": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "days_31_60": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "days_61_90": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "over_90": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  },
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "charges": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "closing": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "credits": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "opening": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
 ## `report trial-balance`
 
 Accrual ending account nets as of date_to; zero balances omitted unless include_zero is true. Totals cover all accounts; rows are paged.
