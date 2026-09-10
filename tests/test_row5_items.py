@@ -74,6 +74,36 @@ def test_missing_purchase_fields_do_not_request_disabled_sales_fields(client):
         "purchase_description", "expense_account_id", "cost"}
 
 
+def test_the_item_type_resolves_the_accounts_it_already_determines(client):
+    """A system role is unique in a chart, so these fields have one admissible value.
+
+    Asking the caller for the inventory-asset or sales-tax-payable account is a required
+    field with a single legal answer. Omitting it resolves; naming the wrong account is
+    still refused, and naming the right one still works.
+    """
+    refs = _refs(client)
+    account = refs["accounts"]
+    common = {"type": "inventory_part", "sales_enabled": True, "purchase_enabled": True,
+              "description": "Brass fitting", "price": "12.50", "purchase_description": "Brass fitting",
+              "cost": "7.25", "income_account_id": account["Service Income"],
+              "cogs_account_id": account["Cost of Goods Sold"], "sales_tax_code_id": refs["tax_code"]}
+
+    resolved = client.run("item create", dict(common, name="Resolved fitting"), company=COMPANY)
+    assert resolved["asset_account_id"] == account["Inventory Asset"]
+
+    named = client.run("item create", dict(common, name="Named fitting",
+                                           asset_account_id=account["Inventory Asset"]), company=COMPANY)
+    assert named["asset_account_id"] == account["Inventory Asset"]
+
+    error = _assert_error(client, "item create", dict(common, name="Wrong fitting",
+                                                      asset_account_id=account["Undeposited Funds"]), "E_VALIDATION")
+    assert [f["field"] for f in error.details["fields"]] == ["asset_account_id"]
+
+    tax = client.run("item create", {"name": "County tax", "type": "sales_tax_item", "tax_percent": "2.5",
+                                     "tax_agency_vendor_id": refs["tax_vendor"]}, company=COMPANY)
+    assert tax["liability_account_id"] == account["Sales Tax Payable"]
+
+
 def test_every_item_type_has_a_complete_strict_exact_profile(client):
     refs = _refs(client)
     account = refs["accounts"]
