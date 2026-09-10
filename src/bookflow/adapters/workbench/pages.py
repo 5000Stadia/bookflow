@@ -1282,8 +1282,14 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             originals = {**originals, 'pay_to': {'name_type': 'vendor'}}
         if noun == 'invoice' and verb == 'update' and shown and not attempted:
             settlement = run(request, 'invoice settlement', {'invoice': shown['id']}, company_id)
-            attempted['f:operation_key'] = 'WB-' + secrets.token_urlsafe(24)
             attempted['f:settlement_guard'] = settlement['settlement_guard']
+            # An operation key turns an ordinary edit into a keyed settlement operation,
+            # and a keyed operation requires a reason. Only an invoice that money has
+            # been applied to needs either: keying every correction asks a person for a
+            # reason no other surface asks for on the same edit, and the empty required
+            # field then stops the browser from ever sending the preview.
+            if settlement['applied_minor_units']:
+                attempted['f:operation_key'] = 'WB-' + secrets.token_urlsafe(24)
         if noun in Work.NOUNS and verb in ('copy', 'estimate', 'work-order', 'complete', 'invoice', 'sales-receipt'):
             originals = {k: v for k, v in originals.items() if k in (noun.replace('-', '_'), 'expected_version')}
         if noun in Work.NOUNS and 'conversion_key' in cmd.input_model.model_fields and not attempted:
@@ -1807,6 +1813,25 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             # without the workbench header would answer 200 and look accepted (row 3 plan, Authentication)
             if e.code in ("E_UNAUTHENTICATED", "E_WORKBENCH_HEADER"):
                 return page_error(request, e)
+            if (noun == 'invoice' and verb == 'update' and record_id is not None
+                    and (e.details or {}).get('reason') == 'applied_invoice_correction'
+                    and not form.get('f:operation_key')):
+                # Money reached this invoice after the form opened. Key the correction
+                # and refresh its settlement baseline here, so the entered draft can be
+                # completed with the reason a keyed operation needs rather than
+                # stranding it against a hidden field a person cannot fill.
+                try:
+                    current = run(request, 'invoice settlement', {'invoice': record_id}, company_id)
+                except BookflowError:
+                    current = None
+                if current is not None:
+                    form = dict(form, **{'f:operation_key': 'WB-' + secrets.token_urlsafe(24),
+                        'f:settlement_guard': current['settlement_guard'],
+                        'f:expected_facts_fingerprint': ''})
+                    return form_page(request, company_id, noun, verb, record_id, error=e.to_dict(), attempted=form,
+                        workflow_note='A payment was applied to this invoice while you were editing. '
+                            'Your entries are retained; give a reason for the correction, review the current '
+                            'invoice and settlement versions, then preview again before saving.')
             return form_page(request, company_id, noun, verb, record_id, error=e.to_dict(), attempted=form)
         if preview:
             return form_page(request, company_id, noun, verb, record_id, result=out, preview=True, attempted=form)
