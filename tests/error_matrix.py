@@ -715,5 +715,5 @@ MATRIX["bill void"] = {
     "E_DIRECTIVE_INACTIVE": "deactivated --directive",
 }
 MATRIX["bill show"] = {"E_RECORD_NOT_FOUND": "unknown bill or revision number"}
-MATRIX["bill query"] = {"E_RECORD_NOT_FOUND": "unknown vendor filter", "E_QUERY_STALE": "cursor from a changed contract or an audited company change"}
-MATRIX["bill history"] = {"E_RECORD_NOT_FOUND": "unknown bill", "E_QUERY_STALE": "cursor from a changed contract or an audited company change"}
+MATRIX["bill query"] = {"E_RECORD_NOT_FOUND": "unknown vendor filter", "E_QUERY_STALE": "company audit changed between bill pages"}
+MATRIX["bill history"] = {"E_RECORD_NOT_FOUND": "unknown bill", "E_QUERY_STALE": "company audit changed between history pages"}

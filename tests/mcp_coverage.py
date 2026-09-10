@@ -53,6 +53,12 @@ attachment unlink
 audit list
 audit show
 audit tail
+bill history
+bill post
+bill query
+bill show
+bill update
+bill void
 card-charge post
 chart apply
 chart list
@@ -356,6 +362,7 @@ def execution_map():
     from tests.test_mcp_registry_deposits import COMMANDS as DEPOSIT_COMMANDS
     from tests.test_mcp_registry_identity import COMMANDS as IDENTITY_COMMANDS
     from tests.test_money_out_documents import COMMANDS as MONEY_OUT_COMMANDS
+    from tests.test_bill_entry import COMMANDS as BILL_COMMANDS
     from tests.test_transfer_funds import COMMANDS as TRANSFER_COMMANDS
     from tests.test_payment_recovery_interfaces import COMMANDS as RECOVERY_COMMANDS
     registry.load_all()
@@ -373,6 +380,7 @@ def execution_map():
                    'tests/test_mcp_registry_deposits.py::test_deposit_lifecycle_full_documents_and_exact_ledger' if cmd.name in DEPOSIT_COMMANDS else
                    'tests/test_mcp_registry_identity.py::test_identity_lifecycle_full_documents_owned_password_and_rejected_state' if cmd.name in IDENTITY_COMMANDS else
                    'tests/test_money_out_documents.py::test_the_same_check_and_card_charge_through_python_cli_http_and_mcp' if cmd.name in MONEY_OUT_COMMANDS else
+                   'tests/test_bill_entry.py::test_the_same_bill_through_python_cli_http_and_mcp' if cmd.name in BILL_COMMANDS else
                    'tests/test_transfer_funds.py::test_the_same_transfer_through_python_cli_http_and_mcp' if cmd.name in TRANSFER_COMMANDS else
                    'tests/test_payment_recovery_interfaces.py::test_complete_recovery_contract_on_all_four_interfaces' if cmd.name in RECOVERY_COMMANDS else
                    'tests/test_mcp_registry_hub_reads.py::test_hub_read_full_documents_and_scope_boundaries' if any(cmd.name in names for names in HUB_FAMILIES.values()) else

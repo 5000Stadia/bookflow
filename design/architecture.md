@@ -535,6 +535,70 @@ refusal's own figures after a refusal, so the reconciliation is visible on the p
 `pay_to` is a multi-target reference resolved by the `discriminator` declared on
 `ReferenceDefinition`, which generalises the mechanism the sales-rep picker already used.
 
+### Vendor bills: the payable side of the invoice
+
+`bill post/update/void/show/query/history` is an accrual purchase document with its own
+transaction type. `company/bill_models.py` holds its inputs and outputs, `company/bill_facts.py`
+what a revision captures, `company/bills.py` the resolution, posting and reads,
+`company/bill_validation.py` an independent check of the aggregate, and
+`company/purchase_schema.py` the storage. It is the invoice's lifecycle read on the other side of
+the books: an immutable revision per correction, an exact reversal of the old effect at its
+original date, a full replacement at the new one, and a void that reverses at the document's own
+date and keeps every earlier revision readable. `document_effects.persist` writes the whole
+aggregate under one audit event, exactly as the sales documents do.
+
+**The posting.** Each expense line debits its own account for its own amount; Accounts Payable is
+credited once, for the total. The payable is one leg because that is what the vendor is owed --
+one figure on one document -- and each line's share of it is a `posting_line_sources` row hanging
+off that credit, so the attribution is per line without the general ledger showing a payable
+credit per line. Every posting line is fully attributed: the expense debits carry an attribution
+row of their own. `EXPENSE_ACCOUNTS` in `bills.py` is what a line may debit -- `expense`,
+`other_expense`, `cost_of_goods_sold`, `fixed_asset`, `other_asset`, `other_current_asset` --
+which keeps bank, card, AR, AP and equity off a free expense row; those are moved by the typed
+documents that own them.
+
+**The header.** `ap_account` resolves the named active Accounts Payable account, or the one the
+previous revision carried, or the company's uniquely eligible active one; with none or several
+and nothing named it refuses and says how many there are, because an arbitrary payable choice is
+worse than a question. `terms` is what was typed, else the vendor's own terms when the vendor is
+new to this bill, else what the bill already carried, and the due date comes from
+`profiles.compute_term_dates` -- the terms owner -- never from arithmetic here. An entered
+`due_date` overrides it and survives a correction that changes neither the bill date nor the
+terms; `BillProfile.due_date_basis` records which of the three it was.
+
+**Supplier reference.** The vendor's own document number, kept as a plain string in the spelling
+it arrived in, beside `supplier_reference_key`: NFC-normalized, trimmed and case-folded, null when
+blank. `bills.duplicate_references` reports every other bill from the same vendor carrying that
+key, voided ones included, in the read output only. Nothing refuses and nothing in storage forbids
+the repeat: the configurable warn-with-acknowledgement and block modes are not adopted, and a
+uniqueness constraint would make the warning mode unimplementable.
+
+**What a settlement owner attaches to.** `ap_obligation_keys` is one stable row per bill --
+vendor, payable account, currency -- created once at posting and never moved by a correction, so
+an application bound to it survives every later revision. `ap_obligation_components` is the
+per-revision breakdown, one positive amount per entered line, each naming the exact
+`posting_line_sources` row that credited AP for it, which is what an allocation targets when a
+payment has to land on particular lines. `bills.applied_totals` is the one function that says how
+much has been settled against each payable; it answers zero for every bill today and is the only
+place an AP settlement owner has to replace. `bill show` and `bill query` project it as
+`settlement_current` with gross, applied, open and a status, the same shape `invoice settlement`
+uses.
+
+**Where the Items tab attaches.** The line collection is `expenses`, not `lines`, and the
+`document_lines` envelope kind is `purchase`, not `expense`. An item line is the same envelope
+with `purchase_item_lines` beside `purchase_expense_lines`; the obligation component points at the
+envelope rather than at the expense profile, so it needs no schema change; the posting sums
+whatever line rows exist; and the header, the numbering, the terms, the payable and the reference
+detection know nothing about which family a line came from. Nothing is reserved for it: no empty
+tab, no unused column, no inventory behaviour.
+
+Migration `co0025` widens the `transactions` type CHECK and the `document_lines` kind CHECK and
+reinstates `document_lines_type_insert` with the bill's mapping, by the same table-rebuild that
+`co0020` used, then creates the four purchase tables with their immutability triggers. `bill` was
+already a declared `CustomFieldScope`, so custom fields needed only `SUPPORTED_VALUE_SCOPES`.
+The workbench has no bill surface yet: the noun is registered without a `ui_group`, so no
+navigation entry promises a page that is not there.
+
 ### Transfers between the company's own accounts
 
 `transfer post` is the same document surface over the same register.

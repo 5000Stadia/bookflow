@@ -16,7 +16,7 @@ from typing import Literal
 from bookflow.company.sales_facts import Account, Origin, Reference, Term
 from bookflow.company.sales_models import StrictModel
 
-__all__ = ['Account', 'Origin', 'Reference', 'Term', 'BillProfile', 'BillExpenseProfile']
+__all__ = ['Account', 'Origin', 'Reference', 'Term', 'Vendor', 'BillProfile', 'BillExpenseProfile']
 
 
 class Vendor(Reference):

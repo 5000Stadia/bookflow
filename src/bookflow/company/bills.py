@@ -76,6 +76,11 @@ TABLE_KINDS = (
 # AP and AR are moved by the documents that owe and are owed, never by a free expense row.
 EXPENSE_ACCOUNTS = frozenset({'expense', 'other_expense', 'cost_of_goods_sold',
                               'fixed_asset', 'other_asset', 'other_current_asset'})
+# A system role means some other command owns what lands in that account: Undeposited Funds is
+# the deposit owner's, Inventory Asset is the item owner's. Cost of Goods Sold is the exception
+# -- it carries a role but it is an ordinary purchase account a bookkeeper picks by hand, and
+# refusing it would refuse freight in and subcontracted cost.
+LINE_ROLES = frozenset({'cost_of_goods_sold'})
 
 
 def json_text(value):
@@ -280,6 +285,9 @@ def _expense_line(s, line, header_class, currency, index):
         raise _invalid(field + '.account',
                        f'"{row["full_name"]}" is a {row["type"].replace("_", " ")} account; an expense line '
                        'takes an expense, cost of goods sold, or asset account')
+    if row['system_role'] is not None and row['system_role'] not in LINE_ROLES:
+        raise _invalid(field + '.account',
+                       f'"{row["full_name"]}" is written by the command that owns it, not by a bill line')
     if row['currency'] != currency:
         raise _invalid(field + '.account', 'account must use the home currency')
     amount = parse_domestic_amount(line.amount, currency, field + '.amount')
@@ -713,7 +721,9 @@ def _posting_accounts_active(s, resolved):
             'account before posting this correction.'),
             details={'field': 'ap_account', 'reason': 'captured_posting_account_type'})
     for line in resolved['lines']:
-        if current[line['profile'].account.id]['type'] not in EXPENSE_ACCOUNTS:
+        account = current[line['profile'].account.id]
+        if account['type'] not in EXPENSE_ACCOUNTS or (
+                account['system_role'] is not None and account['system_role'] not in LINE_ROLES):
             raise BookflowError('E_VALIDATION', message=(
                 'A saved posting account is no longer eligible. Select an eligible expense '
                 'account before posting this correction.'),
