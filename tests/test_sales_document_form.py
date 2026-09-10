@@ -13,7 +13,7 @@ from bookflow.adapters.workbench import document_form as D
 from bookflow.adapters.workbench import forms as F
 from bookflow.core import registry
 from bookflow.core.money import Money
-from tests.test_row3_host import hosted  # noqa: F401
+from tests.test_row3_host import WB, hosted  # noqa: F401
 from tests.test_row5_workbench_forms import _browser
 
 DOCUMENTS = (('invoice', 'post'), ('invoice', 'update'), ('sales-receipt', 'post'),
@@ -228,8 +228,59 @@ def test_the_action_bar_offers_save_save_and_new_and_cancel(hosted):
 
 def test_a_correction_asks_for_its_reason_where_a_person_can_see_it(hosted):
     browser = _browser(hosted)
+    company = hosted.company_id
     invoice = _seed(hosted, 'invoice')
-    page = browser.get(f'/c/{hosted.company_id}/invoice/{invoice}/update').text
+    # A reason is what a keyed settlement correction needs, and money applied to the
+    # invoice is what makes a correction keyed. An untouched invoice is an ordinary
+    # edit on every surface and asks for no reason.
+    plain = browser.get(f'/c/{company}/invoice/{invoice}/update').text
+    assert not re.search(r'<input id="ctx-reason"[^>]*required', plain)
+    customer = hosted.ok('invoice.show', dict(invoice=invoice), company=company)['customer_id']
+    bank = hosted.ok('account.create', dict(name='Doc reason bank', type='bank'), company=company)['id']
+    method = hosted.ok('payment-method.create', dict(name='Doc reason cash', kind='cash'), company=company)['id']
+    hosted.ok('payment.receive', dict(customer=customer, date='2026-01-12', amount='10.00',
+        payment_method=method, deposit_to=bank, operation_key='doc-reason-receipt',
+        applications=dict(mode='inline', items=[dict(invoice=invoice, expected_version=1, amount='10.00')])),
+        company=company)
+    page = browser.get(f'/c/{company}/invoice/{invoice}/update').text
     reason = re.search(r'(?s)<label for="ctx-reason">(.*?)</label>', page)
     assert reason is not None and 'Reason for this correction (required)' in reason.group(1)
     assert re.search(r'<input id="ctx-reason"[^>]*required', page)
+
+
+def _originals(page):
+    return json.loads(html.unescape(re.search(r'name="originals" value=\'([^\']*)\'', page).group(1)))
+
+
+def test_a_payment_applied_mid_edit_keys_the_correction_without_losing_the_draft(hosted):
+    """Money can reach the invoice between opening the form and saving it."""
+    browser = _browser(hosted)
+    company = hosted.company_id
+    invoice = _seed(hosted, 'invoice')
+    route = f'/c/{company}/invoice/{invoice}/update'
+    opened = browser.get(route).text
+    assert re.search(r'name="f:operation_key" value=""', opened)
+    form = {'originals': json.dumps(_originals(opened)), 'f:expected_version': '1',
+            'f:memo': 'Draft written before the payment', 'f:operation_key': '',
+            'f:settlement_guard': re.search(r'name="f:settlement_guard" value="([^"]*)"', opened).group(1)}
+    previewed = browser.post(route, headers=WB, data={**form, 'action': 'preview'}).text
+    fingerprint = re.search(r'name="f:expected_facts_fingerprint" value="([0-9a-f]{64})"', previewed).group(1)
+
+    customer = hosted.ok('invoice.show', dict(invoice=invoice), company=company)['customer_id']
+    bank = hosted.ok('account.create', dict(name='Late payment bank', type='bank'), company=company)['id']
+    method = hosted.ok('payment-method.create', dict(name='Late payment cash', kind='cash'), company=company)['id']
+    hosted.ok('payment.receive', dict(customer=customer, date='2026-01-12', amount='10.00',
+        payment_method=method, deposit_to=bank, operation_key='late-payment-receipt',
+        applications=dict(mode='inline', items=[dict(invoice=invoice, expected_version=1, amount='10.00')])),
+        company=company)
+
+    saved = browser.post(route, headers=WB, data={**form, 'action': 'submit',
+        'f:expected_facts_fingerprint': fingerprint})
+    assert saved.status_code == 200
+    assert 'A payment was applied to this invoice while you were editing.' in saved.text
+    assert re.search(r'name="f:operation_key" value="WB-[^"]+"', saved.text)
+    assert re.search(r'<input id="ctx-reason"[^>]*required', saved.text)
+    assert 'name="f:memo" value="Draft written before the payment"' in saved.text
+    assert 'name="f:expected_facts_fingerprint" value=""' in saved.text
+    current = hosted.ok('invoice.show', dict(invoice=invoice), company=company)
+    assert current['revision']['memo'] == 'Seeded document'
