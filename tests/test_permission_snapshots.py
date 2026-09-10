@@ -4,12 +4,31 @@ import hashlib
 import json
 import sqlite3
 import pytest
-from bookflow.hub import permission_catalog as c, permission_policy as a, permission_snapshot as s
+from bookflow.hub import permission_catalog as c, permission_policy as a, permission_runtime as r, permission_snapshot as s
 from bookflow.storage.engine import open_database
 from tests.permission_storage_support import create_hub, snapshot
 
-BUNDLE=s.CatalogBundle(c.FROZEN_CATALOG.version,c.FROZEN_CATALOG,c.FROZEN_MANIFEST.standalone_names,
+BUNDLE=s.CatalogBundle(r.SOURCE_COMMIT,c.FROZEN_CATALOG,c.FROZEN_MANIFEST.standalone_names,
     hashlib.sha256(json.dumps([asdict(x) for x in c.CONDITIONAL_RESOURCE_SOURCES],sort_keys=True).encode()).hexdigest())
+
+
+def without_capability(catalog, name):
+    """Retire a capability the way a real transition has to: leave nothing referencing it.
+
+    Dropping the capability and its company actions is not enough. A conditional source
+    that still names the atom describes a requirement the company universe can no longer
+    express, and the catalog validator rejects it - correctly. Trim the atom out of every
+    source, and drop any source it was the whole of.
+    """
+    return replace(catalog,
+        capabilities=tuple(x for x in catalog.capabilities if x.name != name),
+        company_actions=tuple(x for x in catalog.company_actions
+                              if name not in {r.capability for r in x.requirements}),
+        defaults=tuple(x for x in catalog.defaults if x.requirement.capability != name),
+        conditional_sources=tuple(
+            replace(x, requirements=tuple(r for r in x.requirements if r.capability != name))
+            for x in catalog.conditional_sources
+            if any(r.capability != name for r in x.requirements)))
 
 
 def install_fixture_policy(raw,bundle=BUNDLE):
@@ -115,7 +134,7 @@ def test_invalid_complete_facts_fail_safely_without_repair(path,change):
 
 def test_dense_removed_reparented_and_new_catalog_union(path,tmp_path):
     other=tmp_path/'new.db';create_hub(other,'hub0012')
-    new_catalog=replace(BUNDLE.descriptor,version='owned-new',capabilities=tuple(x for x in BUNDLE.descriptor.capabilities if x.name!='transaction.payment.delete'),company_actions=tuple(x for x in BUNDLE.descriptor.company_actions if 'transaction.payment.delete' not in {r.capability for r in x.requirements}))
+    new_catalog=replace(without_capability(BUNDLE.descriptor,'transaction.payment.delete'),version='owned-new')
     new_bundle=replace(BUNDLE,source_commit='a'*40,descriptor=new_catalog)
     with open_database(other,writable=True) as db:
         db.raw.execute("DELETE FROM memberships WHERE scope_id='E'")

@@ -5,7 +5,7 @@ import pytest
 from bookflow.hub import permission_snapshot as s, permission_catalog as c, permission_policy as a
 from bookflow.storage.engine import open_database
 from tests.permission_storage_support import create_hub, snapshot
-from tests.test_permission_snapshots import BUNDLE, SuppliedVisibility, install_fixture_policy
+from tests.test_permission_snapshots import BUNDLE, SuppliedVisibility, install_fixture_policy, without_capability
 
 MAX = 9223372036854775807
 AT = '2026-09-07T05:00:00Z'  # Fixed synthetic operation time, not a runtime timestamp.
@@ -167,9 +167,7 @@ def test_maximum_generation_noop_and_forbidden_successor(tmp_path):
 @pytest.mark.parametrize('defaults', [(),(c.DefaultEntry('readonly',c.Requirement('ledger.read','member')),c.DefaultEntry('standard',c.Requirement('ledger.read','member')))])
 def test_new_bundle_actual_defaults_complete_sql_observation(tmp_path,defaults):
     path=tmp_path/'hub.db';old=owned_root(path)
-    descriptor=replace(BUNDLE.descriptor,version='owned-new-catalog',
-        capabilities=tuple(x for x in BUNDLE.descriptor.capabilities if x.name!='transaction.payment.delete'),
-        company_actions=tuple(x for x in BUNDLE.descriptor.company_actions if 'transaction.payment.delete' not in {r.capability for r in x.requirements}))
+    descriptor=replace(without_capability(BUNDLE.descriptor,'transaction.payment.delete'),version='owned-new-catalog')
     bundle=replace(BUNDLE,descriptor=descriptor,source_commit='a'*40)
     result=s.derive_proposal(old,old_catalog=BUNDLE,new_catalog=bundle,changes=s.ProposalRows(),generation=2,full_defaults=tuple(reversed(defaults)))
     expected_catalog=replace(descriptor,defaults=defaults)
@@ -198,7 +196,7 @@ def test_removed_capability_referenced_by_revoked_policy_is_not_erased(tmp_path)
     path=tmp_path/'hub.db';owned_root(path)
     with open_database(path,writable=True) as db:db.raw.execute("UPDATE memberships SET denies='[\"transaction.payment.delete\"]' WHERE id='R'")
     with open_database(path,writable=False) as db:old=s.load_root(db,catalog=BUNDLE)
-    descriptor=replace(BUNDLE.descriptor,capabilities=tuple(x for x in BUNDLE.descriptor.capabilities if x.name!='transaction.payment.delete'),company_actions=tuple(x for x in BUNDLE.descriptor.company_actions if 'transaction.payment.delete' not in {r.capability for r in x.requirements}))
+    descriptor=without_capability(BUNDLE.descriptor,'transaction.payment.delete')
     with pytest.raises(s.SnapshotError,match='legacy_policy_invalid'):
         s.derive_proposal(old,old_catalog=BUNDLE,new_catalog=replace(BUNDLE,descriptor=descriptor),changes=s.ProposalRows(),generation=2)
     assert row(old.memberships,'R').denies=='["transaction.payment.delete"]'
