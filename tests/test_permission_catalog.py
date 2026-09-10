@@ -139,9 +139,10 @@ def test_exact_requirement_universes_and_effective_literal_migration_seeds():
         effective.update(rows)
     expected = tuple(c.DefaultEntry(role, R(cap, threshold)) for role, cap, threshold in sorted(effective, key=lambda x: ((*c.ROLES, 'hub_admin').index(x[0]), x[1], c.THRESHOLDS.index(x[2]))))
     assert c.FROZEN_DEFAULTS == expected
+    # Registration comes from what commands declare. A conditional source says where a
+    # graph requirement is produced; it registers nothing, so it is not a term here.
     registered = {R(d.capability, d.threshold) for d in c.FROZEN_COMMANDS}
     registered.update(r for d in c.FROZEN_COMMANDS for r in d.resources)
-    registered.update(r for s in c.CONDITIONAL_RESOURCE_SOURCES for r in s.requirements)
     assert set(c.FROZEN_MANIFEST.registered_requirements) == registered
     assert {d.requirement for d in expected} <= registered  # no invented legacy atom
     company = {R(d.capability, d.threshold) for d in c.FROZEN_COMMANDS if d.routed_scope == 'company'}
@@ -149,6 +150,14 @@ def test_exact_requirement_universes_and_effective_literal_migration_seeds():
     company.update(r for s in c.CONDITIONAL_RESOURCE_SOURCES for r in s.requirements)
     company.update(R(n, 'standard') for n in c.DELETE_NAMES)
     assert set(c.FROZEN_MANIFEST.company_requirements) == company
+    # Sources are admitted against the company universe, so the only atoms they can carry
+    # that no command registers are the four Delete standards. Equality is the point in
+    # both directions: nothing else may appear here, since it would be a requirement with
+    # no way to be granted, and every Delete standard must appear, since an unavailable
+    # delete contract still has to name where its graph requirement is produced.
+    source_atoms = {r for s in c.CONDITIONAL_RESOURCE_SOURCES for r in s.requirements}
+    assert source_atoms <= set(c.FROZEN_MANIFEST.company_requirements)
+    assert source_atoms - registered == {R(n, 'standard') for n in c.DELETE_NAMES}
     assert set(c.FROZEN_MANIFEST.capability_names) == {r.capability for r in registered | company}
 
 
@@ -208,3 +217,31 @@ def test_catalog_references_and_delete_defaults_reject():
     for value in bad:
         with pytest.raises(c.PolicyInputError):
             c.catalog_manifest(value)
+
+
+def test_a_source_may_name_an_unregistered_delete_atom_and_still_register_nothing():
+    """A conditional source says where a graph requirement is produced, not that anything
+    may be granted. It is admitted against the company universe, so it may legitimately
+    name a Delete standard that no command registers -- and naming it must leave
+    registration, availability and the capability universe exactly as they were."""
+    delete = R(c.DELETE_NAMES[0], 'standard')
+    assert delete in set(c.FROZEN_MANIFEST.company_requirements)
+    assert delete not in set(c.FROZEN_MANIFEST.registered_requirements)
+    site = (('src/bookflow/company/synthetic.py', 1),)
+    grown = c.catalog_manifest(
+        replace(c.FROZEN_CATALOG, conditional_sources=c.FROZEN_CATALOG.conditional_sources
+                + (c.ResourceSource('bookflow.company.synthetic.owner', site, (delete,)),)),
+        c.FROZEN_MANIFEST.standalone_names)
+    for field in ('registered_requirements', 'company_requirements', 'capability_names',
+                  'company_action_keys', 'admin_action_keys', 'command_names'):
+        assert getattr(grown, field) == getattr(c.FROZEN_MANIFEST, field), field
+    # The inventory is still described rather than absorbed silently.
+    assert grown.descriptor_sha256 != c.FROZEN_MANIFEST.descriptor_sha256
+    # An atom outside the company universe stays invalid, whether the capability is
+    # unknown or the threshold is one this capability never admits in a company.
+    for requirement in (R('unknown', 'member'), R('customer-work', 'admin')):
+        with pytest.raises(c.PolicyInputError) as e:
+            c.catalog_manifest(replace(
+                c.FROZEN_CATALOG, conditional_sources=c.FROZEN_CATALOG.conditional_sources
+                + (c.ResourceSource('bookflow.company.synthetic.other', site, (requirement,)),)))
+        assert e.value.category is c.InputErrorCategory.invalid_catalog
