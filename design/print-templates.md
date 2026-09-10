@@ -1,9 +1,15 @@
 # Print templates and form editor — future roadmap
 
 This is a recorded product direction for a later UI/output phase. It is not an
-active implementation plan. No editor, renderer, print integration, schema or
-dependency is introduced by recording it. Current work remains paused for the
-human's roadmap discussion.
+active implementation plan, and no editor, template schema or print integration
+is introduced by recording it.
+
+What exists now is the supplied basic default described below: invoices, sales
+receipts, estimates and customer statements render to PDF on a fixed Letter
+layout, described in [printed documents](printed-documents.md). Everything else
+on this page — choosing among templates, editing one, dynamic references,
+groups, paper profiles, receipt widths, labels and batch printing — remains
+future roadmap work.
 
 ## Coverage and editor
 

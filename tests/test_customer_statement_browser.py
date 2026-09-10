@@ -78,9 +78,12 @@ def test_a_statement_reads_as_a_document_at_both_widths_and_pages_without_restar
         # The document a row names opens where it was written.
         assert browser.evaluate("""!!document.querySelector('#statement-lines a[href*="/invoice/"]')""")
         assert browser.evaluate("""!!document.querySelector('#statement-lines a[href*="/payment/"]')""")
-        # Nothing on the page claims it can be delivered; this product cannot.
+        # The one hand-over there is: a printable PDF for the customer whose balance the
+        # row opens. Nothing offers to send it, because this product still cannot.
         assert browser.evaluate("""[...document.querySelectorAll('#customer-statement a,#customer-statement button')]
-            .filter(e => /send|e-?mail|print|deliver|mail/i.test(e.textContent)).length""") == 0
+            .filter(e => /send|e-?mail|deliver|mail/i.test(e.textContent)).length""") == 0
+        assert browser.evaluate(
+            "document.querySelectorAll('#statement-lines a.statement-print').length") > 0
 
         for width, height in ((1280, 900), (390, 844)):
             browser.viewport(width, height)

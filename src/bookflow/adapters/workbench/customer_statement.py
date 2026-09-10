@@ -2,9 +2,13 @@
 
 A statement is the one receivables page a customer would read over the owner's
 shoulder, so every row names itself in words rather than in field values, and
-every document on it opens where it was written.
+every document on it opens where it was written. A statement is one customer's
+account, so the printable copy is per customer and its link sits on the row that
+opens that customer's balance.
 """
 from urllib.parse import urlencode
+
+from bookflow.adapters.workbench.document_print import statement_url
 
 
 COMMANDS = {"report statement"}
@@ -33,7 +37,11 @@ def view(result, inputs, company_id):
                 {"f:date_from": period["date_from"], "f:date_to": period["date_to"],
                  "f:customer": row["customer_id"], "source_report_watermark": watermark})
         noun = NOUNS.get(row["entry"]) if row["transaction_id"] else None
-        rows.append({**row, "customer_url": customer_url,
+        print_url = None
+        if row["kind"] == "opening" and row["customer_id"]:
+            print_url = statement_url(company_id, row["customer_id"],
+                                      period["date_from"], period["date_to"])
+        rows.append({**row, "customer_url": customer_url, "print_url": print_url,
                      "document_url": f"/c/{company_id}/{noun}/{row['transaction_id']}" if noun else None})
     next_fields = {f"f:{key}": (str(value).lower() if isinstance(value, bool) else str(value))
                    for key, value in inputs.items() if key != "cursor" and value is not None}

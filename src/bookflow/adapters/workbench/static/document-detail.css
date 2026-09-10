@@ -62,3 +62,9 @@
    phone, which the wider totals measure would break onto two rows either way. */
 .customer-statement #statement-aging { grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); }
 @media print { .customer-statement #customer-statement-next-page { display: none; } }
+
+/* Printing is producing the document's PDF, so these links are controls rather than
+   part of the page a customer reads: they never appear on a printed page. */
+.document-print { margin: .35rem 0 .6rem; }
+.customer-statement .statement-print { display: inline-block; margin-top: .25rem; font-size: .85rem; }
+@media print { .document-print, .customer-statement .statement-print { display: none; } }

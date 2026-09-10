@@ -689,7 +689,37 @@ def _logical_defaults(item_type: str, parsed: ItemInput) -> tuple[bool, bool]:
     )
 
 
+# Account fields whose value the item type has already decided. A system role is unique
+# within a chart, so "the inventory-asset account" names exactly one account and the
+# caller has no choice left to make. Requiring these was a mandatory field with a single
+# admissible answer; the cogs and fixed-asset accounts stay required because a company
+# can have several of each and picking one is a real decision.
+_DETERMINED_ACCOUNTS = {
+    ("inventory_part", "asset_account_id"): "inventory_asset",
+    ("inventory_assembly", "asset_account_id"): "inventory_asset",
+    ("sales_tax_item", "liability_account_id"): "sales_tax_payable",
+}
+
+
+def _determined_accounts(db: Database, parsed: ItemInput, supplied: set[str]) -> ItemInput:
+    """Resolve the account fields the item type determines, leaving supplied values alone.
+
+    A chart that does not carry the role resolves nothing, and the ordinary required-field
+    error still names the field - better than inventing an account that is not there.
+    """
+    filled: dict[str, Any] = {}
+    for (item_type, field), role in _DETERMINED_ACCOUNTS.items():
+        if parsed.type != item_type or field in supplied or getattr(parsed, field) is not None:
+            continue
+        found = db.conn.execute(sa.select(schema.accounts.c.id).where(
+            schema.accounts.c.system_role == role, schema.accounts.c.active.is_(True))).scalar_one_or_none()
+        if found is not None:
+            filled[field] = str(found)
+    return parsed.model_copy(update=filled) if filled else parsed
+
+
 def _owner_values(db: Database, parsed: ItemInput, *, supplied: set[str], reference_changes: set[str], creating: bool) -> dict[str, Any]:
+    parsed = _determined_accounts(db, parsed, supplied)
     _validate_profile(parsed, supplied)
     sales_enabled, purchase_enabled = _logical_defaults(parsed.type, parsed)
     values: dict[str, Any] = {"type": parsed.type, "sales_enabled": sales_enabled, "purchase_enabled": purchase_enabled}

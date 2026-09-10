@@ -4,6 +4,7 @@ import pytest
 from bookflow.hub import identity_admin as b, permission_catalog as c
 from bookflow.storage.engine import open_database
 from tests.permission_admin_support import *
+from tests.test_permission_catalog import FROZEN_DESCRIPTOR_SHA256
 from tests.test_permission_snapshots import BUNDLE as PRODUCTION
 from tests.test_permission_catalog import FROZEN_DESCRIPTOR_SHA256
 

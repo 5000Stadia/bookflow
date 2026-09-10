@@ -1260,7 +1260,11 @@ references, and ordered template groups that can mix document/report sections.
 Receipts, invoices and reports come first; work orders, proposals and custom forms
 follow. Physical paper profiles include standard pages, envelopes and labels;
 per-template separate print-dialog prompts support paper changes and later batch
-printing. This is future design, not an active implementation row.
+printing. That editor is future design, not an active implementation row.
+
+The supplied basic default it assumes exists now: [printed documents](printed-documents.md)
+renders invoices, sales receipts, estimates and customer statements to PDF on a fixed
+Letter layout, opened from each document's own page and printed by the browser.
 
 Receipt-width profiles have content-dependent length for invoices, sales receipts
 and estimates. Repeating item elements grow with actual data, move following

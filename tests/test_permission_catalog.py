@@ -55,6 +55,11 @@ def test_complete_unfiltered_registry_descriptors_and_action_owners():
 
 # Hand-disposed conditional resource producers. Graph discovery remains with these
 # owners; no target graph is executed or replaced by static permission admission.
+# The accepted descriptor's digest, pinned in exactly one place. A second copy of this
+# literal is how tests/test_identity_admin_catalog.py drifted to a value matching no
+# catalog at all, and stayed that way unnoticed while its fixture could not run.
+FROZEN_DESCRIPTOR_SHA256 = '0d153b8a941c25e3b826a9b0679be1655cc47498a10ea6b1c7f080b11bf12ca2'
+
 RESOURCE_PAIRS = {
     # Mirrored from permission_runtime.CURRENT_SOURCES, which already declared every owner
     # with its call-site lines. The frozen catalog had absorbed only 16 of 22 and its
