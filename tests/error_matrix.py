@@ -667,3 +667,16 @@ MATRIX['payment recovery query']['E_RECOVERY_PENDING'] = "a listed draft's recov
 MATRIX['payment recovery query']['E_RECORD_NOT_FOUND'] = 'a listed draft named by a live attempt is absent from the selected company'
 MATRIX['payment recovery query']['E_QUERY_STALE'] = 'company audit changed between attempt pages; restart without a cursor'
 MATRIX['payment recovery items']['E_QUERY_STALE'] = 'the attempt intent hash or version changed between entry, chunk or gap pages; restart without a cursor'
+
+# Public deposit reads. E_DEPOSIT_SOURCE_INVALID has three distinct producers and the
+# distinction matters: a candidate whose authority lookup refuses is converted here rather
+# than skipped, so a record the reader cannot resolve can never silently drop out of a page
+# and quietly change a total.
+_DEPOSIT_READ_ERRORS = {
+    'E_RECORD_NOT_FOUND': 'absent deposit, or one whose connected graph the reader is not admitted to; the refusal is deliberately identical for both so it never distinguishes them',
+    'E_DEPOSIT_SOURCE_INVALID': 'captured provenance the reader layer cannot decode (an allocation bucket that is neither a known name nor additional:<row>), a candidate whose authority or graph lookup refused during admission, or stored shape that no longer matches the pinned owners, tables and codecs',
+}
+for _name in ('deposit show', 'deposit items', 'deposit query'):
+    MATRIX.setdefault(_name, {}).update(_DEPOSIT_READ_ERRORS)
+for _name in ('deposit items', 'deposit query'):
+    MATRIX[_name]['E_QUERY_STALE'] = 'the page fingerprint moved under the cursor; restart without one'

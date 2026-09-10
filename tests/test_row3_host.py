@@ -1417,6 +1417,18 @@ def _page_url(cmd, company_id):
     return f"{base}/self/{cmd.verb}" if cmd.version_source else f"{base}/{cmd.verb}"
 
 
+
+def _cursor_free_reports():
+    """Reports whose filter form drops the cursor, taken from the pages that drop it.
+
+    Naming them here by hand is how this list went stale: the behaviour grew to seven
+    reports while the literal still named two, so the test asserted nothing for five of
+    them. Read the same constants the workbench reads instead.
+    """
+    from bookflow.adapters.workbench import statements, customer_statement, receivables
+    return statements.COMMANDS | customer_statement.COMMANDS | receivables.COMMANDS
+
+
 def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted, tmp_path):
     import re
 
@@ -1511,9 +1523,7 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
                 if cmd.noun in commercial_fields:
                     destination = cmd.verb if cmd.name in ("proposal estimate", "estimate work-order", "estimate invoice", "estimate sales-receipt", "work-order invoice", "work-order sales-receipt") else cmd.noun
                     assert set(values) == commercial_fields[destination], cmd.name
-            elif leaf["path"] == "cursor" and cmd.name in (
-                "report balance-sheet", "report profit-and-loss"
-            ):
+            elif leaf["path"] == "cursor" and cmd.name in _cursor_free_reports():
                 # Statement continuations belong to the result's Next form;
                 # rerunning the filter form must always start a fresh report.
                 assert 'name="f:cursor"' not in page.text, cmd.name
