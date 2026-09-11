@@ -111,7 +111,10 @@ class DepositProof:
         if document is not None:
             if document.get('company_id') != request.company:
                 raise TypeError('the disclosed document must belong to the requested company')
-            if request.command != 'deposit query':
+            # Only the two reads that select one immutable revision carry a pin. A query
+            # spans documents and a history walk spans every revision of one, so neither has
+            # a single selection to record.
+            if request.command in ('deposit show', 'deposit items'):
                 selected = document['selected']
                 selected = selected['pin'] if request.command == 'deposit show' else selected
                 pin = (selected['deposit_id'], selected['revision_id'], selected['revision_number'])
@@ -145,6 +148,8 @@ def _produce(session, request, audience, at):
         return reads.query(session, request.input, audience=audience, at=at)
     if request.command == 'deposit show':
         return reads.show(session, request.input, audience=audience, at=at)
+    if request.command == 'deposit history':
+        return reads.history(session, request.input, audience=audience, at=at)
     return reads.items(session, request.input, audience=audience, at=at)
 
 

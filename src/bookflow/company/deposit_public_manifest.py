@@ -30,13 +30,15 @@ DISPOSITIONS = ('disclosed', 'reference_group', 'projected', 'derived', 'private
 
 
 def _roots():
-    from bookflow.company.deposit_read_models import DepositShow, DepositItemPage, DepositPage
-    return (DepositShow, DepositItemPage, DepositPage)
+    from bookflow.company.deposit_read_models import (
+        DepositHistoryPage, DepositItemPage, DepositPage, DepositShow)
+    return (DepositShow, DepositItemPage, DepositPage, DepositHistoryPage)
 
 
 def _public_roots():
-    from bookflow.company.deposit_public_models import DepositDetail, DepositItemsPage, DepositQueryPage
-    return (DepositDetail, DepositItemsPage, DepositQueryPage)
+    from bookflow.company.deposit_public_models import (
+        DepositDetail, DepositHistoryPage, DepositItemsPage, DepositQueryPage)
+    return (DepositDetail, DepositItemsPage, DepositQueryPage, DepositHistoryPage)
 
 
 # Public fields with no private counterpart: wire constants, audience-derived
@@ -72,6 +74,10 @@ PUBLIC_CONSTRUCTED = {
     'DepositItemsPage.company_id': 'The company this request selected.',
     'DepositItemsPage.fingerprint': 'Minted over the public projected page in the deposit-public domain.',
     'DepositItemsPage.next_cursor': 'Minted over the public projected page in the deposit-public domain.',
+    'DepositHistoryPage.schema_version': 'Public contract version, independent of the private reader.',
+    'DepositHistoryPage.company_id': 'The company this request selected.',
+    'DepositHistoryPage.fingerprint': 'Minted over the public projected page in the deposit-public history domain.',
+    'DepositHistoryPage.next_cursor': 'Minted over the public projected page in the deposit-public history domain.',
 }
 
 _G = 'reference_group'
@@ -95,6 +101,36 @@ FIELDS: dict[str, dict[str, tuple]] = {
         'fingerprint': (_R, ('DepositQueryPage.fingerprint',), 'Reissued over complete public matching relation and semantic filters.'),
         'next_cursor': (_R, ('DepositQueryPage.next_cursor',), 'Reissued in public.query domain.'),
         'previous_cursor': (_R, ('DepositQueryPage.previous_cursor',), 'Reissued in public.query domain.'),
+    },
+    # ---------------------------------------------------------- history root
+    'deposit_read_models.DepositHistoryPage': {
+        'deposit': (_D, ('DepositHistoryPage.deposit_id',), ''),
+        'items': (_D, ('DepositHistoryPage.items',), ''),
+        'total_count': (_D, ('DepositHistoryPage.total_count',), ''),
+        'fingerprint': (_P, (), 'Private-domain HMAC over captured values including undisclosed fields.'),
+        'next_cursor': (_P, (), 'Private-domain continuation; the public page mints its own over the '
+                                'disclosed relation in a distinct deposit-public history domain.'),
+    },
+    'deposit_read_models.HistoryEntry': {
+        'id': (_P, (), 'The private reader\'s own ordering key, spelled kind + ":" + the physical '
+                       'revision, membership or operation row it names; the disclosed kind and that '
+                       'entry\'s own named identity already tell two rows apart.'),
+        'kind': (_D, ('HistoryEntry.kind',), ''),
+        'event_id': (_D, ('HistoryEntry.audit_event_id',), ''),
+        'at': (_D, ('HistoryEntry.at',), ''),
+        'actor_id': (_D, ('HistoryEntry.actor_id',), ''),
+        'interface': (_D, ('HistoryEntry.interface',), ''),
+        'on_behalf_of': (_D, ('HistoryEntry.on_behalf_of',), ''),
+        'reason': (_D, ('HistoryEntry.reason',), ''),
+        'revision_id': (_D, ('HistoryEntry.revision_id',), ''),
+        'previous_revision_id': (_D, ('HistoryEntry.previous_revision_id',), ''),
+        'operation_id': (_D, ('HistoryEntry.operation_id',), ''),
+        'operation_key': (_P, (), 'A caller-chosen permanent-retry secret, not a fact about the books; publishing it would let a reader replay another writer operation.'),
+        'source_ids': (_D, ('HistoryEntry.source_ids',), ''),
+        'membership_id': (_D, ('HistoryEntry.membership_id',), ''),
+        'batch_ids': (_D, ('HistoryEntry.batch_ids',), ''),
+        'bank_version_ids': (_D, ('HistoryEntry.bank_version_ids',), ''),
+        'draft_id': (_D, ('HistoryEntry.draft_id',), ''),
     },
     # ------------------------------------------------------------- show root
     'deposit_read_models.DepositShow': {

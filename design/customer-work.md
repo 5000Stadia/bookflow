@@ -24,12 +24,12 @@ of job-date reports; work-order dates describe that work order only.
 
 ## Commands and authority
 
-The shared registry exposes these21 commands:
+The shared registry exposes these22 commands:
 
 | Noun | Commands |
 |---|---|
 | proposal | create, update, copy, show, query, history, estimate |
-| estimate | create, update, copy, show, query, history, work-order |
+| estimate | create, update, copy, show, query, history, work-order, void |
 | work-order | create, update, copy, show, query, history, complete |
 
 All are company scoped. Reads require membership; writes require the standard role,
@@ -99,7 +99,8 @@ ordinary unchanged facts retain their saved inactive references. A quote require
 no AR or deposit destination. Catalog income/tax-account references are captured
 as catalog facts, without generating financial effects.
 
-Proposal and estimate status: draft, open, accepted, declined, superseded, cancelled.
+Proposal and estimate status: draft, open, accepted, declined, superseded, cancelled;
+an estimate may also be voided.
 Create starts draft. Update explicitly records a decision_note (1–2000) on accepting,
 declining or superseding; acceptance records its actual revision, UTC time and actor,
 not an electronic-signature claim. Changing any agreed header/scope/price/line fact
@@ -115,6 +116,16 @@ subsequent memo/availability/conversion-link revisions retain that reference.
 An estimate also has expires_on (nullable ISO date not before issue date). Expiry is
 a read-time warning, never an unrecorded status change. Accepting an expired estimate
 requires an explicit acknowledge_expired boolean on that update.
+
+`estimate void` withdraws a quote with a required context reason of at most 140
+characters. It is non-posting, so no accounting effect is written or reversed; the
+document becomes voided and inactive, the reason is recorded as its decision_note in
+a new revision, and every earlier revision, line and captured fact stays readable.
+Voided is terminal: a voided estimate cannot be updated or converted to an invoice,
+a sales receipt or a work order, each of which refuses with E_WORK_DEPENDENCY, and a
+second void changes nothing. Void itself is refused with E_WORK_DEPENDENCY while the
+estimate already has its work order or a sale consumes its billing roots. Copying a
+voided estimate into a fresh draft remains available.
 
 Active/inactive availability is a separate bool, initially true, editable without
 changing acceptance, completion or history. Inactive documents remain showable and

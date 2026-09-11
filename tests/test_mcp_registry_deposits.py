@@ -15,7 +15,7 @@ from tests.test_payment_receipts import posted, method
 from tests.test_service_sales_lifecycle import sale, COMPANY
 
 COMMANDS = frozenset({'deposit sources', 'deposit post', 'deposit update', 'deposit void',
-                      'deposit query', 'deposit show', 'deposit items'})
+                      'deposit query', 'deposit show', 'deposit items', 'deposit history'})
 
 
 def _guards(value, key=None):
@@ -157,6 +157,14 @@ def test_deposit_lifecycle_full_documents_and_exact_ledger(root, undeposited, tm
                 assert banked_sources['total_count'] == 2 and banked_sources['next_cursor'] is None
                 assert {row['source']['transaction_id'] for row in banked_sources['items']} == \
                     {row['source'] for row in rows}
+                # The revision walk: what happened to this deposit, in the audit's own order.
+                walked = await call('deposit history', dict(deposit=banked['deposit']['id'],
+                                                            page=dict(limit=50)))
+                assert walked['deposit_id'] == banked['deposit']['id']
+                assert sorted(row['kind'] for row in walked['items']) == [
+                    'membership_claimed', 'membership_claimed', 'revision_created']
+                assert walked['total_count'] == 3 and walked['next_cursor'] is None
+                assert 'matrix-deposit' not in json.dumps(walked), 'no operation recovery key travels'
 
                 # Claiming a receipt bumps its header, so a correction reads the members back.
                 members = await call('deposit sources', dict(date='2026-06-03', limit=200,
@@ -190,6 +198,11 @@ def test_deposit_lifecycle_full_documents_and_exact_ledger(root, undeposited, tm
                                                          kind='additional', page=dict(limit=50))))['total_count'] == 1
                 final = await call('deposit query', listing)
                 assert final['total_count'] == 1 and final['items'][0]['current']['status'] == 'voided'
+                ended = await call('deposit history', dict(deposit=banked['deposit']['id'],
+                                                           page=dict(limit=50)))
+                kinds = [row['kind'] for row in ended['items']]
+                assert kinds.count('replaced') == 1 and kinds.count('void') == 1
+                assert ended['total_count'] > walked['total_count']
                 # Books that moved answer with a different digest, which is what stales a cursor.
                 assert final['fingerprint'] != saved['fingerprint']
 

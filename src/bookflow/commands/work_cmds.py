@@ -10,6 +10,7 @@ WRITE_DESCRIPTIONS = {
     'estimate': 'Make an estimate from this proposal using a permanent conversion key. Preserve the selected source revision and return the original destination on retry.',
     'work-order': 'Make one work order from the accepted estimate using a permanent conversion key. Preserve agreed facts and shared billing roots without posting any sale.',
     'complete': 'Mark work complete, recording actual start/end and filling remaining completed quantities in preview. This records completion without invoicing or claiming payment.',
+    'void': 'Withdraw an estimate with a required reason. An estimate posts nothing, so nothing is reversed and no money moves; what changes is that it can no longer become an invoice, a sales receipt or a work order, and it stays readable in full -- every revision, line and captured fact, with the reason recorded as its decision. Terminal: a voided estimate cannot be updated, completed or voided again, and it is refused while a work order or a bill already consumes its work. Copying it into a fresh draft still works, which is how a withdrawn quote is re-quoted.',
 }
 READ_DESCRIPTIONS = {
     'show': 'Show current or historical work facts, exact quoted totals, costs, completed quantities and source links; internal notes remain internal.',
@@ -21,8 +22,13 @@ READ_DESCRIPTIONS = {
 def _register(kind, prefix):
     noun = kind.replace('_', '-')
     commands = []
-    for verb in ('create', 'update', 'copy', 'show', 'query', 'history',
-                 'estimate' if kind == 'proposal' else 'work-order' if kind == 'estimate' else 'complete'):
+    verbs = ['create', 'update', 'copy', 'show', 'query', 'history',
+             'estimate' if kind == 'proposal' else 'work-order' if kind == 'estimate' else 'complete']
+    if kind == 'estimate':
+        # Only the estimate carries the verb today: the proposal is a draft nobody has agreed
+        # to, and a work order is withdrawn by cancelling the work rather than the quote.
+        verbs.append('void')
+    for verb in verbs:
         model_name = prefix + ''.join(word.title() for word in verb.split('-')) + 'Input'
         model = models.WorkQueryInput if verb == 'query' else getattr(models, model_name)
         write = verb in WRITE_DESCRIPTIONS

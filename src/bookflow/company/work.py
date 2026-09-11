@@ -31,7 +31,9 @@ from bookflow.hub.users import common
 
 LINK_PAGE_SIZE = 200
 KINDS = ('proposal', 'estimate', 'work_order')
-QUOTE_STATES = ('draft', 'open', 'accepted', 'declined', 'superseded', 'cancelled')
+# `voided` is terminal and reachable only through `estimate void`: it is not a decision the
+# quote is still in, it is the quote withdrawn. Nothing transitions out of it.
+QUOTE_STATES = ('draft', 'open', 'accepted', 'declined', 'superseded', 'cancelled', 'voided')
 WORK_STATES = ('draft', 'scheduled', 'in_progress', 'on_hold', 'complete', 'cancelled')
 TABLE_KINDS = (('work_revisions', 'work_revision'), ('work_line_identities', 'work_line'),
                ('work_lines', 'work_revision_line'), ('work_links', 'work_link'),
@@ -327,7 +329,9 @@ def _lifecycle(kind, old, value, inp, ctx):
         allowed = {'draft': {'open', 'accepted', 'declined', 'cancelled'},
             'open': {'draft', 'accepted', 'declined', 'cancelled'},
             'accepted': {'draft', 'superseded', 'cancelled'},
-            'declined': {'draft'}, 'superseded': {'draft'}, 'cancelled': {'draft'}}
+            'declined': {'draft'}, 'superseded': {'draft'}, 'cancelled': {'draft'},
+            # Terminal: `estimate void` sets it without asking here, and nothing leaves it.
+            'voided': set()}
         if status != prior and status not in allowed[prior]:
             raise _invalid('status', f'cannot change {prior} directly to {status}')
         if status != prior and (status in ('cancelled', 'superseded') or prior in ('accepted', 'declined', 'superseded', 'cancelled')):
@@ -638,6 +642,18 @@ def prepare(s, ctx, inp, kind, operation):
     old_rev = revision(s, old) if old else None
     if old:
         _version(s, old, inp.expected_version)
+    if operation == 'void':
+        _reason(ctx)
+        if len(ctx.reason.strip()) > 140:
+            raise _invalid('reason', 'must be at most 140 characters')
+        if old['status'] == 'voided':
+            # Already withdrawn: say so by changing nothing, exactly as a second `bill void` does.
+            return Plan(WorkWriteOutput(**output(s, old, old_rev, ctx=ctx).model_dump(), changed=False,
+                facts_fingerprint=_fingerprint(s, inp, kind, operation, _semantic(old_rev, saved_lines(s, old_rev)),
+                                               old_rev, [], old['id']), warnings=[]),
+                dict(input=inp, kind=kind, operation=operation, changed=False))
+    elif old and old['status'] == 'voided':
+        raise _invalid(kind, 'a voided ' + kind.replace('_', ' ') + ' cannot be changed')
     at, event = clock.now_iso(), new_id()
     header = dict(old) if old else dict(id=new_id(), kind=kind, **common(s.actor.id, ctx.interface.value, at), estimate_group_id=None)
     if not old and kind == 'estimate':
@@ -645,7 +661,17 @@ def prepare(s, ctx, inp, kind, operation):
     old_lines = saved_lines(s, old_rev) if old else []
     before = _semantic(old_rev, old_lines) if old else None
     warnings, sequence = [], None
-    if operation == 'complete':
+    if operation == 'void':
+        # Non-posting, so there is nothing to reverse: the withdrawal is the whole effect, and
+        # the reason travels as the document's own decision evidence. Every earlier revision,
+        # its lines and its captured facts stay exactly as they were and stay readable.
+        value = deepcopy(before)
+        value['status'] = 'voided'
+        value['active'] = False
+        value['decision_note'] = ctx.reason.strip()
+        custom_plan = None
+        custom_snapshot = json.loads(old_rev['custom_fields_snapshot'])
+    elif operation == 'complete':
         value = deepcopy(before)
         value['status'] = 'complete'
         for key in ('actual_start', 'actual_end'):
@@ -675,7 +701,8 @@ def prepare(s, ctx, inp, kind, operation):
     # Report invalid completion timestamps before captured-fact parsing in tax preparation.
     _state_invariants(kind, value)
     work_tax.prepare(s,header['id'],value)
-    _lifecycle(kind, before, value, inp, ctx)
+    if operation != 'void':
+        _lifecycle(kind, before, value, inp, ctx)
     _dependencies(s, old, before, value)
     _accepted_group(s, header, value['status'])
     fingerprint = _fingerprint(s, inp, kind, operation, value, old_rev, warnings, header['id'])
@@ -720,6 +747,11 @@ def _prepare_destination(s, ctx, inp, kind, operation):
     if destination_kind == 'estimate':
         from bookflow.company.work_preferences import require_estimates
         require_estimates(s)
+    if relation != 'copy' and source['status'] == 'voided':
+        # Said before the availability refusal, because "inactive" is a thing an estimate
+        # comes back from and a void is not.
+        raise BookflowError('E_WORK_DEPENDENCY', details={'source_id': source['id'],
+            'problem': 'a voided ' + kind.replace('_', ' ') + ' cannot be converted'})
     if relation != 'copy' and not source['active']:
         raise BookflowError('E_INACTIVE_REFERENCE', details={'record_type': kind, 'record_id': source['id']})
     if relation == 'proposal_estimate' and source['status'] not in ('draft', 'open', 'accepted'):

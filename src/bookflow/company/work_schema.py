@@ -56,7 +56,7 @@ def define_tables(metadata, column, table, common):
         sa.UniqueConstraint('kind', 'number', name='uq_work_kind_number'),
         check("kind IN ('proposal','estimate','work_order')", 'kind'),
         check("(kind = 'estimate' AND estimate_group_id IS NOT NULL) OR (kind <> 'estimate' AND estimate_group_id IS NULL)", 'group'),
-        check("(kind IN ('proposal','estimate') AND status IN ('draft','open','accepted','declined','superseded','cancelled')) OR (kind = 'work_order' AND status IN ('draft','scheduled','in_progress','on_hold','complete','cancelled'))", 'status'),
+        check("(kind IN ('proposal','estimate') AND status IN ('draft','open','accepted','declined','superseded','cancelled','voided')) OR (kind = 'work_order' AND status IN ('draft','scheduled','in_progress','on_hold','complete','cancelled'))", 'status'),
         check('active IN (0,1)', 'active'), exact('version', positive=True),
         check('length(trim(number)) BETWEEN 1 AND 64', 'number'),
         owner(['id', 'current_revision_id'], ['work_revisions.document_id', 'work_revisions.id'], 'current_revision', True),

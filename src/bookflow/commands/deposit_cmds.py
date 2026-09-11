@@ -84,8 +84,9 @@ from bookflow.core.context import Context
 from bookflow.core.errors import BookflowError
 from bookflow.core.registry import command, Plan
 from bookflow.core.session import Session
-from bookflow.company.deposit_read_models import ShowInput, ItemsInput, QueryInput
-from bookflow.company.deposit_public_models import DepositDetail, DepositItemsPage, DepositQueryPage
+from bookflow.company.deposit_read_models import ShowInput, ItemsInput, HistoryInput, QueryInput
+from bookflow.company.deposit_public_models import (
+    DepositDetail, DepositHistoryPage, DepositItemsPage, DepositQueryPage)
 
 _ERRORS = ['E_RECORD_NOT_FOUND', 'E_VALIDATION', 'E_PERMISSION', 'E_UNAUTHENTICATED',
            'E_DEPOSIT_SOURCE_INVALID']
@@ -111,6 +112,19 @@ def deposit_items(inp: ItemsInput, ctx: Context, s: Session) -> Plan:
     raise BookflowError('E_INTERNAL', message='Deposit details require authenticated reader execution')
 
 
+@command('deposit history', scope='company',
+         description='Page what happened to one deposit in the order the audit recorded it: each revision '
+                     'created or replaced, each receipt claimed or released, coordinated source changes, the '
+                     'void, operations that changed nothing, and any draft consumed -- with who did it, '
+                     'through which interface, on whose behalf and why. Continue with the returned cursor; '
+                     'restart when the page fingerprint no longer matches.',
+         input_model=HistoryInput, output_model=DepositHistoryPage,
+         required_role='member', capability='ledger.read', positional=['deposit'],
+         error_codes=[*_ERRORS, 'E_QUERY_STALE'])
+def deposit_history(inp: HistoryInput, ctx: Context, s: Session) -> Plan:
+    raise BookflowError('E_INTERNAL', message='Deposit details require authenticated reader execution')
+
+
 @command('deposit query', scope='company',
          description='Find saved deposits by bank, current status, revision date, exact number or captured number/memo/received-from text. Sort by date, number or revision bank total. Whole matching totals include voided revision amounts; effective bank total excludes their bank effect. Previous/next pages retain filters, sort and direction; restart stale results. Deleted deposits are not yet supported.',
          input_model=QueryInput, output_model=DepositQueryPage,
@@ -120,4 +134,4 @@ def deposit_query(inp: QueryInput, ctx: Context, s: Session) -> Plan:
     raise BookflowError('E_INTERNAL', message='Deposit query requires authenticated reader execution')
 
 
-DEPOSIT_COMMANDS = [deposit_show, deposit_items, deposit_query]
+DEPOSIT_COMMANDS = [deposit_show, deposit_items, deposit_history, deposit_query]

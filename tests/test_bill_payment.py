@@ -892,7 +892,8 @@ def test_every_write_is_attributed_in_the_company_audit(books):
 # ---------------------------------------------------------------- every surface, same result
 
 COMMANDS = frozenset(('bill pay', 'bill payment show', 'bill payment query',
-                      'bill payment apply', 'bill payment unapply', 'bill payment void'))
+                      'bill payment history', 'bill payment apply', 'bill payment unapply',
+                      'bill payment void'))
 
 
 @pytest.mark.timeout(300)
@@ -940,6 +941,11 @@ def test_the_same_bill_payment_through_python_cli_http_and_mcp(root, tmp_path):
 
                 await call('bill payment show', {'payment': payment['id']})
                 await call('bill payment query', {'vendor': vendor, 'limit': 10})
+                walked = await call('bill payment history', {'payment': payment['id'], 'limit': 10})
+                assert walked['count'] == 1 and walked['items'][0]['revision_number'] == 1
+                assert [row['kind'] for row in walked['items'][0]['batches']] == ['original']
+                assert [(row['kind'], row['active']) for row in walked['items'][0]['applications']] == [
+                    ('apply', True)]
                 taken = await call('bill payment unapply', {
                     'payment': payment['id'], 'expected_version': payment['version']})
                 assert taken['settlement_current']['unapplied']['amount'] == FIRST
@@ -951,6 +957,10 @@ def test_the_same_bill_payment_through_python_cli_http_and_mcp(root, tmp_path):
                     'payment': payment['id'], 'expected_version': back['version']})
                 await call('bill payment void', {'payment': payment['id'],
                                                  'expected_version': freed['version']})
+                ended = await call('bill payment history', {'payment': payment['id'], 'limit': 10})
+                assert ended['status'] == 'voided'
+                assert [row['kind'] for row in ended['items'][0]['batches']] == ['original', 'reversal']
+                assert not any(row['active'] for row in ended['items'][0]['applications'])
 
                 refused = await call('bill pay', {
                     **request, 'number': 'PARITY-PAY-2',

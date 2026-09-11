@@ -11,8 +11,12 @@ from bookflow.core import registry
 from tests.mcp_matrix_support import Matrix, normalize
 from tests.test_service_sales_lifecycle import sale
 
-FAMILIES = {noun: tuple(noun+' '+verb for verb in ('create', 'copy', 'show', 'query', 'update', 'history', last))
-            for noun, last in [('proposal', 'estimate'), ('estimate', 'work-order'), ('work-order', 'complete')]}
+# Only the estimate carries `void`: the proposal is a draft nobody agreed to, and a work
+# order is stopped by cancelling the work rather than withdrawing the quote.
+FAMILIES = {noun: tuple(noun+' '+verb for verb in
+                        ('create', 'copy', 'show', 'query', 'update', 'history', last) + extra)
+            for noun, last, extra in [('proposal', 'estimate', ()), ('estimate', 'work-order', ('void',)),
+                                      ('work-order', 'complete', ())]}
 GHOST = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
 
@@ -108,6 +112,13 @@ def test_nonposting_work_lifecycle_full_documents_and_lineage(root, tmp_path, sa
                     repeated = await call(verb, conversion)
                     assert repeated['id'] == final['id'] and repeated['idempotent_replay']
                     assert (await call(verb, {**conversion, 'date': '2026-01-15'}, rejected=True))['code'] == 'E_CONVERSION_KEY_REUSED'
+                if noun == 'estimate':
+                    # The alternative nobody chose is withdrawn, not corrected. The accepted
+                    # original keeps its work order; this one can never become anything.
+                    withdrawn = await write('void', {noun: copy['id'], 'expected_version': copy['version']})
+                    assert withdrawn['status'] == 'voided' and withdrawn['active'] is False
+                    assert (await call('void', {noun: copy['id'],
+                                                'expected_version': withdrawn['version']}))['changed'] is False
                 await call('history', {**selector, 'limit': 200})
                 assert set(calls) == set(FAMILIES[noun])
                 for name, data in calls.items():

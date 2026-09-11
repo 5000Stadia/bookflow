@@ -56,6 +56,7 @@ audit tail
 bill history
 bill pay
 bill payment apply
+bill payment history
 bill payment query
 bill payment show
 bill payment unapply
@@ -130,6 +131,7 @@ customer-type query
 customer-type show
 customer-type update
 demo reset
+deposit history
 deposit items
 deposit post
 deposit query
@@ -158,6 +160,7 @@ estimate query
 estimate sales-receipt
 estimate show
 estimate update
+estimate void
 estimate work-order
 hub audit list
 hub audit show
