@@ -333,6 +333,42 @@ MATRIX['report missing-checks'] = {
     'E_RECORD_NOT_FOUND': 'account filter does not resolve',
     'E_VALIDATION': 'account filter names an account that is not a bank account',
 }
+MATRIX['report inventory-valuation'] = {
+    'E_QUERY_STALE': 'a movement, posting or item display fact changed between valuation pages',
+    'E_VALUE_RANGE': 'an item asset value or the valuation total exceeds signed 64-bit range',
+}
+MATRIX['report stock-status'] = {
+    'E_QUERY_STALE': 'a movement, posting or item display fact changed between stock-status pages',
+    'E_VALUE_RANGE': 'an on-hand quantity, asset value or the total exceeds signed 64-bit range',
+}
+MATRIX['inventory adjust'] = {
+    'E_RECORD_NOT_FOUND': 'unknown item, adjustment account or class',
+    'E_INACTIVE_REFERENCE': 'inactive item, account or class',
+    'E_VALIDATION': 'an item that carries no stock, no change at all, a quantity increase with no value, a quantity decrease carrying one, negative stock on an affected date, stock left worth nothing, or a movement worth nothing at the current average',
+    'E_VALUE_RANGE': 'quantity or value outside signed 64-bit storage',
+    'E_AMOUNT_PRECISION': 'value_change with more decimal places than the currency allows',
+    'E_UNBALANCED_ENTRY': 'the generated posting does not balance',
+    'E_PERIOD_CLOSED': 'the adjustment date or any correction date falls in a closed period',
+    'E_DUPLICATE_NUMBER': 'the supplied number is already used in the journal series',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['inventory void'] = {
+    'E_RECORD_NOT_FOUND': 'no inventory adjustment with that id or number',
+    'E_VERSION_CONFLICT': 'stale expected_version',
+    'E_VALIDATION': 'the reversal would take the item below zero on an affected date',
+    'E_VALUE_RANGE': 'a reversed or corrected value outside signed 64-bit storage',
+    'E_REASON_REQUIRED': 'void without a reason',
+    'E_PERIOD_CLOSED': 'the adjustment date or any correction date falls in a closed period',
+    'E_IDEMPOTENCY_MISMATCH': 'same key, different input',
+    'E_DIRECTIVE_NOT_FOUND': 'unknown --directive',
+    'E_DIRECTIVE_INACTIVE': 'deactivated --directive',
+}
+MATRIX['inventory show'] = {
+    'E_RECORD_NOT_FOUND': 'no inventory adjustment with that id or number, or no revision with that number',
+    'E_VALIDATION': 'missing or malformed selector',
+}
 
 for _verb in ('post', 'update'):
     MATRIX['journal ' + _verb]['E_NO_EXCHANGE_RATE'] = 'no exact-date original-to-home rate and no manual override'

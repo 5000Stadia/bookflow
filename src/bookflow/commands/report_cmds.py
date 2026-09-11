@@ -28,6 +28,10 @@ from bookflow.company.summary_reports import (
     SalesByItemInput, SalesByItemOutput, SalesByRepInput, SalesByRepOutput,
     expenses_by_vendor, sales_by_customer, sales_by_item, sales_by_rep,
 )
+from bookflow.company.inventory_reports import (
+    InventoryValuationInput, InventoryValuationOutput, StockStatusInput, StockStatusOutput,
+    inventory_valuation, stock_status,
+)
 
 
 @command("report ap-aging", scope="company", required_role="member", capability="reports",
@@ -162,3 +166,19 @@ def plan_expenses_by_vendor(inp, ctx, s):
     error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
 def plan_sales_by_rep(inp, ctx, s):
     return Plan(preview=sales_by_rep(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report inventory-valuation", scope="company", required_role="member", capability="reports",
+    description="What every inventory item holds on as_of and what it is worth: on-hand quantity, weighted-average cost and asset value, one row per item, named in item order. Quantity and value are the running sums of the item's own stock movements up to that date, dated cost corrections included, so a backdated purchase shows in the value of the day it belongs to and not the day it was entered. Items with no stock and no value are listed while they are active and drop off once they are not. The total asset value is the inventory asset on report balance-sheet for the same date; the report refuses rather than print a figure the balance sheet would contradict. Totals cover every item and rows are paged.",
+    input_model=InventoryValuationInput, output_model=InventoryValuationOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_inventory_valuation(inp, ctx, s):
+    return Plan(preview=inventory_valuation(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report stock-status", scope="company", required_role="member", capability="reports",
+    description="What to reorder, as of as_of: each inventory item with what is on hand, what is available, its reorder points and whether it has fallen to or below the lower one, beside its average cost, asset value and preferred vendor. Quantity available equals quantity on hand and quantity on order is zero until sales orders, purchase orders and assembly builds exist to commit or expect stock; both columns are here so the reading does not change when they do. Asset value totals the same figure report inventory-valuation totals and the balance sheet carries for that date. Totals and the below-reorder count cover every item; rows are paged.",
+    input_model=StockStatusInput, output_model=StockStatusOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_stock_status(inp, ctx, s):
+    return Plan(preview=stock_status(inp, s, principal_id=ctx.on_behalf_of))

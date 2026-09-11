@@ -31,11 +31,20 @@ def rows(s, table, *where, order=None):
 NUMBER_FAMILIES = {'invoice': ('invoice', 'credit_memo'), 'credit_memo': ('invoice', 'credit_memo')}
 
 
-def allocate(s, document_type, explicit, own=None):
+def allocate(s, document_type, explicit, own=None, reserved=()):
+    """The next free number in this document's series.
+
+    ``reserved`` is what one command has already handed out inside its own transaction and
+    has not inserted yet. A change that writes several documents at once -- an inventory
+    adjustment and the dated corrections it owes -- would otherwise give every one of them
+    the same number, because the occupancy test can only see rows that exist.
+    """
     t = c.transactions
     family = NUMBER_FAMILIES.get(document_type, (document_type,))
     series = family[0]
     def occupied(number):
+        if number in reserved:
+            return True
         query = sa.select(t.c.id).where(t.c.type.in_(family), t.c.number == number)
         if own:
             query = query.where(t.c.id != own)

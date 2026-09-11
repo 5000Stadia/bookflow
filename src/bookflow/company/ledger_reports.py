@@ -422,7 +422,15 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True, acc
     by_item = report == "sales-by-item"
     by_rep = report == "sales-by-rep"
     by_vendor = report == "expenses-by-vendor"
-    if financial:
+    # Stock rows are items, and what a reader sees on one is its hierarchy name, its type,
+    # its reorder points and whether it is still active -- so all of that is what stales a
+    # continuation when it changes, exactly as an account rename does on the statements.
+    stock = report in {"inventory-valuation", "stock-status"}
+    if stock:
+        label_query = ("SELECT id, full_name, full_name_key, name, type, active, description, "
+                       "reorder_point_min_microunits, reorder_point_max_microunits, "
+                       "preferred_vendor_id FROM items ORDER BY id")
+    elif financial:
         label_query = "SELECT id, full_name, full_name_key, name, number, type, parent_id, active FROM accounts ORDER BY id"
     elif receivable:
         # Receivables rows are customers, not accounts, and the hierarchy name
@@ -491,6 +499,15 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True, acc
         # A check number moves with a correction and stays occupied through a void, and
         # both are audited; nothing this report reads can change without an audit event.
         extra_state = [raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]]
+    elif stock:
+        # A movement is written under an audit event beside its posting, so the audit
+        # sequence already covers a backdated movement; the count and maximal identity are
+        # written anyway, because a ledger that gained rows without an event is a defect a
+        # continuation must not page through silently.
+        extra_state = [tuple(raw.execute(
+            "SELECT count(*), max(id) FROM inventory_movements WHERE effective_date<=:date_to",
+            {"date_to": inp.date_to}).fetchone()),
+            raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]]
     elif payable:
         # A payable row moves with settlement history, which posts nothing,
         # so the posting effect alone cannot see an apply or an unapply. The

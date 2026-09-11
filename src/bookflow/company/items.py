@@ -7,7 +7,7 @@ write and persisted inside the dispatcher's company transaction.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Literal, Mapping, Sequence
 
@@ -26,6 +26,7 @@ from bookflow.core.exact import (
     format_quantity_micro_units,
     parse_percentage_millionths,
     parse_quantity_micro_units,
+    round_ratio_half_even,
 )
 from bookflow.core.ids import is_ulid, new_id
 from bookflow.core.money import Money
@@ -1413,6 +1414,30 @@ class _ProjectionCache:
     unit_rows: Mapping[str, Mapping[str, Any]]
     unit_sets: Mapping[str, Mapping[str, Any]]
     home_currency: str
+    stock: Mapping[str, tuple[int, int]] = field(default_factory=dict)
+
+
+# The stock-carrying item types, and the running sums that value them. Both come from the
+# inventory ledger rather than from a stored per-item figure, because that ledger is the
+# truth and a cached number is a second copy waiting to disagree with it.
+STOCK_TYPES = frozenset({"inventory_part", "inventory_assembly"})
+
+
+def _stock(db: Database, owner_ids: Sequence[str]) -> dict[str, tuple[int, int]]:
+    """On-hand quantity and asset value per item: the running sums of its movements."""
+    if not owner_ids:
+        return {}
+    table = schema.metadata.tables.get("inventory_movements")
+    if table is None:  # pragma: no cover - the ledger is part of the shipped schema
+        return {}
+    rows = db.conn.execute(
+        sa.select(table.c.item_id,
+                  sa.func.sum(table.c.quantity_microunits),
+                  sa.func.sum(table.c.value_minor_units))
+        .where(table.c.item_id.in_(tuple(owner_ids)))
+        .group_by(table.c.item_id)
+    ).all()
+    return {str(item_id): (int(quantity or 0), int(value or 0)) for item_id, quantity, value in rows}
 
 
 def _build_projection_cache(
@@ -1422,7 +1447,7 @@ def _build_projection_cache(
     """Batch-load the relations needed to project an arbitrary item page."""
     owner_ids = tuple(str(row["id"]) for row in owners)
     if not owner_ids:
-        return _ProjectionCache({}, {}, {}, {}, {}, {}, {}, {}, _home_currency(db))
+        return _ProjectionCache({}, {}, {}, {}, {}, {}, {}, {}, _home_currency(db), {})
 
     member_rows = tuple(dict(row) for row in db.conn.execute(
         sa.select(schema.item_members)
@@ -1558,6 +1583,7 @@ def _build_projection_cache(
         unit_rows={str(row["id"]): row for row in unit_rows},
         unit_sets={str(row["id"]): row for row in unit_set_rows},
         home_currency=_home_currency(db),
+        stock=_stock(db, [str(row["id"]) for row in owners if row["type"] in STOCK_TYPES]),
     )
 
 
@@ -1711,7 +1737,19 @@ def project_item(
         if not INT64_MIN <= combined_value <= INT64_MAX:
             raise _validation("combined_percent", "does not fit signed 64-bit storage", code="E_VALUE_RANGE")
         combined = format_percentage_millionths(combined_value)
-    zero_money = MoneyOutput(**Money(0, cache.home_currency if cache is not None else _home_currency(db)).to_dict())
+    currency = cache.home_currency if cache is not None else _home_currency(db)
+    zero_money = MoneyOutput(**Money(0, currency).to_dict())
+    # An item that carries stock now has somewhere to read it from. Quantity committed, on
+    # order and pending build stay zero and unavailable-shaped until a sales order, a purchase
+    # order and an assembly build exist to produce them; on hand and value are real today, and
+    # `inventory_values_available` is what tells a reader which of those it is looking at.
+    stocked = owner["type"] in STOCK_TYPES
+    if stocked:
+        quantity, value = (cache.stock.get(owner_id, (0, 0)) if cache is not None
+                           else _stock(db, [owner_id]).get(owner_id, (0, 0)))
+    else:
+        quantity, value = 0, 0
+    average = 0 if quantity <= 0 else round_ratio_half_even(value * 10 ** 6, quantity)
     return ItemOutput(
         **{field: owner[field] for field in (
             "id", "version", "created_at", "created_by", "created_via", "updated_at",
@@ -1746,9 +1784,12 @@ def project_item(
         members=[_member_output(db, row, cache) for row in members],
         vendor_profiles=[_vendor_output(db, row, cache) for row in vendor_profiles],
         custom_fields=[CustomFieldValueOutput.model_validate(row) for row in custom_values],
-        quantity_on_hand="0", quantity_available="0", quantity_committed="0", quantity_on_order="0",
-        quantity_pending_build="0", average_cost=zero_money, inventory_value=zero_money,
-        inventory_values_available=False,
+        quantity_on_hand=format_quantity_micro_units(quantity),
+        quantity_available=format_quantity_micro_units(quantity),
+        quantity_committed="0", quantity_on_order="0", quantity_pending_build="0",
+        average_cost=MoneyOutput(**Money(average, currency).to_dict()) if stocked else zero_money,
+        inventory_value=MoneyOutput(**Money(value, currency).to_dict()) if stocked else zero_money,
+        inventory_values_available=stocked,
         bill_of_material_cost=_bom_cost(db, members, cache) if owner["type"] == "inventory_assembly" else None,
         combined_percent=combined, child_count=child_count, has_children=bool(child_count),
     )

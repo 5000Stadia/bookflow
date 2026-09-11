@@ -278,7 +278,8 @@ PANELS: tuple[Panel, ...] = (
                         "item and rep, expenses by vendor. Customer statements, A/R aging, "
                         "open invoices, A/P aging, unpaid bills, trial balance, profit and "
                         "loss, balance sheet, statement of cash flows, income tax summary, "
-                        "general ledger, transaction detail by account and missing checks.",
+                        "general ledger, transaction detail by account, missing checks, "
+                        "inventory valuation and stock status.",
                 action=Action(
                     "Choose a report to run",
                     READ,
@@ -286,12 +287,19 @@ PANELS: tuple[Panel, ...] = (
                      "report expenses-by-vendor",
                      "report statement", "report ar-aging", "report open-invoices",
                      "report ap-aging", "report unpaid-bills",
+                     "report inventory-valuation", "report stock-status",
                      "report trial-balance", "report profit-and-loss", "report balance-sheet",
                      "report cash-flows", "report income-tax-summary",
                      "report general-ledger", "report transaction-detail",
                      "report missing-checks"),
                     "/_group/reports",
                 ),
+            ),
+            Step(
+                id="adjust-inventory",
+                title="Adjust inventory",
+                summary="Set opening stock, or correct what an item holds and what it is worth.",
+                action=Action("Adjust inventory", WRITE, ("inventory adjust",), "/inventory/adjust"),
             ),
             Step(
                 id="employees",
