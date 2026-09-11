@@ -123,6 +123,26 @@ BILL_FOOTER = ('memo',)
 BILL_GRID = (('account', 'Account'), ('amount', 'Amount'), ('memo', 'Memo'),
              ('customer', 'Customer:Job'), ('billable', 'Billable'), ('class_id', 'Class'))
 
+# The bill's Items grid: the second tab of the same band. It names no account, because the
+# item named on the row owns the one the line debits; what it asks for instead is how many
+# were bought and what one costs. ``amount`` is the alternative to ``unit_cost`` rather than
+# a computed figure -- the server derives quantity x cost when the cost is what was given --
+# so it is a typed column here too and there is no ``@amount`` asking the server for one.
+BILL_ITEM_GRID = (('item', 'Item'), ('description', 'Description'), ('quantity', 'Qty'),
+                  ('unit_cost', 'Cost'), ('amount', 'Amount'),
+                  ('customer', 'Customer:Job'), ('billable', 'Billable'), ('class_id', 'Class'))
+
+# What a head means on the Items grid rather than on a sale. The same word does not mean the
+# same thing on both: an item is what was bought here and what is charged for there, and a
+# description is the vendor's words rather than the customer's.
+BILL_ITEM_HINTS = {
+    'item': 'What was bought',
+    'description': 'What this line was for',
+    'quantity': 'How many were bought',
+    'unit_cost': 'What one costs; quantity x cost is the amount',
+    'amount': 'The whole line, when you would rather type it than derive it from a cost',
+}
+
 # What each column head means, written for the person who has to tell two of them apart.
 # A bookkeeper reading this grid asked what Unit was next to Quantity; a head that needs
 # that question asked is a head that has not explained itself. The same words are the
@@ -159,6 +179,7 @@ WIDTHS = {'item': ('minmax(9rem, 1.2fr)', 9), 'description': ('minmax(9rem, 1.5f
           'markup_percent': ('5rem', 5), 'class_id': ('6.5rem', 6.5),
           '@amount': ('5.5rem', 5.5), 'tax_code': ('6.5rem', 6.5),
           'account': ('minmax(9rem, 1.4fr)', 9), 'amount': ('6.5rem', 6.5),
+          'unit_cost': ('5.5rem', 5.5),
           'memo': ('minmax(9rem, 1.6fr)', 9), 'customer': ('minmax(8rem, 1.1fr)', 8),
           'billable': ('4.5rem', 4.5)}
 ACTIONS_WIDTH = ('4.5rem', 4.5)
@@ -200,7 +221,7 @@ LINE_LABELS = {
     'billable': 'Billable', 'completed_quantity': 'Completed quantity',
     'refresh_defaults': 'Reprice this line from the current records',
     'use_defaults': 'Fields on this line to return to their defaults',
-    'account': 'Account', 'amount': 'Amount', 'memo': 'Memo',
+    'account': 'Account', 'amount': 'Amount', 'memo': 'Memo', 'unit_cost': 'Unit cost',
     'customer': 'Customer:Job',
     'class_mode': 'How this line is classed',
     'party': 'Customer, job or other name this line is for',
@@ -250,9 +271,11 @@ HELP = {
     'transfer': 'A transfer moves money between two accounts the company already owns. It is neither income '
                 'nor expense, so it changes no profit. Both accounts have to be balance-sheet accounts: a '
                 'bank, a credit card, another asset, a loan, or equity.',
-    'bill': 'A bill records what a vendor has charged you and what it was for. Each expense line debits '
-            'its own account and Accounts Payable is credited the total, so the bill stands open at that '
-            'total until it is paid. Nothing is paid here, and nothing is sent to the vendor.',
+    'bill': 'A bill records what a vendor has charged you and what it was for. Enter it on Expenses '
+            'for the accounts you type, on Items for the things you buy, or on both. Every line debits '
+            'its own account — an item line the account named on the item — and Accounts Payable is '
+            'credited the total, so the bill stands open at that total until it is paid. Nothing is '
+            'paid here, and nothing is sent to the vendor.',
 }
 
 # The same window, in each document's own words. A label or an explanation here overrides the
@@ -346,12 +369,17 @@ def describe(leaves, noun):
             leaf['label'] = tail.replace('_id', '').replace('_', ' ').capitalize()
         if leaf['kind'] == 'collection' and path == 'use_defaults':
             leaf['collection']['item']['choice_labels'] = DEFAULT_CHOICE_LABELS
-        if path in ('lines', 'expenses'):
+        if path in ('lines', 'expenses', 'items'):
+            # The Items grid says what its own words mean; where it says nothing the shared
+            # column hints still apply, so a head is never left unexplained on one grid
+            # because it was explained on the other.
+            own_hints = BILL_ITEM_HINTS if path == 'items' else {}
             for child in leaf['collection']['item']['fields']:
                 child['label'] = LINE_LABELS.get(child['name'],
                                                  child['name'].replace('_id', '').replace('_', ' ').capitalize())
-                if child['name'] in COLUMN_HINTS and not child.get('description'):
-                    child['description'] = COLUMN_HINTS[child['name']]
+                hint = own_hints.get(child['name'], COLUMN_HINTS.get(child['name']))
+                if hint and not child.get('description'):
+                    child['description'] = hint
                 if child['kind'] == 'collection' and child['name'] == 'use_defaults':
                     child['collection']['item']['choice_labels'] = DEFAULT_CHOICE_LABELS
         if path in own_descriptions:
@@ -372,6 +400,28 @@ def _address_group(title, prefix, leaves, placed):
     placed.update(leaf['path'] for leaf in group + selector)
     return {'title': title, 'prefix': prefix, 'leaves': selector + group,
             'component_paths': [leaf['path'] for leaf in group]}
+
+
+def _grid(key, title, leaf, columns, hints):
+    """One line grid: its columns in document order and the track widths they add up to.
+
+    The grid's own hint map wins over the shared one, so a head that means one thing on the
+    Items tab and another on the Expenses tab is explained as itself on each.
+    """
+    line_fields = list(leaf['collection']['item']['fields'])
+    named = {name for name, _ in columns if not name.startswith('@')}
+    built = [{'name': name, 'label': label, 'hint': hints.get(name, COLUMN_HINTS.get(name)),
+              'field': next((child for child in line_fields if child['name'] == name), None)}
+             for name, label in columns]
+    extras = ([child for child in line_fields
+               if child['name'] in LINE_EXTRAS and child['name'] not in named]
+              + [child for child in line_fields
+                 if child['name'] not in named and child['name'] not in LINE_EXTRAS
+                 and child['name'] != 'line_id'])
+    tracks = [WIDTHS.get(column['name'], ('9rem', 9)) for column in built] + [ACTIONS_WIDTH]
+    return {'key': key, 'title': title, 'lines': leaf, 'columns': built, 'line_extras': extras,
+            'grid_template': ' '.join(track for track, _ in tracks),
+            'grid_width': format(sum(width for _, width in tracks), 'g') + 'rem'}
 
 
 def layout(noun, leaves):
@@ -405,10 +455,23 @@ def layout(noun, leaves):
                  if group is not None]
     scope = [] if plain else take(SCOPE)
     # A transfer has no line collection at all, which is what leaves the grid band out of
-    # the page rather than rendering an empty one.
-    lines = None if transfer else by_path.get('expenses' if money_out or bill else 'lines')
-    if lines is not None:
-        placed.add(lines['path'])
+    # the page rather than rendering an empty one. A bill has two of them -- the accounts a
+    # person types and the things they buy -- and they are one band with a tab apiece rather
+    # than two bands, because a line belongs to one grid or the other and never to both.
+    lines_title = 'Expenses' if money_out or bill else 'Lines'
+    grids = []
+    if not transfer:
+        primary_lines = by_path.get('expenses' if money_out or bill else 'lines')
+        if primary_lines is not None:
+            grids.append(_grid('expenses' if money_out or bill else 'lines',
+                               lines_title, primary_lines, grid, {}))
+        if bill:
+            item_lines = by_path.get('items')
+            if item_lines is not None:
+                grids.append(_grid('items', 'Items', item_lines, BILL_ITEM_GRID, BILL_ITEM_HINTS))
+    for band in grids:
+        placed.add(band['lines']['path'])
+    lines = grids[0]['lines'] if grids else None
     footer = take(BILL_FOOTER if bill else TRANSFER_FOOTER if transfer else
                   MONEY_OUT_FOOTER if money_out else FOOTER)
     pricing = [] if plain else take(PRICING)
@@ -416,24 +479,19 @@ def layout(noun, leaves):
     # Anything this layout does not name still reaches the reader, rather than
     # disappearing from a form that must stay input-identical to the command.
     record += [leaf for leaf in leaves if leaf['path'] not in placed]
-    line_fields = list(lines['collection']['item']['fields']) if lines is not None else []
-    named = {name for name, _ in grid if not name.startswith('@')}
-    columns = [{'name': name, 'label': label, 'hint': COLUMN_HINTS.get(name),
-                'field': next((child for child in line_fields if child['name'] == name), None)}
-               for name, label in grid]
-    extras = ([child for child in line_fields
-               if child['name'] in LINE_EXTRAS and child['name'] not in named]
-              + [child for child in line_fields
-                 if child['name'] not in named and child['name'] not in LINE_EXTRAS
-                 and child['name'] != 'line_id'])
-    tracks = [WIDTHS.get(column['name'], ('9rem', 9)) for column in columns] + [ACTIONS_WIDTH]
+    first = grids[0] if grids else {'columns': [], 'line_extras': [],
+                                    'grid_template': '', 'grid_width': '0rem'}
     return {'primary': primary, 'addresses': addresses, 'terms': terms, 'scope': scope,
-            'lines': lines, 'columns': columns, 'line_extras': extras,
+            'lines': lines, 'columns': first['columns'], 'line_extras': first['line_extras'],
+            'grids': grids,
+            # One tab per grid, and no tab strip at all where there is only one grid: a
+            # check's Expenses band reads exactly as it did before a bill grew a second.
+            'tabs': [{'key': band['key'], 'label': band['title']} for band in grids]
+                    if len(grids) > 1 else [],
             'line_pricing': None if plain else LINE_PRICING,
-            'lines_title': 'Expenses' if money_out or bill else 'Lines',
+            'lines_title': lines_title,
             'footer': footer, 'pricing': pricing, 'record': record,
-            'grid_template': ' '.join(track for track, _ in tracks),
-            'grid_width': format(sum(width for _, width in tracks), 'g') + 'rem'}
+            'grid_template': first['grid_template'], 'grid_width': first['grid_width']}
 
 
 def _amount(value):
@@ -511,14 +569,20 @@ def bill_totals(result):
     add up to, and the sentence under it says the two things a person opening a payable wants
     to know — when it is due, and that nothing here has been paid.
 
-    The Items row appears only when there is one. A bill entered on the Expenses tab alone
-    reads exactly as it did before the Items tab existed, rather than growing a zero.
+    A grid's row appears only when that grid has something on it. A bill entered on the
+    Expenses tab alone reads exactly as it did before the Items tab existed, rather than
+    growing a zero, and a bill bought wholly on the Items tab is not told that it spent
+    nothing on expenses. A bill with nothing on either tab cannot be written at all, so the
+    Expenses row stands in for an empty preview rather than a footer with no lines in it.
     """
     if not isinstance(result, dict) or not isinstance(result.get('total'), dict):
         return [], None, None
     currency = result['currency']
-    rows = [_row('Expenses', f"{result['expense_total']['amount']} {currency}")]
-    if (result.get('item_total') or {}).get('minor_units'):
+    items = (result.get('item_total') or {}).get('minor_units')
+    rows = []
+    if result['expense_total']['minor_units'] or not items:
+        rows.append(_row('Expenses', f"{result['expense_total']['amount']} {currency}"))
+    if items:
         rows.append(_row('Items', f"{result['item_total']['amount']} {currency}"))
     rows.append(_row('Amount due', f"{result['total']['amount']} {currency}", True))
     settlement = result.get('settlement_current')
@@ -578,8 +642,8 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
         empty = 'Preview to see what each of the two accounts does.'
     elif bill:
         totals, reconciliation, reconciled = bill_totals(result)
-        empty = ('Preview to see what the expense lines add up to and when the terms make '
-                 'this bill due.')
+        empty = ('Preview to see what the lines on both tabs add up to and when the terms '
+                 'make this bill due.')
     elif money_out:
         totals, reconciliation, reconciled = money_out_totals(noun, result, error)
         empty = ('Preview to see what the expense lines add up to and whether it agrees '

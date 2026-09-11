@@ -20,7 +20,7 @@
 <div class="line-cell line-cell-actions"><button type="button" data-collection-up aria-label="Move this line up">↑</button><button type="button" data-collection-down aria-label="Move this line down">↓</button><button type="button" data-collection-remove>Remove</button></div>
 {% endmacro %}
 
-{% macro line_row(item, path, value, amounts) %}
+{% macro line_row(item, path, value, amounts, grid) %}
 {% set allocated = allocated_lines.get(value.get('line_id')) if allocated_lines and value is mapping else none %}
 <div class="line-row{% if allocated %} line-row-allocated{% endif %}" data-collection-item>
 {% if allocated %}
@@ -30,7 +30,7 @@
 {{ row_actions() }}
 {% else %}
 <input type="hidden" name="c:{{ path }}:line_id" value="{{ value.get('line_id') or '' if value is mapping else '' }}">
-{% for column in d.columns %}
+{% for column in grid.columns %}
 {% set cell_id = (("c:" ~ path ~ ":" ~ column.field.name) if column.field else ("amount:" ~ path)).replace(':', '-').replace('.', '-') %}
 <div class="line-cell" data-line-column="{{ column.name }}"{% if column.hint %} title="{{ column.hint }}"{% endif %}>
 {% if column.name == '@amount' %}<span class="line-cell-label"><span class="line-cell-name">{{ column.label }}</span>{% if column.hint %}<small class="line-cell-hint"> — {{ column.hint }}</small>{% endif %}</span><span class="line-amount">{{ amounts.amount if amounts else '—' }}</span>
@@ -39,10 +39,10 @@
 </div>
 {% endfor %}
 {{ row_actions() }}
-{% if d.line_extras or d.line_pricing %}<details class="line-extras"><summary>More on this line</summary><div class="line-extra-fields">
+{% if grid.line_extras or d.line_pricing %}<details class="line-extras"><summary>More on this line</summary><div class="line-extra-fields">
 {% if d.line_pricing %}{% set mode_id = ("price-mode:" ~ path).replace(':', '-').replace('.', '-') %}
 <div class="collection-field"><label for="{{ mode_id }}">{{ d.line_pricing.label }}<small>{{ d.line_pricing.description }}</small></label>{{ price_mode(path, mode_id) }}</div>{% endif %}
-{% for child in d.line_extras %}
+{% for child in grid.line_extras %}
 {% set child_name = "c:" ~ path ~ ":" ~ child.name %}
 <div class="collection-field"><label for="{{ child_name.replace(':', '-').replace('.', '-') }}">{{ child.label or child.name }}{% if child.required %} *{% endif %}<small>{{ child.description }}</small></label>{{ line_child(child, path, value.get(child.name) if value is mapping else none) }}</div>
 {% endfor %}
@@ -69,15 +69,25 @@
 {% if d.scope %}<section class="document-band" aria-label="Scope"><h2 class="band-title">Scope</h2>
 <div class="document-row document-row-wide">{% for l in d.scope %}{{ field(l, l.index) }}{% endfor %}</div></section>{% endif %}
 
-{% if d.lines %}
-<section class="document-band" aria-label="{{ d.lines_title }}"><h2 class="band-title">{{ d.lines_title }}</h2>
-<div class="line-grid" data-collection data-collection-path="{{ d.lines.path }}" style="--line-columns: {{ d.grid_template }}; --line-width: {{ d.grid_width }}">
-<input type="hidden" name="collection:{{ d.lines.path }}" value="1">
-<div class="line-head" aria-hidden="true">{% for column in d.columns %}<span class="line-cell"{% if column.hint %} title="{{ column.hint }}"{% endif %}>{{ column.label }}{% if column.hint %}<small class="line-head-hint">{{ column.hint }}</small>{% endif %}</span>{% endfor %}<span class="line-cell line-cell-actions">Row</span></div>
-<div class="line-body" data-collection-items>{% for value in d.lines.collection["values"] %}{{ line_row(d.lines.collection.item, d.lines.path ~ ":" ~ loop.index0, value, d.line_amount(value.get('line_id') if value is mapping else none, loop.index0)) }}{% endfor %}</div>
-<template data-collection-template data-index-token="__INDEX0__">{{ line_row(d.lines.collection.item, d.lines.path ~ ":__INDEX0__", {}, none) }}</template>
+{% if d.grids %}
+{# One band, one tab per grid. A document with a single grid renders exactly what it always
+   did: no tab strip, no panel wrapper that changes anything a person sees. The hidden panel
+   is still part of the form, so both grids submit whichever tab happens to be showing --
+   that is what lets a bill be entered on the Items tab and corrected from the Expenses one. #}
+<section class="document-band{% if d.tabs %} document-band-tabbed{% endif %}" aria-label="{{ d.lines_title }}" data-line-bands>
+{% if d.tabs %}<div class="line-tabs" role="tablist" aria-label="{{ d.title }} lines">{% for tab in d.tabs %}<button type="button" class="line-tab" role="tab" id="line-tab-{{ tab.key }}" aria-controls="line-panel-{{ tab.key }}" aria-selected="{{ 'true' if loop.first else 'false' }}" data-line-tab="{{ tab.key }}">{{ tab.label }}</button>{% endfor %}</div>{% endif %}
+{% for grid in d.grids %}
+<div class="line-panel" id="line-panel-{{ grid.key }}" data-line-panel="{{ grid.key }}"{% if d.tabs %} role="tabpanel" aria-labelledby="line-tab-{{ grid.key }}"{% endif %}>
+<h2 class="band-title{% if d.tabs %} band-title-tabbed{% endif %}">{{ grid.title }}</h2>
+<div class="line-grid" data-collection data-collection-path="{{ grid.lines.path }}" style="--line-columns: {{ grid.grid_template }}; --line-width: {{ grid.grid_width }}">
+<input type="hidden" name="collection:{{ grid.lines.path }}" value="1">
+<div class="line-head" aria-hidden="true">{% for column in grid.columns %}<span class="line-cell"{% if column.hint %} title="{{ column.hint }}"{% endif %}>{{ column.label }}{% if column.hint %}<small class="line-head-hint">{{ column.hint }}</small>{% endif %}</span>{% endfor %}<span class="line-cell line-cell-actions">Row</span></div>
+<div class="line-body" data-collection-items>{% for value in grid.lines.collection["values"] %}{{ line_row(grid.lines.collection.item, grid.lines.path ~ ":" ~ loop.index0, value, d.line_amount(value.get('line_id') if value is mapping else none, loop.index0), grid) }}{% endfor %}</div>
+<template data-collection-template data-index-token="__INDEX0__">{{ line_row(grid.lines.collection.item, grid.lines.path ~ ":__INDEX0__", {}, none, grid) }}</template>
 <button type="button" data-collection-add class="line-add">Add a line</button>
 </div>
+</div>
+{% endfor %}
 </section>
 {% endif %}
 

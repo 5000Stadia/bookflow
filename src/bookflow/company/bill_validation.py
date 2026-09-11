@@ -218,7 +218,13 @@ def _validate(plan, s, ctx):
         family, line = found
         facts = bills.LINE_FACTS[family].model_validate_json(line['line_snapshot'])
         require(facts.account.id == line['account_id'], 'captured line facts disagree with columns')
-        require(facts.account.type in bills.EXPENSE_ACCOUNTS, 'a bill line names an ineligible account')
+        # An item with no purchase side debits the income account it is sold out of; every
+        # other line debits a cost account. The captured basis says which this line is, so
+        # the check reads the eligible set off the line rather than off one fixed list.
+        require(facts.account.type in (bills.ITEM_INCOME_ACCOUNTS
+                                       if getattr(facts, 'account_basis', 'purchase') == 'income'
+                                       else bills.EXPENSE_ACCOUNTS),
+                'a bill line names an ineligible account')
         require(bool(line['billable']) is facts.billable, 'billable disagrees with captured facts')
         require(not line['billable'] or line['customer_id'] is not None,
                 'a billable cost names no customer or job')

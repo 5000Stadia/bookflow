@@ -43,6 +43,13 @@ def editable_values(record):
     This is the form's comparison baseline, not a replacement payload: a leaf equal to its
     original is not submitted, which is what lets a header-only correction reach the writer
     without an ``expenses`` grid and keep the saved lines exactly as they were captured.
+
+    Both grids are baselined, and each of them separately. Supplying one grid replaces it
+    outright, so a baseline that did not match what the form renders would make every
+    correction resubmit that grid and silently re-resolve it against today's records --
+    recapturing a renamed item on a revision that never touched it. The Items baseline
+    therefore states exactly one of ``unit_cost`` and ``amount``: the one the line was
+    entered on, which is what ``unit_cost`` being null on the saved line already says.
     """
     revision = record['revision']
     profile = revision['profile']
@@ -60,6 +67,7 @@ def editable_values(record):
         'custom_fields': {field['definition_id']: deepcopy(field['value'])
                           for field in revision.get('custom_fields', [])},
         'expenses': [],
+        'items': [],
     }
     for line in revision['expenses']:
         row = {'line_id': line['line_id'], 'account': line['account_id'],
@@ -67,6 +75,20 @@ def editable_values(record):
                'customer': line['customer_id'], 'billable': line['billable']}
         row.update(_line_class(line, header_class))
         values['expenses'].append(row)
+    # ``revision['items']`` by key, never ``revision.items`` -- the context passes the
+    # revision as a plain dict, and the attribute is the mapping's own method.
+    for line in revision['items']:
+        row = {'line_id': line['line_id'], 'item': line['item_id'],
+               'description': line['description'], 'quantity': line['quantity'],
+               'customer': line['customer_id'], 'billable': line['billable']}
+        # The two price inputs are exclusive on the way in, so the baseline names the one
+        # that was used. A null unit cost is the saved line saying the amount was typed.
+        if line['unit_cost'] is None:
+            row['amount'] = line['amount']['amount']
+        else:
+            row['unit_cost'] = line['unit_cost']['amount']
+        row.update(_line_class(line, header_class))
+        values['items'].append(row)
     return values
 
 
