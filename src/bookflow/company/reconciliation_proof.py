@@ -1,6 +1,7 @@
 """Independent raw-leg coverage, inverse bijection and dated GL witnesses."""
 from collections import Counter
 from bookflow.company.reconciliation_adapters import require
+from bookflow.company.reconciliation_models import STATEMENT_ACCOUNTS
 
 
 def prove(g, history, current, account_id, cutoff):
@@ -8,7 +9,7 @@ def prove(g, history, current, account_id, cutoff):
     legs = g.by_id('posting_lines'); sources = g.by_id('posting_line_sources'); batches = g.by_id('posting_batches')
     require(len(legs)==len(g.rows['posting_lines']) and len(sources)==len(g.rows['posting_line_sources']), 'duplicate_physical_identity')
     originals = {key:r for key,r in legs.items() if batches[r['batch_id']]['kind'] != 'reversal'}
-    bank = {key:r for key,r in originals.items() if g.accounts[r['account_id']]['type'] in ('bank','credit_card')}
+    bank = {key:r for key,r in originals.items() if g.accounts[r['account_id']]['type'] in STATEMENT_ACCOUNTS}
     represented = Counter(key for v in history if v.active for key in v.posting_line_ids)
     require(represented == Counter({key:1 for key in bank}), 'business_leg_coverage')
     for value in history:

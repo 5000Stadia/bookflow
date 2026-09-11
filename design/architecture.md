@@ -2327,15 +2327,26 @@ exact historical inverses do not re-admit those accounts.
 
 `company/reconciliation_models.py`, `reconciliation_adapters.py` and
 `reconciliation_proof.py` provide private immutable statement references and
-versions over the accepted company co0021 source families. The closed registry
-covers journal entries (including register translation), payment cash, sales
-receipt control/net, retained invoice net recognition and persisted deposit bank
-keys. These modules register no command, write no database, and do not activate
-`deposit_dependencies.RECONCILIATION`.
+versions over the company's posting families. The registry covers every document
+type `ledger_schema.TRANSACTION_TYPES` declares, and it is written against that
+tuple rather than against a retyped copy: journal entries (including register
+translation), payment cash, sales receipt control/net, retained invoice net
+recognition, persisted deposit bank keys, the funded leg of a bill payment,
+customer refund or sales tax remittance, and the settled documents -- bill,
+credit memo and vendor credit -- which post no statement leg at all and prove it
+by refusing one rather than by returning nothing. `Producer` in
+`reconciliation_models.py` is that same tuple. An unadapted producer is not a
+partial result: `enumerate_graph` refuses the whole graph, so one of them makes
+every account it touches unreconcilable, and
+`tests/test_reconciliation_adapters.py` fails the moment the ledger admits a type
+the registry does not name. These modules register no command, write no
+database, and do not activate `deposit_dependencies.RECONCILIATION`.
 
-References use their producer's stable commercial line plus closed role, or the
-existing deposit bank key. Account is version data. Receipt control lines share
-one remittance movement; net-recognition credits have a separate movement.
+References use their producer's stable commercial line plus role, or the
+existing deposit bank key, or -- for a funded document -- the document itself,
+because one payment is one statement line however many bills it answers. Account
+is version data. Receipt control lines share one remittance movement;
+net-recognition credits have a separate movement.
 Journal lines and deposit roles remain distinct even on the same account.
 Immutable revision/business-batch anchors change on metadata replacements;
 removal and void retain the former account and explicit transition provenance.
