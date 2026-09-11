@@ -60,7 +60,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
           for cmd in registry.routed_commands()]
     mapped=workbench_variant_map(rows)
     assert len(mapped)==len(variant_policies())==22
-    assert sum(len(group["paths"]) for group in mapped)==2322
+    # The census of material schema nodes. It moves whenever a routed command gains input
+    # shape: the bill's Items grid added eighteen paths under `items` on `bill post` and
+    # `bill update`, and one more where `expenses` became optional beside it.
+    assert sum(len(group["paths"]) for group in mapped)==2341
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

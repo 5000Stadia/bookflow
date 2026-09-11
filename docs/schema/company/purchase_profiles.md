@@ -20,5 +20,6 @@ Database: `company`.
 | `due_date` | VARCHAR(10) | no | — | — | — | — | Captured due date, derived from terms or entered outright. |
 | `supplier_reference` | VARCHAR(128) | yes | — | — | — | — | The supplier's own document number, as entered; null when blank. |
 | `supplier_reference_key` | VARCHAR(256) | yes | — | — | ix_purchase_profiles_reference | — | NFC-normalized, trimmed and case-folded reference used to detect a repeat; null when blank. |
-| `expense_total_minor_units` | BIGINT | no | — | — | — | — | Home-currency sum of the expense lines. |
+| `expense_total_minor_units` | BIGINT | no | — | — | — | — | Home-currency sum of the expense lines; zero on a bill entered on the Items tab alone. |
+| `item_total_minor_units` | BIGINT | no | — | — | — | — | Home-currency sum of the item lines; zero on a bill entered on the Expenses tab alone. |
 | `profile_snapshot` | TEXT | no | — | — | — | — | Versioned typed JSON object of resolved header facts and input origins. |

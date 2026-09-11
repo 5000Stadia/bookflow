@@ -197,6 +197,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`company/price_levels`](schema/company/price_levels.md)
 - [`company/principals`](schema/company/principals.md)
 - [`company/purchase_expense_lines`](schema/company/purchase_expense_lines.md)
+- [`company/purchase_item_lines`](schema/company/purchase_item_lines.md)
 - [`company/purchase_profiles`](schema/company/purchase_profiles.md)
 - [`company/reconciliation_accounts`](schema/company/reconciliation_accounts.md)
 - [`company/reconciliation_active_certificates`](schema/company/reconciliation_active_certificates.md)

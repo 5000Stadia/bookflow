@@ -5,6 +5,11 @@ the writer's arithmetic -- every total is recomputed from the rows themselves. I
 once on the preview and once inside the writing transaction, so a graph that only became wrong
 between the two is still caught. Anything it refuses is ``E_INTERNAL``: a caller cannot cause
 these, and if one fires it is this module's own fault, not the person's.
+
+Both line grids are read the same way. Every ``document_lines`` envelope must be owned by
+exactly one profile row in exactly one of the two tables, each family must add up to the total
+the header carries for it, and the two totals together must be the revision's. What an item
+line adds beyond that is in ``_item``.
 """
 from __future__ import annotations
 
@@ -13,7 +18,7 @@ import json
 from pydantic import ValidationError
 
 from bookflow.company import document_effects as effects, schema as c
-from bookflow.company.bill_facts import BillExpenseProfile, BillProfile
+from bookflow.company.bill_facts import BillProfile
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import INT64_MAX
 
@@ -34,6 +39,37 @@ def validate(plan, s, ctx):
         return _validate(plan, s, ctx)
     except (ValidationError, json.JSONDecodeError) as exc:
         raise BookflowError('E_INTERNAL', message='Invalid bill aggregate: malformed captured facts') from exc
+
+
+def _item(line, facts):
+    """What an item line stores beyond an expense line, checked against its own captured facts.
+
+    The account is not re-read from the item: what the bill posted is what it captured, and a
+    later repointing of the item must not be able to make a stored revision look wrong. What is
+    checked is that the columns and the snapshot say the same thing, that the family is one a
+    bill may receive, and that a derived amount really is quantity times the unit cost it
+    names -- the one arithmetic step this module recomputes rather than trusts.
+    """
+    from bookflow.company import bills
+
+    require(facts.item.id == line['item_id'], 'the captured item disagrees with the column')
+    require(facts.item_type in bills.PURCHASABLE_ITEM_TYPES,
+            'an item line names a family a bill cannot receive')
+    require(facts.quantity_microunits == line['quantity_microunits'],
+            'the captured quantity disagrees with the column')
+    require(facts.unit_cost_minor_units == line['unit_cost_minor_units'],
+            'the captured unit cost disagrees with the column')
+    require(type(line['quantity_microunits']) is int and 0 < line['quantity_microunits'] <= INT64_MAX,
+            'an item line has no positive quantity')
+    if facts.amount_basis == 'unit_cost':
+        require(line['unit_cost_minor_units'] is not None, 'a derived amount names no unit cost')
+        amount(line['unit_cost_minor_units'])
+        require(bills.extension(line['quantity_microunits'], line['unit_cost_minor_units'])
+                == line['amount_minor_units'],
+                'a derived amount is not the quantity times the unit cost')
+    else:
+        require(line['unit_cost_minor_units'] is None,
+                'an entered amount carries a unit cost it was not derived from')
 
 
 def _validate(plan, s, ctx):
@@ -155,9 +191,10 @@ def _validate(plan, s, ctx):
             'a supplier reference without its comparison key')
 
     envelopes = pending['document_lines']
-    expenses = pending['purchase_expense_lines']
-    require(bool(envelopes) and len(envelopes) == len(expenses), 'every entered line needs exactly one profile')
-    require(all(line['revision_id'] == revision['id'] for line in envelopes + expenses),
+    expenses, items = pending['purchase_expense_lines'], pending['purchase_item_lines']
+    require(bool(envelopes) and len(envelopes) == len(expenses) + len(items),
+            'every entered line needs exactly one profile')
+    require(all(line['revision_id'] == revision['id'] for line in envelopes + expenses + items),
             'a line belongs to another revision')
     require(sorted(line['position'] for line in envelopes) == list(range(1, len(envelopes) + 1)),
             'non-contiguous entered lines')
@@ -171,22 +208,31 @@ def _validate(plan, s, ctx):
     known |= {row['id'] for row in pending['document_line_identities']}
     require(identities <= known, 'a line identity this document does not own')
 
-    by_envelope = {line['document_line_id']: line for line in expenses}
-    total = 0
+    by_envelope = {line['document_line_id']: ('expense', line) for line in expenses}
+    by_envelope.update({line['document_line_id']: ('item', line) for line in items})
+    require(len(by_envelope) == len(envelopes), 'one envelope owns two line profiles')
+    totals = {'expense': 0, 'item': 0}
     for envelope in envelopes:
-        line = by_envelope.get(envelope['id'])
-        require(line is not None, 'an entered line without its expense profile')
-        facts = BillExpenseProfile.model_validate_json(line['line_snapshot'])
+        found = by_envelope.get(envelope['id'])
+        require(found is not None, 'an entered line without its expense or item profile')
+        family, line = found
+        facts = bills.LINE_FACTS[family].model_validate_json(line['line_snapshot'])
         require(facts.account.id == line['account_id'], 'captured line facts disagree with columns')
-        require(facts.account.type in bills.EXPENSE_ACCOUNTS, 'an expense line names an ineligible account')
+        require(facts.account.type in bills.EXPENSE_ACCOUNTS, 'a bill line names an ineligible account')
         require(bool(line['billable']) is facts.billable, 'billable disagrees with captured facts')
         require(not line['billable'] or line['customer_id'] is not None,
                 'a billable cost names no customer or job')
         require(line['customer_id'] == (facts.customer.id if facts.customer else None),
                 'the captured job disagrees with the column')
-        total += amount(line['amount_minor_units'], positive=True)
-    require(total == profile['expense_total_minor_units'] == revision['total_minor_units'],
-            'the expense lines do not add up to the bill')
+        if family == 'item':
+            _item(line, facts)
+        totals[family] += amount(line['amount_minor_units'], positive=True)
+    require(totals['expense'] == profile['expense_total_minor_units']
+            and totals['item'] == profile['item_total_minor_units'],
+            'a line family does not add up to the total the header carries for it')
+    total = totals['expense'] + totals['item']
+    require(total == revision['total_minor_units'] and total > 0,
+            'the entered lines do not add up to the bill')
 
     batch = business[0]
     own = [leg for leg in legs if leg['batch_id'] == batch['id']]
@@ -197,14 +243,14 @@ def _validate(plan, s, ctx):
     for leg in own:
         if leg is payable[0]:
             continue
-        require(leg['debit_minor_units'] > 0, 'a bill posts nothing but expense debits and one payable credit')
+        require(leg['debit_minor_units'] > 0, 'a bill posts nothing but line debits and one payable credit')
         debits[leg['id']] = leg
-    require(len(debits) == len(envelopes), 'one expense debit per entered line')
+    require(len(debits) == len(envelopes), 'one debit per entered line')
     attributed = {}
     for source in sources:
         if source['posting_line_id'] == payable[0]['id']:
             attributed[source['document_line_id']] = attributed.get(source['document_line_id'], 0) + source['amount_minor_units']
-    require(attributed == {envelope['id']: by_envelope[envelope['id']]['amount_minor_units']
+    require(attributed == {envelope['id']: by_envelope[envelope['id']][1]['amount_minor_units']
                            for envelope in envelopes},
             'the payable credit is not attributed line by line')
 

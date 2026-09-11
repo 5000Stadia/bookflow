@@ -23,7 +23,7 @@ from bookflow.company.credit_schema import settlement_guard_statements
 from bookflow.company.vendor_credit_schema import guard_statements
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, known_revisions, migrate_to_head
-from tests.payment_raw_evidence import table
+from tests.payment_raw_evidence import preserved, table
 from tests.test_bill_payment_migration import _rebuilt_since, _superseded_after
 
 M = importlib.import_module('bookflow.storage.company_migrations.versions.0032_vendor_credits')
@@ -204,8 +204,11 @@ def test_a_populated_previous_database_keeps_every_value_and_every_local_object(
     with open_database(path, writable=True) as db:
         assert migrate_to_head(db, 'company', tmp_path / 'backups') == (PREVIOUS, HEADS['company'])
         # Byte for byte, including the embedded NUL and the raw blob, and at the same rowids.
+        # A later migration that widens a table adds a column, and comparing the widened
+        # reading against the old one would fail on the column list alone; `preserved` omits
+        # exactly the columns that did not exist then, which keeps the assertion about values.
         for name in names:
-            assert table(db.raw, name) == before[name], name
+            assert preserved(db.raw, name, before[name]) == before[name], name
         objects_after = set(db.raw.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
         ).fetchall())

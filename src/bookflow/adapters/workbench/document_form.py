@@ -507,15 +507,20 @@ def bill_totals(result):
     """The bill footer: what the lines add up to, what is owed, and when it falls due.
 
     Every figure is the server's own. A bill has no figure written on its face, so there is
-    nothing to reconcile against the way a check has: the total *is* what the expense lines
+    nothing to reconcile against the way a check has: the total *is* what the entered lines
     add up to, and the sentence under it says the two things a person opening a payable wants
     to know — when it is due, and that nothing here has been paid.
+
+    The Items row appears only when there is one. A bill entered on the Expenses tab alone
+    reads exactly as it did before the Items tab existed, rather than growing a zero.
     """
     if not isinstance(result, dict) or not isinstance(result.get('total'), dict):
         return [], None, None
     currency = result['currency']
-    rows = [_row('Expenses', f"{result['expense_total']['amount']} {currency}"),
-            _row('Amount due', f"{result['total']['amount']} {currency}", True)]
+    rows = [_row('Expenses', f"{result['expense_total']['amount']} {currency}")]
+    if (result.get('item_total') or {}).get('minor_units'):
+        rows.append(_row('Items', f"{result['item_total']['amount']} {currency}"))
+    rows.append(_row('Amount due', f"{result['total']['amount']} {currency}", True))
     settlement = result.get('settlement_current')
     if isinstance(settlement, dict) and settlement.get('applied_minor_units'):
         rows += [_row('Paid so far', settlement['applied']['amount']),

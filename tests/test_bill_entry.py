@@ -542,17 +542,31 @@ def test_the_same_bill_through_python_cli_http_and_mcp(root, tmp_path):
 
                 expense = (await matrix.call(surface, 'account create',
                                              dict(name='Parity supplies', type='expense')))['id']
+                chart = (await matrix.call(surface, 'account query', {'limit': 200}))['items']
+                cogs = next(row['id'] for row in chart if row['type'] == 'cost_of_goods_sold')
+                income = next(row['id'] for row in chart if row['type'] == 'income')
                 vendor = (await matrix.call(surface, 'vendor create',
                                             dict(name='Parity Supply Co')))['id']
+                # An item row goes across every surface beside the typed rows: the Items grid
+                # is a second collection on the same command, so nothing but this proves the
+                # CLI's own JSON array flag and the MCP schema carry it.
+                part = (await matrix.call(surface, 'item create', dict(
+                    name='Parity Valve', type='non_inventory_part', sales_enabled=False,
+                    purchase_enabled=True, purchase_description='Parity valve',
+                    cost='12.35', expense_account_id=expense)))['id']
                 entry = dict(vendor=vendor, date='2026-03-04', number='PARITY-1',
                              supplier_reference='INV-9001', memo='Parity parts',
                              expenses=[{'account': expense, 'amount': FIRST, 'memo': 'Fittings'},
-                                       {'account': expense, 'amount': SECOND, 'memo': 'Delivery'}])
+                                       {'account': expense, 'amount': SECOND, 'memo': 'Delivery'}],
+                             items=[{'item': part, 'quantity': '4'}])
                 assert (await call('bill post', entry, dry_run=True))['dry_run']
                 posted = await call('bill post', entry, idempotency_key='bill-1')
                 replay = await call('bill post', entry, idempotency_key='bill-1')
                 assert replay['id'] == posted['id'] and replay['idempotent_replay']
-                assert posted['total']['amount'] == BILL
+                # 184.60 + 100.00 typed, plus 4 at 12.35 bought: 284.60 + 49.40 is 334.00.
+                assert posted['expense_total']['amount'] == BILL
+                assert posted['item_total']['amount'] == '49.40'
+                assert posted['total']['amount'] == '334.00'
 
                 await call('bill show', {'bill': posted['id']})
                 await call('bill history', {'bill': posted['id'], 'limit': 10})
@@ -569,6 +583,18 @@ def test_the_same_bill_through_python_cli_http_and_mcp(root, tmp_path):
                     rejected=True)
                 assert refused['code'] == 'E_VALIDATION'
                 assert refused['details']['fields'][0]['field'] == 'expenses.0.account'
+
+                # Receiving stock is refused the same way, and says the same thing, everywhere.
+                stock = (await matrix.call(surface, 'item create', dict(
+                    name='Parity Elbow', type='inventory_part', description='Parity elbow',
+                    price='4.50', purchase_description='Parity elbow', cost='1.80',
+                    cogs_account_id=cogs, income_account_id=income)))['id']
+                stopped = await call('bill post', dict(
+                    vendor=vendor, date='2026-03-04', number='PARITY-3',
+                    items=[{'item': stock, 'quantity': '50'}]), rejected=True)
+                assert stopped['code'] == 'E_VALIDATION'
+                assert stopped['details']['reason'] == 'inventory_receipt_not_implemented'
+                assert stopped['details']['fields'][0]['field'] == 'items.0.item'
                 assert set(calls) == COMMANDS
                 for name, data in list(calls.items()):
                     assert (await call(name, data, company=GHOST,

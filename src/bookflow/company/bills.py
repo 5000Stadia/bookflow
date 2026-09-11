@@ -16,11 +16,20 @@ is what an allocation targets when a payment has to land on particular lines. No
 applies anything: ``applied_totals`` is the single function the settlement owner answers, and
 ``bill pay`` in ``company/bill_payments.py`` is what makes it answer more than zero.
 
-**The Items tab.** The line collection is ``expenses`` and the envelope kind is ``purchase``.
-The obligation component points at the envelope, not at the expense profile, so an item line
-is a component with no schema change; the posting sums whatever components exist; and the
-header, the numbering, the terms and the payable know nothing about which family a line came
-from. See ``company/purchase_schema.py`` for the storage side of the same seam.
+**The two tabs.** A bill has an Expenses grid and an Items grid, and it may be entered on
+either or on both. They are two profile tables over one envelope family: every entered line is
+a ``purchase`` envelope in ``document_lines``, owned by exactly one of
+``purchase_expense_lines`` and ``purchase_item_lines``, and which one it is changes only what
+was captured -- never the numbering, the terms, the payable, the obligation component or the
+shape of the posting. An expense line names its own account; an item line takes the account
+off the item it names. Both then debit that account for their own amount, and Accounts Payable
+is credited their sum, once.
+
+**Why an inventory part is refused.** Receiving stock debits Inventory Asset and moves quantity
+on hand, and nothing in this product owns either. So a bill admits exactly the three item
+families an invoice already sells -- service, non-inventory part and other charge -- each of
+which posts to one account named on the item itself, and refuses an inventory item by name
+rather than quietly debiting an expense account it was never meant to touch.
 """
 from __future__ import annotations
 
@@ -34,7 +43,8 @@ from bookflow.company import accounts, journals, list_service, schema as c
 from bookflow.company import document_effects as effects
 from bookflow.company import journal_custom_fields as custom
 from bookflow.company.bill_facts import (
-    Account, BillExpenseProfile, BillProfile, Origin, Reference, Term, Vendor,
+    PURCHASABLE_ITEM_TYPES, Account, BillExpenseProfile, BillItemProfile, BillProfile, Origin,
+    Reference, Term, Vendor,
 )
 from bookflow.company.bill_models import (
     BillExpenseInput, BillHistoryOutput, BillObligationComponentOutput, BillObligationOutput,
@@ -47,9 +57,12 @@ from bookflow.company.journal_models import checked_sum, parse_domestic_amount
 from bookflow.company.lists import get_list_definition
 from bookflow.company.parties import resolve_party
 from bookflow.company.profiles import TermInput, compute_term_dates
+from bookflow.company.sales_calculations import extension
 from bookflow.core import audit, clock
 from bookflow.core.errors import BookflowError
-from bookflow.core.exact import format_percentage_millionths
+from bookflow.core.exact import (
+    format_percentage_millionths, format_quantity_micro_units, parse_quantity_micro_units,
+)
 from bookflow.core.ids import is_ulid, new_id
 from bookflow.core.money import Money
 from bookflow.core.registry import Plan
@@ -65,6 +78,7 @@ TABLE_KINDS = (
     ('document_lines', 'document_line', 'id'),
     ('purchase_profiles', 'purchase_profile', 'revision_id'),
     ('purchase_expense_lines', 'purchase_expense_line', 'document_line_id'),
+    ('purchase_item_lines', 'purchase_item_line', 'document_line_id'),
     ('posting_batches', 'posting_batch', 'id'),
     ('posting_lines', 'posting_line', 'id'),
     ('posting_line_sources', 'posting_line_source', 'id'),
@@ -111,25 +125,56 @@ def profile_row(s, revision):
     return effects.rows(s, c.purchase_profiles, c.purchase_profiles.c.revision_id == revision['id'])[0]
 
 
-def merged_line(envelope, profile):
-    """One expense line as a reader sees it: the envelope's identity, the profile's money.
+# The captured-fact shape each line family stores, keyed by the family name the resolved and
+# merged line dictionaries carry. One mapping rather than three branches: every place that has
+# to parse a stored ``line_snapshot`` asks this which shape it is holding.
+LINE_FACTS = {'expense': BillExpenseProfile, 'item': BillItemProfile}
+
+
+def merged_line(envelope, profile, family):
+    """One entered line as a reader sees it: the envelope's identity, the profile's money.
 
     The envelope and the profile both carry an ``account_id`` and an ``amount_minor_units``
     column, and on a purchase envelope both of those are null -- the accounting lives in the
     profile. Spelling the overlap out here rather than merging the two rows blindly is what
     keeps a line's account from silently reading as null.
+
+    An item line adds what the Items tab has and the Expenses tab does not: the item itself,
+    the quantity and the unit cost the amount came from. ``memo`` and ``description`` are the
+    same stored envelope text under each tab's own column name.
     """
-    return dict(envelope, memo=envelope['description'], account_id=profile['account_id'],
-                amount_minor_units=profile['amount_minor_units'], customer_id=profile['customer_id'],
-                billable=bool(profile['billable']), line_snapshot=profile['line_snapshot'])
+    merged = dict(envelope, family=family, memo=envelope['description'],
+                  account_id=profile['account_id'],
+                  amount_minor_units=profile['amount_minor_units'],
+                  customer_id=profile['customer_id'], billable=bool(profile['billable']),
+                  line_snapshot=profile['line_snapshot'])
+    if family == 'item':
+        merged.update(item_id=profile['item_id'],
+                      quantity_microunits=profile['quantity_microunits'],
+                      quantity=format_quantity_micro_units(profile['quantity_microunits']),
+                      unit_cost_minor_units=profile['unit_cost_minor_units'])
+    return merged
+
+
+def line_profiles(s, revision):
+    """Every stored line profile of a revision, by envelope id, with the family that owns it."""
+    found = {}
+    for family, table in (('expense', c.purchase_expense_lines), ('item', c.purchase_item_lines)):
+        for row in effects.rows(s, table, table.c.revision_id == revision['id']):
+            found[row['document_line_id']] = (family, row)
+    return found
 
 
 def saved_lines(s, revision):
+    """The entered lines of a revision in stored position order, each tagged with its family."""
     lines = effects.rows(s, c.document_lines, c.document_lines.c.revision_id == revision['id'],
                          order=c.document_lines.c.position)
-    profiles = {row['document_line_id']: row for row in effects.rows(
-        s, c.purchase_expense_lines, c.purchase_expense_lines.c.revision_id == revision['id'])}
-    return [merged_line(line, profiles[line['id']]) for line in lines]
+    profiles = line_profiles(s, revision)
+    return [merged_line(line, profiles[line['id']][1], profiles[line['id']][0]) for line in lines]
+
+
+def by_family(lines, family):
+    return [line for line in lines if line['family'] == family]
 
 
 # ---------------------------------------------------------------- header resolution
@@ -308,7 +353,105 @@ def _expense_line(s, line, header_class, currency, index):
         account=_account_facts(row), class_id=klass, customer=customer,
         billable=getattr(line, 'billable', False),
         origins={'class_id': Origin(kind='explicit' if line.class_mode == 'value' else 'default')})
-    return dict(line_id=None, amount_minor_units=amount.minor_units, memo=line.memo, profile=profile)
+    return dict(line_id=None, family='expense', amount_minor_units=amount.minor_units,
+                memo=line.memo, profile=profile)
+
+
+def _line_class(s, line, header_class, field):
+    """A class typed on the row is the row's; a row without one takes the bill's."""
+    if line.class_mode == 'none':
+        return None
+    if line.class_id is not None:
+        return _reference(_list_row(s, 'class', c.classes, line.class_id, field + '.class_id', 'class'))
+    return header_class
+
+
+def _purchasable_item(s, selector, field):
+    """The item a bill line may buy, and the one account buying it debits.
+
+    Three refusals, each naming what is actually wrong. An inventory part is refused by its own
+    name because receiving it is real work nobody has built -- it debits Inventory Asset and
+    moves quantity on hand -- and posting it to an expense account instead would be a wrong
+    debit that balances, which is the worst kind. An item with no purchase side is refused
+    because it has no purchase account to debit and inventing one would be a guess. A
+    percentage charge is refused for the reason the invoice refuses it: there is no base here
+    to take a percentage of.
+    """
+    row = _list_row(s, 'item', c.items, selector, field, 'item')
+    if row['type'] not in PURCHASABLE_ITEM_TYPES:
+        spelled = row['type'].replace('_', ' ')
+        problem = (f'"{row["full_name"]}" is an inventory part; receiving stock is not implemented, '
+                   'so a bill cannot post one. Enter what was bought as an expense line against '
+                   'the account it should land in.'
+                   if row['type'] in ('inventory_part', 'inventory_assembly') else
+                   f'"{row["full_name"]}" is a {spelled} item; a bill line takes a service, '
+                   'non-inventory part or other charge item')
+        raise BookflowError('E_VALIDATION', details={
+            'fields': [{'field': field, 'problem': problem}], 'record_type': 'item',
+            'record_id': row['id'], 'item_type': row['type'],
+            'reason': 'inventory_receipt_not_implemented'
+            if row['type'] in ('inventory_part', 'inventory_assembly') else 'item_type_not_purchasable',
+            'supported_item_types': list(PURCHASABLE_ITEM_TYPES)})
+    if not row['purchase_enabled'] or row['expense_account_id'] is None:
+        raise _invalid(field, f'"{row["full_name"]}" has no purchase side; give it a purchase '
+                              'description and an expense account, or enter the cost as an expense line')
+    if row['other_charge_percent_millionths'] is not None:
+        raise _invalid(field, f'"{row["full_name"]}" is a percentage charge; a bill line has no base '
+                              'to take a percentage of')
+    account = _account_row(s, row['expense_account_id'], field)
+    if account['type'] not in EXPENSE_ACCOUNTS or (
+            account['system_role'] is not None and account['system_role'] not in LINE_ROLES):
+        raise _invalid(field, f'"{row["full_name"]}" posts to "{account["full_name"]}", which a bill '
+                              'line may not debit; repoint the item at an expense or cost account')
+    return row, account
+
+
+def _item_line(s, line, header_class, currency, index):
+    """One Items-tab row resolved into the amount it debits and the facts it captures."""
+    field = f'items.{index}'
+    row, account = _purchasable_item(s, line.item, field + '.item')
+    if account['currency'] != currency:
+        raise _invalid(field + '.item', 'account must use the home currency')
+    if row['cost_minor_units'] is not None and row['cost_currency'] != currency:
+        raise _invalid(field + '.item', 'item amounts must use home currency')
+    quantity = parse_quantity_micro_units(line.quantity, field=field + '.quantity')
+    if line.amount is not None:
+        basis = 'amount'
+        unit_cost = None
+        amount = parse_domestic_amount(line.amount, currency, field + '.amount').minor_units
+    else:
+        basis = 'unit_cost'
+        if line.unit_cost is not None:
+            unit_cost = parse_domestic_amount(line.unit_cost, currency, field + '.unit_cost').minor_units
+        elif row['cost_minor_units'] is not None:
+            unit_cost = int(row['cost_minor_units'])
+        else:
+            raise _invalid(field + '.unit_cost',
+                           f'"{row["full_name"]}" has no standard cost; give a unit cost or an amount')
+        if unit_cost < 0:
+            raise _invalid(field + '.unit_cost', 'must not be negative')
+        amount = extension(quantity, unit_cost)
+    if amount <= 0:
+        raise _invalid(field + '.amount', 'an item line must be worth more than nothing')
+    customer = (_reference(_list_row(s, 'customer', c.customers, line.customer, field + '.customer', 'customer'))
+                if line.customer else None)
+    profile = BillItemProfile(
+        item=_reference(row), item_type=row['type'], account=_account_facts(account),
+        quantity_microunits=quantity, unit_cost_minor_units=unit_cost, amount_basis=basis,
+        standard_cost_minor_units=(None if row['cost_minor_units'] is None
+                                   else int(row['cost_minor_units'])),
+        class_id=_line_class(s, line, header_class, field), customer=customer,
+        billable=line.billable,
+        origins={'class_id': Origin(kind='explicit' if line.class_mode == 'value' else 'default'),
+                 'description': Origin(kind='explicit' if line.description is not None
+                                       else 'default', source_id=row['id']),
+                 'unit_cost': Origin(kind='explicit' if line.unit_cost is not None or basis == 'amount'
+                                     else 'default', source_id=None if line.unit_cost is not None
+                                     or basis == 'amount' else row['id'])})
+    # The purchase description is the item's own words unless the row overrode them; it is
+    # stored on the envelope, exactly where an expense row's memo is stored.
+    memo = line.description if line.description is not None else row['purchase_description']
+    return dict(line_id=None, family='item', amount_minor_units=amount, memo=memo, profile=profile)
 
 
 # ---------------------------------------------------------------- supplier reference
@@ -415,8 +558,10 @@ def summary(header, revision, profile, settlement):
                 supplier_reference=profile['supplier_reference'], memo=revision['memo'],
                 currency=currency,
                 expense_total_minor_units=profile['expense_total_minor_units'],
+                item_total_minor_units=profile['item_total_minor_units'],
                 total_minor_units=revision['total_minor_units'],
                 expense_total=Money(profile['expense_total_minor_units'], currency).to_dict(),
+                item_total=Money(profile['item_total_minor_units'], currency).to_dict(),
                 total=Money(revision['total_minor_units'], currency).to_dict(),
                 settlement_current=settlement)
 
@@ -446,8 +591,11 @@ def revision_output(s, header, revision, pending=None, *, summary_only=False):
             sa.select(sa.func.count()).select_from(c.document_lines).where(
                 c.document_lines.c.revision_id == revision['id'])).scalar_one()
     elif envelopes:
-        details = {row['document_line_id']: row for row in pending['purchase_expense_lines']}
-        lines = [merged_line(line, details[line['id']]) for line in envelopes]
+        details = {row['document_line_id']: (family, row) for family, table in
+                   (('expense', 'purchase_expense_lines'), ('item', 'purchase_item_lines'))
+                   for row in pending[table]}
+        lines = [merged_line(line, details[line['id']][1], details[line['id']][0])
+                 for line in envelopes]
     else:
         lines = saved_lines(s, revision)
     saved_batches = effects.rows(s, c.posting_batches, c.posting_batches.c.revision_id == revision['id'],
@@ -460,7 +608,9 @@ def revision_output(s, header, revision, pending=None, *, summary_only=False):
     values = {k: v for k, v in revision.items() if not k.endswith('_snapshot')}
     values.update(due_date=profile['due_date'],
                   expense_total_minor_units=profile['expense_total_minor_units'],
+                  item_total_minor_units=profile['item_total_minor_units'],
                   expense_total=Money(profile['expense_total_minor_units'], currency).to_dict(),
+                  item_total=Money(profile['item_total_minor_units'], currency).to_dict(),
                   total=Money(revision['total_minor_units'], currency).to_dict(),
                   line_count=line_count if summary_only else len(lines), batches=summaries)
     if summary_only:
@@ -472,7 +622,13 @@ def revision_output(s, header, revision, pending=None, *, summary_only=False):
         custom_fields_snapshot=snapshot, custom_fields=custom.project(snapshot),
         obligation=_obligation_output(s, header, revision, pending),
         expenses=[dict(line, amount=Money(line['amount_minor_units'], currency).to_dict(),
-                       line_snapshot=json.loads(line['line_snapshot'])) for line in lines])
+                       line_snapshot=json.loads(line['line_snapshot']))
+                  for line in by_family(lines, 'expense')],
+        items=[dict(line, amount=Money(line['amount_minor_units'], currency).to_dict(),
+                    unit_cost=(None if line['unit_cost_minor_units'] is None else
+                               Money(line['unit_cost_minor_units'], currency).to_dict()),
+                    line_snapshot=json.loads(line['line_snapshot']))
+               for line in by_family(lines, 'item')])
 
 
 def current_settlement(s, header, obligation=None, revision=None):
@@ -586,14 +742,14 @@ def _custom_semantic(snapshot):
 
 
 def _line_semantic(line):
-    return {'line_id': line['line_id'], 'memo': line['memo'],
+    return {'line_id': line['line_id'], 'family': line['family'], 'memo': line['memo'],
             'amount_minor_units': line['amount_minor_units'], 'profile': line['profile'].model_dump()}
 
 
 def _saved_semantic(s, revision):
     profile = profile_row(s, revision)
-    lines = [_line_semantic(dict(line, profile=BillExpenseProfile.model_validate_json(line['line_snapshot'])))
-             for line in saved_lines(s, revision)]
+    lines = [_line_semantic(dict(line, profile=LINE_FACTS[line['family']].model_validate_json(
+        line['line_snapshot']))) for line in saved_lines(s, revision)]
     return dict(date=revision['date'], number=revision['number'], memo=revision['memo'],
                 issuer=json.loads(revision['issuer_snapshot']),
                 profile=BillProfile.model_validate_json(profile['profile_snapshot']).model_dump(),
@@ -702,31 +858,47 @@ def commercial(s, inp, old_header, old_revision, *, document_id):
         issuer['display_name'] = s.company_row['display_name']
 
     old_lines = saved_lines(s, old_revision) if old_revision else []
-    if old_revision and inp.expenses is None:
-        # A header-only correction keeps every line exactly as it was captured, down to the
-        # account name the bill was entered under.
-        lines = [dict(line_id=line['line_id'], amount_minor_units=line['amount_minor_units'],
-                      memo=line['memo'],
-                      profile=BillExpenseProfile.model_validate_json(line['line_snapshot']))
-                 for line in old_lines]
-    else:
-        prior = {line['line_id'] for line in old_lines}
-        seen, lines = set(), []
-        for index, line in enumerate(inp.expenses):
+    # One grid at a time. Supplying a collection replaces that tab outright; leaving it out
+    # keeps the tab exactly as it was captured, down to the account name the bill was entered
+    # under, so correcting the Expenses grid cannot silently re-resolve an item line.
+    seen, grids = set(), {}
+    for family, supplied, resolver in (('expense', inp.expenses, _expense_line),
+                                       ('item', getattr(inp, 'items', None), _item_line)):
+        kept = by_family(old_lines, family)
+        if old_revision and supplied is None:
+            grids[family] = [dict(line_id=line['line_id'], family=family, memo=line['memo'],
+                                  amount_minor_units=line['amount_minor_units'],
+                                  profile=LINE_FACTS[family].model_validate_json(line['line_snapshot']))
+                             for line in kept]
+            seen.update(line['line_id'] for line in kept)
+            continue
+        collection = f'{family}s' if family == 'item' else 'expenses'
+        prior, resolved_lines = {line['line_id'] for line in kept}, []
+        for index, line in enumerate(supplied or []):
             key = line.line_id.upper() if line.line_id and is_ulid(line.line_id) else line.line_id
+            # A retired identity cannot return, and an identity cannot cross tabs: the line it
+            # names is on the other grid and moving it would rewrite what that line was.
             if key is not None and (key not in prior or key in seen):
-                raise _invalid('expenses.line_id', 'use a unique current line identity from this bill; '
-                                                   'retired identities cannot return')
+                raise _invalid(collection + '.line_id',
+                               'use a unique current line identity from this grid; '
+                               'retired identities cannot return and a line cannot change grid')
             if key:
                 seen.add(key)
-            resolved = _expense_line(s, line, header_facts['class_id'], currency, index)
+            resolved = resolver(s, line, header_facts['class_id'], currency, index)
             resolved['line_id'] = key
-            lines.append(resolved)
+            resolved_lines.append(resolved)
+        grids[family] = resolved_lines
+    # Expenses first, then items: the order of the two tabs on the document itself.
+    lines = grids['expense'] + grids['item']
 
-    expense_total = checked_sum((line['amount_minor_units'] for line in lines), 'expenses.total')
-    if expense_total <= 0:
-        raise _invalid('expenses', 'a posted bill must have a positive total')
-    profile = BillProfile(**header_facts, expense_total_minor_units=expense_total)
+    expense_total = checked_sum((line['amount_minor_units'] for line in grids['expense']), 'expenses.total')
+    item_total = checked_sum((line['amount_minor_units'] for line in grids['item']), 'items.total')
+    total = checked_sum((expense_total, item_total), 'total')
+    if total <= 0:
+        raise _invalid('items' if grids['item'] and not grids['expense'] else 'expenses',
+                       'a posted bill must have a positive total')
+    profile = BillProfile(**header_facts, expense_total_minor_units=expense_total,
+                          item_total_minor_units=item_total)
 
     custom.validate_kinds(s.company, inp.custom_fields, inp.custom_field_kinds, record_type=DOCUMENT_TYPE)
     custom_plan = custom.prepare(
@@ -738,7 +910,7 @@ def commercial(s, inp, old_header, old_revision, *, document_id):
                     custom_fields=_custom_semantic(custom_plan.snapshot))
     return dict(profile=profile, date=date, number=number, sequence=sequence, memo=memo, issuer=issuer,
                 lines=lines, custom_plan=custom_plan, semantic=semantic, currency=currency,
-                expense_total=expense_total, total=expense_total)
+                expense_total=expense_total, item_total=item_total, total=total)
 
 
 def _posting_accounts_active(s, resolved):
@@ -761,10 +933,14 @@ def _posting_accounts_active(s, resolved):
         account = current[line['profile'].account.id]
         if account['type'] not in EXPENSE_ACCOUNTS or (
                 account['system_role'] is not None and account['system_role'] not in LINE_ROLES):
+            item = line.get('family') == 'item'
             raise BookflowError('E_VALIDATION', message=(
+                'A saved posting account is no longer eligible. Repoint the item at an eligible '
+                'expense account before posting this correction.' if item else
                 'A saved posting account is no longer eligible. Select an eligible expense '
                 'account before posting this correction.'),
-                details={'field': 'expenses', 'reason': 'captured_posting_account_type'})
+                details={'field': 'items' if item else 'expenses',
+                         'reason': 'captured_posting_account_type'})
 
 
 def _has_applications(s, header):
@@ -841,6 +1017,7 @@ def prepare(s, ctx, inp, operation):
             supplier_reference=profile.supplier_reference,
             supplier_reference_key=profile.supplier_reference_key,
             expense_total_minor_units=resolved['expense_total'],
+            item_total_minor_units=resolved['item_total'],
             profile_snapshot=json_text(profile.model_dump())))
         for position, line in enumerate(resolved['lines'], 1):
             identity = line['line_id']
@@ -857,12 +1034,21 @@ def prepare(s, ctx, inp, operation):
                             class_name=facts.class_id.label if facts.class_id else None,
                             description=line['memo'], **dict.fromkeys(journals.FACTS))
             pending['document_lines'].append(envelope)
-            pending['purchase_expense_lines'].append(dict(
-                document_line_id=envelope['id'], transaction_id=header['id'], revision_id=revision['id'],
-                **row_provenance, account_id=facts.account.id,
-                amount_minor_units=line['amount_minor_units'],
-                customer_id=facts.customer.id if facts.customer else None, billable=facts.billable,
-                line_snapshot=json_text(facts.model_dump())))
+            # One envelope, one profile row, in whichever of the two tables the line's family
+            # owns. Everything above this line -- identity, position, class, party, memo -- is
+            # written the same way whichever tab the row was typed on.
+            shared = dict(document_line_id=envelope['id'], transaction_id=header['id'],
+                          revision_id=revision['id'], **row_provenance,
+                          account_id=facts.account.id,
+                          amount_minor_units=line['amount_minor_units'],
+                          customer_id=facts.customer.id if facts.customer else None,
+                          billable=facts.billable, line_snapshot=json_text(facts.model_dump()))
+            if line['family'] == 'item':
+                pending['purchase_item_lines'].append(dict(
+                    shared, item_id=facts.item.id, quantity_microunits=facts.quantity_microunits,
+                    unit_cost_minor_units=facts.unit_cost_minor_units))
+            else:
+                pending['purchase_expense_lines'].append(shared)
     else:
         journals.open_dates(s, [old_revision['date']])
         revision = old_revision
@@ -911,12 +1097,16 @@ def prepare(s, ctx, inp, operation):
 
 
 def _business_postings(s, header, revision, batch, resolved, pending, created, event):
-    """Dr each expense account its own line; Cr Accounts Payable the total, once.
+    """Dr each entered line's own account; Cr Accounts Payable the total, once.
 
     The payable is one credit because that is what the vendor is owed -- one figure on one
     document -- and each entered line's share of it is carried as an attribution row on that
     credit rather than as a separate leg. Those attribution rows are what the obligation
     components name, which is how a payment can later land on particular lines.
+
+    Nothing here asks which tab a line came from. An expense line's account was typed and an
+    item line's was read off the item, but by the time both are stored each is one captured
+    account and one positive amount, so both take exactly one debit leg and one component.
     """
     profile = resolved['profile']
     currency = revision['currency']
@@ -927,7 +1117,9 @@ def _business_postings(s, header, revision, batch, resolved, pending, created, e
                           currency=currency, audit_event_id=event)
         pending['ap_obligation_keys'].append(obligation)
     envelopes = [row for row in pending['document_lines'] if row['revision_id'] == revision['id']]
-    profiles = {row['document_line_id']: row for row in pending['purchase_expense_lines']}
+    profiles = {row['document_line_id']: (family, row) for family, table in
+                (('expense', 'purchase_expense_lines'), ('item', 'purchase_item_lines'))
+                for row in pending[table]}
     line_no = 0
 
     def leg(account, amount, debit, class_id, class_name, description):
@@ -953,16 +1145,16 @@ def _business_postings(s, header, revision, batch, resolved, pending, created, e
         return source
 
     for envelope in envelopes:
-        line = profiles[envelope['id']]
-        facts = BillExpenseProfile.model_validate_json(line['line_snapshot'])
-        expense = leg(facts.account, line['amount_minor_units'], True,
-                      envelope['class_id'], envelope['class_name'], envelope['description'])
-        attribute(expense, envelope, line['amount_minor_units'])
+        family, line = profiles[envelope['id']]
+        facts = LINE_FACTS[family].model_validate_json(line['line_snapshot'])
+        cost = leg(facts.account, line['amount_minor_units'], True,
+                   envelope['class_id'], envelope['class_name'], envelope['description'])
+        attribute(cost, envelope, line['amount_minor_units'])
     payable = leg(profile.ap_account, resolved['total'], False,
                   profile.class_id.id if profile.class_id else None,
                   profile.class_id.label if profile.class_id else None, resolved['memo'])
     for envelope in envelopes:
-        line = profiles[envelope['id']]
+        line = profiles[envelope['id']][1]
         source = attribute(payable, envelope, line['amount_minor_units'])
         pending['ap_obligation_components'].append(dict(
             **created(), transaction_id=header['id'], revision_id=revision['id'],

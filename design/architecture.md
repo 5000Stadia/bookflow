@@ -622,13 +622,42 @@ settlement exists, and it now forwards to `company/ap_settlement.py`. `bill show
 `settlement_current` with gross, applied, open and a status, the same shape `invoice settlement`
 uses.
 
-**Where the Items tab attaches.** The line collection is `expenses`, not `lines`, and the
-`document_lines` envelope kind is `purchase`, not `expense`. An item line is the same envelope
-with `purchase_item_lines` beside `purchase_expense_lines`; the obligation component points at the
-envelope rather than at the expense profile, so it needs no schema change; the posting sums
-whatever line rows exist; and the header, the numbering, the terms, the payable and the reference
-detection know nothing about which family a line came from. Nothing is reserved for it: no empty
-tab, no unused column, no inventory behaviour.
+**The Items tab.** A bill carries two grids, `expenses` and `items`, and may be entered on
+either or on both. They are two profile tables over one envelope family: every entered line is a
+`purchase` envelope in `document_lines`, owned by exactly one of `purchase_expense_lines` and
+`purchase_item_lines`. An expense line names its own account; an item line takes the account off
+the item it names, captured at the moment of writing, so repointing the item later cannot move
+what a stored revision posted. Both then debit that account for their own amount, and Accounts
+Payable is credited their sum once. The numbering, the terms, the payable, the reference
+detection, the obligation component and the shape of the posting know nothing about which family
+a line came from, and `ap_obligation_components` needed no change at all -- it already pointed at
+the envelope rather than at the expense profile.
+
+`purchase_profiles` did need one: it gains `item_total_minor_units` beside
+`expense_total_minor_units`, and each of the two is widened from positive to nonnegative, because
+a bill entered wholly on one tab owes a real zero for the other. The figure that must stay
+positive is the revision's own total, which is their sum. Migration `co0033` rebuilds the header
+for those two CHECK constraints -- SQLite changes a CHECK no other way -- and gives every existing
+bill an item total of zero, which is what it has.
+
+An item line's amount is derived or entered: `unit_cost` gives quantity times cost, rounded half
+to even by `sales_calculations.extension`, the same arithmetic an invoice line uses; `amount`
+gives the amount outright and records no unit cost; neither gives the item's own standard cost.
+`BillItemProfile.amount_basis` records which.
+
+**Only three item families, and why.** A bill admits `service`, `non_inventory_part` and
+`other_charge` -- exactly the families `sales_defaults` admits on an invoice -- because each posts
+to one account named on the item itself. An `inventory_part` is refused by name with
+`E_VALIDATION` and `reason` `inventory_receipt_not_implemented`: receiving stock debits Inventory
+Asset and moves quantity on hand, nothing here owns either, and a wrong debit that balances is
+worse than a refusal. An item with no purchase side is refused for the same reason in miniature:
+it has no purchase account, and inventing one would be a guess. Inventory valuation, stock
+movement, purchase orders and item receipts remain unbuilt.
+
+**Correcting one grid at a time.** Supplying `expenses` or `items` replaces that grid outright;
+the grid left out keeps its lines exactly as captured; an empty list clears one; leaving both out
+corrects the header alone. A line identity belongs to the grid it was written on and cannot cross,
+because moving it would rewrite what that line was.
 
 Migration `co0025` widens the `transactions` type CHECK and the `document_lines` kind CHECK and
 reinstates `document_lines_type_insert` with the bill's mapping, by the same table-rebuild that
@@ -644,10 +673,18 @@ pair already use: `document_form.BILL_PRIMARY` is the header the payables window
 (vendor, date, our number, the vendor's `Ref. No.`), `BILL_TERMS` is the band that carries the
 terms, the due date they derived, the A/P account and the bill's class, and `BILL_GRID` is the
 check's Expenses grid with the two columns a payable adds -- the customer or job a cost belongs
-to, and whether it is billable to them. The footer copies the server's own `expense_total` and
-`total` back, and says which date the bill fell due and which rule produced it; there is no
-figure on the face of a bill to reconcile the lines against, which is the one way the footer
-differs from a check's.
+to, and whether it is billable to them. The footer copies the server's own `expense_total`,
+`item_total` when there is one, and `total` back, and says which date the bill fell due and which
+rule produced it; there is no figure on the face of a bill to reconcile the lines against, which
+is the one way the footer differs from a check's.
+
+The window has **no Items tab yet**. `items` is a declared collection on both write commands, so
+the generated window carries it as an unnamed collection control rather than dropping it -- the
+form stays input-identical to the command -- but there is no second grid, no item picker column,
+no quantity-times-cost preview and no phone rules scoped to `[data-collection-path=items]`. Adding
+it means a `BILL_ITEM_GRID` beside `BILL_GRID`, a tab control that switches which grid the band
+shows, `adapters/workbench/bills.editable_values` returning an `items` list beside `expenses`, and
+`bill_contract.FORM` already declares the three pickers an item row needs.
 
 `adapters/workbench/bills.py` is the payables mirror of `sales.py` and does its two jobs:
 `editable_values` is the correction form's comparison baseline, so a header-only correction
@@ -655,8 +692,11 @@ reaches the writer without an `expenses` grid and the saved lines stay exactly a
 reads `class_mode` back out of the captured class and its origin, so a line deliberately left
 unclassified under a classed bill is not silently reclassified by a correction. `detail_context`
 feeds `templates/bill_detail.html`, which shows the captured vendor, the terms and the basis of
-the due date, the expense lines with their customer, billable flag and class, what is still open
-on the bill, the duplicate references the command reported, and the posting batches.
+the due date, the expense lines with their customer, billable flag and class, the item lines with
+their item, quantity, unit cost and amount when there are any, what is still open on the bill, the
+duplicate references the command reported, and the posting batches. `editable_values` returns only
+`expenses`, which is why a browser correction leaves the Items grid exactly as captured rather
+than dropping it.
 
 Below 700px the grid becomes one block per line and the saved bill's line table becomes one card
 per line, both asserted at 390px in `tests/test_bill_form_browser.py` as the element's own

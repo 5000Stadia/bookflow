@@ -5,10 +5,12 @@ instead of a receivable, and a total that stands open until it is paid. The verb
 discipline and the shape of what comes back are the invoice's, deliberately, so that a person
 or an agent who has entered one has already learned the other.
 
-**Where the Items tab attaches.** The line collection is ``expenses``, not ``lines``, and
-nothing in the header, the totals or the posting is named after it: ``item_total`` and an
-``items`` collection arrive beside ``expense_total`` and ``expenses`` without renaming or
-re-cutting anything that is here. That is the same seam the check and the card charge left.
+**The two tabs.** ``expenses`` is the Expenses grid and ``items`` is the Items grid, and a
+bill carries either or both. Each is optional on entry and each is replaced as a whole on a
+correction: supplying one replaces that grid and leaves the other exactly as it was captured,
+supplying neither corrects the header alone, and supplying an empty list clears that tab. The
+header reports a total per grid and ``total`` is their sum, so nothing in the numbering, the
+terms, the payable or the posting is named after either family.
 """
 from __future__ import annotations
 
@@ -18,13 +20,14 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, model_serializer, model_validator
 
 from bookflow.commands.common import CommonOut
-from bookflow.company.bill_facts import BillExpenseProfile, BillProfile
+from bookflow.company.bill_facts import BillExpenseProfile, BillItemProfile, BillProfile
 from bookflow.company.custom_fields import CustomFieldKindExpectations, CustomFieldValuePatch
 from bookflow.company.journal_custom_fields import SnapshotField
 from bookflow.company.journal_models import (
     MoneyInput, _Date, _Input, _Number, _Selector, _Version,
 )
 from bookflow.company.journal_outputs import CreatedOutput, JournalBatchOutput, JournalMoneyOutput
+from bookflow.company.sales_models import Quantity
 from bookflow.core.models import WriteOutput
 
 MoneyOutput = JournalMoneyOutput
@@ -82,7 +85,51 @@ class BillExpenseInput(_Input):
         return self
 
 
-Expenses = Annotated[list[BillExpenseInput], Field(min_length=1, max_length=200)]
+class BillItemInput(_Input):
+    """One row of the Items grid: what was bought, how much of it, and at what cost.
+
+    The item decides the account this line debits -- its own purchase account, captured at the
+    moment the bill is written -- so nothing here names an account. Only the three item
+    families an invoice already sells are admitted; an inventory part is refused, because
+    receiving stock debits Inventory Asset and moves quantity on hand, and no owner of that
+    exists yet.
+
+    ``quantity`` defaults to one. The amount is either derived or entered, never both: give
+    ``unit_cost`` and the amount is quantity times it, give ``amount`` and that is the amount
+    with no unit cost recorded, and give neither and the item's own standard cost is used.
+
+    ``description`` defaults to the item's purchase description. ``class_id``, ``class_mode``,
+    ``customer`` and ``billable`` mean exactly what they mean on the Expenses grid.
+    """
+
+    line_id: _Selector | None = None
+    item: _Selector
+    description: Text | None = None
+    quantity: Quantity = '1'
+    unit_cost: str | MoneyInput | None = None
+    amount: str | MoneyInput | None = None
+    customer: _Selector | None = None
+    billable: bool = False
+    class_id: _Selector | None = None
+    class_mode: Literal['inherit', 'none', 'value'] = 'inherit'
+
+    @model_validator(mode='after')
+    def one_basis(self) -> Self:
+        if self.unit_cost is not None and self.amount is not None:
+            raise ValueError('give unit_cost or amount, not both; the other is derived')
+        if self.class_mode == 'value' and self.class_id is None:
+            raise ValueError('class_id is required when class_mode is value')
+        if self.class_id is not None and self.class_mode != 'value':
+            if self.class_mode == 'none':
+                raise ValueError('class_mode none leaves the line unclassified; remove class_id')
+            self.class_mode = 'value'
+        if self.billable and self.customer is None:
+            raise ValueError('billable requires a customer or job to bill the cost to')
+        return self
+
+
+Expenses = Annotated[list[BillExpenseInput], Field(min_length=0, max_length=200)]
+Items = Annotated[list[BillItemInput], Field(min_length=0, max_length=200)]
 
 
 class _BillFields(_Input):
@@ -101,12 +148,15 @@ class _BillFields(_Input):
 class BillPostInput(_BillFields):
     date: _Date
     vendor: _Selector
-    expenses: Expenses
+    expenses: Expenses | None = None
+    items: Items | None = None
 
     @model_validator(mode='after')
     def new_lines(self) -> Self:
-        if any(line.line_id is not None for line in self.expenses):
-            raise ValueError('new expense lines cannot supply an existing line identity')
+        if not (self.expenses or self.items):
+            raise ValueError('a bill needs at least one expense line or item line')
+        if any(line.line_id is not None for line in (self.expenses or []) + (self.items or [])):
+            raise ValueError('new lines cannot supply an existing line identity')
         return self
 
 
@@ -116,10 +166,11 @@ class BillUpdateInput(_BillFields):
     date: _Date | None = None
     vendor: _Selector | None = None
     expenses: Expenses | None = None
+    items: Items | None = None
 
     @model_validator(mode='after')
     def required_values(self) -> Self:
-        for field in ('date', 'vendor', 'expenses', 'number', 'ap_account'):
+        for field in ('date', 'vendor', 'expenses', 'items', 'number', 'ap_account'):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f'{field} cannot be null')
         return self
@@ -194,6 +245,38 @@ class BillExpenseOutput(CreatedOutput):
     name_id: str | None
     party_name: str | None
     line_snapshot: BillExpenseProfile
+
+
+class BillItemOutput(CreatedOutput):
+    """One stored item line: the envelope's identity and the item profile's own figures.
+
+    ``account_id`` is the account this line debited, captured from the item rather than typed,
+    and ``unit_cost`` is null exactly when the amount was entered outright.
+    """
+
+    transaction_id: str
+    revision_id: str
+    line_id: str
+    position: int
+    kind: Literal['purchase']
+    item_id: str
+    account_id: str
+    quantity: str
+    quantity_microunits: int
+    unit_cost: MoneyOutput | None
+    unit_cost_minor_units: int | None
+    amount: MoneyOutput
+    amount_minor_units: int
+    currency: str
+    description: str | None
+    customer_id: str | None
+    billable: bool
+    class_id: str | None
+    class_name: str | None
+    name_type: str | None
+    name_id: str | None
+    party_name: str | None
+    line_snapshot: BillItemProfile
 
 
 class BillObligationOutput(CreatedOutput):
@@ -277,8 +360,10 @@ class BillRevisionSummaryOutput(CreatedOutput):
     memo: str | None
     due_date: str
     expense_total: MoneyOutput
+    item_total: MoneyOutput
     total: MoneyOutput
     expense_total_minor_units: int
+    item_total_minor_units: int
     total_minor_units: int
     currency: str
     audit_event_id: str
@@ -292,6 +377,7 @@ class BillRevisionOutput(BillRevisionSummaryOutput):
     custom_fields: list[SnapshotField]
     profile: BillProfile
     expenses: list[BillExpenseOutput]
+    items: list[BillItemOutput] = Field(default_factory=list)
     obligation: BillObligationOutput | None = None
 
 
@@ -312,8 +398,10 @@ class BillSummaryOutput(CommonOut):
     supplier_reference: str | None
     memo: str | None
     expense_total: MoneyOutput
+    item_total: MoneyOutput
     total: MoneyOutput
     expense_total_minor_units: int
+    item_total_minor_units: int
     total_minor_units: int
     currency: str
     settlement_current: BillSettlementOutput

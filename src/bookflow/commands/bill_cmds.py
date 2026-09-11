@@ -11,13 +11,20 @@ from bookflow.company.bill_models import (
 )
 
 _LINES = (
-    ' `expenses` is one to 200 rows of account, amount, memo, optional customer or job,'
-    ' optional `billable` and optional class, saying what was bought; each row debits its own'
-    " account and the bill's total is their sum. A row's own `class_id` is that row's class and"
-    " a row without one takes the bill's `class_id`; set `class_mode` to `none` to leave one row"
-    ' unclassified even when the bill carries a class. `billable` marks a cost to pass on to the'
-    ' named customer later and requires one; naming a job without it simply attributes the cost.'
-    ' Item lines are not entered here yet.'
+    ' A bill has two grids and needs at least one row across them. `expenses` is up to 200 rows'
+    ' of account, amount, memo, optional customer or job, optional `billable` and optional'
+    ' class, saying what was bought against an account you name. `items` is up to 200 rows of'
+    ' item, optional `quantity` (default 1), optional `unit_cost` or `amount`, optional'
+    ' `description`, customer or job, `billable` and class, saying what was bought as a thing'
+    ' the company buys; an item row names no account because it debits the item’s own expense'
+    ' account. Give `unit_cost` and the amount is quantity times it; give `amount` and that is'
+    ' the amount; give neither and the item’s standard cost is used. Every row debits its own'
+    " account and the bill's total is the sum of both grids. A row's own `class_id` is that"
+    " row's class and a row without one takes the bill's `class_id`; set `class_mode` to `none`"
+    ' to leave one row unclassified even when the bill carries a class. `billable` marks a cost'
+    ' to pass on to the named customer later and requires one; naming a job without it simply'
+    ' attributes the cost. Only service, non-inventory part and other-charge items can be'
+    ' bought here: receiving an inventory part is not implemented and is refused by name.'
 )
 _HEADER = (
     ' `terms` defaults to the vendor’s own terms and fixes `due_date`; give `due_date` to override'
@@ -39,19 +46,21 @@ WRITE_ERRORS = {
 }
 
 DESCRIPTIONS = {
-    'post': ('Enter a vendor bill. Each expense line debits its own account and Accounts Payable is'
+    'post': ('Enter a vendor bill. Each entered line debits its own account and Accounts Payable is'
              ' credited the total, so the bill stands open at that total until it is paid.'
              + _HEADER + _LINES),
     'update': ('Correct a bill. The old accounting is reversed at its original date and replaced in'
-               ' full at the new one; every earlier revision stays readable. Supply `expenses` to'
-               ' replace the whole grid, carrying each surviving row’s `line_id`; leave it out to'
-               ' correct the header alone and keep the lines exactly as they were captured.'
+               ' full at the new one; every earlier revision stays readable. Supply `expenses` or'
+               ' `items` to replace that whole grid, carrying each surviving row’s `line_id`; the'
+               ' grid you leave out keeps its lines exactly as they were captured, and an empty'
+               ' list clears that grid. Leave both out to correct the header alone.'
                + _HEADER),
     'void': ('Void a bill with a required reason. Its accounting is reversed at its own date, its'
              ' number stays occupied and its history stays readable.'),
     'show': ('Show a bill: its current or a selected immutable revision, captured vendor, payable,'
-             ' terms and custom facts, its expense lines, its posting batches, what is still open'
-             ' on it, and any other bill from this vendor carrying the same supplier reference.'),
+             ' terms and custom facts, its expense lines and item lines, its posting batches, what'
+             ' is still open on it, and any other bill from this vendor carrying the same supplier'
+             ' reference.'),
     'query': ('Page bills in accounting-date and stable-id order, oldest first or newest first, with'
               ' exact vendor, bill-date, due-date, status, number and supplier-reference filters;'
               ' restart on company audit changes.'),

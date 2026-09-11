@@ -2,13 +2,18 @@
 
 Two families live here and they are deliberately separate.
 
-**What was bought.** ``purchase_profiles`` is the one-to-one header of a bill revision;
-``purchase_expense_lines`` is the Expenses grid, one row per envelope in ``document_lines``.
-The envelope kind is ``purchase``, not ``expense``, because the second line family this
-document is going to grow -- items received on a purchase -- is the same envelope with a
-different profile table beside this one. Nothing here is keyed on the word "expense" except
-this table's own name, so ``purchase_item_lines`` attaches as a sibling without touching the
-header, the envelope, the obligation or the posting.
+**What was bought.** ``purchase_profiles`` is the one-to-one header of a bill revision, and
+the two grids below it are the document's two tabs. ``purchase_expense_lines`` is the Expenses
+grid and ``purchase_item_lines`` is the Items grid; each is one row per envelope in
+``document_lines``, and the envelope kind is ``purchase`` for both, because what makes a line
+one or the other is which profile table owns it, never the envelope. The header carries a
+total per family and the revision's own total is their sum, so a bill entered wholly on one
+tab stores a zero for the other rather than a special case.
+
+An item line debits the account captured from the item's own purchase profile, which is what
+makes it the same accounting as an expense line typed by hand -- and the reason an inventory
+item is refused here rather than admitted: receiving stock debits Inventory Asset and needs an
+owner that values it, which does not exist yet.
 
 **What is owed.** ``ap_obligation_keys`` is the payable itself: one stable row per bill,
 carrying the vendor, the AP account and the currency an application has to match exactly. It
@@ -43,6 +48,10 @@ def define_tables(metadata, column, table):
         return sa.CheckConstraint(f"typeof({name}) = 'integer' AND {name} > 0",
                                   name=f'ck_purchase_{name}_positive')
 
+    def nonnegative(name):
+        return sa.CheckConstraint(f"typeof({name}) = 'integer' AND {name} >= 0",
+                                  name=f'ck_purchase_{name}_nonnegative')
+
     def object_check(name):
         return sa.CheckConstraint(f"json_valid({name}) AND json_type({name}) = 'object'",
                                   name=f'ck_purchase_{name}_object')
@@ -58,7 +67,8 @@ def define_tables(metadata, column, table):
         C('due_date', sa.String(10), 'Captured due date, derived from terms or entered outright.', nullable=False),
         C('supplier_reference', sa.String(128), "The supplier's own document number, as entered; null when blank.", nullable=True),
         C('supplier_reference_key', sa.String(256), 'NFC-normalized, trimmed and case-folded reference used to detect a repeat; null when blank.', nullable=True),
-        integer('expense_total_minor_units', 'Home-currency sum of the expense lines.'),
+        integer('expense_total_minor_units', 'Home-currency sum of the expense lines; zero on a bill entered on the Items tab alone.'),
+        integer('item_total_minor_units', 'Home-currency sum of the item lines; zero on a bill entered on the Expenses tab alone.'),
         C('profile_snapshot', sa.Text, 'Versioned typed JSON object of resolved header facts and input origins.', nullable=False),
         sa.UniqueConstraint('transaction_id', 'revision_id', name='uq_purchase_profile_owner'),
         sa.ForeignKeyConstraint(['transaction_id', 'revision_id'],
@@ -68,7 +78,10 @@ def define_tables(metadata, column, table):
         sa.CheckConstraint("type = 'bill'", name='ck_purchase_profile_type'),
         sa.CheckConstraint('(supplier_reference IS NULL) = (supplier_reference_key IS NULL)',
                            name='ck_purchase_profile_reference_pair'),
-        positive('expense_total_minor_units'), object_check('profile_snapshot'),
+        # Each family's total may be zero -- a bill entered wholly on one tab has nothing on the
+        # other -- and it is their sum that the revision's own positive total constrains.
+        nonnegative('expense_total_minor_units'), nonnegative('item_total_minor_units'),
+        object_check('profile_snapshot'),
         # Deliberately not unique: a repeated supplier reference is reported by the read, and a
         # uniqueness constraint here would make the warn-and-acknowledge mode unimplementable.
         sa.Index('ix_purchase_profiles_reference', 'vendor_id', 'supplier_reference_key'),
@@ -93,6 +106,36 @@ def define_tables(metadata, column, table):
         sa.CheckConstraint('billable IN (0, 1) AND (billable = 0 OR customer_id IS NOT NULL)',
                            name='ck_purchase_expense_billable_job'),
         description='Immutable one-to-one expense lines of a bill, with captured account, job and billable facts.')
+
+    purchase_item_lines = T('purchase_item_lines',
+        identifier('document_line_id', 'Revision-local purchase envelope owning this one-to-one item profile.', primary_key=True),
+        identifier('transaction_id', 'Stable document owning this item line.'),
+        identifier('revision_id', 'Exact immutable purchase revision owning this line.'),
+        *created(),
+        identifier('item_id', 'Item bought on this line.', 'items.id'),
+        identifier('account_id', "Account debited by this line, captured from the item's own purchase account.", 'accounts.id'),
+        C('quantity_microunits', sa.BigInteger, 'Positive quantity bought, in millionths of one unit.', nullable=False),
+        C('unit_cost_minor_units', sa.BigInteger, 'Home-currency cost of one unit; null when the amount was entered outright.', nullable=True),
+        integer('amount_minor_units', 'Positive home-currency amount debited to the account.'),
+        identifier('customer_id', 'Customer or job this cost is attributed to; null when unattributed.', 'customers.id', nullable=True),
+        C('billable', sa.Boolean, 'Whether this cost is marked for rebilling to the named customer or job.', nullable=False),
+        C('line_snapshot', sa.Text, 'Versioned typed JSON object of the resolved item, account, job and class facts.', nullable=False),
+        sa.UniqueConstraint('transaction_id', 'revision_id', 'document_line_id', name='uq_purchase_item_line_owner'),
+        sa.ForeignKeyConstraint(['transaction_id', 'revision_id'],
+            ['purchase_profiles.transaction_id', 'purchase_profiles.revision_id'], name='fk_purchase_item_line_revision'),
+        sa.ForeignKeyConstraint(['transaction_id', 'revision_id', 'document_line_id'],
+            ['document_lines.transaction_id', 'document_lines.revision_id', 'document_lines.id'], name='fk_purchase_item_line_envelope'),
+        positive('quantity_microunits'), positive('amount_minor_units'), object_check('line_snapshot'),
+        # A unit cost is what the amount was derived from, so a line whose amount was typed
+        # outright carries none rather than a back-computed number nobody entered.
+        sa.CheckConstraint("unit_cost_minor_units IS NULL OR (typeof(unit_cost_minor_units) = 'integer' "
+                           'AND unit_cost_minor_units >= 0)', name='ck_purchase_item_unit_cost'),
+        sa.CheckConstraint('billable IN (0, 1) AND (billable = 0 OR customer_id IS NOT NULL)',
+                           name='ck_purchase_item_billable_job'),
+        # What was bought of one item, newest revision last: the read an inventory owner needs
+        # before it can value anything.
+        sa.Index('ix_purchase_item_lines_item', 'item_id', 'revision_id'),
+        description='Immutable one-to-one item lines of a bill, with captured item, account, quantity, cost, job and billable facts.')
 
     ap_obligation_keys = T('ap_obligation_keys',
         identifier('id', 'Stable ULID of this payable; an application names this, never a revision.', primary_key=True),
