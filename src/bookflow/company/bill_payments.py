@@ -32,9 +32,10 @@ from bookflow.company import accounts, ap_settlement, bills, journals, list_serv
 from bookflow.company import document_effects as effects
 from bookflow.company.bill_payment_facts import Account, BillPaymentProfile, Origin, PaymentMethod, Reference, Vendor
 from bookflow.company.bill_payment_models import (
-    BillApplicationOutput, BillPayOutput, BillPaymentLineOutput, BillPaymentOutput,
-    BillPaymentPageOutput, BillPaymentRevisionOutput, BillPaymentSettlementOutput,
-    BillPaymentSummaryOutput, BillPaymentWriteOutput,
+    BillApplicationOutput, BillPayOutput, BillPaymentHistoryOutput, BillPaymentLineOutput,
+    BillPaymentOutput, BillPaymentPageOutput, BillPaymentRevisionOutput,
+    BillPaymentRevisionSummaryOutput, BillPaymentSettlementOutput, BillPaymentSummaryOutput,
+    BillPaymentWriteOutput,
 )
 from bookflow.company.journal_models import checked_sum, parse_domestic_amount
 from bookflow.company.lists import get_list_definition
@@ -388,6 +389,29 @@ def revision_output(s, header, revision, edges, pending=None):
         issuer_snapshot=json.loads(revision['issuer_snapshot']), lines=lines, batches=summaries)
 
 
+def revision_summary(s, revision, edges):
+    """One history row: the revision, every batch it minted, every edge against its capacity.
+
+    The edges are selected by the source components this revision owns, not by the payment,
+    so a later correcting revision would carry its own and never another revision's.
+    """
+    currency = revision['currency']
+    owned = {row['id'] for row in effects.rows(
+        s, c.ap_source_components, c.ap_source_components.c.revision_id == revision['id'])}
+    mine = [row for row in edges if row['source_component_id'] in owned]
+    numbers = _bill_numbers(s, sorted({row['obligation_transaction_id'] for row in mine}))
+    count = s.company.conn.execute(sa.select(sa.func.count()).select_from(c.document_lines)
+                                   .where(c.document_lines.c.revision_id == revision['id'])).scalar_one()
+    batches = effects.rows(s, c.posting_batches, c.posting_batches.c.revision_id == revision['id'],
+                           order=c.posting_batches.c.id)
+    values = {k: v for k, v in revision.items() if not k.endswith('_snapshot')}
+    values.update(total=Money(revision['total_minor_units'], currency).to_dict())
+    return BillPaymentRevisionSummaryOutput(
+        **values, line_count=count,
+        batches=[journals.batch_output(s, batch) for batch in batches],
+        applications=application_outputs(mine, currency, numbers))
+
+
 def _output(s, header, revision, profile, pending=None, *, model=BillPaymentOutput, **extra):
     edges = _edges(s, header, pending)
     source = ap_settlement.source_key_row(s, header['id'], pending)
@@ -405,7 +429,7 @@ def show(s, inp):
     return _output(s, header, revision, profile_row(s, revision))
 
 
-def page(s, ctx, inp):
+def page(s, ctx, inp, *, history=False):
     from bookflow.company.query import continuation, page_state
 
     class Contract:
@@ -415,7 +439,9 @@ def page(s, ctx, inp):
         def model_dump(self, **kw):
             return inp.model_dump(**kw)
 
-    state = page_state(s, 'bill payment query', Contract(), ctx.on_behalf_of)
+    state = page_state(s, 'bill payment ' + ('history' if history else 'query'), Contract(), ctx.on_behalf_of)
+    if history:
+        return _history_page(s, inp, state)
     t, r, p = c.transactions, c.transaction_revisions, c.ap_payment_profiles
     query = (sa.select(t.c.id).select_from(
         t.join(r, r.c.id == t.c.current_revision_id).join(p, p.c.revision_id == r.c.id))
@@ -474,6 +500,23 @@ def page(s, ctx, inp):
     return BillPaymentPageOutput(items=items, count=len(found), has_more=more,
                                  next_cursor=continuation(state, len(found), more),
                                  audit_watermark=state.sequence)
+
+
+def _history_page(s, inp, state):
+    """The revision walk, oldest first, on the bill's own cursor discipline."""
+    from bookflow.company.query import continuation
+    header = resolve(s, inp.payment)
+    revisions = [dict(row) for row in s.company.conn.execute(
+        sa.select(c.transaction_revisions).where(
+            c.transaction_revisions.c.transaction_id == header['id']).order_by(
+            c.transaction_revisions.c.revision_number).offset(state.offset).limit(inp.limit + 1)).mappings()]
+    more, revisions = len(revisions) > inp.limit, revisions[:inp.limit]
+    edges = _edges(s, header)
+    return BillPaymentHistoryOutput(
+        **{key: header[key] for key in ('id', 'version', 'current_revision_id', 'number', 'status')},
+        items=[revision_summary(s, revision, edges) for revision in revisions],
+        count=len(revisions), has_more=more,
+        next_cursor=continuation(state, len(revisions), more), audit_watermark=state.sequence)
 
 
 # ---------------------------------------------------------------- writing one payment
@@ -767,6 +810,11 @@ def prepare_unapply(s, ctx, inp):
         active = [row for row in active if row['obligation_transaction_id'] in wanted]
     if not active:
         return _unchanged(s, header, revision, profile)
+    # An unapply appends the exact negation of each application at that application's own
+    # effective date, so each of those dates has to be open -- exactly as `payment unapply`
+    # refuses on the customer side. Nothing here posts, but what the books say was open on a
+    # closed date would change, which is the same rewrite of closed history a void is refused for.
+    journals.open_dates(s, sorted({row['effective_date'] for row in active}))
     at, event = clock.now_iso(), new_id()
     pending = {table: [] for table, _, _ in TABLE_KINDS}
     for row in active:

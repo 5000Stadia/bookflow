@@ -255,6 +255,7 @@ for _noun in ('proposal', 'estimate', 'work-order'):
 
 EXAMPLES.update({
     'proposal estimate': Example(f'bookflow proposal estimate {ID} --expected-version 1 --conversion-key "drain-quote-2026-09" --date 2026-09-02 --company "Demo Plumbing Co" --reason "Make an estimate from the scope" --json', {'proposal': ID, 'expected_version': 1, 'conversion_key': 'drain-quote-2026-09', 'date': '2026-09-02'}),
+    'estimate void': Example(f'bookflow estimate void {ID} --expected-version 2 --company "Demo Plumbing Co" --reason "Customer changed their mind" --json', {'estimate': ID, 'expected_version': 2}),
     'estimate work-order': Example(f'bookflow estimate work-order {ID} --expected-version 2 --conversion-key "drain-dispatch-2026-09" --date 2026-09-03 --company "Demo Plumbing Co" --reason "Make a work order from the accepted estimate" --json', {'estimate': ID, 'expected_version': 2, 'conversion_key': 'drain-dispatch-2026-09', 'date': '2026-09-03'}),
     'work-order complete': Example(f'bookflow work-order complete {ID} --expected-version 1 --actual-start 2026-09-03T10:00:00-05:00 --actual-end 2026-09-03T11:00:00-05:00 --company "Demo Plumbing Co" --reason "Customer work completed" --json', {'work_order': ID, 'expected_version': 1, 'actual_start': '2026-09-03T10:00:00-05:00', 'actual_end': '2026-09-03T11:00:00-05:00'}),
 })
@@ -418,6 +419,10 @@ EXAMPLES.update({
         f'bookflow deposit items {ID} --kind sources --revision-number 2 --page-limit 50 --company "Demo Plumbing Co" --json',
         {"deposit": ID, "kind": "sources", "revision_number": 2, "page": {"limit": 50}},
     ),
+    "deposit history": Example(
+        f'bookflow deposit history {ID} --page-limit 50 --company "Demo Plumbing Co" --json',
+        {"deposit": ID, "page": {"limit": 50}},
+    ),
 })
 
 EXAMPLES['deposit query'] = Example(
@@ -489,4 +494,7 @@ EXAMPLES.update({
         f'bookflow bill payment void {ID} --expected-version 2 --company "Demo Plumbing Co"'
         ' --reason "The check was never sent" --json',
         {"payment": ID, "expected_version": 2}),
+    "bill payment history": Example(
+        f'bookflow bill payment history {ID} --limit 25 --company "Demo Plumbing Co" --json',
+        {"payment": ID, "limit": 25}),
 })

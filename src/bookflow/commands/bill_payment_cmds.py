@@ -10,9 +10,9 @@ check pointed at the wrong bill is re-pointed rather than voided and rewritten.
 from bookflow.core.registry import Plan, command
 from bookflow.company import bill_payments
 from bookflow.company.bill_payment_models import (
-    BillPayInput, BillPayOutput, BillPaymentApplyInput, BillPaymentOutput, BillPaymentPageOutput,
-    BillPaymentQueryInput, BillPaymentShowInput, BillPaymentUnapplyInput,
-    BillPaymentVoidInput, BillPaymentWriteOutput,
+    BillPayInput, BillPayOutput, BillPaymentApplyInput, BillPaymentHistoryInput,
+    BillPaymentHistoryOutput, BillPaymentOutput, BillPaymentPageOutput, BillPaymentQueryInput,
+    BillPaymentShowInput, BillPaymentUnapplyInput, BillPaymentVoidInput, BillPaymentWriteOutput,
 )
 
 _PAY = (
@@ -34,7 +34,8 @@ ERRORS = {
     'apply': ['E_RECORD_NOT_FOUND', 'E_VALIDATION', 'E_AMOUNT_PRECISION', 'E_VALUE_RANGE',
               'E_PERIOD_CLOSED', 'E_VERSION_CONFLICT', 'E_APPLICATION_CAPACITY',
               'E_APPLICATION_INCOMPATIBLE', 'E_APPLICATION_INACTIVE'],
-    'unapply': ['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_APPLICATION_INACTIVE', 'E_VALIDATION'],
+    'unapply': ['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_APPLICATION_INACTIVE', 'E_VALIDATION',
+                'E_PERIOD_CLOSED'],
     'void': ['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION', 'E_REASON_REQUIRED',
              'E_PERIOD_CLOSED', 'E_APPLICATION_INACTIVE', 'E_HAS_APPLICATIONS'],
 }
@@ -59,7 +60,9 @@ DESCRIPTIONS = {
     'unapply': ('Take a payment back off the bills it settled, without moving any money. The'
                 ' bills go back to open for what was applied and the bank is untouched, which'
                 ' leaves the payment standing as an unapplied debit against the vendor. Name'
-                ' `bills` to detach only those; leave it out to detach everything still applied.'),
+                ' `bills` to detach only those; leave it out to detach everything still applied.'
+                ' Each detachment is dated at the settlement date it takes back, so an'
+                ' application dated on or before the closing date cannot be undone here.'),
     'void': ('Void a bill payment with a required reason. Its accounting is reversed at its own'
              ' date, its number stays occupied and its history stays readable. Anything it still'
              ' settles must be unapplied first, so that voiding never silently reopens a bill.'),
@@ -69,6 +72,12 @@ DESCRIPTIONS = {
               ' first, with exact vendor, date, funding-account, method, number, check-number and'
               ' status filters, and a `bill` filter that answers what paid a given bill; restart'
               ' on company audit changes.'),
+    'history': ('Page immutable bill-payment revisions in revision-number order with the current'
+                ' header and version, every posting batch each revision minted -- the original'
+                ' and the exact reversal a void wrote at its own date -- and every settlement'
+                ' edge against the capacity it created, applies and their inverses alike, so a'
+                ' payment re-pointed at another bill reads as the correction it is; restart on'
+                ' company audit changes.'),
 }
 
 
@@ -90,14 +99,16 @@ def _write(name, verb, model, output_model):
 
 def _read(verb, model, output_model):
     def planner(inp, ctx, s):
-        return Plan(bill_payments.show(s, inp) if verb == 'show' else bill_payments.page(s, ctx, inp))
+        if verb == 'show':
+            return Plan(bill_payments.show(s, inp))
+        return Plan(bill_payments.page(s, ctx, inp, history=verb == 'history'))
 
     return command(
         'bill payment ' + verb, scope='company', description=DESCRIPTIONS[verb],
         input_model=model, output_model=output_model,
         required_role='member', capability='ledger.read',
-        positional=['payment'] if verb == 'show' else [],
-        error_codes=['E_RECORD_NOT_FOUND'] + (['E_QUERY_STALE'] if verb == 'query' else []),
+        positional=[] if verb == 'query' else ['payment'],
+        error_codes=['E_RECORD_NOT_FOUND'] + (['E_QUERY_STALE'] if verb != 'show' else []),
     )(planner)
 
 
@@ -107,6 +118,7 @@ bill_payment_unapply = _write('bill payment unapply', 'unapply', BillPaymentUnap
 bill_payment_void = _write('bill payment void', 'void', BillPaymentVoidInput, BillPaymentWriteOutput)
 bill_payment_show = _read('show', BillPaymentShowInput, BillPaymentOutput)
 bill_payment_query = _read('query', BillPaymentQueryInput, BillPaymentPageOutput)
+bill_payment_history = _read('history', BillPaymentHistoryInput, BillPaymentHistoryOutput)
 
-BILL_PAYMENT_COMMANDS = [bill_pay, bill_payment_show, bill_payment_query, bill_payment_apply,
-                         bill_payment_unapply, bill_payment_void]
+BILL_PAYMENT_COMMANDS = [bill_pay, bill_payment_show, bill_payment_query, bill_payment_history,
+                         bill_payment_apply, bill_payment_unapply, bill_payment_void]

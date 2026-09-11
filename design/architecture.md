@@ -643,7 +643,7 @@ the payments already made against that bill.
 
 ### Paying a bill: the settlement side of the payable
 
-`bill pay` and `bill payment show/query/apply/unapply/void` settle what a bill owes.
+`bill pay` and `bill payment show/query/history/apply/unapply/void` settle what a bill owes.
 `company/bill_payment_models.py` holds the inputs and outputs, `company/bill_payment_facts.py`
 what a revision captures, `company/bill_payments.py` the resolution, posting and reads,
 `company/bill_payment_validation.py` an independent check of the aggregate,
@@ -2783,11 +2783,14 @@ Workbench forms use business-facing context labels and reason guidance. The Java
 
 General-ledger opening, posting and closing rows expose current_account_name, current_account_number and display_account_label using the existing report account-display rule and company preferences. Captured account_snapshot remains historical; current labels do not rewrite it. Ordering, arithmetic and pagination are unchanged.
 Saved deposit reads coexist with the current deposit write aggregate (2026-09-09).
-`deposit show` and `deposit items` use the reviewed closed public models, field
-manifest and projection producers from history-public, with a sealed reader-bound
-publication proof on offline, hosted, forwarded CLI, MCP and browser execution.
-Only those two command names enter this read path; post/update/void/sources keep
-their current lifecycle, persistence and publication owners. The read authority's
+`deposit show`, `deposit items`, `deposit query` and `deposit history` use the
+reviewed closed public models, field manifest and projection producers from
+history-public, with a sealed reader-bound publication proof on offline, hosted,
+forwarded CLI, MCP and browser execution. Only those command names enter this read
+path; post/update/void/sources keep their current lifecycle, persistence and
+publication owners. `deposit history` pages the deposit's own recorded events in
+audit order in its own continuation domain; the operation recovery key an entry was
+submitted under is declared private and never reaches the wire. The read authority's
 reference vocabulary is checked against the existing list definitions and
 permission catalog, without importing the audit/history projection family.
 The existing financial reader accepts selective note/attachment acquisition and
