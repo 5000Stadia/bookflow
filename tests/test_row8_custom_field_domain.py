@@ -1,5 +1,6 @@
 """Isolated owner-slot and immutable snapshot witnesses."""
 from copy import deepcopy
+from typing import get_args
 from dataclasses import replace
 
 import pytest
@@ -9,6 +10,10 @@ from pydantic import ValidationError
 from bookflow.company import custom_fields as cf, journal_custom_fields as journal, schema, undo
 from bookflow.core.errors import BookflowError
 from bookflow.core.ids import new_id
+from alembic import command
+
+from bookflow.storage.engine import open_database
+from bookflow.storage.migrate import HEADS, _config
 from tests.test_row5_custom_fields import conn, _definition  # noqa: F401
 
 
@@ -251,3 +256,50 @@ def test_cleared_choice_can_retire_and_reactivation_captures_new_identity(conn):
     journal.apply(conn, restored)
     # The retired old same-key choice does not block unrelated definition edits.
     edit(conn, item, position=2)
+
+
+@pytest.fixture(scope='module')
+def head_conn(tmp_path_factory):
+    """A company schema at HEADS, so scope coverage is judged against the current CHECK.
+
+    Built once: every scope needs the same schema, and raising it per parameter cost minutes.
+    """
+    path = tmp_path_factory.mktemp('custom-fields-head') / 'company.db'
+    with open_database(path, writable=True, create=True) as db:
+        db.raw.execute('PRAGMA foreign_keys=OFF')
+        command.upgrade(_config('company', db.conn), HEADS['company'])
+        db.raw.execute('PRAGMA foreign_keys=ON')
+        yield db.conn
+
+
+def test_scope_buckets_partition_the_declared_scope_literal():
+    """Adding a scope to the Literal without bucketing it is a decision, and this catches it."""
+    declared = set(get_args(cf.CustomFieldScope))
+    assert cf.LIST_VALUE_SCOPES | cf.TRANSACTION_SCOPES == declared
+    assert not cf.LIST_VALUE_SCOPES & cf.TRANSACTION_SCOPES
+    assert cf.SUPPORTED_TRANSACTION_SCOPES <= cf.TRANSACTION_SCOPES
+    assert cf.SUPPORTED_VALUE_SCOPES == cf.LIST_VALUE_SCOPES | cf.SUPPORTED_TRANSACTION_SCOPES
+
+
+@pytest.mark.parametrize('scope', sorted(cf.TRANSACTION_SCOPES))
+def test_every_declared_transaction_scope_blocks_definition_deactivation(head_conn, scope):
+    """The undo guard reads the declared scope set, so no document type goes unguarded."""
+    item = _definition(head_conn, name=f'Guarded {scope}', scopes=(scope,))
+    head_conn.execute(schema.custom_field_values.insert().values(
+        id=new_id(), def_id=item['id'], record_type=scope, record_id=new_id(),
+        active=True, canonical_text='Used'))
+    assert undo._active_dependents(head_conn, 'custom_field', item['id']) == [
+        dict(record_type='custom_field_value', count=1)]
+    head_conn.execute(schema.custom_field_values.update().where(
+        schema.custom_field_values.c.def_id == item['id']).values(active=False))
+    assert undo._active_dependents(head_conn, 'custom_field', item['id']) == []
+
+
+@pytest.mark.parametrize('scope', sorted(cf.SUPPORTED_TRANSACTION_SCOPES))
+def test_revision_snapshot_validator_accepts_every_supported_transaction_scope(head_conn, scope):
+    """A supported scope the snapshot validator rejects would be a silently unusable document."""
+    item = _definition(head_conn, name=f'Snapshot {scope}', scopes=(scope,))
+    owner = new_id()
+    plan = journal.prepare(head_conn, owner, cf.CustomFieldValuePatch({item['id']: 'Used'}), {},
+                           creating=True, record_type=scope)
+    assert plan.snapshot[item['id']]['canonical_text'] == 'Used'
