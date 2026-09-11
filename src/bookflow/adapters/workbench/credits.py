@@ -7,11 +7,12 @@ an amount: every figure on every page below was returned by ``credit-memo show``
 
 **What lives here and why.**
 
-*The pickers.* ``FORM_DEFINITIONS`` says which list each control on the three document windows
-searches, exactly as ``bill_contract`` does for a bill. It sits in the workbench rather than
-beside the other contracts because these three nouns have no Row 5 list definition to hang it
-on and the declaration is pure presentation -- ``pages`` reads it as the last fallback after a
-list definition and a domain form definition.
+*The pickers are not here.* Which list each control on the three document windows searches is
+declared in ``company/credit_contract.py`` beside every other document's contract, and reaches
+this window the way a bill's does -- through ``registry.noun_meta``. It lived here while this
+module was written under a rule that kept it out of ``company/``; a declaration only the
+workbench could see was a second schema waiting to happen, and the memorized dependency index,
+which reads what ``noun_meta`` answers with, could not see it at all.
 
 *The two seeded openings.* A return and a refund are both written against something that
 already exists, so both windows can be opened from it. ``/credit-memo/post?invoice=<id>``
@@ -28,48 +29,11 @@ reads them and carries them in its own hidden fields -- and a stale one is answe
 command with ``E_VERSION_CONFLICT`` rather than being reconciled here.
 """
 from copy import deepcopy
-from dataclasses import dataclass
 from urllib.parse import quote, urlencode
 
-from bookflow.company.lists import ReferenceDefinition
 from bookflow.core.money import Money
 # One home for the order an address reads in, shared with the printed documents.
 from bookflow.documents.model import address_lines
-
-
-@dataclass(frozen=True)
-class CreditFormDefinition:
-    """Which list each control searches. Declaration only; it decides nothing."""
-
-    references: tuple[ReferenceDefinition, ...]
-
-
-# A credit memo is the invoice read backwards, so its pickers are the invoice's: the same
-# customer list, the same items, the same classes and tax codes. `source_invoice` and
-# `source_line` are deliberately absent -- an invoice is a document rather than a list, so
-# there is no list command behind a picker for one. The window seeds them from the invoice
-# the return was opened from instead, which is the way a return is actually written.
-_CREDIT_MEMO_FORM = CreditFormDefinition(tuple(ReferenceDefinition(field, target) for field, target in (
-    ('customer', 'customer'), ('ar_account', 'account'), ('class_id', 'class'),
-    ('customer_tax_code', 'sales-tax-code'), ('sales_tax_item', 'item'),
-    ('customer_message_item', 'customer-message'),
-    ('lines.item', 'item'), ('lines.class_id', 'class'), ('lines.tax_code', 'sales-tax-code'),
-)) + (ReferenceDefinition('lines.unit', 'unit-of-measure', child_units=True),))
-
-_CUSTOMER_REFUND_FORM = CreditFormDefinition(tuple(ReferenceDefinition(field, target) for field, target in (
-    ('customer', 'customer'), ('funding_account', 'account'), ('method', 'payment-method'),
-    ('class_id', 'class'),
-)))
-
-_VENDOR_CREDIT_FORM = CreditFormDefinition(tuple(ReferenceDefinition(field, target) for field, target in (
-    ('vendor', 'vendor'), ('ap_account', 'account'), ('class_id', 'class'),
-    ('expenses.account', 'account'), ('expenses.customer', 'customer'),
-    ('expenses.class_id', 'class'),
-)))
-
-FORM_DEFINITIONS = {'credit-memo': _CREDIT_MEMO_FORM,
-                    'customer-refund': _CUSTOMER_REFUND_FORM,
-                    'vendor-credit': _VENDOR_CREDIT_FORM}
 
 # The three documents, by the route segment they live under.
 NOUNS = ('credit-memo', 'customer-refund', 'vendor-credit')

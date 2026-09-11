@@ -77,6 +77,15 @@ class ReferenceDefinition:
         return tuple(self.target.split("|"))
 
 
+# The four lists a person's name can come from. A payee on a check, a payee on a register
+# row and a party on a journal line all choose between exactly these, so the set is written
+# once -- here, in the cheap declaration module every form contract already imports -- and
+# ``parties.PARTY_NOUNS`` is this same tuple. ``NAME_LISTS`` is its multi-target reference
+# spelling, for a ``ReferenceDefinition`` whose discriminator names the chosen list.
+PARTY_LISTS: tuple[str, ...] = ("customer", "vendor", "employee", "other-name")
+NAME_LISTS = "|".join(PARTY_LISTS)
+
+
 @dataclass(frozen=True)
 class HierarchyDefinition:
     parent_field: str = "parent_id"

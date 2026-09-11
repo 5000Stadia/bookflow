@@ -352,16 +352,17 @@ def _document_base(company_id: str | None, noun: str) -> str:
 def _form_reference(definition: Any, noun: str, path: str) -> Any | None:
     """Project the sole authoritative reference declarations for one form control.
 
-    A Row 5 list definition first, then a domain form definition, then the workbench's own
-    declaration for the credit documents -- those three nouns have no list definition to hang
-    one on, and where a picker searches is presentation rather than domain.
+    A Row 5 list definition first, then the noun's own form contract -- ``company``'s single
+    index of the nouns whose input is a document and so have no list definition to hang one
+    on. There is no third source: a declaration the workbench kept to itself would be a
+    second schema, invisible to everything else that resolves through ``noun_meta``.
     """
     definition = definition or _form_definition(noun)
     return F.reference_for_path(definition, path)
 
 
 def _form_definition(noun: str) -> Any | None:
-    return _noun_meta(noun).get('form_definition') or Credits.FORM_DEFINITIONS.get(noun)
+    return _noun_meta(noun).get('form_definition')
 
 
 def _decorate_collection_references(

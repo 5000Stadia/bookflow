@@ -390,25 +390,20 @@ NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
 }
 
 
+def _form_definition(noun: str) -> Any | None:
+    """The reference declarations of a noun whose input is a document rather than a list."""
+    from bookflow.company.form_contracts import FORM_DEFINITIONS
+
+    return FORM_DEFINITIONS.get(noun)
+
+
 def noun_meta(noun: str) -> dict[str, Any]:
     """Project routing metadata, including an authoritative Row 5 list definition when available."""
     if noun in NOUN_META_OVERRIDES:
         meta = dict(NOUN_META_OVERRIDES[noun])
-        if noun in ('invoice', 'sales-receipt'):
-            from bookflow.company.sales_contract import FORM_DEFINITIONS
-            meta['form_definition'] = FORM_DEFINITIONS[noun]
-        if noun == 'report':
-            from bookflow.company.report_contract import FORM
-            meta['form_definition'] = FORM
-        if noun in ('check', 'card-charge'):
-            from bookflow.company.check_contract import FORM_DEFINITIONS
-            meta['form_definition'] = FORM_DEFINITIONS[noun]
-        if noun == 'bill':
-            from bookflow.company.bill_contract import FORM
-            meta['form_definition'] = FORM
-        if noun == 'transfer':
-            from bookflow.company.transfer_contract import FORM
-            meta['form_definition'] = FORM
+        form = _form_definition(noun)
+        if form is not None:
+            meta['form_definition'] = form
         return meta
     show = REGISTRY.get(f"{noun} show")
     identifier = show.positional[0] if show and show.positional else None
@@ -416,7 +411,11 @@ def noun_meta(noun: str) -> dict[str, Any]:
 
     definition = get_list_definition(noun)
     if definition is None:
-        return {"record_type": noun.replace(" ", "_"), "identifier": identifier}
+        meta = {"record_type": noun.replace(" ", "_"), "identifier": identifier}
+        form = _form_definition(noun)
+        if form is not None:
+            meta['form_definition'] = form
+        return meta
     return {
         "record_type": definition.record_type,
         "identifier": identifier,
