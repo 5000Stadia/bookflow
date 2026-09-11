@@ -4,6 +4,7 @@ import json
 import pytest
 from bookflow.hub import permission_snapshot as s, permission_catalog as c, permission_policy as a
 from bookflow.storage.engine import open_database
+from bookflow.storage.migrate import HEADS
 from tests.permission_storage_support import create_hub, snapshot
 from tests.test_permission_snapshots import BUNDLE, SuppliedVisibility, install_fixture_policy, without_capability
 
@@ -12,7 +13,7 @@ AT = '2026-09-07T05:00:00Z'  # Fixed synthetic operation time, not a runtime tim
 
 
 def owned_root(path, *, suspended=True):
-    create_hub(path, 'hub0012', suspended=suspended)
+    create_hub(path, HEADS['hub'], suspended=suspended)
     with open_database(path, writable=True) as db:
         install_fixture_policy(db.raw)
     with open_database(path, writable=False) as db:

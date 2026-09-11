@@ -6,6 +6,7 @@ import sqlite3
 import pytest
 from bookflow.hub import permission_catalog as c, permission_policy as a, permission_runtime as r, permission_snapshot as s
 from bookflow.storage.engine import open_database
+from bookflow.storage.migrate import HEADS
 from tests.permission_storage_support import create_hub, snapshot
 
 BUNDLE=s.CatalogBundle(r.SOURCE_COMMIT,c.FROZEN_CATALOG,c.FROZEN_MANIFEST.standalone_names,
@@ -61,7 +62,7 @@ class SuppliedVisibility:
 
 @pytest.fixture
 def path(tmp_path):
-    value=tmp_path/'hub.db';create_hub(value,'hub0012')
+    value=tmp_path/'hub.db';create_hub(value,HEADS['hub'])
     with open_database(value,writable=True) as db:install_fixture_policy(db.raw)
     return value
 
@@ -133,7 +134,7 @@ def test_invalid_complete_facts_fail_safely_without_repair(path,change):
 
 
 def test_dense_removed_reparented_and_new_catalog_union(path,tmp_path):
-    other=tmp_path/'new.db';create_hub(other,'hub0012')
+    other=tmp_path/'new.db';create_hub(other,HEADS['hub'])
     new_catalog=replace(without_capability(BUNDLE.descriptor,'transaction.payment.delete'),version='owned-new')
     new_bundle=replace(BUNDLE,source_commit='a'*40,descriptor=new_catalog)
     with open_database(other,writable=True) as db:

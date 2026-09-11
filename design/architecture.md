@@ -185,7 +185,7 @@ src/bookflow/
     engine.py            Database (sqlite3 + SQLAlchemy Core); explicit read-only snapshots, verified WAL/FULL/foreign-key writers, writable-transaction detection and exception-safe cleanup; percent-encoded URIs; create=True only for init/rollout
     traced_sqlite.py      capture-enabled per-connection native subclasses; bounded statement classification, execute/fetch/transaction timing, caller factories preserved
     migrate.py           HEADS constants; classify(); backup via sqlite backup API; migrate_to_head(); Alembic loaded only when migrating
-    hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection), hub0007 (note capabilities), hub0008 (attachment/activity capabilities), hub0009 (agent principal assignments, authority epochs and credential conversion), hub0010 (ledger and report capabilities), hub0011 (customer-work read/write role defaults)
+    hub_migrations/      Alembic chain "hub": hub0001 (frozen explicit tables), hub0002 (seq, directive_code, idempotency_keys), hub0003 (capability/feature metadata), hub0004–hub0005 (list capabilities), hub0006 (pending config projection), hub0007 (note capabilities), hub0008 (attachment/activity capabilities), hub0009 (agent principal assignments, authority epochs and credential conversion), hub0010 (ledger and report capabilities), hub0011 (customer-work read/write role defaults), hub0012 (permission-administration storage), hub0013 (identity and membership capabilities)
     company_migrations/  Alembic chain "company": co0001 (frozen), co0002 (audit/presence/directives), co0003 (20 supporting lists), co0004 (job delivery inheritance), co0005 (notes), co0006 (attachments, links, collection intent, byte limit), co0007 (journal identities, immutable revisions and postings, numbering prefix, private report cursor key), co0008 (journal header custom ownership), co0009 (commercial sales), co0010 (nonposting customer work and preserving custom scope CHECK widening), co0011 (immutable linked billing and preserving sales amount-price widening), co0012 (exact progress allocation proofs, fractional sales quantities and overlap guards), co0013 (company work preferences)
     migrate.py           + migrate_company(): the one owner of company migrations: migrate entry by the system user, baseline entry, marker, hub projection entry
   hub/
@@ -2293,7 +2293,9 @@ constructor.
 `hub.permission_snapshot` is a private read-only dependency. `load_root` accepts
 an already consistent `Database` transaction and an explicitly reviewed
 `CatalogBundle`; it never opens a root or company, imports the registry to infer a
-catalog, installs visibility, or writes policy state. Independent complete SQL
+catalog, installs visibility, or writes policy state. It accepts only a root at
+`storage.migrate.HEADS['hub']`, read from that constant rather than pinned, and
+stamps what it read; any other revision fails `schema_mismatch`. Independent complete SQL
 key/parent projections are checked against typed row materialization on that same
 snapshot. Revoked and inactive rows remain represented; even revoked malformed
 policies fail strict preflight. Root defaults replace shipped defaults before the
@@ -2359,6 +2361,26 @@ legacy mode: the actual legacy-observation/activation bridge remains B3/C work.
 This dependency does not itself implement administration, token reconciliation,
 structural writer routing, command/editor activation, or completion of Row7/B3.
 
+
+### Identity and membership capability defaults (hub0013)
+
+Hub `hub0013` follows `hub0012`; company history is unchanged. It seeds the six
+`role_capabilities` rows the command registry already declared and the chain had
+never inserted: `membership` at `authenticated` for `readonly`, `standard`,
+`admin`, `owner` and `hub_admin`, and `user` at `hub_admin` for `hub_admin`.
+Without them a root leaving `legacy` mode denies every role, owners included,
+`user add|list|set-password` and `membership grant|revoke|list`.
+
+The insert reads the existing rows first and writes only those absent, so a root
+upgraded twice and a root already carrying one of the six both succeed against
+the `(role, capability, required_role)` primary key. Both the read and the insert
+address `main`, so a same-named ordinary TEMP table takes neither.
+
+`tests/test_migration_chain.py::CURRENT_ROLE_CAPABILITY_SEED` is derived from the
+migration chain's own `ROLE_CAPABILITY_SEED` constants, newest table-clearing
+migration onward, and `test_frozen_role_capability_seed_matches_registry` asserts
+it equals the registry projection. The chain is the frozen side of that equality;
+deriving it from the registry instead would make the assertion vacuous.
 
 ### Private permission administration (B2)
 
