@@ -3,7 +3,7 @@
 {% block body %}
 <link rel="stylesheet" href="{{ static_urls['browsing.css'] }}"><script src="{{ static_urls['browsing.js'] }}" defer></script>
 <h1>{{ meta.plural_label }}</h1>
-<p class="actions">{% for v in verbs if v.is_write and not v.version_source and not v.positional %}<a href="/c/{{ company_id }}/{{ noun }}/{{ v.verb }}">{{ v.verb.capitalize() }}</a>{% endfor %}<a href="{{ inactive_toggle }}">{{ 'Hide' if raw.include_inactive else 'Include' }} inactive</a></p>
+<p class="actions">{% for v in verbs if v.is_write and not v.version_source and not v.positional %}<a href="/c/{{ company_id }}/{{ noun|segment }}/{{ v.verb }}">{{ v.verb.capitalize() }}</a>{% endfor %}<a href="{{ inactive_toggle }}">{{ 'Hide' if raw.include_inactive else 'Include' }} inactive</a></p>
 <form id="browse-form" method="get" class="list-tools browse-controls">
 <label>Search<input name="query" value="{{ raw.get('query', '') }}" placeholder="Search {{ meta.plural_label | lower }}"></label>
 <label><input type="checkbox" id="metadata-active-only" name="metadata_active_only" value="1"{% if metadata_active_only %} checked{% endif %}> Active fields and choices only (keeps selected criteria)</label>
@@ -21,11 +21,11 @@
 <div class="browse-picker"><label>Find a filter<input id="filter-search" type="search"></label><button type="button" id="find-filters">Find filters</button><label>Filter field<select id="available-filters"></select></label><button type="button" id="more-filters">More filters</button><label>Match<select id="filter-operator"></select></label><div id="filter-editor"></div><button type="button" id="add-filter">Add filter</button></div>
 </details>
 <div id="active-criteria" aria-label="Active filters"></div><button type="button" id="clear-filters">Clear filters</button>
-<p id="browse-error" role="alert"></p><button type="submit">Apply</button><a href="/c/{{ company_id }}/{{ noun }}">Reset all controls</a>
+<p id="browse-error" role="alert"></p><button type="submit">Apply</button><a href="/c/{{ company_id }}/{{ noun|segment }}">Reset all controls</a>
 </form>
 <p class="browse-count" role="status">{{ result.matching_total }} matching records; {{ result.count }} on this page.</p>
 <div class="table-wrap"><table id="master-results"><thead><tr>{% for column in result.columns %}<th scope="col"{% if column.sortable %} aria-sort="{{ ('descending' if current_sort.direction == 'desc' else 'ascending') if current_sort.field == column.sort_key else 'none' }}"{% endif %}>{% if column.sortable %}<button type="button" data-sort-url="{{ headings[column.key] }}">{{ column.label }}{% if current_sort.field == column.sort_key %} {{ '↓' if current_sort.direction == 'desc' else '↑' }}{% endif %}</button>{% else %}{{ column.label }}{% endif %}</th>{% endfor %}<th>Details</th></tr></thead><tbody>
-{% for row in result['items'] %}<tr data-record-id="{{ row.id }}">{% for column in result.columns %}<td data-label="{{ column.label }}">{% if loop.first and row['values'][column.key] is not mapping %}<a href="/c/{{ company_id }}/{{ noun }}/{{ row.id }}">{{ value(row['values'][column.key], company_id, noun, row.id) }}</a>{% else %}{{ value(row['values'][column.key], company_id, noun, row.id) }}{% endif %}</td>{% endfor %}<td><a href="/c/{{ company_id }}/{{ noun }}/{{ row.id }}">View {{ row.label }}</a></td></tr>{% endfor %}</tbody></table></div>
+{% for row in result['items'] %}<tr data-record-id="{{ row.id }}">{% for column in result.columns %}<td data-label="{{ column.label }}">{% if loop.first and row['values'][column.key] is not mapping %}<a href="/c/{{ company_id }}/{{ noun|segment }}/{{ row.id }}">{{ value(row['values'][column.key], company_id, noun, row.id) }}</a>{% else %}{{ value(row['values'][column.key], company_id, noun, row.id) }}{% endif %}</td>{% endfor %}<td><a href="/c/{{ company_id }}/{{ noun|segment }}/{{ row.id }}">View {{ row.label }}</a></td></tr>{% endfor %}</tbody></table></div>
 {% if not result['items'] %}<p>No matching records. Clear a filter or include inactive records.</p>{% endif %}
 {% if next_url %}<nav class="pagination" aria-label="Results pages"><a href="{{ next_url }}" rel="next">Next page →</a></nav>{% endif %}
 <script type="application/json" id="browse-data">{{ browser_data | tojson }}</script>

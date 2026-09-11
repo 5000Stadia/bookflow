@@ -87,7 +87,16 @@ last logical item identity without persisting a preview.
 
 `adapters/workbench/payments.py` installs receive/apply/correction, payment query,
 shared-selection, application-history and dated invoice-settlement pages over the
-same registry reads. `payments.js` persists amount/row origins through shared
+same registry reads. The application pages read an application's payer as a customer
+payment, which is what `application show` itself does, so they serve only the rows a
+receipt settled. An application row names which it is: exactly one of
+`source_component_key_id` and `credit_source_key_id` carries its capacity, and a row
+carrying the second was settled by a credit memo rather than by a payment. The invoice
+settlement page reads that key and sends a credit-settled row to the credit memo that
+paid it, because the application views answer `E_RECORD_NOT_FOUND` for a payer that is
+not a payment and a link to a page that cannot open is worse than no link.
+
+`payments.js` persists amount/row origins through shared
 selection commands, retrieves complete prospective effects before enabling Save,
 and retains the exact submitted operation across ambiguous response loss. The
 form stays locked until recovery resolves. It uses the existing 200-row public
@@ -221,6 +230,7 @@ src/bookflow/
   adapters/http/auth.py  argon2 passwords (constant-time on unknown users), bearer and session tokens stored as sha256, liveness refresh, login throttle
   adapters/http/local.py LocalListener on the Unix socket: peer identity from SO_PEERCRED, envelope identity fields discarded, 8 MiB frame cap and 30-second accepted-connection timeout
   adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), document_form.py (sales document bands, line grid columns with a hint per head, human labels, the per-line pricing rule in the row panel), document_nav.py (the way back from a document to earlier documents of its type), sales.py and bills.py (what a saved sale or bill shows, and what its correction form opens with), credits.py (what the three credit documents show, which lists their pickers search, the two seeded openings, and the credit apply/unapply routes), document_print.py (the four print routes that answer PDF bytes), list_paging.py (which lists open on the newest record, and the walk forwards and back through a list's pages), naming.py (page titles and column heads in a person's words), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
+  adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), document_form.py (sales document bands, line grid columns with a hint per head, human labels, the per-line pricing rule in the row panel), document_nav.py (the way back from a document to earlier documents of its type), sales.py and bills.py (what a saved sale or bill shows, and what its correction form opens with), document_print.py (the four print routes that answer PDF bytes), list_paging.py (which lists open on the newest record, and the walk forwards and back through a list's pages), naming.py (page titles and column heads in a person's words), routing.py (the one spelling of a noun inside a URL, and the resolution of a path segment back to it), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
   documents/model.py     command output -> PrintedDocument: parties, header fields, columns, rows, totals, grids, notes; no PDF, no HTTP, no arithmetic
   documents/pdf.py       the one layout: Letter, half-inch margins, repeated column headings, unsplit line items, Page X of Y (reportlab)
   documents/render.py    render(read, company_id, kind, identity) -> Rendered(filename, media_type, content, title); the seam a later attach or send command calls
@@ -301,6 +311,8 @@ Registry index `NOUN_MODULES` maps modules to nouns; the CLI loads only the modu
 - `demo reset` accepts the public boolean `include_reference` (default false), with nullable reference company ID/name output. Opt-in creates both companies in the replacement demo organization through the same rollout and command seed paths. Reset always trashes the entire prior demo organization. After-commit seed failures raise `E_PARTIAL_WRITE` with the durable organization/company identities and incomplete company; previously committed seed commands remain saved. The packaged reference-year guide documents source arithmetic and twelve monthly checkpoints, including correction/void gross movements and second-half opening balances.
 - The demo includes opening capital, a corrected service journal, an expense, a voided duplicate, bank payments and receipts, a credit-card charge and payment, and a corrected mixed split with a net payment of 10000 USD minor units. Its accrual trial balance as of 2026-12-31 is 663000 USD minor units on each side. Foreign-tagged posting and exchange-rate commands remain following increments. Fine-grained identity and publication controls remain unfinished identity work.
 - A single-word command (`upgrade`) has no verb: its noun page is its form, and it submits to `/hub/<noun>`.
+- Whether a noun's page is about one record or about the whole thing is `pages._record_selector`, which the navigation grid asks rather than reading `positional`: `payment recovery show` names its record with `recovery_id` and declares no positional, and reading `positional` sent it to a singleton `/self` page and its list rows to a `show` with no record at all, both of which answered 422.
+- A noun with a space in it (`bill payment`, `sales-tax payment`, `hub audit`) is spelled with a hyphen inside a URL, because a raw space in an `href` is malformed markup: a browser hides it by encoding on navigation, a strict client refuses the link, and nothing that is not a browser can follow it. `adapters/workbench/routing.py` is the only place that spelling is made and the only place a path segment is resolved back to its noun. Its map is derived from `registry.NOUN_MODULES`, so a noun declared later is spelled and routed without anything being retyped; a segment naming no declared noun is handed to the route untouched, and the literal noun still resolves, so a link saved before the spelling existed still opens its page. `tests/test_workbench_noun_urls.py` holds the round trip and the absence of segment collisions, and the link crawl in `tests/test_row3_host.py` fails on any rendered `href` carrying a character a URL may not carry.
 - `docs generate` is a rootless standalone command: no data root, lock, actor, capability, forwarding, or HTTP route. It renders all registered commands including standalone tooling, validates examples and schema descriptions, and copies packaged prose resources. Generation accepts only an absent, empty, or exactly marked real directory; it refuses symlinks and unrelated trees, validates a sibling stage, swaps it atomically, and restores the previous complete tree if publication fails. `--check` performs a read-only byte/path comparison and reports sorted missing, extra, and changed paths as `E_DOCS_STALE`.
 - The cold-start test budgets `bookflow --help` below 300 ms; neither root help nor command discovery imports FastAPI, uvicorn, or the workbench.
 - Suite duration and process-cold read timings are diagnostic rather than release budgets. Cold root help retains its 300 ms gate; warm interactive queries retain their independent 100 ms gate. CLI tests record per-command cold timings as test properties for comparison without attributing the entire duration to imports.
@@ -430,7 +442,7 @@ HTTP host, local hand-off, and workbench verification in `tests/test_row3_host.p
 - A forwarded CLI call is recorded with interface `cli`; forged actor, principal, company, and interface fields are ignored; one-byte frame fragments are assembled; unsafe runtime directories are refused; a forwarded `company use` writes the caller's login table; another uid is refused; `serve` and `init` are never forwarded; a descriptor whose socket refuses, and one whose pid is dead, both fall back to the lock path; a pre-socket version mismatch is named.
 - Two reads pass a barrier and finish in under a second while a one-second writer job is active; mutation routing through the writer is detected. Two concurrent updates serialize into consecutive versions. A stale credential read remains non-blocking behind an occupied writer and five concurrent refresh attempts enqueue one job.
 - The async stream drains a burst, resumes from `Last-Event-ID`, validates bad cursors as ordinary 422 documents, wakes under lowercase ids, catches a real commit between first drain and subscription, closes readers/subscriptions after a mid-batch disconnect, and leaves the worker pool available with more than 40 idle subscribers. A live `serve` process with an idle stream exits promptly on SIGINT and removes its descriptor and socket.
-- Every routed command has a role-authorized form page with one control per input leaf. Clear wins over a prefilled value and unchanged rendered fields send nothing. Preview writes nothing. Ordinary submit returns 303; HTMX submit returns `HX-Redirect` so the successful destination reaches the address bar. A one-use, session-bound result flash survives one GET without entering the URL or cookie. One browser-level journey proves visible presence, overlapping stale-form conflict without overwrite, directive creation, and the resulting HTTP audit entries. Audit routes and invalid filters, picker schema state, restricted actions/presence, and rendered links are covered.
+- Every routed command has a role-authorized form page with one control per input leaf. Clear wins over a prefilled value and unchanged rendered fields send nothing. Preview writes nothing. Ordinary submit returns 303; HTMX submit returns `HX-Redirect` so the successful destination reaches the address bar. A one-use, session-bound result flash survives one GET without entering the URL or cookie. One browser-level journey proves visible presence, overlapping stale-form conflict without overwrite, directive creation, and the resulting HTTP audit entries. Audit routes and invalid filters, picker schema state, and restricted actions/presence are covered. The link crawl walks page shapes rather than page instances -- an identifier segment collapses to a placeholder and each distinct shape is fetched once, so its cost stays flat as the demo grows while its reach grows with every page added -- asserts the number of shapes it reached, and reads every rendered `href` for a character a URL may not carry.
 - `--allow-network` gates a non-loopback bind. The tri-state cookie helper proves non-loopback defaults secure and explicit false is retained; a busy port returns the deliberate redacted `E_IO`. `serve` has no write-only CLI flags or dry run.
 - A company rewound to `co0001` is migrated at startup, and the company's audit shows the `upgrade` event by the system user with the serving hub admin as `on_behalf_of`.
 - After 300 company updates through the writer with a reader attached, the company WAL is under 4 MB once the idle checkpoint runs; `checkpoint_now()` logs a result per connection and `sweep_now()` deletes only sessions expired more than a day, as one `session sweep` event by System with the token hash absent.
@@ -794,8 +806,11 @@ commands file under Vendors rather than falling through to Hub, and the Pay Bill
 Vendors panel is live at `/pay-bills` with a Bill payments tile beside it at `/bill-payment`.
 `adapters/workbench/bill_payments.py` mounts all three routes before the generated noun routes,
 because `bill payment` is a two-word noun and a hyphenated path reads better than an escaped
-space; it holds no business logic, and `GROUP_FIELDS` is the one place the window's idea of a
-payee group lives.
+space -- which is now the spelling every workbench link uses for it, so the generated pages
+address the same paths, and the detail route reads a segment naming one of the noun's verbs as
+that verb's form rather than as a missing payment, exactly as the deposit window does. It holds
+no business logic, and `GROUP_FIELDS` is the one place the window's idea of a payee group
+lives.
 
 `templates/pay_bills.html` plus `static/pay-bills.js` are the window: one funding account, one
 method and one date for the page, an optional vendor filter, and the open bills underneath.
@@ -1403,7 +1418,6 @@ and the home window's Reports tile names both alongside the seven that were
 there before. A staled continuation on any report page now shows the restart
 note, not only on trial balance and general ledger.
 
-<<<<<<< HEAD
 ## Transaction detail by account, and the holes in a check sequence
 
 `report transaction-detail` and `report missing-checks` add nothing to the
@@ -1471,7 +1485,7 @@ registry rather than from a hand-listed map, and a gap row opens the checks on
 either side of it. Because a repeated control cannot be carried by a scalar
 query name, a report GET now also accepts the collection's own `c:`/`collection:`
 keys, which is what makes the account-set filter linkable at all.
-=======
+
 ## Period summaries: where the money came from and where it went
 
 `company/summary_reports.py` supplies `report sales-by-customer`, `report
@@ -1555,7 +1569,6 @@ one that goes somewhere unrelated. `pages.CURSOR_FREE_REPORTS` gains them by
 containing `Summary.COMMANDS`, so nothing names the commands a second time. All
 four are titled from `naming.REPORTS` and listed on the home window's Reports
 tile.
->>>>>>> build/sales-summaries
 
 ## Customer work documents
 
