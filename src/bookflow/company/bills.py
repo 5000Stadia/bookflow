@@ -39,7 +39,8 @@ from bookflow.company.bill_facts import (
 from bookflow.company.bill_models import (
     BillExpenseInput, BillHistoryOutput, BillObligationComponentOutput, BillObligationOutput,
     BillOutput, BillPageOutput, BillRevisionOutput, BillRevisionSummaryOutput,
-    BillSettlementOutput, BillSummaryOutput, BillWriteOutput, DuplicateReferenceOutput,
+    BillSettlementOutput, BillSettlementSourceOutput, BillSummaryOutput, BillWriteOutput,
+    DuplicateReferenceOutput,
     reference_key,
 )
 from bookflow.company.journal_models import checked_sum, parse_domestic_amount
@@ -158,12 +159,14 @@ def _account_row(s, selector, field):
     return row
 
 
-def _ap_account(s, selector, currency, previous):
-    """The payable this bill is owed out of: named, carried forward, or the only one there is.
+def _ap_account(s, selector, currency, previous, *, noun='bill'):
+    """The payable this document is owed out of: named, carried forward, or the only one there is.
 
     Never an arbitrary choice. With no explicit account and no previous one, the company must
     have exactly one active Accounts Payable account; anything else is a question for the
-    person entering the bill, not a guess for the writer.
+    person entering the document, not a guess for the writer. ``noun`` names the document in
+    the refusal, because a vendor credit resolves its payable by exactly this rule and a
+    message naming a bill would be about the wrong document.
     """
     explicit = selector is not None
     if selector is None and previous is not None:
@@ -172,13 +175,13 @@ def _ap_account(s, selector, currency, previous):
         eligible = s.company.conn.execute(sa.select(c.accounts.c.id).where(
             c.accounts.c.type == 'accounts_payable', c.accounts.c.active.is_(True))).scalars().all()
         if len(eligible) != 1:
-            raise _invalid('ap_account', 'name the Accounts Payable account this bill is owed from; '
+            raise _invalid('ap_account', f'name the Accounts Payable account this {noun} is owed from; '
                                          f'the company has {len(eligible)} active ones')
         selector = eligible[0]
     row = _account_row(s, selector, 'ap_account')
     if row['type'] != 'accounts_payable':
         raise _invalid('ap_account', f'"{row["full_name"]}" is a {row["type"].replace("_", " ")} account; '
-                                     'a bill is owed out of an Accounts Payable account')
+                                     f'a {noun} is owed out of an Accounts Payable account')
     if row['currency'] != currency:
         raise _invalid('ap_account', 'account must use the home currency')
     return _account_facts(row), Origin(kind='explicit' if explicit else 'default')
@@ -299,8 +302,11 @@ def _expense_line(s, line, header_class, currency, index):
         klass = header_class
     customer = (_reference(_list_row(s, 'customer', c.customers, line.customer, field + '.customer', 'customer'))
                 if line.customer else None)
+    # A vendor credit's grid is this grid without the billable column: a credit is not a cost
+    # to pass on, so its row carries no such field and the captured fact is plainly false.
     profile = BillExpenseProfile(
-        account=_account_facts(row), class_id=klass, customer=customer, billable=line.billable,
+        account=_account_facts(row), class_id=klass, customer=customer,
+        billable=getattr(line, 'billable', False),
         origins={'class_id': Origin(kind='explicit' if line.class_mode == 'value' else 'default')})
     return dict(line_id=None, amount_minor_units=amount.minor_units, memo=line.memo, profile=profile)
 
@@ -346,9 +352,20 @@ def applied_totals(s, obligation_ids):
     applications standing against these keys. Everything else here -- the open balance, the
     status, the refusal to correct or void a bill that has been paid -- is arithmetic on what
     this answers, which is why the settlement owner landing moved nothing else.
+
+    **One number, whatever settled it.** A bill paid by a check and a bill credited by the
+    vendor are both settled here, and this deliberately does not say which: ``open`` is
+    ``gross - applied`` and ``status`` is read off that scalar by four callers. What composed
+    it is a separate read, ``applied_by_source_kind``, surfaced as ``settlement.sources``.
     """
     from bookflow.company import ap_settlement
     return ap_settlement.applied_totals(s, obligation_ids)
+
+
+def applied_sources(s, obligation_ids):
+    """The additive composition beside ``applied_totals``: settled amount per source kind."""
+    from bookflow.company import ap_settlement
+    return ap_settlement.applied_by_source_kind(s, obligation_ids)
 
 
 def obligation_row(s, transaction_id, pending=None):
@@ -360,7 +377,15 @@ def obligation_row(s, transaction_id, pending=None):
     return found[0] if found else None
 
 
-def settlement_output(header, revision, obligation, applied):
+def settlement_output(header, revision, obligation, applied, sources=None):
+    """What is still open on this bill, and -- separately -- what kinds of money closed it.
+
+    ``applied`` stays one number and ``open`` and ``status`` stay derived from it alone: a bill
+    settled in full by a vendor credit reads ``paid`` exactly as one settled by a check does,
+    with no branch here asking which. ``sources`` is the additive composition read, a mapping
+    of source kind to netted amount from ``ap_settlement.applied_by_source_kind``; callers that
+    do not ask for it get an empty list and the same three fields they always read.
+    """
     gross = revision['total_minor_units'] if header['status'] == 'posted' else 0
     open_amount = gross - applied
     currency = revision['currency']
@@ -371,7 +396,11 @@ def settlement_output(header, revision, obligation, applied):
         gross=Money(gross, currency).to_dict(), applied=Money(applied, currency).to_dict(),
         open=Money(open_amount, currency).to_dict(), currency=currency,
         status=('voided' if header['status'] == 'voided' else
-                'paid' if open_amount == 0 else 'partial' if applied else 'unpaid'))
+                'paid' if open_amount == 0 else 'partial' if applied else 'unpaid'),
+        sources=[BillSettlementSourceOutput(
+            source_type=kind, applied_minor_units=units,
+            applied=Money(units, currency).to_dict())
+            for kind, units in sorted((sources or {}).items())])
 
 
 # ---------------------------------------------------------------- reads
@@ -449,9 +478,11 @@ def revision_output(s, header, revision, pending=None, *, summary_only=False):
 def current_settlement(s, header, obligation=None, revision=None):
     obligation = obligation if obligation is not None else obligation_row(s, header['id'])
     revision = revision if revision is not None else journals.revision(s, header)
-    applied = applied_totals(s, [obligation['id']] if obligation else [])
+    keys = [obligation['id']] if obligation else []
+    applied = applied_totals(s, keys)
     return settlement_output(header, revision, obligation,
-                             applied.get(obligation['id'], 0) if obligation else 0)
+                             applied.get(obligation['id'], 0) if obligation else 0,
+                             applied_sources(s, keys).get(obligation['id']) if obligation else None)
 
 
 def show(s, inp):
@@ -530,7 +561,9 @@ def page(s, ctx, inp, *, history=False):
     obligations = {row['transaction_id']: dict(row) for row in s.company.conn.execute(
         sa.select(c.ap_obligation_keys).where(
             c.ap_obligation_keys.c.transaction_id.in_(identifiers))).mappings()} if found else {}
-    applied = applied_totals(s, [row['id'] for row in obligations.values()])
+    keys = [row['id'] for row in obligations.values()]
+    applied = applied_totals(s, keys)
+    composed = applied_sources(s, keys)
     items = []
     for header in ordered:
         revision = revisions.get(header['current_revision_id'])
@@ -538,7 +571,8 @@ def page(s, ctx, inp, *, history=False):
             raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': 'transaction_revision'})
         obligation = obligations.get(header['id'])
         settlement = settlement_output(header, revision, obligation,
-                                       applied.get(obligation['id'], 0) if obligation else 0)
+                                       applied.get(obligation['id'], 0) if obligation else 0,
+                                       composed.get(obligation['id']) if obligation else None)
         items.append(BillSummaryOutput(**summary(header, revision, profiles[revision['id']], settlement)))
     return BillPageOutput(items=items, **shared)
 
@@ -857,10 +891,12 @@ def prepare(s, ctx, inp, operation):
     view_profile = (pending['purchase_profiles'][0] if pending['purchase_profiles']
                     else profile_row(s, revision))
     obligation = obligation_row(s, header['id'], pending)
-    applied = applied_totals(s, [obligation['id']] if obligation else [])
+    keys = [obligation['id']] if obligation else []
+    applied = applied_totals(s, keys)
     output = BillWriteOutput(
         **summary(header, revision, view_profile, settlement_output(
-            header, revision, obligation, applied.get(obligation['id'], 0) if obligation else 0)),
+            header, revision, obligation, applied.get(obligation['id'], 0) if obligation else 0,
+            applied_sources(s, keys).get(obligation['id']) if obligation else None)),
         revision=revision_output(s, header, revision, pending),
         warnings=warnings, changed_fields=changed_fields,
         duplicate_references=duplicate_references(

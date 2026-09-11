@@ -326,7 +326,7 @@ AND (NEW.logical_kind = 'net' OR EXISTS (SELECT 1 FROM sales_tax_components tc
 WHERE tc.id = NEW.tax_component_id AND tc.tax_item_id = NEW.tax_item_id AND tc.liability_account_id = recl.account_id))"""
 
 DOCUMENT_LINE_KINDS = (('journal_entry', 'journal'), (('invoice', 'sales_receipt'), 'sale'),
-                       ('payment', 'payment'), ('deposit', 'deposit'), ('bill', 'purchase'),
+                       ('payment', 'payment'), ('deposit', 'deposit'), (('bill', 'vendor_credit'), 'purchase'),
                        ('bill_payment', 'bill_payment'), ('credit_memo', 'credit'),
                        ('sales_tax_payment', 'sales_tax_payment'), ('customer_refund', 'refund'))
 

@@ -43,6 +43,18 @@ def _rebuilt_since(revision):
     return names
 
 
+def _superseded_after(revision):
+    """Trigger names a company migration later than ``revision`` deliberately rewrote."""
+    import pkgutil
+    from bookflow.storage.company_migrations import versions
+    names = set()
+    for info in pkgutil.iter_modules(versions.__path__):
+        module = importlib.import_module(versions.__name__ + '.' + info.name)
+        if getattr(module, 'revision', '') > revision:
+            names.update(getattr(module, 'REPLACED', ()))
+    return names
+
+
 def _at(path, revision):
     """A company database stopped part-way along the chain, the way the runner builds one."""
     from alembic import command
@@ -59,13 +71,24 @@ def _at(path, revision):
 
 
 def test_frozen_ddl_is_the_current_metadata_and_the_guards_are_the_schema_module(tmp_path):
+    # A table a later revision rebuilt no longer reads as this revision froze it, and should
+    # not: co0032 widened `ap_source_keys` to admit a vendor credit as a second kind of paying
+    # source. Which tables those are is derived from the later migrations, never listed here.
+    # Their indexes are restored verbatim by the rebuild, so those still have to match.
+    rebuilt = _rebuilt_since(M.revision)
     indexes = sorted([index for name in M.NEW_TABLES for index in c.metadata.tables[name].indexes],
                      key=lambda index: index.name)
     compiled = tuple(str(CreateTable(c.metadata.tables[name]).compile(dialect=dialect())).strip()
-                     for name in M.NEW_TABLES)
+                     for name in M.NEW_TABLES if name not in rebuilt)
     compiled += tuple(str(CreateIndex(index).compile(dialect=dialect())).strip() for index in indexes)
-    assert M.DDL == compiled
-    assert M.GUARDS[:-1] == tuple(guard_statements())
+    assert tuple(statement for statement in M.DDL
+                 if not any(statement.startswith(f'CREATE TABLE {name} (') for name in rebuilt)) == compiled
+    # Frozen text can only equal today's metadata for the objects no later revision has
+    # rewritten. Which those are is derived from the later migrations themselves, never listed
+    # here: a literal list is what makes the next migration falsify this test.
+    superseded = _superseded_after(M.revision) & {statement.split()[2] for statement in M.GUARDS}
+    assert tuple(s for s in M.GUARDS[:-1] if s.split()[2] not in superseded) == tuple(
+        s for s in guard_statements() if s.split()[2] not in superseded)
     assert M.GUARDS[-1].startswith('CREATE TRIGGER document_lines_type_insert ')
     # Every composite foreign key names a real key of its target, not an arbitrary column pair.
     for name in M.NEW_TABLES:

@@ -221,8 +221,23 @@ class BillObligationComponentOutput(CreatedOutput):
     audit_event_id: str
 
 
+class BillSettlementSourceOutput(_Input):
+    """How much of what settled this bill came from one kind of money."""
+
+    source_type: Literal['bill_payment', 'vendor_credit']
+    applied: MoneyOutput
+    applied_minor_units: int
+
+
 class BillSettlementOutput(_Input):
-    """What is still owed on this bill. ``applied`` is what a settlement owner has taken off."""
+    """What is still owed on this bill. ``applied`` is what a settlement owner has taken off.
+
+    ``applied`` is one number -- everything that settled this bill, whatever settled it -- and
+    ``open`` and ``status`` are arithmetic on exactly that. ``sources`` is the additive answer
+    to the different question: which kinds of money made it up, so a reader can say "46254
+    credit, 53746 cash" without any of the three fields above changing shape. Kinds worth
+    nothing are omitted, so an unsettled bill carries an empty list.
+    """
 
     bill_id: str
     obligation_id: str
@@ -236,6 +251,7 @@ class BillSettlementOutput(_Input):
     open: MoneyOutput
     currency: str
     status: Literal['voided', 'paid', 'partial', 'unpaid']
+    sources: list[BillSettlementSourceOutput] = Field(default_factory=list)
 
 
 class DuplicateReferenceOutput(_Input):

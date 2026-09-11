@@ -18,7 +18,7 @@ from bookflow.company.credit_schema import guard_statements, settlement_guard_st
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, migrate_to_head
 from tests.payment_raw_evidence import table
-from tests.test_bill_payment_migration import _rebuilt_since
+from tests.test_bill_payment_migration import _rebuilt_since, _superseded_after
 
 M = importlib.import_module('bookflow.storage.company_migrations.versions.0028_customer_credits')
 
@@ -38,18 +38,6 @@ def _at(path, revision):
             db.raw.execute('PRAGMA foreign_keys=ON')
 
 
-def _superseded_after(revision):
-    """Trigger names a company migration later than ``revision`` deliberately rewrote."""
-    import pkgutil
-    from bookflow.storage.company_migrations import versions
-    names = set()
-    for info in pkgutil.iter_modules(versions.__path__):
-        module = importlib.import_module(versions.__name__ + '.' + info.name)
-        if getattr(module, 'revision', '') > revision:
-            names.update(getattr(module, 'REPLACED', ()))
-    return names
-
-
 def test_frozen_ddl_is_the_current_metadata_and_the_guards_are_the_schema_module():
     indexes = sorted([index for name in M.NEW_TABLES for index in c.metadata.tables[name].indexes],
                      key=lambda index: index.name)
@@ -63,8 +51,10 @@ def test_frozen_ddl_is_the_current_metadata_and_the_guards_are_the_schema_module
     # Frozen text can only equal today's metadata for the objects no later revision has
     # rewritten. Which those are is derived from the later migrations themselves, never
     # listed here: a literal list is what makes the next migration falsify this test.
-    superseded = _superseded_after(M.revision)
-    assert superseded <= {statement.split()[2] for statement in M.GUARDS}
+    # Only the guards this revision froze can be compared, and only those no later revision
+    # has rewritten: a later migration may rewrite a trigger an *earlier* revision froze, and
+    # that is not this revision's business at all.
+    superseded = _superseded_after(M.revision) & {statement.split()[2] for statement in M.GUARDS}
     current = tuple(guard_statements()) + tuple(settlement_guard_statements())
     assert tuple(s for s in M.GUARDS if s.split()[2] not in superseded) == tuple(
         s for s in current if s.split()[2] not in superseded)

@@ -1110,3 +1110,6 @@ globals().update(_define_sales_tax_settlement_tables(metadata, _column, _table))
 
 from bookflow.company.refund_schema import define_tables as _define_refund_tables
 globals().update(_define_refund_tables(metadata, _column, _table))
+
+from bookflow.company.vendor_credit_schema import define_tables as _define_vendor_credit_tables
+globals().update(_define_vendor_credit_tables(metadata, _column, _table))
