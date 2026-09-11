@@ -247,8 +247,9 @@ def _funding(g, header):
 def _offbank(g, header):
     """A producer that posts no statement line of its own, checked rather than assumed.
 
-    A bill, a credit memo and a vendor credit reach this graph through what settles them, not
-    through a bank account: they post to payables, receivables, income and expense, and the
+    A bill, a credit memo, a vendor credit and a statement charge reach this graph through what
+    settles them, not through a bank account: they post to payables, receivables, income and
+    expense, and the
     account rules of their own writers refuse anything else. Reading their legs and refusing a
     statement account is what turns a future line on a bank into a named unsupported
     population instead of a statement quietly missing an item it should have shown.
@@ -306,7 +307,8 @@ def _deposit(g, header):
 REGISTRY = MappingProxyType({'journal_entry': _commercial, 'payment': _commercial,
     'sales_receipt': _commercial, 'invoice': _commercial, 'deposit': _deposit,
     'bill_payment': _funding, 'customer_refund': _funding, 'sales_tax_payment': _funding,
-    'bill': _offbank, 'credit_memo': _offbank, 'vendor_credit': _offbank})
+    'bill': _offbank, 'credit_memo': _offbank, 'vendor_credit': _offbank,
+    'statement_charge': _offbank})
 UNCOVERED_PRODUCERS = tuple(name for name in TRANSACTION_TYPES if name not in REGISTRY)
 
 

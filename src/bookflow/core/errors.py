@@ -33,7 +33,31 @@ INFRASTRUCTURE_CODES: dict[str, str] = {
     "E_INTERNAL": "Internal failure.",
 }
 
+# Bank reconciliation names its own failures. Every one is raised through
+# `reconciliation_preparation.ReconciliationError`, the only place that decides a
+# reconciliation code, so this dict is the single declaration of the set: the preparation
+# module derives `PRIVATE_REASONS` from it rather than retyping the names, and
+# `tests/error_matrix.py` describes what produces each. A `reconcile ...` command declares
+# the ones it can raise; until one is registered they are reachable only through the private
+# preparation surface, which is why no command lists them yet.
+RECONCILIATION_CODES: dict[str, str] = {
+    "E_RECONCILIATION_ATTEMPT_STATE": "That bulk reconciliation attempt is not in a state this step accepts.",
+    "E_RECONCILIATION_CHAIN_STALE": "The account's reconciliation chain moved since this draft read it.",
+    "E_RECONCILIATION_DATE": "A date is outside what this statement period admits.",
+    "E_RECONCILIATION_DEPENDENCY": "Another reconciliation record depends on the one this change would move.",
+    "E_RECONCILIATION_DIFFERENCE": "The statement does not balance: the cleared balance and the entered ending balance differ.",
+    "E_RECONCILIATION_DRAFT_STATE": "That reconciliation draft is not open, or is not the kind this step accepts.",
+    "E_RECONCILIATION_MANIFEST": "The supplied selection is not the complete, consistent set this operation requires.",
+    "E_RECONCILIATION_MEMBERSHIP_CONFLICT": "A chosen movement is already claimed by the opening or by another statement.",
+    "E_RECONCILIATION_OPENING_UNPROVEN": "The opening does not account for every movement on or before its date.",
+    "E_RECONCILIATION_OPERATION_KEY_REUSED": "That permanent reconciliation operation key belongs to a different original request.",
+    "E_RECONCILIATION_SELECTION_STALE": "A selected movement changed since it was selected; read the candidates again.",
+    "E_RECONCILIATION_SOURCE_INVALID": "The stored statement effects do not reconcile to the general ledger.",
+    "E_RECONCILIATION_UNSUPPORTED": "Statement reconciliation cannot represent this account or one of its documents.",
+}
+
 COMMAND_CODES: dict[str, str] = {
+    **RECONCILIATION_CODES,
     "E_RECOVERY_PENDING": "Resolve the active recovery before editing or recording this selection.",
     "E_RECOVERY_INCOMPLETE": "The complete attempted edits must be uploaded and reviewed before confirmation.",
     "E_RECOVERY_KEY_REUSED": "This immutable recovery action belongs to a different request or reason.",
