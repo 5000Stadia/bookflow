@@ -33,8 +33,12 @@ class CreditLineInput(StrictModel):
     A standalone line prices itself exactly as an invoice line does. A returned line names a
     source invoice line instead and prices nothing: its net and every tax cent come from what
     that invoice captured, which is why it refuses a price, an amount and a tax code.
+
+    ``line_id`` is the permanent identity a correction carries: give a saved line's identity
+    and the corrected revision keeps that line, leave it out and a new line is written.
     """
 
+    line_id: Selector | None = None
     item: Selector | None = None
     source_invoice: Selector | None = None
     source_line: Selector | None = None
@@ -69,7 +73,16 @@ class CreditLineInput(StrictModel):
         return self
 
 
-class CreditMemoPostInput(StrictModel):
+CreditLines = Annotated[list[CreditLineInput], Field(min_length=1, max_length=200)]
+
+
+class _CreditMemoFields(StrictModel):
+    """Everything a credit memo carries whether it is being written or corrected.
+
+    One declaration, because a field that exists on entry and not on correction is a field a
+    person can set and never fix -- which is exactly the gap `credit-memo update` closes.
+    """
+
     @model_serializer(mode="wrap")
     def omitted_tax_request(self, handler):
         values = handler(self)
@@ -79,7 +92,7 @@ class CreditMemoPostInput(StrictModel):
 
     date: _Date
     customer: Selector
-    lines: Annotated[list[CreditLineInput], Field(min_length=1, max_length=200)]
+    lines: CreditLines
     ar_account: Selector | None = None
     number: _Number | None = None
     memo: Text | None = None
@@ -97,16 +110,49 @@ class CreditMemoPostInput(StrictModel):
 
     @model_validator(mode="after")
     def one_origin(self):
-        linked = [line for line in self.lines if line.source_invoice is not None]
-        if linked and len(linked) != len(self.lines):
+        lines = self.lines or []
+        linked = [line for line in lines if line.source_invoice is not None]
+        if linked and len(linked) != len(lines):
             raise ValueError("a credit memo either returns source invoice lines or names its own items: "
                              "the tax calculation rounds across the whole document, so a document holding "
                              "both would have a tax total that is neither captured nor calculated")
-        if linked and len({line.source_invoice for line in self.lines}) != 1:
+        if linked and len({line.source_invoice for line in lines}) != 1:
             raise ValueError("every returned line must come from the same source invoice")
         for field in self.use_defaults:
             if field in self.model_fields_set:
                 raise ValueError(f"{field} is both supplied and returned to its default")
+        return self
+
+
+class CreditMemoPostInput(_CreditMemoFields):
+    @model_validator(mode="after")
+    def new_lines(self):
+        if any(line.line_id is not None for line in self.lines):
+            raise ValueError("new credit memo lines cannot supply an existing line identity")
+        return self
+
+
+class CreditMemoUpdateInput(_CreditMemoFields):
+    """A correction of a saved credit memo: what changes is what is supplied.
+
+    ``lines`` replaces the whole grid, carrying each surviving row's ``line_id``; leave it
+    out and the saved lines stand exactly as they were captured, which is how the header
+    alone is corrected. A returned line's claim on its source invoice is released and taken
+    again in the same write, so what the invoice has left to give back is never wrong
+    in between.
+    """
+
+    credit_memo: Selector
+    expected_version: _Version | None = None
+    date: _Date | None = None
+    customer: Selector | None = None
+    lines: CreditLines | None = None
+
+    @model_validator(mode="after")
+    def required_values(self):
+        for field in ("date", "customer", "lines", "number", "ar_account"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
         return self
 
 
@@ -312,6 +358,7 @@ class CreditMemoPageOutput(StrictModel):
 class CreditMemoWriteOutput(CreditMemoOutput, WriteOutput):
     facts_fingerprint: str | None = None
     changed: bool = True
+    changed_fields: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     idempotent_replay: bool = False
 
