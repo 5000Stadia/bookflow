@@ -181,11 +181,36 @@ def test_account_number_currency_type_profiles_and_reimbursable_rules(client):
             "reimbursable_income_account_id",
         ),
         ({"name": "Nonposting tax", "type": "non_posting", "tax_line": "1040-C"}, "tax_line"),
+        # A cash account is what the statement of cash flows explains, and a
+        # non-posting account reaches no statement at all, so neither can declare
+        # a section; a profit-and-loss account's effect is reported inside net
+        # income, which the statement reports under operating and nowhere else.
+        ({"name": "Sectioned bank", "type": "bank", "cash_flow_section": "operating"}, "cash_flow_section"),
+        ({"name": "Sectioned nonposting", "type": "non_posting", "cash_flow_section": "operating"}, "cash_flow_section"),
+        ({"name": "Investing expense", "type": "expense", "cash_flow_section": "investing"}, "cash_flow_section"),
+        ({"name": "Financing income", "type": "income", "cash_flow_section": "financing"}, "cash_flow_section"),
+        ({"name": "Unknown section", "type": "fixed_asset", "cash_flow_section": "elsewhere"}, "cash_flow_section"),
     ]
     for payload, field in cases:
         error = _error(client.account.create, **payload, company=company)
         assert error.code == "E_VALIDATION"
         assert error.details["fields"][0]["field"].split(".")[0] == field
+
+    # A declared cash-flow section is stored, reported and changeable, and
+    # clearing it puts the account back on the section its type gives.
+    accumulated = client.account.create(
+        name="Accumulated Depreciation", type="fixed_asset",
+        cash_flow_section="operating", company=company)
+    assert accumulated["cash_flow_section"] == "operating"
+    assert client.account.show(account=accumulated["id"], company=company)["cash_flow_section"] == "operating"
+    listed = next(row for row in client.account.list(company=company)["items"]
+                  if row["id"] == accumulated["id"])
+    assert listed["cash_flow_section"] == "operating"
+    moved = client.account.update(account=accumulated["id"],
+                                  expected_version=accumulated["version"],
+                                  cash_flow_section="investing", company=company)
+    assert moved["cash_flow_section"] == "investing" and moved["changed_fields"] == ["cash_flow_section"]
+    assert expense["cash_flow_section"] is None
 
     duplicate = _error(
         client.account.create,

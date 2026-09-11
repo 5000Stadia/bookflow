@@ -1166,18 +1166,35 @@ reports for the same `date_to`. Row `opening_balance` and `closing_balance` are
 on the account's own normal side, so a row's balances match what the balance
 sheet prints while `amount` keeps the statement's source-and-use sign.
 
-Section classification is `SECTION_BY_TYPE` in `cash_flow_reports.py`, checked at
-import against `accounts.STATEMENT_FAMILY`: operating takes receivables,
-payables, the other current assets and current liabilities and credit cards;
-investing takes fixed and other assets; financing takes long-term liabilities and
-equity; `bank` is the cash the statement explains. An account type added to the
-chart vocabulary without a section here raises on import rather than dropping out
-of a statement that would still look balanced. **Nothing recorded on an account
-distinguishes depreciation or amortisation from any other account of its type**,
-so the depreciation add-back reaches the statement through the credit against the
-fixed asset and is reported under investing, where the anchor reports it under
-operating. Closing cash is unaffected either way; moving it would need a declared
-per-account cash-flow section, which no column holds today.
+Which section an account is in has one answer, `accounts.cash_flow_section(type,
+declared)`: the section the account itself declares in `accounts.cash_flow_section`
+(co0039, nullable, CHECK-constrained to the three sections), falling back to
+`accounts.CASH_FLOW_SECTION_BY_TYPE`. That type rule is checked at import against
+`accounts.STATEMENT_FAMILY`: operating takes receivables, payables, the other
+current assets and current liabilities and credit cards; investing takes fixed
+and other assets; financing takes long-term liabilities and equity; `bank` is the
+cash the statement explains. An account type added to the chart vocabulary
+without a section raises on import rather than dropping out of a statement that
+would still look balanced. `cash_flow_reports._section_sql` is that same
+resolution written once for SQLite over the same mapping, and
+`test_cash_flow_reports.py` pins the two answers together over every type and
+every declaration.
+
+**No account type and no system role distinguishes depreciation or amortisation
+from any other account of its type**, which is what the column exists for. The
+add-back itself needs no help -- it reaches the statement as the credit against
+the fixed asset -- but the type rule reports it under investing, where the anchor
+reports it under operating. An accumulated-depreciation account declaring
+`operating` moves that row, and only that row. Nothing is backfilled and nothing
+declares itself by default, so an upgraded company's statement is the one it
+already had; and because sectioning only chooses which subtotal a change lands
+in, net change in cash and closing cash are the same figures either way. A
+profit-and-loss account may declare only `operating`, since the statement reports
+every income and expense effect inside net income, which it reports under
+operating; the reference company declares it on both Depreciation Expense and
+Accumulated Depreciation. Which balance-sheet accounts get their own row is still
+decided by type, never by the declaration, so an expense account can never be
+counted twice.
 
 `report income-tax-summary` is the only reader of `accounts.tax_line`. It groups
 income and expense account activity for an inclusive period by that value, one

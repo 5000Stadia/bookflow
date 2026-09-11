@@ -112,25 +112,31 @@ replacements remain recorded; applications do not post cash again. See
 [customer payment workflows](customer-payment-workflows.md) for ownership,
 unapplied balances, control coverage and the preserving append oracles.
 
+From November, the active captured-tax examples add Accounts Receivable39,
+Service Income35 and Sales Tax Payable4. They are four small invoices: one pair
+under the legacy rule with no tax cell, one pair taxed per line, one pair taxed
+on the invoice total with the second cell at zero, and one whole-line work
+invoice. Every figure on this page from November onward includes them.
+
 | Checkpoint | Checking | Trial balance, each side | Income | Net assets |
 |---|---:|---:|---:|---:|
 | June 30 | 3065000 | 3575000 | 2305000 | 3305000 |
-| December 31 | 7267800 | 8048600 | 6457000 | 7457000 |
+| December 31 | 7267800 | 8048639 | 6457035 | 7457035 |
 
 At December 31, debit balances are Checking7267800, Payment Example Bank17000,
-Accounts Receivable13800, Equipment240000,
+Accounts Receivable13839, Equipment240000,
 Professional Fees 330000, Insurance Expense 120000 and Depreciation Expense
 60000. Credit balances are Accumulated Depreciation 60000, Service Income
-6949000, Payment Example Income18000, Opening Balance Equity1000000,
-Business Credit Card20000 and Sales Tax Payable1600.
-Income is `6949000 + 18000 - 330000 - 120000 - 60000 = 6457000`.
-Net assets are `7267800 + 17000 + 13800 + 240000 - 60000 - 20000 - 1600 = 7457000`, equal to
+6949035, Payment Example Income18000, Opening Balance Equity1000000,
+Business Credit Card20000 and Sales Tax Payable1604.
+Income is `6949035 + 18000 - 330000 - 120000 - 60000 = 6457035`.
+Net assets are `7267800 + 17000 + 13839 + 240000 - 60000 - 20000 - 1604 = 7457035`, equal to
 capital plus income. AP is zero. Income and net-assets values are independent arithmetic regression oracles for
 the profit-and-loss and balance-sheet commands. Aging remains unavailable.
 
 The ordinary demo retains its original ten journals and commercial history,
 and adds active invoices/payments with the same17000/1000/18000 net increments.
-Its trial balance is708195 on each side and Checking remains624895.
+Its trial balance is708234 on each side and Checking remains624895.
 Account show/list express balances on each account's normal
 side; reports use debit-minus-credit values. Both companies remain ordinary
 independent companies selectable through company show/list and the browser
@@ -164,11 +170,11 @@ The statement table shows home-currency totals, bounded account detail and
 links to the current general ledger with the same dates. A drill-down warns
 when the books have changed since the source statement.
 
-Annual P&L income is6967000, expense510000 and net income6457000 minor units.
-Balance-sheet assets are7478600, liabilities21600, posted equity1000000,
-prior earnings0 and current-year income6457000. Total equity7457000 plus
-liabilities21600 equals assets7478600; difference0. In2027 with no new entries,
-those6457000 become prior earnings and current-year income is0.
+Annual P&L income is6967035, expense510000 and net income6457035 minor units.
+Balance-sheet assets are7478639, liabilities21604, posted equity1000000,
+prior earnings0 and current-year income6457035. Total equity7457035 plus
+liabilities21604 equals assets7478639; difference0. In2027 with no new entries,
+those6457035 become prior earnings and current-year income is0.
 
 Both reports support **accrual only**; cash returns E_VALIDATION. P&L dates are
 inclusive; balance sheet includes all effects through its as-of date. Each account
@@ -194,28 +200,32 @@ carry integer minor units and currency; overflows return E_VALUE_RANGE, not floa
 
 `report cash-flows` is the indirect statement over the same effects, and the
 reference year is its arithmetic oracle because the company opens with no cash.
-Net income is 6457000. Every other balance-sheet account contributes its own
-negated change: Accounts Receivable 13800 is -13800, Sales Tax Payable 1600 is
-+1600 and Business Credit Card 20000 is +20000, so operating adjustments are
-7800 and operating is `6457000 + 7800 = 6464800`. Equipment 240000 is -240000
-and Accumulated Depreciation 60000 is +60000, so investing is -180000. Opening
-Balance Equity 1000000 is financing. Net change in cash is
-`6464800 - 180000 + 1000000 = 7284800`, opening cash is 0 and closing cash is
+Net income is 6457035. Every other balance-sheet account contributes its own
+negated change: Accounts Receivable 13839 is -13839, Sales Tax Payable 1604 is
++1604, Business Credit Card 20000 is +20000 and Accumulated Depreciation 60000
+is +60000, so operating adjustments are 67765 and operating is
+`6457035 + 67765 = 6524800`. Equipment 240000 is -240000, so investing is
+-240000. Opening Balance Equity 1000000 is financing. Net change in cash is
+`6524800 - 240000 + 1000000 = 7284800`, opening cash is 0 and closing cash is
 `7267800 + 17000 = 7284800`, which is the total of the two bank accounts on the
 balance sheet for the same date. `totals.difference` is 0.
 
 The 60000 of depreciation is added back, because writing the asset down credits
 Accumulated Depreciation and a falling asset is a source of cash. It is added
-back under **investing**, not under operating: Accumulated Depreciation is a
-fixed-asset account and nothing recorded on an account says which fixed asset it
-is. Closing cash is the same figure either way. Row balances read on each
+back under **operating**, because the reference chart creates that account with
+`cash_flow_section = "operating"`. No account type and no system role
+distinguishes accumulated depreciation from any other fixed asset, so an account
+that declares nothing takes what its type gives and the same add-back would be
+reported under investing. Closing cash is the same figure either way: sectioning
+only chooses which subtotal a change lands in. Row balances read on each
 account's own normal side, so the credit card row opens at 0 and closes at 20000
-while its cash effect is +20000.
+while its cash effect is +20000, and Accumulated Depreciation closes at -60000
+because its credit balance is a negative asset.
 
 `report income-tax-summary` groups the same income and expense activity by
 `accounts.tax_line`. No reference account has one set, so every account is under
-**Unassigned**: Service Income 6949000, Payment Example Income 18000,
+**Unassigned**: Service Income 6949035, Payment Example Income 18000,
 Professional Fees 330000, Insurance Expense 120000 and Depreciation Expense
-60000. Each is positive on its own normal side, so that one line totals 7477000
-while the report totals are income 6967000, expense 510000 and net income
-6457000 -- the same net income the profit and loss reports for the same dates.
+60000. Each is positive on its own normal side, so that one line totals 7477035
+while the report totals are income 6967035, expense 510000 and net income
+6457035 -- the same net income the profit and loss reports for the same dates.

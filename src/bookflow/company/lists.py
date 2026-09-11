@@ -304,11 +304,11 @@ def _add(definition: ListDefinition) -> None:
 _add(_define(
     "account", "accounts", ("Account", "Accounts"), "full_name", selector=("id", "full_name"), hierarchical=True,
     search=("name", "full_name", "number", "description", "institution_name", "institution_account_last4", "note"),
-    filters=("active", "type", "parent_id", "currency", "tax_line", "is_system", "default_class_id", "track_reimbursable_expenses"),
+    filters=("active", "type", "parent_id", "currency", "tax_line", "cash_flow_section", "is_system", "default_class_id", "track_reimbursable_expenses"),
     sorts=("full_name", "number", "type", "balance", "updated_at", "hierarchy_order"),
     default_sort=("number:asc:nulls-last", "full_name:asc", "id:asc"),
     default_columns=("number", "full_name", "type", "balance", "currency", "active"),
-    additional_columns=("parent", "description", "currency", "tax_line", "institution_name", "next_check_number", "default_class_id", "track_reimbursable_expenses", "reimbursable_income_account_id", "system_role", "is_system", "available_balance", "updated_at", "$common"),
+    additional_columns=("parent", "description", "currency", "tax_line", "cash_flow_section", "institution_name", "next_check_number", "default_class_id", "track_reimbursable_expenses", "reimbursable_income_account_id", "system_role", "is_system", "available_balance", "updated_at", "$common"),
     references=_refs(("parent_id", "account", "hard"), ("default_class_id", "class", "soft"), ("reimbursable_income_account_id", "account", "hard")),
     dependents=("account", "item", "vendor"),
 ))

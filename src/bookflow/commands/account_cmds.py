@@ -62,6 +62,7 @@ class AccountRecordOutput(_StrictModel):
     track_reimbursable_expenses: bool
     reimbursable_income_account_id: str | None
     note: str | None
+    cash_flow_section: accounts.CashFlowSection | None
     system_role: str | None
     is_system: bool
     balance: MoneyOutput

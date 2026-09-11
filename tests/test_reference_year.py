@@ -245,6 +245,41 @@ def assert_balances(c):
     assert c.journal.query(company=DEMO)['count'] == 10
 
 
+def test_the_reference_depreciation_add_back_is_reported_in_operating(reference_client):
+    """The seeded chart declares its own section, and the statement obeys it.
+
+    The reference year writes six hundred dollars of depreciation as six monthly
+    journals, each crediting Accumulated Depreciation. Nothing about a fixed-asset
+    account says it is the accumulated one, so the type rule would report the
+    add-back under investing; the account says so itself instead.
+    """
+    c, _ = reference_client
+    for name in ('Accumulated Depreciation', 'Depreciation Expense'):
+        assert c.account.show(company=REFERENCE, account=name)['cash_flow_section'] == 'operating'
+    assert c.account.show(company=REFERENCE, account='Equipment')['cash_flow_section'] is None
+
+    rows, totals = page_rows(c.report.cash_flows, company=REFERENCE,
+                             date_from='2026-01-01', date_to='2026-12-31', limit=200)
+    sections = {row['current_account_label']: row['section'] for row in rows}
+    assert sections['Accumulated Depreciation'] == 'operating'
+    assert sections['Equipment'] == 'investing'
+    written_off = next(row for row in rows if row['current_account_label'] == 'Accumulated Depreciation')
+    # A credit to a fixed asset is a falling asset, so a source of cash.
+    assert written_off['amount']['minor_units'] == 60000
+    assert written_off['closing_balance']['minor_units'] == -60000
+
+    # And the statement still reconciles, to itself and to the balance sheet.
+    units = {key: value['minor_units'] for key, value in totals.items()}
+    assert units['difference'] == 0
+    assert units['opening_cash'] + units['net_change_in_cash'] == units['closing_cash']
+    assert (units['net_income'] + units['operating_adjustments'] + units['investing']
+            + units['financing']) == units['closing_cash'] - units['opening_cash']
+    assert units['net_income'] == EXPECTED['annual']['income']
+    sheet, _ = page_rows(c.report.balance_sheet, company=REFERENCE, date_to='2026-12-31', limit=200)
+    assert units['closing_cash'] == sum(row['amount']['minor_units'] for row in sheet
+                                        if row['account_type'] == 'bank')
+
+
 def test_company_selection_balances_audit_and_closed_root_copy(reference_client, tmp_path, monkeypatch):
     c, root = reference_client
     assert_balances(c)

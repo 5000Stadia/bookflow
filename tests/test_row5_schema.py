@@ -158,10 +158,20 @@ def _normalized_shape(conn: sqlite3.Connection) -> tuple:
     return tuple(tables)
 
 
+# EXPECTED_COLUMNS is what co0003 froze, and one test below reads it back out of a
+# co0003 database. Every Row 5 column a later revision added is named here instead,
+# so the live metadata can grow without loosening the frozen-shape assertion.
+ADDED_AFTER_CO0003 = {
+    "accounts": {"cash_flow_section"},  # co0039
+}
+
+
 def test_row5_metadata_has_exact_primary_and_child_column_inventory():
     assert set(EXPECTED_COLUMNS) == {table.name for table in schema.ROW5_TABLES}
+    assert set(ADDED_AFTER_CO0003) <= set(EXPECTED_COLUMNS)
     for table_name, expected in EXPECTED_COLUMNS.items():
-        assert set(schema.metadata.tables[table_name].c.keys()) == expected, table_name
+        assert set(schema.metadata.tables[table_name].c.keys()) == (
+            expected | ADDED_AFTER_CO0003.get(table_name, set())), table_name
     assert ROW5_COMPANY_SETTINGS <= set(schema.company_info.c.keys())
     assert "undo_of_event_id" in schema.audit_events.c
     assert schema.customers.c.preferred_delivery_method.nullable
