@@ -168,10 +168,22 @@ def _check_number(inp, method, funding_kind):
 # ---------------------------------------------------------------- what is being paid
 
 
-def _selected(s, inp, currency):
-    """Every bill named, what is open on it, and what this payment takes off it."""
-    chosen = []
-    for index, row in enumerate(inp.bills):
+def _selected(s, rows, date, currency, *, capacity=None):
+    """Every bill named, what is open on it, and what this settlement takes off it.
+
+    Both directions of money out read this: ``bill pay``, where ``date`` is the day the money
+    left, and ``bill payment apply``, where it is the day free capacity was attached. The open
+    balance, the per-row default, the refusal of a row that settles nothing and the refusal of
+    one that settles past what is open are therefore one implementation, not two that agree.
+
+    ``capacity`` is what the settlement has to spend, and only a row naming no amount feels it:
+    ``bill pay`` decides its own amount from the selection and passes none, so an unnamed row
+    means the whole open balance; ``bill payment apply`` is spending money that already exists,
+    so an unnamed row means the open balance or what is left of the payment, whichever is less.
+    A named amount is taken as named either way, and refused above what is open.
+    """
+    chosen, remaining = [], capacity
+    for index, row in enumerate(rows):
         field = f'bills.{index}'
         header = bills.resolve(s, row.bill)
         revision = journals.revision(s, header)
@@ -185,15 +197,20 @@ def _selected(s, inp, currency):
         if obligation['currency'] != currency:
             raise BookflowError('E_APPLICATION_INCOMPATIBLE', details={
                 'field': field, 'bill_id': header['id'], 'currency': obligation['currency']})
-        if inp.date < revision['date']:
-            raise _invalid(field, f'a payment dated {inp.date} cannot settle bill {header["number"]}, '
+        if date < revision['date']:
+            raise _invalid(field, f'a settlement dated {date} cannot settle bill {header["number"]}, '
                                   f'which is dated {revision["date"]}')
         applied = ap_settlement.applied_totals(s, [obligation['id']])[obligation['id']]
         open_amount = revision['total_minor_units'] - applied
         if row.amount is None:
-            amount = open_amount
+            amount = open_amount if remaining is None else min(open_amount, remaining)
         else:
             amount = parse_domestic_amount(row.amount, currency, field + '.amount').minor_units
+        if amount <= 0 and remaining is not None and remaining <= 0 and row.amount is None:
+            raise _invalid(field + '.amount', 'nothing is left to apply by the time this row is '
+                                              f'reached; bill {header["number"]} has '
+                                              f'{Money(open_amount, currency).to_dict()["amount"]} '
+                                              f'{currency} open')
         if amount <= 0:
             # Nothing here writes a discount or a vendor credit, so a row that settles nothing
             # is a mistake rather than a zero-cash settlement; refusing it is also what keeps a
@@ -207,6 +224,8 @@ def _selected(s, inp, currency):
                 'requested': Money(amount, currency).to_dict(),
                 'available': Money(open_amount, currency).to_dict(),
                 'next': 'Pay at most what is still open on this bill; a vendor credit is a separate document.'})
+        if remaining is not None:
+            remaining -= amount
         chosen.append(dict(header=header, revision=revision, obligation=obligation, amount=amount))
     return chosen
 
@@ -328,12 +347,19 @@ def revision_output(s, header, revision, edges, pending=None):
         components = effects.rows(s, c.ap_source_components,
                                   c.ap_source_components.c.revision_id == revision['id'])
     by_line = {row['document_line_id']: row for row in components}
+    # A line says where its capacity is attached now, not where it was entered: once an apply
+    # can re-point a freed component at another bill, the entered target survives only in the
+    # line's own description, and a component answering two bills names neither here.
     attached, targets = {}, {}
     for edge in edges:
-        if edge['active']:
-            attached[edge['source_component_id']] = attached.get(edge['source_component_id'], 0) + edge['amount_minor_units']
-        targets.setdefault(edge['source_component_id'], edge['obligation_transaction_id'])
-    numbers = _bill_numbers(s, sorted(set(targets.values())), pending)
+        if not edge['active']:
+            continue
+        attached[edge['source_component_id']] = attached.get(edge['source_component_id'], 0) + edge['amount_minor_units']
+        targets[edge['source_component_id']] = (edge['obligation_transaction_id']
+                                                if edge['source_component_id'] not in targets
+                                                or targets[edge['source_component_id']] == edge['obligation_transaction_id']
+                                                else '')
+    numbers = _bill_numbers(s, sorted({value for value in targets.values() if value}), pending)
     currency = revision['currency']
     saved_batches = effects.rows(s, c.posting_batches, c.posting_batches.c.revision_id == revision['id'],
                                  order=c.posting_batches.c.id)
@@ -344,7 +370,7 @@ def revision_output(s, header, revision, edges, pending=None):
     lines = []
     for envelope in envelopes:
         component = by_line[envelope['id']]
-        bill_id = targets.get(component['id'], '')
+        bill_id = targets.get(component['id']) or ''
         applied = attached.get(component['id'], 0)
         lines.append(BillPaymentLineOutput(
             **{key: envelope[key] for key in ('id', 'created_at', 'created_by', 'created_via',
@@ -571,7 +597,7 @@ def _resolved(s, inp, currency):
 def prepare_pay(s, ctx, inp):
     currency = _info(s)['home_currency']
     resolved = _resolved(s, inp, currency)
-    chosen = _selected(s, inp, currency)
+    chosen = _selected(s, inp.bills, inp.date, currency)
     journals.open_dates(s, [inp.date])
     groups = _groups(chosen)
     numbers, sequence = _numbers(s, len(groups), inp.number)
@@ -604,7 +630,7 @@ def prepare_pay(s, ctx, inp):
                               sequence=sequence, changed_headers=changed_headers, currency=currency))
 
 
-# ---------------------------------------------------------------- taking it back
+# ------------------------------------------------ re-pointing the money, and taking it back
 
 
 def _payment_for_write(s, inp):
@@ -617,6 +643,115 @@ def _payment_for_write(s, inp):
             'payment_id': header['id'], 'status': header['status'],
             'next': 'A voided payment settles nothing and cannot be voided again.'})
     return header, revision, profile_row(s, revision)
+
+
+def _free_capacity(s, header, revision, pending=None):
+    """Each part of this payment's capacity, in entered order, and what nothing is holding.
+
+    A component is capacity rather than a bill, so what is free on it is its own amount less
+    the applications standing against it -- which is why an unapply gives capacity back
+    instead of destroying it, and why this reads the same whether the payment has never been
+    attached or has been attached and freed a dozen times.
+    """
+    components = effects.rows(s, c.ap_source_components,
+                              c.ap_source_components.c.transaction_id == header['id'])
+    envelopes = effects.rows(s, c.document_lines, c.document_lines.c.revision_id == revision['id'],
+                             order=c.document_lines.c.position)
+    by_line = {row['document_line_id']: row for row in components}
+    attached = {}
+    for edge in _edges(s, header, pending):
+        if edge['active']:
+            attached[edge['source_component_id']] = (attached.get(edge['source_component_id'], 0)
+                                                     + edge['amount_minor_units'])
+    return [(row, row['amount_minor_units'] - attached.get(row['id'], 0))
+            for row in (by_line[envelope['id']] for envelope in envelopes)]
+
+
+def _compatible(source, chosen, payment_id):
+    """An application matches the vendor, the payable account and the currency, exactly.
+
+    The storage trigger says the same thing and would abort the insert; saying it here names
+    the row that is wrong and what about it, which an aborted insert cannot.
+    """
+    for index, row in enumerate(chosen):
+        obligation = row['obligation']
+        if all(obligation[key] == source[key] for key in ('vendor_id', 'ap_account_id', 'currency')):
+            continue
+        raise BookflowError('E_APPLICATION_INCOMPATIBLE', details={
+            'field': f'bills.{index}', 'payment_id': payment_id,
+            'bill_id': row['header']['id'], 'bill_number': row['header']['number'],
+            'vendor_id': obligation['vendor_id'], 'ap_account_id': obligation['ap_account_id'],
+            'currency': obligation['currency'],
+            'next': 'A payment answers only the vendor, payable account and currency it was '
+                    'written for; pay this bill with its own payment.'})
+
+
+def prepare_apply(s, ctx, inp):
+    """Attach what this payment still has free to more of the same vendor's open bills.
+
+    Nothing is posted and no revision is written: the cash left when the payment posted, so
+    the whole of this is settlement edges. Capacity is taken from the entered lines in order,
+    which is why applying less than what is free leaves the rest free, and why one component
+    can answer two bills when an amount straddles it.
+    """
+    header, revision, profile = _payment_for_write(s, inp)
+    currency = revision['currency']
+    date = inp.date or revision['date']
+    if date < revision['date']:
+        raise _invalid('date', f'an application dated {date} cannot come before payment '
+                               f'{header["number"]}, which is dated {revision["date"]}')
+    source = ap_settlement.source_key_row(s, header['id'])
+    if source is None:
+        raise BookflowError('E_INTERNAL', message='This payment carries no settlement source')
+    supply = [[component, units] for component, units in _free_capacity(s, header, revision) if units > 0]
+    available = sum(units for _, units in supply)
+
+    def beyond(requested):
+        return BookflowError('E_APPLICATION_CAPACITY', details={
+            'payment_id': header['id'], 'payment_number': header['number'],
+            'requested_minor_units': requested, 'available_minor_units': available,
+            'requested': Money(requested, currency).to_dict(),
+            'available': Money(available, currency).to_dict(),
+            'next': 'Apply at most what this payment still has free; unapply what it holds, or '
+                    'pay the rest with another payment.'})
+
+    if not available:
+        raise beyond(0)
+    chosen = _selected(s, inp.bills, date, currency, capacity=available)
+    _compatible(source, chosen, header['id'])
+    # An application posts nothing, but it does change what the books say was open on a date,
+    # so a closed period refuses it exactly as `payment apply` refuses one on the customer side.
+    journals.open_dates(s, [date])
+    total = checked_sum((row['amount'] for row in chosen), 'bills.total')
+    if total > available:
+        raise beyond(total)
+    at, event = clock.now_iso(), new_id()
+    pending = {table: [] for table, _, _ in TABLE_KINDS}
+    position = 0
+    for row in chosen:
+        remaining = row['amount']
+        while remaining:
+            component, units = supply[position]
+            if not units:
+                position += 1
+                continue
+            taken = min(units, remaining)
+            supply[position][1] -= taken
+            remaining -= taken
+            pending['ap_applications'].append(dict(
+                id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value,
+                audit_event_id=event, kind='apply', source_transaction_id=header['id'],
+                source_key_id=source['id'], source_component_id=component['id'],
+                obligation_transaction_id=row['header']['id'],
+                obligation_key_id=row['obligation']['id'], amount_minor_units=taken,
+                currency=currency, effective_date=date, reverses_application_id=None))
+    changed = dict(header, version=header['version'] + 1, updated_at=at,
+                   updated_by=s.actor.id, updated_via=ctx.interface.value)
+    changed_headers = [(row['header'], dict(row['header'], version=row['header']['version'] + 1,
+                                            updated_at=at, updated_by=s.actor.id,
+                                            updated_via=ctx.interface.value)) for row in chosen]
+    return _plan(s, ctx, inp, 'apply', changed, header, revision, profile, pending, event, at,
+                 changed_headers, ['applications'])
 
 
 def prepare_unapply(s, ctx, inp):
@@ -703,6 +838,8 @@ def _plan(s, ctx, inp, operation, changed, header, revision, profile, pending, e
 def prepare(s, ctx, inp, operation):
     if operation == 'pay':
         return prepare_pay(s, ctx, inp)
+    if operation == 'apply':
+        return prepare_apply(s, ctx, inp)
     if operation == 'unapply':
         return prepare_unapply(s, ctx, inp)
     return prepare_void(s, ctx, inp)

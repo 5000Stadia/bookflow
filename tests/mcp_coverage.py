@@ -55,6 +55,7 @@ audit show
 audit tail
 bill history
 bill pay
+bill payment apply
 bill payment query
 bill payment show
 bill payment unapply
