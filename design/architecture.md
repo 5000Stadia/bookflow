@@ -220,7 +220,7 @@ src/bookflow/
   adapters/http/app.py   FastAPI app from the registry: /commands/<noun.verb>, authoritative /companies/{id}/commands/<noun.verb>, /login, /logout, async /companies/{id}/events and /hub-events, exact generated /openapi.json, /health; credential/cookie handling and the same error documents as the CLI with HTTP statuses
   adapters/http/auth.py  argon2 passwords (constant-time on unknown users), bearer and session tokens stored as sha256, liveness refresh, login throttle
   adapters/http/local.py LocalListener on the Unix socket: peer identity from SO_PEERCRED, envelope identity fields discarded, 8 MiB frame cap and 30-second accepted-connection timeout
-  adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), document_form.py (sales document bands, line grid columns with a hint per head, human labels, the per-line pricing rule in the row panel), document_nav.py (the way back from a document to earlier documents of its type), document_print.py (the four print routes that answer PDF bytes), list_paging.py (which lists open on the newest record, and the walk forwards and back through a list's pages), naming.py (page titles and column heads in a person's words), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
+  adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), document_form.py (sales document bands, line grid columns with a hint per head, human labels, the per-line pricing rule in the row panel), document_nav.py (the way back from a document to earlier documents of its type), sales.py and bills.py (what a saved sale or bill shows, and what its correction form opens with), document_print.py (the four print routes that answer PDF bytes), list_paging.py (which lists open on the newest record, and the walk forwards and back through a list's pages), naming.py (page titles and column heads in a person's words), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
   documents/model.py     command output -> PrintedDocument: parties, header fields, columns, rows, totals, grids, notes; no PDF, no HTTP, no arithmetic
   documents/pdf.py       the one layout: Letter, half-inch margins, repeated column headings, unsplit line items, Page X of Y (reportlab)
   documents/render.py    render(read, company_id, kind, identity) -> Rendered(filename, media_type, content, title); the seam a later attach or send command calls
@@ -607,8 +607,38 @@ Migration `co0025` widens the `transactions` type CHECK and the `document_lines`
 reinstates `document_lines_type_insert` with the bill's mapping, by the same table-rebuild that
 `co0020` used, then creates the four purchase tables with their immutability triggers. `bill` was
 already a declared `CustomFieldScope`, so custom fields needed only `SUPPORTED_VALUE_SCOPES`.
-The workbench has no bill surface yet: the noun is registered without a `ui_group`, so no
-navigation entry promises a page that is not there.
+
+**The browser surface.** `bill` carries `ui_group` "Vendors and purchases", so it has a
+navigation entry, a list page and a record page like every other noun in that group, and the
+Enter bill tile on the Vendors panel of the flow board is live.
+
+`bill post` and `bill update` open the document window the sales documents and the money-out
+pair already use: `document_form.BILL_PRIMARY` is the header the payables window reads in
+(vendor, date, our number, the vendor's `Ref. No.`), `BILL_TERMS` is the band that carries the
+terms, the due date they derived, the A/P account and the bill's class, and `BILL_GRID` is the
+check's Expenses grid with the two columns a payable adds -- the customer or job a cost belongs
+to, and whether it is billable to them. The footer copies the server's own `expense_total` and
+`total` back, and says which date the bill fell due and which rule produced it; there is no
+figure on the face of a bill to reconcile the lines against, which is the one way the footer
+differs from a check's.
+
+`adapters/workbench/bills.py` is the payables mirror of `sales.py` and does its two jobs:
+`editable_values` is the correction form's comparison baseline, so a header-only correction
+reaches the writer without an `expenses` grid and the saved lines stay exactly as captured; it
+reads `class_mode` back out of the captured class and its origin, so a line deliberately left
+unclassified under a classed bill is not silently reclassified by a correction. `detail_context`
+feeds `templates/bill_detail.html`, which shows the captured vendor, the terms and the basis of
+the due date, the expense lines with their customer, billable flag and class, what is still open
+on the bill, the duplicate references the command reported, and the posting batches.
+
+Below 700px the grid becomes one block per line and the saved bill's line table becomes one card
+per line, both asserted at 390px in `tests/test_bill_form_browser.py` as the element's own
+`scrollWidth` against its own `clientWidth`. Bills are not printed: a bill is an internal
+document, so there is no print route beside the four customer-facing ones.
+
+Not built here: `bill pay` and any A/P settlement, so the detail page says plainly that a posted
+bill stands open; the Item tab; and a browser page for `bill history`, which is reachable only
+through the command surfaces.
 
 ### Transfers between the company's own accounts
 

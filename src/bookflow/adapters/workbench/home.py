@@ -164,8 +164,7 @@ PANELS: tuple[Panel, ...] = (
                 id="bill",
                 title="Enter bill",
                 summary="Record what a vendor has charged you.",
-                action=Action("Enter a bill", WRITE),
-                waits_on="bill commands and accounts payable",
+                action=Action("Enter a bill", WRITE, ("bill post",), "/bill/post"),
             ),
             Step(
                 id="pay-bills",

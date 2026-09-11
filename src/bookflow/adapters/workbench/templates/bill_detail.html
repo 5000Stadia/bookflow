@@ -1,0 +1,35 @@
+{# Include with bill=detail_context(...). All captured text stays autoescaped. #}
+{% set r = bill.revision %}{% set p = bill.profile %}{% set s = bill.settlement %}
+<section class="workspace-card sales-document" aria-label="Bill">
+<h2>Bill {{ r.number }}</h2>
+<p><strong>{{ 'Preview — nothing written' if bill.preview else bill.record.status|capitalize }}</strong> · {{ r.date }} · Revision {{ r.revision_number }} · {{ r.currency }}</p>
+{% if bill.record.void_reason %}<p class="warn">Voided: {{ bill.record.void_reason }}. Historical amounts remain visible; the reversal is in accounting history.</p>{% endif %}
+{% if bill.duplicates %}<p class="warn" data-duplicate-references>Another bill from this vendor carries reference {{ p.supplier_reference }}: {% for other in bill.duplicates %}<a href="/c/{{ company_id }}/bill/{{ other.bill_id }}">{{ other.number }}</a> · {{ other.date }} · {{ other.total.amount }}{% if other.status == 'voided' %} · voided{% endif %}{% if not loop.last %}; {% endif %}{% endfor %}. Nothing is refused; check you are not entering it twice.</p>{% endif %}
+<div class="sales-parties">
+<div><h3>Vendor</h3><p>{{ p.vendor.label }}</p>{% if p.vendor.company_name %}<p>{{ p.vendor.company_name }}</p>{% endif %}{% if p.vendor.account_number %}<p>Your account: {{ p.vendor.account_number }}</p>{% endif %}{% if p.vendor.phone %}<p>{{ p.vendor.phone }}</p>{% endif %}{% if p.vendor.email %}<p>{{ p.vendor.email }}</p>{% endif %}</div>
+<div><h3>Billed to</h3><p>{{ bill.issuer.legal_name or bill.issuer.display_name }}</p>{% for part in bill.issuer_address %}<div>{{ part }}</div>{% endfor %}</div>
+</div>
+<dl class="sales-facts">
+<dt>Ref. No.</dt><dd>{{ p.supplier_reference or '—' }}</dd>
+<dt>Terms</dt><dd>{{ p.terms.label if p.terms else 'No terms' }}</dd>
+<dt>Bill due</dt><dd data-bill-due>{{ p.due_date }}{% if p.due_date_basis == 'terms' %} · from the terms{% elif p.due_date_basis == 'entered' %} · entered on this bill{% else %} · the bill date, with no terms to defer it{% endif %}</dd>
+<dt>A/P account</dt><dd>{{ p.ap_account.full_name }}</dd>
+{% if p.class_id %}<dt>Class</dt><dd>{{ p.class_id.label }}</dd>{% endif %}
+</dl>
+<div class="table-wrap"><table class="ledger-table bill-lines"><thead><tr><th>Account</th><th>Amount</th><th>Memo</th><th>Customer:Job</th><th>Billable</th><th>Class</th></tr></thead><tbody>
+{% for line in r.expenses %}<tr><td data-label="Account"><span class="sales-cell-label" aria-hidden="true">Account</span>{{ line.line_snapshot.account.full_name }}</td><td data-label="Amount"><span class="sales-cell-label" aria-hidden="true">Amount</span>{{ line.amount.amount }}</td><td data-label="Memo"><span class="sales-cell-label" aria-hidden="true">Memo</span>{{ line.memo if line.memo is not none else '—' }}</td><td data-label="Customer:Job"><span class="sales-cell-label" aria-hidden="true">Customer:Job</span>{{ line.line_snapshot.customer.label if line.line_snapshot.customer else '—' }}</td><td data-label="Billable"><span class="sales-cell-label" aria-hidden="true">Billable</span>{{ 'Yes' if line.billable else 'No' }}</td><td data-label="Class"><span class="sales-cell-label" aria-hidden="true">Class</span>{{ line.class_name or '—' }}</td></tr>{% endfor %}
+</tbody><tfoot><tr><th colspan="5">Total ({{ r.currency }})</th><th><span class="sales-cell-label">Total</span>{{ r.total.amount }}</th></tr></tfoot></table></div>
+{% if r.memo is not none %}<p>Memo: {{ r.memo }}</p>{% endif %}
+{% if r.custom_fields %}<h3>Custom fields</h3><dl>{% for f in r.custom_fields %}<dt>{{ f.name }} · {{ f.kind }}</dt><dd>{{ f.choice_label if f.kind == 'choice' else ('true' if f.value is sameas true else 'false' if f.value is sameas false else f.value) }}</dd>{% endfor %}</dl>{% endif %}
+{% if s and not bill.preview %}<section aria-label="What is still owed on this bill"><h3>What is owed</h3>
+<p data-bill-settlement>{{ s.status|capitalize }} · Bill {{ s.gross.amount }} · Paid {{ s.applied.amount }} · Open {{ s.open.amount }} {{ s.currency }}</p>
+<p class="muted">Paying bills is not available yet, so a posted bill stands open until the payables work lands.</p></section>{% endif %}
+<details data-bill-origins><summary>Captured rules and input origins</summary>
+{% if p.terms %}<h4>Term rule</h4><dl>{% for field, value in p.terms.items() %}{% if value is not none %}<dt>{{ field.replace('_',' ') }}</dt><dd>{{ value }}</dd>{% endif %}{% endfor %}</dl>{% endif %}
+<dl>{% for field, origin in p.origins.items() %}<dt>{{ field.replace('_',' ') }}</dt><dd>{{ origin.kind }}{% if origin.source_id %} · source {{ origin.source_id }}{% endif %}</dd>{% endfor %}</dl>
+{% for line in r.expenses %}<h4>Line {{ line.position }} · {{ line.line_snapshot.account.full_name }}</h4><p>Account {{ line.line_snapshot.account.type.replace('_', ' ') }}{% if line.line_snapshot.account.number %} · number {{ line.line_snapshot.account.number }}{% endif %} · {{ line.line_snapshot.account.normal_balance }}-normal</p>
+<dl>{% for field, origin in line.line_snapshot.origins.items() %}<dt>{{ field.replace('_',' ') }}</dt><dd>{{ origin.kind }}{% if origin.source_id %} · source {{ origin.source_id }}{% endif %}</dd>{% endfor %}</dl>{% endfor %}
+</details>
+{% if bill.links %}<nav class="actions" aria-label="Bill revisions">{% for label, href in bill.links %}<a href="{{ href }}">{{ label }}</a>{% endfor %}</nav>{% endif %}
+</section>
+<details class="workspace-card sales-document"><summary>Accounting history for this revision</summary><p>Expense lines {{ r.expense_total.amount }} {{ r.currency }}, credited to Accounts Payable as one total. Posting batches are shown separately.</p><div class="table-wrap"><table><thead><tr><th>Effect</th><th>Accounting date</th><th>Recorded</th><th>Debits</th><th>Credits</th></tr></thead><tbody>{% for batch in r.batches %}<tr><td>{{ batch.kind }}</td><td>{{ batch.effective_date }}</td><td>{{ batch.created_at }}</td><td>{{ batch.debit_total.amount }}</td><td>{{ batch.credit_total.amount }}</td></tr>{% endfor %}</tbody></table></div></details>

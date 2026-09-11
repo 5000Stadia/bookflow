@@ -10,6 +10,17 @@
 <label>Status<select name="status"><option value="">All</option>{% for value in ('posted', 'voided') %}<option value="{{ value }}"{% if sales_filters.get('status') == value %} selected{% endif %}>{{ value|capitalize }}</option>{% endfor %}</select></label>
 <label>Order<select name="direction"><option value="desc" {% if selected_direction != 'asc' %}selected{% endif %}>Newest first</option><option value="asc" {% if selected_direction == 'asc' %}selected{% endif %}>Oldest first</option></select></label>
 <button>Apply</button><a href="{{ base }}">Reset</a></form>{% endif %}
+{% if bill_filters is not none and noun == 'bill' %}<form method="get" class="list-tools" aria-label="Bill filters">
+<label>Vendor<input name="vendor" value="{{ bill_filters.get('vendor', '') }}" placeholder="Exact name or ID"></label>
+<label>Number contains<input name="number" value="{{ bill_filters.get('number', '') }}"></label>
+<label>Ref. No.<input name="supplier_reference" value="{{ bill_filters.get('supplier_reference', '') }}"></label>
+<label>From date<input type="date" name="date_from" value="{{ bill_filters.get('date_from', '') }}"></label>
+<label>Through date<input type="date" name="date_to" value="{{ bill_filters.get('date_to', '') }}"></label>
+<label>Due on or after<input type="date" name="due_from" value="{{ bill_filters.get('due_from', '') }}"></label>
+<label>Due on or before<input type="date" name="due_to" value="{{ bill_filters.get('due_to', '') }}"></label>
+<label>Status<select name="status"><option value="">All</option>{% for value in ('posted', 'voided') %}<option value="{{ value }}"{% if bill_filters.get('status') == value %} selected{% endif %}>{{ value|capitalize }}</option>{% endfor %}</select></label>
+<label>Order<select name="direction"><option value="desc" {% if selected_direction != 'asc' %}selected{% endif %}>Newest first</option><option value="asc" {% if selected_direction == 'asc' %}selected{% endif %}>Oldest first</option></select></label>
+<button>Apply</button><a href="{{ base }}">Reset</a></form>{% endif %}
 {% if noun == 'rate' %}<p><a href="{{ base }}/query">Query rates</a></p><form method="get" class="list-tools" aria-label="Rate filters">
 <label>From date<input type="date" name="date_from" value="{{ rate_filters.get('date_from', '') }}"></label>
 <label>Through date<input type="date" name="date_to" value="{{ rate_filters.get('date_to', '') }}"></label>
