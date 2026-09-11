@@ -256,6 +256,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.attachment_cmds": ["attachment"],
     "bookflow.commands.journal_cmds": ["journal"],
     "bookflow.commands.sales_cmds": ["invoice", "sales-receipt"],
+    "bookflow.commands.statement_charge_cmds": ["statement-charge"],
     "bookflow.commands.deposit_cmds": ["deposit"],
     "bookflow.commands.payment_recovery_cmds": ["payment recovery"],
     "bookflow.commands.payment_cmds": ["payment", "payment selection", "invoice", "application", "payment operation", "payment preview", "payment settlement"],
@@ -356,6 +357,9 @@ NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
     "payment": {"record_type": "transaction", "identifier": "payment", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "number", "singular_label": "Customer payment", "plural_label": "Customer payments"},
     "invoice": {"record_type": "transaction", "identifier": "invoice", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "number", "singular_label": "Invoice", "plural_label": "Invoices"},
     "sales-receipt": {"record_type": "transaction", "identifier": "sales_receipt", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "number", "singular_label": "Sales receipt", "plural_label": "Sales receipts"},
+    # No ui_group: there is no statement-charge page behind one yet, and a group with no
+    # page is a tile that goes nowhere. It joins "Customers and sales" with its window.
+    "statement-charge": {"record_type": "transaction", "identifier": "statement_charge", "output_identifier": "id", "display_field": "number", "singular_label": "Statement charge", "plural_label": "Statement charges"},
     "company": {"record_type": "company_info", "identifier": None},
     "journal": {"record_type": "transaction", "identifier": "journal", "output_identifier": "id", "ui_group": "Accounting", "display_field": "number", "singular_label": "Journal", "plural_label": "Journals"},
     "register": {"record_type": None, "identifier": None, "ui_group": "Accounting"},

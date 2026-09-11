@@ -1034,3 +1034,31 @@ MATRIX["customer-refund query"] = {
     "E_RECORD_NOT_FOUND": "unknown customer, funding account or method filter",
     "E_QUERY_STALE": "company audit changed between refund pages",
 }
+MATRIX["statement-charge post"] = {
+    "E_RECORD_NOT_FOUND": "unknown customer, item, class, tax code or receivable account",
+    "E_INACTIVE_REFERENCE": "an inactive customer, item or account",
+    "E_VALIDATION": "no positive amount, rate and amount together, a non-sales item, or no single active AR account",
+    "E_VALUE_RANGE": "a quantity or amount past the exact-integer bound",
+    "E_AMOUNT_PRECISION": "a rate or amount with more decimals than the currency has",
+    "E_PERIOD_CLOSED": "the charge date is on or before the closing date",
+    "E_DUPLICATE_NUMBER": "another statement charge already holds that number",
+    "E_PREVIEW_STALE": "expected_facts_fingerprint no longer matches the resolved facts",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["statement-charge void"] = {
+    "E_RECORD_NOT_FOUND": "unknown statement charge",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_VALIDATION": "a reason longer than 140 characters",
+    "E_REASON_REQUIRED": "no reason given",
+    "E_PERIOD_CLOSED": "the charge's own date is in a closed period",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["statement-charge show"] = {"E_RECORD_NOT_FOUND": "unknown charge or revision number"}
+MATRIX["statement-charge query"] = {
+    "E_RECORD_NOT_FOUND": "unknown customer filter",
+    "E_QUERY_STALE": "company audit changed between charge pages",
+}

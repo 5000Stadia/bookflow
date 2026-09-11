@@ -38,7 +38,7 @@ def define_tables(metadata, column, table):
         identifier('revision_id', 'Immutable revision owning this one-to-one sales header.', primary_key=True),
         identifier('transaction_id', 'Stable sales document owning this revision.'),
         *created(),
-        C('type', sa.String(32), 'Commercial type: invoice or sales_receipt.', nullable=False),
+        C('type', sa.String(32), 'Commercial type: invoice, sales_receipt or statement_charge.', nullable=False),
         identifier('customer_id', 'Customer or job captured for the sale.', 'customers.id'),
         identifier('control_account_id', 'Receivable account for an invoice or deposit account for a receipt.', 'accounts.id'),
         C('due_date', sa.String(10), 'Captured invoice due date; null for a sales receipt.', nullable=True),
@@ -50,7 +50,7 @@ def define_tables(metadata, column, table):
             ['transaction_revisions.transaction_id', 'transaction_revisions.id'], name='fk_sales_profile_revision'),
         sa.ForeignKeyConstraint(['transaction_id', 'type'],
             ['transactions.id', 'transactions.type'], name='fk_sales_profile_type'),
-        sa.CheckConstraint("(type = 'invoice' AND due_date IS NOT NULL) OR (type = 'sales_receipt' AND due_date IS NULL)",
+        sa.CheckConstraint("(type = 'invoice' AND due_date IS NOT NULL) OR (type IN ('sales_receipt', 'statement_charge') AND due_date IS NULL)",
                            name='ck_sales_profile_type_due'),
         nonnegative('subtotal_minor_units'), nonnegative('tax_minor_units'), object_check('profile_snapshot'),
         description='Immutable one-to-one sales revision headers, resolved customer facts and commercial totals.')

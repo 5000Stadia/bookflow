@@ -173,7 +173,7 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
                 memo = summary['memo']
                 if row.transaction_type != 'journal_entry':
                     category = {'invoice': 'Invoice', 'sales_receipt': 'Sales receipt', 'payment': 'Payment', 'deposit': 'Deposit', 'credit_memo': 'Credit memo',
-                                'customer_refund': 'Refund'}.get(row.transaction_type)
+                                'customer_refund': 'Refund', 'statement_charge': 'Statement charge'}.get(row.transaction_type)
                     class_label = row.class_name
                 elif summary['selected'] != 1:
                     category, class_label = 'General journal', row.class_name

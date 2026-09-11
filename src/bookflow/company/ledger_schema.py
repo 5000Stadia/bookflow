@@ -62,7 +62,7 @@ def define_tables(metadata, column, table, common):
             name='ck_ledger_party_pair')
 
     transactions = T('transactions', *common(),
-        text('type', 'Business document type: journal_entry, invoice, sales_receipt, payment, deposit, bill, bill_payment, credit_memo, sales_tax_payment, customer_refund or vendor_credit.', size=32),
+        text('type', 'Business document type: journal_entry, invoice, statement_charge, sales_receipt, payment, deposit, bill, bill_payment, credit_memo, sales_tax_payment, customer_refund or vendor_credit.', size=32),
         text('number', 'Unique editable number within the document type.', size=64),
         identifier('current_revision_id', 'Immutable revision currently displayed.'),
         text('status', 'Current workflow state: posted or voided.', size=16),
@@ -71,7 +71,7 @@ def define_tables(metadata, column, table, common):
         text('void_reason', 'Reason supplied for the final void.', True, 140),
         identifier('void_posting_batch_id', 'Final reversal batch; no separate business number.', True),
         sa.UniqueConstraint('type', 'number', name='uq_transaction_type_number'),
-        sa.CheckConstraint("type IN ('journal_entry', 'invoice', 'sales_receipt', 'payment', 'deposit', 'bill', 'bill_payment', 'credit_memo', 'sales_tax_payment', 'customer_refund', 'vendor_credit')", name='ck_transaction_type'),
+        sa.CheckConstraint("type IN ('journal_entry', 'invoice', 'sales_receipt', 'payment', 'deposit', 'bill', 'bill_payment', 'credit_memo', 'sales_tax_payment', 'customer_refund', 'vendor_credit', 'statement_charge')", name='ck_transaction_type'),
         sa.UniqueConstraint('id', 'type', name='uq_transaction_id_type'),
         sa.CheckConstraint("length(trim(number)) BETWEEN 1 AND 64", name='ck_transaction_number'),
         sa.CheckConstraint("(status = 'posted' AND voided_at IS NULL AND voided_by IS NULL AND void_reason IS NULL AND void_posting_batch_id IS NULL) OR "

@@ -172,6 +172,15 @@ def test_frozen_ddl_matches_declared_columns_keys_checks(old, tmp_path, monkeypa
                              if constraint.name == 'ck_source_component_exclusive']
                 for constraint in exclusive:
                     expected.constraints.remove(constraint)
+            if name == 'sales_profiles':
+                # co0034 admits the statement charge, which carries no due date because it has
+                # no terms. This fixture owns co0009, which knew only the two sales.
+                expected = expected.to_metadata(sa.MetaData())
+                current_check, = (c for c in expected.constraints if c.name == 'ck_sales_profile_type_due')
+                expected.constraints.remove(current_check)
+                expected.append_constraint(sa.CheckConstraint(
+                    re.sub(r"type IN \('sales_receipt'[^)]*\)", "type = 'sales_receipt'",
+                           str(current_check.sqltext)), name=current_check.name))
             if name == 'sales_line_profiles':
                 # co0011/12 introduced amount/allocated pricing; this owns co0009.
                 # Undo only those declared deltas, retaining every other assertion.

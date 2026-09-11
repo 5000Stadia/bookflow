@@ -143,7 +143,7 @@ class SalesSummaryOutput(CommonOut):
         if self.settlement_current is None:
             result.pop('settlement_current', None)
         return result
-    type: Literal["invoice", "sales_receipt"]
+    type: Literal["invoice", "sales_receipt", "statement_charge"]
     number: str
     current_revision_id: str
     status: Literal["posted", "voided"]

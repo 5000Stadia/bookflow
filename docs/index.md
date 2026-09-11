@@ -87,6 +87,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`serve`](cli/serve.md)
 - [`ship-method`](cli/ship-method.md)
 - [`ship-method query`](cli/ship-method-query.md)
+- [`statement-charge`](cli/statement-charge.md)
 - [`term`](cli/term.md)
 - [`term query`](cli/term-query.md)
 - [`token`](cli/token.md)

@@ -1126,7 +1126,8 @@ per document and party, once per party and column, both through
 
 An invoice ages on the captured due date of its current revision; everything
 else that reaches receivable -- unapplied customer credit, a receivable journal
-entry -- ages on its accounting date. Column edges are computed once in Python
+entry, a statement charge, which has no terms and so no due date -- ages on its
+accounting date. Column edges are computed once in Python
 as four exact whole-day boundary dates and compared in SQL as ISO text, so no
 calendar arithmetic and no float ever enters the query; an as-of date inside the
 first 90 days of year 1 clamps instead of underflowing. An invoice due exactly
@@ -1141,8 +1142,9 @@ Current, 1-30, 31-60, 61-90, Over 90 and a total; a row whose columns are all
 zero -- a paid invoice, a voided one, a fully applied receipt -- is omitted,
 which cannot move a total. A receivable posting under no customer, or under a
 party that is not a customer, keeps its own row labelled "No name" so the tie
-survives it. Open invoices are unpaid and partly paid invoices only, oldest due
-date first, with due date, days past due, column, original amount, applied
+survives it. Open invoices are unpaid and partly paid invoices only -- a statement
+charge is receivable and ages, but is not listed here and cannot be settled;
+see *Statement charges* below -- oldest due date first, with due date, days past due, column, original amount, applied
 amount and remaining balance, optionally filtered to one customer or to past-due
 rows; it excludes credit, so it exceeds Accounts Receivable by whatever credit
 stands unapplied.
@@ -3134,3 +3136,86 @@ no demo seed extension. A credit takes its own number series rather than sharing
 the anchor product's shared-sequence behaviour is a receivables rule about invoices and credit
 memos, and the payables document it credits is numbered by the supplier's own reference. Purchase
 discounts, purchase tax and vendor refunds are their own documents and none of them exists.
+
+## Statement charges, and the invoice line with no invoice around it
+
+`statement-charge post/show/query/void` charge one customer's account directly.
+`company/sales_models.py` holds the three inputs, `commands/statement_charge_cmds.py` the four
+commands, and everything else is the invoice's, unchanged: `sales.prepare`, `sales.commercial`,
+`sales.show`, `sales.page`, `sales._business_postings`, `sales_defaults.resolve_header` and
+`resolve_line`, `sales_validation.validate`. There is no `statement_charges.py`, and that is the
+design rather than an economy — a statement charge *is* one invoice line, so writing it a second
+implementation would be writing a second answer to what an invoice line posts.
+
+**Why it is a sales document and not its own.** `receivable_reports._EFFECTS` builds the aging
+and the statement from Accounts Receivable posting lines keyed by `name_id`, so any document that
+debits receivable under a customer already ages and already appears; only `StatementRow.entry`'s
+closed `Literal` had to admit the new word. Settlement is the part that is not document-agnostic:
+`settled_party` inner-joins `sales_profiles` for the paying side's customer, and
+`applications_exact_party` checks the same table. A charge stored in its own header table would
+have needed both widened, which is precisely the hole that would have dropped every credit
+application out of A/R aging when credit memos landed — a wrong report that still balances.
+Storing the charge in `sales_profiles` and `sales_line_profiles` means the settlement increment is
+a widening of type filters and two trigger words, not a change to how a report adds up.
+
+**The header is the line.** The anchor product's charge is a single row — item, quantity, rate,
+amount, description, class — so the input has no `lines` collection; `item`, `quantity`, `unit`,
+`rate` or `amount`, `description` and `tax_code` sit on the header and a `lines` property builds
+the one `SalesLineInput` the shared resolver reads. Two lines is an invoice. `description` becomes
+the revision memo unless a separate `memo` is given, because the revision memo is what
+`report statement` prints and a charge whose statement row says nothing is a charge nobody can
+read. The surface carries no shipping address, ship date, ship method, sales rep, customer message
+or purchase order: a charge is not shipped and not sent, only summarised. Those facts are still
+*captured* onto the revision from the customer, exactly as an invoice captures them; they are not
+asked for. `use_defaults` and `refresh_defaults` are `ClassVar` constants, not inputs — both are
+questions about a correction, and a charge is only ever posted.
+
+**No due date, by construction.** An invoice ages on the due date its terms compute; a charge has
+no terms and no invoice, so its own date is the only date it could age by.
+`sales_defaults.resolve_header` skips the terms and due-date resolution for anything that is not
+an invoice, and `co0034` widens `ck_sales_profile_type_due` so `due_date IS NULL` is the stored
+fact that says so rather than a convention. `_EFFECTS.dated` already read `CASE WHEN
+t.type='invoice' THEN p.due_date ELSE r.date END`, so the aging needed no edit at all.
+
+**Its own number series.** `document_effects.NUMBER_FAMILIES` is untouched: a charge is not in the
+invoice/credit-memo shared run, and `uq_transaction_receivable_number` is deliberately left naming
+those two, so a charge numbered 1 is never refused because invoice 1 exists. The anchor numbers
+them separately for the same reason.
+
+**Nothing can settle one, and it says so.** `applications_paid_transaction_id_type` admits a
+document of type `invoice` and nothing else, and `co0034` does not touch it. Naming a charge where
+an invoice goes therefore fails, and `payment_queries.invoice_facts` catches that failure, asks
+whether the selector named a statement charge, and answers with `found_type` and a sentence saying
+what was found — so the boundary is reported rather than read as a typo. What settling one would
+need is in *What this does not do* below.
+
+**What `co0034` does.** Three CHECK constraints widened by table rebuild — `transactions`
+(twelfth document type), `sales_profiles` (a commercial type with no due date) and
+`custom_field_scopes` (a charge takes custom fields like every other document) — and
+`document_lines_type_insert` rewritten to pair `statement_charge` with the `sale` envelope.
+`document_lines` itself is not rebuilt: a charge's line is a `sale` envelope, which the stored
+kind CHECK already admits. No table is created, nothing is backfilled and no settlement row,
+trigger or capacity changes.
+
+**What this does not do.** No `statement-charge update` and no `history`: a wrong charge is voided
+and re-entered, which is what a sixty-dollar document is worth. No browser page and no `ui_group`,
+so nothing registers a tile that goes nowhere; the window it wants is the customer register, and
+`registers.py` would need to read a customer's Accounts Receivable rows the way it reads a bank
+account's. No demo seed extension. No finance charges — a different anchor feature that computes
+its own amounts from an aging.
+
+And, the real one: **a payment cannot settle a charge.** Doing it needs, in one increment:
+`applications_paid_transaction_id_type` and `payment_selection_items_invoice_id_type` widened to
+admit `statement_charge` (a migration, since both are triggers);
+`payment_queries.invoice_facts` and the three `sales.resolve(..., 'invoice')` calls in
+`payment_selection` widened to either type; `payment_preparation._candidate_query`'s
+`t.type='invoice'` condition widened, which is what makes a charge appear in `payment invoices`;
+`settlement_line_keys_transaction_id_type` widened, since the per-line settlement keys an
+invoice writes are what `application_allocations_owned_sources` verifies; `payment_recovery`'s
+`ck invoice_type` CHECK and its `invoice_type='invoice'` writes; `payment_dependencies`'s
+`owner_type` pair; and `receivable_reports._OPEN`, whose `document_type='invoice'` filter is why
+`report open-invoices` cannot list one. The storage under all of it already fits — `applications`
+and `payment_selection_items` both foreign-key `transactions.id` with no type column, and a charge
+already writes the `sales_profiles` row `applications_exact_party` joins — so this is a widening
+of nine type filters and four triggers, not a data-model change. What it is not is small, and
+half-doing it is how a settled charge disappears from an aging that still balances.
