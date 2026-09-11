@@ -164,7 +164,7 @@ class GeneralLedgerRow(StrictModel):
     batch_id: str | None = None
     batch_kind: Literal["original", "reversal", "replacement"] | None = None
     transaction_id: str | None = None
-    transaction_type: Literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo"] | None = None
+    transaction_type: Literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment"] | None = None
     transaction_number: str | None = None
     revision_id: str | None = None
     reverses_batch_id: str | None = None
@@ -328,7 +328,9 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True):
     # receivables report and takes the receivable branch, like its two neighbours.
     financial = report in {"profit-and-loss", "balance-sheet"}
     receivable = report in {"ar-aging", "open-invoices", "statement"}
-    payable = report in {"ap-aging", "unpaid-bills"}
+    # The sales tax liability is a payables report whose rows are agencies, which are
+    # vendors, so it labels and orders its rows exactly as the other two do.
+    payable = report in {"ap-aging", "unpaid-bills", "sales-tax-liability"}
     if financial:
         label_query = "SELECT id, full_name, full_name_key, name, number, type, parent_id, active FROM accounts ORDER BY id"
     elif receivable:

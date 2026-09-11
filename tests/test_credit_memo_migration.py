@@ -37,6 +37,18 @@ def _at(path, revision):
             db.raw.execute('PRAGMA foreign_keys=ON')
 
 
+def _superseded_after(revision):
+    """Trigger names a company migration later than ``revision`` deliberately rewrote."""
+    import pkgutil
+    from bookflow.storage.company_migrations import versions
+    names = set()
+    for info in pkgutil.iter_modules(versions.__path__):
+        module = importlib.import_module(versions.__name__ + '.' + info.name)
+        if getattr(module, 'revision', '') > revision:
+            names.update(getattr(module, 'REPLACED', ()))
+    return names
+
+
 def test_frozen_ddl_is_the_current_metadata_and_the_guards_are_the_schema_module():
     indexes = sorted([index for name in M.NEW_TABLES for index in c.metadata.tables[name].indexes],
                      key=lambda index: index.name)
@@ -47,7 +59,14 @@ def test_frozen_ddl_is_the_current_metadata_and_the_guards_are_the_schema_module
                   if index.name == 'uq_transaction_receivable_number')
     compiled += (str(CreateIndex(shared).compile(dialect=dialect())).strip(),)
     assert M.DDL == compiled
-    assert M.GUARDS == tuple(guard_statements()) + tuple(settlement_guard_statements())
+    # Frozen text can only equal today's metadata for the objects no later revision has
+    # rewritten. Which those are is derived from the later migrations themselves, never
+    # listed here: a literal list is what makes the next migration falsify this test.
+    superseded = _superseded_after(M.revision)
+    assert superseded <= {statement.split()[2] for statement in M.GUARDS}
+    current = tuple(guard_statements()) + tuple(settlement_guard_statements())
+    assert tuple(s for s in M.GUARDS if s.split()[2] not in superseded) == tuple(
+        s for s in current if s.split()[2] not in superseded)
     assert {statement.split()[2] for statement in M.GUARDS} & set(M.REPLACED) == set(M.REPLACED)
     # Every composite foreign key names a real key of its target, not an arbitrary column pair.
     for name in M.NEW_TABLES + ('applications', 'application_allocations'):
@@ -63,7 +82,9 @@ def test_frozen_ddl_is_the_current_metadata_and_the_guards_are_the_schema_module
 def test_a_fresh_database_reaches_the_head_with_empty_credit_storage(tmp_path):
     with open_database(tmp_path / 'fresh.db', writable=True, create=True) as db:
         assert migrate_to_head(db, 'company', None) == (None, HEADS['company'])
-        assert HEADS['company'] == M.revision
+        # This revision is a link in the chain, not necessarily its head: pinning it as the
+        # head made every later migration falsify a test about credit memos.
+        assert M.down_revision == 'co0027'
         assert all(db.raw.execute('SELECT count(*) FROM ' + name).fetchone() == (0,)
                    for name in M.NEW_TABLES)
         assert db.raw.execute('PRAGMA main.foreign_key_check').fetchall() == []

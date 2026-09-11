@@ -49,6 +49,7 @@ COMMAND_CODES: dict[str, str] = {
     "E_SELECTION_CONSUMED": "This draft was consumed by a successful payment operation; recover that operation or start a new draft.",
     "E_NO_EXCHANGE_RATE": "No exchange rate exists for the exact accounting date and currency pair.",
     "E_UNBALANCED_ENTRY": "Journal debits and credits must be equal.",
+    "E_TAX_BASIS_UNSUPPORTED": "Sales tax on this liability basis is not derivable from what the books record.",
     "E_PERIOD_CLOSED": "An affected accounting date is in a closed period.",
     "E_WORK_DEPENDENCY": "The accepted or linked work prevents this change; inspect the related document.",
     "E_CONVERSION_KEY_REUSED": "That permanent conversion key was used for different work or input.",

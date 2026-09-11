@@ -563,3 +563,33 @@ EXAMPLES.update({
         f'bookflow credit-memo history {ID} --limit 25 --company "Demo Plumbing Co" --json',
         {"credit_memo": ID, "limit": 25}),
 })
+
+
+# Sales tax is read before it is paid, so the liability example names the period end a bookkeeper
+# would actually ask about, and the remittance answers exactly that period.
+EXAMPLES.update({
+    "sales-tax liability": Example(
+        'bookflow sales-tax liability --as-of 2026-03-31 --limit 25'
+        ' --company "Demo Plumbing Co" --json',
+        {"as_of": "2026-03-31", "limit": 25}),
+    "sales-tax pay": Example(
+        'bookflow sales-tax pay --agency "State Board of Equalization" --date 2026-04-20'
+        ' --through-date 2026-03-31 --funding-account "Checking" --method "Check"'
+        ' --check-number 1052 --memo "Q1 sales tax"'
+        ' --company "Demo Plumbing Co" --reason "Remit the first-quarter sales tax" --json',
+        {"agency": "State Board of Equalization", "date": "2026-04-20",
+         "through_date": "2026-03-31", "funding_account": "Checking", "method": "Check",
+         "check_number": "1052", "memo": "Q1 sales tax"}),
+    "sales-tax payment show": Example(
+        f'bookflow sales-tax payment show {ID} --company "Demo Plumbing Co" --json',
+        {"payment": ID}),
+    "sales-tax payment query": Example(
+        'bookflow sales-tax payment query --agency "State Board of Equalization"'
+        ' --date-from 2026-01-01 --status posted --limit 25 --company "Demo Plumbing Co" --json',
+        {"agency": "State Board of Equalization", "date_from": "2026-01-01",
+         "status": "posted", "limit": 25}),
+    "sales-tax payment void": Example(
+        f'bookflow sales-tax payment void {ID} --expected-version 1 --company "Demo Plumbing Co"'
+        ' --reason "Remitted from the wrong bank account" --json',
+        {"payment": ID, "expected_version": 1}),
+})
