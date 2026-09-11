@@ -63,7 +63,7 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # The census of material schema nodes. It moves whenever a routed command gains input
     # shape. Measured from the merged tree on every merge -- no branch's number survives
     # another branch landing.
-    assert sum(len(group["paths"]) for group in mapped)==2508
+    assert sum(len(group["paths"]) for group in mapped)==2510
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

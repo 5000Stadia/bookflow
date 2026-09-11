@@ -25,7 +25,10 @@ from tests.test_bill_payment_migration import _rebuilt_since
 M = importlib.import_module(
     'bookflow.storage.company_migrations.versions.0039_account_cash_flow_section')
 
-PRIOR = 'co0033'
+# Read the predecessor off the migration itself. Branches merge out of numeric order, so this
+# revision's down_revision moves at integration time; a literal here would rot on the first merge
+# that lands ahead of it -- which is exactly what happened.
+PRIOR = M.down_revision
 
 
 def _chain():
@@ -110,7 +113,7 @@ def test_the_constraint_admits_every_section_and_nothing_else(tmp_path):
         raw.commit()
 
 
-def test_a_populated_co0033_database_keeps_every_value_and_declares_nothing(tmp_path):
+def test_a_populated_prior_database_keeps_every_value_and_declares_nothing(tmp_path):
     path = tmp_path / 'company.db'
     _at(path, PRIOR)
     with sqlite3.connect(path) as raw:

@@ -50,6 +50,7 @@ FIELDS = {
         'description': ('str', True, False, 'outside_output'),
         'currency': ('str', False, False, 'dependency_field'),
         'tax_line': ('str', True, False, 'outside_output'),
+              'cash_flow_section': ('str', True, False, 'outside_output'),
         'institution_name': ('str', True, False, 'outside_output'),
         'institution_account_last4': ('str', True, False, 'outside_output'),
         'routing_number_last4': ('str', True, False, 'outside_output'),
