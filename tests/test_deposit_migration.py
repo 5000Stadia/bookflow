@@ -14,12 +14,38 @@ from sqlalchemy.schema import CreateTable,CreateIndex
 from sqlalchemy.dialects.sqlite import dialect
 from bookflow.company import schema
 from bookflow.storage.engine import open_database
-from bookflow.storage.migrate import migrate_to_head,FeatureRevision,feature_admission
+from bookflow.storage.migrate import HEADS,migrate_to_head,FeatureRevision,feature_admission
 from bookflow.core.errors import BookflowError
 from tests.payment_raw_evidence import table,attachments
 
 BASE='57314722e8b2cd7e4402feaf059a244794f0efca'
 M=importlib.import_module('bookflow.storage.company_migrations.versions.0020_deposits')
+
+
+def _later_rebuilds(revision):
+    """Tables a later company migration rebuilt, and triggers it rewrote."""
+    import pkgutil
+    from bookflow.storage.company_migrations import versions
+    rebuilt,rewritten=set(),set()
+    for info in pkgutil.iter_modules(versions.__path__):
+        module=importlib.import_module(versions.__name__+'.'+info.name)
+        if getattr(module,'revision','')<=revision:continue
+        rebuilt.update(getattr(module,'CHANGED',()))
+        rewritten.update(getattr(module,'REPLACED',()))
+    return rebuilt,rewritten
+
+
+def _later_additions(revision):
+    """Columns a company migration later than ``revision`` appends to an existing table."""
+    import pkgutil
+    from bookflow.storage.company_migrations import versions
+    added={}
+    for info in pkgutil.iter_modules(versions.__path__):
+        module=importlib.import_module(versions.__name__+'.'+info.name)
+        if getattr(module,'revision','')<=revision:continue
+        for name,columns in getattr(module,'ADDITIONS',{}).items():
+            added.setdefault(name,[]).extend(part.strip().split()[0] for part in columns)
+    return {name:tuple(columns) for name,columns in added.items()}
 
 
 @pytest.fixture(scope='module')
@@ -43,7 +69,7 @@ def test_frozen_ddl_metadata_and_shared_feature_admission(tmp_path):
         expected.extend(str(CreateIndex(i).compile(dialect=dialect())) for i in sorted(t.indexes,key=lambda i:i.name))
     assert M.DDL==expected
     with open_database(tmp_path/'fresh.db',writable=True,create=True) as db:
-        assert migrate_to_head(db,'company',None)==(None,'co0023')
+        assert migrate_to_head(db,'company',None)==(None,HEADS['company'])
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
         assert db.raw.execute('PRAGMA integrity_check').fetchall()==[('ok',)]
         assert feature_admission(db,FeatureRevision('company',None),resolver=None) is None
@@ -89,13 +115,18 @@ def test_all_raw_values_local_ddl_attachments_and_rollback(co19,tmp_path):
         assert db.raw.execute('SELECT version_num FROM alembic_version').fetchone()==('co0019',)
         assert db.raw.execute("SELECT name FROM sqlite_schema WHERE name='deposit_profiles'").fetchall()==[]
         db.raw.execute('DROP TABLE deposit_current_memberships')
-        assert migrate_to_head(db,'company',tmp_path/'backups')==('co0019','co0023')
-        after={name:table(db.raw,name,omit_columns=('deposit_component_id',) if name=='posting_line_sources' else ()) for name in names}
+        assert migrate_to_head(db,'company',tmp_path/'backups')==('co0019',HEADS['company'])
+        # Columns later revisions add to a rebuilt table are the one difference allowed,
+        # and which those are is derived from the migrations themselves: a literal list
+        # here is what made every new migration falsify this test.
+        omit=dict(_later_additions(M.revision),posting_line_sources=('deposit_component_id',))
+        after={name:table(db.raw,name,omit_columns=tuple(omit.get(name,()))) for name in names}
         assert before==after
         stored={(kind,name):(owner,sql) for kind,name,owner,sql in db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema')}
+        rebuilt,rewritten=_later_rebuilds(M.revision)
         for kind,name,owner,sql in ddl:
-            if kind=='table' and name in ('transactions','document_lines','posting_line_sources'):continue
-            if name=='document_lines_type_insert':continue
+            if kind=='table' and name in {'transactions','document_lines','posting_line_sources'}|rebuilt:continue
+            if name in {'document_lines_type_insert'}|rewritten:continue
             assert stored[(kind,name)]==(owner,sql),(kind,name)
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
         assert db.raw.execute('PRAGMA integrity_check').fetchall()==[('ok',)]

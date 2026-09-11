@@ -327,7 +327,8 @@ WHERE tc.id = NEW.tax_component_id AND tc.tax_item_id = NEW.tax_item_id AND tc.l
 
 DOCUMENT_LINE_KINDS = (('journal_entry', 'journal'), (('invoice', 'sales_receipt'), 'sale'),
                        ('payment', 'payment'), ('deposit', 'deposit'), ('bill', 'purchase'),
-                       ('bill_payment', 'bill_payment'), ('credit_memo', 'credit'))
+                       ('bill_payment', 'bill_payment'), ('credit_memo', 'credit'),
+                       ('sales_tax_payment', 'sales_tax_payment'))
 
 
 def settlement_guard_statements():

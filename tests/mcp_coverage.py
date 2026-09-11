@@ -282,6 +282,11 @@ sales-rep list
 sales-rep query
 sales-rep show
 sales-rep update
+sales-tax liability
+sales-tax pay
+sales-tax payment query
+sales-tax payment show
+sales-tax payment void
 sales-tax-code activate
 sales-tax-code create
 sales-tax-code deactivate
@@ -391,6 +396,7 @@ def execution_map():
     from tests.test_bill_entry import COMMANDS as BILL_COMMANDS
     from tests.test_bill_payment import COMMANDS as BILL_PAYMENT_COMMANDS
     from tests.test_credit_memo import COMMANDS as CREDIT_MEMO_COMMANDS
+    from tests.test_sales_tax_remittance import COMMANDS as SALES_TAX_COMMANDS
     from tests.test_transfer_funds import COMMANDS as TRANSFER_COMMANDS
     from tests.test_payment_recovery_interfaces import COMMANDS as RECOVERY_COMMANDS
     registry.load_all()
@@ -411,6 +417,7 @@ def execution_map():
                    'tests/test_bill_entry.py::test_the_same_bill_through_python_cli_http_and_mcp' if cmd.name in BILL_COMMANDS else
                    'tests/test_bill_payment.py::test_the_same_bill_payment_through_python_cli_http_and_mcp' if cmd.name in BILL_PAYMENT_COMMANDS else
                    'tests/test_credit_memo.py::test_the_same_credit_memo_through_python_cli_http_and_mcp' if cmd.name in CREDIT_MEMO_COMMANDS else
+                   'tests/test_sales_tax_remittance.py::test_the_same_sales_tax_remittance_through_python_cli_http_and_mcp' if cmd.name in SALES_TAX_COMMANDS else
                    'tests/test_transfer_funds.py::test_the_same_transfer_through_python_cli_http_and_mcp' if cmd.name in TRANSFER_COMMANDS else
                    'tests/test_payment_recovery_interfaces.py::test_complete_recovery_contract_on_all_four_interfaces' if cmd.name in RECOVERY_COMMANDS else
                    'tests/test_mcp_registry_hub_reads.py::test_hub_read_full_documents_and_scope_boundaries' if any(cmd.name in names for names in HUB_FAMILIES.values()) else

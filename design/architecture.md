@@ -2928,3 +2928,64 @@ page — the home window's credit-memo tile stays planned, because a tile is liv
 command, a route and a page all exist. Price allowances against a source line, stocked returns
 and cost restoration, cross-party (parent↔job) credit, cash-basis treatment and print are
 outside the release entirely and are refused rather than approximated; the command help says so.
+
+## Sales tax liability, and the document that remits it
+
+**Why the liability is derived rather than stored.** `sales_tax_components` already records, for
+every posted sale, which agency each tax cell belongs to and which liability account it credited.
+Nothing needed to be added to know what is owed; what was missing was a read that asks the
+question and a document that can answer it. `sales-tax liability` starts from every posting
+effect on an account whose `system_role` is `sales_tax_payable`, dated on or before the as-of
+date, signs it credit-minus-debit because a tax liability is credit-normal, and attributes each
+effect to an agency.
+
+**Three attributions, one rule.** A sale's tax leg names its component through
+`posting_line_sources.tax_component_id`; a credit memo's tax leg is named by
+`credit_tax_components.posting_source_id`; a remittance's liability leg is named by
+`sales_tax_payment_profiles.liability_posting_source_id`. A reversal is resolved by following
+`posting_line_sources.reversed_source_id` back to the attribution it inverts, which is why
+voiding an invoice, a credit memo or a remittance moves the report by exactly what the document
+moved. An effect no attribution claims — a journal entry posted straight at the liability — is
+reported on its own row with no agency rather than dropped. That is what makes the report's total
+the account's own balance for the same date, and both the per-row identity
+(`tax_charged − tax_credited − remitted + unattributed = balance`) and the totals are checked in
+Python, where an integer is exact and unbounded.
+
+**Accrual only, and why that is the honest answer.** `company_info.sales_tax_liability_basis` has
+two settings, and `sales_defaults.resolve_line` refuses to post a taxable sale at all unless it is
+`invoice_date`. So a company on `payment_receipt` has never recorded a tax component, there is no
+deferred-tax account, and no posting moves tax from unearned to payable — a cash-basis figure
+could not be computed from anything stored. Both `sales-tax liability` and `sales-tax pay` refuse
+with `E_TAX_BASIS_UNSUPPORTED` rather than answering with an accrual number under a cash-basis
+policy.
+
+**A dedicated document, not a check.** A check names an account; it does not say whose liability
+fell, and there is no second table that could say it afterwards. `sales_tax_payment_profiles` is
+the one-to-one header of a remittance revision — agency, liability account, funding account and
+kind, method, check number, the period end it answers, and the attribution row that debited the
+liability. Its accounting is one debit to the captured liability account and one credit to the
+funding account; that is the whole ledger effect. The anchor product's own guidance is explicit
+that a check written to a tax agency is an error to be voided and re-entered through the proper
+feature, and this is the structural reason why.
+
+**No settlement edge.** Sales tax is a balance, not a set of documents, so a remittance answers
+nothing and there is nothing to apply, unapply or re-point. A partial remittance leaves the
+remainder owed because the balance is the arithmetic of the postings — which is also why the
+remainder stays right afterwards: a later invoice raises it and a credit memo lowers it without
+the remittance being revisited. `amount` defaults to everything owed through `through_date`;
+more than that is refused with `E_APPLICATION_CAPACITY`, and the check is made again inside the
+writer's transaction so two remittances racing for one balance cannot both post.
+
+**Immutable, void only.** There is no `sales-tax payment update` and no `history`. A remittance
+has three facts — the agency, the amount and the date — and changing any of them makes it a
+different remittance, so the correction path is void and write again. One revision for the life
+of the document is also what lets `liability_posting_source_id` name one posting attribution for
+ever rather than one per revision, and a history walk over a document that can only ever have one
+revision would report nothing the `show` does not.
+
+**What this increment deliberately does not do.** There is no sales tax adjustment document, so an
+agency's balance can only be changed by a sale, a credit memo, a remittance or a hand journal
+entry — and a hand journal entry lands in the unattributed row rather than on an agency. There is
+no browser page, no multi-agency remittance, and no demo seed extension. `company_info`'s
+`sales_tax_remittance_frequency` is captured at company creation and read by nothing here: the
+period a remittance answers is `through_date`, supplied per document.

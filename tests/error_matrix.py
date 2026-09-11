@@ -844,3 +844,45 @@ MATRIX["credit-memo history"] = {
     "E_RECORD_NOT_FOUND": "unknown credit memo",
     "E_QUERY_STALE": "company audit changed between history pages",
 }
+
+
+# Remitting sales tax refuses for three families: the funding side a bill payment already
+# refuses for, the agency side that keeps a remittance off a vendor who is not one, and the
+# basis refusal -- the company policy under which nothing recorded a liability to report.
+MATRIX["sales-tax liability"] = {
+    "E_RECORD_NOT_FOUND": "unknown agency filter",
+    "E_QUERY_STALE": "company audit changed between liability pages",
+    "E_VALUE_RANGE": "an amount outside signed 64-bit minor units",
+    "E_TAX_BASIS_UNSUPPORTED": "the company's sales tax liability basis is payment_receipt",
+}
+MATRIX["sales-tax pay"] = {
+    "E_RECORD_NOT_FOUND": "unknown agency, funding account, method or class, or no sales tax payable account in the chart",
+    "E_INACTIVE_REFERENCE": "deactivated agency, funding account, method, class or liability account",
+    "E_VALIDATION": "a vendor that is not a flagged tax agency, an ineligible funding account, a check number on something that is not a check, a through_date after the payment date, or an amount of zero",
+    "E_VALUE_RANGE": "an exhausted remittance number sequence",
+    "E_AMOUNT_PRECISION": "an amount with more precision than the currency has",
+    "E_PERIOD_CLOSED": "payment date on or before the closing date",
+    "E_DUPLICATE_NUMBER": "explicit number already occupied by another remittance",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_APPLICATION_CAPACITY": "more than the agency is owed through that date, including a concurrent remittance that took it first",
+    "E_TAX_BASIS_UNSUPPORTED": "the company's sales tax liability basis is payment_receipt",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["sales-tax payment void"] = {
+    "E_RECORD_NOT_FOUND": "unknown remittance",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_VALIDATION": "a reason longer than 140 characters",
+    "E_REASON_REQUIRED": "void without a reason",
+    "E_PERIOD_CLOSED": "remittance date on or before the closing date",
+    "E_APPLICATION_INACTIVE": "an already voided remittance",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["sales-tax payment show"] = {"E_RECORD_NOT_FOUND": "unknown remittance"}
+MATRIX["sales-tax payment query"] = {
+    "E_RECORD_NOT_FOUND": "unknown agency, funding account or method filter",
+    "E_QUERY_STALE": "company audit changed between remittance pages",
+}
