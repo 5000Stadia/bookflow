@@ -522,6 +522,11 @@ EXAMPLES.update({
         'bookflow bill payment query --vendor "Northside Supply" --date-from 2026-04-01'
         ' --status posted --limit 25 --company "Demo Plumbing Co" --json',
         {"vendor": "Northside Supply", "date_from": "2026-04-01", "status": "posted", "limit": 25}),
+    "bill payment apply": Example(
+        f'bookflow bill payment apply {ID} --expected-version 2'
+        ' --bills \'[{"bill":"BILL-112"}]\''
+        ' --company "Demo Plumbing Co" --reason "Move the check to the right bill" --json',
+        {"payment": ID, "expected_version": 2, "bills": [{"bill": "BILL-112"}]}),
     "bill payment unapply": Example(
         f'bookflow bill payment unapply {ID} --expected-version 1 --company "Demo Plumbing Co"'
         ' --reason "Applied to the wrong bill" --json',

@@ -670,7 +670,7 @@ the payments already made against that bill.
 
 ### Paying a bill: the settlement side of the payable
 
-`bill pay` and `bill payment show/query/unapply/void` settle what a bill owes.
+`bill pay` and `bill payment show/query/apply/unapply/void` settle what a bill owes.
 `company/bill_payment_models.py` holds the inputs and outputs, `company/bill_payment_facts.py`
 what a revision captures, `company/bill_payments.py` the resolution, posting and reads,
 `company/bill_payment_validation.py` an independent check of the aggregate,
@@ -720,9 +720,25 @@ transaction against storage, so a concurrent payment that took the money first l
 than at the preview. A payment cannot be dated before a bill it settles, which is what keeps the
 payable tied to the open balances at every date.
 
-**Taking it back.** `bill payment unapply` writes inverses and nothing else -- no posting, no new
-revision -- and names `bills` to detach only some of them; unapplying what is already unapplied
-is a no-change result rather than an error. `bill payment void` reverses the posting batch at its
+**Taking it back, and pointing it somewhere else.** `bill payment unapply` writes inverses and
+nothing else -- no posting, no new revision -- and names `bills` to detach only some of them;
+unapplying what is already unapplied is a no-change result rather than an error.
+`bill payment apply` is its inverse and writes as little: new `apply` edges hung on capacity that
+already exists, so a payment freed off one bill answers another without a new document. Free
+capacity is read per component in entered-line order -- the component's own amount less the
+applies standing against it -- and consumed greedily, so applying an amount that straddles a
+component boundary leaves one component answering two bills, which the storage allows and
+`BillPaymentLineOutput` reports by naming no bill on that line. A row naming no amount takes the
+lesser of what is open on the bill and what the payment has left, because unlike `bill pay` the
+money exists before the selection does; a named amount is taken as named and refused above either
+side with `E_APPLICATION_CAPACITY`. `date` defaults to the payment's own date and may be later,
+which is what lets a check answer a bill entered after it was written, but never earlier than the
+payment or than a bill it settles. A closed period refuses it, the way `payment apply` refuses
+one on the customer side: nothing is posted, but what the books say was open on a date does
+change. `bill_payment_validation._source_capacity` is the mirror of its `_settlement`: one refuses
+settling a payable past its gross, the other refuses spending a payment past what it carries, and
+both read storage inside the writer's transaction so the second of two concurrent writers loses
+there rather than at the preview. `bill payment void` reverses the posting batch at its
 own date and refuses with `E_HAS_APPLICATIONS` while anything is still applied, which is the
 customer receipt's discipline and keeps a void from silently reopening a bill. `bills.prepare`
 already refused correction and void of a bill with applications, so a bill that has been paid is
@@ -744,9 +760,8 @@ payee group lives.
 `templates/pay_bills.html` plus `static/pay-bills.js` are the window: one funding account, one
 method and one date for the page, an optional vendor filter, and the open bills underneath.
 Each row's original amount, due date and open balance come from that bill's own
-`settlement_current` as `bill query` returned it -- not from `report unpaid-bills`, whose applied
-column is still the literal zero the payables reports were written with, so it lists a paid bill
-as open. Ticking a row fills its payment with the whole open balance, which is what ticking a row
+`settlement_current` as `bill query` returned it, which is the same edge `report unpaid-bills`
+now sums in its own `applied` column. Ticking a row fills its payment with the whole open balance, which is what ticking a row
 on a Pay Bills screen means; typing over it is a partial payment. The running total and each
 group's total are exact minor-unit sums in `BigInt`, never a float.
 
@@ -768,9 +783,13 @@ per row, asserted at 390px in `tests/test_pay_bills_browser.py` as each element'
 
 Not built here: purchase discounts and vendor credits, which need their own documents and an
 adopted account-eligibility contract before a settlement can carry a third term; purchase tax;
-re-applying a freed component to a different bill; printing a check; and browser pages for
-`bill payment unapply` and `bill payment void`, which are reachable only through the command
-surfaces.
+`bill payment update`, which would move a posted payment's money rather than what it answers;
+printing a check; and browser pages for `bill payment apply`, `bill payment unapply` and
+`bill payment void`, which are reachable only through the command surfaces. To expose applying,
+the Pay Bills window would need a payment-first mode -- pick a payment with unapplied money,
+list that vendor's open bills, and fill each ticked row with the lesser of its open balance and
+what the payment has left, against `bill payment show`'s `settlement_current.unapplied` as the
+running budget rather than a funding account and a date.
 
 ### Transfers between the company's own accounts
 

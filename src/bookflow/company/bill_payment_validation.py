@@ -6,10 +6,12 @@ each bill has left is read again from storage rather than taken from the plan. I
 preview and again inside the writing transaction, so a graph that only became wrong between
 the two is still caught. Anything it refuses is ``E_INTERNAL``: a caller cannot cause these.
 
-The one refusal that is not internal is over-settlement. Two people paying the same bill at the
-same moment each see it open, and the second one's write has to lose -- so the check that a
-payable is never settled past its gross is made here, in the writer's own transaction, against
-what storage says at that instant.
+The one refusal that is not internal is over-settlement, and it has two directions. Two people
+paying the same bill at the same moment each see it open, and two people re-pointing the same
+freed payment each see it free; in both races the second write has to lose. So the checks that
+a payable is never settled past its gross and that a payment's capacity never answers two bills
+at once are made here, in the writer's own transaction, against what storage says at that
+instant, and both refuse with ``E_APPLICATION_CAPACITY``.
 """
 from __future__ import annotations
 
@@ -49,7 +51,7 @@ def _validate(plan, s, ctx):
     if not data.get('changed', True):
         return
     operation = data['operation']
-    require(operation in ('pay', 'unapply', 'void'), 'wrong operation')
+    require(operation in ('pay', 'apply', 'unapply', 'void'), 'wrong operation')
     currency = s.company.conn.execute(c.company_info.select()).mappings().one()['home_currency']
     numbers = set()
     for document in data['documents']:
@@ -57,6 +59,7 @@ def _validate(plan, s, ctx):
         numbers.add(document['header']['number'])
     require(len(numbers) == len(data['documents']), 'two payments with the same number')
     _settlement(s, data, operation)
+    _source_capacity(s, data)
 
 
 def _document(s, ctx, payments, data, document, currency, operation):
@@ -121,10 +124,13 @@ def _document(s, ctx, payments, data, document, currency, operation):
     if operation == 'void':
         _void(s, data, document, header, pending, batches, legs)
         return
-    if operation == 'unapply':
+    if operation in ('apply', 'unapply'):
         require(not any(pending[name] for name, _, _ in payments.TABLE_KINDS
-                        if name != 'ap_applications'), 'an unapply writes nothing but inverses')
-        require(header['status'] == 'posted', 'an unapply cannot void the payment')
+                        if name != 'ap_applications'),
+                'settling existing capacity writes nothing but edges')
+        require(header['status'] == 'posted', 'settling existing capacity cannot void the payment')
+        if operation == 'apply':
+            _apply(s, document, header, pending, currency)
         return
 
     require(header['status'] == 'posted', 'a new payment is posted')
@@ -216,16 +222,43 @@ def _document(s, ctx, payments, data, document, currency, operation):
                 and application['effective_date'] == revision['date']
                 and application['kind'] == 'apply' and application['reverses_application_id'] is None,
                 'an application does not match the capacity it consumes')
-        bill = effects.rows(s, c.transactions, c.transactions.c.id == application['obligation_transaction_id'])
-        require(len(bill) == 1 and bill[0]['type'] == 'bill' and bill[0]['status'] == 'posted',
-                'an application names something that is not an open bill')
-        obligation = effects.rows(s, c.ap_obligation_keys,
-                                  c.ap_obligation_keys.c.id == application['obligation_key_id'])
-        require(len(obligation) == 1 and obligation[0]['transaction_id'] == bill[0]['id']
-                and obligation[0]['vendor_id'] == key['vendor_id']
-                and obligation[0]['ap_account_id'] == key['ap_account_id']
-                and obligation[0]['currency'] == currency,
-                'an application crosses a vendor, a payable account or a currency')
+        _settled_bill(s, application, key, currency)
+
+
+def _settled_bill(s, application, key, currency):
+    """What an application names on the payable side, whichever write made it."""
+    bill = effects.rows(s, c.transactions, c.transactions.c.id == application['obligation_transaction_id'])
+    require(len(bill) == 1 and bill[0]['type'] == 'bill' and bill[0]['status'] == 'posted',
+            'an application names something that is not an open bill')
+    obligation = effects.rows(s, c.ap_obligation_keys,
+                              c.ap_obligation_keys.c.id == application['obligation_key_id'])
+    require(len(obligation) == 1 and obligation[0]['transaction_id'] == bill[0]['id']
+            and obligation[0]['vendor_id'] == key['vendor_id']
+            and obligation[0]['ap_account_id'] == key['ap_account_id']
+            and obligation[0]['currency'] == currency,
+            'an application crosses a vendor, a payable account or a currency')
+
+
+def _apply(s, document, header, pending, currency):
+    """Edges hung on capacity that already exists, read back from storage rather than the plan."""
+    revision = document['revision']
+    key = ap_settlement.source_key_row(s, header['id'])
+    require(key is not None and key['currency'] == currency,
+            'an apply against a payment that carries no settlement source')
+    components = {row['id']: row for row in effects.rows(
+        s, c.ap_source_components, c.ap_source_components.c.transaction_id == header['id'])}
+    applications = pending['ap_applications']
+    require(bool(applications), 'an apply that settles nothing')
+    for application in applications:
+        component = components.get(application['source_component_id'])
+        require(component is not None and application['source_key_id'] == key['id']
+                and application['currency'] == component['currency'] == currency
+                and application['kind'] == 'apply' and application['reverses_application_id'] is None
+                and amount(application['amount_minor_units'], positive=True) <= component['amount_minor_units'],
+                'an application does not match the capacity it consumes')
+        require(application['effective_date'] >= revision['date'],
+                'an application cannot settle before the money left')
+        _settled_bill(s, application, key, currency)
 
 
 def _void(s, data, document, header, pending, batches, legs):
@@ -288,3 +321,43 @@ def _settlement(s, data, operation):
         active = {row['id'] for row in ap_settlement.active_applications(
             s, data['documents'][0]['header']['id'])}
         require(originals <= active, 'an inverse of something already unapplied')
+
+
+def _source_capacity(s, data):
+    """No part of a payment's capacity answers two bills at once, read fresh against storage.
+
+    The mirror of ``_settlement``: that one refuses settling a payable past its gross, this one
+    refuses spending a payment past what it carries. Both have to read storage inside the
+    writer's transaction, because the concurrent write that took the money is only visible
+    there -- two people re-pointing the same freed check at different bills is the same race as
+    two people paying the same bill.
+    """
+    rows = [row for document in data['documents'] for row in document['pending']['ap_applications']]
+    if not rows:
+        return
+    for identifier in sorted({row['source_transaction_id'] for row in rows}):
+        components = {row['id']: row for row in effects.rows(
+            s, c.ap_source_components, c.ap_source_components.c.transaction_id == identifier)}
+        components.update({row['id']: row for document in data['documents']
+                           for row in document['pending']['ap_source_components']
+                           if row['transaction_id'] == identifier})
+        held = dict.fromkeys(components, 0)
+        for edge in ap_settlement.applications(s, source_transaction_id=identifier):
+            if edge['active']:
+                held[edge['source_component_id']] = held.get(edge['source_component_id'], 0) + edge['amount_minor_units']
+        for row in rows:
+            if row['source_transaction_id'] == identifier:
+                sign = 1 if row['kind'] == 'apply' else -1
+                held[row['source_component_id']] = held.get(row['source_component_id'], 0) + sign * row['amount_minor_units']
+        for component_id, units in held.items():
+            component = components.get(component_id)
+            require(component is not None, 'an edge against capacity this payment does not own')
+            require(units >= 0, 'a payment has been given back more than it carried')
+            if units > component['amount_minor_units']:
+                header = effects.rows(s, c.transactions, c.transactions.c.id == identifier)[0]
+                raise BookflowError('E_APPLICATION_CAPACITY', details={
+                    'payment_id': identifier, 'payment_number': header['number'],
+                    'requested_minor_units': units,
+                    'available_minor_units': component['amount_minor_units'],
+                    'next': 'Someone else attached this payment first; re-read what it has free '
+                            'and apply that.'})

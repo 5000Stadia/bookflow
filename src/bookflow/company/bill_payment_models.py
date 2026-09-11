@@ -9,6 +9,11 @@ says so rather than a note in the help saying so.
 first detaches money from a bill and leaves the cash where it went; the second reverses the
 cash and requires that nothing is still attached, which is exactly the discipline the customer
 receipt already has.
+
+``bill payment apply`` is the other direction of the first of those: capacity a payment has
+free -- never applied, or freed by an unapply -- attached to more of the same vendor's open
+bills. Detaching and re-attaching is ordinary work rather than a correction, so the way out of
+a payment pointed at the wrong bill is to re-point it, not to void it and write another check.
 """
 from __future__ import annotations
 
@@ -82,6 +87,29 @@ class BillPaymentUnapplyInput(_Input):
         return self
 
 
+class BillPaymentApplyInput(_Input):
+    """Attach what a payment still has free to more of the same vendor's open bills.
+
+    The money already left when the payment posted, so this moves nothing: it decides which
+    payables the payment answers. ``date`` is the settlement's own accounting date and defaults
+    to the payment's date; it can be later, which is what lets a check answer a bill entered
+    after it was written, but never earlier than the payment or than a bill it settles, and
+    never in a period the closing date has shut.
+    """
+
+    payment: _Selector
+    expected_version: _Version | None = None
+    bills: Selections
+    date: _Date | None = None
+
+    @model_validator(mode='after')
+    def one_row_per_bill(self) -> Self:
+        selectors = [row.bill for row in self.bills]
+        if len(set(selectors)) != len(selectors):
+            raise ValueError('name each bill once; give one amount per bill')
+        return self
+
+
 class BillPaymentVoidInput(_Input):
     payment: _Selector
     expected_version: _Version | None = None
@@ -148,7 +176,13 @@ class BillPaymentSettlementOutput(_Input):
 
 
 class BillPaymentLineOutput(CreatedOutput):
-    """One selected bill on the payment, with the capacity it carries."""
+    """One selected bill on the payment, with the capacity it carries.
+
+    ``description`` keeps the bill this line was entered for, which never changes. ``bill_id``
+    and ``bill_number`` say where this line's capacity is attached **now**, and are empty when
+    nothing holds it or when an apply split it across more than one bill; ``applications`` on
+    the payment is the authority in either case.
+    """
 
     transaction_id: str
     revision_id: str
