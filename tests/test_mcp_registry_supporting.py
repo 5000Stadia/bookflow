@@ -21,7 +21,9 @@ FAMILIES = {
                 'report balance-sheet', 'report profit-and-loss',
                 'report cash-flows', 'report income-tax-summary',
                 'report ar-aging', 'report open-invoices', 'report statement',
-                'report ap-aging', 'report unpaid-bills', 'report missing-checks'),
+                'report ap-aging', 'report unpaid-bills', 'report missing-checks',
+                'report sales-by-customer', 'report sales-by-item', 'report sales-by-rep',
+                'report expenses-by-vendor'),
 }
 
 

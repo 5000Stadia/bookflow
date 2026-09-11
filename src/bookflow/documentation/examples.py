@@ -183,6 +183,10 @@ EXAMPLES.update({
     "report open-invoices": Example('bookflow report open-invoices --as-of 2026-12-31 --past-due-only --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31", "past_due_only": True}),
     "report ap-aging": Example('bookflow report ap-aging --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31"}),
     "report unpaid-bills": Example('bookflow report unpaid-bills --as-of 2026-12-31 --past-due-only --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31", "past_due_only": True}),
+    "report sales-by-customer": Example('bookflow report sales-by-customer --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
+    "report sales-by-item": Example('bookflow report sales-by-item --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
+    "report sales-by-rep": Example('bookflow report sales-by-rep --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
+    "report expenses-by-vendor": Example('bookflow report expenses-by-vendor --date-from 2026-01-01 --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
 })
 
 

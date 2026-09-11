@@ -1,0 +1,40 @@
+<section id="summary-report" aria-label="Period summary report">
+<p>{{ company_label }} · {{ summaries.metadata.basis|capitalize }} · {{ summaries.metadata.currency }} · {{ summaries.date_from }} to {{ summaries.date_to }}</p>
+{% if summaries.verb == 'sales-by-customer' %}
+<p class="muted">Income for the period grouped by the customer or job the sale was made to, in hierarchy-name order so a job reads directly under the customer it belongs to. A job's income is its own and is never added into its parent's figure. Income posted against no customer is the row called No name. The total is the income the profit and loss reports for the same dates. Select a customer to open that customer's statement for this period.</p>
+{% elif summaries.verb == 'sales-by-item' %}
+<p class="muted">The same income grouped by the item sold, with the quantity in the item's own base unit and the average price that quantity fetched. Average price is income divided by quantity rounded to the cent for reading, and is blank where a line was priced by allocation and carries no quantity. Every sales line names an item, so income with no item is income no sale line posted: an income journal entry, or a deposit taken straight to an income account. That is the row called No item, and the totals above say what it came to, so item income plus no-item income is the income the profit and loss reports for the same dates.</p>
+{% elif summaries.verb == 'sales-by-rep' %}
+<p class="muted">The same income grouped by the sales representative the sale itself captured. The representative is read from the document revision that posted the money, never from the customer's current representative, so reassigning a customer today does not move sales already made. Income from a document that captured no representative is the row called Unassigned.</p>
+{% else %}
+<p class="muted">Expense for the period grouped by vendor, covering cost of goods sold, ordinary expense and other expense — every bill, cheque, credit card charge, vendor credit and expense journal entry that reached one of those accounts. A line that names no vendor takes the one vendor named elsewhere on the same posting, which is how a cheque's payee reaches its expense lines. A vendor credit is negative. Expense naming no vendor at all is the row called No name. Select a vendor to list that vendor's open bills.</p>
+{% endif %}
+<div class="table-wrap"><table id="summary-totals"><caption>Whole-report totals — all pages</caption><thead><tr>
+{% if summaries.verb == 'sales-by-item' %}<th scope="col">Item income</th><th scope="col">No-item income</th>{% endif %}
+<th scope="col">{{ summaries.shape.amount_heading }}</th></tr></thead><tbody>
+<tr>{% if summaries.verb == 'sales-by-item' %}<td data-total="item_income">{{ summaries.totals.item_income.amount }}</td><td data-total="no_item_income">{{ summaries.totals.no_item_income.amount }}</td>{% endif %}
+<td data-total="{{ summaries.shape.amount }}">{{ summaries.total_amount }}</td></tr>
+</tbody></table></div>
+<p id="summary-page-count">{{ summaries.count }} {{ summaries.shape.rows }} on this page{% if summaries.next_cursor %}; more available{% endif %}.</p>
+<div class="table-wrap"><table id="summary-rows"><thead><tr>
+<th scope="col">{{ summaries.shape.row }}</th>
+{% if summaries.verb == 'sales-by-customer' %}<th scope="col">Parent</th>{% endif %}
+{% if summaries.verb == 'sales-by-item' %}<th scope="col">Quantity</th>{% endif %}
+{% if summaries.verb == 'sales-by-rep' %}<th scope="col">Initials</th>{% endif %}
+<th scope="col">{{ summaries.shape.amount_heading }}</th>
+{% if summaries.verb == 'sales-by-item' %}<th scope="col">Average price</th>{% endif %}
+<th scope="col">% of total</th></tr></thead><tbody>
+{% for row in summaries.rows %}<tr data-row="{{ row[summaries.shape.id] or '' }}">
+<th scope="row">{% if row.detail_url %}<a href="{{ row.detail_url }}">{{ row.display_label }}</a>{% else %}{{ row.display_label }}{% endif %}{% if row.active is defined and row.active is not none and not row.active %} (inactive){% endif %}</th>
+{% if summaries.verb == 'sales-by-customer' %}<td>{{ row.parent_label or '' }}</td>{% endif %}
+{% if summaries.verb == 'sales-by-item' %}<td>{{ row.quantity }}{% if not row.quantity_complete %} (partial){% endif %}</td>{% endif %}
+{% if summaries.verb == 'sales-by-rep' %}<td>{{ row.current_sales_rep_initials or '' }}</td>{% endif %}
+<td data-amount>{{ row.display_amount }}</td>
+{% if summaries.verb == 'sales-by-item' %}<td>{{ row.average_price.amount if row.average_price else '' }}</td>{% endif %}
+<td data-percent>{{ row.display_percent or '' }}</td></tr>
+{% else %}<tr><td colspan="5">Nothing was posted to these accounts between {{ summaries.date_from }} and {{ summaries.date_to }}.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if summaries.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="summary-next-page">{% for name, value in summaries.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}<button name="action" value="submit">Next page</button></form>{% endif %}
+<p class="muted">Generated {{ summaries.metadata.generation_time }} · Audit watermark {{ summaries.metadata.audit_watermark }}. Any audited company change requires restarting the report. Change the filters below to start a new report.</p>
+<details><summary>Structured report data</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
+</section>

@@ -75,6 +75,12 @@ class BalanceSheetOutput(ledger.Page):
 PL_SECTIONS = ("income", "cost_of_goods_sold", "expense", "other_income", "other_expense")
 BS_SECTIONS = ("assets", "liabilities", "equity")
 DEBIT_TYPES = {"bank", "accounts_receivable", "other_current_asset", "fixed_asset", "other_asset", "cost_of_goods_sold", "expense", "other_expense"}
+# Which sections are the cost side of this statement is not a third list to keep in step:
+# a cost section is the one whose accounts are debit-normal, which DEBIT_TYPES already
+# says, and on a profit-and-loss row the section is the account type itself.
+# `summary_reports` breaks that side down by vendor and reads this rather than retyping
+# the types, so a new cost type joins the statement and the breakdown in one edit.
+COST_SECTIONS = tuple(name for name in PL_SECTIONS if name in DEBIT_TYPES)
 SECTION_SQL = """CASE
  WHEN a.type IN ('bank','accounts_receivable','other_current_asset','fixed_asset','other_asset') THEN 'assets'
  WHEN a.type IN ('accounts_payable','credit_card','other_current_liability','long_term_liability') THEN 'liabilities'

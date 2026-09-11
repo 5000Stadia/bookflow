@@ -275,11 +275,15 @@ report ap-aging
 report ar-aging
 report balance-sheet
 report cash-flows
+report expenses-by-vendor
 report general-ledger
 report income-tax-summary
 report missing-checks
 report open-invoices
 report profit-and-loss
+report sales-by-customer
+report sales-by-item
+report sales-by-rep
 report statement
 report transaction-detail
 report trial-balance
