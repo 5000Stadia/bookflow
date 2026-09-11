@@ -30,12 +30,16 @@ def books(tmp_path, monkeypatch):
     second = client.account.create(name='Payroll Bank', type='bank', company=company)['id']
     expense = next(row['id'] for row in accounts if row['type'] == 'expense')
     vendor = client.vendor.create(name='Northside Supply', company=company)['id']
+    other = client.vendor.create(name='Corner Hardware', company=company)['id']
+    # Keyed by kind, because a cheque is a cheque by its kind and not by what it is called.
+    methods = {row['kind']: row['id'] for row in
+               client.run('payment-method query', dict(limit=50), company=company)['items']}
 
     def run(name, raw, **context):
         return client.run(name, raw, company=company, **context)
 
     return dict(client=client, company=company, first=first, second=second,
-                expense=expense, vendor=vendor, run=run)
+                expense=expense, vendor=vendor, other=other, methods=methods, run=run)
 
 
 def _check(books, **extra):
@@ -49,6 +53,20 @@ def _check(books, **extra):
 
 def _write(books, **extra):
     return books['run']('check post', _check(books, **extra), reason='Pay Northside Supply')
+
+
+def _bill(books, vendor=None, amount=AMOUNT):
+    return books['run']('bill post', dict(
+        vendor=vendor or books['vendor'], date='2026-03-03',
+        expenses=[{'account': books['expense'], 'amount': amount}]), reason='Enter a bill')
+
+
+def _pay(books, *entered, **extra):
+    """``bill pay`` with the cheque method, which is what makes it a cheque."""
+    values = dict(date='2026-03-04', bills=[{'bill': bill['id']} for bill in entered],
+                  funding_account=books['first'], method=books['methods']['check'])
+    values.update(extra)
+    return books['run']('bill pay', values, reason='Pay the vendor')
 
 
 def _report(books, **filters):
@@ -450,3 +468,141 @@ def test_a_file_with_nothing_carried_over_carries_no_disclosure(books):
     report = _report(books, account=books['first'])
     assert report['totals']['checks_numbered_before_the_upgrade'] == 0
     assert report['disclosure'] is None
+
+
+# ---------------------------------------------------------------- the other form that prints one
+
+
+def test_paying_a_bill_by_cheque_takes_the_next_number_out_of_the_same_chequebook(books):
+    """One chequebook, two forms. Whichever wrote the last cheque, the next one follows it."""
+    books['client'].account.update(account=books['first'], next_check_number='2001',
+                                   company=books['company'])
+    written = _write(books)
+    paid = _pay(books, _bill(books))['payments'][0]
+    after = _write(books)
+
+    assert written['document']['check_number'] == '2001'
+    assert paid['check_number'] == '2002'
+    assert after['document']['check_number'] == '2003'
+    assert books['client'].account.show(
+        account=books['first'], company=books['company'])['next_check_number'] == '2004'
+
+
+def test_a_bill_payment_that_is_not_a_cheque_takes_no_number_and_moves_no_chequebook(books):
+    """A cheque is the method being a check and the money leaving a bank. Nothing else is."""
+    books['client'].account.update(account=books['first'], next_check_number='3000',
+                                   company=books['company'])
+    card = books['client'].account.create(name='Company Card', type='credit_card',
+                                          company=books['company'])['id']
+    not_a_cheque = next(value for kind, value in books['methods'].items() if kind != 'check')
+    by_transfer = _pay(books, _bill(books), method=not_a_cheque)['payments'][0]
+    on_the_card = _pay(books, _bill(books), funding_account=card)['payments'][0]
+
+    assert by_transfer['check_number'] is None and on_the_card['check_number'] is None
+    assert books['client'].account.show(
+        account=books['first'], company=books['company'])['next_check_number'] == '3000'
+    assert _report(books)['totals']['checks_examined'] == 0
+
+
+def test_one_number_is_refused_whichever_form_already_has_it(books):
+    """The refusal is the same refusal: a number is on one piece of paper or on none."""
+    held = _write(books, number='1001')
+    with pytest.raises(BookflowError) as raised:
+        _pay(books, _bill(books), check_number='01001')
+    assert raised.value.code == 'E_DUPLICATE_NUMBER'
+    assert raised.value.details['held_by'] == held['id']
+
+    paid = _pay(books, _bill(books), check_number='1002')['payments'][0]
+    with pytest.raises(BookflowError) as again:
+        _write(books, number='1002')
+    assert again.value.code == 'E_DUPLICATE_NUMBER'
+    assert again.value.details['held_by'] == paid['id']
+    # And neither refusal wrote anything: one cheque each is all that exists.
+    assert books['run']('check query', {'account': books['first'], 'limit': 10})['count'] == 1
+    assert books['run']('bill payment query', {'limit': 10})['count'] == 1
+
+
+def test_paying_two_payees_at_once_takes_two_consecutive_numbers(books):
+    """Two cheques out of one book in one command: the second cannot repeat the first."""
+    books['client'].account.update(account=books['first'], next_check_number='4000',
+                                   company=books['company'])
+    paid = _pay(books, _bill(books), _bill(books, vendor=books['other']))
+
+    assert paid['group_count'] == 2
+    assert sorted(payment['check_number'] for payment in paid['payments']) == ['4000', '4001']
+    assert books['client'].account.show(
+        account=books['first'], company=books['company'])['next_check_number'] == '4002'
+    assert _findings(_report(books, account=books['first'])) == []
+
+
+def test_naming_a_number_while_paying_two_payees_is_refused(books):
+    """One number names one piece of paper, and this selection writes two."""
+    with pytest.raises(BookflowError) as raised:
+        _pay(books, _bill(books), _bill(books, vendor=books['other']), check_number='5000')
+    assert raised.value.code == 'E_VALIDATION'
+    assert raised.value.details['fields'][0]['field'] == 'check_number'
+    assert not books['run']('bill payment query', {'limit': 10})['items']
+
+
+def test_the_report_places_a_bill_payments_cheque_in_the_run(books):
+    """The hole this used to print was 1002, because 1003 was a number it could not see."""
+    written = _write(books, number='1001')
+    paid = _pay(books, _bill(books), check_number='1003')['payments'][0]
+
+    report = _report(books, account=books['first'])
+    row, = report['rows']
+    assert (row['kind'], row['first_missing'], row['last_missing']) == ('gap', 1002, 1002)
+    assert row['before']['transaction_id'] == written['id']
+    assert row['after']['transaction_id'] == paid['id'] and row['after']['number'] == '1003'
+    assert report['totals']['checks_examined'] == 2
+    assert report['totals']['numbered_checks'] == 2
+    assert report['totals']['checks_off_a_bank_account'] == 0
+    # Nothing is disclosed as unplaceable any more, because there is nothing left it cannot place.
+    assert report['disclosure'] is None
+
+
+def test_a_voided_bill_payment_keeps_its_number_and_is_neither_a_gap_nor_reusable(books):
+    lost = _pay(books, _bill(books), check_number='1002')['payments'][0]
+    _write(books, number='1001')
+    _write(books, number='1003')
+    books['run']('bill payment unapply', {'payment': lost['id']}, reason='Cheque was lost')
+    books['run']('bill payment void', {'payment': lost['id']}, reason='Cheque was lost')
+
+    assert _findings(_report(books, account=books['first'])) == []
+    with pytest.raises(BookflowError) as raised:
+        _write(books, number='1002')
+    assert raised.value.code == 'E_DUPLICATE_NUMBER'
+    assert books['run']('bill payment show', {'payment': lost['id']})['check_number'] == '1002'
+
+
+def test_the_register_shows_the_cheque_number_a_bill_payment_was_written_with(books):
+    written = _write(books, number='1001')
+    paid = _pay(books, _bill(books), check_number='1002')['payments'][0]
+
+    register = books['run']('register query', {'account': books['first'],
+                                               'date_from': '2026-01-01', 'date_to': '2026-12-31'})
+    numbers = {row['transaction_id']: row['check_number']
+               for row in register['rows'] if row['kind'] == 'posting'}
+    assert numbers[written['id']] == '1001' and numbers[paid['id']] == '1002'
+
+
+def test_a_bill_payments_cheque_does_not_make_a_checks_number_ambiguous(books):
+    """`check show` opens checks, so only two of those make a number ambiguous.
+
+    The guard `money_out.resolve` keeps is for two bank accounts both writing 1001, which is
+    still reachable because a cheque number belongs to one chequebook. A bill payment shares
+    that chequebook but is not a check, so it is filtered out before the count is taken --
+    otherwise it would refuse a number that names exactly one check.
+    """
+    written = _write(books, number='1001')
+    _pay(books, _bill(books), funding_account=books['second'], check_number='1001')
+
+    assert books['run']('check show', {'check': '1001'})['id'] == written['id']
+
+    here = _write(books, number='2001')
+    there = _write(books, account=books['second'], number='2001')
+    with pytest.raises(BookflowError) as raised:
+        books['run']('check show', {'check': '2001'})
+    assert raised.value.code == 'E_VALIDATION'
+    assert {row['transaction_id'] for row in raised.value.details['candidates']} == {
+        here['id'], there['id']}

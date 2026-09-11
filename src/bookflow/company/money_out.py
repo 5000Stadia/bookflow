@@ -52,8 +52,11 @@ def resolve(s, selector, noun):
     chequebook, so two accounts can both have written a cheque ``1001``. This never picks one
     of them: it names both and refuses. That is the whole point of the ambiguity -- returning
     whichever row came back first would have shown, corrected or voided the wrong cheque
-    without saying a word. The document reference is still accepted for a cheque whose number
-    finds nothing, which is what makes a journal-series reference from the audit page work.
+    without saying a word. A cheque written from Pay Bills shares that chequebook but is not
+    a check, so it is filtered out of the candidates before they are counted rather than
+    making a number ambiguous that names one check. The document reference is still accepted
+    for a cheque whose number finds nothing, which is what makes a journal-series reference
+    from the audit page work.
 
     A card charge and a transfer have no cheque number, so the document reference is all they
     are ever addressed by; that number is unique across journal entries, but more than one
@@ -66,6 +69,15 @@ def resolve(s, selector, noun):
     if not found and noun == 'check':
         from bookflow.company import check_numbers
         candidates = check_numbers.by_number(s, selector)
+        if candidates:
+            # Narrowed to the cheques that are checks before ambiguity is decided. A bill
+            # payment carries a cheque number too, and `check show` cannot open one, so
+            # letting it make 1001 ambiguous would refuse a number that names exactly one
+            # check. Two checks on two chequebooks still name two, and that is the case the
+            # guard below is for.
+            owned = {row['id'] for row in s.company.conn.execute(base.where(
+                t.c.id.in_([row['transaction_id'] for row in candidates]))).mappings()}
+            candidates = [row for row in candidates if row['transaction_id'] in owned]
         if len(candidates) > 1:
             raise check_numbers.ambiguous(noun, selector, candidates)
         if candidates:

@@ -22,9 +22,12 @@ _PAY = (
     ' account, which rises. Bills are grouped by vendor, payable account, currency, funding'
     ' account and method, and each group is one payment, so two vendors are never paid by one'
     ' check; `group_count` says how many the selection made. Paying less than what is open'
-    ' leaves the remainder open. `check_number` is the number on the paper check and is'
-    ' accepted only when the method is a check drawn on a bank account. Purchase discounts and'
-    ' vendor credits are separate documents and are not entered here.'
+    ' leaves the remainder open. A payment whose method is a check drawn on a bank account is'
+    ' a cheque out of that account\'s chequebook: it takes the account\'s next check number,'
+    ' moves that number on, and is refused if the number is already on another cheque, exactly'
+    ' as `check post` is. `check_number` writes a number you name instead of the next one, and'
+    ' is accepted only on such a payment and only when one payee is being paid. Purchase'
+    ' discounts and vendor credits are separate documents and are not entered here.'
 )
 
 ERRORS = {

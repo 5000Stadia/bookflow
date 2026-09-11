@@ -17,6 +17,14 @@ account, method)`` and each group is one document. The funding account and the m
 from the command, and the currency is the home currency, so what actually splits a selection is
 the vendor and the payable it is owed from -- and two vendors never share a check.
 
+**A cheque written here is a cheque.** When the money leaves a bank account and the method is
+a check, the number comes out of that account's chequebook through
+``company/check_numbers.py`` -- the same allocator ``check post`` uses, refusing the same
+collisions and moving the same pointer -- and the payment carries a ``check_instruments`` row
+like any other cheque. There is no second allocation path here to fall out of step with that
+one. ``ap_payment_profiles.check_number`` still records what the payment was written with, but
+it is now what was allocated rather than free text ``report missing-checks`` could not place.
+
 **What this does not write.** A purchase discount is its own document with its own accounts and
 does not exist yet; every cent here is cash or card. A vendor credit does exist, in
 ``company/vendor_credits.py``, and it settles through the same ``ap_applications`` edge -- but it
@@ -29,7 +37,8 @@ import json
 
 import sqlalchemy as sa
 
-from bookflow.company import accounts, ap_settlement, bills, journals, list_service, schema as c
+from bookflow.company import (
+    accounts, ap_settlement, bills, check_numbers, journals, list_service, schema as c)
 from bookflow.company import document_effects as effects
 from bookflow.company.bill_payment_facts import Account, BillPaymentProfile, Origin, PaymentMethod, Reference, Vendor
 from bookflow.company.bill_payment_models import (
@@ -153,18 +162,23 @@ def _method(s, selector):
         kind=row['kind'])
 
 
-def _check_number(inp, method, funding_kind):
-    """A check number belongs to a check. Nothing else has one to write on."""
-    if inp.check_number is None:
-        return None
-    number = inp.check_number.strip()
-    if not number:
+def _cheque(inp, method, funding_kind):
+    """Whether this payment prints a cheque, and the number a person typed on it if any.
+
+    A cheque is the method being a check and the money leaving a bank account; nothing else
+    has a piece of paper to write a number on. What the number *is* is not decided here --
+    ``company/check_numbers.py`` allocates it, refuses a collision and moves the chequebook
+    on, at the moment the payment is written -- so a payment whose method is a check gets a
+    number whether or not one was typed, exactly as ``check post`` does.
+    """
+    typed = inp.check_number.strip() if inp.check_number is not None else None
+    if inp.check_number is not None and not typed:
         raise _invalid('check_number', 'must not be blank')
-    if method.kind != 'check':
+    if typed is not None and method.kind != 'check':
         raise _invalid('check_number', f'"{method.label}" is not a check, so it carries no check number')
-    if funding_kind != 'bank_cash':
+    if typed is not None and funding_kind != 'bank_cash':
         raise _invalid('check_number', 'a check is written on a bank account, not a credit card')
-    return number
+    return method.kind == 'check' and funding_kind == 'bank_cash', typed
 
 
 # ---------------------------------------------------------------- what is being paid
@@ -269,6 +283,31 @@ def _numbers(s, count, explicit):
         if candidate not in occupied:
             numbers.append(candidate)
     return numbers, dict(name=DOCUMENT_TYPE, next_number=next_number, prefix=prefix)
+
+
+def _cheques(s, resolved, count):
+    """One cheque identity per payee, out of the funding account's own chequebook.
+
+    Every one of these comes from ``check_numbers.identity`` -- the call ``check post``
+    makes -- so a number one form took is a number the other cannot, the duplicate refusal is
+    the same refusal, and the pointer that moves is the same pointer. Numbers claimed earlier
+    in this loop are carried forward as ``taken``, for the reason ``_numbers`` carries its
+    own: the database cannot see what this command is about to write.
+    """
+    if not resolved['writes_a_cheque']:
+        return [None] * count
+    typed = resolved['typed_check_number']
+    if typed is not None and count != 1:
+        raise _invalid('check_number', 'a check number names one cheque, and this selection '
+                       f'writes {count}; pay one payee at a time to number the cheque yourself')
+    settled, taken = [], set()
+    for _ in range(count):
+        cheque = check_numbers.identity(
+            s, requested=check_numbers.request(resolved['funding'].id, typed),
+            existing=None, taken=taken)
+        taken.add(cheque['check_number_key'])
+        settled.append(cheque)
+    return settled
 
 
 # ---------------------------------------------------------------- reads
@@ -524,7 +563,7 @@ def _history_page(s, inp, state):
 # ---------------------------------------------------------------- writing one payment
 
 
-def _document(s, ctx, inp, at, event, group, rows, number, resolved):
+def _document(s, ctx, inp, at, event, group, rows, number, resolved, cheque):
     """One payee's payment: its revision, its two legs, its capacity and its applications."""
     vendor_id, ap_account_id, currency = group
 
@@ -541,7 +580,7 @@ def _document(s, ctx, inp, at, event, group, rows, number, resolved):
     profile = BillPaymentProfile(
         vendor=vendor, ap_account=ap_account, funding_account=resolved['funding'],
         funding_kind=resolved['funding_kind'], payment_method=resolved['method'],
-        check_number=resolved['check_number'], reference=inp.reference,
+        check_number=cheque['check_number'] if cheque else None, reference=inp.reference,
         amount_minor_units=total, currency=currency,
         origins={'funding_account': Origin(kind='explicit'), 'method': Origin(kind='explicit'),
                  'amount': Origin(kind='default')})
@@ -560,7 +599,8 @@ def _document(s, ctx, inp, at, event, group, rows, number, resolved):
         transaction_id=header['id'], revision_id=revision['id'], **provenance, audit_event_id=event,
         type=DOCUMENT_TYPE, vendor_id=vendor_id, ap_account_id=ap_account_id,
         funding_account_id=resolved['funding'].id, funding_kind=resolved['funding_kind'],
-        payment_method_id=resolved['method'].id, check_number=resolved['check_number'],
+        payment_method_id=resolved['method'].id,
+        check_number=cheque['check_number'] if cheque else None,
         reference=inp.reference, amount_minor_units=total,
         profile_snapshot=json_text(profile.model_dump())))
     klass = resolved['class_id']
@@ -623,7 +663,10 @@ def _document(s, ctx, inp, at, event, group, rows, number, resolved):
             obligation_transaction_id=row['header']['id'], obligation_key_id=row['obligation']['id'],
             amount_minor_units=row['amount'], currency=currency, effective_date=inp.date,
             reverses_application_id=None))
-    return header, revision, pending
+    # The paper this payment was written on, in the one place every cheque in the company
+    # lives. Written by ``check_numbers.write`` in ``apply`` below, beside the pointer move.
+    instrument = check_numbers.rows(s, ctx, header, revision, cheque, None, at=at, event=event)
+    return header, revision, pending, instrument
 
 
 def _resolved(s, inp, currency):
@@ -632,8 +675,9 @@ def _resolved(s, inp, currency):
     klass = (_reference(_list_row(s, 'class', c.classes, inp.class_id, 'class_id', 'class'))
              if inp.class_id else None)
     info = _info(s)
+    writes_a_cheque, typed = _cheque(inp, method, funding_kind)
     return dict(funding=funding, funding_kind=funding_kind, method=method,
-                check_number=_check_number(inp, method, funding_kind), class_id=klass,
+                writes_a_cheque=writes_a_cheque, typed_check_number=typed, class_id=klass,
                 issuer={key: value for key, value in info.items()
                         if key in ('id', 'legal_name', 'home_currency')
                         or key.startswith(('address_', 'legal_address_'))})
@@ -646,6 +690,7 @@ def prepare_pay(s, ctx, inp):
     journals.open_dates(s, [inp.date])
     groups = _groups(chosen)
     numbers, sequence = _numbers(s, len(groups), inp.number)
+    cheques = _cheques(s, resolved, len(groups))
     at, event = clock.now_iso(), new_id()
     resolved['vendors'] = {key[0]: Vendor(**_reference(row := resolve_party(s.company, 'vendor', key[0])).model_dump(),
                                           **{k: row.get(k) for k in ('company_name', 'email', 'phone', 'account_number')})
@@ -653,11 +698,13 @@ def prepare_pay(s, ctx, inp):
     resolved['payables'] = {key[1]: _account_facts(_account_row(s, key[1], 'bills')) for key, _ in groups}
     documents, outputs, changed_headers = [], [], []
     seen_bills = {}
-    for (group, rows), number in zip(groups, numbers):
-        header, revision, pending = _document(s, ctx, inp, at, event, group, rows, number, resolved)
+    for (group, rows), number, cheque in zip(groups, numbers, cheques):
+        header, revision, pending, instrument = _document(
+            s, ctx, inp, at, event, group, rows, number, resolved, cheque)
         pending['_bill_headers'] = [dict(transaction_id=row['header']['id'], number=row['header']['number'])
                                     for row in rows]
-        documents.append(dict(header=header, revision=revision, pending=pending, rows=rows))
+        documents.append(dict(header=header, revision=revision, pending=pending, rows=rows,
+                              instrument=instrument))
         outputs.append(_output(s, header, revision, pending['ap_payment_profiles'][0], pending))
         for row in rows:
             old = row['header']
@@ -916,6 +963,8 @@ def apply(plan, ctx, s):
         for table, kind, key in TABLE_KINDS:
             touched.extend(Touched(kind, row[key], 'create', None, 1, effects.decoded(row), db='company')
                            for row in document['pending'][table])
+        if document.get('instrument'):
+            touched.extend(check_numbers.touches(document['instrument']))
         summaries.append(header['number'])
     touched.extend(Touched('transaction', after['id'], 'update', old['version'], after['version'],
                            after, old, db='company') for old, after in data['changed_headers'])
@@ -934,6 +983,9 @@ def apply(plan, ctx, s):
         for table, _, _ in TABLE_KINDS:
             if document['pending'][table]:
                 s.company.conn.execute(getattr(c, table).insert(), document['pending'][table])
+        if document.get('instrument'):
+            # After the revision it hangs off exists, and with the chequebook pointer it moved.
+            check_numbers.write(s, document['instrument'])
     for _, after in data['changed_headers']:
         s.company.conn.execute(c.transactions.update().where(
             c.transactions.c.id == after['id']).values(**after))

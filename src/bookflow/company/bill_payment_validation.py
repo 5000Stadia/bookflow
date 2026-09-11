@@ -121,6 +121,8 @@ def _document(s, ctx, payments, data, document, currency, operation):
                     'a posting line is not fully attributed to entered lines')
         require(debit == credit and debit > 0, 'a posting batch does not balance')
 
+    require(operation == 'pay' or document.get('instrument') is None,
+            'only writing a payment writes a cheque; a void keeps the number it had')
     if operation == 'void':
         _void(s, data, document, header, pending, batches, legs)
         return
@@ -162,6 +164,26 @@ def _document(s, ctx, payments, data, document, currency, operation):
     require(profile['check_number'] is None or (captured.payment_method.kind == 'check'
                                                 and profile['funding_kind'] == 'bank_cash'),
             'a check number on something that is not a check')
+    # A cheque is a cheque number, a chequebook row, and the two saying the same thing. A
+    # payment that prints one without recording it is a hole `report missing-checks` would
+    # name, and one that records a number the payment does not carry is two cheques' worth of
+    # evidence for one piece of paper.
+    instrument = document.get('instrument')
+    require(bool(instrument) == (captured.payment_method.kind == 'check'
+                                 and profile['funding_kind'] == 'bank_cash'),
+            'a cheque without a chequebook number, or a number on what is not a cheque')
+    if instrument:
+        written, projected = instrument['revision'], instrument['instrument']
+        require(instrument['before'] is None and written['transaction_id'] == header['id']
+                and written['revision_id'] == revision['id']
+                and projected['transaction_id'] == header['id']
+                and projected['revision_id'] == revision['id']
+                and projected['type'] == header['type'],
+                'the cheque identity belongs to another document')
+        require(written['account_id'] == projected['account_id'] == profile['funding_account_id']
+                and written['check_number'] == projected['check_number'] == profile['check_number']
+                and written['origin'] == projected['origin'] == 'issued',
+                'the cheque identity disagrees with the payment it is written on')
 
     envelopes = pending['document_lines']
     components = pending['ap_source_components']

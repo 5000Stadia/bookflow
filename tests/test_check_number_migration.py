@@ -26,11 +26,25 @@ M = importlib.import_module('bookflow.storage.company_migrations.versions.0040_c
 PREVIOUS = M.down_revision
 
 
-def test_the_migration_sits_on_the_chain_and_is_its_end():
-    """Derived from the files, never a second copy of the number."""
+def test_the_migration_sits_on_the_chain():
+    """Derived from the files, never a second copy of the number.
+
+    This revision is a link in the chain, not its end: co0041 follows it and carries the
+    cheque numbers typed on bill payments into the same chequebook, so asserting this one is
+    the head is what would go stale on the next revision rather than what matters here.
+    """
     assert M.revision in known_revisions('company')
     assert M.down_revision in known_revisions('company')
-    assert HEADS['company'] == M.revision
+    assert M.revision in {getattr(module, 'down_revision', None)
+                          for module in _later_modules()}
+
+
+def _later_modules():
+    """Every company migration that names another one as the revision it follows."""
+    import pkgutil
+    from bookflow.storage.company_migrations import versions
+    return [importlib.import_module(versions.__name__ + '.' + info.name)
+            for info in pkgutil.iter_modules(versions.__path__)]
 
 
 def test_frozen_ddl_is_the_current_metadata_and_every_composite_key_is_real():
