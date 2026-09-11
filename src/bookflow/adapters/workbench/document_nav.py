@@ -36,7 +36,8 @@ from urllib.parse import quote
 
 from bookflow.core.errors import BookflowError
 
-NOUNS = ('invoice', 'sales-receipt', 'estimate', 'bill')
+NOUNS = ('invoice', 'sales-receipt', 'estimate', 'bill', 'credit-memo', 'customer-refund',
+         'vendor-credit')
 
 # The largest page every one of these query commands accepts.
 PAGE = 200
@@ -45,7 +46,10 @@ RECENT = 5
 LABELS = {'invoice': ('invoice', 'Invoices'),
           'sales-receipt': ('sales receipt', 'Sales receipts'),
           'estimate': ('estimate', 'Estimates'),
-          'bill': ('bill', 'Bills')}
+          'bill': ('bill', 'Bills'),
+          'credit-memo': ('credit memo', 'Credit memos'),
+          'customer-refund': ('customer refund', 'Customer refunds'),
+          'vendor-credit': ('vendor credit', 'Vendor credits')}
 
 ORDER = ('Ordered by document date, then by the order they were entered — '
          'the same order as the list.')

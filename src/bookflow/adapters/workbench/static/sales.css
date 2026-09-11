@@ -153,6 +153,19 @@
   [data-collection-path="expenses"] .line-cell[data-line-column="memo"] {
     order: 6; grid-column: 1 / -1; }
 
+  /* A credit memo's grid carries two more columns than an invoice's. A returned row is
+     identified by the invoice and the line it came back from, so both read across the block
+     and sit with the item they stand in for; the quantity below them is what came back. */
+  .line-cell[data-line-column="source_invoice"] { order: 1; grid-column: 1 / -1; }
+  .line-cell[data-line-column="source_line"] { order: 1; grid-column: 1 / -1; }
+
+  /* A refund's grid is the credits being spent rather than anything sold: the credit reads
+     across the block and the amount paid out of it sits underneath. */
+  [data-collection-path="sources"] .line-cell[data-line-column="credit_memo"] {
+    order: 1; grid-column: 1 / -1; }
+  [data-collection-path="sources"] .line-cell[data-line-column="amount"] {
+    order: 2; grid-column: 1 / -1; }
+
   /* The number a person checks, as the block's own footer. Still the server's figure. */
   .line-cell[data-line-column="@amount"] { order: 10; grid-column: 1 / -1;
     display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline;
@@ -248,4 +261,16 @@
   .sales-document .bill-lines tfoot th:last-child {
     background: #f4f7fb; padding: .4rem; font-size: 1.05rem; font-weight: 700;
     text-align: left; }
+}
+
+/* Applying a credit: the tick and the invoice it answers read as one control, and the
+   amount box never widens the card it sits in. */
+.credit-apply-pick { display: flex; gap: .45rem; align-items: baseline; min-width: 0;
+  overflow-wrap: anywhere; }
+.credit-apply-open input[name^="amount:"], .credit-apply-open input[type="date"] {
+  box-sizing: border-box; max-width: 100%; }
+.credit-apply-open td[data-label="Still owed"], .credit-apply-open td[data-label="Invoice total"],
+.credit-apply-standing td[data-label="Applied"] { font-variant-numeric: tabular-nums; }
+@media screen and (max-width: 700px) {
+  .credit-apply-open input[name^="amount:"] { width: 100%; }
 }

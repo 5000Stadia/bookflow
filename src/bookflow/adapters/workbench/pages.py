@@ -29,6 +29,7 @@ from bookflow.adapters.workbench import billing as Billing
 from bookflow.adapters.workbench import home as Home
 from bookflow.core.money import Money
 from bookflow.adapters.workbench import bills as Bills
+from bookflow.adapters.workbench import credits as Credits
 from bookflow.adapters.workbench import document_form as Document
 from bookflow.adapters.workbench import document_nav as Nav
 from bookflow.adapters.workbench import list_paging as Paging
@@ -154,7 +155,7 @@ def runtime_custom_field_scope(noun, verb, cmd, definition):
         if Billing.is_conversion(noun, verb):
             return verb.replace('-', '_')
         return 'estimate' if verb == 'estimate' else 'work_order' if verb == 'work-order' else noun.replace('-', '_')
-    if noun in ('invoice', 'sales-receipt', 'bill') and verb in ('post', 'update'):
+    if noun in ('invoice', 'sales-receipt', 'bill', 'credit-memo') and verb in ('post', 'update'):
         return noun.replace('-', '_')
     if noun in ('journal', 'register', *Document.MONEY_OUT) and verb in ('post', 'update'):
         return 'journal_entry'
@@ -333,9 +334,18 @@ def _document_base(company_id: str | None, noun: str) -> str:
 
 
 def _form_reference(definition: Any, noun: str, path: str) -> Any | None:
-    """Project the domain's sole authoritative reference declarations."""
-    definition = definition or _noun_meta(noun).get('form_definition')
+    """Project the sole authoritative reference declarations for one form control.
+
+    A Row 5 list definition first, then a domain form definition, then the workbench's own
+    declaration for the credit documents -- those three nouns have no list definition to hang
+    one on, and where a picker searches is presentation rather than domain.
+    """
+    definition = definition or _form_definition(noun)
     return F.reference_for_path(definition, path)
+
+
+def _form_definition(noun: str) -> Any | None:
+    return _noun_meta(noun).get('form_definition') or Credits.FORM_DEFINITIONS.get(noun)
 
 
 def _decorate_collection_references(
@@ -576,6 +586,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         form_page=lambda request, company_id, noun, verb: form_page(request, company_id, noun, verb, None))
     BillPayments.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                        role_allows=_role_allows)
+    # Mounted ahead of the generic `<noun>/<record>/<verb>` route, which would otherwise read
+    # `apply` as a command name on a credit memo and answer `unknown command credit-memo apply`.
+    Credits.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                  role_allows=_role_allows)
 
     @app.get("/static/{name}")
     def static(name: str):
@@ -789,12 +803,20 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     options.append(f'<option value="{escape(address["id"], quote=True)}" label="{escape(label, quote=True)}"></option>')
             return HTMLResponse(''.join(options[:25]), headers={'Cache-Control': 'no-store'})
         if getattr(reference, "child_units", False):
+            # Which control on this row names the item whose units these are. Ask the same
+            # declaration the picker came from rather than keeping a list of the nouns whose
+            # rows call it `item`: a list would omit the next document type and its unit
+            # picker would silently return nothing. A row that declares a sibling `item`
+            # reference has one; an item component names `component_item_id`.
+            container = field.rsplit(".", 1)[0] if "." in field else None
+            item_sibling = container is not None and _form_reference(
+                definition, owner_noun, container + ".item") is not None
             component_selector = next(
                 (
                     value
                     for key, value in request.query_params.multi_items()
                     if key.startswith("c:") and (key.endswith(":component_item_id") or
-                        (owner_noun in ('invoice', 'sales-receipt', *Work.NOUNS) and key.endswith(":item")))
+                        (item_sibling and key.endswith(":item")))
                 ),
                 None,
             )
@@ -1010,8 +1032,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return page_error(request, e)
         meta = _noun_meta(noun)
         items = out.get("items", [])
+        if noun in Credits.COLUMNS:
+            items = Credits.list_rows(noun, items)
         definition = meta.get("definition")
-        columns = (["number", "date", "memo", "total", "status"] if noun == "journal" else
+        columns = (list(Credits.COLUMNS[noun]) if noun in Credits.COLUMNS else
+                   ["number", "date", "memo", "total", "status"] if noun == "journal" else
                    ["number", "date", "title", "customer_name", "total", "status"] if noun in Work.NOUNS else
                    ["number", "date", "customer_name", "due_date", "total", "status"] if noun in ('invoice', 'sales-receipt') else
                    ["date", "from_currency", "to_currency", "rate", "source", "version"] if noun == "rate" else
@@ -1079,7 +1104,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         show_selector = _record_selector(show, command_noun)
         raw = {show_selector: record_id} if show_selector else {}
         try:
-            if command_noun in ("journal", "invoice", "sales-receipt", "bill", *Work.NOUNS) and request.query_params.get("revision_number"):
+            # Ask the command whether it reads a revision rather than keeping a list of the
+            # nouns that do: a document type added without its name here would silently lose
+            # its revision arrows.
+            if "revision_number" in show.input_model.model_fields and request.query_params.get("revision_number"):
                 try:
                     raw["revision_number"] = int(request.query_params["revision_number"])
                 except ValueError:
@@ -1145,7 +1173,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             ),
             record_id,
         )
-        if command_noun in ("journal", "invoice", "sales-receipt", "bill", *Work.NOUNS):
+        if command_noun in ("journal", *Document.NOUNS, *Work.NOUNS):
             record_title = out["revision"]["number"]
         contact_copy = None
         if company_id is not None and command_noun in ("customer", "vendor"):
@@ -1208,6 +1236,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       document_nav=Nav.strip(lambda name, raw, company: run(request, name, raw, company), company_id, noun, out),
                       sale=Sales.detail_context(out, company_id) if command_noun in ('invoice', 'sales-receipt') else None,
                       bill=Bills.detail_context(out, company_id) if command_noun == 'bill' else None,
+                      credit=Credits.detail_context(command_noun, out, company_id) if command_noun in Credits.NOUNS else None,
                       audit_undo=audit_undo, contact_copy=contact_copy, workspace=workspace,
                       annotations=annotation_context,
                       presence=(meta["record_type"] in _presence_types()) and company_id is not None
@@ -1322,6 +1351,45 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             # kind of name here both selects Vendor and leaves the whole pay_to object out of
             # the command until a name is actually chosen.
             originals = {**originals, 'pay_to': {'name_type': 'vendor'}}
+        if company_id and noun == 'credit-memo' and verb == 'post' and not attempted:
+            # A return is written against an invoice, so it can be opened from one. Seeding
+            # the attempted controls rather than the originals is what makes the rows real:
+            # an original is a comparison baseline, and a value equal to it is never sent.
+            source_invoice = request.query_params.get('invoice')
+            if source_invoice:
+                try:
+                    returned = run(request, 'invoice show', {'invoice': source_invoice}, company_id)
+                except BookflowError as err:
+                    return page_error(request, err)
+                seeded = Credits.return_rows(returned)
+                if seeded:
+                    attempted.update(seeded)
+                    workflow_note = (
+                        'Returning lines of invoice ' + str(returned['revision']['number'])
+                        + '. Every cent of a returned row is priced from what that invoice '
+                        'captured, so enter how many units came back and remove any row that '
+                        'did not come back at all.')
+        if company_id and noun == 'customer-refund' and verb == 'post' and not attempted:
+            # A refund is written against credits, so it can be opened from one credit or from
+            # everything a customer still has in hand.
+            wanted = request.query_params.getlist('credit_memo')[:20]
+            customer = request.query_params.get('customer')
+            found: list[dict[str, Any]] = []
+            try:
+                for credit_id in wanted:
+                    found.append(run(request, 'credit-memo show', {'credit_memo': credit_id}, company_id))
+                if customer and not found:
+                    found = run(request, 'credit-memo query', {
+                        'customer': customer, 'status': 'posted', 'available_only': True,
+                        'limit': 25}, company_id)['items']
+            except BookflowError as err:
+                return page_error(request, err)
+            found = [row for row in found
+                     if (row.get('source_current') or {}).get('available_minor_units')]
+            if found:
+                attempted.update(Credits.refund_rows(found))
+                attempted['f:customer'] = str(found[0]['customer_id'])
+                workflow_note = Credits.refund_note(found)
         if noun == 'invoice' and verb == 'update' and shown and not attempted:
             settlement = run(request, 'invoice settlement', {'invoice': shown['id']}, company_id)
             attempted['f:settlement_guard'] = settlement['settlement_guard']
@@ -1336,7 +1404,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             originals = {k: v for k, v in originals.items() if k in (noun.replace('-', '_'), 'expected_version')}
         if noun in Work.NOUNS and 'conversion_key' in cmd.input_model.model_fields and not attempted:
             attempted['f:conversion_key'] = secrets.token_urlsafe(32)
-        if noun in ('invoice', 'sales-receipt', *Work.NOUNS) and verb in ('history', 'billing') and record_id is not None:
+        if noun in ('invoice', 'sales-receipt', 'credit-memo', *Work.NOUNS) and verb in ('history', 'billing') and record_id is not None:
             originals[noun.replace('-', '_')] = record_id
             if not attempted and result is None:
                 try:
@@ -1485,7 +1553,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         for leaf in described:
             if leaf["path"] == selector:
                 leaf["pinned"] = True
-        reference_definition = definition or meta.get('form_definition')
+        reference_definition = definition or _form_definition(noun)
         if company_id is not None and reference_definition is not None:
             def creation_targets(targets: tuple[str, ...]) -> list[dict[str, Any]]:
                 choices = []
@@ -1673,7 +1741,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                           '' if error and error.get('code') in ('E_PREVIEW_STALE', 'E_VERSION_CONFLICT') else attempted.get('f:expected_facts_fingerprint', '')),
                       sale=Sales.detail_context(result, company_id, preview=preview) if result and (noun in ('invoice', 'sales-receipt') or Billing.is_conversion(noun, verb)) and 'revision' in result else None,
                       bill=Bills.detail_context(result, company_id, preview=preview) if result and noun == 'bill' and 'revision' in result else None,
-                      sales_history=result if noun in ('invoice', 'sales-receipt') and verb == 'history' else None,
+                      credit=Credits.detail_context(noun, result, company_id, preview=preview) if result and noun in Credits.NOUNS and 'revision' in result else None,
+                      sales_history=result if noun in ('invoice', 'sales-receipt', 'credit-memo') and verb == 'history' else None,
                       statement=S.view(result, report_input, company_id, cmd.name) if result and report_input is not None and cmd.name in S.COMMANDS else None,
                       receivables=Receivable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Receivable.COMMANDS else None,
                       payables=Payable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Payable.COMMANDS else None,
@@ -1827,6 +1896,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             raw, headers, preview = F.translate(cmd, translated_form, comparison if comparison else None)
             if Billing.is_conversion(noun, verb):
                 raw = Billing.selection(raw, form)
+            if noun == 'credit-memo' and verb == 'post':
+                raw = Credits.untouched_return_defaults(raw)
             if (noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')) or (noun in Work.NOUNS and cmd.is_write) or (noun == 'deposit' and verb == 'post'):
                 if noun == 'invoice' and verb == 'update' and form.get('action') == 'review-settlement':
                     current = run(request, 'invoice settlement', {'invoice': record_id}, company_id)
@@ -1874,7 +1945,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return form_page(request, company_id, noun, verb, record_id, error=e.to_dict(), attempted=form)
         if preview:
             return form_page(request, company_id, noun, verb, record_id, result=out, preview=True, attempted=form)
-        if noun in ('invoice', 'sales-receipt', *Work.NOUNS) and verb in ('history', 'query', 'billing'):
+        if noun in ('invoice', 'sales-receipt', 'credit-memo', *Work.NOUNS) and verb in ('history', 'query', 'billing'):
             return form_page(request, company_id, noun, verb, record_id, result=out, attempted=form)
         if noun == "report" and not cmd.is_write:
             return form_page(request, company_id, noun, verb, record_id, result=out, attempted=form,

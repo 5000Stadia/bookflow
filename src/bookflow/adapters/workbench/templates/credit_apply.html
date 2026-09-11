@@ -1,0 +1,57 @@
+{% extends "base.html" %}{% block title %}Apply credit {{ apply.credit.number }}{% endblock %}{% block body %}
+{% set a = apply %}
+<nav class="crumbs"><a href="/c/{{ company_id }}/credit-memo">Credit memos</a> / <a href="{{ a.credit_url }}">{{ a.credit.number }}</a> / Apply</nav>
+<h1>Credit memo {{ a.credit.number }} — apply to invoices</h1>
+<p data-credit-available>{{ a.credit.customer_name }} · Written for {{ a.credit.total.amount }} · Applied {{ a.source.applied.amount }} · <strong>Still available {{ a.source.available.amount }} {{ a.currency }}</strong></p>
+<p class="muted">Applying a credit posts nothing and moves no money. The credit memo already took the receivable and the income down; this only decides which invoices it answers. Each invoice's saved version travels with its row, so nothing here asks you to find a version number.</p>
+{% if error %}<section class="error" role="alert"><h2>Nothing was applied</h2><p>{{ error.message }}</p>
+{% for field in (error.details or {}).get('fields', []) %}<p>{{ field.field }}: {{ field.problem }}</p>{% endfor %}
+{% if error.code %}<p class="muted">{{ error.code }}</p>{% endif %}</section>{% endif %}
+
+{% if not a.may_apply %}<p class="warn">Your role does not allow applying a credit in this company.</p>
+{% elif a.credit.status == 'voided' %}<p class="warn">This credit memo is voided. Nothing can be applied from it.</p>
+{% elif not a.spendable %}<p class="warn">Nothing is left on this credit: every cent has been applied to an invoice or refunded.</p>
+{% else %}
+<form id="credit-apply-form" hx-post="{{ a.apply_url }}" hx-target="body" hx-swap="outerHTML">
+<div class="row form-field"><label for="credit-apply-date">Settlement date<small>Leave empty to use the credit memo's own date. It may be later, never earlier than the credit or than an invoice it settles.</small></label><div class="control-stack"><input id="credit-apply-date" type="date" name="date" value=""></div><span></span></div>
+<section class="workspace-card document-detail" aria-label="Open invoices for this customer">
+<h2>Open invoices</h2>
+{% if a.rows %}
+<div class="table-wrap"><table class="ledger-table document-lines credit-apply-open"><thead><tr><th>Apply</th><th>Invoice</th><th>Date</th><th>Due date</th><th>Invoice total</th><th>Still owed</th><th>Amount to apply</th></tr></thead><tbody>
+{% for row in a.rows %}<tr data-invoice="{{ row.id }}">
+<td data-label="Apply" class="document-wide"><label class="credit-apply-pick"><input type="checkbox" name="select:{{ row.id }}" value="1"> Apply this credit to invoice {{ row.number }}</label><input type="hidden" name="version:{{ row.id }}" value="{{ row.version }}"></td>
+<td data-label="Invoice"><span class="document-cell-label" aria-hidden="true">Invoice</span><a href="{{ row.url }}">{{ row.number }}</a></td>
+<td data-label="Date"><span class="document-cell-label" aria-hidden="true">Date</span>{{ row.date }}</td>
+<td data-label="Due date"><span class="document-cell-label" aria-hidden="true">Due date</span>{{ row.due_date or '—' }}</td>
+<td data-label="Invoice total"><span class="document-cell-label" aria-hidden="true">Invoice total</span>{{ row.total.amount }}</td>
+<td data-label="Still owed" class="document-total"><span class="document-cell-label" aria-hidden="true">Still owed</span><span data-invoice-due>{{ row.due.amount }}</span></td>
+<td data-label="Amount to apply" class="document-wide"><label class="document-cell-label" for="credit-apply-amount-{{ loop.index0 }}">Amount to apply <small>Leave empty to use as much as this invoice still owes.</small></label><input id="credit-apply-amount-{{ loop.index0 }}" name="amount:{{ row.id }}" inputmode="decimal" data-math-currency="company" value="{{ row.suggested.amount if row.suggested else '' }}"></td>
+</tr>{% endfor %}
+</tbody></table></div>
+{% else %}<p class="muted" data-credit-no-invoices>This customer has no posted invoice still owing anything in {{ a.currency }} on this receivable account.</p>{% endif %}
+</section>
+<div class="row form-field"><label for="credit-apply-reason">Reason<small>Recorded with this change in the audit trail.</small></label><div class="control-stack"><input id="credit-apply-reason" name="reason" maxlength="140" value=""></div><span></span></div>
+<div class="document-actions"><button id="credit-apply-save" class="primary-action" name="action" value="submit">Apply this credit</button><a class="cancel-action" href="{{ a.credit_url }}">Cancel</a></div>
+</form>
+{% endif %}
+
+<section class="workspace-card document-detail" aria-label="What this credit already answers">
+<h2>Already applied</h2>
+{% if a.standing and a.may_apply %}
+<form id="credit-unapply-form" hx-post="{{ a.unapply_url }}" hx-target="body" hx-swap="outerHTML">
+<div class="table-wrap"><table class="ledger-table document-lines credit-apply-standing"><thead><tr><th>Take off</th><th>Invoice</th><th>Applied</th><th>Settlement date</th></tr></thead><tbody>
+{% for row in a.standing %}<tr data-application="{{ row.application_id }}">
+<td data-label="Take off" class="document-wide"><label class="credit-apply-pick"><input type="checkbox" name="unapply:{{ row.application_id }}" value="1"> Take this application off invoice {{ row.invoice_number }}</label><input type="hidden" name="invoice-version:{{ row.application_id }}" value="{{ row.invoice_version }}"></td>
+<td data-label="Invoice"><span class="document-cell-label" aria-hidden="true">Invoice</span><a href="/c/{{ company_id }}/invoice/{{ row.invoice_id }}">{{ row.invoice_number }}</a></td>
+<td data-label="Applied" class="document-total"><span class="document-cell-label" aria-hidden="true">Applied</span>{{ row.amount.amount }}</td>
+<td data-label="Settlement date"><span class="document-cell-label" aria-hidden="true">Settlement date</span>{{ row.effective_date }}</td>
+</tr>{% endfor %}
+</tbody></table></div>
+<div class="row form-field"><label for="credit-unapply-reason">Reason<small>Recorded with this change in the audit trail.</small></label><div class="control-stack"><input id="credit-unapply-reason" name="reason" maxlength="140" value=""></div><span></span></div>
+<div class="document-actions"><button id="credit-unapply-save" name="action" value="submit">Take the selected applications off</button></div>
+<p class="muted">Taking an application back off is dated on that application's own date, never today, so the period it happened in has to still be open.</p>
+</form>
+{% elif a.standing %}<p class="muted">This credit answers {{ a.standing | length }} invoice(s). Your role does not allow taking an application back off.</p>
+{% else %}<p class="muted" data-credit-nothing-applied>This credit answers no invoice yet.</p>{% endif %}
+</section>
+{% endblock %}

@@ -220,7 +220,7 @@ src/bookflow/
   adapters/http/app.py   FastAPI app from the registry: /commands/<noun.verb>, authoritative /companies/{id}/commands/<noun.verb>, /login, /logout, async /companies/{id}/events and /hub-events, exact generated /openapi.json, /health; credential/cookie handling and the same error documents as the CLI with HTTP statuses
   adapters/http/auth.py  argon2 passwords (constant-time on unknown users), bearer and session tokens stored as sha256, liveness refresh, login throttle
   adapters/http/local.py LocalListener on the Unix socket: peer identity from SO_PEERCRED, envelope identity fields discarded, 8 MiB frame cap and 30-second accepted-connection timeout
-  adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), document_form.py (sales document bands, line grid columns with a hint per head, human labels, the per-line pricing rule in the row panel), document_nav.py (the way back from a document to earlier documents of its type), sales.py and bills.py (what a saved sale or bill shows, and what its correction form opens with), document_print.py (the four print routes that answer PDF bytes), list_paging.py (which lists open on the newest record, and the walk forwards and back through a list's pages), naming.py (page titles and column heads in a person's words), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
+  adapters/workbench/    pages.py (picker, hub/company indexes, bounded list/record/form/audit pages), forms.py (input model -> leaves and command JSON with originals, tri-state booleans, clears, Preview), document_form.py (sales document bands, line grid columns with a hint per head, human labels, the per-line pricing rule in the row panel), document_nav.py (the way back from a document to earlier documents of its type), sales.py and bills.py (what a saved sale or bill shows, and what its correction form opens with), credits.py (what the three credit documents show, which lists their pickers search, the two seeded openings, and the credit apply/unapply routes), document_print.py (the four print routes that answer PDF bytes), list_paging.py (which lists open on the newest record, and the walk forwards and back through a list's pages), naming.py (page titles and column heads in a person's words), workflows.py (customer/job display groups), templates/, static/ (vendored htmx, reference-selection client, content-versioned assets)
   documents/model.py     command output -> PrintedDocument: parties, header fields, columns, rows, totals, grids, notes; no PDF, no HTTP, no arithmetic
   documents/pdf.py       the one layout: Letter, half-inch margins, repeated column headings, unsplit line items, Page X of Y (reportlab)
   documents/render.py    render(read, company_id, kind, identity) -> Rendered(filename, media_type, content, title); the seam a later attach or send command calls
@@ -3017,11 +3017,84 @@ the settled reason: a refund is one customer, one amount, one date and one accou
 any of them makes it a different refund and the document carries one revision for life. A
 refund's source is a credit memo only; refunding unapplied payment overage needs
 `payment_facts.available` to gain the consumption term and is not built. There is no recovery
-family, no browser page and no tile — a tile is live only when a command, a route and a page all
-exist, and no `ui_group` is registered for either noun. Price allowances against a source line,
+family. Price allowances against a source line,
 stocked returns and cost restoration, cross-party (parent↔job) credit, cash-basis treatment, the
 refund's reconciliation producer and print are outside the release entirely and are refused
 rather than approximated; the command help says so.
+
+## The three credit documents in the browser
+
+**`ui_group` is what files a noun, and its absence is misfiling rather than absence.**
+`pages._grouped_nouns` falls through to "Hub" for any noun without one, so `credit-memo`,
+`customer-refund` and `customer-credit` were listed under Hub on every company page and
+`vendor-credit` with them. All four carry one now, in `registry.NOUN_META_OVERRIDES`: the three
+receivables nouns under "Customers and sales" and the vendor credit under "Vendors and
+purchases". `vendor-credit` had no override row at all, so its `record_type` was the derived
+`"vendor-credit"` rather than `"transaction"` and its record page asked the audit trail for a
+record type nothing writes; the row fixes that in the same place.
+
+**All three open in the document window the invoice and the bill already use.**
+`document_form.py` gains them: a credit memo is the invoice's window — the same priced grid,
+the same footer, the same tax rule — with the two columns that make a row a return instead of a
+sale (`source_invoice`, `source_line`) and without the addresses, which belong to the invoice it
+credits, or the price-level machinery, which prices new work rather than taking a sale back. A
+vendor credit is the bill's Expenses grid with `billable` removed. A refund's grid is neither:
+its rows are the credits being spent, one credit memo and how much of it goes out.
+`document_form.refund_totals` and `vendor_credit_totals` copy the server's own figures the way
+`bill_totals` does; nothing on any of the three pages is arithmetic done in the browser.
+
+**The two seeded openings, and why they seed *attempted* rather than *originals*.** A return is
+written against an invoice and a refund against a credit, so both windows open from the document
+they answer: `/credit-memo/post?invoice=<id>` fills one returned row per line of that invoice
+already naming the source invoice and the source line, and `/customer-refund/post?credit_memo=<id>`
+(or `?customer=<id>`) fills the sources with what is still available. Both write into the form's
+`attempted` controls. An `originals` map is a correction's comparison baseline and
+`forms.translate` drops every leaf equal to it, so seeding there would silently submit an empty
+grid. `credits.return_rows` and `credits.refund_rows` are the two projections; the invoice's own
+page carries the link that opens the first.
+
+**The apply surface carries the versions.** `customer-credit apply` needs `expected_version` on
+the credit *and* on every invoice it touches, and `unapply` needs each application's id with the
+invoice's version beside it. `/c/<company>/credit-memo/<id>/apply` reads them and puts them in
+its own hidden fields: the credit's version from `credit-memo show`, each invoice's from the
+`settlement_current` its own `invoice query` row carries, and the standing applications from
+`invoice settlement` — read only for the invoices that have money applied, so the page costs one
+query plus one settlement read per settled invoice rather than one per invoice. A version that
+has moved is answered by the command with `E_VERSION_CONFLICT` and shown on the page; nothing
+here refreshes a stale version and retries, because that would apply a credit to an invoice the
+person never saw. `credits.py` mounts both routes ahead of the generated
+`<noun>/<record>/<verb>` route, which would otherwise read `apply` as a command name.
+
+**Where the pickers are declared.** These three nouns have no Row 5 list definition to hang a
+`ReferenceDefinition` on, so `credits.FORM_DEFINITIONS` holds them and `pages._form_definition`
+reads it as the last fallback after a list definition and a domain form definition. There is no
+picker for `source_invoice`, `source_line` or `credit_memo`: a picker searches a list command,
+and a document is not a list. The seeded openings are the answer to that, not a workaround —
+they are how a return and a refund are actually written.
+
+**Reading them back.** `credit_memo_detail.html`, `vendor_credit_detail.html` and
+`customer_refund_detail.html` render one saved document each from `credits.detail_context`, and
+`document_nav` gains all three so the arrows step between them exactly as they do between bills.
+The credit memo's page says what the credit is worth now and offers the two things that can be
+done with it; the vendor credit's says what it still has free and which bills it answers; the
+refund's says which credits it paid out and what each was worth first. Below 700px every grid
+and every table becomes one block per row, asserted at 390px in
+`tests/test_credit_windows_browser.py` as each element's own `scrollWidth` against its own
+`clientWidth`.
+
+**The three tiles are live.** Credit memo and Refund on the Customers panel, Vendor credit on the
+Vendors panel. `tests/test_credit_windows_browser.py` performs the availability contract rather
+than asserting it: it clicks each tile on the home board, enters a document through the page the
+click lands on, saves it, reads the rendered figures back, and then applies a credit from its own
+page and reads the invoice's Balance Due. `tests/test_home_window.py` moved its "not built yet"
+stand-in from vendor credits to purchase orders, because vendor credits now have commands, a
+route and a page and can no longer stand for something that does not.
+
+**Still not in the browser.** `credit-memo void`, `customer-refund void` and `vendor-credit void`
+are reachable only as generated forms from their record pages; `vendor-credit apply` and
+`unapply` have no page of their own, so a vendor credit is pointed at a bill through the command
+surface; `customer-refund` and `vendor-credit` have no `history` command to page; and nothing
+prints a credit memo.
 
 ## Sales tax liability, and the document that remits it
 
@@ -3129,8 +3202,8 @@ unchanged: before an application a credit is a negative AP row aged by its own d
 its row nets to zero and is omitted. `_UNPAID` already reads the real applied sum. `aging.py`
 stays one rule for both sides.
 
-**What this does not do.** There is no `vendor-credit update`, no `history`, no browser page and
-no demo seed extension. A credit takes its own number series rather than sharing the bill series:
+**What this does not do.** There is no `vendor-credit update`, no `history` and no demo seed
+extension. A credit takes its own number series rather than sharing the bill series:
 the anchor product's shared-sequence behaviour is a receivables rule about invoices and credit
 memos, and the payables document it credits is numbered by the supplier's own reference. Purchase
 discounts, purchase tax and vendor refunds are their own documents and none of them exists.

@@ -16,7 +16,8 @@ does not place reach the reader in the advanced sections rather than disappearin
 """
 from bookflow.core.money import Money
 
-NOUNS = ('invoice', 'sales-receipt', 'estimate', 'bill')
+NOUNS = ('invoice', 'sales-receipt', 'estimate', 'bill', 'credit-memo', 'customer-refund',
+         'vendor-credit')
 
 # The money-out documents: a check written on a bank account, a charge made on a credit card.
 # They open in this same window and use this same grid; what differs is the account that funds
@@ -38,13 +39,23 @@ TRANSFER = 'transfer'
 # which is why it is in NOUNS and the money-out pair is not.
 BILL = 'bill'
 
+# The three credit documents. A credit memo is the invoice read backwards and opens in the
+# invoice's own window; a vendor credit is the bill read backwards and opens in the bill's;
+# a customer refund is the one that moves cash, and its grid is the credits being spent
+# rather than anything being sold. All three have list pages and document arrows.
+CREDIT_MEMO = 'credit-memo'
+REFUND = 'customer-refund'
+VENDOR_CREDIT = 'vendor-credit'
+CREDITS = (CREDIT_MEMO, REFUND, VENDOR_CREDIT)
+
 # Documents with no list page and no arrows of their own; Cancel returns them to the board
 # they were opened from.
 NO_LIST = (*MONEY_OUT, TRANSFER)
 
 TITLES = {'invoice': 'Invoice', 'sales-receipt': 'Sales receipt', 'estimate': 'Estimate',
           'check': 'Check', 'card-charge': 'Credit card charge', 'transfer': 'Transfer',
-          'bill': 'Bill'}
+          'bill': 'Bill', 'credit-memo': 'Credit memo', 'customer-refund': 'Customer refund',
+          'vendor-credit': 'Vendor credit'}
 
 # Header band, first row: who and when, in the order a document window reads.
 PRIMARY = ('customer', 'title', 'class_id', 'date', 'number', 'expires_on', 'status', 'decision_note')
@@ -66,7 +77,8 @@ ADDRESSES = {'sales-receipt': (('Sold To', 'billing_address'), ('Ship To', 'ship
 DEFAULT_ADDRESSES = (('Bill To', 'billing_address'), ('Ship To', 'shipping_address'))
 
 NUMBER_LABELS = {'invoice': 'Invoice #', 'sales-receipt': 'Sale #', 'estimate': 'Estimate #',
-                 'check': 'Check No.', 'bill': 'Bill #'}
+                 'check': 'Check No.', 'bill': 'Bill #', 'credit-memo': 'Credit Memo #',
+                 'customer-refund': 'Refund #', 'vendor-credit': 'Credit #'}
 
 # Grid columns, in document order. Every one of them is a value a person reads off the
 # line or types into it. ``@amount`` is the exception the reader still expects to see:
@@ -123,6 +135,49 @@ BILL_FOOTER = ('memo',)
 BILL_GRID = (('account', 'Account'), ('amount', 'Amount'), ('memo', 'Memo'),
              ('customer', 'Customer:Job'), ('billable', 'Billable'), ('class_id', 'Class'))
 
+# The credit memo's header, in the invoice's own order: who is being credited, when, our
+# number for it, and the class the whole document is tracked under.
+CREDIT_PRIMARY = ('customer', 'date', 'number', 'class_id')
+
+# What the credit is written against. A credit memo has no terms and no due date -- nobody
+# owes it on a date -- so what is left of the invoice's terms band is the receivable it is
+# credited to and the customer's own order number.
+CREDIT_TERMS = ('ar_account', 'customer_purchase_order')
+
+# The credit memo's grid: the invoice's priced line, plus the two controls that turn a row
+# into a return instead. A returned row is priced entirely from what the source invoice
+# captured, so its rate, its amount and its tax are the invoice's rather than anything typed
+# here -- which is why they sit in the same columns and simply stay empty.
+CREDIT_GRID = (('item', 'Item'), ('source_invoice', 'Returned from'),
+               ('source_line', 'Returned line'), ('description', 'Description'),
+               ('quantity', 'Quantity'), ('unit', 'Unit of measure'), ('unit_price', 'Rate'),
+               ('class_id', 'Class'), ('@amount', 'Amount'), ('tax_code', 'Tax'))
+
+# The refund's header: who is being paid back, when, and our number for the payment.
+REFUND_PRIMARY = ('customer', 'date', 'number', 'class_id')
+
+# How the money leaves: the account it is drawn on, how it was paid, and the numbers that
+# identify it afterwards.
+REFUND_TERMS = ('funding_account', 'method', 'check_number', 'reference')
+REFUND_FOOTER = ('memo',)
+
+# The refund's grid is not a sale and not an expense: it is the credits being spent. Each row
+# names one credit memo and how much of it is being paid out, and the document's total is what
+# those rows add up to.
+REFUND_GRID = (('credit_memo', 'Credit memo'), ('amount', 'Amount'))
+
+# The vendor credit's header: the bill's, one field shorter -- a credit has no terms and no
+# due date, so the vendor's own credit-note number takes the place of the bill's reference.
+VENDOR_CREDIT_PRIMARY = ('vendor', 'date', 'number', 'supplier_reference')
+VENDOR_CREDIT_TERMS = ('ap_account', 'class_id')
+VENDOR_CREDIT_FOOTER = ('memo',)
+
+# The vendor credit's grid is the bill's Expenses grid with Billable removed: passing a cost
+# on to a customer is a rebilling decision, and a credit does not make it. Naming the customer
+# or job still attributes the credit to it, so job costing nets.
+VENDOR_CREDIT_GRID = (('account', 'Account'), ('amount', 'Amount'), ('memo', 'Memo'),
+                      ('customer', 'Customer:Job'), ('class_id', 'Class'))
+
 # What each column head means, written for the person who has to tell two of them apart.
 # A bookkeeper reading this grid asked what Unit was next to Quantity; a head that needs
 # that question asked is a head that has not explained itself. The same words are the
@@ -143,6 +198,9 @@ COLUMN_HINTS = {
     'memo': 'What this line was for',
     'customer': 'Customer or job this cost belongs to',
     'billable': 'Pass this cost on to that customer later',
+    'source_invoice': 'The posted invoice these units came back from',
+    'source_line': 'Which line of that invoice came back',
+    'credit_memo': 'The credit being paid back',
 }
 
 # The pricing selector, in the row's own panel rather than in the columns.
@@ -160,7 +218,9 @@ WIDTHS = {'item': ('minmax(9rem, 1.2fr)', 9), 'description': ('minmax(9rem, 1.5f
           '@amount': ('5.5rem', 5.5), 'tax_code': ('6.5rem', 6.5),
           'account': ('minmax(9rem, 1.4fr)', 9), 'amount': ('6.5rem', 6.5),
           'memo': ('minmax(9rem, 1.6fr)', 9), 'customer': ('minmax(8rem, 1.1fr)', 8),
-          'billable': ('4.5rem', 4.5)}
+          'billable': ('4.5rem', 4.5), 'source_invoice': ('minmax(8rem, 1.1fr)', 8),
+          'source_line': ('minmax(8rem, 1.1fr)', 8),
+          'credit_memo': ('minmax(11rem, 2fr)', 11)}
 ACTIONS_WIDTH = ('4.5rem', 4.5)
 
 # Per-line controls that belong to pricing machinery rather than the document grid.
@@ -202,6 +262,8 @@ LINE_LABELS = {
     'use_defaults': 'Fields on this line to return to their defaults',
     'account': 'Account', 'amount': 'Amount', 'memo': 'Memo',
     'customer': 'Customer:Job',
+    'source_invoice': 'Returned from', 'source_line': 'Returned line',
+    'credit_memo': 'Credit memo',
     'class_mode': 'How this line is classed',
     'party': 'Customer, job or other name this line is for',
 }
@@ -253,6 +315,20 @@ HELP = {
     'bill': 'A bill records what a vendor has charged you and what it was for. Each expense line debits '
             'its own account and Accounts Payable is credited the total, so the bill stands open at that '
             'total until it is paid. Nothing is paid here, and nothing is sent to the vendor.',
+    'credit-memo': 'A credit memo credits a customer. Each line takes back the income the sale took '
+                   'and the tax it charged, and Accounts Receivable is credited the total, so the '
+                   'customer owes that much less. Saving it applies nothing: the credit stands '
+                   'available until you put it against an invoice or refund it. Every line either '
+                   'names an item or returns a line of one posted invoice; one credit memo cannot '
+                   'hold both.',
+    'customer-refund': 'A refund pays a customer back what a credit memo says they are owed. It '
+                       'debits Accounts Receivable and credits the account the money left, and posts '
+                       'nothing else -- the credit already took the income and the tax back down. '
+                       'Every refunded cent comes from a credit named below.',
+    'vendor-credit': 'A vendor credit records money a vendor owes you back. Accounts Payable is '
+                     'debited the total and each line credits the account the original cost went to, '
+                     'so what the vendor is owed falls by exactly that. It is never due and appears '
+                     'on no payables report; it settles nothing until you apply it to a bill.',
 }
 
 # The same window, in each document's own words. A label or an explanation here overrides the
@@ -267,6 +343,13 @@ NOUN_LABELS = {
                  'amount': 'Transfer Amount'},
     'bill': {'vendor': 'Vendor', 'supplier_reference': 'Ref. No.', 'terms': 'Terms',
              'due_date': 'Bill Due', 'ap_account': 'A/P Account'},
+    'credit-memo': {'customer': 'Customer:Job', 'ar_account': 'A/R Account',
+                    'customer_purchase_order': 'P.O. Number'},
+    'customer-refund': {'customer': 'Customer:Job', 'funding_account': 'Pay from',
+                        'method': 'Payment method', 'check_number': 'Check No.',
+                        'reference': 'Reference'},
+    'vendor-credit': {'vendor': 'Vendor', 'supplier_reference': 'Ref. No.',
+                      'ap_account': 'A/P Account'},
 }
 
 NOUN_DESCRIPTIONS = {
@@ -297,6 +380,30 @@ NOUN_DESCRIPTIONS = {
                        'empty to take the next one.',
              'class_id': 'The class the whole bill is tracked under. A line with a class of its '
                          'own keeps it.'},
+    'credit-memo': {'customer': 'Search by customer or job name, then choose the match.',
+                    'ar_account': 'The receivable account this credit is posted to. It has to be '
+                                  'the one the invoices it will answer were posted to.',
+                    'number': 'Credit memos share the invoice number series, so invoices and '
+                              'credits read as one run of numbers to a customer. Leave it empty '
+                              'to take the next one.'},
+    'customer-refund': {'customer': 'Optional guard: the customer you expect these credits to '
+                                    'belong to. The refund is refused if they belong to anyone '
+                                    'else.',
+                        'funding_account': 'The bank or card account the money leaves.',
+                        'method': 'How the customer was paid back.',
+                        'check_number': 'The number on the paper check. Accepted only when the '
+                                        'method is a check.',
+                        'reference': 'Your own reference for this payment, kept as typed.',
+                        'number': "Bookflow's own number for this refund. Leave it empty to take "
+                                  'the next one.'},
+    'vendor-credit': {'vendor': 'Search by vendor name, then choose the match.',
+                      'supplier_reference': "The vendor's own credit-note number, kept as typed.",
+                      'ap_account': 'The Accounts Payable account this credit is credited '
+                                    'against. It has to match the bills it will settle.',
+                      'number': 'Vendor credits take their own number series; they do not share '
+                                'the bill series. Leave it empty to take the next one.',
+                      'class_id': 'The class the whole credit is tracked under. A line with a '
+                                  'class of its own keeps it.'},
 }
 
 # What the money-out footer calls the figure on the face of the document.
@@ -316,6 +423,7 @@ def is_document(noun, verb):
             or (noun == 'estimate' and verb in ('create', 'update'))
             or (noun in MONEY_OUT and verb == 'post')
             or (noun == BILL and verb in ('post', 'update'))
+            or (noun in CREDITS and verb == 'post')
             or (noun == TRANSFER and verb == 'post'))
 
 
@@ -346,7 +454,7 @@ def describe(leaves, noun):
             leaf['label'] = tail.replace('_id', '').replace('_', ' ').capitalize()
         if leaf['kind'] == 'collection' and path == 'use_defaults':
             leaf['collection']['item']['choice_labels'] = DEFAULT_CHOICE_LABELS
-        if path in ('lines', 'expenses'):
+        if path in ('lines', 'expenses', 'sources'):
             for child in leaf['collection']['item']['fields']:
                 child['label'] = LINE_LABELS.get(child['name'],
                                                  child['name'].replace('_id', '').replace('_', ' ').capitalize())
@@ -380,11 +488,19 @@ def layout(noun, leaves):
     transfer = noun == TRANSFER
     money_out = noun in MONEY_OUT
     bill = noun == BILL
+    credit = noun == CREDIT_MEMO
+    refund = noun == REFUND
+    vendor_credit = noun == VENDOR_CREDIT
     header_only = transfer or money_out
     # A bill has a terms band of its own but none of the sales bands: no addresses to print
-    # on, no quoted scope, and no price rules, because nothing here is being sold.
-    plain = header_only or bill
-    grid = () if transfer else BILL_GRID if bill else EXPENSE_GRID if money_out else \
+    # on, no quoted scope, and no price rules, because nothing here is being sold. A vendor
+    # credit and a refund are the same shape for the same reason. A credit memo is a sale
+    # read backwards, so it keeps the sales footer and the tax rule -- but not the addresses,
+    # which belong to the invoice it credits, and not the price-level machinery, which is a
+    # rule for pricing new work rather than for taking a sale back.
+    plain = header_only or bill or vendor_credit or refund
+    grid = () if transfer else BILL_GRID if bill else VENDOR_CREDIT_GRID if vendor_credit else \
+        REFUND_GRID if refund else CREDIT_GRID if credit else EXPENSE_GRID if money_out else \
         WORK_GRID if noun == 'estimate' else SALE_GRID
 
     def take(paths):
@@ -396,21 +512,32 @@ def layout(noun, leaves):
                 found.append(leaf)
         return found
 
-    primary = take(BILL_PRIMARY if bill else TRANSFER_PRIMARY if transfer else
+    primary = take(BILL_PRIMARY if bill else VENDOR_CREDIT_PRIMARY if vendor_credit else
+                   REFUND_PRIMARY if refund else CREDIT_PRIMARY if credit else
+                   TRANSFER_PRIMARY if transfer else
                    MONEY_OUT_PRIMARY if money_out else PRIMARY)
-    terms = take(BILL_TERMS) if bill else [] if header_only else take(TERMS)
-    addresses = [] if plain else [group for group in
+    terms = take(BILL_TERMS) if bill else take(VENDOR_CREDIT_TERMS) if vendor_credit else \
+        take(REFUND_TERMS) if refund else take(CREDIT_TERMS) if credit else \
+        [] if header_only else take(TERMS)
+    # A credit memo credits an invoice that already carried the addresses; nothing is shipped
+    # and nothing is printed to an address here.
+    addresses = [] if plain or credit else [group for group in
                  (_address_group(title, prefix, leaves, placed)
                   for title, prefix in ADDRESSES.get(noun, DEFAULT_ADDRESSES))
                  if group is not None]
-    scope = [] if plain else take(SCOPE)
+    scope = [] if plain or credit else take(SCOPE)
     # A transfer has no line collection at all, which is what leaves the grid band out of
     # the page rather than rendering an empty one.
-    lines = None if transfer else by_path.get('expenses' if money_out or bill else 'lines')
+    lines = None if transfer else by_path.get(
+        'sources' if refund else 'expenses' if money_out or bill or vendor_credit else 'lines')
     if lines is not None:
         placed.add(lines['path'])
-    footer = take(BILL_FOOTER if bill else TRANSFER_FOOTER if transfer else
+    footer = take(VENDOR_CREDIT_FOOTER if vendor_credit else REFUND_FOOTER if refund else
+                  BILL_FOOTER if bill else TRANSFER_FOOTER if transfer else
                   MONEY_OUT_FOOTER if money_out else FOOTER)
+    # The price-level and rounding rules belong to a document that is pricing new work. A
+    # credit memo keeps the tax calculation rule alone, because the cents it gives back have
+    # to round the way the sale's did.
     pricing = [] if plain else take(PRICING)
     record = take(RECORD)
     # Anything this layout does not name still reaches the reader, rather than
@@ -429,8 +556,13 @@ def layout(noun, leaves):
     tracks = [WIDTHS.get(column['name'], ('9rem', 9)) for column in columns] + [ACTIONS_WIDTH]
     return {'primary': primary, 'addresses': addresses, 'terms': terms, 'scope': scope,
             'lines': lines, 'columns': columns, 'line_extras': extras,
-            'line_pricing': None if plain else LINE_PRICING,
-            'lines_title': 'Expenses' if money_out or bill else 'Lines',
+            # The pricing selector chooses between the exclusive price inputs a sale has.
+            # A credit memo has no catalog repricing of its own and no cost-plus markup, so
+            # it carries no selector: a returned line is priced by its source and a named
+            # item line is priced by its rate.
+            'line_pricing': None if plain or credit else LINE_PRICING,
+            'lines_title': 'Credits paid back' if refund else
+                           'Expenses' if money_out or bill or vendor_credit else 'Lines',
             'footer': footer, 'pricing': pricing, 'record': record,
             'grid_template': ' '.join(track for track, _ in tracks),
             'grid_width': format(sum(width for _, width in tracks), 'g') + 'rem'}
@@ -525,6 +657,46 @@ def bill_totals(result):
     return rows, said + ' Accounts Payable carries it until it is paid.', True
 
 
+def refund_totals(result):
+    """The refund footer: what is being paid back, and out of which account.
+
+    Both figures are the server's own. The sentence says the two things a person writing a
+    refund wants confirmed: that the money leaves the account they named, and that the credits
+    behind it are worth that much less afterwards.
+    """
+    if not isinstance(result, dict) or not isinstance(result.get('total'), dict):
+        return [], None, None
+    currency = result['currency']
+    figure = f"{result['total']['amount']} {currency}"
+    funding = (((result.get('revision') or {}).get('profile') or {}).get('funding_account') or {})
+    rows = [_row('Credits paid out', figure),
+            _row('Out of ' + (funding.get('full_name') or 'the funding account'), figure, True)]
+    return (rows, 'Accounts Receivable is debited and that account is credited. The credits '
+            'named above are worth exactly this much less and cannot be applied to an invoice '
+            'as well.', True)
+
+
+def vendor_credit_totals(result):
+    """The vendor credit footer: what was credited back, and what is still free to apply.
+
+    Every figure is the server's own. A credit is not a payable, so there is no due date to
+    show and nothing here is settled: the sentence says so rather than leaving a reader to
+    wonder why no bill changed.
+    """
+    if not isinstance(result, dict) or not isinstance(result.get('total'), dict):
+        return [], None, None
+    currency = result['currency']
+    rows = [_row('Credited lines', f"{result['expense_total']['amount']} {currency}"),
+            _row('Taken off what you owe', f"{result['total']['amount']} {currency}", True)]
+    settlement = result.get('settlement_current')
+    said = ('Accounts Payable is debited the total, so the vendor is owed that much less. '
+            'Nothing is settled here: apply it to a bill to say which bill it answers.')
+    if isinstance(settlement, dict):
+        rows.append(_row('Still free to apply',
+                         f"{settlement['unapplied']['amount']} {currency}", True))
+    return rows, said, True
+
+
 def _leg_figure(leg):
     """What this end's own figure is called: on a card or a loan it is what you owe."""
     return (f'what you owe on {leg["name"]}' if leg['type'] in OWED_TYPES else leg['name'])
@@ -555,9 +727,14 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
     transfer = noun == TRANSFER
     money_out = noun in MONEY_OUT
     bill = noun == BILL
+    credit = noun == CREDIT_MEMO
+    refund = noun == REFUND
+    vendor_credit = noun == VENDOR_CREDIT
     # A bill's line amounts are typed, not computed, so there is no per-line server figure to
-    # copy back and no ``@amount`` column asking for one.
-    figures = None if transfer or money_out or bill else (computed(result) or computed(shown))
+    # copy back and no ``@amount`` column asking for one. A vendor credit and a refund are
+    # typed the same way. A credit memo's are computed, exactly as an invoice's are.
+    typed = transfer or money_out or bill or vendor_credit or refund
+    figures = None if typed else (computed(result) or computed(shown))
     fresh = result is not None
 
     def line_amount(line_id, index):
@@ -571,6 +748,13 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
     if transfer:
         totals, reconciliation, reconciled = transfer_totals(result)
         empty = 'Preview to see what each of the two accounts does.'
+    elif refund:
+        totals, reconciliation, reconciled = refund_totals(result)
+        empty = 'Preview to see what the credits named above add up to.'
+    elif vendor_credit:
+        totals, reconciliation, reconciled = vendor_credit_totals(result)
+        empty = ('Preview to see what the credited lines add up to and what the vendor is '
+                 'owed afterwards.')
     elif bill:
         totals, reconciliation, reconciled = bill_totals(result)
         empty = ('Preview to see what the expense lines add up to and when the terms make '
@@ -593,5 +777,5 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
                 preview=preview, creating=verb in ('post', 'create'),
                 settled=noun == 'invoice', base=base, record_id=record_id,
                 context_labels=CONTEXT_LABELS,
-                origin=('the values you entered' if (transfer or money_out or bill) and not fresh
+                origin=('the values you entered' if typed and not fresh
                         else 'the last preview' if fresh else 'the saved document'))
