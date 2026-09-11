@@ -355,6 +355,7 @@ NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
     "journal": {"record_type": "transaction", "identifier": "journal", "output_identifier": "id", "ui_group": "Accounting", "display_field": "number", "singular_label": "Journal", "plural_label": "Journals"},
     "register": {"record_type": None, "identifier": None, "ui_group": "Accounting"},
     "bill": {"record_type": "transaction", "identifier": "bill", "output_identifier": "id", "ui_group": "Vendors and purchases", "display_field": "number", "singular_label": "Bill", "plural_label": "Bills"},
+    "bill payment": {"record_type": "transaction", "identifier": "payment", "output_identifier": "id", "ui_group": "Vendors and purchases", "display_field": "number", "singular_label": "Bill payment", "plural_label": "Bill payments"},
     "check": {"record_type": "transaction", "identifier": None, "output_identifier": "id", "ui_group": "Vendors and purchases", "display_field": "number", "singular_label": "Check", "plural_label": "Checks"},
     "card-charge": {"record_type": "transaction", "identifier": None, "output_identifier": "id", "ui_group": "Vendors and purchases", "display_field": "number", "singular_label": "Credit card charge", "plural_label": "Credit card charges"},
     "transfer": {"record_type": "transaction", "identifier": None, "output_identifier": "id", "ui_group": "Accounting", "display_field": "number", "singular_label": "Transfer", "plural_label": "Transfers"},

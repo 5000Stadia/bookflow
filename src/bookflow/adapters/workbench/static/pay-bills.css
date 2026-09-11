@@ -1,0 +1,53 @@
+/* Pay Bills, the bill payment list and the saved payment.
+
+   One selection table, and below 700px each of its rows becomes its own block: the same
+   grouped-block shape the bill window's expense lines take, because a seven-column table on a
+   390px screen is a sideways scroll and was rejected as one. Nothing here is wider than its
+   own box at that width - every cell names itself and wraps. */
+#pay-bills { max-width: 1180px; margin: auto; }
+.pay-bills-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+.pay-bills-grid label { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
+.pay-bills-grid input, .pay-bills-grid select, .pay-bills-grid textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.pay-bills-actions { display: flex; flex-wrap: wrap; gap: .7rem; margin: 1rem 0; }
+#pay-bills section { margin: 1.2rem 0; padding: 1rem; border: 1px solid #d4dce4; border-radius: 6px; }
+#pay-bills fieldset { min-width: 0; }
+#pay-bills [hidden] { display: none !important; }
+#pay-bills-error { border-color: #b14535 !important; background: #fff4f0; }
+#pay-bills-message { min-height: 1.5em; }
+#pay-bills-group-list { list-style: none; margin: .4rem 0; padding: 0; display: grid; gap: .5rem; }
+#pay-bills-group-list li { padding: .55rem .7rem; background: #f4f7fa; border-radius: 4px; overflow-wrap: anywhere; }
+#pay-bills-totals p, #pay-bills-result p { overflow-wrap: anywhere; }
+.pay-bills-effect { margin: .5rem 0; padding: .6rem; background: #f4f7fa; border-radius: 4px;
+  overflow-wrap: anywhere; }
+.pay-bills-effect p { margin: 0; }
+.pay-bills-effect ul { margin: .3rem 0 0; padding-left: 1.1rem; }
+.pay-bills-table-wrap { max-width: 100%; overflow-x: auto; }
+.pay-bills-open { width: 100%; border-collapse: collapse; }
+.pay-bills-open th, .pay-bills-open td { padding: .6rem; border-bottom: 1px solid #d4dce4; text-align: left; vertical-align: top; }
+.pay-bills-open input[type=text] { width: 8rem; max-width: 100%; box-sizing: border-box; }
+.pay-bills-cell-label { display: none; }
+.pay-bills-money { font-variant-numeric: tabular-nums; }
+
+@media screen and (max-width: 700px) {
+  .pay-bills-grid { grid-template-columns: 1fr; }
+  .pay-bills-table-wrap { overflow-x: visible; }
+  .pay-bills-open { display: block; min-width: 0; width: 100%; }
+  .pay-bills-open thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .pay-bills-open tbody, .pay-bills-open tfoot { display: block; }
+  .pay-bills-open tbody tr, .pay-bills-open tfoot tr { display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem .75rem;
+    margin: .5rem 0; padding: .6rem; border: 1px solid #c3d0de; border-radius: .35rem; background: #fff; }
+  .pay-bills-open td, .pay-bills-open tfoot th { min-width: 0; padding: .3rem 0; border: 0;
+    white-space: normal; overflow-wrap: anywhere; text-align: left; }
+  .pay-bills-cell-label { display: block; font-size: .75rem; font-weight: 600; color: #3c4a5a; margin-bottom: .15rem; }
+  /* What the row is about reads across the block -- who it is owed to, which bill, when it is
+     due, and the box you type in. The two money figures are the pair beside each other, which
+     is the comparison a person actually makes before deciding what to pay. */
+  .pay-bills-open td[data-label="Select"], .pay-bills-open td[data-label="Vendor"],
+  .pay-bills-open td[data-label="Bill"], .pay-bills-open td[data-label="Due date"],
+  .pay-bills-open td[data-label="Payment"], .pay-bills-open td[data-label="Memo"],
+  .pay-bills-open td[data-label="Status"], .pay-bills-open td[data-label="Date"],
+  .pay-bills-open td[data-label="Amount"],
+  .pay-bills-open tfoot th:first-child, .pay-bills-open tfoot th:last-child { grid-column: 1 / -1; }
+  .pay-bills-open td[data-label="Payment"] input { width: 100%; }
+}

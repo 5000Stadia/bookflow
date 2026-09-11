@@ -23,7 +23,8 @@
 {% if r.custom_fields %}<h3>Custom fields</h3><dl>{% for f in r.custom_fields %}<dt>{{ f.name }} · {{ f.kind }}</dt><dd>{{ f.choice_label if f.kind == 'choice' else ('true' if f.value is sameas true else 'false' if f.value is sameas false else f.value) }}</dd>{% endfor %}</dl>{% endif %}
 {% if s and not bill.preview %}<section aria-label="What is still owed on this bill"><h3>What is owed</h3>
 <p data-bill-settlement>{{ s.status|capitalize }} · Bill {{ s.gross.amount }} · Paid {{ s.applied.amount }} · Open {{ s.open.amount }} {{ s.currency }}</p>
-<p class="muted">Paying bills is not available yet, so a posted bill stands open until the payables work lands.</p></section>{% endif %}
+{% if s.open_minor_units and bill.record.status != 'voided' %}<p><a data-pay-this-bill href="/c/{{ company_id }}/pay-bills?vendor={{ p.vendor.id }}">Pay this bill</a></p>{% endif %}
+<p class="muted"><a href="/c/{{ company_id }}/bill-payment?bill={{ bill.record.id }}">What has been paid against this bill</a></p></section>{% endif %}
 <details data-bill-origins><summary>Captured rules and input origins</summary>
 {% if p.terms %}<h4>Term rule</h4><dl>{% for field, value in p.terms.items() %}{% if value is not none %}<dt>{{ field.replace('_',' ') }}</dt><dd>{{ value }}</dd>{% endif %}{% endfor %}</dl>{% endif %}
 <dl>{% for field, origin in p.origins.items() %}<dt>{{ field.replace('_',' ') }}</dt><dd>{{ origin.kind }}{% if origin.source_id %} · source {{ origin.source_id }}{% endif %}</dd>{% endfor %}</dl>

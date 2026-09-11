@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block title %}Bill payments{% endblock %}{% block body %}
+<link rel="stylesheet" href="{{ static_urls['pay-bills.css'] }}">
+<h1>Bill payments</h1>
+<p class="pay-bills-actions">{% if may_pay %}<a href="/c/{{ company_id }}/pay-bills">Pay bills</a>{% endif %}<a href="/c/{{ company_id }}/bill">Find a bill</a><a href="/c/{{ company_id }}/report/unpaid-bills">Unpaid bills report</a></p>
+<form method="get" class="pay-bills-grid" aria-label="Find bill payments">
+<label>Vendor (ID or exact name)<input name="vendor" value="{{ filters.get('vendor','') }}"></label>
+<label>Payment number contains<input name="number" value="{{ filters.get('number','') }}"></label>
+<label>Check number<input name="check_number" value="{{ filters.get('check_number','') }}"></label>
+<label>From date<input type="date" name="date_from" value="{{ filters.get('date_from','') }}"></label>
+<label>Through date<input type="date" name="date_to" value="{{ filters.get('date_to','') }}"></label>
+<label>Status<select name="status"><option value="">All</option>{% for value in ('posted','voided') %}<option value="{{ value }}"{% if filters.get('status')==value %} selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+<button>Find payments</button>
+</form>
+<p>{{ payments.count }} payments on this page, newest first.</p>
+<div class="pay-bills-table-wrap"><table class="pay-bills-open payment-lines"><thead><tr><th>Date</th><th>Payment</th><th>Vendor</th><th>Method</th><th>Check no.</th><th>Amount</th><th>Applied</th><th>Unapplied</th><th>Status</th></tr></thead><tbody>
+{% for row in payments.rows %}<tr data-payment="{{ row.id }}"><td data-label="Date"><span class="pay-bills-cell-label" aria-hidden="true">Date</span>{{ row.date }}</td><td data-label="Payment"><span class="pay-bills-cell-label" aria-hidden="true">Payment</span><a href="{{ row.detail_url }}">{{ row.number }}</a></td><td data-label="Vendor"><span class="pay-bills-cell-label" aria-hidden="true">Vendor</span>{{ row.vendor_name }}</td><td data-label="Method"><span class="pay-bills-cell-label" aria-hidden="true">Method</span>{{ row.payment_method_name }}</td><td data-label="Check no."><span class="pay-bills-cell-label" aria-hidden="true">Check no.</span>{{ row.check_number or '—' }}</td><td data-label="Amount"><span class="pay-bills-cell-label" aria-hidden="true">Amount</span>{{ row.total.amount }} {{ row.currency }}</td><td data-label="Applied"><span class="pay-bills-cell-label" aria-hidden="true">Applied</span>{{ row.applied }}</td><td data-label="Unapplied"><span class="pay-bills-cell-label" aria-hidden="true">Unapplied</span>{{ row.unapplied }}</td><td data-label="Status"><span class="pay-bills-cell-label" aria-hidden="true">Status</span>{{ row.status }} · {{ row.settlement_status }}</td></tr>{% endfor %}
+{% if not payments.rows %}<tr><td colspan="9">No bill payment matches these filters.</td></tr>{% endif %}
+</tbody></table></div>
+{% if payments.next_url %}<p><a href="{{ payments.next_url }}">Next page</a></p>{% endif %}
+{% endblock %}
