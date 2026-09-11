@@ -4,7 +4,8 @@ These are the receivables reports read from the other side of the books. Both
 start from Accounts Payable posting effects dated on or before the as-of date,
 signed so that what is owed to a vendor is positive -- credit minus debit,
 because a payable is credit-normal -- and then move each active settlement
-application from the payment that supplied the cash onto the bill it settles.
+application from the source that supplied it -- a bill payment or a vendor
+credit, read the same way -- onto the bill it settles.
 That movement transfers an amount between two rows and never creates or
 destroys one, so the aging total is exactly the Accounts Payable balance the
 balance sheet reports for the same date, whatever the settlement history looks
@@ -137,9 +138,15 @@ NO_VENDOR = "No name"
 # lossless integer text.
 #
 # The sign is the payable's own: credit minus debit, so a bill is positive and
-# a debit to Accounts Payable that no bill owns -- a vendor credit entered as a
-# journal, or a bill payment with nothing applied to it -- is negative, exactly
-# as unapplied customer credit is negative on the receivables side.
+# a debit to Accounts Payable that no bill owns -- an unapplied vendor credit,
+# or a bill payment with nothing applied to it -- is negative, exactly as
+# unapplied customer credit is negative on the receivables side.
+#
+# `settled` joins the obligation side only. The paying document is taken
+# straight from `ap_applications.source_transaction_id`, so a second kind of
+# paying source moves through here with no branch and no arm to forget: joining
+# a source table to learn the kind would be an inner join that silently dropped
+# every row of a kind the join did not cover.
 #
 # `settled` is the same edge `ap_settlement.applied_totals` nets, read along the
 # date axis: an apply on or before the as-of date that no unapply on or before

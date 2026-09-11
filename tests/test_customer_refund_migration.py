@@ -19,6 +19,7 @@ from bookflow.company.refund_schema import guard_statements
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, known_revisions, migrate_to_head
 from tests.payment_raw_evidence import table
+from tests.test_bill_payment_migration import _rebuilt_since
 from tests.test_credit_memo_migration import _superseded_after
 
 M = importlib.import_module('bookflow.storage.company_migrations.versions.0031_customer_refunds')
@@ -171,10 +172,13 @@ def test_a_populated_previous_database_keeps_every_value_and_every_local_object(
             "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'"
             " AND name <> 'alembic_version' ORDER BY name")]
         before = {name: table(raw, name) for name in names}
-        objects = set(raw.execute(
+        # Everything this revision and every later one rebuilds or reissues is read from the
+        # migration modules, never listed here: a hand-written set of names is falsified by the
+        # next revision that widens a table, and silently, because the set still looks right.
+        rebuilt = _rebuilt_since(PREVIOUS)
+        objects = {row for row in raw.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
-            " AND name NOT IN ('transactions', 'document_lines') AND name NOT IN ({})".format(
-                ','.join(repr(name) for name in M.REPLACED))).fetchall())
+        ).fetchall() if row[1] not in rebuilt}
 
     with open_database(path, writable=True) as db:
         assert migrate_to_head(db, 'company', tmp_path / 'backups') == (PREVIOUS, HEADS['company'])

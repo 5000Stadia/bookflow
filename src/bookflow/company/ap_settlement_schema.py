@@ -16,6 +16,13 @@ application has to match exactly, mirroring ``ap_obligation_keys`` on the other 
 binds it to a particular payable is the application, which is why unapplying one frees it
 rather than destroying it.
 
+**Two kinds of source, one shape.** ``source_type`` is ``bill_payment`` when cash or a card
+paid the payable and ``vendor_credit`` when the vendor gave it back. Both carry the same
+triple, both break into the same positive components against the same debited attribution, and
+both settle through the same edge below -- so every reader of a settled payable answers without
+knowing which one settled it. What separates them is upstream, in their own documents: a
+payment also took money out of a bank, and a credit also credited the purchase accounts.
+
 **The edge.** ``ap_applications`` is a dated settlement edge from a source key to an
 obligation key, plus its exact whole-edge inverse. Applications post nothing: the cash left
 the bank when the payment posted, and an application only says which payable it answered. So
@@ -85,14 +92,14 @@ def define_tables(metadata, column, table):
         identifier('id', 'Stable ULID of this settlement source; an application names this, never a revision.', primary_key=True),
         identifier('transaction_id', 'Document that permanently owns this source.', 'transactions.id'),
         integer('ordinal', 'One-based source ordinal within the document; a bill payment has exactly one.'),
-        C('source_type', sa.String(32), 'Kind of money this source is; bill_payment is the only implemented one.', nullable=False),
+        C('source_type', sa.String(32), 'Kind of money this source is: bill_payment when cash or a card paid the payable, vendor_credit when the vendor gave it back.', nullable=False),
         identifier('vendor_id', 'Vendor an application must match exactly.', 'vendors.id'),
         identifier('ap_account_id', 'Payable account an application must match exactly.', 'accounts.id'),
         C('currency', sa.String(3), 'Home currency an application must match exactly.', nullable=False),
         *created(),
         sa.UniqueConstraint('transaction_id', 'id', name='uq_ap_source_owner'),
         sa.UniqueConstraint('transaction_id', 'ordinal', name='uq_ap_source_ordinal'),
-        sa.CheckConstraint("source_type = 'bill_payment'", name='ck_ap_source_type'),
+        sa.CheckConstraint("source_type IN ('bill_payment', 'vendor_credit')", name='ck_ap_source_type'),
         positive('ordinal'),
         sa.Index('ix_ap_source_keys_vendor', 'vendor_id', 'ap_account_id', 'id'),
         description='Stable settlement sources; retired ordinals are never reused and a correction never moves one.')
@@ -169,12 +176,16 @@ def guard_statements():
         for event in ('UPDATE', 'DELETE'):
             yield (f'CREATE TRIGGER {table}_immutable_{event.lower()} BEFORE {event} ON {table} '
                    "BEGIN SELECT RAISE(ABORT, 'immutable settlement history'); END")
-    for table, field, kind in (('ap_source_keys', 'transaction_id', 'bill_payment'),
-                               ('ap_applications', 'source_transaction_id', 'bill_payment'),
-                               ('ap_applications', 'obligation_transaction_id', 'bill')):
+    # A source key says which kind of money it is, so its own row is what the document type is
+    # checked against: a vendor credit can never mint a source calling itself a bill payment.
+    # The edge admits either kind, and the payable side is a bill and nothing else.
+    for table, field, predicate in (
+            ('ap_source_keys', 'transaction_id', 'type = NEW.source_type'),
+            ('ap_applications', 'source_transaction_id', "type IN ('bill_payment', 'vendor_credit')"),
+            ('ap_applications', 'obligation_transaction_id', "type = 'bill'")):
         yield (f'CREATE TRIGGER {table}_{field}_type BEFORE INSERT ON {table}\n'
                f'WHEN NOT EXISTS (SELECT 1 FROM transactions WHERE id = NEW.{field} '
-               f"AND type = '{kind}')\n"
+               f'AND {predicate})\n'
                "BEGIN SELECT RAISE(ABORT, 'settlement reference has wrong document type'); END")
     same = ' AND '.join(f'a.{name} IS NEW.{name}' for name in _INVERSE_FIELDS)
     yield (f'CREATE TRIGGER ap_applications_exact_inverse BEFORE INSERT ON ap_applications\n'

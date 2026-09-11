@@ -289,12 +289,19 @@ def _void(s, data, document, header, pending, batches, legs):
 
 
 def _settlement(s, data, operation):
+    pending = [row for document in data['documents'] for row in document['pending']['ap_applications']]
+    settlement_fence(s, pending, operation=operation,
+                     source_transaction_id=data['documents'][0]['header']['id'])
+
+
+def settlement_fence(s, pending, *, operation=None, source_transaction_id=None):
     """No payable ends up settled past its gross, and no inverse takes back what is not there.
 
     Read fresh, against storage, plus what this write adds: the arithmetic that decides whether
-    a concurrent payment already took the money.
+    a concurrent settlement already took the money. Both kinds of paying source come through
+    here -- a bill payment and a vendor credit answer the same payable, so the rule that a bill
+    is never settled past its gross has to be one rule reading one edge, not two that agree.
     """
-    pending = [row for document in data['documents'] for row in document['pending']['ap_applications']]
     if not pending:
         return
     obligations = sorted({row['obligation_key_id'] for row in pending})
@@ -318,28 +325,31 @@ def _settlement(s, data, operation):
     if operation == 'unapply':
         originals = {row['reverses_application_id'] for row in pending}
         require(len(originals) == len(pending), 'two inverses of one application')
-        active = {row['id'] for row in ap_settlement.active_applications(
-            s, data['documents'][0]['header']['id'])}
+        active = {row['id'] for row in ap_settlement.active_applications(s, source_transaction_id)}
         require(originals <= active, 'an inverse of something already unapplied')
 
 
 def _source_capacity(s, data):
-    """No part of a payment's capacity answers two bills at once, read fresh against storage.
-
-    The mirror of ``_settlement``: that one refuses settling a payable past its gross, this one
-    refuses spending a payment past what it carries. Both have to read storage inside the
-    writer's transaction, because the concurrent write that took the money is only visible
-    there -- two people re-pointing the same freed check at different bills is the same race as
-    two people paying the same bill.
-    """
     rows = [row for document in data['documents'] for row in document['pending']['ap_applications']]
+    source_capacity_fence(s, rows, [row for document in data['documents']
+                                    for row in document['pending']['ap_source_components']])
+
+
+def source_capacity_fence(s, rows, minted=(), *, noun='payment'):
+    """No part of a source's capacity answers two bills at once, read fresh against storage.
+
+    The mirror of ``settlement_fence``: that one refuses settling a payable past its gross,
+    this one refuses spending a source past what it carries. Both have to read storage inside
+    the writer's transaction, because the concurrent write that took the money is only visible
+    there -- two people re-pointing the same freed check at different bills is the same race as
+    two people paying the same bill, and a vendor credit races exactly the same way.
+    """
     if not rows:
         return
     for identifier in sorted({row['source_transaction_id'] for row in rows}):
         components = {row['id']: row for row in effects.rows(
             s, c.ap_source_components, c.ap_source_components.c.transaction_id == identifier)}
-        components.update({row['id']: row for document in data['documents']
-                           for row in document['pending']['ap_source_components']
+        components.update({row['id']: row for row in minted
                            if row['transaction_id'] == identifier})
         held = dict.fromkeys(components, 0)
         for edge in ap_settlement.applications(s, source_transaction_id=identifier):
@@ -351,13 +361,13 @@ def _source_capacity(s, data):
                 held[row['source_component_id']] = held.get(row['source_component_id'], 0) + sign * row['amount_minor_units']
         for component_id, units in held.items():
             component = components.get(component_id)
-            require(component is not None, 'an edge against capacity this payment does not own')
-            require(units >= 0, 'a payment has been given back more than it carried')
+            require(component is not None, f'an edge against capacity this {noun} does not own')
+            require(units >= 0, f'a {noun} has been given back more than it carried')
             if units > component['amount_minor_units']:
                 header = effects.rows(s, c.transactions, c.transactions.c.id == identifier)[0]
                 raise BookflowError('E_APPLICATION_CAPACITY', details={
-                    'payment_id': identifier, 'payment_number': header['number'],
+                    f'{noun}_id': identifier, f'{noun}_number': header['number'],
                     'requested_minor_units': units,
                     'available_minor_units': component['amount_minor_units'],
-                    'next': 'Someone else attached this payment first; re-read what it has free '
+                    'next': f'Someone else attached this {noun} first; re-read what it has free '
                             'and apply that.'})

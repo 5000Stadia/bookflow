@@ -11,7 +11,7 @@ Database: `company`.
 | `id` | VARCHAR(26) | no | — | primary key 1, unique with transaction_id + id | ix_ap_source_keys_vendor | — | Stable ULID of this settlement source; an application names this, never a revision. |
 | `transaction_id` | VARCHAR(26) | no | — | unique with transaction_id + id, unique with transaction_id + ordinal | — | transactions.id | Document that permanently owns this source. |
 | `ordinal` | BIGINT | no | — | unique with transaction_id + ordinal | — | — | One-based source ordinal within the document; a bill payment has exactly one. |
-| `source_type` | VARCHAR(32) | no | — | — | — | — | Kind of money this source is; bill_payment is the only implemented one. |
+| `source_type` | VARCHAR(32) | no | — | — | — | — | Kind of money this source is: bill_payment when cash or a card paid the payable, vendor_credit when the vendor gave it back. |
 | `vendor_id` | VARCHAR(26) | no | — | — | ix_ap_source_keys_vendor | vendors.id | Vendor an application must match exactly. |
 | `ap_account_id` | VARCHAR(26) | no | — | — | ix_ap_source_keys_vendor | accounts.id | Payable account an application must match exactly. |
 | `currency` | VARCHAR(3) | no | — | — | — | — | Home currency an application must match exactly. |

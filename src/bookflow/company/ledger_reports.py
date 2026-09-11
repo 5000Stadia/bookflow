@@ -164,7 +164,7 @@ class GeneralLedgerRow(StrictModel):
     batch_id: str | None = None
     batch_kind: Literal["original", "reversal", "replacement"] | None = None
     transaction_id: str | None = None
-    transaction_type: Literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund"] | None = None
+    transaction_type: Literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit"] | None = None
     transaction_number: str | None = None
     revision_id: str | None = None
     reverses_batch_id: str | None = None

@@ -832,6 +832,63 @@ MATRIX["bill payment history"] = {
 }
 
 
+# A vendor credit refuses for the bill's reasons -- it is the same resolver on the same
+# accounts -- and applying one refuses for both sides of the same settlement edge a bill
+# payment uses: what the credit has free, and what the bill still has open.
+MATRIX["vendor-credit post"] = {
+    "E_RECORD_NOT_FOUND": "unknown vendor, account, class or job",
+    "E_INACTIVE_REFERENCE": "deactivated vendor, account, class or job",
+    "E_VALIDATION": "no single active Accounts Payable account, or an ineligible account on the header or a line",
+    "E_VALUE_RANGE": "amount outside signed 64-bit minor units",
+    "E_AMOUNT_PRECISION": "more decimals than the home currency has",
+    "E_PERIOD_CLOSED": "credit date on or before the closing date",
+    "E_DUPLICATE_NUMBER": "explicit --number already used by another vendor credit",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["vendor-credit void"] = {
+    "E_RECORD_NOT_FOUND": "unknown credit",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_REASON_REQUIRED": "void without a reason",
+    "E_VALIDATION": "a reason longer than 140 characters",
+    "E_PERIOD_CLOSED": "credit date on or before the closing date",
+    "E_HAS_APPLICATIONS": "the credit still settles a bill",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["vendor-credit apply"] = {
+    "E_RECORD_NOT_FOUND": "unknown credit or bill",
+    "E_VALIDATION": "a settlement dated before the credit or before a bill it settles, a repeated bill selector, or a row reached with nothing left to apply",
+    "E_AMOUNT_PRECISION": "an amount with more precision than the currency has",
+    "E_VALUE_RANGE": "an amount of zero or less",
+    "E_PERIOD_CLOSED": "settlement date on or before the closing date",
+    "E_VERSION_CONFLICT": "stale expected_version on the credit or on a selected bill",
+    "E_APPLICATION_CAPACITY": "more than the credit has free or more than the bill has open, including a concurrent write that took either first",
+    "E_APPLICATION_INCOMPATIBLE": "a bill owed to another vendor, from another payable account, or in another currency",
+    "E_APPLICATION_INACTIVE": "a voided credit, a voided bill, or a bill with no payable",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["vendor-credit unapply"] = {
+    "E_RECORD_NOT_FOUND": "unknown credit or bill",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_APPLICATION_INACTIVE": "a voided credit, or a named bill this credit has nothing applied to",
+    "E_PERIOD_CLOSED": "an application being taken back is effective on or before the closing date",
+    "E_VALIDATION": "a repeated bill selector",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["vendor-credit show"] = {"E_RECORD_NOT_FOUND": "unknown credit or revision number"}
+MATRIX["vendor-credit query"] = {
+    "E_RECORD_NOT_FOUND": "unknown vendor or bill filter",
+    "E_QUERY_STALE": "company audit changed between credit pages",
+}
+
+
 # A credit memo refuses for the invoice's reasons -- it is the same resolver on the same
 # accounts -- plus the two only a return can hit: asking for more of a line than is left, and
 # a source line the invoice has since corrected out from under the claim.

@@ -546,6 +546,41 @@ EXAMPLES.update({
 })
 
 
+# A vendor credit is the bill read backwards, so its entry example is the bill's with the
+# amount coming back instead of going out; applying it reads like applying a check, because it
+# is the same settlement edge.
+EXAMPLES.update({
+    "vendor-credit post": Example(
+        'bookflow vendor-credit post --vendor "Northside Supply" --date 2026-04-18'
+        ' --supplier-reference CN-118 --memo "Returned fittings"'
+        ' --expenses \'[{"account":"Office Supplies","amount":"46.25","memo":"Returned fittings"}]\''
+        ' --company "Demo Plumbing Co" --reason "Enter the vendor credit" --json',
+        {"vendor": "Northside Supply", "date": "2026-04-18", "supplier_reference": "CN-118",
+         "memo": "Returned fittings",
+         "expenses": [{"account": "Office Supplies", "amount": "46.25",
+                       "memo": "Returned fittings"}]}),
+    "vendor-credit show": Example(
+        f'bookflow vendor-credit show {ID} --company "Demo Plumbing Co" --json', {"credit": ID}),
+    "vendor-credit query": Example(
+        'bookflow vendor-credit query --vendor "Northside Supply" --date-from 2026-04-01'
+        ' --status posted --limit 25 --company "Demo Plumbing Co" --json',
+        {"vendor": "Northside Supply", "date_from": "2026-04-01", "status": "posted", "limit": 25}),
+    "vendor-credit void": Example(
+        f'bookflow vendor-credit void {ID} --expected-version 1 --company "Demo Plumbing Co"'
+        ' --reason "Credited against the wrong vendor" --json',
+        {"credit": ID, "expected_version": 1}),
+    "vendor-credit apply": Example(
+        f'bookflow vendor-credit apply {ID} --expected-version 1'
+        ' --bills \'[{"bill":"BILL-104"}]\''
+        ' --company "Demo Plumbing Co" --reason "Settle the April bill with the credit" --json',
+        {"credit": ID, "expected_version": 1, "bills": [{"bill": "BILL-104"}]}),
+    "vendor-credit unapply": Example(
+        f'bookflow vendor-credit unapply {ID} --expected-version 2 --company "Demo Plumbing Co"'
+        ' --reason "Applied to the wrong bill" --json',
+        {"credit": ID, "expected_version": 2}),
+})
+
+
 # A credit memo is entered either way it can be entered: the goodwill credit names its own item
 # and price, the return names the invoice line coming back and lets the capture price it.
 EXAMPLES.update({

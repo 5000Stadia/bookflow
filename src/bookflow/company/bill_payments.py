@@ -17,10 +17,11 @@ account, method)`` and each group is one document. The funding account and the m
 from the command, and the currency is the home currency, so what actually splits a selection is
 the vendor and the payable it is owed from -- and two vendors never share a check.
 
-**What this does not write.** A purchase discount and a vendor credit are their own documents
-with their own accounts, and neither exists yet; every cent here is cash or card. That is why
-``due = applied + open`` with no third term, and why a selection that would settle nothing is
-refused rather than posted as a payment for zero.
+**What this does not write.** A purchase discount is its own document with its own accounts and
+does not exist yet; every cent here is cash or card. A vendor credit does exist, in
+``company/vendor_credits.py``, and it settles through the same ``ap_applications`` edge -- but it
+is entered as its own document and never as a line on a check, which is why a selection here that
+would settle nothing is refused rather than posted as a payment for zero.
 """
 from __future__ import annotations
 
@@ -172,10 +173,11 @@ def _check_number(inp, method, funding_kind):
 def _selected(s, rows, date, currency, *, capacity=None):
     """Every bill named, what is open on it, and what this settlement takes off it.
 
-    Both directions of money out read this: ``bill pay``, where ``date`` is the day the money
-    left, and ``bill payment apply``, where it is the day free capacity was attached. The open
+    Every settlement of a payable reads this: ``bill pay``, where ``date`` is the day the money
+    left, ``bill payment apply``, where it is the day free capacity was attached, and
+    ``vendor-credit apply``, where it is the day the credit was pointed at the bill. The open
     balance, the per-row default, the refusal of a row that settles nothing and the refusal of
-    one that settles past what is open are therefore one implementation, not two that agree.
+    one that settles past what is open are therefore one implementation, not three that agree.
 
     ``capacity`` is what the settlement has to spend, and only a row naming no amount feels it:
     ``bill pay`` decides its own amount from the selection and passes none, so an unnamed row
@@ -213,9 +215,9 @@ def _selected(s, rows, date, currency, *, capacity=None):
                                               f'{Money(open_amount, currency).to_dict()["amount"]} '
                                               f'{currency} open')
         if amount <= 0:
-            # Nothing here writes a discount or a vendor credit, so a row that settles nothing
-            # is a mistake rather than a zero-cash settlement; refusing it is also what keeps a
-            # whole selection from posting a payment written for zero.
+            # A row worth nothing settles nothing, whichever source is being spent, so it is a
+            # mistake rather than a zero settlement; refusing it is also what keeps a whole
+            # selection from posting a payment written for zero.
             raise _invalid(field + '.amount', f'must be more than zero; bill {header["number"]} has '
                                               f'{Money(open_amount, currency).to_dict()["amount"]} {currency} open')
         if amount > open_amount:
@@ -224,7 +226,7 @@ def _selected(s, rows, date, currency, *, capacity=None):
                 'requested_minor_units': amount, 'available_minor_units': open_amount,
                 'requested': Money(amount, currency).to_dict(),
                 'available': Money(open_amount, currency).to_dict(),
-                'next': 'Pay at most what is still open on this bill; a vendor credit is a separate document.'})
+                'next': 'Settle at most what is still open on this bill.'})
         if remaining is not None:
             remaining -= amount
         chosen.append(dict(header=header, revision=revision, obligation=obligation, amount=amount))

@@ -3083,3 +3083,54 @@ entry — and a hand journal entry lands in the unattributed row rather than on 
 no browser page, no multi-agency remittance, and no demo seed extension. `company_info`'s
 `sales_tax_remittance_frequency` is captured at company creation and read by nothing here: the
 period a remittance answers is `through_date`, supplied per document.
+
+## Vendor credits, and the second kind of money that settles a bill
+
+`vendor-credit post/show/query/void` and `vendor-credit apply/unapply` record what a vendor owes
+back and point it at the bills it answers. `company/vendor_credit_models.py` holds the inputs and
+outputs, `company/vendor_credit_facts.py` what a revision captures,
+`company/vendor_credits.py` the resolution, posting, reads and settlement,
+`company/vendor_credit_validation.py` an independent check of the aggregate, and
+`company/vendor_credit_schema.py` the storage. The settlement edge, the sums and the capacity
+arithmetic are `ap_applications`, `company/ap_settlement.py` and `company/bill_payments.py`'s own
+`_selected`, `_free_capacity` and `_compatible`, imported rather than restated.
+
+**The bill read backwards.** Entering a credit debits Accounts Payable by the total and credits
+each captured purchase account by its own line amount. The line grid, the eligible accounts, the
+payable resolution and the class rules are `bills.py`'s, so a credit can never be credited against
+an account a bill could not be owed out of. `document_lines` carries the credit's lines with kind
+`purchase` — the same envelope family a bill uses, because it is the same grid — which is why
+`co0032` widened the document-line type guard and left `document_lines` itself untouched. A credit
+has no terms and no due date: nobody owes it on a date.
+
+**A source, not a payable.** A vendor credit creates no `ap_obligation_keys` row.
+`payable_reports._UNPAID` lists documents of type `bill`, so an obligation key would put a credit
+on the unpaid-bills list at a negative balance as a document nobody owes. What it creates instead
+is an `ap_source_keys` row of kind `vendor_credit`, carrying the same `(vendor, payable account,
+currency)` triple a bill payment's source carries, with one `ap_source_components` row per
+credited line naming the exact `posting_line_sources` row that debited AP for it. `source_type` is
+now a two-value column, and `ap_source_keys_transaction_id_type` checks a source against its own
+declared kind rather than one hard-coded word, so a credit can never mint a source calling itself
+a bill payment.
+
+**`applied_totals` stays one number.** `bills.applied_totals` answers total settled, whatever
+settled it. `settlement_output` derives `open = gross − applied` and a status from that scalar and
+four call sites destructure it, so a bill settled in full by a credit reads `paid`, leaves
+`report unpaid-bills` and ages to nothing with no branch anywhere asking which kind of money did
+it. Composition is a separate, additive read: `ap_settlement.applied_by_source_kind` joins the
+edge to its source key, and `settlement_current.sources` lists one row per kind, so a bill detail
+page can say "46254 credit, 53746 cash" without any caller of the scalar learning a new shape.
+Kinds that net to nothing are omitted.
+
+**The payables reports needed no edit.** `payable_reports._EFFECTS` joins its `settled` CTE to
+`ap_obligation_keys` only, and takes the paying document straight from
+`ap_applications.source_transaction_id`, so a second kind of paying source moves through it
+unchanged: before an application a credit is a negative AP row aged by its own date, and after one
+its row nets to zero and is omitted. `_UNPAID` already reads the real applied sum. `aging.py`
+stays one rule for both sides.
+
+**What this does not do.** There is no `vendor-credit update`, no `history`, no browser page and
+no demo seed extension. A credit takes its own number series rather than sharing the bill series:
+the anchor product's shared-sequence behaviour is a receivables rule about invoices and credit
+memos, and the payables document it credits is numbered by the supplier's own reference. Purchase
+discounts, purchase tax and vendor refunds are their own documents and none of them exists.
