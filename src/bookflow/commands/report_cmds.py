@@ -16,6 +16,10 @@ from bookflow.company.payable_reports import (
     ApAgingInput, ApAgingOutput, UnpaidBillsInput, UnpaidBillsOutput,
     ap_aging, unpaid_bills,
 )
+from bookflow.company.cash_flow_reports import CashFlowsInput, CashFlowsOutput, cash_flows
+from bookflow.company.income_tax_reports import (
+    IncomeTaxSummaryInput, IncomeTaxSummaryOutput, income_tax_summary,
+)
 
 
 @command("report ap-aging", scope="company", required_role="member", capability="reports",
@@ -88,3 +92,19 @@ def plan_profit_and_loss(inp, ctx, s):
     error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
 def plan_balance_sheet(inp, ctx, s):
     return Plan(preview=balance_sheet(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report cash-flows", scope="company", required_role="member", capability="reports",
+    description="Indirect accrual statement of cash flows for inclusive accounting dates: net income for the period, then the period change in every other balance-sheet account, classified into operating, investing and financing. An increase in an asset is a use of cash and shows negative; an increase in a liability or in equity is a source and shows positive. Operating carries receivables, payables, inventory and the other current assets and current liabilities, including credit cards; investing carries fixed and other assets; financing carries long-term liabilities and equity, so owner draws and contributions appear there. Net income for the same two dates is the figure report profit-and-loss reports, and net income plus the three subtotals plus opening cash is closing cash, which is the sum of the bank accounts report balance-sheet shows for the same date_to; totals.difference publishes that reconciliation and is zero for books that balance. Classification comes from the account's type, so a depreciation add-back reaches the statement through the change in the fixed-asset account it was credited to and is reported under investing rather than under operating. Own-account rows are paged; totals cover every account.",
+    input_model=CashFlowsInput, output_model=CashFlowsOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_cash_flows(inp, ctx, s):
+    return Plan(preview=cash_flows(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report income-tax-summary", scope="company", required_role="member", capability="reports",
+    description="Income and expense account activity for inclusive accounting dates, grouped by the tax line each account is assigned, with a group for the accounts that have none. Each group shows its own total and then the accounts that make it up, so every figure can be traced to the accounts behind it. Amounts are on each account's normal side, so revenue is positive on an income line and a cost is positive on a deduction line, exactly as report profit-and-loss prints them. Totals cover every income and expense account whatever the filter shows, so net income here is the figure report profit-and-loss reports for the same two dates. Rows are paged and a group total covers the whole group even when its accounts fall on the next page.",
+    input_model=IncomeTaxSummaryInput, output_model=IncomeTaxSummaryOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_income_tax_summary(inp, ctx, s):
+    return Plan(preview=income_tax_summary(inp, s, principal_id=ctx.on_behalf_of))

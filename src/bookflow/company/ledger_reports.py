@@ -324,9 +324,12 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True):
         WHERE b.effective_date<=:date_to AND (:account IS NULL OR l.account_id=:account)
         """, {"date_to": inp.date_to, "account": scope}).fetchone()
     labels = hashlib.sha256()
-    # `financial` is the two financial statements. The customer statement is a
-    # receivables report and takes the receivable branch, like its two neighbours.
-    financial = report in {"profit-and-loss", "balance-sheet"}
+    # `financial` is the statements whose rows are accounts and whose row labels
+    # come from the company's account-display preferences: the profit and loss,
+    # the balance sheet, the statement of cash flows and the income tax summary.
+    # The customer statement is a receivables report and takes the receivable
+    # branch, like its two neighbours.
+    financial = report in {"profit-and-loss", "balance-sheet", "cash-flows", "income-tax-summary"}
     receivable = report in {"ar-aging", "open-invoices", "statement"}
     # The sales tax liability is a payables report whose rows are agencies, which are
     # vendors, so it labels and orders its rows exactly as the other two do.

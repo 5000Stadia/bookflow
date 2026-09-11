@@ -15,8 +15,8 @@ def resolves(witness):
 
 def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     rows = execution_map()
-    assert len(rows) == 384
-    assert sum(row["coverage"] == "four_surface_scenario" for row in rows) == 379
+    assert len(rows) == 386
+    assert sum(row["coverage"] == "four_surface_scenario" for row in rows) == 381
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     assert all(row['execution_witness'] and not row['coverage'].startswith('pending') for row in rows)
     assert all(row['local_valid_witnesses'] for row in rows if row['coverage'] == 'local_lifecycle_scenario')
@@ -61,9 +61,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     mapped=workbench_variant_map(rows)
     assert len(mapped)==len(variant_policies())==22
     # The census of material schema nodes. It moves whenever a routed command gains input
-    # shape: the bill's Items grid added eighteen paths under `items` on `bill post` and
-    # `bill update`, and one more where `expenses` became optional beside it.
-    assert sum(len(group["paths"]) for group in mapped)==2341
+    # shape. Two increments moved it from 2322: the bill's Items grid added eighteen paths
+    # under `items` on `bill post` and `bill update`, plus one where `expenses` became
+    # optional beside it; the two cash-flow reports added two more. Recomputed on merge —
+    # neither side's number is right on its own.
+    assert sum(len(group["paths"]) for group in mapped)==2343
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

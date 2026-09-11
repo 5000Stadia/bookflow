@@ -291,6 +291,14 @@ for _report in ('profit-and-loss', 'balance-sheet'):
         'E_QUERY_STALE': 'posting or display facts changed between statement pages',
         'E_VALUE_RANGE': 'public account amount or statement total exceeds signed 64-bit range',
     }
+MATRIX['report cash-flows'] = {
+    'E_QUERY_STALE': 'posting or display facts changed between statement pages',
+    'E_VALUE_RANGE': 'public account change, cash balance or statement total exceeds signed 64-bit range',
+}
+MATRIX['report income-tax-summary'] = {
+    'E_QUERY_STALE': 'posting, tax-line assignment or display facts changed between summary pages',
+    'E_VALUE_RANGE': 'public account amount, tax-line total or report total exceeds signed 64-bit range',
+}
 MATRIX['report ar-aging'] = {
     'E_QUERY_STALE': 'posting, settlement or customer display facts changed between aging pages',
     'E_VALUE_RANGE': 'public aging column or aging total exceeds signed 64-bit range',

@@ -274,7 +274,9 @@ register update
 report ap-aging
 report ar-aging
 report balance-sheet
+report cash-flows
 report general-ledger
+report income-tax-summary
 report open-invoices
 report profit-and-loss
 report statement

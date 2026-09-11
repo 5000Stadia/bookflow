@@ -2,13 +2,19 @@
 from urllib.parse import urlencode
 
 
-COMMANDS = {"report profit-and-loss", "report balance-sheet", "report trial-balance", "report general-ledger"}
+COMMANDS = {"report profit-and-loss", "report balance-sheet", "report trial-balance",
+            "report general-ledger", "report cash-flows", "report income-tax-summary"}
 
 
 def view(result, inputs, company_id, command=None):
     period = result["metadata"]["period"]
     rows = []
     for row in result["rows"]:
+        # A grouping row -- a tax line, which is not an account -- has no ledger
+        # of its own, so it carries no drill-down rather than a broken one.
+        if not row.get("account_id"):
+            rows.append({**row, "ledger_url": None})
+            continue
         query = {"f:account": row["account_id"], "f:date_from": period["date_from"] or "0001-01-01",
                  "f:date_to": period["date_to"], "source_report_watermark": result["metadata"]["audit_watermark"]}
         rows.append({**row, "ledger_url": f"/c/{company_id}/report/general-ledger?" + urlencode(query)})
@@ -17,4 +23,6 @@ def view(result, inputs, company_id, command=None):
     next_fields["f:cursor"] = result["next_cursor"]
     return {**result, "rows": rows, "next_fields": next_fields,
             "basic_report": command in {"report trial-balance", "report general-ledger"},
-            "general_ledger": command == "report general-ledger"}
+            "general_ledger": command == "report general-ledger",
+            "cash_flows": command == "report cash-flows",
+            "tax_summary": command == "report income-tax-summary"}

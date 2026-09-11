@@ -1,0 +1,18 @@
+<section id="financial-statement" aria-label="Income tax summary">
+<p>{{ company_label }} · {{ statement.metadata.basis|capitalize }} · {{ statement.metadata.currency }} ·
+{{ statement.metadata.period.date_from }} through {{ statement.metadata.period.date_to }}</p>
+<p class="muted">Income and expense activity grouped by the tax line set on each account, with the accounts that have no tax line gathered under Unassigned so nothing is left off a return by accident. Amounts are on each account's own normal side, so revenue is positive on an income line and a cost is positive on a deduction line.</p>
+<div class="table-wrap"><table id="statement-totals"><caption>Whole-report totals — all pages</caption><thead><tr><th scope="col">Total</th><th scope="col">{{ statement.metadata.currency }}</th></tr></thead><tbody>
+{% for key, value in statement.totals.items() %}<tr data-total="{{ key }}"><th scope="row">{{ key.replace('_', ' ')|capitalize }}</th><td>{{ value.amount }}</td></tr>{% endfor %}
+</tbody></table></div>
+<p id="report-page-count">{{ statement.count }} rows on this page{% if statement.next_cursor %}; more available{% endif %}. A tax-line row totals its whole group, including accounts that fall on a later page. Select an account amount to open its current general ledger.</p>
+<div class="table-wrap"><table id="statement-accounts"><thead><tr><th scope="col">Tax line</th><th scope="col">Account</th><th scope="col">{{ statement.metadata.currency }}</th></tr></thead><tbody>
+{% for row in statement.rows %}<tr data-kind="{{ row.kind }}"{% if row.account_id %} data-account="{{ row.account_id }}"{% endif %} data-tax-line="{{ row.display_tax_line }}">
+{% if row.kind == 'tax_line' %}<th scope="row">{{ row.display_tax_line }}</th><td>Total of {{ row.account_count }} account{{ '' if row.account_count == 1 else 's' }}</td><td data-value="amount"><b>{{ row.amount.amount }}</b></td>
+{% else %}<td></td><td title="{{ row.current_account_label }}">{{ row.display_account_label }}{% if not row.active %} (inactive){% endif %}</td><td data-value="amount"><a href="{{ row.ledger_url }}">{{ row.amount.amount }}</a></td>{% endif %}
+</tr>{% else %}<tr><td colspan="3">No income or expense account had activity in this period.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if statement.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="statement-next-page">{% for name, value in statement.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}<button name="action" value="submit">Next page</button></form>{% endif %}
+<p class="muted">Generated {{ statement.metadata.generation_time }} · Audit watermark {{ statement.metadata.audit_watermark }}. Any audited company change requires restarting the report. Change the filters below to start a new report.</p>
+<details><summary>Structured report data</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
+</section>
