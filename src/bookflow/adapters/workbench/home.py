@@ -92,6 +92,18 @@ PANELS: tuple[Panel, ...] = (
                 action=Action("Create an invoice", WRITE, ("invoice post",), "/invoice/post"),
             ),
             Step(
+                id="billing-groups",
+                title="Billing groups",
+                summary="Reusable sets of customers you bill the same thing to.",
+                action=Action("Open the billing groups", READ, ("billing-group list",), "/billing-group"),
+            ),
+            Step(
+                id="batch-invoice",
+                title="Batch invoices",
+                summary="Invoice a whole group at once; every invoice still resolves its own customer's terms, tax and prices.",
+                action=Action("Invoice a billing group", WRITE, ("batch-invoice post",), "/batch-invoice/post"),
+            ),
+            Step(
                 id="receive-payment",
                 title="Receive payment",
                 summary="Take money in and settle it against open invoices.",

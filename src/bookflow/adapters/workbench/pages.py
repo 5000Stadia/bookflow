@@ -205,11 +205,15 @@ def _output_identifier(noun: str, meta: dict[str, Any], output: dict[str, Any]) 
             value = output.get(key)
             if value and not isinstance(value, (dict, list)):
                 return str(value)
-    nested = output.get(noun)
-    if isinstance(nested, dict):
-        for key in (identifier, "id", "code"):
-            if key and nested.get(key):
-                return str(nested[key])
+    # A write output names its record under the noun, and a noun's own spelling may differ from
+    # the wire name of the field (`billing-group` carries `billing_group`), so try both rather
+    # than leaving the created record unreachable.
+    for candidate in dict.fromkeys((noun, noun.replace("-", "_").replace(" ", "_"))):
+        nested = output.get(candidate)
+        if isinstance(nested, dict):
+            for key in (identifier, "id", "code"):
+                if key and nested.get(key):
+                    return str(nested[key])
     return None
 
 
@@ -1396,6 +1400,14 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 return page_error(request, err)
             attempted["f:parent_id"] = parent["id"]
             workflow_note = f"Add a job under {parent['full_name']}. Unset commercial defaults inherit from its ancestors. Contact and shipping address source controls choose inherited or owned details; review these before saving."
+        if company_id is not None and record_id is not None and cmd.name in (
+            "billing-group add", "billing-group remove", "batch-invoice retry",
+        ):
+            # These commands take their subject as an ordinary positional rather than through a
+            # version source, so nothing above has put the record a person opened them from into
+            # the form. Seed it, or the pinned field renders empty on a page opened from the
+            # record it is about.
+            originals[_record_selector(cmd, noun)] = record_id
         if company_id is not None and record_id is not None and cmd.name == "other-name convert":
             try:
                 source = run(request, "other-name show", {"other_name": record_id}, company_id)

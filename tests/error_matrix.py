@@ -1034,3 +1034,72 @@ MATRIX["customer-refund query"] = {
     "E_RECORD_NOT_FOUND": "unknown customer, funding account or method filter",
     "E_QUERY_STALE": "company audit changed between refund pages",
 }
+
+MATRIX["billing-group create"] = {
+    "E_RECORD_NOT_FOUND": "unknown customer or job named as a member",
+    "E_NAME_TAKEN": "a billing group with that name, ignoring case",
+    "E_VALIDATION": "a blank name, a name containing a colon, or the same customer twice",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["billing-group rename"] = {
+    "E_RECORD_NOT_FOUND": "unknown billing group",
+    "E_NAME_TAKEN": "another billing group already has that name",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["billing-group delete"] = {
+    "E_RECORD_NOT_FOUND": "unknown billing group",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["billing-group add"] = {
+    "E_RECORD_NOT_FOUND": "unknown billing group, customer or job",
+    "E_VALIDATION": "the same customer twice in one list",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["billing-group remove"] = {
+    "E_RECORD_NOT_FOUND": "unknown billing group, customer or job",
+    "E_VALIDATION": "the same customer twice in one list",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["billing-group show"] = {"E_RECORD_NOT_FOUND": "unknown billing group"}
+MATRIX["billing-group list"] = {"E_LIST_FILTER": "a continuation naming a group that is gone"}
+# A batch never raises for one customer: an invoice that is refused becomes a failed row on the
+# batch carrying that customer's own code. These are the codes the batch itself raises, before
+# any invoice is attempted.
+MATRIX["batch-invoice post"] = {
+    "E_RECORD_NOT_FOUND": "unknown billing group, customer or job",
+    "E_VALIDATION": "neither or both of billing_group and customers, an empty group, or the same customer twice",
+    "E_INACTIVE_REFERENCE": "reported per customer on the batch, never raised for the run",
+    "E_PERIOD_CLOSED": "reported per customer on the batch, never raised for the run",
+    "E_DUPLICATE_NUMBER": "reported per customer on the batch, never raised for the run",
+    "E_VALUE_RANGE": "reported per customer on the batch, never raised for the run",
+    "E_AMOUNT_PRECISION": "reported per customer on the batch, never raised for the run",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["batch-invoice retry"] = {
+    "E_RECORD_NOT_FOUND": "unknown batch",
+    "E_VALIDATION": "a batch whose customers were all invoiced",
+    "E_INACTIVE_REFERENCE": "reported per customer on the batch, never raised for the run",
+    "E_PERIOD_CLOSED": "reported per customer on the batch, never raised for the run",
+    "E_DUPLICATE_NUMBER": "reported per customer on the batch, never raised for the run",
+    "E_VALUE_RANGE": "reported per customer on the batch, never raised for the run",
+    "E_AMOUNT_PRECISION": "reported per customer on the batch, never raised for the run",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["batch-invoice show"] = {"E_RECORD_NOT_FOUND": "unknown batch"}
+MATRIX["batch-invoice query"] = {"E_RECORD_NOT_FOUND": "unknown billing group filter"}
