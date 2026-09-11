@@ -25,11 +25,17 @@ shape of the posting. An expense line names its own account; an item line takes 
 off the item it names. Both then debit that account for their own amount, and Accounts Payable
 is credited their sum, once.
 
-**Why an inventory part is refused.** Receiving stock debits Inventory Asset and moves quantity
-on hand, and nothing in this product owns either. So a bill admits exactly the three item
-families an invoice already sells -- service, non-inventory part and other charge -- each of
-which posts to one account named on the item itself, and refuses an inventory item by name
-rather than quietly debiting an expense account it was never meant to touch.
+**Receiving stock is an item line that debits a different account.** A bill line naming an
+inventory part or an inventory assembly debits that item's own Inventory Asset account rather
+than an expense account -- the quantity is on the shelf, not consumed -- and writes one
+``inventory_movements`` receipt carrying the quantity and that amount, through
+``company/inventory_effects.py``. Nothing else about the bill changes: one debit per entered
+line, Accounts Payable credited once for the whole, one obligation component per line. What is
+different is only which account the line names, and the item is what says so.
+
+A correction reverses the movement it used to carry and receives again; a void reverses it and
+stops. A purchase entered behind a sale of the same item recosts that sale, as its own dated
+document, exactly as a backdated inventory adjustment does -- because it is the same replay.
 """
 from __future__ import annotations
 
@@ -39,8 +45,9 @@ from datetime import date as calendar_date
 
 import sqlalchemy as sa
 
-from bookflow.company import accounts, journals, list_service, schema as c
+from bookflow.company import accounts, charts, journals, list_service, schema as c
 from bookflow.company import document_effects as effects
+from bookflow.company import inventory, inventory_effects
 from bookflow.company import journal_custom_fields as custom
 from bookflow.company.bill_facts import (
     PURCHASABLE_ITEM_TYPES, Account, BillExpenseProfile, BillItemProfile, BillProfile, Origin,
@@ -101,6 +108,30 @@ LINE_ROLES = frozenset({'cost_of_goods_sold'})
 # item record itself allows -- an income account on an item is `income` or `other_income` and
 # nothing else.
 ITEM_INCOME_ACCOUNTS = frozenset({'income', 'other_income'})
+# The account a stock-carrying item's purchase lands in, and the role it must carry. The type
+# is read off the chart's own role-to-type declaration rather than written out again, so a
+# chart that ever moves the inventory control account to another type moves this with it.
+INVENTORY_ASSET_ACCOUNTS = frozenset({charts.SYSTEM_ROLE_TYPES[inventory.ASSET_ROLE]})
+
+# What each captured `account_basis` means: the account types the line may debit, and the
+# system role it must carry when the answer is not "none, or an ordinary cost account". One
+# table, read by the line resolver, by the saved-account re-check on a correction and by the
+# independent validator, so the three cannot drift.
+ACCOUNT_BASES = {
+    'purchase': (EXPENSE_ACCOUNTS, None),
+    'income': (ITEM_INCOME_ACCOUNTS, None),
+    'asset': (INVENTORY_ASSET_ACCOUNTS, inventory.ASSET_ROLE),
+}
+
+
+def account_eligible(basis, account):
+    """Whether this account is still one a line captured on that basis may debit."""
+    allowed, role = ACCOUNT_BASES[basis]
+    if account['type'] not in allowed:
+        return False
+    if role is not None:
+        return account['system_role'] == role
+    return account['system_role'] is None or account['system_role'] in LINE_ROLES
 
 
 def income_account_warning(profile):
@@ -384,51 +415,51 @@ def _line_class(s, line, header_class, field):
     return header_class
 
 
+def _readable(types):
+    spelled = [name.replace('_', ' ') for name in types]
+    return ', '.join(spelled[:-1]) + ' or ' + spelled[-1]
+
+
 def _purchasable_item(s, selector, field):
     """The item a bill line may buy, the account buying it debits, and which account that is.
 
-    Two refusals, each naming what is actually wrong. An inventory part is refused by its own
-    name because receiving it is real work nobody has built -- it debits Inventory Asset and
-    moves quantity on hand -- and posting it to an expense account instead would be a wrong
-    debit that balances, which is the worst kind. A percentage charge is refused for the
-    reason the invoice refuses it: there is no base here to take a percentage of.
+    Three bases, and the item decides which. A **stock-carrying** item debits its own
+    Inventory Asset account, because what was bought is on the shelf rather than spent; the
+    item record already guarantees that account exists and carries the inventory-asset role.
+    An item with a **purchase** side debits the expense account it names. An item with
+    neither -- sold but never bought -- has one account rather than none, the income account
+    it is sold out of, and the anchor product posts the line to it, so this does too and warns
+    that it did.
 
-    An item with no purchase side is not a third refusal. It has one account rather than
-    none -- the income account it is sold out of -- and the anchor product posts the line to
-    it, so this does too and warns that it did. The item record already guarantees the
-    account exists: a service, non-inventory part or other charge must have a sales side or a
-    purchase side, and a sales side requires an income account.
+    Two refusals. A family a bill cannot buy at all is named by its own family. A percentage
+    charge is refused for the reason the invoice refuses it: there is no base here to take a
+    percentage of.
     """
     row = _list_row(s, 'item', c.items, selector, field, 'item')
     if row['type'] not in PURCHASABLE_ITEM_TYPES:
-        spelled = row['type'].replace('_', ' ')
-        problem = (f'"{row["full_name"]}" is an inventory part; receiving stock is not implemented, '
-                   'so a bill cannot post one. Enter what was bought as an expense line against '
-                   'the account it should land in.'
-                   if row['type'] in ('inventory_part', 'inventory_assembly') else
-                   f'"{row["full_name"]}" is a {spelled} item; a bill line takes a service, '
-                   'non-inventory part or other charge item')
         raise BookflowError('E_VALIDATION', details={
-            'fields': [{'field': field, 'problem': problem}], 'record_type': 'item',
-            'record_id': row['id'], 'item_type': row['type'],
-            'reason': 'inventory_receipt_not_implemented'
-            if row['type'] in ('inventory_part', 'inventory_assembly') else 'item_type_not_purchasable',
+            'fields': [{'field': field, 'problem':
+                        f'"{row["full_name"]}" is a {row["type"].replace("_", " ")} item; a bill '
+                        f'line takes a {_readable(PURCHASABLE_ITEM_TYPES)} item'}],
+            'record_type': 'item', 'record_id': row['id'], 'item_type': row['type'],
+            'reason': 'item_type_not_purchasable',
             'supported_item_types': list(PURCHASABLE_ITEM_TYPES)})
     if row['other_charge_percent_millionths'] is not None:
         raise _invalid(field, f'"{row["full_name"]}" is a percentage charge; a bill line has no base '
                               'to take a percentage of')
-    purchase = bool(row['purchase_enabled']) and row['expense_account_id'] is not None
-    basis = 'purchase' if purchase else 'income'
-    account_id = row['expense_account_id'] if purchase else row['income_account_id']
+    if row['type'] in inventory.TRACKED_TYPES:
+        basis, account_id = 'asset', row['asset_account_id']
+    elif bool(row['purchase_enabled']) and row['expense_account_id'] is not None:
+        basis, account_id = 'purchase', row['expense_account_id']
+    else:
+        basis, account_id = 'income', row['income_account_id']
     if account_id is None:
         raise _invalid(field, f'"{row["full_name"]}" has no account to post to; give it a purchase '
                               'description and an expense account, or enter the cost as an expense line')
     account = _account_row(s, account_id, field)
-    allowed = EXPENSE_ACCOUNTS if purchase else ITEM_INCOME_ACCOUNTS
-    if account['type'] not in allowed or (
-            account['system_role'] is not None and account['system_role'] not in LINE_ROLES):
+    if not account_eligible(basis, account):
         raise _invalid(field, f'"{row["full_name"]}" posts to "{account["full_name"]}", which a bill '
-                              'line may not debit; repoint the item at an expense or cost account')
+                              'line may not debit; repoint the item at an eligible account')
     return row, account, basis
 
 
@@ -977,13 +1008,10 @@ def _posting_accounts_active(s, resolved):
             details={'field': 'ap_account', 'reason': 'captured_posting_account_type'})
     for line in resolved['lines']:
         account = current[line['profile'].account.id]
-        # A line that debits an item's income account is still eligible for the account its
-        # own captured basis names; a purchase line is not eligible for an income account.
-        allowed = (ITEM_INCOME_ACCOUNTS
-                   if getattr(line['profile'], 'account_basis', 'purchase') == 'income'
-                   else EXPENSE_ACCOUNTS)
-        if account['type'] not in allowed or (
-                account['system_role'] is not None and account['system_role'] not in LINE_ROLES):
+        # Each line is judged against the account family its own captured basis names: an
+        # income-basis line is still eligible for an income account and a stock line for the
+        # inventory control account, neither of which an ordinary purchase line may debit.
+        if not account_eligible(getattr(line['profile'], 'account_basis', 'purchase'), account):
             item = line.get('family') == 'item'
             raise BookflowError('E_VALIDATION', message=(
                 'A saved posting account is no longer eligible. Repoint the item at an eligible '
@@ -1022,6 +1050,30 @@ def _from_order(s, inp, operation):
                                  'omit vendor, or enter this bill without naming the order')
     return source, inp.model_copy(update={key: value for key, value in carried.items()
                                           if key not in supplied or getattr(inp, key) is None})
+
+
+def _stock_entries(pending, profile):
+    """The item lines that move stock, in the shape the inventory ledger takes them.
+
+    The family a line belongs to is read off the captured facts rather than off the item
+    master: what this bill receives is what it was written against, and repointing the item
+    afterwards must not change which lines a stored revision moved.
+    """
+    items = {row['document_line_id']: row for row in pending['purchase_item_lines']}
+    entries = []
+    for envelope in pending['document_lines']:
+        line = items.get(envelope['id'])
+        if line is None:
+            continue
+        facts = BillItemProfile.model_validate_json(line['line_snapshot'])
+        if facts.item_type not in inventory.TRACKED_TYPES:
+            continue
+        entries.append(inventory_effects.Entry(
+            key=envelope['id'], item_id=facts.item.id, item_name=facts.item.label,
+            kind='receipt', quantity_microunits=facts.quantity_microunits,
+            asset_account_id=facts.account.id, offset_account_id=profile.ap_account.id,
+            class_id=envelope['class_id'], value_minor_units=line['amount_minor_units']))
+    return entries
 
 
 def prepare(s, ctx, inp, operation):
@@ -1133,6 +1185,17 @@ def prepare(s, ctx, inp, operation):
         journals.open_dates(s, [old_revision['date']])
         revision = old_revision
 
+    # What this write does to stock, decided in full before any of it is built: the previous
+    # revision's receipts are retired, the new revision's are taken in, and the corrections
+    # every earlier issue is owed are worked out against the item's whole history. A refusal
+    # here -- negative stock on any earlier date, a closed period any delta would land in --
+    # leaves nothing behind, because nothing has been written.
+    stock = inventory_effects.plan(
+        s, entries=[] if operation == 'void' else _stock_entries(pending, resolved['profile']),
+        reversing=inventory_effects.own_movements(s, old_header['id']) if old_header else (),
+        date=revision['date'], currency=revision['currency'], field='items')
+    inventory_effects.open_dates(s, stock)
+
     current_batch = None
     if old_header:
         header.update(version=old_header['version'] + 1, updated_at=at, updated_by=s.actor.id,
@@ -1152,7 +1215,13 @@ def prepare(s, ctx, inp, operation):
                      replaces_batch_id=current_batch['id'] if current_batch else None,
                      audit_event_id=event)
         pending['posting_batches'].append(batch)
-        _business_postings(s, header, revision, batch, resolved, pending, created, event)
+        debits = _business_postings(s, header, revision, batch, resolved, pending, created, event)
+        for movement in stock.movements:
+            if movement.key is not None:
+                inventory_effects.bind(movement, debits[movement.key], transaction_id=header['id'],
+                                       revision_id=revision['id'], document_line_id=movement.key)
+    inventory_effects.bind_reversals(stock, pending['posting_lines'])
+    inventory_effects.check(s, stock, pending['posting_lines'])
 
     consumption = None
     if source is not None:
@@ -1175,7 +1244,7 @@ def prepare(s, ctx, inp, operation):
     plan = Plan(output, dict(input=inp, operation=operation, changed=True, header=header,
                              before=old_header, old_revision=old_revision, pending=pending,
                              sequence=sequence, event=event, custom_plan=custom_plan,
-                             consumption=consumption,
+                             consumption=consumption, stock=stock,
                              semantic=resolved['semantic'] if resolved else None))
     from bookflow.company.bill_validation import validate
     validate(plan, s, ctx)
@@ -1230,11 +1299,13 @@ def _business_postings(s, header, revision, batch, resolved, pending, created, e
         pending['posting_line_sources'].append(source)
         return source
 
+    debits = {}
     for envelope in envelopes:
         family, line = profiles[envelope['id']]
         facts = LINE_FACTS[family].model_validate_json(line['line_snapshot'])
         cost = leg(facts.account, line['amount_minor_units'], True,
                    envelope['class_id'], envelope['class_name'], envelope['description'])
+        debits[envelope['id']] = cost
         attribute(cost, envelope, line['amount_minor_units'])
     payable = leg(profile.ap_account, resolved['total'], False,
                   profile.class_id.id if profile.class_id else None,
@@ -1247,6 +1318,7 @@ def _business_postings(s, header, revision, batch, resolved, pending, created, e
             key_id=obligation['id'], document_line_id=envelope['id'], ordinal=1,
             posting_source_id=source['id'], amount_minor_units=line['amount_minor_units'],
             currency=currency, audit_event_id=event))
+    return debits
 
 
 def apply(plan, ctx, s):
@@ -1255,5 +1327,15 @@ def apply(plan, ctx, s):
     fresh = prepare(s, ctx, plan.data['input'], plan.data['operation'])
     from bookflow.company.bill_validation import validate
     validate(fresh, s, ctx)
-    return effects.persist(fresh, ctx, s, command_name='bill ' + plan.data['operation'],
-                           table_kinds=TABLE_KINDS, companion=fresh.data.get('consumption'))
+    applied = effects.persist(fresh, ctx, s, command_name='bill ' + plan.data['operation'],
+                              table_kinds=TABLE_KINDS, companion=fresh.data.get('consumption'))
+    # The dated cost corrections this purchase owes earlier sales: their own documents, at
+    # their own dates, in this same company transaction.
+    stock = fresh.data.get('stock')
+    if stock is None or not stock.moves_stock:
+        return applied
+    header = fresh.data['header']
+    return inventory_effects.settle(applied, stock, ctx, s,
+                                    command_name='bill ' + plan.data['operation'],
+                                    summary=f"stock moved by bill {header['number']}",
+                                    created_at=header['updated_at'])

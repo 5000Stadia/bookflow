@@ -7,6 +7,7 @@ import zlib
 import sqlalchemy as sa
 
 from bookflow.company import schema as c, journals, document_effects as effects
+from bookflow.company import inventory, inventory_effects
 from bookflow.company import journal_custom_fields as custom, list_service
 from bookflow.company import sales_calculations as calc
 from bookflow.company import tax_attribution as tax_facts
@@ -536,6 +537,16 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
     else:
         journals.open_dates(s, [old_revision['date']])
         revision = old_revision
+    # What this write does to stock, decided in full before any of it is built: the previous
+    # revision's issues are retired, the new revision's are taken out at whatever the average
+    # says now, and every earlier sale this displaces is owed its own dated correction. A
+    # refusal here -- more going out than is on hand on some earlier date, a closed period any
+    # delta would land in -- leaves nothing behind, because nothing has been written.
+    stock = inventory_effects.plan(
+        s, entries=[] if operation == 'void' else _stock_entries(pending),
+        reversing=inventory_effects.own_movements(s, old_header['id']) if old_header else (),
+        date=revision['date'], currency=revision['currency'])
+    inventory_effects.open_dates(s, stock)
     current_batch = None
     if old_header:
         header.update(version=old_header['version'] + 1, updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
@@ -548,12 +559,19 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
         batch = dict(**created(), transaction_id=header['id'], revision_id=revision['id'], kind='replacement' if old_header else 'original',
             effective_date=revision['date'], reverses_batch_id=None, replaces_batch_id=current_batch['id'] if current_batch else None, audit_event_id=event)
         pending['posting_batches'].append(batch)
-        _business_postings(header, revision, batch, resolved, pending, created)
+        assets = _business_postings(header, revision, batch, resolved, pending, created, stock.costs)
+        for movement in stock.movements:
+            if movement.key is not None:
+                inventory_effects.bind(movement, assets[movement.key], transaction_id=header['id'],
+                                       revision_id=revision['id'], document_line_id=movement.key)
+    inventory_effects.bind_reversals(stock, pending['posting_lines'])
+    inventory_effects.check(s, stock, pending['posting_lines'])
     view_profile = pending['sales_profiles'][0] if pending['sales_profiles'] else profile_row(s, revision)
     output = SalesWriteOutput(**summary(header, revision, view_profile), revision=revision_output(s, revision, pending),
         facts_fingerprint=fingerprint, warnings=warnings, changed_fields=changed_fields)
     plan = Plan(output, dict(input=inp, operation=operation, document_type=document_type, changed=True, header=header,
         before=old_header, old_revision=old_revision, pending=pending, sequence=sequence, event=event, custom_plan=custom_plan, billing_source=billing_source,
+        stock=stock,
         semantic=resolved['semantic'] if resolved else None))
     from bookflow.company.billing_edits import carry_allocations
     carry_allocations(plan, s)
@@ -565,14 +583,47 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
     return plan
 
 
-def _business_postings(header, revision, batch, resolved, pending, created):
+def _stock_entries(pending):
+    """The entered lines that move stock, in the shape the inventory ledger takes them.
+
+    The quantity issued is the line's *base* quantity, not the quantity typed: stock is held
+    in the item's base unit and a line sold by the case has to leave the shelf in eaches. The
+    family and the two accounts are read off the captured facts rather than off the item
+    master, so what a stored revision issued cannot change when the item is repointed.
+    """
+    profiles = {line['document_line_id']: line for line in pending['sales_line_profiles']}
+    entries = []
+    for envelope in pending['document_lines']:
+        line = profiles[envelope['id']]
+        facts = SalesLineProfile.model_validate_json(line['item_snapshot'])
+        if facts.item_type not in inventory.TRACKED_TYPES:
+            continue
+        entries.append(inventory_effects.Entry(
+            key=envelope['id'], item_id=facts.item.id, item_name=facts.item.label,
+            kind='issue', quantity_microunits=line['base_quantity_microunits'],
+            asset_account_id=facts.asset_account.id, offset_account_id=facts.cogs_account.id,
+            class_id=envelope['class_id']))
+    return entries
+
+
+def _business_postings(header, revision, batch, resolved, pending, created, costs=None):
+    """Every leg this sale posts, and the inventory-asset leg each stock line's cost left by.
+
+    ``costs`` is what the weighted average said the quantity leaving is worth, per entered
+    line and signed the way the movement carries it. A line without one posts what a sale has
+    always posted; a line with one posts two more legs beside it -- debit Cost of Goods Sold,
+    credit Inventory Asset -- which is the sale recognising a cost it already paid for, not
+    the sale charging the customer anything different.
+    """
     profile = resolved['profile']
     profiles = {line['document_line_id']: line for line in pending['sales_line_profiles']}
+    costs = costs or {}
+    assets = {}
     line_no = 0
     def leg(envelope, account, amount, debit, allocations):
         nonlocal line_no
         if not amount:
-            return
+            return None
         line_no += 1
         value = dict(**created(), transaction_id=header['id'], batch_id=batch['id'], line_no=line_no,
             account_id=account.id, account_snapshot=json_text(account.model_dump()), currency=revision['currency'],
@@ -586,6 +637,7 @@ def _business_postings(header, revision, batch, resolved, pending, created):
                 pending['posting_line_sources'].append(dict(**created(), transaction_id=header['id'], posting_line_id=value['id'],
                     revision_id=revision['id'], document_line_id=envelope['id'], tax_component_id=component_id,
                     amount_minor_units=units, currency=revision['currency'], reversed_source_id=None))
+        return value
     for envelope in pending['document_lines']:
         line = profiles[envelope['id']]
         facts = SalesLineProfile.model_validate_json(line['item_snapshot'])
@@ -596,6 +648,11 @@ def _business_postings(header, revision, batch, resolved, pending, created):
         for component in taxes:
             captured = SalesTaxComponent.model_validate_json(component['component_snapshot'])
             leg(envelope, captured.liability_account, component['tax_minor_units'], False, [(component['id'], component['tax_minor_units'])])
+        cost = -costs.get(envelope['id'], 0)
+        if cost:
+            leg(envelope, facts.cogs_account, cost, True, [(None, cost)])
+            assets[envelope['id']] = leg(envelope, facts.asset_account, cost, False, [(None, cost)])
+    return assets
 
 
 def apply(plan, ctx, s):
@@ -608,21 +665,48 @@ def apply(plan, ctx, s):
         require_unclaimed(s, fresh.data['header']['id'])
     from bookflow.company.sales_validation import validate
     validate(fresh, s, ctx)
+    command_name = plan.data['document_type'].replace('_', '-') + ' ' + plan.data['operation']
     if fresh.data.get('settlement_extension'):
         from bookflow.company.payment_invoice_corrections import persist
-        return persist(fresh, ctx, s)
-    if 'billing_allocations' in fresh.data:
+        applied = persist(fresh, ctx, s)
+    elif 'billing_allocations' in fresh.data:
         from bookflow.company.billing import persist
-        return persist(fresh, ctx, s, command_name=plan.data['document_type'].replace('_', '-') + ' ' + plan.data['operation'])
-    return effects.persist(fresh, ctx, s, command_name=plan.data['document_type'].replace('_', '-') + ' ' + plan.data['operation'], table_kinds=TABLE_KINDS)
+        applied = persist(fresh, ctx, s, command_name=command_name)
+    else:
+        applied = effects.persist(fresh, ctx, s, command_name=command_name, table_kinds=TABLE_KINDS)
+    # Every one of those three paths writes the sale itself and none of them writes stock;
+    # this is the seam all three come back through, so the movements and the dated cost
+    # corrections they owe are written here, once, inside the same company transaction.
+    stock = fresh.data.get('stock')
+    if stock is None or not stock.moves_stock:
+        return applied
+    header = fresh.data['header']
+    return inventory_effects.settle(
+        applied, stock, ctx, s, command_name=command_name,
+        summary=f"stock moved by {header['type'].replace('_', ' ')} {header['number']}",
+        created_at=header['updated_at'])
 
 
 def coordinate_rows_and_touches(plan):
-    """Closed sales-receipt edit rows including their carried work allocations."""
+    """Closed sales-receipt edit rows including their carried work allocations.
+
+    A receipt that moves stock is refused here rather than silently written without its
+    movements. The deposit coordinate operation writes the receipt's rows itself, from a typed
+    closed row set, and does not come back through ``apply``; adding the stock ledger to that
+    row set would change the operation's own pinned output shape for a case that needs a
+    deliberate design rather than a quiet one.
+    """
     from bookflow.company.deposit_coordination import source_identity_map
     from bookflow.company import billing
     source_identity_map(plan, payment=False)
     data = plan.data
+    if data.get('stock') is not None and data['stock'].moves_stock:
+        raise BookflowError('E_VALIDATION', message=(
+            'This sales receipt moves stock, and a deposit coordinate operation cannot carry '
+            'the inventory ledger with it. Correct or void the receipt on its own first, then '
+            'coordinate the deposit.'), details={'fields': [{
+                'field': 'replacement', 'problem': 'the receipt being replaced moves stock'}],
+                'reason': 'coordinated_sale_moves_stock'})
     if data['document_type'] != 'sales_receipt' or data['operation'] not in ('update', 'void'):
         raise BookflowError('E_INTERNAL')
     if not data['changed']:

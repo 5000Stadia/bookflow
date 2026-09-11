@@ -584,17 +584,23 @@ def test_the_same_bill_through_python_cli_http_and_mcp(root, tmp_path):
                 assert refused['code'] == 'E_VALIDATION'
                 assert refused['details']['fields'][0]['field'] == 'expenses.0.account'
 
-                # Receiving stock is refused the same way, and says the same thing, everywhere.
+                # Receiving stock posts the same way and says the same thing everywhere: the
+                # line debits the item's own Inventory Asset account and the quantity lands on
+                # the stock report, whichever surface entered it.
                 stock = (await matrix.call(surface, 'item create', dict(
                     name='Parity Elbow', type='inventory_part', description='Parity elbow',
                     price='4.50', purchase_description='Parity elbow', cost='1.80',
                     cogs_account_id=cogs, income_account_id=income)))['id']
-                stopped = await call('bill post', dict(
+                received = await call('bill post', dict(
                     vendor=vendor, date='2026-03-04', number='PARITY-3',
-                    items=[{'item': stock, 'quantity': '50'}]), rejected=True)
-                assert stopped['code'] == 'E_VALIDATION'
-                assert stopped['details']['reason'] == 'inventory_receipt_not_implemented'
-                assert stopped['details']['fields'][0]['field'] == 'items.0.item'
+                    items=[{'item': stock, 'quantity': '50'}]))
+                assert received['item_total']['amount'] == '90.00'   # 50 at 1.80
+                line = received['revision']['items'][0]
+                assert line['line_snapshot']['account_basis'] == 'asset'
+                assert line['line_snapshot']['item_type'] == 'inventory_part'
+                held = await matrix.call(surface, 'report stock-status',
+                                         {'as_of': '2026-03-04', 'limit': 10})
+                assert held['totals']['asset_value']['amount'] == '90.00'
                 assert set(calls) == COMMANDS
                 for name, data in list(calls.items()):
                     assert (await call(name, data, company=GHOST,

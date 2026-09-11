@@ -389,6 +389,16 @@ ITEM_PROFILES: dict[str, ItemProfile] = {
     "fixed_asset": ItemProfile(_IDENTITY | _FIXED, frozenset({"asset_number", "description", "purchase_date", "original_cost", "asset_account_id", "disposal_status", "depreciation_method"})),
 }
 
+# The item types that carry stock, read off the registry above rather than written out again.
+# A stock-carrying type is one that must name both an inventory-asset account and a
+# cost-of-goods account: that pair is what a quantity on hand can be valued into and issued
+# out of. Every module that needs "the types with a quantity" -- the stock ledger, the two
+# stock reports, the purchase and sales grids -- derives it from here, because a second copy
+# of the list is a copy that the next stock-carrying type is silently left out of.
+TRACKED_TYPES: tuple[str, ...] = tuple(sorted(
+    name for name, profile in ITEM_PROFILES.items()
+    if {"asset_account_id", "cogs_account_id"} <= profile.required))
+
 
 _MONEY_FIELDS = (
     "price", "cost", "discount_amount", "original_cost", "disposal_proceeds",
@@ -1420,7 +1430,7 @@ class _ProjectionCache:
 # The stock-carrying item types, and the running sums that value them. Both come from the
 # inventory ledger rather than from a stored per-item figure, because that ledger is the
 # truth and a cached number is a second copy waiting to disagree with it.
-STOCK_TYPES = frozenset({"inventory_part", "inventory_assembly"})
+STOCK_TYPES = frozenset(TRACKED_TYPES)
 
 
 def _stock(db: Database, owner_ids: Sequence[str]) -> dict[str, tuple[int, int]]:

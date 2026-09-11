@@ -299,6 +299,13 @@ def persist(plan, ctx, s, *, command_name):
     data = plan.data
     if not data['changed']:
         return Applied(plan.preview, [], 'no change')
+    if data.get('stock') is not None and data['stock'].moves_stock and 'work_header' in data:
+        # A work order or an estimate cannot carry a stock item, so a conversion of one cannot
+        # move stock; the conversion command writes through here without passing `sales.apply`,
+        # which is where the movements would be written.
+        raise BookflowError('E_INTERNAL', message=(
+            'A work billing conversion cannot move stock; its source could not have carried a '
+            'stock item.'))
     header, old = data['header'], data['before']
     touched = [Touched('transaction', header['id'], 'update' if old else 'create',
         old['version'] if old else None, header['version'], header, old, db='company')]
