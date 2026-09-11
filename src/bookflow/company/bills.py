@@ -13,8 +13,8 @@ and it is created once, at posting, so a correction never moves it and a settlem
 attached to it stays attached. ``ap_obligation_components`` breaks that obligation down per
 entered line and names the exact ``posting_line_sources`` row that credited AP for it, which
 is what an allocation targets when a payment has to land on particular lines. Nothing here
-applies anything: ``applied_totals`` is the single function a settlement owner replaces, and
-today it answers zero for every bill.
+applies anything: ``applied_totals`` is the single function the settlement owner answers, and
+``bill pay`` in ``company/bill_payments.py`` is what makes it answer more than zero.
 
 **The Items tab.** The line collection is ``expenses`` and the envelope kind is ``purchase``.
 The obligation component points at the envelope, not at the expense profile, so an item line
@@ -341,11 +341,14 @@ def duplicate_references(s, vendor_id, key, own_id=None, *, limit=20):
 def applied_totals(s, obligation_ids):
     """How much has been settled against each payable, by ``ap_obligation_keys.id``.
 
-    This is the whole of the seam an AP settlement owner attaches to. Today nothing can settle
-    a bill, so every payable answers zero; when the settlement owner lands, it sums its own
-    active applications against these keys here, and nothing else in this module moves.
+    This is the whole of the seam the AP settlement owner attaches to, and the only line in
+    this module that knows a settlement exists: ``company/ap_settlement.py`` nets the active
+    applications standing against these keys. Everything else here -- the open balance, the
+    status, the refusal to correct or void a bill that has been paid -- is arithmetic on what
+    this answers, which is why the settlement owner landing moved nothing else.
     """
-    return {identifier: 0 for identifier in obligation_ids}
+    from bookflow.company import ap_settlement
+    return ap_settlement.applied_totals(s, obligation_ids)
 
 
 def obligation_row(s, transaction_id, pending=None):

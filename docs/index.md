@@ -20,6 +20,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`attachment`](cli/attachment.md)
 - [`audit`](cli/audit.md)
 - [`bill`](cli/bill.md)
+- [`bill payment`](cli/bill-payment.md)
 - [`card-charge`](cli/card-charge.md)
 - [`chart`](cli/chart.md)
 - [`check`](cli/check.md)
@@ -99,8 +100,12 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 ## Schema reference
 
 - [`company/accounts`](schema/company/accounts.md)
+- [`company/ap_applications`](schema/company/ap_applications.md)
 - [`company/ap_obligation_components`](schema/company/ap_obligation_components.md)
 - [`company/ap_obligation_keys`](schema/company/ap_obligation_keys.md)
+- [`company/ap_payment_profiles`](schema/company/ap_payment_profiles.md)
+- [`company/ap_source_components`](schema/company/ap_source_components.md)
+- [`company/ap_source_keys`](schema/company/ap_source_keys.md)
 - [`company/application_allocations`](schema/company/application_allocations.md)
 - [`company/applications`](schema/company/applications.md)
 - [`company/attachment_collection`](schema/company/attachment_collection.md)
