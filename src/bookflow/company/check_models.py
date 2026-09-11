@@ -20,13 +20,16 @@ a sibling collection beside it rather than as a rewrite of this one. See
 """
 from typing import Annotated, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from bookflow.company.custom_fields import CustomFieldKindExpectations, CustomFieldValuePatch
 from bookflow.company.journal_models import (
-    MoneyInput, _Date, _Input, _Number, _Selector,
+    MoneyInput, _Date, _Input, _Number, _Selector, _Version,
 )
-from bookflow.company.journal_outputs import JournalMoneyOutput, JournalWriteOutput
+from bookflow.company.journal_outputs import (
+    JournalMoneyOutput, JournalOutput, JournalRevisionSummaryOutput, JournalSummaryOutput,
+    JournalWriteOutput,
+)
 
 # What funds each document, and which way that account moves when money goes out. A bank
 # account is debit-normal so paying decreases it; a card is credit-normal so charging
@@ -53,6 +56,7 @@ class ExpenseLine(_Input):
     unclassified while the document itself carries a class.
     """
 
+    line_id: _Selector | None = None
     account: _Selector
     amount: str | MoneyInput
     memo: str | None = Field(default=None, max_length=2000)
@@ -89,12 +93,131 @@ class _MoneyOut(_Input):
         default_factory=lambda: CustomFieldValuePatch({}))
 
 
-class CheckPostInput(_MoneyOut):
+class _MoneyOutPost(_MoneyOut):
+    @model_validator(mode='after')
+    def new_lines(self) -> Self:
+        if any(line.line_id is not None for line in self.expenses):
+            raise ValueError('a new expense line cannot claim an existing line identity')
+        return self
+
+
+class CheckPostInput(_MoneyOutPost):
     number: _Number | None = None
 
 
-class CardChargePostInput(_MoneyOut):
+class CardChargePostInput(_MoneyOutPost):
     """A card charge carries no check number; the card statement carries the reference."""
+
+
+class _MoneyOutCorrection(_Input):
+    """Everything on the face of the document, each field optional and each one meaning it.
+
+    A field left out keeps what was captured; a field supplied replaces it. ``expenses``
+    replaces the whole grid, so a surviving row carries its ``line_id`` and a row without one
+    is new -- the same rule the bill's grid follows. Leaving ``expenses`` out keeps the saved
+    rows exactly as they were captured, so correcting a date or a payee cannot silently
+    re-read an account that has been renamed or reclassified since.
+    """
+
+    expected_version: _Version | None = None
+    account: _Selector | None = None
+    pay_to: CheckParty | None = None
+    date: _Date | None = None
+    amount: str | MoneyInput | None = None
+    memo: str | None = Field(default=None, max_length=2000)
+    class_id: _Selector | None = None
+    expenses: Expenses | None = None
+    custom_field_kinds: CustomFieldKindExpectations = Field(
+        default_factory=lambda: CustomFieldKindExpectations({}))
+    custom_fields: CustomFieldValuePatch = Field(
+        default_factory=lambda: CustomFieldValuePatch({}))
+
+    @model_validator(mode='after')
+    def required_values(self) -> Self:
+        for field in ('account', 'date', 'amount', 'expenses', 'number'):
+            if field in self.model_fields_set and getattr(self, field, None) is None:
+                raise ValueError(f'{field} cannot be cleared')
+        return self
+
+    @model_serializer(mode='wrap')
+    def only_supplied(self, handler):
+        values = handler(self)
+        for key in ('pay_to', 'memo', 'class_id'):
+            if key not in self.model_fields_set:
+                values.pop(key, None)
+        return values
+
+
+class CheckUpdateInput(_MoneyOutCorrection):
+    check: _Selector
+    number: _Number | None = None
+
+
+class CardChargeUpdateInput(_MoneyOutCorrection):
+    card_charge: _Selector
+
+
+class CheckVoidInput(_Input):
+    check: _Selector
+    expected_version: _Version | None = None
+
+
+class CardChargeVoidInput(_Input):
+    card_charge: _Selector
+    expected_version: _Version | None = None
+
+
+class CheckShowInput(_Input):
+    check: _Selector
+    revision_number: _Version | None = None
+
+
+class CardChargeShowInput(_Input):
+    card_charge: _Selector
+    revision_number: _Version | None = None
+
+
+class MoneyOutPageInput(_Input):
+    limit: int = Field(default=50, strict=True, ge=1, le=200)
+    cursor: str | None = Field(default=None, max_length=8192)
+
+
+class _MoneyOutQuery(MoneyOutPageInput):
+    date_from: _Date | None = None
+    date_to: _Date | None = None
+    status: Literal['posted', 'voided'] | None = None
+    number: str | None = Field(default=None, max_length=64)
+    account: _Selector | None = None
+    payee: _Selector | None = None
+    payee_type: Literal['vendor', 'customer', 'employee', 'other_name'] = 'vendor'
+    query: str | None = Field(default=None, max_length=2000)
+    direction: Literal['asc', 'desc'] = Field(default='asc',
+        description='Order of the accounting-date then stable-id page: asc pages the oldest '
+                    'document first, desc the most recent first. A cursor belongs to the '
+                    'direction that minted it; changing direction rejects it, so restart '
+                    'without a cursor.')
+
+    @model_validator(mode='after')
+    def ordered_dates(self) -> Self:
+        if self.date_from and self.date_to and self.date_from > self.date_to:
+            raise ValueError('date_from cannot follow date_to')
+        return self
+
+
+class CheckQueryInput(_MoneyOutQuery):
+    """Which checks to page. Every filter is ANDed; omit them all to page the lot."""
+
+
+class CardChargeQueryInput(_MoneyOutQuery):
+    """Which card charges to page. Every filter is ANDed; omit them all to page the lot."""
+
+
+class CheckHistoryInput(MoneyOutPageInput):
+    check: _Selector
+
+
+class CardChargeHistoryInput(MoneyOutPageInput):
+    card_charge: _Selector
 
 
 class MoneyOutSummary(_Input):
@@ -109,5 +232,42 @@ class MoneyOutSummary(_Input):
     expense_lines: int
 
 
+class MoneyOutOutput(JournalOutput):
+    document: MoneyOutSummary
+
+
 class MoneyOutWriteOutput(JournalWriteOutput):
     document: MoneyOutSummary
+
+
+class MoneyOutSummaryOutput(JournalSummaryOutput):
+    """One row of a money-out list: the journal header with the document's own footer."""
+
+    document: MoneyOutSummary
+
+
+class MoneyOutRevisionSummaryOutput(JournalRevisionSummaryOutput):
+    """One revision in the document's history, with what its own footer showed at the time."""
+
+    document: MoneyOutSummary
+
+
+class MoneyOutPageOutput(_Input):
+    items: list[MoneyOutSummaryOutput]
+    count: int
+    has_more: bool
+    next_cursor: str | None
+    audit_watermark: int
+
+
+class MoneyOutHistoryOutput(_Input):
+    id: str
+    version: int
+    current_revision_id: str
+    number: str
+    status: Literal['posted', 'voided']
+    items: list[MoneyOutRevisionSummaryOutput]
+    count: int
+    has_more: bool
+    next_cursor: str | None
+    audit_watermark: int

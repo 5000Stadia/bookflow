@@ -91,16 +91,30 @@ def calculate(inp, s):
                                    currency=currency, direction=inp.direction)
 
 
-def _compatible(s, inp, header, selected):
+def _compatible(s, inp, header, selected, moving):
+    """Refuse an entry this register cannot restate without losing something.
+
+    Line one is the register's own row and the rest are its split, so the shape asked for is
+    exactly that: a first line on the selected account carrying no class of its own and the
+    memo the header shows, with nothing else on that account and no foreign facts anywhere.
+
+    ``moving`` is the one thing a document knows that a register window does not. Scrolling a
+    register, the selected account is where you are standing and an entry cannot leave it, so
+    the first line has to be on the account the caller named. Opening a check, the bank
+    account is a field on the form: changing it is an ordinary correction, and only the line
+    identity has to be retained. Everything else about the shape is checked either way.
+    """
     revision = journals.revision(s, header)
     lines = journals.rows(s, c.document_lines,
                           c.document_lines.c.revision_id == revision['id'],
                           order=c.document_lines.c.position)
     own = [line for line in lines if line['account_id'] == selected['id']]
-    compatible = (len(own) == 1 and len(lines) >= 2 and own[0]['position'] == 1
-                  and own[0]['line_id'] == lines[0]['line_id']
-                  and own[0]['class_id'] is None and own[0]['class_name'] is None
-                  and own[0]['description'] == revision['memo']
+    anchor = lines[0] if lines else None
+    compatible = (anchor is not None and len(lines) >= 2
+                  and (moving or (len(own) == 1 and own[0]['line_id'] == anchor['line_id']))
+                  and anchor['position'] == 1
+                  and anchor['class_id'] is None and anchor['class_name'] is None
+                  and anchor['description'] == revision['memo']
                   and revision['name_type'] is None and revision['name_id'] is None
                   and all(line['kind'] == 'journal' and all(line[f] is None for f in journals.FACTS)
                           for line in lines))
@@ -109,19 +123,34 @@ def _compatible(s, inp, header, selected):
             'fields': [{'field': 'journal', 'problem': 'current journal cannot be edited losslessly in this register'}],
             'open_journal': {'journal': header['id'], 'command': 'journal show'},
         })
-    if _identity(inp.selected_line_id) != own[0]['line_id']:
+    if _identity(inp.selected_line_id) != anchor['line_id']:
         raise journals.invalid('selected_line_id', 'must retain the current selected-account line identity')
 
 
-def translate(inp, s, operation):
+# A document borrowing this translation carries its own concurrency intent; the register
+# window always knows the version of the row it is showing, so it has none to carry.
+_FROM_INPUT = object()
+
+
+def translate(inp, s, operation, *, moving=False, expected_version=_FROM_INPUT):
+    """Turn register intent into the journal that posts it.
+
+    ``expected_version`` exists because ``RegisterUpdateInput`` requires one and a document
+    does not: ``check update`` and ``transfer update`` allow a blind correction and warn about
+    it, the way ``journal update`` and ``bill update`` do. The caller passes the version the
+    person actually supplied -- ``None`` included -- and that is what the concurrency check and
+    the journal see.
+    """
     # Do this before resolving changed references or checking the current shape.
+    expected = (getattr(inp, 'expected_version', None) if expected_version is _FROM_INPUT
+                else expected_version)
     header = journals.resolve(s, inp.journal) if operation == 'update' else None
     if header:
-        journals.version_meta(s, header, inp.expected_version)
+        journals.version_meta(s, header, expected)
     currency = _home(s)
     selected = _selected(s, inp.account, currency)
     if header:
-        _compatible(s, inp, header, selected)
+        _compatible(s, inp, header, selected, moving)
     amount = parse_domestic_amount(inp.amount, currency)
     normal = accounts.NORMAL_BALANCE[selected['type']]
     main = _line(selected['id'], _side(normal, inp.direction), inp.amount,
@@ -145,7 +174,7 @@ def translate(inp, s, operation):
     if inp.number is not None:
         values['number'] = inp.number
     if header:
-        journal = JournalUpdateInput(journal=header['id'], expected_version=inp.expected_version, **values)
+        journal = JournalUpdateInput(journal=header['id'], expected_version=expected, **values)
     else:
         journal = JournalPostInput(**values)
     receipt = RegisterReceipt(account_id=selected['id'], normal_balance=normal,

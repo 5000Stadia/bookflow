@@ -64,11 +64,21 @@ bill query
 bill show
 bill update
 bill void
+card-charge history
 card-charge post
+card-charge query
+card-charge show
+card-charge update
+card-charge void
 chart apply
 chart list
 chart show
+check history
 check post
+check query
+check show
+check update
+check void
 class activate
 class create
 class deactivate
@@ -293,7 +303,12 @@ term update
 token issue
 token list
 token revoke
+transfer history
 transfer post
+transfer query
+transfer show
+transfer update
+transfer void
 undo
 unit-of-measure activate
 unit-of-measure create
