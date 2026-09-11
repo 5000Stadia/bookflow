@@ -1,11 +1,16 @@
 """The bill window, list and detail page, driven in a real browser.
 
-Three things are checked here that nothing else checks. That the Enter bill tile on the home
+Five things are checked here that nothing else checks. That the Enter bill tile on the home
 board is live in the only sense the availability contract accepts — a person follows the
 tile's own link and enters a bill through the page it lands on. That the window posts the
-same command an agent sends over MCP, field for field. And that at 390px neither the Expenses
-grid nor the saved bill has anything to scroll sideways: the element's own scrollWidth against
-its own clientWidth, not merely a page that does not move.
+same command an agent sends over MCP, field for field. That the Items tab is a way of
+entering a bill rather than a control that exists: a person switches to it, buys something
+and the saved bill says what they bought. That a correction made through the browser leaves
+both grids exactly as they were captured — the regression that arrives the moment the
+correction form baselines the Items grid as well as the Expenses one, because each grid is
+replaced as a whole and a baseline that does not match resubmits it. And that at 390px
+neither grid nor the saved bill has anything to scroll sideways: the element's own
+scrollWidth against its own clientWidth, not merely a page that does not move.
 """
 import json
 
@@ -22,6 +27,12 @@ SECOND = '100.00'
 TOTAL = '284.60'
 
 ROWS = '[data-collection-path=expenses] > [data-collection-items] > [data-collection-item]'
+ITEM_ROWS = '[data-collection-path=items] > [data-collection-items] > [data-collection-item]'
+
+# One item line, bought twelve at a time. Written out so a reader can add it up.
+VALVE_COST = '12.35'
+VALVES = '148.20'        # 12 x 12.35
+BOTH_TABS = '332.80'     # 184.60 on the Expenses tab + 148.20 on the Items tab
 
 VOLATILE = {'id', 'transaction_id', 'revision_id', 'line_id', 'document_line_id', 'created_at',
             'audit_event_id', 'number', 'current_revision_id', 'idempotency_key', 'position',
@@ -37,14 +48,41 @@ def _scrub(value):
     return value
 
 
-def _line(b, index, field):
-    return b.evaluate(f'''document.querySelectorAll({json.dumps(ROWS)})[{index}]
+def _cell(b, rows, index, field):
+    return b.evaluate(f'''document.querySelectorAll({json.dumps(rows)})[{index}]
         .querySelector('[name^="c:"][name$=":{field}"]').name''')
 
 
-def _add_line(b):
-    b.evaluate('document.querySelector("[data-collection-path=expenses] > '
+def _line(b, index, field):
+    return _cell(b, ROWS, index, field)
+
+
+def _item(b, index, field):
+    return _cell(b, ITEM_ROWS, index, field)
+
+
+def _count(b, rows):
+    return b.evaluate(f'document.querySelectorAll({json.dumps(rows)}).length')
+
+
+def _add_line(b, path='expenses'):
+    b.evaluate(f'document.querySelector("[data-collection-path={path}] > '
                '[data-collection-add]").click()')
+
+
+def _tabs(b):
+    """The tab strip as a person sees it: its labels, and which one is showing."""
+    return b.evaluate('''(() => {const tabs = [...document.querySelectorAll("[data-line-tab]")];
+        return {labels: tabs.map(t => t.textContent.trim()),
+                selected: tabs.filter(t => t.getAttribute("aria-selected") === "true")
+                              .map(t => t.dataset.lineTab),
+                shown: [...document.querySelectorAll("[data-line-panel]")]
+                       .filter(p => !p.hidden).map(p => p.dataset.linePanel)};})()''')
+
+
+def _open_tab(b, key):
+    b.evaluate(f'document.querySelector("[data-line-tab={key}]").click()')
+    b.wait_for(f'document.querySelector("[data-line-panel={key}]").hidden === false')
 
 
 def _pick(b, name, label):
@@ -66,10 +104,14 @@ def _act(b, action):
 
 
 def _save(b):
-    """Saving navigates to the saved bill; the form's own window is gone by then."""
+    """Saving navigates to the saved bill; the form's own window is gone by then.
+
+    The saved page is the signal, not one of its tables: a bill bought wholly on the Items
+    tab has no Expenses table to wait for.
+    """
     _click(b, 'submit')
     b.wait_for('!document.querySelector("[data-generated-form]") '
-               '&& !!document.querySelector(".bill-lines")')
+               '&& !!document.querySelector(".sales-document")')
     return b.evaluate('location.pathname').rsplit('/', 1)[-1]
 
 
@@ -378,3 +420,302 @@ def test_a_saved_bill_reads_as_line_cards_at_phone_width(register_browser):
     assert boxes['Billable']['top'] > boxes['Customer:Job']['top'], boxes
     shown = _text(b, '.sales-document')
     assert 'PHONE-1' in shown and TOTAL in shown and 'Card homeowner' in shown, shown[:900]
+
+
+def _bought_item(books):
+    """A non-inventory part with a purchase side, and the account it puts its cost in.
+
+    The account is the item's, not the row's: an item line names no account, which is the
+    whole difference between the two grids.
+    """
+    account = books['run']('account.create',
+                           {'name': f'{books["tag"]} valves', 'type': 'expense'})['id']
+    item = books['run']('item.create', {
+        'name': f'{books["tag"]} valve', 'type': 'non_inventory_part',
+        'sales_enabled': False, 'purchase_enabled': True,
+        'purchase_description': '1in brass ball valve', 'cost': VALVE_COST,
+        'expense_account_id': account})['id']
+    return item, account
+
+
+def test_the_items_tab_buys_something_and_the_saved_bill_says_what_was_bought(register_browser):
+    """The Items tab is a way in, not a control that exists.
+
+    A person opens the bill window, switches to Items, buys twelve valves and saves; the bill
+    that comes out says what was bought, out of the account named on the item, and matches
+    the same purchase sent as an agent sends it.
+    """
+    env, b = register_browser, register_browser.browser
+    b.viewport(1280, 900)
+    books = _books(b, env.site, 'Bought')
+    item, account = _bought_item(books)
+
+    b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/bill/post')
+    b.wait_for('!!document.querySelector("[data-generated-form]")')
+    b.wait_for('!!document.querySelector("[data-line-tab]")')
+
+    # Two tabs over one band, and a bill opens on the accounts a person types.
+    assert _tabs(b) == {'labels': ['Expenses', 'Items'], 'selected': ['expenses'],
+                        'shown': ['expenses']}, _tabs(b)
+    _open_tab(b, 'items')
+    assert _tabs(b) == {'labels': ['Expenses', 'Items'], 'selected': ['items'],
+                        'shown': ['items']}, _tabs(b)
+
+    _pick(b, 'f:vendor', 'Bought supply')
+    _fill(b, 'f:date', '2026-06-08')
+    _fill(b, 'f:supplier_reference', 'ITEM-1')
+    _add_line(b, 'items')
+    _pick(b, _item(b, 0, 'item'), 'Bought valve')
+    _fill(b, _item(b, 0, 'quantity'), '12')
+    _fill(b, _item(b, 0, 'unit_cost'), VALVE_COST)
+    _pick(b, _item(b, 0, 'customer'), 'Bought homeowner')
+    _fill(b, _item(b, 0, 'billable'), 'true')
+    _pick(b, _item(b, 0, 'class_id'), 'Bought job')
+
+    _act(b, 'preview')
+    assert not b.evaluate('document.querySelector(".error")?.textContent'), \
+        b.evaluate('document.body.innerText')[:900]
+    # The footer names the grid the lines are on. A bill bought wholly on the Items tab is
+    # not told that it spent nothing on expenses.
+    assert _totals(b) == {'Items': f'{VALVES} USD', 'Amount due': f'{VALVES} USD'}
+    # A preview swaps the whole window in place; it comes back on the tab being worked on.
+    assert _tabs(b)['shown'] == ['items'], _tabs(b)
+
+    saved = _save(b)
+    written = books['run']('bill.show', {'bill': saved})
+    assert written['expense_total']['minor_units'] == 0
+    assert written['item_total'] == {'amount': VALVES, 'currency': 'USD', 'minor_units': 14820}
+    assert written['total']['amount'] == VALVES
+    assert written['revision']['expenses'] == []
+    line = written['revision']['items'][0]
+    assert len(written['revision']['items']) == 1
+    assert line['item_id'] == item
+    # The account came off the item; nothing on the row named one.
+    assert line['account_id'] == account
+    assert line['quantity'] == '12'
+    assert line['unit_cost']['amount'] == VALVE_COST
+    assert line['amount']['amount'] == VALVES
+    assert line['billable'] is True
+    assert line['description'] == '1in brass ball valve'
+
+    # The same purchase, sent the way an agent sends it.
+    sent = books['run']('bill.post', {
+        'vendor': books['vendor'], 'date': '2026-06-08', 'supplier_reference': 'ITEM-agent',
+        'items': [{'item': item, 'quantity': '12', 'unit_cost': VALVE_COST,
+                   'customer': books['customer'], 'billable': True, 'class_id': books['job']}]})
+    assert _scrub(written['revision'])['items'] == _scrub(sent['revision'])['items']
+
+    # The page the save landed on is the bill itself, showing what was bought.
+    detail = _text(b, '.sales-document')
+    for part in ('Bought valve', '1in brass ball valve', VALVE_COST, VALVES,
+                 'Bought homeowner', 'Bought job'):
+        assert part in detail, (part, detail[:1200])
+    assert b.evaluate('!!document.querySelector(".bill-item-lines")')
+    # Nothing was entered on the Expenses tab, so there is no empty Expenses table.
+    assert b.evaluate('!document.querySelector(".bill-lines")')
+
+
+def test_a_browser_correction_leaves_both_grids_exactly_as_they_were_captured(register_browser):
+    """The regression the Items baseline can introduce, and the one it must not.
+
+    Each grid is replaced as a whole: supplying one replaces it and leaves the other exactly
+    as captured. The correction form submits a grid only when it differs from the baseline it
+    opened with, so a baseline that does not match what the window renders would resubmit
+    that grid on every correction and silently re-resolve it against today's records. Both
+    records are renamed before any correction, so a grid that was resubmitted says so.
+    """
+    env, b = register_browser, register_browser.browser
+    b.viewport(1280, 900)
+    books = _books(b, env.site, 'Keep')
+    item, account = _bought_item(books)
+    posted = books['run']('bill.post', {
+        'vendor': books['vendor'], 'date': '2026-07-01', 'supplier_reference': 'KEEP-1',
+        'expenses': [{'account': books['first'], 'amount': FIRST, 'memo': 'Parts'},
+                     {'account': books['second'], 'amount': SECOND, 'memo': 'Fuel'}],
+        'items': [{'item': item, 'quantity': '12', 'unit_cost': VALVE_COST},
+                  {'item': item, 'quantity': '1', 'amount': '40.00',
+                   'description': 'One spare'}]})
+
+    def grids():
+        record = books['run']('bill.show', {'bill': posted['id']})
+        return record['revision']['revision_number'], {
+            'expenses': [(line['line_id'], line['amount']['amount'], line['memo'],
+                          line['line_snapshot']['account']['full_name'])
+                         for line in record['revision']['expenses']],
+            'items': [(line['line_id'], line['amount']['amount'], line['description'],
+                       line['line_snapshot']['item']['label'])
+                      for line in record['revision']['items']]}
+
+    revision, before = grids()
+    assert revision == 1
+    assert len(before['expenses']) == 2 and len(before['items']) == 2
+
+    # Rename both records. A grid that is silently resubmitted recaptures the new name.
+    books['run']('account.update', {'account': books['first'], 'name': 'Keep renamed account'})
+    books['run']('item.update', {'item': item, 'name': 'Keep renamed item'})
+
+    def correct():
+        b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/bill/{posted["id"]}/update')
+        b.wait_for('!!document.querySelector("[data-generated-form]")')
+
+    # The window opens on both grids, as they were captured, in the order they were written.
+    correct()
+    assert _count(b, ROWS) == 2 and _count(b, ITEM_ROWS) == 2
+    assert _value(b, _line(b, 0, 'amount')) == FIRST
+    assert _value(b, _item(b, 0, 'unit_cost')) == VALVE_COST
+    # The line entered as a whole-line amount reopens on the amount, not on a cost nobody gave.
+    assert _value(b, _item(b, 1, 'amount')) == '40.00'
+    assert _value(b, _item(b, 1, 'unit_cost')) == ''
+
+    # A correction that touches only the header submits neither grid, so neither moves.
+    _fill(b, 'f:memo', 'Header only')
+    _act(b, 'preview')
+    assert not b.evaluate('document.querySelector(".error")?.textContent'), \
+        b.evaluate('document.body.innerText')[:900]
+    _save(b)
+    revision, after = grids()
+    assert revision == 2
+    assert after == before, (after, before)
+
+    # A correction on the Expenses tab replaces that grid alone. The item lines keep their
+    # identities, their order and the item name they were captured under.
+    correct()
+    _fill(b, _line(b, 0, 'amount'), '200.00')
+    _act(b, 'preview')
+    assert not b.evaluate('document.querySelector(".error")?.textContent'), \
+        b.evaluate('document.body.innerText')[:900]
+    _save(b)
+    revision, after = grids()
+    assert revision == 3
+    assert after['items'] == before['items'], (after['items'], before['items'])
+    assert [row[0] for row in after['expenses']] == [row[0] for row in before['expenses']]
+    assert [row[1] for row in after['expenses']] == ['200.00', SECOND]
+    # The grid that was submitted recaptured the renamed account; the grid that was not
+    # kept the name it was written under. That is the same fact from both sides.
+    assert after['expenses'][0][3] == 'Keep renamed account'
+    assert after['items'][0][3] == f'{books["tag"]} valve'
+
+    # And a correction made on the Items tab replaces that grid alone, the same way.
+    correct()
+    _open_tab(b, 'items')
+    _fill(b, _item(b, 0, 'quantity'), '15')
+    _act(b, 'preview')
+    assert not b.evaluate('document.querySelector(".error")?.textContent'), \
+        b.evaluate('document.body.innerText')[:900]
+    assert _totals(b)['Items'] == '225.25 USD', _totals(b)   # 15 x 12.35 + 40.00
+    _save(b)
+    revision, final = grids()
+    assert revision == 4
+    assert final['expenses'] == after['expenses'], (final['expenses'], after['expenses'])
+    assert [row[0] for row in final['items']] == [row[0] for row in before['items']]
+    assert [row[1] for row in final['items']] == ['185.25', '40.00']
+    assert [row[2] for row in final['items']] == [row[2] for row in before['items']]
+    assert final['items'][0][3] == 'Keep renamed item'
+
+
+def test_the_items_grid_and_its_tabs_have_nothing_to_scroll_sideways_at_phone_width(register_browser):
+    """The Items grid becomes one block per line too, in its own reading order."""
+    env, b = register_browser, register_browser.browser
+    b.viewport(390, 844)
+    books = _books(b, env.site, 'Pocket')
+    _bought_item(books)
+
+    b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/bill/post')
+    b.wait_for('!!document.querySelector("[data-generated-form]")')
+    _open_tab(b, 'items')
+    _pick(b, 'f:vendor', 'Pocket supply')
+    _fill(b, 'f:date', '2026-08-10')
+    _add_line(b, 'items')
+    _pick(b, _item(b, 0, 'item'), 'Pocket valve')
+    _fill(b, _item(b, 0, 'quantity'), '12')
+    _fill(b, _item(b, 0, 'unit_cost'), VALVE_COST)
+    _pick(b, _item(b, 0, 'customer'), 'Pocket homeowner')
+    _fill(b, _item(b, 0, 'billable'), 'true')
+
+    _contained(b, 390)
+    grid = b.evaluate('''(() => {const g = document.querySelector("[data-collection-path=items]");
+        return {scroll: g.scrollWidth, client: g.clientWidth};})()''')
+    assert grid['scroll'] == grid['client'], grid
+    # Each tab is a finger-wide target of its own, and the pair fills the window.
+    widths = b.evaluate('''[...document.querySelectorAll("[data-line-tab]")]
+        .map(t => Math.round(t.getBoundingClientRect().width))''')
+    assert len(widths) == 2 and abs(widths[0] - widths[1]) <= 1, widths
+
+    # The block's own reading order: what was bought across the block, then how many and
+    # what one costs beside each other, then the amount and the class, then who it is for.
+    boxes = b.evaluate(f'''(() => {{const row = document.querySelectorAll({json.dumps(ITEM_ROWS)})[0];
+        const cell = name => row.querySelector(`[data-line-column="${{name}}"]`).getBoundingClientRect();
+        const out = {{}};
+        for (const name of ['item', 'description', 'quantity', 'unit_cost', 'amount',
+                            'class_id', 'customer', 'billable'])
+            out[name] = {{top: Math.round(cell(name).top), width: Math.round(cell(name).width)}};
+        return out;}})()''')
+    assert boxes['item']['width'] > boxes['quantity']['width'] * 1.8, boxes
+    assert boxes['description']['width'] == boxes['item']['width'], boxes
+    assert boxes['customer']['width'] == boxes['item']['width'], boxes
+    assert boxes['quantity']['top'] == boxes['unit_cost']['top'], boxes
+    assert boxes['amount']['top'] == boxes['class_id']['top'], boxes
+    assert boxes['amount']['top'] > boxes['quantity']['top'], boxes
+    assert boxes['customer']['top'] > boxes['amount']['top'], boxes
+    assert boxes['billable']['top'] > boxes['customer']['top'], boxes
+    assert b.evaluate(f'''[...document.querySelectorAll({json.dumps(ITEM_ROWS)} + " .line-cell")]
+        .every(e => e.scrollWidth <= e.clientWidth + 1
+                    && e.getBoundingClientRect().right <= innerWidth + 1)''')
+
+    _act(b, 'preview')
+    assert not b.evaluate('document.querySelector(".error")?.textContent'), \
+        b.evaluate('document.body.innerText')[:900]
+    _contained(b, 390)
+    _save(b)
+    _contained(b, 390)
+
+
+def test_one_window_enters_both_tabs_and_saves_both_grids(register_browser):
+    """The tab that is not showing is hidden, not absent: its lines still reach the command.
+
+    Both grids are entered in one window and only one of them can be on screen when Save is
+    pressed. If hiding a panel took its controls out of the submission, a bill entered this
+    way would silently lose whichever grid the person was not looking at.
+    """
+    env, b = register_browser, register_browser.browser
+    b.viewport(1280, 900)
+    books = _books(b, env.site, 'Both')
+    item, account = _bought_item(books)
+
+    b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/bill/post')
+    b.wait_for('!!document.querySelector("[data-line-tab]")')
+    _pick(b, 'f:vendor', 'Both supply')
+    _fill(b, 'f:date', '2026-09-02')
+    _fill(b, 'f:supplier_reference', 'BOTH-1')
+    _add_line(b)
+    _pick(b, _line(b, 0, 'account'), 'Both parts')
+    _fill(b, _line(b, 0, 'amount'), FIRST)
+    _fill(b, _line(b, 0, 'memo'), 'Fittings')
+
+    _open_tab(b, 'items')
+    _add_line(b, 'items')
+    _pick(b, _item(b, 0, 'item'), 'Both valve')
+    _fill(b, _item(b, 0, 'quantity'), '12')
+    _fill(b, _item(b, 0, 'unit_cost'), VALVE_COST)
+
+    # The Expenses panel is off the screen at this point, and its line is still in the form.
+    assert _tabs(b)['shown'] == ['items'], _tabs(b)
+    assert b.evaluate('document.querySelector("[data-line-panel=expenses]").hidden') is True
+    assert _count(b, ROWS) == 1 and _count(b, ITEM_ROWS) == 1
+
+    _act(b, 'preview')
+    assert not b.evaluate('document.querySelector(".error")?.textContent'), \
+        b.evaluate('document.body.innerText')[:900]
+    assert _totals(b) == {'Expenses': f'{FIRST} USD', 'Items': f'{VALVES} USD',
+                          'Amount due': f'{BOTH_TABS} USD'}
+
+    saved = _save(b)
+    written = books['run']('bill.show', {'bill': saved})
+    assert [line['amount']['amount'] for line in written['revision']['expenses']] == [FIRST]
+    assert [line['amount']['amount'] for line in written['revision']['items']] == [VALVES]
+    assert written['revision']['items'][0]['account_id'] == account
+    assert written['total']['amount'] == BOTH_TABS
+    # Both tables are on the saved bill, each with the line it owns.
+    detail = _text(b, '.sales-document')
+    for part in ('Both parts', 'Fittings', 'Both valve', FIRST, VALVES, BOTH_TABS):
+        assert part in detail, (part, detail[:1200])

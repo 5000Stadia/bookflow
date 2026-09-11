@@ -90,3 +90,68 @@
   window.bookflowSales = {configure, invalidate, initialize};
   initialize();
 })();
+
+
+/* The document window's line tabs: two grids in one band, one of them showing.
+ *
+ * A bill is entered on the accounts a person types or on the things they buy, and the
+ * command takes both collections at once. So the panel that is not showing stays in the
+ * form and still submits — hiding a tab must never drop what the other grid holds, which
+ * is exactly what a correction opened on one tab would otherwise do to the other.
+ *
+ * Without script both panels are simply visible and both grids are enterable; the tab
+ * strip is an affordance over a page that already works.
+ */
+(() => {
+  if (window.bookflowLineTabs) return;
+  const BAND = '[data-line-bands]';
+  const tabsOf = band => [...band.querySelectorAll(':scope > .line-tabs > [data-line-tab]')];
+  const panelsOf = band => [...band.querySelectorAll(':scope > [data-line-panel]')];
+  const rows = panel => panel.querySelectorAll(
+    ':scope > .line-grid > [data-collection-items] > [data-collection-item]').length;
+  // The tab a person last chose, so a preview that swaps the whole form in place comes
+  // back on the grid they were working on rather than on the first one.
+  let chosen = null;
+  function show(band, key) {
+    tabsOf(band).forEach(tab => tab.setAttribute(
+      'aria-selected', tab.dataset.lineTab === key ? 'true' : 'false'));
+    panelsOf(band).forEach(panel => { panel.hidden = panel.dataset.linePanel !== key; });
+  }
+  function initialize() {
+    document.querySelectorAll(BAND).forEach(band => {
+      const panels = panelsOf(band);
+      if (tabsOf(band).length < 2 || panels.length < 2) return;
+      const keys = panels.map(panel => panel.dataset.linePanel);
+      if (chosen && keys.includes(chosen)) { show(band, chosen); return; }
+      // Otherwise open on the grid that has lines: a bill bought wholly on the Items tab
+      // reopens on Items rather than on an empty Expenses grid. Lines on both, or on
+      // neither, and the first tab is where a person starts.
+      const entered = panels.filter(panel => rows(panel) > 0);
+      show(band, entered.length === 1 ? entered[0].dataset.linePanel : keys[0]);
+    });
+  }
+  document.addEventListener('click', event => {
+    const tab = event.target.closest('[data-line-tab]');
+    const band = tab && tab.closest(BAND);
+    if (!band) return;
+    chosen = tab.dataset.lineTab;
+    show(band, chosen);
+  });
+  document.addEventListener('keydown', event => {
+    const tab = event.target.closest('[data-line-tab]');
+    const band = tab && tab.closest(BAND);
+    if (!band) return;
+    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+    if (!step) return;
+    const tabs = tabsOf(band);
+    const next = tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length];
+    event.preventDefault();
+    chosen = next.dataset.lineTab;
+    show(band, chosen);
+    next.focus();
+  });
+  document.addEventListener('DOMContentLoaded', initialize);
+  document.addEventListener('htmx:afterSwap', initialize);
+  window.bookflowLineTabs = {initialize};
+  initialize();
+})();

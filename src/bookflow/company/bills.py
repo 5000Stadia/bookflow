@@ -96,6 +96,24 @@ EXPENSE_ACCOUNTS = frozenset({'expense', 'other_expense', 'cost_of_goods_sold',
 # -- it carries a role but it is an ordinary purchase account a bookkeeper picks by hand, and
 # refusing it would refuse freight in and subcontracted cost.
 LINE_ROLES = frozenset({'cost_of_goods_sold'})
+# The one account an item that is sold but never bought has. Buying such an item back debits
+# the income it is sold out of, which is what the anchor product does with it and what the
+# item record itself allows -- an income account on an item is `income` or `other_income` and
+# nothing else.
+ITEM_INCOME_ACCOUNTS = frozenset({'income', 'other_income'})
+
+
+def income_account_warning(profile):
+    """What a line posted to an item's income account has to say for itself.
+
+    Returned beside the written bill rather than raised in front of it. The anchor product
+    posts this line without a word; refusing it outright would be worse than the anchor and
+    posting it silently would be no better, so it posts and says what it did.
+    """
+    return (f'"{profile.item.label}" has no purchase account, so its income account '
+            f'"{profile.account.full_name}" is being used. Buying back something you sell '
+            'reduces that income rather than recording a cost. Give the item a purchase '
+            'description and an expense account to post it to a cost account instead.')
 
 
 def json_text(value):
@@ -367,15 +385,19 @@ def _line_class(s, line, header_class, field):
 
 
 def _purchasable_item(s, selector, field):
-    """The item a bill line may buy, and the one account buying it debits.
+    """The item a bill line may buy, the account buying it debits, and which account that is.
 
-    Three refusals, each naming what is actually wrong. An inventory part is refused by its own
+    Two refusals, each naming what is actually wrong. An inventory part is refused by its own
     name because receiving it is real work nobody has built -- it debits Inventory Asset and
     moves quantity on hand -- and posting it to an expense account instead would be a wrong
-    debit that balances, which is the worst kind. An item with no purchase side is refused
-    because it has no purchase account to debit and inventing one would be a guess. A
-    percentage charge is refused for the reason the invoice refuses it: there is no base here
-    to take a percentage of.
+    debit that balances, which is the worst kind. A percentage charge is refused for the
+    reason the invoice refuses it: there is no base here to take a percentage of.
+
+    An item with no purchase side is not a third refusal. It has one account rather than
+    none -- the income account it is sold out of -- and the anchor product posts the line to
+    it, so this does too and warns that it did. The item record already guarantees the
+    account exists: a service, non-inventory part or other charge must have a sales side or a
+    purchase side, and a sales side requires an income account.
     """
     row = _list_row(s, 'item', c.items, selector, field, 'item')
     if row['type'] not in PURCHASABLE_ITEM_TYPES:
@@ -392,24 +414,28 @@ def _purchasable_item(s, selector, field):
             'reason': 'inventory_receipt_not_implemented'
             if row['type'] in ('inventory_part', 'inventory_assembly') else 'item_type_not_purchasable',
             'supported_item_types': list(PURCHASABLE_ITEM_TYPES)})
-    if not row['purchase_enabled'] or row['expense_account_id'] is None:
-        raise _invalid(field, f'"{row["full_name"]}" has no purchase side; give it a purchase '
-                              'description and an expense account, or enter the cost as an expense line')
     if row['other_charge_percent_millionths'] is not None:
         raise _invalid(field, f'"{row["full_name"]}" is a percentage charge; a bill line has no base '
                               'to take a percentage of')
-    account = _account_row(s, row['expense_account_id'], field)
-    if account['type'] not in EXPENSE_ACCOUNTS or (
+    purchase = bool(row['purchase_enabled']) and row['expense_account_id'] is not None
+    basis = 'purchase' if purchase else 'income'
+    account_id = row['expense_account_id'] if purchase else row['income_account_id']
+    if account_id is None:
+        raise _invalid(field, f'"{row["full_name"]}" has no account to post to; give it a purchase '
+                              'description and an expense account, or enter the cost as an expense line')
+    account = _account_row(s, account_id, field)
+    allowed = EXPENSE_ACCOUNTS if purchase else ITEM_INCOME_ACCOUNTS
+    if account['type'] not in allowed or (
             account['system_role'] is not None and account['system_role'] not in LINE_ROLES):
         raise _invalid(field, f'"{row["full_name"]}" posts to "{account["full_name"]}", which a bill '
                               'line may not debit; repoint the item at an expense or cost account')
-    return row, account
+    return row, account, basis
 
 
 def _item_line(s, line, header_class, currency, index):
     """One Items-tab row resolved into the amount it debits and the facts it captures."""
     field = f'items.{index}'
-    row, account = _purchasable_item(s, line.item, field + '.item')
+    row, account, account_basis = _purchasable_item(s, line.item, field + '.item')
     if account['currency'] != currency:
         raise _invalid(field + '.item', 'account must use the home currency')
     if row['cost_minor_units'] is not None and row['cost_currency'] != currency:
@@ -437,6 +463,7 @@ def _item_line(s, line, header_class, currency, index):
                 if line.customer else None)
     profile = BillItemProfile(
         item=_reference(row), item_type=row['type'], account=_account_facts(account),
+        account_basis=account_basis,
         quantity_microunits=quantity, unit_cost_minor_units=unit_cost, amount_basis=basis,
         standard_cost_minor_units=(None if row['cost_minor_units'] is None
                                    else int(row['cost_minor_units'])),
@@ -922,9 +949,14 @@ def commercial(s, inp, old_header, old_revision, *, document_id):
     semantic = dict(date=date, number=number, memo=memo, issuer=issuer, profile=profile.model_dump(),
                     lines=[_line_semantic(line) for line in lines],
                     custom_fields=_custom_semantic(custom_plan.snapshot))
+    # Read off the captured facts rather than collected as each line resolves, so a grid
+    # kept from the previous revision says the same thing about itself as one just entered.
+    warnings = list(dict.fromkeys(
+        income_account_warning(line['profile']) for line in lines
+        if getattr(line['profile'], 'account_basis', 'purchase') == 'income'))
     return dict(profile=profile, date=date, number=number, sequence=sequence, memo=memo, issuer=issuer,
                 lines=lines, custom_plan=custom_plan, semantic=semantic, currency=currency,
-                expense_total=expense_total, item_total=item_total, total=total)
+                expense_total=expense_total, item_total=item_total, total=total, warnings=warnings)
 
 
 def _posting_accounts_active(s, resolved):
@@ -945,7 +977,12 @@ def _posting_accounts_active(s, resolved):
             details={'field': 'ap_account', 'reason': 'captured_posting_account_type'})
     for line in resolved['lines']:
         account = current[line['profile'].account.id]
-        if account['type'] not in EXPENSE_ACCOUNTS or (
+        # A line that debits an item's income account is still eligible for the account its
+        # own captured basis names; a purchase line is not eligible for an income account.
+        allowed = (ITEM_INCOME_ACCOUNTS
+                   if getattr(line['profile'], 'account_basis', 'purchase') == 'income'
+                   else EXPENSE_ACCOUNTS)
+        if account['type'] not in allowed or (
                 account['system_role'] is not None and account['system_role'] not in LINE_ROLES):
             item = line.get('family') == 'item'
             raise BookflowError('E_VALIDATION', message=(
@@ -1040,6 +1077,7 @@ def prepare(s, ctx, inp, operation):
             return unchanged(old_header, old_revision)
         journals.open_dates(s, [resolved['date']] + ([old_revision['date']] if old_revision else []))
         _posting_accounts_active(s, resolved)
+        warnings += resolved['warnings']
         profile, currency = resolved['profile'], resolved['currency']
         custom_plan, sequence = resolved['custom_plan'], resolved['sequence']
         revision = dict(**created(), transaction_id=header['id'],

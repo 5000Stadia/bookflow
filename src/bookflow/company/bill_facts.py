@@ -57,11 +57,19 @@ class BillItemProfile(StrictModel):
     means the amount is quantity times cost, and ``amount`` means the amount was typed outright
     and ``unit_cost_minor_units`` is null -- a back-computed cost that nobody entered would
     read as a fact, and on a quantity that does not divide the amount it would be a wrong one.
+
+    ``account_basis`` says which of the item's accounts that was. An item sold but never
+    bought has one account rather than none -- the income account it is sold out of -- and a
+    bill line naming it debits that, which reduces the income. A reader years later must be
+    able to tell that from an ordinary purchase without re-reading the item, and a correction
+    must know which account types are still eligible for this line, so the choice is a
+    captured fact rather than something inferred from the account's type today.
     """
 
     item: Reference
     item_type: Literal['service', 'non_inventory_part', 'other_charge']
     account: Account
+    account_basis: Literal['purchase', 'income'] = 'purchase'
     quantity_microunits: int
     unit_cost_minor_units: int | None = None
     amount_basis: Literal['unit_cost', 'amount'] = 'unit_cost'

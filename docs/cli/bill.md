@@ -863,6 +863,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.account.number` | string \| null | yes | yes | — | — |
 | `revision.items[].line_snapshot.account.type` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income"] | no | no | "purchase" | — |
 | `revision.items[].line_snapshot.quantity_microunits` | integer | yes | no | — | — |
 | `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
@@ -1608,6 +1609,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.account.number` | string \| null | yes | yes | — | — |
 | `revision.items[].line_snapshot.account.type` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income"] | no | no | "purchase" | — |
 | `revision.items[].line_snapshot.quantity_microunits` | integer | yes | no | — | — |
 | `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
@@ -2206,6 +2208,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.account.number` | string \| null | yes | yes | — | — |
 | `revision.items[].line_snapshot.account.type` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income"] | no | no | "purchase" | — |
 | `revision.items[].line_snapshot.quantity_microunits` | integer | yes | no | — | — |
 | `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
@@ -2790,6 +2793,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.account.number` | string \| null | yes | yes | — | — |
 | `revision.items[].line_snapshot.account.type` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income"] | no | no | "purchase" | — |
 | `revision.items[].line_snapshot.quantity_microunits` | integer | yes | no | — | — |
 | `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |

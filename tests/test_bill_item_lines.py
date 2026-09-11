@@ -38,6 +38,8 @@ MORE_VALVES = '185.25'   # 15 x 12.35
 MORE_ITEMS = '375.25'    # 190.00 + 185.25
 CORRECTED = '659.85'     # 284.60 + 375.25
 DELTA = 3705             # 185.25 - 148.20, in minor units
+SOLD_ONLY_COST = '250.00'  # a service that is sold and never bought, entered on a bill
+SOLD_ONLY_MINOR = 25000
 
 
 @pytest.fixture
@@ -295,11 +297,76 @@ def test_an_inventory_part_is_refused_on_a_correction_too(books):
     assert books['run']('bill show', {'bill': posted['id']})['total']['amount'] == BILL
 
 
-def test_an_item_with_no_purchase_side_is_refused(books):
-    sold_only = books['client'].item.create(
-        company=books['company'], name='Design Review', type='service',
+def _sold_only(books, name='Design Review'):
+    """A service that is sold and never bought: one account, and it is an income account."""
+    return books['client'].item.create(
+        company=books['company'], name=name, type='service',
         description='Design review', price='250.00', income_account_id=books['income'],
         sales_tax_code_id=next(iter(books['tax_codes'].values())))['id']
+
+
+def test_an_item_with_no_purchase_side_posts_to_its_income_account_and_says_so(books):
+    """The anchor product posts this line to the item's one account, so this does too.
+
+    Buying back something you sell debits the income it is sold out of, which reduces that
+    income rather than recording a cost. Refusing the workflow the anchor supports would be
+    worse than the anchor; posting it without a word would be no better. It posts and warns.
+    """
+    sold_only = _sold_only(books)
+
+    posted = books['run']('bill post', dict(vendor=books['vendor'], date='2017-03-20',
+                                            items=[{'item': sold_only, 'quantity': '1',
+                                                    'unit_cost': SOLD_ONLY_COST}]),
+                          reason='Buy a design review')
+
+    assert posted['total'] == {'amount': SOLD_ONLY_COST, 'currency': 'USD',
+                               'minor_units': SOLD_ONLY_MINOR}
+    line = posted['revision']['items'][0]
+    assert line['account_id'] == books['income']
+    assert line['line_snapshot']['account_basis'] == 'income'
+    # 250.00 debited to the income account, 250.00 credited to Accounts Payable.
+    assert _net(books) == {books['income']: SOLD_ONLY_MINOR, books['payable']: -SOLD_ONLY_MINOR}
+
+    assert len(posted['warnings']) == 1, posted['warnings']
+    said = posted['warnings'][0]
+    assert 'Design Review' in said and 'no purchase account' in said, said
+    assert 'income account' in said, said
+
+    # The ledger agrees the debit landed in income, read back through the report rather than
+    # through the write's own output.
+    rows = books['run']('report general-ledger',
+                        {'date_from': '2017-01-01', 'date_to': '2017-12-31', 'limit': 200})['rows']
+    debited = [row for row in rows
+               if row['kind'] == 'posting' and row['account_id'] == books['income']]
+    assert len(debited) == 1 and debited[0]['debit']['amount'] == SOLD_ONLY_COST, debited
+
+
+def test_an_income_account_line_is_corrected_and_voided_like_any_other(books):
+    """The parity line is an ordinary bill line once it is written: it revises and reverses."""
+    sold_only = _sold_only(books)
+    posted = books['run']('bill post', dict(vendor=books['vendor'], date='2017-03-20',
+                                            items=[{'item': sold_only, 'quantity': '1',
+                                                    'unit_cost': SOLD_ONLY_COST}]),
+                          reason='Buy a design review')
+
+    corrected = books['run']('bill update', dict(bill=posted['id'],
+                                                 expected_version=posted['version'],
+                                                 items=[{'item': sold_only, 'quantity': '2',
+                                                         'unit_cost': SOLD_ONLY_COST}]),
+                             reason='Two of them, not one')
+
+    assert corrected['total']['minor_units'] == SOLD_ONLY_MINOR * 2
+    assert corrected['warnings'], corrected['warnings']
+    assert _net(books) == {books['income']: SOLD_ONLY_MINOR * 2,
+                           books['payable']: -SOLD_ONLY_MINOR * 2}
+
+    books['run']('bill void', {'bill': posted['id']}, reason='Entered in error')
+    assert _net(books) == {}
+
+
+def test_a_sales_only_item_with_no_cost_still_asks_for_one(books):
+    """The account is guessed from the item; the money never is."""
+    sold_only = _sold_only(books, name='Unpriced Review')
 
     with pytest.raises(BookflowError) as raised:
         books['run']('bill post', dict(vendor=books['vendor'], date='2017-03-20',
@@ -307,8 +374,8 @@ def test_an_item_with_no_purchase_side_is_refused(books):
                      reason='Buy a design review')
 
     problem = raised.value.details['fields'][0]
-    assert problem['field'] == 'items.0.item'
-    assert 'no purchase side' in problem['problem']
+    assert problem['field'] == 'items.0.unit_cost'
+    assert 'no standard cost' in problem['problem']
     assert _net(books) == {}
 
 

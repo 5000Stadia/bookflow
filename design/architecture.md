@@ -662,9 +662,24 @@ gives the amount outright and records no unit cost; neither gives the item's own
 to one account named on the item itself. An `inventory_part` is refused by name with
 `E_VALIDATION` and `reason` `inventory_receipt_not_implemented`: receiving stock debits Inventory
 Asset and moves quantity on hand, nothing here owns either, and a wrong debit that balances is
-worse than a refusal. An item with no purchase side is refused for the same reason in miniature:
-it has no purchase account, and inventing one would be a guess. Inventory valuation, stock
-movement, purchase orders and item receipts remain unbuilt.
+worse than a refusal. Inventory valuation, stock movement, purchase orders and item receipts
+remain unbuilt.
+
+**An item with one account.** An item that is sold and never bought has no purchase account, and
+it is not refused: it has one account rather than none -- the income account it is sold out of --
+and the line debits that, which reduces the income rather than recording a cost. The anchor
+product posts such a line to that account, so this does too, and returns a warning saying which
+account it used and why, which the anchor does not. Refusing a workflow the anchor supports is
+not better than the anchor; supporting it with a warning is. The item record guarantees the
+account exists: a service, non-inventory part or other charge must have a sales side or a
+purchase side, and a sales side requires an income account. `BillItemProfile.account_basis`
+captures which of the item's accounts a line used, so a reader can tell one from the other years
+later and a correction knows which account types are still eligible for that line --
+`bills.ITEM_INCOME_ACCOUNTS` for an income-basis line, `EXPENSE_ACCOUNTS` for every other. The
+warning is derived from that captured fact rather than collected as lines resolve, so a grid kept
+from the previous revision says the same thing about itself as one just entered. The money is
+never guessed: a sales-only item has no standard cost, so the line still asks for a unit cost or
+an amount.
 
 **Correcting one grid at a time.** Supplying `expenses` or `items` replaces that grid outright;
 the grid left out keeps its lines exactly as captured; an empty list clears one; leaving both out
@@ -690,13 +705,19 @@ to, and whether it is billable to them. The footer copies the server's own `expe
 rule produced it; there is no figure on the face of a bill to reconcile the lines against, which
 is the one way the footer differs from a check's.
 
-The window has **no Items tab yet**. `items` is a declared collection on both write commands, so
-the generated window carries it as an unnamed collection control rather than dropping it -- the
-form stays input-identical to the command -- but there is no second grid, no item picker column,
-no quantity-times-cost preview and no phone rules scoped to `[data-collection-path=items]`. Adding
-it means a `BILL_ITEM_GRID` beside `BILL_GRID`, a tab control that switches which grid the band
-shows, `adapters/workbench/bills.editable_values` returning an `items` list beside `expenses`, and
-`bill_contract.FORM` already declares the three pickers an item row needs.
+**The two tabs in the window.** `BILL_ITEM_GRID` sits beside `BILL_GRID` and `layout` returns
+`grids` -- one entry per line collection, each with its own columns, hint map and track widths --
+rather than one grid and its columns. A document with a single grid renders exactly what it always
+did; a bill renders a tab strip over two panels in one band. The panel that is not showing is
+`hidden`, and it is still part of the form and still submits, because the command takes both
+collections at once and a correction opened on either tab has to save what the other holds. No
+control in a grid cell carries `required`, so hiding a panel cannot leave the browser refusing to
+submit a form whose invalid control it will not focus. Without script both panels are simply
+visible and both grids are enterable: the tab strip is an affordance over a page that already
+works. `sales.js` owns the strip, opening on the grid that has lines when only one of them does
+and otherwise on Expenses, and remembering the tab a person chose across the swap a preview makes.
+The phone block rules are scoped to `[data-collection-path=items]` the way the Expenses rules are
+scoped to `expenses`, so each grid gets its own reading order without touching the other.
 
 `adapters/workbench/bills.py` is the payables mirror of `sales.py` and does its two jobs:
 `editable_values` is the correction form's comparison baseline, so a header-only correction
@@ -706,17 +727,27 @@ unclassified under a classed bill is not silently reclassified by a correction. 
 feeds `templates/bill_detail.html`, which shows the captured vendor, the terms and the basis of
 the due date, the expense lines with their customer, billable flag and class, the item lines with
 their item, quantity, unit cost and amount when there are any, what is still open on the bill, the
-duplicate references the command reported, and the posting batches. `editable_values` returns only
-`expenses`, which is why a browser correction leaves the Items grid exactly as captured rather
-than dropping it.
+duplicate references the command reported, and the posting batches. `editable_values` baselines
+both grids, each separately: a leaf equal to its baseline is not submitted, so a correction that
+touches one grid replaces that grid and leaves the other exactly as captured, and a header-only
+correction reaches the writer with neither. The
+Items baseline states exactly one of `unit_cost` and `amount` -- the one the line was entered on,
+which is what a null `unit_cost` on the saved line already says -- because a baseline that did not
+match what the window renders would resubmit that grid on every correction and silently re-resolve
+it against today's records, recapturing a renamed item on a revision that never touched it.
+`tests/test_bill_form_browser.py` renames both the account and the item and then corrects each
+grid in turn, which is how that is held.
 
 Below 700px the grid becomes one block per line and the saved bill's line table becomes one card
 per line, both asserted at 390px in `tests/test_bill_form_browser.py` as the element's own
 `scrollWidth` against its own `clientWidth`. Bills are not printed: a bill is an internal
 document, so there is no print route beside the four customer-facing ones.
 
-Not built here: the Item tab, and a browser page for `bill history`, which is reachable only
-through the command surfaces. The bill detail page reads `settlement_current` back and, while
+Not built here: a unit-of-measure column on an item line -- `items` carry a
+`unit_of_measure_set_id` and `unit_conversions` exists, but a purchase line has no unit of its own
+to convert a cost through, so the column would need conversion semantics on the line before it
+could mean anything -- and a browser page for `bill history`, which is reachable only through
+the command surfaces. The bill detail page reads `settlement_current` back and, while
 anything is open on a posted bill, links to the Pay Bills window filtered to that vendor and to
 the payments already made against that bill.
 
