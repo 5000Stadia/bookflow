@@ -1,8 +1,8 @@
-"""co0029 adds the remittance header and widens two CHECK constraints, preserving everything else.
+"""co0030 adds the remittance header and widens two CHECK constraints, preserving everything else.
 
 The DDL in the migration is frozen text: it never imports the application's metadata, so the
 only thing that keeps the two in step is this test compiling the metadata and comparing. The
-rest of the file is the preservation question -- a company database already at co0028 carries
+rest of the file is the preservation question -- a company database already at co0029 carries
 rows, local tables, indexes, views and triggers, and this migration has to rebuild
 ``transactions`` and ``document_lines`` underneath them without touching a byte of what is
 stored.
@@ -20,8 +20,8 @@ from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, migrate_to_head
 from tests.payment_raw_evidence import table
 
-M = importlib.import_module('bookflow.storage.company_migrations.versions.0029_sales_tax_payments')
-PREVIOUS = 'co0028'
+M = importlib.import_module('bookflow.storage.company_migrations.versions.0030_sales_tax_payments')
+PREVIOUS = 'co0029'
 
 
 def _at(path, revision):
@@ -194,9 +194,9 @@ def test_a_rewritten_document_type_guard_stops_the_migration(tmp_path):
         try:
             migrate_to_head(db, 'company', tmp_path / 'backups')
         except Exception as exc:
-            assert 'co0029' in str(exc) or 'co0029' in str(getattr(exc, '__cause__', ''))
+            assert 'co0030' in str(exc) or 'co0030' in str(getattr(exc, '__cause__', ''))
         else:
-            raise AssertionError('a rewritten document type guard must stop co0029')
+            raise AssertionError('a rewritten document type guard must stop co0030')
 
 
 def test_a_competing_local_document_type_guard_stops_the_migration(tmp_path):
@@ -210,9 +210,9 @@ def test_a_competing_local_document_type_guard_stops_the_migration(tmp_path):
         try:
             migrate_to_head(db, 'company', tmp_path / 'backups')
         except Exception as exc:
-            assert 'co0029' in str(exc) or 'co0029' in str(getattr(exc, '__cause__', ''))
+            assert 'co0030' in str(exc) or 'co0030' in str(getattr(exc, '__cause__', ''))
         else:
-            raise AssertionError('an unknown competing document type guard must stop co0029')
+            raise AssertionError('an unknown competing document type guard must stop co0030')
 
 
 def test_a_reserved_remittance_name_already_in_use_stops_the_migration(tmp_path):
@@ -225,6 +225,6 @@ def test_a_reserved_remittance_name_already_in_use_stops_the_migration(tmp_path)
         try:
             migrate_to_head(db, 'company', tmp_path / 'backups')
         except Exception as exc:
-            assert 'co0029' in str(exc) or 'co0029' in str(getattr(exc, '__cause__', ''))
+            assert 'co0030' in str(exc) or 'co0030' in str(getattr(exc, '__cause__', ''))
         else:
-            raise AssertionError('a reserved remittance object name must stop co0029')
+            raise AssertionError('a reserved remittance object name must stop co0030')

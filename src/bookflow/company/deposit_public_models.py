@@ -394,3 +394,46 @@ class DepositQueryPage(Public):
     fingerprint: str
     next_cursor: str | None
     previous_cursor: str | None
+
+
+# ---------------------------------------------------------------------- history
+
+
+class HistoryEntry(Public):
+    """One thing that happened to this deposit, in the order the audit recorded it.
+
+    A revision created or replaced, a receipt claimed or released, a coordinated change to a
+    source, a void, an operation that changed nothing, or a draft consumed. The recovery key
+    an operation was submitted under never appears here: it is a caller's own idempotency
+    secret, not a fact about the books. Neither does the reader's own ordering key: ``kind``
+    and the identity that entry names already tell two rows apart.
+    """
+
+    kind: Literal['revision_created', 'replaced', 'membership_claimed', 'membership_released',
+                  'coordinated_source_change', 'void', 'no_effect_operation', 'draft_consumed']
+    audit_event_id: str
+    at: str
+    actor_id: str
+    interface: str
+    on_behalf_of: str | None
+    reason: str | None
+    revision_id: str | None
+    previous_revision_id: str | None
+    operation_id: str | None
+    source_ids: tuple[str, ...]
+    membership_id: str | None
+    batch_ids: tuple[str, ...]
+    bank_version_ids: tuple[str, ...]
+    draft_id: str | None
+
+
+class DepositHistoryPage(Public):
+    """`deposit history` output: one page of the deposit's own recorded events."""
+
+    schema_version: Literal[1] = 1
+    company_id: str
+    deposit_id: str
+    items: tuple[HistoryEntry, ...]
+    total_count: int
+    fingerprint: str
+    next_cursor: str | None

@@ -115,9 +115,16 @@ class BillPaymentVoidInput(_Input):
     expected_version: _Version | None = None
 
 
-class BillPaymentQueryInput(_Input):
+class BillPaymentPageInput(_Input):
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str | None = Field(default=None, max_length=8192)
+
+
+class BillPaymentHistoryInput(BillPaymentPageInput):
+    payment: _Selector
+
+
+class BillPaymentQueryInput(BillPaymentPageInput):
     date_from: _Date | None = None
     date_to: _Date | None = None
     vendor: _Selector | None = None
@@ -202,6 +209,34 @@ class BillPaymentLineOutput(CreatedOutput):
     description: str | None
 
 
+class BillPaymentRevisionSummaryOutput(CreatedOutput):
+    """One immutable revision as `bill payment history` pages it.
+
+    ``batches`` is every posting batch this revision ever minted, so the exact reversal a
+    void wrote at the revision's own date is read here beside the original it cancels.
+    ``applications`` is every settlement edge -- apply and unapply alike -- against the
+    capacity this revision created, which is where a payment re-pointed at another bill
+    shows its correction. A payment carries no update verb today, so the walk is one
+    revision long; the shape is the bill's so that a later correcting edit simply appends.
+    """
+
+    transaction_id: str
+    revision_number: int
+    supersedes_revision_id: str | None
+    date: str
+    number: str
+    name_type: Literal['vendor']
+    name_id: str
+    memo: str | None
+    total: MoneyOutput
+    total_minor_units: int
+    currency: str
+    audit_event_id: str
+    line_count: int
+    batches: list[JournalBatchOutput]
+    applications: list[BillApplicationOutput]
+
+
 class BillPaymentRevisionOutput(CreatedOutput):
     transaction_id: str
     revision_number: int
@@ -275,6 +310,19 @@ class BillPayOutput(WriteOutput):
 
 class BillPaymentPageOutput(_Input):
     items: list[BillPaymentSummaryOutput]
+    count: int
+    has_more: bool
+    next_cursor: str | None
+    audit_watermark: int
+
+
+class BillPaymentHistoryOutput(_Input):
+    id: str
+    version: int
+    current_revision_id: str
+    number: str
+    status: Literal['posted', 'voided']
+    items: list[BillPaymentRevisionSummaryOutput]
     count: int
     has_more: bool
     next_cursor: str | None

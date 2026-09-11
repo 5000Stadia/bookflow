@@ -17,13 +17,14 @@ from bookflow.core.errors import BookflowError
 
 # Only public deposit reads use this path. Existing writes and sources
 # keep their ordinary execution path.
-COMMANDS = frozenset({'deposit show', 'deposit items', 'deposit query'})
+COMMANDS = frozenset({'deposit show', 'deposit items', 'deposit history', 'deposit query'})
 
 
 def input_model(command):
     """The strict input each public deposit command owns."""
-    from bookflow.company.deposit_read_models import ItemsInput, ShowInput, QueryInput
-    return {'deposit show': ShowInput, 'deposit items': ItemsInput, 'deposit query': QueryInput}.get(command)
+    from bookflow.company.deposit_read_models import HistoryInput, ItemsInput, ShowInput, QueryInput
+    return {'deposit show': ShowInput, 'deposit items': ItemsInput,
+            'deposit history': HistoryInput, 'deposit query': QueryInput}.get(command)
 
 
 def resolve_company(reader, audience, selector, source):

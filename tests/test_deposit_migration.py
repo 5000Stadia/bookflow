@@ -32,6 +32,7 @@ def _later_rebuilds(revision):
         if getattr(module,'revision','')<=revision:continue
         rebuilt.update(getattr(module,'CHANGED',()))
         rewritten.update(getattr(module,'REPLACED',()))
+        rewritten.update(getattr(module,'TRIGGERS',{}))
     return rebuilt,rewritten
 
 

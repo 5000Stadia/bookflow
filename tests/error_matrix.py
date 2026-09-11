@@ -349,6 +349,12 @@ for _noun, _conversion in (('proposal', 'estimate'), ('estimate', 'work-order'),
             'E_QUERY_STALE': 'company audit changed between bounded pages',
         }
 
+# Withdrawing a quote posts nothing, so it refuses for the quote's own reasons only: a stale
+# expected version, a missing reason, and the dependency owners refusing to let work that a
+# work order or a bill already consumes be taken back.
+MATRIX['estimate void'] = dict(_WORK_WRITE_ERRORS,
+    E_WORK_DEPENDENCY='the estimate already has its work order, or a sale consumes its billing roots')
+
 for _noun in ('estimate', 'work-order'):
     for _verb in ('invoice', 'sales-receipt'):
         MATRIX[f'{_noun} {_verb}'] = {
@@ -716,9 +722,9 @@ _DEPOSIT_READ_ERRORS = {
     'E_RECORD_NOT_FOUND': 'absent deposit, or one whose connected graph the reader is not admitted to; the refusal is deliberately identical for both so it never distinguishes them',
     'E_DEPOSIT_SOURCE_INVALID': 'captured provenance the reader layer cannot decode (an allocation bucket that is neither a known name nor additional:<row>), a candidate whose authority or graph lookup refused during admission, or stored shape that no longer matches the pinned owners, tables and codecs',
 }
-for _name in ('deposit show', 'deposit items', 'deposit query'):
+for _name in ('deposit show', 'deposit items', 'deposit history', 'deposit query'):
     MATRIX.setdefault(_name, {}).update(_DEPOSIT_READ_ERRORS)
-for _name in ('deposit items', 'deposit query'):
+for _name in ('deposit items', 'deposit history', 'deposit query'):
     MATRIX[_name]['E_QUERY_STALE'] = 'the page fingerprint moved under the cursor; restart without one'
 
 # The bill is the payables mirror of the invoice, so it refuses for the invoice's reasons on
@@ -797,6 +803,7 @@ MATRIX["bill payment unapply"] = {
     "E_RECORD_NOT_FOUND": "unknown payment or bill",
     "E_VERSION_CONFLICT": "stale expected_version",
     "E_APPLICATION_INACTIVE": "a voided payment, or a named bill this payment has nothing applied to",
+    "E_PERIOD_CLOSED": "an application being taken back is effective on or before the closing date",
     "E_VALIDATION": "a repeated bill selector",
     "E_IDEMPOTENCY_MISMATCH": "same key, different input",
     "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
@@ -818,6 +825,10 @@ MATRIX["bill payment show"] = {"E_RECORD_NOT_FOUND": "unknown payment"}
 MATRIX["bill payment query"] = {
     "E_RECORD_NOT_FOUND": "unknown vendor, bill, funding account or method filter",
     "E_QUERY_STALE": "company audit changed between payment pages",
+}
+MATRIX["bill payment history"] = {
+    "E_RECORD_NOT_FOUND": "unknown payment",
+    "E_QUERY_STALE": "company audit changed between history pages",
 }
 
 

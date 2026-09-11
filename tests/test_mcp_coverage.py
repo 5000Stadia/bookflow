@@ -15,8 +15,8 @@ def resolves(witness):
 
 def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     rows = execution_map()
-    assert len(rows) == 367
-    assert sum(row["coverage"] == "four_surface_scenario" for row in rows) == 362
+    assert len(rows) == 370
+    assert sum(row["coverage"] == "four_surface_scenario" for row in rows) == 365
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     assert all(row['execution_witness'] and not row['coverage'].startswith('pending') for row in rows)
     assert all(row['local_valid_witnesses'] for row in rows if row['coverage'] == 'local_lifecycle_scenario')
@@ -60,7 +60,7 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
           for cmd in registry.routed_commands()]
     mapped=workbench_variant_map(rows)
     assert len(mapped)==len(variant_policies())==22
-    assert sum(len(group["paths"]) for group in mapped)==2259
+    assert sum(len(group["paths"]) for group in mapped)==2262
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

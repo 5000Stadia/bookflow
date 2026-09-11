@@ -381,6 +381,14 @@ class EstimateWorkOrderInput(ConversionInput):
         return self
 
 
+class EstimateVoidInput(StrictModel):
+    """Void an estimate. Non-posting, so nothing is reversed; the reason is the record."""
+
+    estimate: Selector
+    expected_version: _Version
+    expected_facts_fingerprint: Fingerprint | None = None
+
+
 class WorkOrderCompleteInput(StrictModel):
     work_order: Selector
     expected_version: _Version

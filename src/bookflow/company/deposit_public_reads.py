@@ -37,6 +37,9 @@ from bookflow.core.errors import BookflowError
 # Rotation belongs to its own allocation; nothing here should be read as closing
 # it.
 PURPOSE = 'public.items'
+# The revision/settlement walk pages in its own domain, so an items token can never be
+# replayed against it and a history token can never be replayed against a composition page.
+HISTORY_PURPOSE = 'public.history'
 
 # Unknown-history entry prefixes that name an optional master reference.
 UNKNOWN_REFERENCE_TABLES = {kind: table for table, (kind, _) in pa.REFERENCE_CAPABILITIES.items()}
@@ -507,6 +510,40 @@ def items(s, inp, *, audience, at=None):
         fingerprint=fingerprint, next_cursor=following, current=_current_state(q.current(data)),
         current_observed_at=at or q.now(),
         current_references=_current_references(data.references, _named_by_rows(chunk), audience))
+
+
+def _history_entry(entry):
+    """One recorded event, field by field; the operation recovery key never travels."""
+    return w.HistoryEntry(
+        kind=entry.kind, audit_event_id=entry.event_id, at=entry.at,
+        actor_id=entry.actor_id, interface=entry.interface, on_behalf_of=entry.on_behalf_of,
+        reason=entry.reason, revision_id=entry.revision_id,
+        previous_revision_id=entry.previous_revision_id, operation_id=entry.operation_id,
+        source_ids=tuple(entry.source_ids), membership_id=entry.membership_id,
+        batch_ids=tuple(entry.batch_ids), bank_version_ids=tuple(entry.bank_version_ids),
+        draft_id=entry.draft_id)
+
+
+def history(s, inp, *, audience, at=None):
+    """Page this deposit's own recorded events in the order the audit committed them.
+
+    The walk itself is the private reader's: ``load_complete`` validates the whole aggregate
+    and builds the ordered entries, and nothing is re-derived here. ``at`` is accepted and
+    unused, because a history page quotes no observation instant -- every row it carries is
+    already dated by the audit event that wrote it.
+    """
+    inp = q.checked(inp, m.HistoryInput)
+    binding, evidence = _admit(s, audience, inp.deposit)
+    # No page emits an annotation link, so no association is ever acquired here.
+    data = facts.load_complete(s, [inp.deposit], binding=binding, annotations=())[0]
+    rows = tuple(_history_entry(entry) for entry in data.history)
+    content = [data.header['id'], [row.model_dump(mode='json') for row in rows]]
+    chunk, fingerprint, following, _ = pages.page(s, binding, HISTORY_PURPOSE, rows, content,
+                                                  inp.page.limit, inp.page.cursor)
+    audience.validate()
+    return w.DepositHistoryPage(company_id=s.company_row['id'], deposit_id=data.header['id'],
+                                items=chunk, total_count=len(rows), fingerprint=fingerprint,
+                                next_cursor=following)
 
 
 def _query_admitted(s, identity, audience, binding):

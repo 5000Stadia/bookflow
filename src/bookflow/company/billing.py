@@ -31,6 +31,10 @@ def hashes(inp, kind, destination):
 def source_selection(s, inp, kind):
     header = work.resolve(s, getattr(inp, kind), kind)
     work._version(s, header, inp.expected_version)
+    if header['status'] == 'voided':
+        # Before the availability refusal: "inactive" is a state work comes back from, and a
+        # void is not, so the two must not answer with the same code.
+        dependency('a voided ' + kind.replace('_', ' ') + ' cannot be billed', source_id=header['id'])
     if not header['active']:
         raise BookflowError('E_INACTIVE_REFERENCE', details={'record_type': kind, 'record_id': header['id']})
     owner = query.current_owner(s, header)
