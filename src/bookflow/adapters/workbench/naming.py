@@ -32,6 +32,17 @@ REPORTS = {
     'general-ledger': 'General ledger',
     'profit-and-loss': 'Profit and loss',
     'balance-sheet': 'Balance sheet',
+    'inventory-valuation': 'Inventory valuation summary',
+    'stock-status': 'Inventory stock status by item',
+}
+
+# Pages whose title is neither the noun's own name nor a phrase the verb map knows. The
+# inventory nouns are the case the general rule cannot reach: "inventory" is already plural
+# in a bookkeeper's mouth, and "void this inventory" is not what the page does.
+PAGES = {
+    'inventory adjust': 'Adjust inventory',
+    'inventory void': 'Void an inventory adjustment',
+    'inventory show': 'Inventory adjustment',
 }
 
 # The verbs a page is opened by, phrased as the work rather than as the instruction.
@@ -88,6 +99,8 @@ def heading(noun, verb, meta=None):
     """
     if noun == 'report':
         return REPORTS.get(verb) or words(verb)
+    if (noun + ' ' + verb) in PAGES:
+        return PAGES[noun + ' ' + verb]
     one, many = subject(noun, meta), subject(noun, meta, plural=True)
     if not verb:
         return one

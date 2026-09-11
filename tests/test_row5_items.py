@@ -147,7 +147,13 @@ def test_every_item_type_has_a_complete_strict_exact_profile(client):
     assert assembly["bill_of_material_cost"]["minor_units"] == 1520
     tax_group = next(item for item in made if item["type"] == "sales_tax_group")
     assert tax_group["combined_percent"] == "8.25"
-    assert all(item["inventory_values_available"] is False for item in [service, inventory, tax_item, *made])
+    # The flag now says the one thing it could not say before this ledger existed: whether
+    # the item has stock behind it. A stock-carrying type reports real figures -- zero here,
+    # because nothing has been adjusted in yet -- and every other type reports none at all.
+    stocked = {"inventory_part", "inventory_assembly"}
+    for row in [service, inventory, tax_item, *made]:
+        assert row["inventory_values_available"] is (row["type"] in stocked), row["type"]
+        assert row["quantity_on_hand"] == "0" and row["inventory_value"]["minor_units"] == 0
 
     foreign = _assert_error(client, "item create", {
         "name": "Bad subtotal", "type": "subtotal", "description": "Bad", "price": "1.00",

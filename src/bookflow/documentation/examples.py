@@ -179,6 +179,22 @@ EXAMPLES.update({
     "report open-invoices": Example('bookflow report open-invoices --as-of 2026-12-31 --past-due-only --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31", "past_due_only": True}),
     "report ap-aging": Example('bookflow report ap-aging --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31"}),
     "report unpaid-bills": Example('bookflow report unpaid-bills --as-of 2026-12-31 --past-due-only --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31", "past_due_only": True}),
+    "report inventory-valuation": Example('bookflow report inventory-valuation --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31"}),
+    "report stock-status": Example('bookflow report stock-status --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31"}),
+})
+
+
+EXAMPLES.update({
+    "inventory adjust": Example(
+        'bookflow inventory adjust --item "Brass Shutoff Valve" --date 2026-01-05 --adjustment-account "Opening Balance Equity" --quantity-change 24 --value-change 273.60 --memo "Opening stock counted" --company "Demo Plumbing Co" --reason "Set opening stock" --json',
+        {"item": "Brass Shutoff Valve", "date": "2026-01-05",
+         "adjustment_account": "Opening Balance Equity", "quantity_change": "24",
+         "value_change": "273.60", "memo": "Opening stock counted"}),
+    "inventory void": Example(
+        f'bookflow inventory void {ID} --expected-version 1 --company "Demo Plumbing Co" --reason "Counted the wrong bin" --json',
+        {"adjustment": ID, "expected_version": 1}),
+    "inventory show": Example(
+        f'bookflow inventory show {ID} --company "Demo Plumbing Co" --json', {"adjustment": ID}),
 })
 
 

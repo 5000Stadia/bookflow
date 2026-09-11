@@ -1,0 +1,34 @@
+<section id="stock-report" aria-label="Stock report">
+<p>{{ stock.metadata.basis|capitalize }} · {{ stock.metadata.currency }} · As of {{ stock.as_of }}</p>
+{% if stock.verb == 'inventory-valuation' %}
+<p class="muted">What each inventory item holds on the as-of date and what it is worth. Quantity and value are the running totals of that item's own stock movements up to that date, dated cost corrections included, so a backdated purchase shows in the value of the day it belongs to. The asset value total below is the Inventory Asset figure on the balance sheet for the same date.</p>
+{% else %}
+<p class="muted">What to reorder. An item is flagged once it has fallen to or below its reorder point. Available equals on hand and on order is zero until sales orders, purchase orders and assembly builds exist to commit or expect stock.</p>
+{% endif %}
+<div class="table-wrap"><table id="stock-totals"><caption>Whole-report totals — all pages</caption><thead><tr><th scope="col">Asset value</th>{% if stock.verb == 'stock-status' %}<th scope="col">Items to reorder</th>{% endif %}</tr></thead><tbody>
+<tr><td data-total="asset_value">{{ stock.totals.asset_value.amount }}</td>{% if stock.verb == 'stock-status' %}<td data-total="below_reorder_point">{{ stock.totals.below_reorder_point }}</td>{% endif %}</tr>
+</tbody></table></div>
+<p>{{ stock.count }} items on this page{% if stock.next_cursor %}; more available{% endif %}. Select an item to open it.</p>
+<div class="table-wrap"><table id="stock-rows"><thead><tr>
+<th scope="col">{{ stock.headings.item_name }}</th>
+<th scope="col">{{ stock.headings.description }}</th>
+{% if stock.verb == 'stock-status' %}<th scope="col">{{ stock.headings.reorder_point_min }}</th>{% endif %}
+<th scope="col">{{ stock.headings.quantity_on_hand }}</th>
+{% if stock.verb == 'stock-status' %}<th scope="col">{{ stock.headings.quantity_available }}</th><th scope="col">{{ stock.headings.quantity_on_order }}</th><th scope="col">{{ stock.headings.below_reorder_point }}</th>{% endif %}
+<th scope="col">{{ stock.headings.average_cost }}</th>
+<th scope="col">{{ stock.headings.asset_value }}</th>
+</tr></thead><tbody>
+{% for row in stock.rows %}<tr data-item="{{ row.item_id }}">
+<th scope="row"><a href="{{ row.detail_url }}">{{ row.item_name }}</a>{% if not row.active %} (inactive){% endif %}</th>
+<td>{{ row.description or '' }}</td>
+{% if stock.verb == 'stock-status' %}<td>{{ row.reorder_point_min or '' }}</td>{% endif %}
+<td data-value="quantity_on_hand">{{ row.quantity_on_hand }}</td>
+{% if stock.verb == 'stock-status' %}<td>{{ row.quantity_available }}</td><td>{{ row.quantity_on_order }}</td><td data-value="below_reorder_point">{{ 'Order' if row.below_reorder_point else '' }}</td>{% endif %}
+<td data-value="average_cost">{{ row.average_cost.amount }}</td>
+<td data-value="asset_value">{{ row.asset_value.amount }}</td>
+</tr>{% else %}<tr><td colspan="9">No inventory item holds stock on this date.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if stock.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="stock-next-page">{% for name, value in stock.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}<button name="action" value="submit">Next page</button></form>{% endif %}
+<p class="muted">Generated {{ stock.metadata.generation_time }} · Audit watermark {{ stock.metadata.audit_watermark }}. Any audited company change requires restarting the report. Change the filters below to start a new report.</p>
+<details><summary>Structured report data</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
+</section>

@@ -272,6 +272,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.transfer_cmds": ["transfer"],
     "bookflow.commands.sales_tax_cmds": ["sales-tax", "sales-tax payment"],
     "bookflow.commands.report_cmds": ["report"],
+    "bookflow.commands.inventory_cmds": ["inventory"],
     "bookflow.commands.rate_cmds": ["rate"],
     "bookflow.commands.activity_cmds": ["activity"],
     "bookflow.commands.compact_cmds": ["company"],
@@ -371,6 +372,7 @@ NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
     "sales-tax": {"record_type": None, "identifier": None, "ui_group": "Accounting"},
     "sales-tax payment": {"record_type": "transaction", "identifier": "payment", "output_identifier": "id", "ui_group": "Accounting", "display_field": "number", "singular_label": "Sales tax payment", "plural_label": "Sales tax payments"},
     "rate": {"record_type": "exchange_rate", "identifier": "rate_id", "output_identifier": "id", "ui_group": "Accounting"},
+    "inventory": {"record_type": "transaction", "identifier": "adjustment", "output_identifier": "id", "ui_group": "Items", "display_field": "number", "singular_label": "Inventory adjustment", "plural_label": "Inventory adjustments"},
     "audit": {"record_type": "audit_event", "identifier": "event"},
     "hub audit": {"record_type": "audit_event", "identifier": "event"},
 }

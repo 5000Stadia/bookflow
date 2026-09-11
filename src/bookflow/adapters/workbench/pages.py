@@ -22,6 +22,7 @@ from bookflow.adapters.workbench import workflows as W
 from bookflow.adapters.workbench import statements as S
 from bookflow.adapters.workbench import receivables as Receivable
 from bookflow.adapters.workbench import payables as Payable
+from bookflow.adapters.workbench import inventory as Stock
 from bookflow.adapters.workbench import customer_statement as Statement
 from bookflow.adapters.workbench import sales as Sales
 from bookflow.adapters.workbench import work as Work
@@ -52,7 +53,7 @@ env.filters["label"] = Naming.column_label
 # a filter starts a fresh report instead of submitting the previous page's
 # continuation against different inputs. A report joins this set by being listed
 # in its own presentation module; nothing names the commands a second time.
-CURSOR_FREE_REPORTS = S.COMMANDS | Statement.COMMANDS | Receivable.COMMANDS | Payable.COMMANDS
+CURSOR_FREE_REPORTS = S.COMMANDS | Statement.COMMANDS | Receivable.COMMANDS | Payable.COMMANDS | Stock.COMMANDS
 
 
 class _FlashStore:
@@ -1677,6 +1678,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       statement=S.view(result, report_input, company_id, cmd.name) if result and report_input is not None and cmd.name in S.COMMANDS else None,
                       receivables=Receivable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Receivable.COMMANDS else None,
                       payables=Payable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Payable.COMMANDS else None,
+                      stock=Stock.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Stock.COMMANDS else None,
                       customer_statement=Statement.view(result, report_input, company_id) if result and report_input is not None and cmd.name in Statement.COMMANDS else None,
                       source_report_watermark=source_report_watermark,
                       preview=preview, get=F.get_path, form_value=F.form_value,

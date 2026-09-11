@@ -21,6 +21,13 @@ DIMENSIONS = ('account_id', 'account_snapshot', 'currency', 'name_type', 'name_i
               'party_name', 'class_id', 'class_name', 'description', *FACTS)
 TABLES = ('transaction_revisions', 'document_line_identities', 'document_lines',
           'posting_batches', 'posting_lines', 'posting_line_sources')
+
+# A control account whose balance is the running sum of another ledger, and the document
+# module that owns it. A posting to one of these that nothing attributed is a balance the
+# owning ledger cannot explain -- the inventory asset on the balance sheet would stop being
+# the total of the stock reports -- so the journal editor is refused here and only the owner
+# may write it. `owner` is threaded from `prepare` for exactly this.
+OWNED_SYSTEM_ROLES = {'inventory_asset': 'inventory'}
 TYPES = ('transaction_revision', 'document_line_identity', 'document_line',
          'posting_batch', 'posting_line', 'posting_line_source')
 
@@ -157,10 +164,15 @@ def active(row, kind):
     return row
 
 
-def line_values(s, inp, currency, old=None, refresh=False, *, date=None, rate=None, refresh_rates=False, rate_cache=None):
+def line_values(s, inp, currency, old=None, refresh=False, *, date=None, rate=None, refresh_rates=False, rate_cache=None, owner=None):
     account = active(accounts.resolve_account(s.company, inp.account), 'account')
     if account['type'] == 'non_posting':
         raise invalid('account', 'must be a posting account')
+    role = account.get('system_role')
+    if role in OWNED_SYSTEM_ROLES and owner != OWNED_SYSTEM_ROLES[role]:
+        raise invalid('account', f'"{account["name"]}" is written by the {OWNED_SYSTEM_ROLES[role]} '
+                                 'ledger that owns it, which records what each item holds; an '
+                                 'entry posted straight to it would be an amount no item owns')
     if account.get('currency') not in (None, currency):
         raise invalid('account', 'account currency must match the home currency for a domestic journal')
     money = foreign.line_money(s, inp.amount, currency, date, old, rate, refresh_rates, rate_cache)
@@ -199,8 +211,24 @@ def allocate(s, explicit, own=None):
     return allocate_document(s, 'journal_entry', explicit, own)
 
 
-def prepare(s, ctx, inp, operation):
+def prepare(s, ctx, inp, operation, *, owner=None):
+    """``owner`` is the document module posting through this writer; the journal editor is None.
+
+    It decides two things and nothing else: which control accounts these lines may name, and
+    whether this transaction may be edited here at all. A document whose accounting and whose
+    derived ledger are one fact cannot have half of it rewritten in the journal editor.
+    """
     old_h = resolve(s, inp.journal) if operation != 'post' else None
+    if old_h is not None and owner is None:
+        from bookflow.company.inventory import owning_document_kind
+        held = owning_document_kind(s, old_h['id'])
+        if held is not None:
+            raise BookflowError('E_VALIDATION', message=(
+                f'This entry is an inventory {held.replace("recost", "cost correction")} and its '
+                'stock movements are part of it. Use `inventory void` so the quantities and the '
+                'accounting move together.'), details={'fields': [
+                    {'field': 'journal', 'problem': 'an inventory document is not edited as a journal entry'}],
+                    'inventory_document': held, 'transaction_id': old_h['id']})
     old_r = revision(s, old_h) if old_h else None
     meta = version_meta(s, old_h, inp.expected_version) if old_h else None
     warnings = [w] if meta and (w := list_service.blind_write_warning(meta)) else []
@@ -244,7 +272,8 @@ def prepare(s, ctx, inp, operation):
             seen.add(key) if key else None
             old = prior.get(key)
             values.append((key, line_values(s, line, currency, old, getattr(inp, 'refresh_defaults', False),
-                date=date, rate=inp.rate, refresh_rates=getattr(inp, 'refresh_rates', False), rate_cache=rate_cache)))
+                date=date, rate=inp.rate, refresh_rates=getattr(inp, 'refresh_rates', False), rate_cache=rate_cache,
+                owner=owner)))
         debit = checked_sum((v['amount_minor_units'] for _, v in values if v['side'] == 'debit'), 'debits')
         credit = checked_sum((v['amount_minor_units'] for _, v in values if v['side'] == 'credit'), 'credits')
         if debit != credit:
