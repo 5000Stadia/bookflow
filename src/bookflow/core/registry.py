@@ -269,6 +269,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.bill_cmds": ["bill"],
     "bookflow.commands.bill_payment_cmds": ["bill", "bill payment"],
     "bookflow.commands.vendor_credit_cmds": ["vendor-credit"],
+    "bookflow.commands.memorized_cmds": ["memorized", "memorized-group"],
     "bookflow.commands.transfer_cmds": ["transfer"],
     "bookflow.commands.sales_tax_cmds": ["sales-tax", "sales-tax payment"],
     "bookflow.commands.report_cmds": ["report"],
@@ -371,6 +372,8 @@ NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
     "sales-tax": {"record_type": None, "identifier": None, "ui_group": "Accounting"},
     "sales-tax payment": {"record_type": "transaction", "identifier": "payment", "output_identifier": "id", "ui_group": "Accounting", "display_field": "number", "singular_label": "Sales tax payment", "plural_label": "Sales tax payments"},
     "rate": {"record_type": "exchange_rate", "identifier": "rate_id", "output_identifier": "id", "ui_group": "Accounting"},
+    "memorized": {"record_type": "memorized_transaction", "identifier": "memorized", "output_identifier": "id", "ui_group": "Accounting", "display_field": "name", "singular_label": "Memorized transaction", "plural_label": "Memorized transactions"},
+    "memorized-group": {"record_type": "memorized_group", "identifier": "memorized_group", "output_identifier": "id", "ui_group": "Accounting", "display_field": "name", "singular_label": "Memorized transaction group", "plural_label": "Memorized transaction groups"},
     "audit": {"record_type": "audit_event", "identifier": "event"},
     "hub audit": {"record_type": "audit_event", "identifier": "event"},
 }

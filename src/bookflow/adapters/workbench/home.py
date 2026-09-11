@@ -298,6 +298,18 @@ PANELS: tuple[Panel, ...] = (
                 action=Action("Open the custom field definitions", READ, ("custom-field list",), "/custom-field"),
             ),
             Step(
+                id="memorized",
+                title="Memorized transactions",
+                summary="The entries you make again and again, what each one owes, and what is waiting.",
+                action=Action("Open the memorized transaction list", READ, ("memorized list",), "/memorized"),
+            ),
+            Step(
+                id="memorized-due",
+                title="Enter what is due",
+                summary="Enter every memorized transaction whose date has arrived, each at its own date.",
+                action=Action("Enter what is due", WRITE, ("memorized process",), "/memorized/process"),
+            ),
+            Step(
                 id="audit",
                 title="Audit trail",
                 summary="Who changed what, through which interface, and why.",

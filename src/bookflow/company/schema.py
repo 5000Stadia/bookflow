@@ -1113,3 +1113,6 @@ globals().update(_define_refund_tables(metadata, _column, _table))
 
 from bookflow.company.vendor_credit_schema import define_tables as _define_vendor_credit_tables
 globals().update(_define_vendor_credit_tables(metadata, _column, _table))
+
+from bookflow.company.memorized_schema import define_tables as _define_memorized_tables
+globals().update(_define_memorized_tables(metadata, _column, _table, _common))
