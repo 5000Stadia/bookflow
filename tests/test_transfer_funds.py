@@ -318,7 +318,11 @@ def test_a_transfer_posts_the_same_lines_the_register_entry_would(books):
 
 
 def test_a_posted_transfer_can_be_corrected_the_way_its_own_help_says(books):
-    """`transfer post` tells the reader to correct with `register update`; that has to be true."""
+    """A transfer is still an ordinary register row, and correcting it there has to keep working.
+
+    ``transfer update`` is the door a person opening the transfer uses;
+    ``tests/test_money_out_lifecycle.py`` holds that one to the document's own words.
+    """
     posted = books['run']('transfer post', _move(books), reason='Sweep to savings')
     selected = posted['revision']['lines'][0]['line_id']
     corrected = books['run']('register update', dict(
@@ -362,7 +366,8 @@ def test_the_footer_says_what_each_end_did_in_the_words_that_end_uses(books):
 
 # ---------------------------------------------------------------- every surface, same result
 
-COMMANDS = frozenset(('transfer post',))
+COMMANDS = frozenset(('transfer post', 'transfer show', 'transfer query',
+                      'transfer update', 'transfer void', 'transfer history'))
 
 
 @pytest.mark.timeout(300)
@@ -401,6 +406,19 @@ def test_the_same_transfer_through_python_cli_http_and_mcp(root, tmp_path):
                 assert 'Parity income' in refused['message']
                 same = {**move, 'to_account': checking}
                 assert (await call('transfer post', same, rejected=True))['code'] == 'E_VALIDATION'
+                read = await call('transfer show', {'transfer': posted['id']})
+                assert read['document']['to_account']['name'] == 'Parity savings'
+                listed = await call('transfer query', {'account': savings, 'limit': 5})
+                assert listed['count'] == 1 and listed['next_cursor'] is None
+                corrected = await call('transfer update', {
+                    'transfer': posted['id'], 'expected_version': posted['version'],
+                    'memo': 'Parity correction'})
+                assert corrected['version'] == 2
+                voided = await call('transfer void', {'transfer': posted['id'],
+                                                      'expected_version': corrected['version']})
+                assert voided['status'] == 'voided'
+                walk = await call('transfer history', {'transfer': posted['id'], 'limit': 5})
+                assert walk['count'] == 2 and walk['status'] == 'voided'
                 assert set(calls) == COMMANDS
                 for name, data in list(calls.items()):
                     assert (await call(name, data, company=GHOST,

@@ -463,8 +463,17 @@ def apply(plan, ctx, s):
     return persist_prepared(fresh, ctx, s, command_name='journal ' + plan.data['operation'])
 
 
-def persist_prepared(fresh, ctx, s, *, command_name):
-    """Persist a writer-validated aggregate under its outer command's single audit event."""
+def persist_prepared(fresh, ctx, s, *, command_name, extra=(), noun='journal'):
+    """Persist a writer-validated aggregate under its outer command's single audit event.
+
+    ``extra`` is how a document that posts *as* a journal records the one thing the journal
+    cannot say -- which document it was -- inside the same event and the same transaction as
+    the accounting. Each entry is ``(table, record_kind, key_column, rows)``; the rows are
+    audited beside the ledger rows and written after the header they hang off.
+
+    ``noun`` is what the audit summary calls what was written. A person reading the audit page
+    is looking for the cheque they voided, not for the journal it posts as.
+    """
     if not fresh.data['changed']:
         return Applied(fresh.preview, [], 'no change')
     d = fresh.data
@@ -476,9 +485,11 @@ def persist_prepared(fresh, ctx, s, *, command_name):
                        h['version'], h, old, db='company')]
     for table, kind in zip(TABLES, TYPES):
         touched.extend(Touched(kind, row['id'], 'create', None, 1, decoded(row), db='company') for row in pending[table])
+    for _, kind, key, rows_ in extra:
+        touched.extend(Touched(kind, row[key], 'create', None, 1, decoded(row), db='company') for row in rows_)
     if custom_plan is not None:
         touched.extend(custom.touches(custom_plan))
-    summary_text = f"{d['operation']} journal {h['number']}"
+    summary_text = f"{d['operation']} {noun} {h['number']}"
     audit.write_event_to(s.company, ctx, command_name, summary_text, touched,
         actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=getattr(s, 'directive_code', None), event_id=d['event'])
     if old:
@@ -488,6 +499,9 @@ def persist_prepared(fresh, ctx, s, *, command_name):
     for table in TABLES:
         if pending[table]:
             s.company.conn.execute(getattr(c, table).insert(), pending[table])
+    for table, _, _, rows_ in extra:
+        if rows_:
+            s.company.conn.execute(getattr(c, table).insert(), rows_)
     if custom_plan is not None:
         custom.apply(s.company, custom_plan)
     if d['sequence']:

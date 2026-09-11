@@ -1098,3 +1098,6 @@ globals().update(_define_purchase_tables(metadata, _column, _table))
 
 from bookflow.company.ap_settlement_schema import define_tables as _define_ap_settlement_tables
 globals().update(_define_ap_settlement_tables(metadata, _column, _table))
+
+from bookflow.company.money_out_schema import define_tables as _define_money_out_tables
+globals().update(_define_money_out_tables(metadata, _column, _table))

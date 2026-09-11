@@ -236,8 +236,14 @@ def test_a_class_typed_on_a_line_is_that_line_s_class(books):
     assert raised.value.code == 'E_VALIDATION'
 
 
-def test_a_posted_check_can_be_corrected_the_way_its_own_help_says(books):
-    """`check post` tells the reader to correct with `register update`; that has to be true."""
+def test_a_posted_check_can_still_be_corrected_from_the_register_it_posts_through(books):
+    """The document and the register are two doors into one entry, not two entries.
+
+    ``check update`` is the door a bookkeeper opening the check uses, and
+    ``tests/test_money_out_lifecycle.py`` holds it to the document's own vocabulary. This is
+    the other door: scrolling the bank register, the same entry is still an ordinary register
+    row and correcting it there has to keep working.
+    """
     posted = books['run']('check post', _check(books), reason='Pay Northside Supply')
     selected = posted['revision']['lines'][0]['line_id']
     corrected = books['run']('register update', dict(
@@ -288,7 +294,8 @@ def test_the_expenses_collection_leaves_room_for_a_second_line_kind(books):
 
 # ---------------------------------------------------------------- every surface, same result
 
-COMMANDS = frozenset(('check post', 'card-charge post'))
+COMMANDS = frozenset(f'{noun} {verb}' for noun in ('check', 'card-charge')
+                     for verb in ('post', 'show', 'query', 'update', 'void', 'history'))
 
 
 @pytest.mark.timeout(300)
@@ -324,12 +331,38 @@ def test_the_same_check_and_card_charge_through_python_cli_http_and_mcp(root, tm
                 assert replay['id'] == posted['id'] and replay['idempotent_replay']
                 charge = dict(account=card, date='2026-03-05', amount=CHARGE,
                               expenses=[{'account': expense, 'amount': CHARGE}])
-                await call('card-charge post', charge)
+                charged = await call('card-charge post', charge)
                 short = {**check, 'number': 'PARITY-2',
                          'expenses': [{'account': expense, 'amount': FIRST}]}
                 refused = await call('check post', short, rejected=True)
                 assert refused['code'] == 'E_UNBALANCED_ENTRY'
                 assert refused['details']['difference']['amount'] == SECOND
+                read = await call('check show', {'check': posted['id']})
+                assert read['document']['amount']['amount'] == CHECK
+                listed = await call('check query', {'account': bank, 'limit': 5})
+                assert listed['count'] == 1 and listed['next_cursor'] is None
+                corrected = await call('check update', {
+                    'check': posted['id'], 'expected_version': posted['version'],
+                    'memo': 'Parity correction'})
+                assert corrected['version'] == 2 and corrected['revision']['memo'] == 'Parity correction'
+                voided = await call('check void', {'check': posted['id'],
+                                                   'expected_version': corrected['version']})
+                assert voided['status'] == 'voided'
+                walk = await call('check history', {'check': posted['id'], 'limit': 5})
+                assert walk['count'] == 2 and walk['status'] == 'voided'
+                # The card charge carries the identical six verbs, on the card's own account.
+                assert (await call('card-charge show',
+                                   {'card_charge': charged['id']}))['document']['funding'] == 'credit_card'
+                assert (await call('card-charge query',
+                                   {'account': card, 'limit': 5}))['count'] == 1
+                fixed = await call('card-charge update', {
+                    'card_charge': charged['id'], 'expected_version': charged['version'],
+                    'memo': 'Parity correction'})
+                assert fixed['version'] == 2
+                assert (await call('card-charge void', {'card_charge': charged['id'],
+                                                        'expected_version': fixed['version']}))['status'] == 'voided'
+                assert (await call('card-charge history',
+                                   {'card_charge': charged['id'], 'limit': 5}))['count'] == 2
                 assert set(calls) == COMMANDS
                 for name, data in list(calls.items()):
                     assert (await call(name, data, company=GHOST,

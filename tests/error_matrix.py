@@ -225,6 +225,37 @@ MATRIX['transfer post']['E_VALIDATION'] = (
     'an end of the transfer is not a balance-sheet account the company owns, the same account '
     'is named at both ends, or an account is kept in another currency')
 
+# The rest of each money-out document's lifecycle. A correction raises everything entering one
+# raises plus a stale version; a void reads no accounts, allocates no number and cannot be out
+# of balance, so it raises far less; the reads can only fail to find the document, refuse to
+# describe an entry that is no longer one, or be walked with an expired cursor.
+_MONEY_OUT_READ_ERRORS = {
+    'E_RECORD_NOT_FOUND': 'no document of this kind carries that id or number',
+    'E_VALIDATION': 'the stored entry no longer has this document shape, or the cursor belongs '
+                    'to another query contract',
+    'E_QUERY_STALE': 'the company audit log moved while the page was being walked',
+}
+for _noun, _face in (('check', 'check'), ('card-charge', 'card-charge'), ('transfer', 'transfer')):
+    MATRIX[_noun + ' update'] = dict(MATRIX[_noun + ' post'])
+    MATRIX[_noun + ' update']['E_VERSION_CONFLICT'] = (
+        'expected_version is stale: the document changed since it was read')
+    MATRIX[_noun + ' update']['E_RECORD_NOT_FOUND'] = (
+        'no document of this kind carries that id or number, or a named reference is absent')
+    MATRIX[_noun + ' void'] = {
+        'E_RECORD_NOT_FOUND': MATRIX[_noun + ' update']['E_RECORD_NOT_FOUND'],
+        'E_VERSION_CONFLICT': MATRIX[_noun + ' update']['E_VERSION_CONFLICT'],
+        'E_VALIDATION': 'the stored entry no longer has this document shape',
+        'E_REASON_REQUIRED': 'a void carries no reason, or an agent write carries no directive',
+        'E_PERIOD_CLOSED': "the document's own accounting date is closed",
+        'E_IDEMPOTENCY_MISMATCH': 'retry key reused with different original input',
+        'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
+        'E_DIRECTIVE_INACTIVE': 'context directive inactive',
+    }
+    MATRIX[_noun + ' show'] = {code: text for code, text in _MONEY_OUT_READ_ERRORS.items()
+                               if code != 'E_QUERY_STALE'}
+    MATRIX[_noun + ' query'] = dict(_MONEY_OUT_READ_ERRORS)
+    MATRIX[_noun + ' history'] = dict(_MONEY_OUT_READ_ERRORS)
+
 for _verb in ('show', 'list', 'query', 'activate', 'deactivate'):
     MATRIX['customer ' + _verb]['E_VALUE_RANGE'] = 'exact own or family receivable balance exceeds signed 64-bit range'
 
