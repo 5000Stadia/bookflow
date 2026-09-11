@@ -1,5 +1,5 @@
 {% extends "base.html" %}{% block title %}{{ document.heading if document else heading }}{% endblock %}{% block body %}
-{% set base = ("/c/" ~ company_id ~ "/" ~ noun) if company_id else ("/hub/" ~ noun.replace(" ", "-")) %}
+{% set base = noun_base(company_id or None, noun) %}
 {% set action = ((base ~ "/" ~ record_id) if record_id else base) ~ (("/" ~ verb) if verb else "") %}
 {% set invoice_correction_reason = noun == 'invoice' and verb == 'update' and attempted.get('f:operation_key') %}
 {% if billing and request.url.query %}{% set action = action ~ "?" ~ request.url.query %}{% endif %}

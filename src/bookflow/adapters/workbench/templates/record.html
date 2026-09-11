@@ -1,5 +1,5 @@
 {% extends "base.html" %}{% block title %}{{ noun }} {{ record_id }}{% endblock %}{% block body %}
-{% set base = ("/c/" ~ company_id ~ "/" ~ noun) if company_id else ("/hub/" ~ noun.replace(" ", "-")) %}
+{% set base = noun_base(company_id or None, noun) %}
 <nav class="crumbs"><a href="{{ base }}">{{ meta.plural_label or noun }}</a> / {{ record_title }}</nav>
 {% if document_nav %}{% include "document_nav.html" %}{% endif %}
 {% if editing %}<div class="warn">Editing now: {% for e in editing %}{{ e.name or e.user_id }} ({{ e.interface }}, since {{ e.since }}){% if not loop.last %}, {% endif %}{% endfor %}</div>{% endif %}

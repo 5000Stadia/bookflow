@@ -7,6 +7,7 @@ hand-off is exercised by the CLI in a subprocess and by one hand-built envelope.
 
 import json
 from pathlib import Path
+import re
 import sqlite3
 import threading
 import time
@@ -19,6 +20,7 @@ from bookflow import BookflowError
 from bookflow.commands.host_cmds import parse_bind, start_serving
 from bookflow.core.config import os_login
 from bookflow.core.context import client_version
+from bookflow.core.ids import is_ulid
 from tests.conftest import as_user, make_actor
 
 PASSWORD = "correct-horse-battery"
@@ -1959,27 +1961,98 @@ def test_login_lands_in_a_company_without_a_click(hosted):
     assert r.status_code == 303 and r.headers["location"] == f"/c/{hosted.company_id}/", r.headers
 
 
-@pytest.mark.timeout(180)
+# What a local href may carry without being percent-encoded: RFC 3986's unreserved and
+# sub-delim characters, plus the delimiters a path, a query and a fragment spell themselves
+# with, plus `%` for what is already encoded. A raw space, a control character, a quote or a
+# brace is malformed markup -- a browser hides it by encoding on navigation, a strict client
+# refuses the link outright, and nothing that is not a browser can follow it at all.
+_MUST_ENCODE = re.compile(r"[^A-Za-z0-9\-._~!$&'()*+,;=:@/?#%]")
+
+# How many distinct page shapes the crawl below is expected to reach. A floor, not a pin:
+# builders add pages and the number only climbs, but a crawl that silently stops finding
+# things -- a navigation change that strands a whole area -- drops under it and fails.
+COVERED_SHAPES = 432
+
+
+def _shape(url: str) -> str:
+    """One URL with its identifiers taken out: the page shape, rather than the page instance."""
+    return "/".join("{id}" if is_ulid(part) else part for part in url.split("/"))
+
+
+@pytest.mark.timeout(300)
 def test_every_link_the_workbench_renders_resolves(hosted):
-    """Crawl every seeded document family; the expanded graph has a bounded three-minute deadline."""
-    import re
+    """Every page shape reachable from the picker, the hub and a company home resolves.
+
+    The crawl covers shapes rather than instances. The fortieth invoice links exactly where
+    the first one did, so an identifier segment collapses to a placeholder and each distinct
+    shape is fetched once. Cost is then the number of pages the workbench has rather than the
+    number of records the demo holds, which is what stops this outgrowing its deadline again:
+    it was fetching 1260 URLs to reach the 432 pages they are. Every rendered href is still
+    read for characters a URL may not carry, whether or not its own shape was fetched.
+
+    The deadline is sized for that: 432 pages at the rate this suite measures is around two
+    and a half minutes, so five is head-room against a loaded machine rather than a budget
+    the seed data can consume. What now moves it is a page kind nobody had before -- or a
+    crawl that has stopped terminating, which is the failure the deadline still catches.
+    """
     c = TestClient(hosted.handle.app, follow_redirects=True)
     assert c.post("/login", json={"username": hosted.login, "password": PASSWORD}).status_code == 200
-    seen, queue = set(), ["/companies", "/hub/", f"/c/{hosted.company_id}/"]
+    seen, shapes, queue = set(), set(), ["/companies", "/hub/", f"/c/{hosted.company_id}/"]
     while queue:
         url = queue.pop()
-        if url in seen or url.startswith("/static/"):
+        shape = _shape(url)
+        if shape in shapes or url.startswith("/static/"):
             continue
+        shapes.add(shape)
         seen.add(url)
         r = c.get(url)
         assert "//" not in url.replace("http://", ""), url
         assert r.status_code == 200, (url, r.status_code, r.text[:200])
         assert "Not Found" not in r.text[:300], url
         for href in re.findall(r'href="([^"]+)"', r.text):
-            if href.startswith("/") and not href.startswith("/static/") and "?" not in href:
-                queue.append(href)
-    assert len(seen) > 15, sorted(seen)
+            if not href.startswith("/"):
+                continue
+            assert not _MUST_ENCODE.search(href), (href, url)
+            target = href.split("#")[0]  # a fragment never reaches the server
+            if target and not target.startswith("/static/") and "?" not in target:
+                queue.append(target)
+    assert len(shapes) >= COVERED_SHAPES, (len(shapes), sorted(shapes))
     assert f"/c/{hosted.company_id}/directive" in seen and "/hub/hub-audit" in seen and "/hub/organization/new" in seen
+
+
+def test_a_credit_settled_invoice_renders_no_link_the_application_views_cannot_open(hosted):
+    """The one settlement row the demo does not seed, so the crawl above cannot reach it.
+
+    `customer-credit apply` writes an application whose paying transaction is a credit memo,
+    not a customer payment. The application views resolve that payer as a payment, so the
+    history link this page used to render for every row answered 404 on exactly these rows.
+    """
+    cid = hosted.company_id
+    c = TestClient(hosted.handle.app, follow_redirects=True)
+    assert c.post("/login", json={"username": hosted.login, "password": PASSWORD}).status_code == 200
+    invoice = next(hosted.ok("invoice.show", {"invoice": row["id"]}, company=cid)
+                   for row in hosted.ok("invoice.query", {"limit": 50}, company=cid)["items"]
+                   if row["status"] != "voided")
+    items = hosted.ok("item.query", {}, company=cid)["items"]
+    reason = {"X-Bookflow-Reason": "settling this invoice with a credit"}
+    credit = hosted.ok("credit-memo.post", {
+        "customer": invoice["customer_id"], "date": "2026-03-06", "number": "CM-SETTLEMENT-LINKS",
+        "sales_tax_item": next(i["id"] for i in items if i["type"] == "sales_tax_item"),
+        "lines": [{"item": next(i["id"] for i in items if i["type"] == "service"),
+                   "quantity": "1", "unit_price": "1.00"}]}, company=cid, headers=reason)
+    hosted.ok("customer-credit.apply", {
+        "credit_memo": credit["id"], "expected_version": credit["version"],
+        "applications": [{"invoice": invoice["id"], "expected_version": invoice["version"],
+                          "amount": "1.00"}]}, company=cid, headers=reason)
+    settled = hosted.ok("invoice.settlement", {"invoice": invoice["id"], "limit": 50}, company=cid)
+    assert [row for row in settled["applications"] if row["credit_source_key_id"]], settled
+    page = c.get(f"/c/{cid}/invoice/{invoice['id']}/settlement")
+    assert page.status_code == 200, page.text[:200]
+    rendered = [href for href in re.findall(r'href="([^"]+)"', page.text) if href.startswith("/")]
+    assert any(f"/credit-memo/{credit['id']}" in href for href in rendered), rendered
+    for href in sorted(set(rendered)):
+        assert not _MUST_ENCODE.search(href), href
+        assert c.get(href).status_code == 200, (href, c.get(href).status_code)
 
 
 def test_master_browsing_requested_values_and_discovery_http_library_parity(hosted, root):

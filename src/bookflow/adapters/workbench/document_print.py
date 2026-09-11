@@ -16,6 +16,7 @@ from urllib.parse import quote, urlencode
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
 
+from bookflow.adapters.workbench import routing as Routing
 from bookflow.core.errors import BookflowError
 from bookflow.documents import render
 
@@ -23,7 +24,7 @@ STATEMENT_PATH = "/report/statement/print"
 
 
 def document_url(company_id: str, noun: str, record_id: str) -> str:
-    return (f"/c/{quote(str(company_id), safe='')}/{noun}/"
+    return (f"/c/{quote(str(company_id), safe='')}/{Routing.segment(noun)}/"
             f"{quote(str(record_id), safe='')}/print")
 
 

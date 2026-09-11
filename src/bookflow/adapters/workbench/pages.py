@@ -33,6 +33,7 @@ from bookflow.adapters.workbench import document_form as Document
 from bookflow.adapters.workbench import document_nav as Nav
 from bookflow.adapters.workbench import list_paging as Paging
 from bookflow.adapters.workbench import naming as Naming
+from bookflow.adapters.workbench import routing as Routing
 from bookflow.core import registry
 from bookflow.core.errors import BookflowError
 from bookflow.core.money import CURRENCIES
@@ -46,6 +47,12 @@ FLASH_TTL_SECONDS = 60.0
 env = Environment(loader=FileSystemLoader(str(HERE / "templates")), autoescape=select_autoescape(["html"]))
 # One humaniser for every template, so no table anywhere heads a column with a field name.
 env.filters["label"] = Naming.column_label
+# One spelling of a noun inside a URL, so no template ever writes a raw space into an href.
+env.filters["segment"] = Routing.segment
+env.globals["noun_base"] = Routing.base
+# Whether a noun's show command is about one record or about the whole thing, so the
+# navigation grid sends each to the page that can actually open. Registered after the
+# function it calls; see `_record_selector`.
 
 # Every paged report whose rendered result carries its own Next form, which owns
 # the signed continuation. Their filter form drops the `cursor` leaf, so changing
@@ -329,7 +336,7 @@ def _document_base(company_id: str | None, noun: str) -> str:
     """
     if not company_id:
         return ''
-    return f"/c/{company_id}/" if noun in Document.NO_LIST else f"/c/{company_id}/{noun}"
+    return f"/c/{company_id}/" if noun in Document.NO_LIST else Routing.base(company_id, noun)
 
 
 def _form_reference(definition: Any, noun: str, path: str) -> Any | None:
@@ -363,7 +370,7 @@ def _decorate_collection_references(
         reference = _form_reference(definition, noun, path)
         if reference and len(reference.target_nouns) == 1:
             target = reference.target_nouns[0]
-            item["reference"] = {"target": target, "suggestion_url": f"/c/{company_id}/_references/{noun}/{path}?target={target}"}
+            item["reference"] = {"target": target, "suggestion_url": f"/c/{company_id}/_references/{Routing.segment(noun)}/{path}?target={target}"}
         return
     for child in item["fields"]:
         child_path = f"{path}.{child['name']}"
@@ -383,13 +390,21 @@ def _decorate_collection_references(
         target = reference.target_nouns[0]
         child["reference"] = {
             "target": target,
-            "suggestion_url": f"/c/{company_id}/_references/{noun}/{child_path}?target={target}",
+            "suggestion_url": f"/c/{company_id}/_references/{Routing.segment(noun)}/{child_path}?target={target}",
             "include_closest": bool(getattr(reference, "child_units", False)),
             "add_targets": create_targets((target,)) if create_targets and not getattr(reference, "child_units", False) else [],
         }
 
 
 def _record_selector(cmd: registry.Command, noun: str) -> str | None:
+    """Which input field of this command names the one record a page is about.
+
+    ``None`` means the command is about no record at all -- ``company show`` is the whole
+    company -- which is why a page that has to choose between a record route and a singleton
+    route asks this rather than reading ``positional``: a command may name its record by a
+    field of its own and declare no positional at all, and reading ``positional`` sent those
+    nouns to a singleton page that could not open.
+    """
     if cmd.name == "rate set":
         return None
     if cmd.version_source:
@@ -397,10 +412,19 @@ def _record_selector(cmd: registry.Command, noun: str) -> str | None:
     conventional = noun.replace("-", "_").replace(" ", "_")
     if conventional in cmd.input_model.model_fields:
         return conventional
-    return next(
+    positional = next(
         (field for field in cmd.positional if field in cmd.input_model.model_fields),
         None,
     )
+    if positional:
+        return positional
+    # `payment recovery show` takes `recovery_id` or `recovery_key` and declares neither as
+    # positional. One identifier field and no ambiguity is still an unambiguous answer.
+    identifiers = [field for field in cmd.input_model.model_fields if field.endswith("_id")]
+    return identifiers[0] if len(identifiers) == 1 else None
+
+
+env.globals["record_selector"] = _record_selector
 
 
 def _matching_vendor_link(
@@ -430,7 +454,7 @@ def _inactive_toggle(path: str, request: Request, *, include: bool) -> str:
 
 def _success_target(cmd: registry.Command, company_id: str | None, noun: str, record_id: str | None,
                     output: dict[str, Any]) -> str:
-    route_noun = noun.replace(" ", "-")
+    route_noun = Routing.segment(noun)
     if company_id and cmd.name == "rate set" and output.get("id"):
         return f"/c/{company_id}/rate/{output['id']}"
     if company_id and cmd.name in ("register post", "register update", "check post",
@@ -441,16 +465,16 @@ def _success_target(cmd: registry.Command, company_id: str | None, noun: str, re
     if noun in Work.NOUNS and output.get('kind') and output.get('id'):
         return f"/c/{company_id}/{output['kind'].replace('_', '-')}/{output['id']}"
     if record_id is not None:
-        base = f"/c/{company_id}/{noun}" if company_id else f"/hub/{route_noun}"
+        base = Routing.base(company_id, noun)
         return f"{base}/{record_id}"
     if cmd.scope == "company":
         if noun == "company":
             return f"/c/{company_id}/company/self"
         found = _output_identifier(noun, _noun_meta(noun), output)
         if found and registry.get(f"{noun} show") is not None:
-            return f"/c/{company_id}/{noun}/{found}"
+            return f"{Routing.base(company_id, noun)}/{found}"
         if registry.get(f"{noun} list") is not None:
-            return f"/c/{company_id}/{noun}"
+            return Routing.base(company_id, noun)
         return f"/c/{company_id}/"
     if cmd.name == "company detach":
         return "/companies"
@@ -575,7 +599,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     Payments.mount(app, render=render, run=run, credential=credential, page_error=page_error, role_allows=_role_allows,
         form_page=lambda request, company_id, noun, verb: form_page(request, company_id, noun, verb, None))
     BillPayments.mount(app, render=render, run=run, credential=credential, page_error=page_error,
-                       role_allows=_role_allows)
+                       role_allows=_role_allows, form_page=lambda *a, **kw: form_page(*a, **kw))
 
     @app.get("/static/{name}")
     def static(name: str):
@@ -728,6 +752,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         request: Request,
     ):
         """Return at most 25 same-company choices under the declared reference policy."""
+        owner_noun = Routing.noun(owner_noun)
         try:
             cred = credential(request)
             company_view = run(request, "company show", {}, company_id)
@@ -886,6 +911,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     @app.get('/c/{company_id}/_browse/{noun}/{kind}')
     def browse_options(company_id: str, noun: str, kind: str, request: Request):
         from bookflow.company.query_catalog import filter_descriptors
+        noun = Routing.noun(noun)
         try:
             # Discovery and references use the same ordinary dispatch as all other reads.
             query = request.query_params
@@ -916,6 +942,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     @app.get('/c/{company_id}/_recent/{noun}', response_class=HTMLResponse)
     def recent_documents(company_id: str, noun: str, request: Request):
         """The last few documents of a type, fetched after the new-document form renders."""
+        noun = Routing.noun(noun)
         view = Nav.recent(lambda name, raw, company: run(request, name, raw, company), company_id, noun)
         if view is None:
             return Response(status_code=404)
@@ -1064,11 +1091,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
 
     @app.get("/c/{company_id}/{noun}", response_class=HTMLResponse)
     def company_noun(company_id: str, noun: str, request: Request):
-        return noun_page(request, company_id, noun)
+        return noun_page(request, company_id, Routing.noun(noun))
 
     @app.get("/hub/{noun}", response_class=HTMLResponse)
     def hub_noun(noun: str, request: Request):
-        return noun_page(request, None, noun.replace("-", " "))
+        return noun_page(request, None, Routing.noun(noun))
 
     def record_page(request: Request, company_id: str | None, noun: str, record_id: str):
         command_noun = "hub audit" if company_id is None and noun == "audit" else noun
@@ -1158,7 +1185,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 and _role_allows(update, role_view, hub_admin=cred.hub_admin)
             ):
                 contact_copy = {
-                    "url": f"/c/{company_id}/{command_noun}/{record_id}/copy-contact",
+                    "url": f"{Routing.base(company_id, command_noun)}/{record_id}/copy-contact",
                     "label": f"copy contact details to linked {target_noun}",
                 }
         workspace = None
@@ -1216,13 +1243,14 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
 
     @app.get("/c/{company_id}/{noun}/{record_id}", response_class=HTMLResponse)
     def company_record(company_id: str, noun: str, record_id: str, request: Request):
+        noun = Routing.noun(noun)
         if registry.get(f"{noun} {record_id}") is not None:  # a verb, not a record
             return form_page(request, company_id, noun, record_id, None)
         return record_page(request, company_id, noun, record_id)
 
     @app.get("/hub/{noun}/{record_id}", response_class=HTMLResponse)
     def hub_record(noun: str, record_id: str, request: Request):
-        noun = noun.replace("-", " ")
+        noun = Routing.noun(noun)
         if registry.get(f"{noun} {record_id}") is not None:
             return form_page(request, None, noun, record_id, None)
         return record_page(request, None, noun, record_id)
@@ -1564,7 +1592,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     "targets": targets,
                     "target": target,
                     "discriminator": discriminator,
-                    "suggestion_url": f"/c/{company_id}/_references/{noun}/{leaf['path']}",
+                    "suggestion_url": f"/c/{company_id}/_references/{Routing.segment(noun)}/{leaf['path']}",
                     "current": current,
                     "add_targets": add_targets,
                     "version_field": version_field,
@@ -1770,7 +1798,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
 
     @app.get("/hub/{noun}/{record_id}/{verb}", response_class=HTMLResponse)
     def hub_record_form(noun: str, record_id: str, verb: str, request: Request):
-        return form_page(request, None, noun.replace("-", " "), verb, record_id)
+        return form_page(request, None, Routing.noun(noun), verb, record_id)
 
     @app.get("/c/{company_id}/work-source/{record_id}/open")
     def billing_source(request: Request, company_id: str, record_id: str):
@@ -1808,6 +1836,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
 
     @app.get("/c/{company_id}/{noun}/{record_id}/{verb}", response_class=HTMLResponse)
     def company_record_form(company_id: str, noun: str, record_id: str, verb: str, request: Request):
+        noun = Routing.noun(noun)
         if verb == "copy-contact":
             return contact_copy_page(request, company_id, noun, record_id)
         return form_page(request, company_id, noun, verb, record_id)
@@ -1898,7 +1927,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 "version": created_version,
                 "label": _reference_label(noun, out.get(noun, out), {}),
             }).replace("</", "<\\/")
-            record_url = f"/c/{company_id}/{noun}/{created_id}" if company_id else f"/hub/{noun.replace(' ', '-')}/{created_id}"
+            record_url = f"{Routing.base(company_id, noun)}/{created_id}"
             return HTMLResponse(
                 "<!doctype html><meta charset=utf-8><title>Created</title>"
                 f"<p>Created. <a href=\"{escape(record_url, quote=True)}\">Open record</a></p>"
@@ -1908,7 +1937,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         target = _success_target(cmd, company_id, noun, record_id, out)
         if (form.get("action") == "submit-new" and company_id
                 and Document.is_document(noun, verb) and verb in ("post", "create")):
-            target = f"/c/{company_id}/{noun}/{verb}"
+            target = f"{Routing.base(company_id, noun)}/{verb}"
         flash_id = flashes.put(session_token, {"command": cmd.name, "is_write": cmd.is_write, "result": out})
         location = f"{target}?flash={flash_id}"
         if request.headers.get("hx-request", "").lower() == "true":
@@ -1923,27 +1952,27 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
 
     @app.post("/c/{company_id}/{noun}/{verb}")
     async def company_submit(company_id: str, noun: str, verb: str, request: Request):
-        return await run_in_threadpool(submit, request, company_id, noun, verb, None, await form_of(request))
+        return await run_in_threadpool(submit, request, company_id, Routing.noun(noun), verb, None, await form_of(request))
 
     @app.post("/c/{company_id}/{noun}")
     async def company_single_submit(company_id: str, noun: str, request: Request):
-        return await run_in_threadpool(submit, request, company_id, noun, "", None, await form_of(request))
+        return await run_in_threadpool(submit, request, company_id, Routing.noun(noun), "", None, await form_of(request))
 
     @app.post("/c/{company_id}/{noun}/{record_id}/{verb}")
     async def company_record_submit(company_id: str, noun: str, record_id: str, verb: str, request: Request):
-        return await run_in_threadpool(submit, request, company_id, noun, verb, record_id, await form_of(request))
+        return await run_in_threadpool(submit, request, company_id, Routing.noun(noun), verb, record_id, await form_of(request))
 
     @app.post("/hub/{noun}/{record_id}/{verb}")
     async def hub_record_submit(noun: str, record_id: str, verb: str, request: Request):
-        return await run_in_threadpool(submit, request, None, noun.replace("-", " "), verb, record_id, await form_of(request))
+        return await run_in_threadpool(submit, request, None, Routing.noun(noun), verb, record_id, await form_of(request))
 
     @app.post("/hub/{noun}/{verb}")
     async def hub_submit(noun: str, verb: str, request: Request):
-        return await run_in_threadpool(submit, request, None, noun.replace("-", " "), verb, None, await form_of(request))
+        return await run_in_threadpool(submit, request, None, Routing.noun(noun), verb, None, await form_of(request))
 
     @app.post("/hub/{noun}")
     async def hub_single_submit(noun: str, request: Request):
-        return await run_in_threadpool(submit, request, None, noun.replace("-", " "), "", None, await form_of(request))
+        return await run_in_threadpool(submit, request, None, Routing.noun(noun), "", None, await form_of(request))
 
     @app.post("/c/{company_id}/presence/{action}/{record_type}/{record_id}")
     async def heartbeat(company_id: str, action: str, record_type: str, record_id: str, request: Request):

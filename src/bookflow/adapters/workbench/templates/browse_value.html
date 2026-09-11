@@ -3,8 +3,8 @@
 {% elif v is sameas true %}Yes{% elif v is sameas false %}No
 {% elif v is mapping %}
 {% if v.amount is defined and v.currency is defined %}{{ v.amount }} {{ v.currency }}
-{% elif v.command is defined and v.column is defined %}<a href="/c/{{ company_id }}/{{ noun }}/{{ record }}?collection={{ v.column }}">{{ v.count }} entries — view all</a>
-{% elif v.label is defined and v.id is defined %}<a href="/c/{{ company_id }}/{{ v.noun }}/{{ v.id }}">{{ v.label }}</a>{% if not v.active %} <span class="muted">(inactive)</span>{% endif %}
+{% elif v.command is defined and v.column is defined %}<a href="/c/{{ company_id }}/{{ noun|segment }}/{{ record }}?collection={{ v.column }}">{{ v.count }} entries — view all</a>
+{% elif v.label is defined and v.id is defined %}<a href="/c/{{ company_id }}/{{ v.noun|segment }}/{{ v.id }}">{{ v.label }}</a>{% if not v.active %} <span class="muted">(inactive)</span>{% endif %}
 {% else %}<dl class="browse-value">{% for k, part in v.items() if k not in ('id', 'position') %}<dt>{{ k.replace('_', ' ').capitalize() }}</dt><dd>{{ value(part, company_id, noun, record) }}</dd>{% endfor %}</dl>{% endif %}
 {% elif v is sequence and v is not string %}{% if not v %}<span class="muted">No entries</span>{% endif %}<ul>{% for part in v %}<li>{{ value(part, company_id, noun, record) }}</li>{% endfor %}</ul>
 {% else %}{{ v }}{% endif %}

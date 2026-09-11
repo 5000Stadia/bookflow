@@ -3,8 +3,8 @@
 {% if company and page_title %}<nav class="crumbs"><a href="/c/{{ company_id }}/">Home window</a></nav>{% endif %}
 <div class="group-grid">{% for group, nouns in groups %}<section class="nav-group"><h2>{{ group }}</h2>
 {% for noun, verbs in nouns %}<div class="noun-row"><h3>{{ noun }}</h3><p class="actions">
-{% set base = ("/c/" ~ company_id ~ "/" ~ noun) if company else ("/hub/" ~ noun.replace(" ", "-")) %}
+{% set base = noun_base(company_id or None, noun) %}
 {% if company and noun == 'estimate' %}<a href="{{ base }}">list</a>{% endif %}
-{% for v in verbs %}{% if not v.verb %}<a href="{{ base }}">open</a>{% elif v.verb == "list" %}<a href="{{ base }}">list</a>{% elif v.verb == "show" and not v.positional %}<a href="{{ base }}/self">show</a>{% elif not v.version_source %}<a href="{{ base }}/{{ v.verb }}">{{ v.verb }}</a>{% endif %}{% endfor %}</p></div>{% endfor %}
+{% for v in verbs %}{% if not v.verb %}<a href="{{ base }}">open</a>{% elif v.verb == "list" %}<a href="{{ base }}">list</a>{% elif v.verb == "show" and not record_selector(v, noun) %}<a href="{{ base }}/self">show</a>{% elif not v.version_source %}<a href="{{ base }}/{{ v.verb }}">{{ v.verb }}</a>{% endif %}{% endfor %}</p></div>{% endfor %}
 </section>{% endfor %}</div>
 {% endblock %}

@@ -75,7 +75,7 @@ def detail_context(record, company_id):
                                               if key.startswith('address_')}))
 
 
-def mount(app, *, render, run, credential, page_error, role_allows):
+def mount(app, *, render, run, credential, page_error, role_allows, form_page):
     from fastapi import Request
 
     from bookflow.core import registry
@@ -124,6 +124,11 @@ def mount(app, *, render, run, credential, page_error, role_allows):
 
     @app.get('/c/{company_id}/bill-payment/{payment_id}')
     def bill_payment_detail(request: Request, company_id: str, payment_id: str):
+        # `bill payment` is a two-word noun, so its own segment is `bill-payment` and this
+        # window sits on the path the generated pages also address. A segment that names one
+        # of the noun's verbs is that verb's form, exactly as the deposit window reads it.
+        if registry.get('bill payment ' + payment_id) is not None:
+            return form_page(request, company_id, 'bill payment', payment_id, None)
         try:
             shown = run(request, 'bill payment show', {'payment': payment_id}, company_id)
             return render('bill_payment_detail.html', request, company_id=company_id,
