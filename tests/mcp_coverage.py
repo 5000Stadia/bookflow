@@ -275,9 +275,11 @@ report ap-aging
 report ar-aging
 report balance-sheet
 report general-ledger
+report missing-checks
 report open-invoices
 report profit-and-loss
 report statement
+report transaction-detail
 report trial-balance
 report unpaid-bills
 sales-receipt history

@@ -30,6 +30,8 @@ REPORTS = {
     'statement': 'Customer statement',
     'trial-balance': 'Trial balance',
     'general-ledger': 'General ledger',
+    'transaction-detail': 'Transaction detail by account',
+    'missing-checks': 'Missing checks',
     'profit-and-loss': 'Profit and loss',
     'balance-sheet': 'Balance sheet',
 }

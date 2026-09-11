@@ -1,0 +1,47 @@
+{% macro label(text) %}<span class="document-cell-label" aria-hidden="true">{{ text }}</span>{% endmacro %}
+<section id="basic-report" class="document-detail basic-report transaction-detail" aria-label="Transaction detail by account">
+<p>{{ company_label }} · {{ transaction_detail.metadata.basis|capitalize }} · {{ transaction_detail.metadata.currency }} ·
+{{ transaction_detail.date_from }} through {{ transaction_detail.as_of }}</p>
+<h2>Whole-report totals — all pages</h2>
+<dl class="report-totals">
+{% for key, value in transaction_detail.totals.items() %}<div data-total="{{ key }}"><dt>{{ key.replace('_', ' ')|capitalize }}</dt><dd>{{ value.amount }} {{ value.currency }}</dd></div>{% endfor %}
+</dl>
+<p id="report-page-count">{{ transaction_detail.count }} rows on this page{% if transaction_detail.next_cursor %}; more available{% endif %}. Each account opens with its opening balance and closes with the period's own debits, credits and closing balance; those rows count toward the page limit. The running balance is the account's balance after the line, over the whole account, so a page boundary never breaks it.</p>
+<div class="table-wrap report-lines-wrap"><table class="ledger-table document-lines" id="report-lines" role="table">
+<caption>Transaction detail by account · {{ transaction_detail.metadata.currency }}</caption>
+<thead role="rowgroup"><tr role="row">
+<th scope="col" role="columnheader">Account</th>
+<th scope="col" role="columnheader">Date / document</th>
+<th scope="col" role="columnheader">Name</th>
+<th scope="col" role="columnheader">Memo / description</th>
+<th scope="col" role="columnheader">Split</th>
+<th scope="col" role="columnheader">Debit</th><th scope="col" role="columnheader">Credit</th>
+<th scope="col" role="columnheader">Balance</th></tr></thead>
+<tbody role="rowgroup">
+{% for row in transaction_detail.rows %}<tr role="row" data-kind="{{ row.kind }}" data-account="{{ row.account_id }}">
+<td role="cell" class="document-wide">{{ label('Account') }}<a href="{{ row.ledger_url }}">{{ row.display_account_label }}</a>
+<details class="report-current"><summary>Current account details</summary><div>{{ row.current_account_label }}{% if row.current_account_number %} · {{ row.current_account_number }}{% endif %}</div></details>
+</td>
+<td role="cell" class="document-wide">{{ label('Date / document') }}{% if row.kind_label %}<strong>{{ row.kind_label }}</strong>{% endif %}
+{% if row.date %}<div data-value="date">{{ row.date }}</div>{% endif %}
+{% if row.transaction_type %}<div>{% if row.document_url %}<a href="{{ row.document_url }}">{{ row.transaction_type.replace('_', ' ')|capitalize }} {{ row.transaction_number or '' }}</a>{% else %}{{ row.transaction_type.replace('_', ' ')|capitalize }} {{ row.transaction_number or '' }}{% endif %}</div>{% endif %}
+{% if row.batch_kind and row.batch_kind != 'original' %}<span class="report-state">{{ row.batch_kind|capitalize }} effect</span>{% endif %}</td>
+<td role="cell">{{ label('Name') }}<span data-value="party">{{ row.party_name or '' }}</span></td>
+<td role="cell" class="document-wide document-prose">{{ label('Memo / description') }}<div class="report-description">{{ row.description or row.memo or '' }}</div>
+{% if row.kind == 'posting' %}<details class="report-captured"><summary>Captured posting details</summary>
+{% if row.memo and row.description %}<p>Document memo: {{ row.memo }}</p>{% endif %}{% if row.class_name %}<p>Class: {{ row.class_name }}</p>{% endif %}
+<dl>{% for key, value in (row.account_snapshot or {}).items() %}<dt>{{ key.replace('_', ' ')|capitalize }} (captured account)</dt><dd>{{ value if value is not none else '—' }}</dd>{% endfor %}
+{% for key in ('recorded_at', 'transaction_id', 'revision_id', 'batch_id', 'posting_line_id', 'line_no') %}{% if row[key] is not none %}<dt>{{ key.replace('_', ' ')|capitalize }}</dt><dd>{{ row[key] }}</dd>{% endif %}{% endfor %}</dl></details>{% endif %}</td>
+<td role="cell">{{ label('Split') }}{% if row.split_url %}<a href="{{ row.split_url }}" data-value="split">{{ row.split_account_label }}</a>{% else %}<span data-value="split">{{ row.split_account_label or '' }}</span>{% endif %}</td>
+<td role="cell" data-value="debit">{{ label('Debit') }}{{ row.debit.amount }}</td>
+<td role="cell" data-value="credit">{{ label('Credit') }}{{ row.credit.amount }}</td>
+<td role="cell" class="document-total" data-value="balance">{{ label('Balance') }}{{ row.balance.amount }}</td>
+</tr>{% else %}<tr role="row"><td role="cell" colspan="8">No matching report rows.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if transaction_detail.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="statement-next-page">
+{% for name, value in transaction_detail.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+{% if source_report_watermark is not none %}<input type="hidden" name="_source_report_watermark" value="{{ source_report_watermark }}">{% endif %}
+<button name="action" value="submit">Next detail page</button></form>{% endif %}
+<p class="muted">Generated {{ transaction_detail.metadata.generation_time }} · Change the filters below to start a new report. Account labels are current; captured posting details retain the historical facts. A split of “-SPLIT-” means the entry has more than two lines, so it has no single other side.</p>
+<details class="report-structured"><summary>Structured report data</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
+</section>

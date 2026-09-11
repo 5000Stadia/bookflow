@@ -1,7 +1,10 @@
 """Typed domestic accrual report commands; dispatch owns authorization."""
 from bookflow.company.ledger_reports import (
-    GeneralLedgerInput, GeneralLedgerOutput, TrialBalanceInput, TrialBalanceOutput,
-    general_ledger, trial_balance,
+    GeneralLedgerInput, GeneralLedgerOutput, TransactionDetailInput, TransactionDetailOutput,
+    TrialBalanceInput, TrialBalanceOutput, general_ledger, transaction_detail, trial_balance,
+)
+from bookflow.company.check_reports import (
+    MissingChecksInput, MissingChecksOutput, missing_checks,
 )
 from bookflow.core.registry import Plan, command
 from bookflow.company.financial_statements import (
@@ -88,3 +91,19 @@ def plan_profit_and_loss(inp, ctx, s):
     error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
 def plan_balance_sheet(inp, ctx, s):
     return Plan(preview=balance_sheet(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report transaction-detail", scope="company", required_role="member", capability="reports",
+    description="Every posting line of every account between date_from and date_to, one section per account in chart-of-accounts order. A section opens with the account's opening balance, lists each line with its accounting date, document type and number, the party it names, the line's own description and the document's memo, the split account, and the debit or credit, and closes with the period's debits, credits and the closing balance. The running balance on each line is the account's balance after that line, computed over the whole account before the page is cut, so a page boundary never breaks it. The split account is the other side of the entry read off the posting batch itself: the one other account when the entry has exactly two lines, and -SPLIT- when it has more. Corrections and voids appear as the reversal and replacement effects they are, so the section reconciles to report trial-balance for the same date. accounts filters to a set of accounts by ID or canonical full name; omit it for every account with an opening balance or with activity in the period. Totals cover the whole filter and rows are paged.",
+    input_model=TransactionDetailInput, output_model=TransactionDetailOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND"])
+def plan_transaction_detail(inp, ctx, s):
+    return Plan(preview=transaction_detail(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report missing-checks", scope="company", required_role="member", capability="reports",
+    description="Holes and repeats in each bank account's check-number sequence as of as_of, so an unrecorded or twice-entered check can be found. One row per hole, naming the first and last missing number and the checks that occupy the numbers immediately below and above it, and one row per number two or more checks carry. A check counts as drawn on the bank account its first entered line credits, so a correction that moves it moves it here too, and a voided check still occupies its number because the paper it was written on is still gone. A check whose number is not a plain run of digits has no position in a sequence and is counted rather than placed; so is one no longer drawn on a bank account. account limits the report to one bank account. Totals cover every examined check and rows are paged.",
+    input_model=MissingChecksInput, output_model=MissingChecksOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND", "E_VALIDATION"])
+def plan_missing_checks(inp, ctx, s):
+    return Plan(preview=missing_checks(inp, s, principal_id=ctx.on_behalf_of))

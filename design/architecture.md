@@ -1307,6 +1307,74 @@ and the home window's Reports tile names both alongside the seven that were
 there before. A staled continuation on any report page now shows the restart
 note, not only on trial balance and general ledger.
 
+## Transaction detail by account, and the holes in a check sequence
+
+`report transaction-detail` and `report missing-checks` add nothing to the
+schema: both read the posting and document history that was already there.
+
+**Transaction detail is the general ledger, printed line by line.** One SQL
+builder in `company/ledger_reports.py` now writes the account walk both reports
+page -- `_effects(scope)` for the effects and each account's four figures, and
+`_ledger(scope)` for `selected`, `running`, `flat` and `ordered` on top of it.
+`_GL` is that builder under `ONE_ACCOUNT`, the single `:account` filter every
+earlier report uses; `_DETAIL` is the same text under `ACCOUNT_SET`, a JSON
+array of stable IDs read through `json_each(:accounts)`. There is one copy of
+the balance arithmetic and one copy of the traversal, so the general ledger and
+the detail report cannot drift into two meanings of an opening balance. The
+running balance is still the window computed over the whole account before any
+page is sliced, which is what lets a page boundary fall anywhere.
+
+What transaction detail adds is the two columns that make it a drill-down. The
+party, the class and the line description were already captured on every posting
+line; the split account is derived per page by `_SPLITS`, which counts the legs
+of each printed line's own posting batch and names the one other account when
+there are exactly two, and `MANY_SPLITS` (`-SPLIT-`) when there are more.
+Nothing about a document type enters that derivation, so a document family
+nobody has written yet splits correctly on the day it lands. `TRANSACTION_TYPES`
+now lives once in `company/ledger_schema.py`, which builds the `ck_transaction_type`
+CHECK from it and which both report row models read, replacing the closed
+`Literal` the general ledger row used to retype.
+
+`accounts` is a list rather than a scalar, so `ReportCursor` gained
+`account_ids` beside `account_id`: the IDs the first page resolved ride in the
+signed continuation, and renaming a selected account stales the page instead of
+failing to resolve on page two. A cursor minted before the field existed decodes
+with none, which is what a single-account report carries anyway. An empty list
+and an absent one normalize to the same request in the input validator, so a
+browser form that submits its empty repeated control does not invalidate its own
+continuation.
+
+**Missing checks reads documents, not effects.** `company/check_reports.py`
+starts from `money_out_documents`, the only row that says a journal entry was
+entered as a check, so a hand-typed entry that happens to credit a bank account
+is never listed. A check belongs to the account its current revision's first
+entered line credits -- the funding line `company/checks.py` reads -- so a
+correction that moves a check moves it between sequences here too, and a marked
+check that no longer has that shape is counted in the totals rather than
+dropped. A number is a position in a sequence only when it is one to eighteen
+ASCII digits; anything else is a real check number with no place between two
+others and is counted as `unnumbered_checks`. `lag()` over each account's used
+numbers produces the holes, and `count(*) > 1` per number produces the repeats:
+`uq_transaction_type_number` makes two checks with the identical stored number
+impossible, but `1001` and `01001` are two stored numbers occupying one place in
+the sequence, which is exactly the double entry the report exists to catch. A
+voided check keeps its number because the paper it was written on is still gone.
+Its continuation extends the shared HMAC state with the company audit watermark,
+because every check write is audited and nothing else this report reads can move
+without one.
+
+Workbench `transaction_detail.py`/`.html` and `missing_checks.py`/`.html`
+project both results without accounting logic, reusing the `document-detail
+basic-report` blocks so the phone cards and the print table come from the
+stylesheet rather than from a third copy. Both are in
+`pages.CURSOR_FREE_REPORTS`, both are titled from `naming.REPORTS`, and the home
+window's Reports tile names both alongside the nine that were there before. A
+detail row opens the document it came from, resolving the record noun from the
+registry rather than from a hand-listed map, and a gap row opens the checks on
+either side of it. Because a repeated control cannot be carried by a scalar
+query name, a report GET now also accepts the collection's own `c:`/`collection:`
+keys, which is what makes the account-set filter linkable at all.
+
 ## Customer work documents
 
 [Customer work](customer-work.md) owns the nonposting proposal, alternative
