@@ -60,7 +60,12 @@ def test_reference_picker_checking_register(reference_site, tmp_path, width, hei
         browser.wait_for("document.querySelector('h1')?.textContent==='Reference Plumbing Co'")
         browser.evaluate("[...document.querySelectorAll('main a')].find(a=>a.getAttribute('href').endsWith('/account')).click()")
         browser.wait_for("[...document.querySelectorAll('tr')].some(r=>r.textContent.includes('Checking'))")
-        browser.evaluate("[...document.querySelectorAll('tr')].find(r=>r.textContent.includes('Checking')).querySelector('a[href$=register]').click()")
+        # The account list stopped carrying a register link of its own when it became
+        # the master browser, so this walks where a person now walks: open the account,
+        # then take its own primary action by the name printed on it.
+        browser.evaluate("[...document.querySelectorAll('#master-results tbody tr')].find(r=>r.textContent.includes('Checking')).querySelector('a').click()")
+        browser.wait_for("[...document.querySelectorAll('.actions a')].some(a=>a.textContent==='Open register')")
+        browser.evaluate("[...document.querySelectorAll('.actions a')].find(a=>a.textContent==='Open register').click()")
         # $72,550 journal balance + $100 service + $8 tax + $20 exempt.
         browser.wait_for("document.querySelector('#register-current')?.textContent.includes('72678.00')")
         browser.navigate(browser.evaluate('location.href').split('?')[0]+'?date_from=2026-01-01&date_to=2026-12-31')

@@ -21,12 +21,12 @@ input = { name = "Insurance Expense", type = "expense" }
 [[commands]]
 command = "account create"
 reason = "Create reference account: Depreciation Expense"
-input = { name = "Depreciation Expense", type = "expense" }
+input = { name = "Depreciation Expense", type = "expense", cash_flow_section = "operating" }
 
 [[commands]]
 command = "account create"
 reason = "Create reference account: Accumulated Depreciation"
-input = { name = "Accumulated Depreciation", type = "fixed_asset" }
+input = { name = "Accumulated Depreciation", type = "fixed_asset", cash_flow_section = "operating" }
 
 [[commands]]
 command = "account create"

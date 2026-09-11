@@ -174,10 +174,16 @@ def test_reference_monthly_annual_half_year_cli_and_read_only(reference_client):
         assert balance["totals"]["total_equity"]["minor_units"] == checkpoint["net_assets"]
         assert balance["totals"]["current_year_income"] == profit["totals"]["net_income"]
         assert balance["totals"]["difference"]["minor_units"] == 0
+    # The year and the half-year come from the published oracle, not from literals
+    # retyped here: these two were hand-written copies of it and went stale the day
+    # the seed grew the Row 22 payment examples, eighteen thousand of second-half
+    # income that moved the oracle and left the copies behind.
+    assert EXPECTED["monthly"][5]["date_to"] == "2026-06-30"
+    annual, first_half = EXPECTED["annual"]["income"], EXPECTED["monthly"][5]["income"]
     half=c.report.profit_and_loss(company=REFERENCE,date_from="2026-07-01",date_to="2026-12-31")
-    assert half["totals"]["net_income"]["minor_units"] == 6439035-2305000
+    assert half["totals"]["net_income"]["minor_units"] == annual-first_half
     rollover=c.report.balance_sheet(company=REFERENCE,date_to="2027-01-01")
-    assert rollover["totals"]["prior_earnings"]["minor_units"] == 6439035
+    assert rollover["totals"]["prior_earnings"]["minor_units"] == annual
     assert rollover["totals"]["current_year_income"]["minor_units"] == 0
     for name,args in (("profit-and-loss",["--date-from","2026-01-01"]),("balance-sheet",[])):
         output=cli_run(root,"report",name,"--company",REFERENCE,"--date-to","2026-12-31",*args)

@@ -43,3 +43,4 @@ Database: `company`.
 | `reimbursable_income_account_id` | VARCHAR(26) | yes | — | — | ix_accounts_reimbursable_income_account_id | accounts.id | Income account used for reimbursable expenses; null when tracking is disabled. |
 | `note` | TEXT | yes | — | — | — | — | Account note; null when not recorded. |
 | `system_role` | VARCHAR(64) | yes | — | unique | — | — | Chart-assigned company-unique system role; null for ordinary accounts. |
+| `cash_flow_section` | VARCHAR(16) | yes | — | — | — | — | Declared statement-of-cash-flows section; null when the account takes the section its type gives. |

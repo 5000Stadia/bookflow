@@ -44,7 +44,7 @@ from bookflow.core.ids import new_id
 from bookflow.core.registry import Applied, Plan, REGISTRY
 from bookflow.core.session import Session
 from bookflow.storage.engine import open_database
-from bookflow.storage.migrate import current_revision, migrate_to_head
+from bookflow.storage.migrate import HEADS, current_revision, migrate_to_head
 
 
 ACTOR = "01J00000000000000000000000"
@@ -54,8 +54,11 @@ ACTOR = "01J00000000000000000000000"
 def company_db(tmp_path: Path):
     path = tmp_path / "company.db"
     with open_database(path, writable=True, create=True) as db:
-        assert migrate_to_head(db, "company", None) == (None, "co0017")
-        assert current_revision(db) == "co0017"
+        # The head this fixture reaches is whatever the shipped chain ends at. Pinning
+        # a literal here asserts only which revision was current the day it was written,
+        # and it had been stale since co0018.
+        assert migrate_to_head(db, "company", None) == (None, HEADS["company"])
+        assert current_revision(db) == HEADS["company"]
         yield db
 
 

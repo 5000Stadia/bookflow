@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
-from typing import Any, Literal, Mapping
+from typing import Any, Literal, Mapping, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 import sqlalchemy as sa
@@ -90,6 +90,61 @@ STATEMENT_FAMILY: dict[str, StatementFamily] = {
     "non_posting": "neither",
 }
 
+CashFlowSection = Literal["operating", "investing", "financing"]
+
+# Cash itself: the accounts whose balance the statement of cash flows explains,
+# rather than accounts it sections.
+CASH_FLOW_CASH_TYPES = frozenset({"bank"})
+
+# The type rule. Which section of the statement of cash flows a non-cash
+# balance-sheet account falls in when the account declares nothing of its own.
+CASH_FLOW_SECTION_BY_TYPE: dict[str, CashFlowSection] = {
+    "accounts_receivable": "operating",
+    "other_current_asset": "operating",
+    "accounts_payable": "operating",
+    "credit_card": "operating",
+    "other_current_liability": "operating",
+    "fixed_asset": "investing",
+    "other_asset": "investing",
+    "long_term_liability": "financing",
+    "equity": "financing",
+}
+
+# An account may declare its own section wherever the statement can act on the
+# declaration: every posting account except cash, which the statement explains.
+# Derived from the families above so a new account type cannot be missed here.
+CASH_FLOW_DECLARABLE_TYPES = frozenset(
+    account_type for account_type, family in STATEMENT_FAMILY.items()
+    if family != "neither") - CASH_FLOW_CASH_TYPES
+
+_BALANCE_SHEET_TYPES = frozenset(
+    account_type for account_type, family in STATEMENT_FAMILY.items()
+    if family == "balance_sheet")
+
+if set(CASH_FLOW_SECTION_BY_TYPE) | CASH_FLOW_CASH_TYPES != _BALANCE_SHEET_TYPES \
+        or set(CASH_FLOW_SECTION_BY_TYPE) & CASH_FLOW_CASH_TYPES:
+    raise RuntimeError(
+        "every balance-sheet account type must be cash or carry exactly one cash-flow section; "
+        f"unclassified {sorted(_BALANCE_SHEET_TYPES - CASH_FLOW_CASH_TYPES - set(CASH_FLOW_SECTION_BY_TYPE))}, "
+        f"unknown {sorted((set(CASH_FLOW_SECTION_BY_TYPE) | CASH_FLOW_CASH_TYPES) - _BALANCE_SHEET_TYPES)}")
+if set(CASH_FLOW_SECTION_BY_TYPE.values()) - set(get_args(CashFlowSection)):
+    raise RuntimeError("unknown cash-flow sections "
+                       f"{sorted(set(CASH_FLOW_SECTION_BY_TYPE.values()) - set(get_args(CashFlowSection)))}")
+
+
+def cash_flow_section(account_type: str, declared: str | None) -> str | None:
+    """The one answer to which cash-flow section an account is in.
+
+    A declared section wins; otherwise the account takes what its type gives.
+    Cash has no section because the statement explains it rather than sectioning
+    it, and a profit-and-loss account has none of its own because its effect is
+    reported inside net income, which the statement reports under operating.
+    """
+    if declared is not None:
+        return declared
+    return CASH_FLOW_SECTION_BY_TYPE.get(account_type)
+
+
 _NUMBER = re.compile(r"^[0-9]{1,7}$", re.ASCII)
 _INSTITUTION_TYPES = frozenset(
     {
@@ -145,6 +200,7 @@ _LOGICAL_FIELDS = (
     "track_reimbursable_expenses",
     "reimbursable_income_account_id",
     "note",
+    "cash_flow_section",
 )
 
 
@@ -180,6 +236,7 @@ class AccountCreateInput(_StrictInput):
     track_reimbursable_expenses: bool = False
     reimbursable_income_account_id: str | None = None
     note: str | None = None
+    cash_flow_section: CashFlowSection | None = None
 
 
 class AccountUpdateInput(_StrictInput):
@@ -205,6 +262,7 @@ class AccountUpdateInput(_StrictInput):
     track_reimbursable_expenses: bool | None = None
     reimbursable_income_account_id: str | None = None
     note: str | None = None
+    cash_flow_section: CashFlowSection | None = None
 
 
 @dataclass(frozen=True)
@@ -352,6 +410,21 @@ def _validate_type_profile(values: Mapping[str, Any]) -> None:
             )
     if values.get("tax_line") is not None and account_type == "non_posting":
         raise _validation("tax_line", "is not available for non-posting accounts")
+    section = values.get("cash_flow_section")
+    if section is not None:
+        if section not in get_args(CashFlowSection):
+            raise _validation("cash_flow_section", "is not a statement-of-cash-flows section")
+        if account_type not in CASH_FLOW_DECLARABLE_TYPES:
+            raise _validation(
+                "cash_flow_section",
+                f"is not available for account type {account_type}",
+            )
+        if STATEMENT_FAMILY[account_type] == "profit_and_loss" and section != "operating":
+            raise _validation(
+                "cash_flow_section",
+                "must be operating on an income or expense account, whose effect the "
+                "statement of cash flows reports inside net income",
+            )
 
     tracking = bool(values.get("track_reimbursable_expenses", False))
     income_id = values.get("reimbursable_income_account_id")
@@ -1080,6 +1153,9 @@ def list_accounts(
 
 __all__ = [
     "ACCOUNT_TYPES",
+    "CASH_FLOW_CASH_TYPES",
+    "CASH_FLOW_DECLARABLE_TYPES",
+    "CASH_FLOW_SECTION_BY_TYPE",
     "NORMAL_BALANCE",
     "STATEMENT_FAMILY",
     "AccountActivePlan",
@@ -1088,6 +1164,8 @@ __all__ = [
     "AccountType",
     "AccountUpdateInput",
     "AccountUpdatePlan",
+    "CashFlowSection",
+    "cash_flow_section",
     "has_transactions",
     "list_accounts",
     "logical_account_snapshot",

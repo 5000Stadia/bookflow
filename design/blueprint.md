@@ -545,6 +545,7 @@ Table `accounts` carries the common list contract in section 11 and these fields
 | `track_reimbursable_expenses` | expense and cost-of-goods-sold only; default false |
 | `reimbursable_income_account_id` | required active income or other-income account when reimbursable tracking is enabled; otherwise null |
 | `note` | nullable internal text |
+| `cash_flow_section` | nullable declared statement-of-cash-flows section, one of operating, investing, financing; null means the account takes the section its type gives. Refused on cash accounts, which the statement explains rather than sections, and on non-posting accounts; an income or expense account may declare only operating, since the statement reports its effect inside net income. This is what tells the statement that a fixed asset is accumulated depreciation, which no account type or system role can say |
 | `system_role` | nullable stable role key, unique within the company; only chart application sets it |
 | `is_system` | derived as `system_role != null` |
 | `balance` | derived posted balance in home-currency minor units; zero until ledger transactions exist |
@@ -587,10 +588,10 @@ Account lookup and tables use the following declared inventory:
 | Concern | Fields |
 |---|---|
 | Query search | `name`, `full_name`, `number`, `description`, `institution_name`, institution-account suffix, `note` |
-| Equality filters | `active`, `type`, `parent_id`, `currency`, `tax_line`, `is_system`, `default_class_id`, `track_reimbursable_expenses` |
+| Equality filters | `active`, `type`, `parent_id`, `currency`, `tax_line`, `cash_flow_section`, `is_system`, `default_class_id`, `track_reimbursable_expenses` |
 | Sort fields | `full_name`, `number`, `type`, `balance`, `updated_at` |
 | Default columns | `number`, `full_name`, `type`, `balance`, `currency`, `active` |
-| Additional selectable columns | parent, `description`, currency, `tax_line`, `institution_name`, `next_check_number`, `default_class_id`, reimbursable-expense fields, `system_role`, `is_system`, `available_balance`, `updated_at`, every common field |
+| Additional selectable columns | parent, `description`, currency, `tax_line`, `cash_flow_section`, `institution_name`, `next_check_number`, `default_class_id`, reimbursable-expense fields, `system_role`, `is_system`, `available_balance`, `updated_at`, every common field |
 
 The default sort is `number` ascending with unnumbered accounts after numbered accounts, using the declared lexical comparison, then `full_name` ascending and `id` ascending. A hierarchy-order sort returns parents before children; flat sorts do not alter stored parentage. `show` includes every stored and derived field, `full_name`, `depth`, and `has_children`. Balances are informational outputs and are never accepted by Row 5 commands. Opening balances and all provider balance refresh behavior are deferred to their ledger and bank-feed passes. Account edits never recategorize existing transactions; any previewed batch application to existing transaction lines belongs to the ledger/form workflow pass.
 

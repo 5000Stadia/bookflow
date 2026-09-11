@@ -7,6 +7,8 @@ plus opening cash equals closing cash, and closing cash equals the bank total
 the balance sheet reports for the same date -- is an assertion in every case
 below, not a comment.
 """
+import sqlite3
+
 import pytest
 
 from bookflow.company import accounts as chart
@@ -57,6 +59,7 @@ def cash_ledger(ledger):
                type=kind, currency="USD", active=True)
     for day, units, debit, credit in (*JANUARY, *FEBRUARY):
         batch(day, units, debit=debit, credit=credit)
+    s.batch = batch
     return s
 
 
@@ -80,10 +83,16 @@ def oracle(s, date_from, date_to):
     return types, opening, closing
 
 
+def declared(s):
+    """What each account says its own cash-flow section is, read off the chart."""
+    return dict(s.company.raw.execute("SELECT id, cash_flow_section FROM accounts").fetchall())
+
+
 def expected(s, date_from="2026-02-01", date_to="2026-02-28"):
     """What the statement has to say, derived from the oracle and nothing else."""
     types, opening, closing = oracle(s, date_from, date_to)
     sections = dict.fromkeys(cf.SECTIONS, 0)
+    declarations = declared(s)
     contributions, net_income, opening_cash, closing_cash = {}, 0, 0, 0
     for account, kind in types.items():
         if kind in cf.CASH_TYPES:
@@ -92,7 +101,7 @@ def expected(s, date_from="2026-02-01", date_to="2026-02-28"):
         elif kind in cf.SECTION_BY_TYPE:
             contribution = opening[account] - closing[account]
             contributions[account] = contribution
-            sections[cf.SECTION_BY_TYPE[kind]] += contribution
+            sections[declarations[account] or cf.SECTION_BY_TYPE[kind]] += contribution
         elif kind in cf.INCOME_TYPES:
             net_income -= closing[account] - opening[account]
     operating = net_income + sections["operating"]
@@ -117,6 +126,24 @@ def test_every_posting_account_type_carries_exactly_one_cash_flow_disposition():
         account_type for account_type, family in chart.STATEMENT_FAMILY.items()
         if family == "balance_sheet"}
     assert set(cf.SECTION_BY_TYPE.values()) == set(cf.SECTIONS)
+
+
+def test_the_sql_and_the_python_answer_which_section_identically():
+    """Two readings of one rule would be two rules, and they would drift apart."""
+    combinations = [(kind, section) for kind in sorted(ACCOUNT_TYPES)
+                    for section in (None, *cf.SECTIONS)]
+    values = ", ".join("(?, ?)" for _ in combinations)
+    with sqlite3.connect(":memory:") as connection:
+        answered = connection.execute(
+            f"WITH a(type, {cf.SECTION_COLUMN}) AS (VALUES {values}) "
+            f"SELECT type, {cf.SECTION_COLUMN}, {cf._section_sql()} FROM a",
+            [field for pair in combinations for field in pair]).fetchall()
+    assert answered == [(kind, section, chart.cash_flow_section(kind, section))
+                        for kind, section in combinations]
+    # And the rule really is the account's own answer first, the type's second.
+    assert chart.cash_flow_section("fixed_asset", None) == "investing"
+    assert chart.cash_flow_section("fixed_asset", "operating") == "operating"
+    assert chart.cash_flow_section("expense", None) is None
 
 
 def test_the_statement_reconciles_to_cash_to_the_profit_and_loss_and_to_the_balance_sheet(cash_ledger):
@@ -145,7 +172,8 @@ def test_the_statement_reconciles_to_cash_to_the_profit_and_loss_and_to_the_bala
     assert {row.account_id: row.amount.minor_units for row in rows} == {
         account: value for account, value in contributions.items() if value}
     assert {row.account_id: row.section for row in rows} == {
-        account: cf.SECTION_BY_TYPE[dict(ADDED)[account]] for account in contributions if contributions[account]}
+        account: chart.cash_flow_section(dict(ADDED)[account], declared(s)[account])
+        for account in contributions if contributions[account]}
     assert [row.section for row in rows] == sorted(
         (row.section for row in rows), key=cf.SECTIONS.index)
     # Balances read on the account's own normal side, and the cash effect is the
@@ -193,13 +221,62 @@ def test_depreciation_is_added_back_through_the_asset_it_was_credited_to(cash_le
     equipment = next(row for row in flows(s, limit=200).rows if row.account_id == "equipment")
     # 4000 of equipment bought, 500 of it written off: the write-off is a source
     # of cash that offsets the expense inside net income, and it is reported in
-    # investing because no recorded fact separates it from any other fixed asset.
+    # investing because this account has declared no section of its own.
+    assert declared(s)["equipment"] is None
     assert equipment.amount.minor_units == -3500 and equipment.section == "investing"
     without_depreciation = flows(s, date_from="2026-02-13", date_to="2026-02-13", limit=200)
     assert without_depreciation.totals.net_income.minor_units == -500
     assert without_depreciation.totals.investing.minor_units == 500
     assert without_depreciation.totals.net_change_in_cash.minor_units == 0
     assert without_depreciation.totals.difference.minor_units == 0
+
+
+def test_a_declared_section_moves_the_add_back_to_operating_without_moving_cash(cash_ledger):
+    """The chart's own answer wins, and only the subtotals it chooses between move."""
+    s = cash_ledger
+    # The shape a real chart has: accumulated depreciation is its own fixed-asset
+    # account, and depreciation expense is its own expense account.
+    insert(s.company, schema.accounts, id="accumulated", name="accumulated", name_key="accumulated",
+           full_name="accumulated", full_name_key="accumulated", path="accumulated", depth=1,
+           type="fixed_asset", currency="USD", active=True)
+    insert(s.company, schema.accounts, id="wear", name="wear", name_key="wear", full_name="wear",
+           full_name_key="wear", path="wear", depth=1, type="expense", currency="USD", active=True)
+    s.batch("2026-02-20", 700, debit="wear", credit="accumulated")
+
+    undeclared = flows(s, limit=200)
+    assert units(undeclared.totals) == expected(s)[1]
+    row = next(item for item in undeclared.rows if item.account_id == "accumulated")
+    # A credit to a fixed asset is a falling asset, so a source of cash -- reported
+    # in investing while the account has said nothing about itself.
+    assert row.amount.minor_units == 700 and row.section == "investing"
+
+    s.company.raw.execute(
+        "UPDATE accounts SET cash_flow_section='operating' WHERE id IN ('accumulated', 'wear')")
+    moved = flows(s, limit=200)
+    assert units(moved.totals) == expected(s)[1]
+    row = next(item for item in moved.rows if item.account_id == "accumulated")
+    assert row.amount.minor_units == 700 and row.section == "operating"
+
+    # The add-back is worth exactly 700 of operating cash it was not credited with
+    # before, taken out of investing. Every other figure on the statement is the
+    # one it already was, including the reconciliation.
+    assert moved.totals.operating.minor_units == undeclared.totals.operating.minor_units + 700
+    assert moved.totals.investing.minor_units == undeclared.totals.investing.minor_units - 700
+    for figure in ("net_income", "financing", "net_change_in_cash", "opening_cash",
+                   "closing_cash", "difference"):
+        assert getattr(moved.totals, figure) == getattr(undeclared.totals, figure), figure
+    assert moved.totals.difference.minor_units == 0
+    assert (moved.totals.opening_cash.minor_units + moved.totals.net_change_in_cash.minor_units
+            == moved.totals.closing_cash.minor_units)
+    # Closing cash is still the bank total the balance sheet reports for the date.
+    _, sheet_rows = all_pages(
+        lambda **kw: fs.balance_sheet(fs.BalanceSheetInput(date_to="2026-02-28", **kw), s), limit=5)
+    assert sum(item.amount.minor_units for item in sheet_rows if item.account_type == "bank") \
+        == moved.totals.closing_cash.minor_units
+    # The rows stay grouped in section order, with the moved account among the
+    # operating ones rather than left where its type would have put it.
+    assert [item.section for item in moved.rows] == sorted(
+        (item.section for item in moved.rows), key=cf.SECTIONS.index)
 
 
 def test_totals_cover_every_account_while_rows_page_and_zero_changes_are_asked_for(cash_ledger):

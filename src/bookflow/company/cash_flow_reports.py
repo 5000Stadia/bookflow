@@ -28,27 +28,39 @@ account lands in. ``totals.difference`` is that reconciliation, published on
 the report the way the balance sheet publishes its own, and it is zero for any
 company whose books balance.
 
-**Classification is derived, never listed.** ``accounts.STATEMENT_FAMILY``
-already declares which account types are balance-sheet types, and
-``SECTION_BY_TYPE`` below assigns each of those to operating, investing or
-financing. The two are checked against each other at import, so an account type
-added to the chart vocabulary without a section here fails loudly instead of
-silently falling out of a statement that would still look balanced.
+**One answer to which section an account is in.**
+``accounts.cash_flow_section`` is that answer: a section the account itself
+declares, falling back to the section its type gives. Both halves live in
+``bookflow.company.accounts`` beside the rest of the chart vocabulary --
+``CASH_FLOW_SECTION_BY_TYPE`` is the type rule and ``cash_flow_section()``
+resolves an account against it -- and ``_section_sql`` below is that same
+resolution written once for SQLite, over the same declared mapping. The type
+rule is checked against ``STATEMENT_FAMILY`` at import, so an account type added
+to the chart vocabulary without a section fails loudly instead of silently
+falling out of a statement that would still look balanced.
 
-**What the account-type vocabulary cannot say.** A depreciation or amortisation
-add-back belongs in the operating section on the anchor product's own statement,
-and nothing recorded on an account distinguishes accumulated depreciation from
-any other fixed asset, or depreciation expense from any other expense: there is
-no account type and no ``system_role`` for it. So the add-back happens -- an
-increase in accumulated depreciation is a credit against a fixed-asset account,
-which is a negative asset change and therefore a source of cash -- but it is
-reported under investing rather than under operating, and the closing cash
-figure is unaffected either way. Giving an account its own declared cash-flow
-section is what would move it, and no column records that today.
+**What the account-type vocabulary cannot say, and what the column says
+instead.** A depreciation or amortisation add-back belongs in the operating
+section on the anchor product's own statement, and no account type and no
+``system_role`` distinguishes accumulated depreciation from any other fixed
+asset. The add-back itself needs no help -- an increase in accumulated
+depreciation is a credit against a fixed-asset account, which is a negative
+asset change and therefore a source of cash -- but the type rule reports it
+under investing. Declaring ``cash_flow_section = 'operating'`` on the
+accumulated-depreciation account moves that row, and only that row, to
+operating. Nothing declares itself by default, so a company that has said
+nothing gets exactly the statement it got before the column existed; and
+because sectioning only chooses which subtotal a change lands in, net change in
+cash and closing cash are the same figures either way.
+
+A profit-and-loss account may declare ``operating`` and nothing else, because
+the statement reports every income and expense effect inside net income, which
+it reports under operating. That declaration records what is already true of
+depreciation expense rather than moving anything.
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import get_args
 
 from pydantic import Field, field_validator, model_validator
 
@@ -56,39 +68,17 @@ from bookflow.company import accounts as chart
 from bookflow.company import ledger_reports as ledger
 
 
-SECTIONS = ("operating", "investing", "financing")
+# The chart vocabulary this statement runs on, named here and declared once in
+# `bookflow.company.accounts`, which also checks the type rule against
+# STATEMENT_FAMILY at import.
+SECTIONS = get_args(chart.CashFlowSection)
+CASH_TYPES = chart.CASH_FLOW_CASH_TYPES
+SECTION_BY_TYPE = chart.CASH_FLOW_SECTION_BY_TYPE
+SECTION_COLUMN = "cash_flow_section"
 
-# Cash itself: the accounts whose balance the statement explains. Every other
-# balance-sheet account is classified into one of the three sections below.
-CASH_TYPES = frozenset({"bank"})
-
-# The one declared classification. Keys are account types, values are sections.
-SECTION_BY_TYPE = {
-    "accounts_receivable": "operating",
-    "other_current_asset": "operating",
-    "accounts_payable": "operating",
-    "credit_card": "operating",
-    "other_current_liability": "operating",
-    "fixed_asset": "investing",
-    "other_asset": "investing",
-    "long_term_liability": "financing",
-    "equity": "financing",
-}
-
-BALANCE_SHEET_TYPES = frozenset(
-    account_type for account_type, family in chart.STATEMENT_FAMILY.items()
-    if family == "balance_sheet")
 INCOME_TYPES = frozenset(
     account_type for account_type, family in chart.STATEMENT_FAMILY.items()
     if family == "profit_and_loss")
-
-if set(SECTION_BY_TYPE) | CASH_TYPES != BALANCE_SHEET_TYPES or set(SECTION_BY_TYPE) & CASH_TYPES:
-    raise RuntimeError(
-        "every balance-sheet account type must be cash or carry exactly one cash-flow section; "
-        f"unclassified {sorted(BALANCE_SHEET_TYPES - CASH_TYPES - set(SECTION_BY_TYPE))}, "
-        f"unknown {sorted((set(SECTION_BY_TYPE) | CASH_TYPES) - BALANCE_SHEET_TYPES)}")
-if set(SECTION_BY_TYPE.values()) - set(SECTIONS):
-    raise RuntimeError(f"unknown cash-flow sections {sorted(set(SECTION_BY_TYPE.values()) - set(SECTIONS))}")
 
 
 def _in(types) -> str:
@@ -103,12 +93,17 @@ def _rows(cursor):
 
 
 def _section_sql() -> str:
+    """``accounts.cash_flow_section`` in SQL: the account's own answer, else its type's.
+
+    The arms are written from the same mapping the Python resolver uses, so the
+    two cannot drift apart into two classifications that disagree.
+    """
     by_section: dict[str, list[str]] = {}
     for account_type, section in SECTION_BY_TYPE.items():
         by_section.setdefault(section, []).append(account_type)
     arms = " ".join(f"WHEN a.type IN {_in(by_section[section])} THEN '{section}'"
                     for section in SECTIONS if section in by_section)
-    return "CASE " + arms + " END"
+    return f"coalesce(a.{SECTION_COLUMN}, CASE " + arms + " END)"
 
 
 SECTION_ORDER = "CASE section " + " ".join(
@@ -147,7 +142,7 @@ class CashFlowRow(ledger.StrictModel):
     account_type: str
     parent_id: str | None
     active: bool
-    section: Literal["operating", "investing", "financing"]
+    section: chart.CashFlowSection
     opening_balance: ledger.MoneyOutput
     closing_balance: ledger.MoneyOutput
     amount: ledger.MoneyOutput

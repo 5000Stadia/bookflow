@@ -93,6 +93,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `track_reimbursable_expenses` | boolean | yes | no | — | — |
 | `reimbursable_income_account_id` | string \| null | yes | yes | — | — |
 | `note` | string \| null | yes | yes | — | — |
+| `cash_flow_section` | literal["operating", "investing", "financing"] \| null | yes | yes | — | — |
 | `system_role` | string \| null | yes | yes | — | — |
 | `is_system` | boolean | yes | no | — | — |
 | `balance` | object | yes | no | — | — |
@@ -125,6 +126,7 @@ Example JSON output:
     "currency": "USD",
     "minor_units": 1
   },
+  "cash_flow_section": null,
   "changed": false,
   "check_reorder_number": null,
   "child_count": 1,
@@ -243,6 +245,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `track_reimbursable_expenses` | `--track-reimbursable-expenses` | boolean | no | no | false | — |
 | `reimbursable_income_account_id` | `--reimbursable-income-account-id` | string \| null | no | yes | null | — |
 | `note` | `--note` | string \| null | no | yes | null | — |
+| `cash_flow_section` | `--cash-flow-section` | literal["operating", "investing", "financing"] \| null | no | yes | null | — |
 
 ### Command and context options
 
@@ -310,6 +313,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `track_reimbursable_expenses` | boolean | yes | no | — | — |
 | `reimbursable_income_account_id` | string \| null | yes | yes | — | — |
 | `note` | string \| null | yes | yes | — | — |
+| `cash_flow_section` | literal["operating", "investing", "financing"] \| null | yes | yes | — | — |
 | `system_role` | string \| null | yes | yes | — | — |
 | `is_system` | boolean | yes | no | — | — |
 | `balance` | object | yes | no | — | — |
@@ -339,6 +343,7 @@ Example JSON output:
     "currency": "USD",
     "minor_units": 1
   },
+  "cash_flow_section": null,
   "check_reorder_number": null,
   "child_count": 1,
   "created_at": "2026-01-01T00:00:00Z",
@@ -506,6 +511,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `track_reimbursable_expenses` | boolean | yes | no | — | — |
 | `reimbursable_income_account_id` | string \| null | yes | yes | — | — |
 | `note` | string \| null | yes | yes | — | — |
+| `cash_flow_section` | literal["operating", "investing", "financing"] \| null | yes | yes | — | — |
 | `system_role` | string \| null | yes | yes | — | — |
 | `is_system` | boolean | yes | no | — | — |
 | `balance` | object | yes | no | — | — |
@@ -538,6 +544,7 @@ Example JSON output:
     "currency": "USD",
     "minor_units": 1
   },
+  "cash_flow_section": null,
   "changed": false,
   "check_reorder_number": null,
   "child_count": 1,
@@ -699,6 +706,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].track_reimbursable_expenses` | boolean | yes | no | — | — |
 | `items[].reimbursable_income_account_id` | string \| null | yes | yes | — | — |
 | `items[].note` | string \| null | yes | yes | — | — |
+| `items[].cash_flow_section` | literal["operating", "investing", "financing"] \| null | yes | yes | — | — |
 | `items[].system_role` | string \| null | yes | yes | — | — |
 | `items[].is_system` | boolean | yes | no | — | — |
 | `items[].balance` | object | yes | no | — | — |
@@ -971,6 +979,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `track_reimbursable_expenses` | boolean | yes | no | — | — |
 | `reimbursable_income_account_id` | string \| null | yes | yes | — | — |
 | `note` | string \| null | yes | yes | — | — |
+| `cash_flow_section` | literal["operating", "investing", "financing"] \| null | yes | yes | — | — |
 | `system_role` | string \| null | yes | yes | — | — |
 | `is_system` | boolean | yes | no | — | — |
 | `balance` | object | yes | no | — | — |
@@ -998,6 +1007,7 @@ Example JSON output:
     "currency": "USD",
     "minor_units": 1
   },
+  "cash_flow_section": null,
   "check_reorder_number": null,
   "child_count": 1,
   "created_at": "2026-01-01T00:00:00Z",
@@ -1109,6 +1119,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `track_reimbursable_expenses` | `--track-reimbursable-expenses` | boolean \| null | no | yes | null | — |
 | `reimbursable_income_account_id` | `--reimbursable-income-account-id` | string \| null | no | yes | null | — |
 | `note` | `--note` | string \| null | no | yes | null | — |
+| `cash_flow_section` | `--cash-flow-section` | literal["operating", "investing", "financing"] \| null | no | yes | null | — |
 
 ### Command and context options
 
@@ -1175,6 +1186,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `track_reimbursable_expenses` | boolean | yes | no | — | — |
 | `reimbursable_income_account_id` | string \| null | yes | yes | — | — |
 | `note` | string \| null | yes | yes | — | — |
+| `cash_flow_section` | literal["operating", "investing", "financing"] \| null | yes | yes | — | — |
 | `system_role` | string \| null | yes | yes | — | — |
 | `is_system` | boolean | yes | no | — | — |
 | `balance` | object | yes | no | — | — |
@@ -1208,6 +1220,7 @@ Example JSON output:
     "currency": "USD",
     "minor_units": 1
   },
+  "cash_flow_section": null,
   "changed_fields": [],
   "check_reorder_number": null,
   "child_count": 1,

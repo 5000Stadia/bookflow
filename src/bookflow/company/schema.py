@@ -333,9 +333,14 @@ accounts = _table(
     _column("reimbursable_income_account_id", sa.String(26), "Income account used for reimbursable expenses; null when tracking is disabled.", sa.ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=True),
     _column("note", sa.Text, "Account note; null when not recorded.", nullable=True),
     _column("system_role", sa.String(64), "Chart-assigned company-unique system role; null for ordinary accounts.", nullable=True),
+    _column("cash_flow_section", sa.String(16), "Declared statement-of-cash-flows section; null when the account takes the section its type gives.", nullable=True),
     sa.CheckConstraint(
         "type IN ('bank','accounts_receivable','other_current_asset','fixed_asset','other_asset','accounts_payable','credit_card','other_current_liability','long_term_liability','equity','income','cost_of_goods_sold','expense','other_income','other_expense','non_posting')",
         name="ck_accounts_type",
+    ),
+    sa.CheckConstraint(
+        "cash_flow_section IS NULL OR cash_flow_section IN ('operating','investing','financing')",
+        name="ck_accounts_cash_flow_section",
     ),
     sa.CheckConstraint("number IS NULL OR (length(number) BETWEEN 1 AND 7 AND number NOT GLOB '*[^0-9]*')", name="ck_accounts_number"),
     sa.CheckConstraint("(number IS NULL AND number_key IS NULL) OR number_key = number", name="ck_accounts_number_key"),
