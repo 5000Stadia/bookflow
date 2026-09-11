@@ -8,11 +8,22 @@ import sqlalchemy as sa
 from alembic import command
 from bookflow import BookflowError
 from bookflow.storage.engine import open_database
-from bookflow.storage.migrate import _config, migrate_to_head
+from bookflow.storage.migrate import HEADS, _config, migrate_to_head
 from bookflow.hub import schema as h
 from tests.permission_storage_support import create_hub, snapshot, digest
 
 REV=importlib.import_module('bookflow.storage.hub_migrations.versions.0012_permission_administration')
+
+
+@pytest.fixture(autouse=True)
+def hub0012_is_the_target(monkeypatch):
+    """This file examines the hub0011 -> hub0012 step alone.
+
+    `migrate_to_head` runs whatever the chain's head is, so without this every later hub
+    revision would land inside these preservation witnesses and they would assert against
+    a revision they never examined. Each later revision carries its own file.
+    """
+    monkeypatch.setitem(HEADS, 'hub', 'hub0012')
 
 
 @pytest.mark.parametrize('suspended',[False,True])

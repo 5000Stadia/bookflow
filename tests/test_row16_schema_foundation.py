@@ -347,10 +347,15 @@ def test_hub_capabilities_additive_and_fresh(tmp_path):
         after=_rows(db.raw)
         for name in before:
             if name != 'role_capabilities':
-                assert after[name] == before[name]
+                # A later hub migration may append columns - hub0012 did, to memberships and
+                # agent_authority - but nothing earlier is dropped, reordered or repopulated.
+                assert after[name][0][:len(before[name][0])] == before[name][0]
+                assert after[name][1] == before[name][1]
         new=set(after['role_capabilities'][1])-set(before['role_capabilities'][1])
+        identity=importlib.import_module('bookflow.storage.hub_migrations.versions.0013_identity_capabilities')
         assert new == ({(role,'customer-work','member') for role in ('owner','admin','hub_admin','standard','readonly')}
-                       | {(role,'customer-work','standard') for role in ('owner','admin','hub_admin','standard')})
+                       | {(role,'customer-work','standard') for role in ('owner','admin','hub_admin','standard')}
+                       | set(identity.ROLE_CAPABILITY_SEED))
     with open_database(tmp_path/'fresh-hub.db',writable=True,create=True) as db:
         migrate_to_head(db,'hub',None)
         assert _rows(db.raw) == after

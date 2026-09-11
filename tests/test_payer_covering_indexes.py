@@ -18,7 +18,7 @@ from sqlalchemy.dialects.sqlite import dialect
 from bookflow.company import schema
 from bookflow import BookflowError
 from bookflow.storage.engine import open_database
-from bookflow.storage.migrate import migrate_to_head
+from bookflow.storage.migrate import HEADS, migrate_to_head
 from tests.payment_raw_evidence import database, attachments
 
 M = importlib.import_module('bookflow.storage.company_migrations.versions.0019_payment_payer_covering_indexes')
@@ -250,13 +250,17 @@ json.dump(dict(company=co,rows=rows),open(sys.argv[2],'w'))
     old_files = attachments(root)
     with sqlite3.connect(root/'hub.db') as raw:
         hub_before_rows=snapshot(raw)['main']
+        hub_before_revision=raw.execute('SELECT version_num FROM alembic_version').fetchone()[0]
+    # The old root was built by BASE's source; the same call brings its hub to head too.
+    hub_seed=importlib.import_module('bookflow.storage.hub_migrations.versions.0013_identity_capabilities').ROLE_CAPABILITY_SEED
+    hub_moved=hub_before_revision!=HEADS['hub']
     with sqlite3.connect(root/'hub.db') as raw:
         raw.row_factory = sqlite3.Row
         company_before = dict(raw.execute('SELECT * FROM companies WHERE id=?',(co,)).fetchone())
         system = dict(raw.execute("SELECT * FROM users WHERE kind='system'").fetchone())
     client = bookflow.connect(data_root=str(root))
     result = client.run('upgrade',{},reason='Co19 exact public migration')
-    assert result['hub_revision']=='hub0012' and not result['hub_migrated']
+    assert result['hub_revision']==HEADS['hub'] and result['hub_migrated']==hub_moved
     assert result['companies_migrated']==[co] and not result['companies_failed']
     with sqlite3.connect(path) as raw:
         after = snapshot(raw)['main']
@@ -312,6 +316,11 @@ json.dump(dict(company=co,rows=rows),open(sys.argv[2],'w'))
         newcols,newrows=hub_after_rows[1][table];assert cols==newcols
         if table in ('audit_events','audit_entries'):
             assert len(newrows)==len(rows)+1 and newrows[:-1]==rows
+        elif hub_moved and table=='alembic_version':
+            assert len(newrows)==len(rows)
+        elif hub_moved and table=='role_capabilities':
+            # hub0013 appends its seed; every row already there is untouched.
+            assert newrows[:len(rows)]==rows and len(newrows)==len(rows)+len(hub_seed)
         elif table=='companies':
             names=[c[1] for c in cols];identifier=2+3*names.index('id')
             allowed={1+3*names.index('schema_revision')+i for i in range(3)}
