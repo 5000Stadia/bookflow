@@ -593,3 +593,47 @@ EXAMPLES.update({
         ' --reason "Remitted from the wrong bank account" --json',
         {"payment": ID, "expected_version": 1}),
 })
+
+
+# What a credit can become: it is listed, applied to an invoice, taken back off, refunded in
+# cash, or voided outright. Each of the three dispositions the anchor's own dialog offers has
+# a command here, and the list is where you find what a customer still has in hand.
+EXAMPLES.update({
+    "credit-memo query": Example(
+        'bookflow credit-memo query --customer "Rivera Construction" --available-only --limit 25'
+        ' --company "Demo Plumbing Co" --json',
+        {"customer": "Rivera Construction", "available_only": True, "limit": 25}),
+    "credit-memo void": Example(
+        f'bookflow credit-memo void {ID} --expected-version 1 --company "Demo Plumbing Co"'
+        ' --reason "Issued to the wrong customer" --json',
+        {"credit_memo": ID, "expected_version": 1}),
+    "customer-credit apply": Example(
+        f'bookflow customer-credit apply {ID} --expected-version 1'
+        ' --applications \'[{"invoice":"INV-118","expected_version":1,"amount":"30.00"}]\''
+        ' --company "Demo Plumbing Co" --reason "Use the credit against the open invoice" --json',
+        {"credit_memo": ID, "expected_version": 1,
+         "applications": [{"invoice": "INV-118", "expected_version": 1, "amount": "30.00"}]}),
+    "customer-credit unapply": Example(
+        f'bookflow customer-credit unapply {ID} --expected-version 2'
+        f' --applications \'[{{"application_id":"{ID}","invoice_expected_version":2}}]\''
+        ' --company "Demo Plumbing Co" --reason "Applied to the wrong invoice" --json',
+        {"credit_memo": ID, "expected_version": 2,
+         "applications": [{"application_id": ID, "invoice_expected_version": 2}]}),
+    "customer-refund post": Example(
+        'bookflow customer-refund post --date 2026-04-12 --funding-account "Checking"'
+        ' --method "Check" --check-number 1041'
+        f' --sources \'[{{"credit_memo":"{ID}"}}]\''
+        ' --company "Demo Plumbing Co" --reason "The customer asked for the money back" --json',
+        {"date": "2026-04-12", "funding_account": "Checking", "method": "Check",
+         "check_number": "1041", "sources": [{"credit_memo": ID}]}),
+    "customer-refund show": Example(
+        f'bookflow customer-refund show {ID} --company "Demo Plumbing Co" --json', {"refund": ID}),
+    "customer-refund query": Example(
+        'bookflow customer-refund query --customer "Rivera Construction" --limit 25'
+        ' --company "Demo Plumbing Co" --json',
+        {"customer": "Rivera Construction", "limit": 25}),
+    "customer-refund void": Example(
+        f'bookflow customer-refund void {ID} --expected-version 1 --company "Demo Plumbing Co"'
+        ' --reason "Drawn on the wrong bank account" --json',
+        {"refund": ID, "expected_version": 1}),
+})

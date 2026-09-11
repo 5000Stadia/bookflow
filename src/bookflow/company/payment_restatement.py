@@ -157,7 +157,7 @@ def validate(plan, s, ctx):
             require(row['effective_date'] == app['effective_date'] and row['currency'] == app['currency'])
             require(row['created_by'] == s.actor.id and row['audit_event_id'] == data['event'])
             original = live[0]
-            require(all(row[key] == original[key] for key in ('source_transaction_id', 'source_revision_id', 'source_component_id', 'source_posting_source_id')))
+            require(all(row[key] == original[key] for key in ('source_transaction_id', 'source_revision_id', 'source_component_id', 'credit_source_component_id', 'source_posting_source_id')))
     changed_payments = {row['source_transaction_id'] for row in changes}
     require(changed_payments == {old['id'] for old, new in data.get('settlement_headers', [])})
     for old, new in data.get('settlement_headers', []):

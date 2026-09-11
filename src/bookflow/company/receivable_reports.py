@@ -149,7 +149,7 @@ class StatementTotals(StrictModel):
 class StatementRow(StrictModel):
     kind: Literal["opening", "activity", "closing"]
     entry: Literal["balance_forward", "invoice", "sales_receipt", "payment", "deposit",
-                   "journal_entry", "credit_memo", "applied_credit", "balance_due"]
+                   "journal_entry", "credit_memo", "customer_refund", "applied_credit", "balance_due"]
     customer_id: str | None
     current_customer_label: str | None
     current_customer_name: str | None
@@ -197,13 +197,24 @@ WITH ar AS (
  FROM posting_lines l JOIN posting_batches b ON b.id=l.batch_id
  JOIN accounts a ON a.id=l.account_id
  WHERE a.type='accounts_receivable' AND b.effective_date<=:as_of
+), settlement_sources AS (
+ -- One receivable settlement edge with two kinds of source. A receipt names a payment
+ -- component key and a credit memo names a credit source key; both carry the same
+ -- (transaction, id, party) triple, and `applications_one_source` guarantees exactly one of
+ -- the two columns is present and belongs to the paying document. Joining the union rather
+ -- than one of the tables is what keeps this an outer question about settlement instead of a
+ -- question about receipts: an inner join to payment keys alone silently drops every credit
+ -- application, leaving the invoice aged at gross and the credit aged as a separate negative.
+ SELECT transaction_id, id, party_id FROM payment_component_keys
+ UNION ALL
+ SELECT transaction_id, id, party_id FROM credit_source_keys
 ), settled AS (
  SELECT s.paid_transaction_id AS invoice, s.paying_transaction_id AS receipt,
         k.party_id AS credit_party, s.amount_minor_units AS amount,
         s.effective_date AS effect_date
  FROM applications s
- JOIN payment_component_keys k ON k.transaction_id=s.paying_transaction_id
-                              AND k.id=s.source_component_key_id
+ JOIN settlement_sources k ON k.transaction_id=s.paying_transaction_id
+                          AND k.id=coalesce(s.source_component_key_id, s.credit_source_key_id)
  WHERE s.kind='apply' AND s.effective_date<=:as_of
    AND NOT EXISTS (SELECT 1 FROM applications u
                    WHERE u.reverses_application_id=s.id AND u.effective_date<=:as_of)

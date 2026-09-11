@@ -56,6 +56,8 @@ COMMAND_CODES: dict[str, str] = {
     "E_DUPLICATE_NUMBER": "That document number is already used in this document's number series.",
     "E_RETURN_EXHAUSTED": "The source invoice line has less left to return than this credit asks for.",
     "E_SOURCE_CORRECTION_CONFLICT": "The source invoice line has been corrected since it was claimed; issue an unlinked credit instead.",
+    "E_CREDIT_UNAVAILABLE": "That credit has already been applied or refunded; it is not worth what was asked for.",
+    "E_HAS_REFUND": "A refund has consumed this credit; void the refund before changing the credit memo.",
     "E_NAME_TAKEN": "That display name is already used.",
     "E_ORGANIZATION_REQUIRED": "More than one organization is visible; name one with --organization.",
     "E_ROLLOUT_INCOMPLETE": "Company creation did not finish; a folder remains.",

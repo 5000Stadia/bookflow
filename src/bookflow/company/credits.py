@@ -31,9 +31,9 @@ from bookflow.company import journals, schema as c
 from bookflow.company import sales_calculations as calc
 from bookflow.company import tax_attribution as tax_facts
 from bookflow.company.credit_models import (
-    CreditClaimOutput, CreditLineOutput, CreditMemoHistoryOutput, CreditMemoOutput,
-    CreditMemoWriteOutput, CreditRevisionOutput, CreditRevisionSummaryOutput, CreditSourceOutput,
-    CreditTaxComponentOutput,
+    CreditClaimOutput, CreditLineOutput, CreditMemoHistoryOutput, CreditMemoListOutput,
+    CreditMemoOutput, CreditMemoPageOutput, CreditMemoWriteOutput, CreditRevisionOutput,
+    CreditRevisionSummaryOutput, CreditSourceOutput, CreditTaxComponentOutput,
 )
 from bookflow.company.sales_facts import SalesLineProfile, SalesProfile, SalesTaxComponent
 from bookflow.company.sales_models import SalesLineInput, _invalid
@@ -473,13 +473,84 @@ def _cell_taxable(cell):
     return cell['taxable_minor_units'] if cell['rule'] is not None else cell['captured']['taxable_minor_units']
 
 
+def prepare_void(s, ctx, inp):
+    """Reverse the credit at its own date and give every claimed source interval back.
+
+    A credit that anything still stands on is refused rather than quietly released: an active
+    application would leave an invoice settled by a document that no longer exists, and an
+    active refund would leave cash paid against capacity that is gone. Unapply or void those
+    first, which is exactly what an invoice with applied payments asks for.
+    """
+    source = facts(s, inp.credit_memo, write=True)
+    old_header, revision = source['header'], source['revision']
+    if inp.expected_version is not None:
+        journals.version_meta(s, old_header, inp.expected_version)
+    if not ctx.reason or not ctx.reason.strip():
+        raise BookflowError('E_REASON_REQUIRED')
+    if len(ctx.reason.strip()) > 140:
+        raise _invalid('reason', 'must be at most 140 characters')
+    if old_header['status'] == 'voided':
+        return Plan(CreditMemoWriteOutput(
+            **summary(old_header, revision, profile_row(s, revision)),
+            revision=revision_output(s, revision), source_current=_source_current(s, old_header['id']),
+            changed=False), dict(input=inp, operation='void', changed=False))
+    if source['applications']:
+        raise BookflowError('E_HAS_APPLICATIONS', details={
+            'credit_memo_id': old_header['id'],
+            'application_ids': [row['id'] for row in source['applications']],
+            'next': 'Take the credit back off the invoices it settled with `customer-credit '
+                    'unapply`, then void it.'})
+    if source['consumptions']:
+        raise BookflowError('E_HAS_REFUND', details={
+            'credit_memo_id': old_header['id'],
+            'refund_ids': sorted({row['transaction_id'] for row in source['consumptions']}),
+            'next': 'Void the refund that paid this credit out, then void the credit memo.'})
+    journals.open_dates(s, [revision['date']])
+    at, event = clock.now_iso(), new_id()
+    created = lambda: dict(id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
+    pending = {table: [] for table, _, _ in TABLE_KINDS}
+    batches = effects.rows(s, c.posting_batches, c.posting_batches.c.revision_id == revision['id'],
+                           c.posting_batches.c.kind != 'reversal')
+    if len(batches) != 1:
+        raise BookflowError('E_VALIDATION', message='Credit memo has ambiguous current posting evidence.')
+    inverse = effects.reverse(s, old_header, revision, batches[0], event, created, pending)
+    claims = c.credit_source_claims
+    released = sa.select(claims.c.reverses_claim_id).where(claims.c.kind == 'release')
+    for claim in effects.rows(s, claims, claims.c.credit_transaction_id == old_header['id'],
+                              claims.c.kind == 'claim', claims.c.id.notin_(released),
+                              order=claims.c.id):
+        pending['credit_source_claims'].append(dict(
+            claim, **created(), audit_event_id=event, kind='release', reverses_claim_id=claim['id']))
+    header = dict(old_header, version=old_header['version'] + 1, updated_at=at,
+                  updated_by=s.actor.id, updated_via=ctx.interface.value, status='voided',
+                  voided_at=at, voided_by=s.actor.id, void_reason=ctx.reason.strip(),
+                  void_posting_batch_id=inverse['id'])
+    output = CreditMemoWriteOutput(**summary(header, revision, profile_row(s, revision)),
+                                   revision=revision_output(s, revision, pending),
+                                   source_current=_void_current(source), changed=True)
+    return Plan(output, dict(input=inp, operation='void', changed=True, header=header,
+                             before=old_header, pending=pending, sequence=None, event=event,
+                             revision=revision, source=source))
+
+
+def _void_current(source):
+    key, currency = source['key'], source['currency']
+    zero = Money(0, currency).to_dict()
+    return CreditSourceOutput(
+        credit_source_key_id=key['id'], party_id=key['party_id'], ar_account_id=key['ar_account_id'],
+        currency=currency, capacity_minor_units=0, applied_minor_units=0, refunded_minor_units=0,
+        available_minor_units=0, capacity=zero, applied=zero, refunded=zero, available=zero)
+
+
 def apply(plan, ctx, s):
     # Rebuilt inside the writer transaction: the residue on a source line, the number and the
     # open period are only decisive here, and the preview read them before anyone held the lock.
-    fresh = prepare(s, ctx, plan.data['input'])
-    from bookflow.company.credit_validation import validate
-    validate(fresh, s, ctx)
-    return effects.persist(fresh, ctx, s, command_name='credit-memo post', table_kinds=TABLE_KINDS)
+    operation = plan.data['operation']
+    fresh = prepare_void(s, ctx, plan.data['input']) if operation == 'void' else prepare(s, ctx, plan.data['input'])
+    from bookflow.company.credit_validation import validate, validate_void
+    (validate_void if operation == 'void' else validate)(fresh, s, ctx)
+    return effects.persist(fresh, ctx, s, command_name='credit-memo ' + operation,
+                           table_kinds=TABLE_KINDS)
 
 
 # ------------------------------------------------------------------ reading it back
@@ -577,11 +648,92 @@ def revision_output(s, revision, pending=None, *, summary_only=False):
                                 custom_fields_snapshot=snapshot, custom_fields=custom.project(snapshot))
 
 
-def _source_current(s, transaction_id, pending=None):
-    """What this credit is worth now: its capacity less what has been applied from it.
+def active_applications(s, transaction_id):
+    """Every apply from this credit that no unapply has taken back."""
+    app, inverse = c.applications, c.applications.alias('credit_apply_inverse')
+    return effects.rows(s, app, app.c.kind == 'apply', app.c.paying_transaction_id == transaction_id,
+                        ~sa.exists(sa.select(inverse.c.id).where(
+                            inverse.c.reverses_application_id == app.c.id)),
+                        order=app.c.id)
 
-    Reading the settlement edge rather than assuming it is empty is what keeps this true on the
-    day `customer-credit apply` starts writing rows against these keys.
+
+def active_consumptions(s, *, key_id=None, refund_id=None):
+    """Every refund consumption of credit capacity that no release has given back."""
+    table, inverse = c.customer_refund_consumptions, c.customer_refund_consumptions.alias('release')
+    where = [table.c.kind == 'consume',
+             ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_consumption_id == table.c.id))]
+    if key_id is not None:
+        where.append(table.c.credit_source_key_id == key_id)
+    if refund_id is not None:
+        where.append(table.c.transaction_id == refund_id)
+    return effects.rows(s, table, *where, order=table.c.id)
+
+
+def _component_use(s, transaction_id, key_id):
+    """What each of this credit's components has already been spent on, by component id.
+
+    Both kinds of spending land here: an application writes ``application_allocations``
+    naming the credit component it drew on, and a refund writes a consumption naming the
+    same component. One dictionary, so no caller can subtract one kind and forget the other.
+    """
+    used = {}
+    allocations, inverse = c.application_allocations, c.application_allocations.alias('credit_alloc_inverse')
+    for row in s.company.conn.execute(sa.select(
+            allocations.c.credit_source_component_id,
+            sa.func.sum(allocations.c.amount_minor_units)).where(
+            allocations.c.kind == 'allocation',
+            allocations.c.source_transaction_id == transaction_id,
+            allocations.c.credit_source_component_id.isnot(None),
+            ~sa.exists(sa.select(inverse.c.id).where(
+                inverse.c.reverses_allocation_id == allocations.c.id))).group_by(
+            allocations.c.credit_source_component_id)):
+        used[row[0]] = used.get(row[0], 0) + int(row[1])
+    for row in active_consumptions(s, key_id=key_id):
+        identifier = row['credit_source_component_id']
+        used[identifier] = used.get(identifier, 0) + row['amount_minor_units']
+    return used
+
+
+def facts(s, selector, *, write=False):
+    """The one place a credit's remaining worth is computed, for every caller.
+
+    Available is capacity less active applications less active refund consumptions. Both
+    subtractions live here so that no reader can take one of them and miss the other, and
+    ``remaining`` breaks the same arithmetic down per component so a later application knows
+    which of the credit's lines it is actually drawing on.
+    """
+    from bookflow.company.payment_authority import authorize
+    header = resolve(s, selector) if isinstance(selector, str) else selector
+    authorize(s, [header['id']], write=write)
+    revision = effects.rows(s, c.transaction_revisions,
+                            c.transaction_revisions.c.id == header['current_revision_id'])[0]
+    key = effects.rows(s, c.credit_source_keys,
+                       c.credit_source_keys.c.transaction_id == header['id'])[0]
+    components = effects.rows(s, c.credit_components,
+                              c.credit_components.c.transaction_id == header['id'],
+                              c.credit_components.c.revision_id == revision['id'],
+                              order=c.credit_components.c.id)
+    posted = header['status'] == 'posted'
+    applications = active_applications(s, header['id'])
+    consumptions = active_consumptions(s, key_id=key['id'])
+    used = _component_use(s, header['id'], key['id'])
+    capacity = sum(row['amount_minor_units'] for row in components) if posted else 0
+    applied = sum(row['amount_minor_units'] for row in applications)
+    refunded = sum(row['amount_minor_units'] for row in consumptions)
+    remaining = {row['id']: (row['amount_minor_units'] if posted else 0) - used.get(row['id'], 0)
+                 for row in components}
+    return dict(header=header, revision=revision, key=key, components=components,
+                applications=applications, consumptions=consumptions, remaining=remaining,
+                capacity=capacity, applied=applied, refunded=refunded,
+                available=capacity - applied - refunded, currency=key['currency'])
+
+
+def _source_current(s, transaction_id, pending=None):
+    """What this credit is worth now: its capacity less what has been applied or refunded.
+
+    Reading the settlement edge and the refund consumptions rather than assuming both are
+    empty is what keeps this true once `customer-credit apply` and `customer-refund post`
+    start writing rows against these keys.
     """
     keys = [row for row in (pending or {}).get('credit_source_keys', [])
             if row['transaction_id'] == transaction_id]
@@ -597,16 +749,16 @@ def _source_current(s, transaction_id, pending=None):
                                   c.credit_components.c.transaction_id == transaction_id,
                                   c.credit_components.c.revision_id == revision)
     capacity = sum(row['amount_minor_units'] for row in components) if (not header or header[0]['status'] == 'posted') else 0
-    app, inverse = c.applications, c.applications.alias('inverse')
-    applied = s.company.conn.execute(sa.select(sa.func.coalesce(sa.func.sum(app.c.amount_minor_units), 0)).where(
-        app.c.kind == 'apply', app.c.credit_source_key_id == key['id'],
-        ~sa.exists(sa.select(inverse.c.id).where(inverse.c.reverses_application_id == app.c.id)))).scalar_one()
+    applied = sum(row['amount_minor_units'] for row in active_applications(s, transaction_id))
+    refunded = sum(row['amount_minor_units'] for row in active_consumptions(s, key_id=key['id']))
+    available = capacity - applied - refunded
     currency = key['currency']
     return CreditSourceOutput(
         credit_source_key_id=key['id'], party_id=key['party_id'], ar_account_id=key['ar_account_id'],
         currency=currency, capacity_minor_units=capacity, applied_minor_units=applied,
-        available_minor_units=capacity - applied, capacity=Money(capacity, currency).to_dict(),
-        applied=Money(applied, currency).to_dict(), available=Money(capacity - applied, currency).to_dict())
+        refunded_minor_units=refunded, available_minor_units=available,
+        capacity=Money(capacity, currency).to_dict(), applied=Money(applied, currency).to_dict(),
+        refunded=Money(refunded, currency).to_dict(), available=Money(available, currency).to_dict())
 
 
 def show(s, inp):
@@ -638,3 +790,221 @@ def page(s, ctx, inp):
         items=[revision_output(s, revision, summary_only=True) for revision in found],
         count=len(found), has_more=more, next_cursor=continuation(state, len(found), more),
         audit_watermark=state.sequence)
+
+
+def _page_worth(s, headers):
+    """What each credit on one page is still worth, in three queries rather than three per row.
+
+    The arithmetic is `facts`'s, said once for a page: capacity from the current revision's
+    components, less active applications, less active refund consumptions.
+    """
+    identifiers = [header['id'] for header in headers]
+    if not identifiers:
+        return {}
+    keys = {row['transaction_id']: row for row in effects.rows(
+        s, c.credit_source_keys, c.credit_source_keys.c.transaction_id.in_(identifiers))}
+    capacity = {}
+    component = c.credit_components
+    for transaction_id, total in s.company.conn.execute(sa.select(
+            component.c.transaction_id, sa.func.sum(component.c.amount_minor_units)).join(
+            c.transactions, c.transactions.c.current_revision_id == component.c.revision_id).where(
+            component.c.transaction_id.in_(identifiers)).group_by(component.c.transaction_id)):
+        capacity[transaction_id] = int(total)
+    applied, app, inverse = {}, c.applications, c.applications.alias('page_apply_inverse')
+    for transaction_id, total in s.company.conn.execute(sa.select(
+            app.c.paying_transaction_id, sa.func.sum(app.c.amount_minor_units)).where(
+            app.c.kind == 'apply', app.c.paying_transaction_id.in_(identifiers),
+            ~sa.exists(sa.select(inverse.c.id).where(
+                inverse.c.reverses_application_id == app.c.id))).group_by(
+            app.c.paying_transaction_id)):
+        applied[transaction_id] = int(total)
+    refunded, use, release = {}, c.customer_refund_consumptions, c.customer_refund_consumptions.alias('page_release')
+    for key_id, total in s.company.conn.execute(sa.select(
+            use.c.credit_source_key_id, sa.func.sum(use.c.amount_minor_units)).where(
+            use.c.kind == 'consume',
+            use.c.credit_source_key_id.in_([row['id'] for row in keys.values()]),
+            ~sa.exists(sa.select(release.c.id).where(
+                release.c.reverses_consumption_id == use.c.id))).group_by(
+            use.c.credit_source_key_id)):
+        refunded[key_id] = int(total)
+    worth = {}
+    for header in headers:
+        key = keys[header['id']]
+        currency = key['currency']
+        held = capacity.get(header['id'], 0) if header['status'] == 'posted' else 0
+        spent = applied.get(header['id'], 0)
+        paid = refunded.get(key['id'], 0)
+        available = held - spent - paid
+        worth[header['id']] = CreditSourceOutput(
+            credit_source_key_id=key['id'], party_id=key['party_id'],
+            ar_account_id=key['ar_account_id'], currency=currency, capacity_minor_units=held,
+            applied_minor_units=spent, refunded_minor_units=paid,
+            available_minor_units=available, capacity=Money(held, currency).to_dict(),
+            applied=Money(spent, currency).to_dict(), refunded=Money(paid, currency).to_dict(),
+            available=Money(available, currency).to_dict())
+    return worth
+
+
+def query_page(s, ctx, inp):
+    """Page credit memos, newest or oldest first, with what each is still worth."""
+    from bookflow.company import accounts
+    from bookflow.company.parties import resolve_party
+    from bookflow.company.query import continuation, page_state
+
+    class Contract:
+        cursor = inp.cursor
+        query = None
+
+        def model_dump(self, **kw):
+            return inp.model_dump(**kw)
+
+    state = page_state(s, 'credit-memo query', Contract(), ctx.on_behalf_of)
+    t, r, p = c.transactions, c.transaction_revisions, c.credit_profiles
+    query = (sa.select(t.c.id).select_from(
+        t.join(r, r.c.id == t.c.current_revision_id).join(p, p.c.revision_id == r.c.id))
+        .where(t.c.type == DOCUMENT_TYPE))
+    if inp.customer:
+        query = query.where(p.c.customer_id == resolve_party(s.company, 'customer', inp.customer)['id'])
+    if inp.ar_account:
+        query = query.where(p.c.ar_account_id == accounts.resolve_account(s.company, inp.ar_account)['id'])
+    if inp.origin:
+        query = query.where(p.c.origin == inp.origin)
+    if inp.status:
+        query = query.where(t.c.status == inp.status)
+    if inp.date_from:
+        query = query.where(r.c.date >= inp.date_from)
+    if inp.date_to:
+        query = query.where(r.c.date <= inp.date_to)
+    if inp.number:
+        query = query.where(t.c.number.contains(inp.number, autoescape=True))
+    order = (r.c.date, t.c.id)
+    query = query.order_by(*([column.desc() for column in order] if inp.direction == 'desc' else order))
+    if inp.available_only:
+        # Capacity less applications less consumptions, in SQL, so the filter happens before
+        # the page rather than after it -- the same arithmetic `_page_worth` reports.
+        app, inverse = c.applications, c.applications.alias('filter_apply_inverse')
+        use, release = c.customer_refund_consumptions, c.customer_refund_consumptions.alias('filter_release')
+        component, key = c.credit_components, c.credit_source_keys
+        held = sa.select(sa.func.coalesce(sa.func.sum(component.c.amount_minor_units), 0)).where(
+            component.c.transaction_id == t.c.id, component.c.revision_id == t.c.current_revision_id
+        ).scalar_subquery()
+        spent = sa.select(sa.func.coalesce(sa.func.sum(app.c.amount_minor_units), 0)).where(
+            app.c.kind == 'apply', app.c.paying_transaction_id == t.c.id,
+            ~sa.exists(sa.select(inverse.c.id).where(
+                inverse.c.reverses_application_id == app.c.id))).scalar_subquery()
+        paid = sa.select(sa.func.coalesce(sa.func.sum(use.c.amount_minor_units), 0)).select_from(
+            use.join(key, key.c.id == use.c.credit_source_key_id)).where(
+            key.c.transaction_id == t.c.id, use.c.kind == 'consume',
+            ~sa.exists(sa.select(release.c.id).where(
+                release.c.reverses_consumption_id == use.c.id))).scalar_subquery()
+        query = query.where(t.c.status == 'posted', held - spent - paid > 0)
+    found = [dict(row) for row in s.company.conn.execute(
+        query.offset(state.offset).limit(inp.limit + 1)).mappings()]
+    more, found = len(found) > inp.limit, found[:inp.limit]
+    identifiers = [row['id'] for row in found]
+    headers = {row['id']: dict(row) for row in s.company.conn.execute(
+        sa.select(c.transactions).where(c.transactions.c.id.in_(identifiers))).mappings()} if found else {}
+    ordered = [headers[identifier] for identifier in identifiers]
+    revision_ids = [header['current_revision_id'] for header in ordered]
+    revisions = {row['id']: dict(row) for row in s.company.conn.execute(
+        sa.select(c.transaction_revisions).where(
+            c.transaction_revisions.c.id.in_(revision_ids))).mappings()} if found else {}
+    profiles = {row['revision_id']: dict(row) for row in s.company.conn.execute(
+        sa.select(c.credit_profiles).where(
+            c.credit_profiles.c.revision_id.in_(revision_ids))).mappings()} if found else {}
+    worth = _page_worth(s, ordered)
+    items = [CreditMemoListOutput(
+        **summary(header, revisions[header['current_revision_id']],
+                  profiles[header['current_revision_id']]),
+        source_current=worth[header['id']]) for header in ordered]
+    return CreditMemoPageOutput(items=items, count=len(found), has_more=more,
+                                next_cursor=continuation(state, len(found), more),
+                                audit_watermark=state.sequence)
+
+
+def settlement_current_output(s, source):
+    """This credit as a settlement source, in the shape a receipt reports itself in.
+
+    ``credit_source_keys`` deliberately carries the same (party, receivable, currency) triple
+    ``payment_component_keys`` carries, so a reader that already renders a payment's current
+    settlement renders a credit's without learning a second shape. The field names are the
+    receipt's for the same reason: one projection over two kinds of source.
+    """
+    from bookflow.company import sales_defaults as defaults
+    key, header = source['key'], source['header']
+    party = defaults._row(s.company, 'customer', key['party_id'], active=False)
+    return dict(payment_id=header['id'], version=header['version'],
+                revision_id=source['revision']['id'], status=header['status'],
+                received_minor_units=source['capacity'],
+                effective_received_minor_units=source['capacity'],
+                applied_minor_units=source['applied'], available_minor_units=source['available'],
+                currency=source['currency'], component_count=1,
+                components=[dict(component_key_id=key['id'], component_id=None,
+                                 party_id=key['party_id'], party_name=party['full_name'],
+                                 ar_account_id=key['ar_account_id'], currency=source['currency'],
+                                 received_minor_units=source['capacity'],
+                                 applied_minor_units=source['applied'],
+                                 available_minor_units=source['available'])])
+
+
+def require_claims_intact(s, transaction_id, old_revision, pending):
+    """Refuse an invoice correction that contradicts an interval a credit already claimed.
+
+    The credit side fails closed on its own: `_returned` compares a live claim against the
+    line as it stands now and answers `E_SOURCE_CORRECTION_CONFLICT` rather than pricing a
+    return from a line that has moved underneath it. The invoice side did not fail at all --
+    a correction could change a claimed line's quantity, its net or its tax cells and leave an
+    issued credit priced against something that no longer exists, with nothing said. This is
+    the other half of that fence, and it is deliberately the same comparison: a claimed line's
+    base quantity, its net, and the tax cells the credit's own cells were captured from.
+
+    An issued credit is never repriced from a corrected source -- its cells are captured facts
+    -- so the only two honest answers are "leave the claimed line alone" and "refuse", and a
+    separately dated commercial adjustment remains available to the user either way.
+    """
+    claims = c.credit_source_claims
+    released = sa.select(claims.c.reverses_claim_id).where(claims.c.kind == 'release')
+    live = effects.rows(s, claims, claims.c.source_transaction_id == transaction_id,
+                        claims.c.kind == 'claim', claims.c.id.notin_(released), order=claims.c.id)
+    if not live:
+        return
+    envelopes = {row['id']: row['line_id'] for row in pending['document_lines']}
+    lines = {envelopes[row['document_line_id']]: row for row in pending['sales_line_profiles']}
+    cells = {}
+    for row in pending['sales_tax_components']:
+        cells.setdefault(envelopes[row['document_line_id']], []).append(row)
+    old_cells = {}
+    old_envelopes = {row['id']: row['line_id'] for row in effects.rows(
+        s, c.document_lines, c.document_lines.c.revision_id == old_revision['id'])}
+    for row in effects.rows(s, c.sales_tax_components,
+                            c.sales_tax_components.c.revision_id == old_revision['id']):
+        old_cells.setdefault(old_envelopes[row['document_line_id']], []).append(row)
+
+    def taxes(rows):
+        return sorted((row['tax_item_id'], row['liability_account_id'], row['taxable_minor_units'],
+                       row['tax_minor_units']) for row in rows)
+
+    for claim in live:
+        line_id = claim['source_line_id']
+        profile = lines.get(line_id)
+        conflict = dict(invoice_id=transaction_id, line_id=line_id,
+                        credit_memo_id=claim['credit_transaction_id'],
+                        claimed_base_quantity_microunits=claim['source_base_quantity_microunits'],
+                        claimed_net_minor_units=claim['source_net_minor_units'],
+                        next='A credit memo has returned part of this line. Take the return back '
+                             'by voiding that credit memo, or correct the other lines and leave '
+                             'this one as it was issued.')
+        if profile is None:
+            raise BookflowError('E_SOURCE_CORRECTION_CONFLICT',
+                                details=dict(conflict, reason='claimed_line_removed'))
+        if (profile['base_quantity_microunits'] != claim['source_base_quantity_microunits']
+                or profile['net_minor_units'] != claim['source_net_minor_units']):
+            raise BookflowError('E_SOURCE_CORRECTION_CONFLICT', details=dict(
+                conflict, reason='claimed_line_repriced',
+                current_base_quantity_microunits=profile['base_quantity_microunits'],
+                current_net_minor_units=profile['net_minor_units']))
+        if taxes(cells.get(line_id, [])) != taxes(old_cells.get(line_id, [])):
+            # The interval is stored and the money is a function of it, so a moved tax cell
+            # moves cents nobody asked to move -- including in returns already issued.
+            raise BookflowError('E_SOURCE_CORRECTION_CONFLICT',
+                                details=dict(conflict, reason='claimed_line_tax_changed'))

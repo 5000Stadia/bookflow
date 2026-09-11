@@ -99,7 +99,9 @@ company update
 company use
 credit-memo history
 credit-memo post
+credit-memo query
 credit-memo show
+credit-memo void
 custom-field activate
 custom-field create
 custom-field deactivate
@@ -116,6 +118,8 @@ customer query
 customer show
 customer unlink-vendor
 customer update
+customer-credit apply
+customer-credit unapply
 customer-message activate
 customer-message create
 customer-message deactivate
@@ -130,6 +134,10 @@ customer-type list
 customer-type query
 customer-type show
 customer-type update
+customer-refund post
+customer-refund query
+customer-refund show
+customer-refund void
 demo reset
 deposit history
 deposit items
@@ -399,6 +407,9 @@ def execution_map():
     from tests.test_bill_entry import COMMANDS as BILL_COMMANDS
     from tests.test_bill_payment import COMMANDS as BILL_PAYMENT_COMMANDS
     from tests.test_credit_memo import COMMANDS as CREDIT_MEMO_COMMANDS
+    from tests.test_credit_memo_lifecycle import COMMANDS as CREDIT_LIFECYCLE_COMMANDS
+    from tests.test_credit_settlement import COMMANDS as CREDIT_SETTLEMENT_COMMANDS
+    from tests.test_customer_refund import COMMANDS as REFUND_COMMANDS
     from tests.test_sales_tax_remittance import COMMANDS as SALES_TAX_COMMANDS
     from tests.test_transfer_funds import COMMANDS as TRANSFER_COMMANDS
     from tests.test_payment_recovery_interfaces import COMMANDS as RECOVERY_COMMANDS
@@ -420,6 +431,9 @@ def execution_map():
                    'tests/test_bill_entry.py::test_the_same_bill_through_python_cli_http_and_mcp' if cmd.name in BILL_COMMANDS else
                    'tests/test_bill_payment.py::test_the_same_bill_payment_through_python_cli_http_and_mcp' if cmd.name in BILL_PAYMENT_COMMANDS else
                    'tests/test_credit_memo.py::test_the_same_credit_memo_through_python_cli_http_and_mcp' if cmd.name in CREDIT_MEMO_COMMANDS else
+                   'tests/test_credit_memo_lifecycle.py::test_the_same_credit_memo_lifecycle_through_python_cli_http_and_mcp' if cmd.name in CREDIT_LIFECYCLE_COMMANDS else
+                   'tests/test_credit_settlement.py::test_the_same_credit_application_through_python_cli_http_and_mcp' if cmd.name in CREDIT_SETTLEMENT_COMMANDS else
+                   'tests/test_customer_refund.py::test_the_same_refund_through_python_cli_http_and_mcp' if cmd.name in REFUND_COMMANDS else
                    'tests/test_sales_tax_remittance.py::test_the_same_sales_tax_remittance_through_python_cli_http_and_mcp' if cmd.name in SALES_TAX_COMMANDS else
                    'tests/test_transfer_funds.py::test_the_same_transfer_through_python_cli_http_and_mcp' if cmd.name in TRANSFER_COMMANDS else
                    'tests/test_payment_recovery_interfaces.py::test_complete_recovery_contract_on_all_four_interfaces' if cmd.name in RECOVERY_COMMANDS else

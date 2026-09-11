@@ -62,7 +62,7 @@ def define_tables(metadata, column, table, common):
             name='ck_ledger_party_pair')
 
     transactions = T('transactions', *common(),
-        text('type', 'Business document type: journal_entry, invoice, sales_receipt, payment, deposit, bill, bill_payment, credit_memo or sales_tax_payment.', size=32),
+        text('type', 'Business document type: journal_entry, invoice, sales_receipt, payment, deposit, bill, bill_payment, credit_memo, sales_tax_payment or customer_refund.', size=32),
         text('number', 'Unique editable number within the document type.', size=64),
         identifier('current_revision_id', 'Immutable revision currently displayed.'),
         text('status', 'Current workflow state: posted or voided.', size=16),
@@ -71,7 +71,7 @@ def define_tables(metadata, column, table, common):
         text('void_reason', 'Reason supplied for the final void.', True, 140),
         identifier('void_posting_batch_id', 'Final reversal batch; no separate business number.', True),
         sa.UniqueConstraint('type', 'number', name='uq_transaction_type_number'),
-        sa.CheckConstraint("type IN ('journal_entry', 'invoice', 'sales_receipt', 'payment', 'deposit', 'bill', 'bill_payment', 'credit_memo', 'sales_tax_payment')", name='ck_transaction_type'),
+        sa.CheckConstraint("type IN ('journal_entry', 'invoice', 'sales_receipt', 'payment', 'deposit', 'bill', 'bill_payment', 'credit_memo', 'sales_tax_payment', 'customer_refund')", name='ck_transaction_type'),
         sa.UniqueConstraint('id', 'type', name='uq_transaction_id_type'),
         sa.CheckConstraint("length(trim(number)) BETWEEN 1 AND 64", name='ck_transaction_number'),
         sa.CheckConstraint("(status = 'posted' AND voided_at IS NULL AND voided_by IS NULL AND void_reason IS NULL AND void_posting_batch_id IS NULL) OR "
@@ -117,7 +117,7 @@ def define_tables(metadata, column, table, common):
         identifier('revision_id', 'Immutable document revision containing this line.'),
         identifier('line_id', 'Stable line identity carried across revisions.'),
         integer('position', 'One-based entered line position within the revision.'),
-        text('kind', 'Entered line kind: journal, sale, payment, deposit, purchase, bill_payment, credit or sales_tax_payment.', size=16),
+        text('kind', 'Entered line kind: journal, sale, payment, deposit, purchase, bill_payment, credit, sales_tax_payment or refund.', size=16),
         C('account_id', sa.String(26), 'Posting account selected for a journal; null for a sale.', sa.ForeignKey('accounts.id'), nullable=True),
         text('side', 'Journal side: debit or credit; null for a sale.', True, size=6),
         integer('amount_minor_units', 'Positive journal amount; null for a sale.', True),
@@ -134,7 +134,7 @@ def define_tables(metadata, column, table, common):
             "(kind = 'journal' AND account_id IS NOT NULL AND side IS NOT NULL AND side IN ('debit', 'credit') "
             "AND typeof(amount_minor_units) = 'integer' AND amount_minor_units > 0 "
             "AND account_snapshot IS NOT NULL AND json_valid(account_snapshot) AND json_type(account_snapshot) = 'object') OR "
-            "(kind IN ('sale', 'payment', 'deposit', 'purchase', 'bill_payment', 'credit', 'sales_tax_payment') AND account_id IS NULL AND side IS NULL AND amount_minor_units IS NULL AND account_snapshot IS NULL "
+            "(kind IN ('sale', 'payment', 'deposit', 'purchase', 'bill_payment', 'credit', 'sales_tax_payment', 'refund') AND account_id IS NULL AND side IS NULL AND amount_minor_units IS NULL AND account_snapshot IS NULL "
             "AND original_minor_units IS NULL AND original_currency IS NULL AND rate_used IS NULL AND rate_source IS NULL)",
             name='ck_document_line_kind_side'),
         description='Immutable ordered journal or sale envelopes, dimensions and original journal currency facts.')

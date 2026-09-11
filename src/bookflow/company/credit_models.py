@@ -221,9 +221,11 @@ class CreditSourceOutput(StrictModel):
     currency: str
     capacity_minor_units: int
     applied_minor_units: int
+    refunded_minor_units: int = 0
     available_minor_units: int
     capacity: MoneyOutput
     applied: MoneyOutput
+    refunded: MoneyOutput | None = None
     available: MoneyOutput
 
 
@@ -254,6 +256,57 @@ class CreditMemoSummaryOutput(CommonOut):
 class CreditMemoOutput(CreditMemoSummaryOutput):
     revision: CreditRevisionOutput
     source_current: CreditSourceOutput
+
+
+class CreditMemoListOutput(CreditMemoSummaryOutput):
+    """A credit memo as a list row, with what it is still worth attached.
+
+    The worth is the reason a list of credits is worth reading at all: "which of this
+    customer's credits can still be applied or refunded" is the question, and answering it
+    from the row rather than from a second call per credit is what makes the list usable.
+    """
+
+    source_current: CreditSourceOutput
+
+
+class CreditMemoVoidInput(StrictModel):
+    credit_memo: Selector
+    expected_version: _Version | None = None
+
+
+class CreditMemoQueryInput(StrictModel):
+    limit: int = Field(default=50, ge=1, le=200)
+    cursor: str | None = Field(default=None, max_length=8192)
+    date_from: _Date | None = None
+    date_to: _Date | None = None
+    customer: Selector | None = None
+    ar_account: Selector | None = None
+    number: str | None = Field(default=None, max_length=64)
+    origin: Literal["standalone", "return"] | None = None
+    status: Literal["posted", "voided"] | None = None
+    available_only: bool = Field(
+        default=False,
+        description="Keep only credits that are still worth something: capacity less what has "
+                    "been applied to invoices and less what has been refunded.")
+    direction: Literal["asc", "desc"] = Field(
+        default="asc",
+        description="Order of the accounting-date then stable-id page: asc pages the oldest credit "
+                    "first, desc the most recent first. A cursor belongs to the direction that "
+                    "minted it; changing direction rejects it, so restart without a cursor.")
+
+    @model_validator(mode="after")
+    def dates(self):
+        if self.date_from and self.date_to and self.date_from > self.date_to:
+            raise ValueError("date_from cannot follow date_to")
+        return self
+
+
+class CreditMemoPageOutput(StrictModel):
+    items: list[CreditMemoListOutput]
+    count: int
+    has_more: bool
+    next_cursor: str | None
+    audit_watermark: int
 
 
 class CreditMemoWriteOutput(CreditMemoOutput, WriteOutput):
