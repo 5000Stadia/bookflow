@@ -241,6 +241,7 @@ register calculate
 register post
 register query
 register update
+report ap-aging
 report ar-aging
 report balance-sheet
 report general-ledger
@@ -248,6 +249,7 @@ report open-invoices
 report profit-and-loss
 report statement
 report trial-balance
+report unpaid-bills
 sales-receipt history
 sales-receipt post
 sales-receipt query

@@ -657,6 +657,7 @@ def _read_calls(hosted):
         "rate query": ({"from_currency": "JPY", "limit": 2}, cid),
         "register query": ({"account": "Checking", "date_from": "2026-01-01", "date_to": "2026-12-31"}, cid),
         "register calculate": ({"account": "Checking", "direction": "decrease", "allocations": [{"account": "Professional Fees", "amount": "125.00"}]}, cid),
+        "report ap-aging": ({"as_of": "2026-12-31"}, cid),
         "report ar-aging": ({"as_of": "2026-12-31"}, cid),
         "report statement": ({"date_from": "2026-01-01", "date_to": "2026-12-31"}, cid),
         "report open-invoices": ({"as_of": "2026-12-31"}, cid),
@@ -664,6 +665,7 @@ def _read_calls(hosted):
         "report balance-sheet": ({"date_to": "2026-12-31"}, cid),
         "report trial-balance": ({"date_to": "2026-12-31"}, cid),
         "report general-ledger": ({"date_from": "2026-01-01", "date_to": "2026-12-31"}, cid),
+        "report unpaid-bills": ({"as_of": "2026-12-31"}, cid),
     })
     paid = hosted.ok("payment.query", {"status": "posted", "limit": 1}, company=cid)["items"][0]
     payment = hosted.ok("payment.show", {"payment": paid["id"]}, company=cid)
@@ -1419,14 +1421,15 @@ def _page_url(cmd, company_id):
 
 
 def _cursor_free_reports():
-    """Reports whose filter form drops the cursor, taken from the pages that drop it.
+    """Reports whose filter form drops the cursor, taken from the page that drops it.
 
     Naming them here by hand is how this list went stale: the behaviour grew to seven
     reports while the literal still named two, so the test asserted nothing for five of
-    them. Read the same constants the workbench reads instead.
+    them. Read the same constant the workbench branches on instead, so a report added
+    to one of the presentation modules is asserted here the moment it exists.
     """
-    from bookflow.adapters.workbench import statements, customer_statement, receivables
-    return statements.COMMANDS | customer_statement.COMMANDS | receivables.COMMANDS
+    from bookflow.adapters.workbench.pages import CURSOR_FREE_REPORTS
+    return CURSOR_FREE_REPORTS
 
 
 def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted, tmp_path):

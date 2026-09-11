@@ -12,6 +12,26 @@ from bookflow.company.receivable_reports import (
     ArAgingInput, ArAgingOutput, OpenInvoicesInput, OpenInvoicesOutput,
     StatementInput, StatementOutput, ar_aging, open_invoices, statement,
 )
+from bookflow.company.payable_reports import (
+    ApAgingInput, ApAgingOutput, UnpaidBillsInput, UnpaidBillsOutput,
+    ap_aging, unpaid_bills,
+)
+
+
+@command("report ap-aging", scope="company", required_role="member", capability="reports",
+    description="Accrual payables aged by bill due date as of as_of, one row per vendor, in Current, 1-30, 31-60, 61-90 and Over 90 columns. A bill due exactly 30 days before as_of is 1-30. Bills carry what is still owed on them; a payable journal entry ages by accounting date, so the aging total equals Accounts Payable on the balance sheet for the same date. Voided bills and all-zero vendors are omitted; totals cover every vendor and rows are paged.",
+    input_model=ApAgingInput, output_model=ApAgingOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_ap_aging(inp, ctx, s):
+    return Plan(preview=ap_aging(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report unpaid-bills", scope="company", required_role="member", capability="reports",
+    description="Open vendor bills as of as_of, oldest due date first, each with its vendor, bill date, due date, days past due, aging column, the vendor's own reference number, bill amount, applied amount and open balance. Voided bills are omitted. This lists bills only, so its total is payables before any vendor credit; use report ap-aging for the balance that ties to Accounts Payable. Nothing settles a bill yet, so every applied amount is zero and every open balance is the whole bill. Totals cover the whole filter and rows are paged.",
+    input_model=UnpaidBillsInput, output_model=UnpaidBillsOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND"])
+def plan_unpaid_bills(inp, ctx, s):
+    return Plan(preview=unpaid_bills(inp, s, principal_id=ctx.on_behalf_of))
 
 
 @command("report ar-aging", scope="company", required_role="member", capability="reports",

@@ -231,6 +231,8 @@ def test_the_ar_aging_page_is_titled_with_the_report_not_the_command(hosted):
 @pytest.mark.parametrize('verb, title', [('trial-balance', 'Trial balance'),
                                          ('general-ledger', 'General ledger'),
                                          ('open-invoices', 'Open invoices'),
+                                         ('ap-aging', 'A/P aging summary'),
+                                         ('unpaid-bills', 'Unpaid bills'),
                                          ('profit-and-loss', 'Profit and loss'),
                                          ('balance-sheet', 'Balance sheet')])
 def test_every_report_page_is_titled_with_the_report(hosted, verb, title):

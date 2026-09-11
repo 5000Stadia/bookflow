@@ -974,6 +974,9 @@ calendar arithmetic and no float ever enters the query; an as-of date inside the
 first 90 days of year 1 clamps instead of underflowing. An invoice due exactly
 30 days before `as_of` is 1-30 and one due exactly 31 days before is 31-60;
 `bucket_of` is the Python twin of the same rule and both are pinned by test.
+The columns, the edges, the boundary-date helper and both evaluators live in
+`company/aging.py` and are read from there by the receivables and the payables
+reports alike, so 1-30 is the same number of days on both sides of the books.
 
 Aging rows are customers and jobs in hierarchy-name order, one row each, holding
 Current, 1-30, 31-60, 61-90, Over 90 and a total; a row whose columns are all
@@ -1054,6 +1057,74 @@ window's Reports tile names all three, and the Customers panel's Statement tile
 is live and lands on the statement form. No section repeats the page's own title:
 every report page is titled with the report, from `naming.REPORTS`, rather than
 with the command that produces it.
+
+## Payables aging and unpaid bills
+
+`company/payable_reports.py` supplies `report ap-aging` and `report
+unpaid-bills` through the same registry and `reports` capability, with the same
+period metadata, HMAC continuation, streamed whole-filter totals and signed64
+checks as their receivables twins. Both take `as_of`, the single inclusive bound
+the metadata carries as `period.date_to`. No schema, cached balance or posting
+cost is introduced: they read `posting_lines` and `posting_batches` exactly as
+the other reports do.
+
+Both start from Accounts Payable posting effects dated on or before `as_of`,
+signed credit minus debit because a payable is credit-normal, and group them by
+the vendor the posting line names and by document. Entering a bill credits
+Accounts Payable, correcting one reverses the old credit and posts a new one,
+and voiding one reverses at the original date, so a document's net is what is
+still owed on it whatever its history is; that is also exactly what the balance
+sheet reports for Accounts Payable on the same date, so `report ap-aging` ties
+to it by construction rather than by agreement. `E_INTERNAL` guards the columns
+summing to the total on every run. Amounts are grouped losslessly through
+`bookflow_sum_int`, twice, exactly as the receivables reports group them.
+
+A bill ages on the captured due date of its current revision; everything else
+that reaches payable -- a vendor credit or adjustment entered as a journal, which
+`journals.py` already requires to name a vendor -- ages on its accounting date.
+Columns and edges are `company/aging.py`'s, so an A/P column and an A/R column of
+the same name are the same number of days.
+
+Aging rows are vendors in name order, one row each, holding Current, 1-30,
+31-60, 61-90, Over 90 and a total; a row whose columns are all zero -- a voided
+bill, a correction that took a bill to nothing -- is omitted, which cannot move a
+total. A payable posting under no vendor keeps its own row labelled "No name" so
+the tie survives it. Unpaid bills are bills only, oldest due date first, with
+vendor, bill date, due date, days past due, column, the vendor's own reference,
+bill amount, applied amount and open balance, optionally filtered to one vendor
+or to past-due rows; because it lists bills it excludes vendor credit, so it
+exceeds Accounts Payable by whatever credit stands unattached.
+
+**Nothing settles a bill yet.** `bills.applied_totals` answers zero for every
+payable and there is no A/P application table, so every bill's applied amount is
+the literal zero in `_UNPAID` and every open balance is the whole bill.
+`settlement_status` already carries `partly_paid` so the output shape does not
+move when settlement lands. Two things change in `payable_reports.py` then and
+nothing else: `_EFFECTS` gains the settlement union that
+`receivable_reports._EFFECTS` already has -- each active application moving an
+amount from the paying document's row onto the bill it pays, before anything is
+bucketed or totalled -- and `_UNPAID` reads a real applied sum. Because that
+movement transfers between two rows and never creates or destroys one, the aging
+total stays the Accounts Payable balance.
+
+Their continuations extend the shared HMAC state with vendor presentation and the
+company audit watermark, so any audited company write stales a continuation --
+including, when it lands, an A/P settlement, which posts nothing and which the
+posting-effect watermark alone could not see. The vendor filter's resolved stable
+ID rides in the cursor under `account_scoped=False`, so renaming that vendor
+stales the continuation instead of failing to resolve on page two.
+
+Workbench `payables.py` and `payables.html` project both results without
+accounting logic: an aging column table with each vendor linking to their own
+open bills, and an unpaid-bill table linking each number to its bill. Both carry
+a Next page form that preserves the validated filter and signed cursor, and the
+filter form drops the `cursor` leaf like every other paged report --
+`pages.CURSOR_FREE_REPORTS` is the one set the workbench branches on and the one
+the host test reads, so a report added to one of the presentation modules is
+covered without being named again. Both pages are titled from `naming.REPORTS`,
+and the home window's Reports tile names both alongside the seven that were
+there before. A staled continuation on any report page now shows the restart
+note, not only on trial balance and general ledger.
 
 ## Customer work documents
 
