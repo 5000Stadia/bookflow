@@ -25,6 +25,8 @@ from bookflow.company.query_catalog import LABELS as CATALOG_LABELS
 REPORTS = {
     'ar-aging': 'A/R aging summary',
     'open-invoices': 'Open invoices',
+    'ap-aging': 'A/P aging summary',
+    'unpaid-bills': 'Unpaid bills',
     'statement': 'Customer statement',
     'trial-balance': 'Trial balance',
     'general-ledger': 'General ledger',

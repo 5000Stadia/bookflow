@@ -18,7 +18,8 @@ FAMILIES = {
                     'note add', 'note show', 'note list', 'note edit'),
     'links': ('customer link-vendor', 'customer unlink-vendor', 'other-name convert'),
     'reports': ('report trial-balance', 'report general-ledger', 'report balance-sheet', 'report profit-and-loss',
-                'report ar-aging', 'report open-invoices', 'report statement'),
+                'report ar-aging', 'report open-invoices', 'report statement',
+                'report ap-aging', 'report unpaid-bills'),
 }
 
 

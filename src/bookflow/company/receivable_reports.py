@@ -35,53 +35,20 @@ expression only for as long as that stays true.
 """
 from __future__ import annotations
 
-from datetime import date
 from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
 from bookflow.company import ledger_reports as ledger
+# The aging rule itself is shared with payables, so that 1-30 means the same
+# number of days on both sides of the books. Re-exported here because these
+# names have always been read off this module.
+from bookflow.company.aging import (  # noqa: F401
+    BUCKET_EDGES, BUCKETS, BUCKET_SQL as _BUCKET, COLUMNS as _COLUMNS,
+    bucket_edges, bucket_of, days_past_due,
+)
 from bookflow.company.ledger_reports import MoneyOutput, StrictModel, iso_date, money
 from bookflow.core.errors import BookflowError
-
-# Column order is the order a bookkeeper reads an aging, and the JSON field
-# names are the columns. Edges are exact: an invoice due exactly 30 days before
-# the as-of date is 1-30, and one due exactly 31 days before is 31-60.
-BUCKETS = ("current", "days_1_30", "days_31_60", "days_61_90", "over_90")
-BUCKET_EDGES = (0, 30, 60, 90)
-# SQL never names a bucket, so no column alias can collide with a keyword.
-_COLUMNS = (*(f"bucket_{index}" for index in range(len(BUCKETS))), "total")
-
-
-def bucket_edges(as_of: str) -> dict[str, str]:
-    """The as-of date and the three past-due boundary dates, as ISO date text.
-
-    Calendar arithmetic happens once, here, in exact whole days; SQL only ever
-    compares ISO date text, whose lexicographic order is its calendar order.
-    Dates before year 1 do not exist, so an early as-of date clamps rather than
-    underflowing, which collapses the older columns instead of failing.
-    """
-    ordinal = date.fromisoformat(as_of).toordinal()
-    return {f"edge{index}": date.fromordinal(max(1, ordinal - days)).isoformat()
-            for index, days in enumerate(BUCKET_EDGES)}
-
-
-def days_past_due(as_of: str, aging_date: str) -> int:
-    """Whole days this row is past due; zero or negative while it is current."""
-    return date.fromisoformat(as_of).toordinal() - date.fromisoformat(aging_date).toordinal()
-
-
-def bucket_of(as_of: str, aging_date: str) -> str:
-    """The Python twin of _BUCKET; one rule, two evaluators, same boundaries."""
-    days = days_past_due(as_of, aging_date)
-    for index, edge in enumerate(BUCKET_EDGES):
-        if days <= edge:
-            return BUCKETS[index]
-    return BUCKETS[-1]
-
-
-_BUCKET = ("CASE WHEN aging_date>=:edge0 THEN 0 WHEN aging_date>=:edge1 THEN 1 "
-           "WHEN aging_date>=:edge2 THEN 2 WHEN aging_date>=:edge3 THEN 3 ELSE 4 END")
 
 
 class AsOfInput(StrictModel):
