@@ -141,6 +141,28 @@ def _grouped_nouns(noun_rows: list[tuple[str, list[registry.Command]]], *, compa
     ]
 
 
+def runtime_custom_field_scope(noun, verb, cmd, definition):
+    """The custom-field target type whose definitions this form renders, or None.
+
+    A form with a scope renders one `cf:` control per defined field and drops the raw
+    `custom_fields` leaf; a form without one renders that leaf itself. Anything needing
+    to know which shape a form takes asks here rather than keeping its own list of
+    nouns - a hand-listed set silently omits the next document type, which is how
+    `bill post` came to be asserted against a control it correctly does not render.
+    """
+    if noun in Work.NOUNS and 'custom_fields' in cmd.input_model.model_fields:
+        if Billing.is_conversion(noun, verb):
+            return verb.replace('-', '_')
+        return 'estimate' if verb == 'estimate' else 'work_order' if verb == 'work-order' else noun.replace('-', '_')
+    if noun in ('invoice', 'sales-receipt', 'bill') and verb in ('post', 'update'):
+        return noun.replace('-', '_')
+    if noun in ('journal', 'register', *Document.MONEY_OUT) and verb in ('post', 'update'):
+        return 'journal_entry'
+    if definition is not None and definition.runtime_field_provider == 'custom-fields':
+        return definition.record_type
+    return None
+
+
 def _presence_types() -> set[str]:
     cmd = registry.get("presence set")
     if cmd is None:
@@ -1602,12 +1624,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     collect_references(leaf["collection"], leaf["collection"]["values"], leaf["path"])
         except BookflowError as err:
             return page_error(request, err)
-        runtime_scope = (noun.replace('-', '_') if noun in ('invoice', 'sales-receipt', 'bill') and verb in ('post', 'update') else
-                         "journal_entry" if (noun in ("journal", "register", *Document.MONEY_OUT)
-                                             and verb in ("post", "update")) else
-                         definition.record_type if definition is not None and definition.runtime_field_provider == "custom-fields" else None)
-        if noun in Work.NOUNS and 'custom_fields' in cmd.input_model.model_fields:
-            runtime_scope = verb.replace('-', '_') if Billing.is_conversion(noun, verb) else 'estimate' if verb == 'estimate' else 'work_order' if verb == 'work-order' else noun.replace('-', '_')
+        runtime_scope = runtime_custom_field_scope(noun, verb, cmd, definition)
         if company_id is not None and runtime_scope:
             try:
                 definitions = run(
