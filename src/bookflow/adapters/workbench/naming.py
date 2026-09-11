@@ -32,6 +32,8 @@ REPORTS = {
     'general-ledger': 'General ledger',
     'profit-and-loss': 'Profit and loss',
     'balance-sheet': 'Balance sheet',
+    'cash-flows': 'Statement of cash flows',
+    'income-tax-summary': 'Income tax summary',
 }
 
 # The verbs a page is opened by, phrased as the work rather than as the instruction.

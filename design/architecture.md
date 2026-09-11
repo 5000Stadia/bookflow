@@ -1101,6 +1101,60 @@ for trial balance, 897.67/899.82 ms for P&L and 1266.23/1283.83 ms for balance s
 Company record/audit counts were unchanged. This is a bounded read sample, not
 the separate 100,000 transaction storage workload or a universal latency guarantee.
 
+## Statement of cash flows and income tax summary
+
+`company/cash_flow_reports.py` supplies `report cash-flows` and
+`company/income_tax_reports.py` supplies `report income-tax-summary`, both
+through the shared registry and reports capability, with the same period
+metadata, HMAC continuation, streamed whole-filter totals and signed64 checks as
+the other statements. `ledger_reports._state` treats both as account-labelled
+financial reports, so their continuations carry the company's fiscal and label
+preferences and its audit watermark and any audited write stales them. Neither
+adds a table, a column or a posting cost.
+
+The cash flow statement is the indirect method, and it is one identity rather
+than a rule set. Because every account's signed net sums to zero at every date,
+the change in cash over an inclusive period is net income less the change in the
+remaining balance-sheet accounts. Each of those accounts therefore contributes
+its own negated signed change: an asset that grew is a use of cash and a
+liability or equity that grew is a source. Net income is computed exactly as
+`report profit-and-loss` computes it and is the same figure for the same dates.
+`totals.difference` is the published reconciliation -- closing cash less opening
+cash less net income and the three subtotals -- and is zero whenever the books
+balance; closing cash is the total of the bank accounts `report balance-sheet`
+reports for the same `date_to`. Row `opening_balance` and `closing_balance` are
+on the account's own normal side, so a row's balances match what the balance
+sheet prints while `amount` keeps the statement's source-and-use sign.
+
+Section classification is `SECTION_BY_TYPE` in `cash_flow_reports.py`, checked at
+import against `accounts.STATEMENT_FAMILY`: operating takes receivables,
+payables, the other current assets and current liabilities and credit cards;
+investing takes fixed and other assets; financing takes long-term liabilities and
+equity; `bank` is the cash the statement explains. An account type added to the
+chart vocabulary without a section here raises on import rather than dropping out
+of a statement that would still look balanced. **Nothing recorded on an account
+distinguishes depreciation or amortisation from any other account of its type**,
+so the depreciation add-back reaches the statement through the credit against the
+fixed asset and is reported under investing, where the anchor reports it under
+operating. Closing cash is unaffected either way; moving it would need a declared
+per-account cash-flow section, which no column holds today.
+
+`report income-tax-summary` is the only reader of `accounts.tax_line`. It groups
+income and expense account activity for an inclusive period by that value, one
+`tax_line` row carrying the group's own total and its account count followed by
+the accounts that make it up, with a group for accounts that have none whose
+typed `tax_line` stays null and whose `display_tax_line` is "Unassigned". Each
+posting line's normal side is chosen from `accounts.NORMAL_BALANCE` before it is
+summed, so no aggregate is ever negated in SQL. Totals cover every income and
+expense account whatever the filter shows, which makes `totals.net_income` the
+figure `report profit-and-loss` reports for the same two dates. A group total
+covers the whole group even when its accounts fall on a later page.
+
+Workbench `statements.py` projects both without accounting logic, through
+`cash_flows.html` and `tax_summary.html`; a tax-line row carries no drill-down
+because it is not an account. Both are on the home window's Reports tile and in
+the report group page.
+
 ## Receivables aging, open invoices and customer statements
 
 `company/receivable_reports.py` supplies `report ar-aging`, `report

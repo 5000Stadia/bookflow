@@ -1,0 +1,16 @@
+<section id="financial-statement" aria-label="Statement of cash flows">
+<p>{{ company_label }} · {{ statement.metadata.basis|capitalize }} · {{ statement.metadata.currency }} ·
+{{ statement.metadata.period.date_from }} through {{ statement.metadata.period.date_to }}</p>
+<p class="muted">Indirect method. Net income for the period, then what every other balance-sheet account did to cash: a source of cash is positive and a use of cash is negative, so money put into a receivable or into equipment reads negative and money raised from a lender or an owner reads positive.</p>
+<p class="muted">Net income plus the three section subtotals plus cash at the start of the period is cash at the end of it, and that closing figure is the total of the bank accounts on the balance sheet for the same date. Difference is that reconciliation; it is zero whenever the books balance.</p>
+<div class="table-wrap"><table id="statement-totals"><caption>Whole-statement totals — all pages</caption><thead><tr><th scope="col">Total</th><th scope="col">{{ statement.metadata.currency }}</th></tr></thead><tbody>
+{% for key, value in statement.totals.items() %}<tr data-total="{{ key }}"><th scope="row">{{ key.replace('_', ' ')|capitalize }}</th><td>{{ value.amount }}</td></tr>{% endfor %}
+</tbody></table></div>
+<p id="report-page-count">Account detail: {{ statement.count }} rows on this page{% if statement.next_cursor %}; more available{% endif %}. Each row is one balance-sheet account's own change; subaccounts appear separately and cash accounts are the subject of the statement rather than rows in it. Opening and closing are on the account's own normal side, so a liability reads as what is owed. Select a cash effect to open that account's current general ledger.</p>
+<div class="table-wrap"><table id="statement-accounts"><thead><tr><th scope="col">Section</th><th scope="col">Account</th><th scope="col">Opening</th><th scope="col">Closing</th><th scope="col">Cash effect ({{ statement.metadata.currency }})</th></tr></thead><tbody>
+{% for row in statement.rows %}<tr data-account="{{ row.account_id }}" data-section="{{ row.section }}"><td>{{ row.section|capitalize }}</td><td title="{{ row.current_account_label }}">{{ row.display_account_label }}{% if not row.active %} (inactive){% endif %}</td><td>{{ row.opening_balance.amount }}</td><td>{{ row.closing_balance.amount }}</td><td data-value="amount"><a href="{{ row.ledger_url }}">{{ row.amount.amount }}</a></td></tr>{% else %}<tr><td colspan="5">No balance-sheet account changed over this period.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if statement.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="statement-next-page">{% for name, value in statement.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}<button name="action" value="submit">Next account page</button></form>{% endif %}
+<p class="muted">Generated {{ statement.metadata.generation_time }} · Audit watermark {{ statement.metadata.audit_watermark }}. Any audited company change requires restarting the report. Change the filters below to start a new report.</p>
+<details><summary>Structured report data</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
+</section>
