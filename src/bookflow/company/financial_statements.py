@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
+from bookflow.company import accounts
 from bookflow.company import ledger_reports as ledger
 
 
@@ -74,16 +75,27 @@ class BalanceSheetOutput(ledger.Page):
 
 PL_SECTIONS = ("income", "cost_of_goods_sold", "expense", "other_income", "other_expense")
 BS_SECTIONS = ("assets", "liabilities", "equity")
-DEBIT_TYPES = {"bank", "accounts_receivable", "other_current_asset", "fixed_asset", "other_asset", "cost_of_goods_sold", "expense", "other_expense"}
+# The debit-normal account types, read from the one place that declares which side each
+# type sits on rather than retyped here. This was the last hand-listed copy of the chart's
+# vocabulary in the statements.
+DEBIT_TYPES = accounts.DEBIT_NORMAL_TYPES
 # Which sections are the cost side of this statement is not a third list to keep in step:
 # a cost section is the one whose accounts are debit-normal, which DEBIT_TYPES already
 # says, and on a profit-and-loss row the section is the account type itself.
 # `summary_reports` breaks that side down by vendor and reads this rather than retyping
 # the types, so a new cost type joins the statement and the breakdown in one edit.
 COST_SECTIONS = tuple(name for name in PL_SECTIONS if name in DEBIT_TYPES)
-SECTION_SQL = """CASE
- WHEN a.type IN ('bank','accounts_receivable','other_current_asset','fixed_asset','other_asset') THEN 'assets'
- WHEN a.type IN ('accounts_payable','credit_card','other_current_liability','long_term_liability') THEN 'liabilities'
+def _types_sql(names):
+    """The chart's own declaration order, so the generated SQL reads as the statement does."""
+    ordered = [name for name in accounts.STATEMENT_FAMILY if name in names]
+    return ",".join(f"'{name}'" for name in ordered)
+
+
+# Which side of the balance sheet a row falls on, generated from the account vocabulary.
+# Equity is neither, so it falls through to its own type -- which is what `ELSE` already did.
+SECTION_SQL = f"""CASE
+ WHEN a.type IN ({_types_sql(accounts.ASSET_TYPES)}) THEN 'assets'
+ WHEN a.type IN ({_types_sql(accounts.LIABILITY_TYPES)}) THEN 'liabilities'
  ELSE a.type END"""
 
 

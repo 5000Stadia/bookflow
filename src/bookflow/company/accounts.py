@@ -132,6 +132,30 @@ if set(CASH_FLOW_SECTION_BY_TYPE.values()) - set(get_args(CashFlowSection)):
                        f"{sorted(set(CASH_FLOW_SECTION_BY_TYPE.values()) - set(get_args(CashFlowSection)))}")
 
 
+# What a balance sheet calls each side, derived rather than retyped. Assets are the
+# balance-sheet types that are debit-normal; liabilities are the credit-normal ones apart
+# from equity, which is its own section rather than something the company owes. Those two
+# facts are already declared above, so a new account type joins the right side by saying
+# what it is -- it cannot be missed the way a hand-listed copy is missed.
+EQUITY_TYPES = frozenset({"equity"})
+ASSET_TYPES = frozenset(
+    account_type for account_type in _BALANCE_SHEET_TYPES
+    if NORMAL_BALANCE[account_type] == "debit")
+LIABILITY_TYPES = _BALANCE_SHEET_TYPES - ASSET_TYPES - EQUITY_TYPES
+
+if ASSET_TYPES | LIABILITY_TYPES | EQUITY_TYPES != _BALANCE_SHEET_TYPES:
+    raise RuntimeError(
+        "every balance-sheet account type must be an asset, a liability or equity; "
+        f"unplaced {sorted(_BALANCE_SHEET_TYPES - ASSET_TYPES - LIABILITY_TYPES - EQUITY_TYPES)}")
+if not EQUITY_TYPES <= _BALANCE_SHEET_TYPES:
+    raise RuntimeError(f"equity types are not balance-sheet types: {sorted(EQUITY_TYPES - _BALANCE_SHEET_TYPES)}")
+
+# Debit-normal account types across the whole chart, for a statement that needs the cost
+# side of a profit and loss as well as the asset side of a balance sheet.
+DEBIT_NORMAL_TYPES = frozenset(
+    account_type for account_type, normal in NORMAL_BALANCE.items() if normal == "debit")
+
+
 def cash_flow_section(account_type: str, declared: str | None) -> str | None:
     """The one answer to which cash-flow section an account is in.
 
