@@ -269,6 +269,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.bill_cmds": ["bill"],
     "bookflow.commands.bill_payment_cmds": ["bill", "bill payment"],
     "bookflow.commands.vendor_credit_cmds": ["vendor-credit"],
+    "bookflow.commands.purchase_order_cmds": ["purchase-order"],
     "bookflow.commands.transfer_cmds": ["transfer"],
     "bookflow.commands.sales_tax_cmds": ["sales-tax", "sales-tax payment"],
     "bookflow.commands.report_cmds": ["report"],

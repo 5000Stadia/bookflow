@@ -257,6 +257,12 @@ price-level update
 profile apply
 profile list
 profile show
+purchase-order history
+purchase-order post
+purchase-order query
+purchase-order show
+purchase-order update
+purchase-order void
 proposal copy
 proposal create
 proposal estimate
@@ -417,6 +423,7 @@ def execution_map():
     from tests.test_credit_settlement import COMMANDS as CREDIT_SETTLEMENT_COMMANDS
     from tests.test_customer_refund import COMMANDS as REFUND_COMMANDS
     from tests.test_vendor_credit import COMMANDS as VENDOR_CREDIT_COMMANDS
+    from tests.test_purchase_order import COMMANDS as PURCHASE_ORDER_COMMANDS
     from tests.test_sales_tax_remittance import COMMANDS as SALES_TAX_COMMANDS
     from tests.test_transfer_funds import COMMANDS as TRANSFER_COMMANDS
     from tests.test_payment_recovery_interfaces import COMMANDS as RECOVERY_COMMANDS
@@ -438,6 +445,7 @@ def execution_map():
                    'tests/test_bill_entry.py::test_the_same_bill_through_python_cli_http_and_mcp' if cmd.name in BILL_COMMANDS else
                    'tests/test_bill_payment.py::test_the_same_bill_payment_through_python_cli_http_and_mcp' if cmd.name in BILL_PAYMENT_COMMANDS else
                    'tests/test_vendor_credit.py::test_the_same_vendor_credit_through_python_cli_http_and_mcp' if cmd.name in VENDOR_CREDIT_COMMANDS else
+                   'tests/test_purchase_order.py::test_the_same_purchase_order_through_python_cli_http_and_mcp' if cmd.name in PURCHASE_ORDER_COMMANDS else
                    'tests/test_credit_memo.py::test_the_same_credit_memo_through_python_cli_http_and_mcp' if cmd.name in CREDIT_MEMO_COMMANDS else
                    'tests/test_credit_memo_lifecycle.py::test_the_same_credit_memo_lifecycle_through_python_cli_http_and_mcp' if cmd.name in CREDIT_LIFECYCLE_COMMANDS else
                    'tests/test_credit_settlement.py::test_the_same_credit_application_through_python_cli_http_and_mcp' if cmd.name in CREDIT_SETTLEMENT_COMMANDS else

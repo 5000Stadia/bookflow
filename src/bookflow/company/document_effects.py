@@ -77,8 +77,15 @@ def decoded(row):
             for key, value in row.items()}
 
 
-def persist(plan, ctx, s, *, command_name, table_kinds):
-    """Caller validates the full aggregate first; dispatch owns transaction/commit."""
+def persist(plan, ctx, s, *, command_name, table_kinds, companion=None):
+    """Caller validates the full aggregate first; dispatch owns transaction/commit.
+
+    ``companion`` is another document's side of this same write -- the purchase order a bill
+    was entered from is the one there is -- supplied as an object with ``touches`` and a
+    ``write(s)``. It joins this document's audit event rather than raising one of its own,
+    because one command was run and one thing happened; and it writes last, so its rows may
+    name anything this document just inserted.
+    """
     if not plan.data['changed']:
         return Applied(plan.preview, [], 'no change')
     data = plan.data
@@ -87,6 +94,8 @@ def persist(plan, ctx, s, *, command_name, table_kinds):
         old['version'] if old else None, header['version'], header, old, db='company')]
     for table, kind, key in table_kinds:
         touched.extend(Touched(kind, row[key], 'create', None, 1, decoded(row), db='company') for row in pending[table])
+    if companion is not None:
+        touched.extend(companion.touches)
     custom_plan = data.get('custom_plan')
     if custom_plan is not None:
         touched.extend(custom.touches(custom_plan))
@@ -108,4 +117,6 @@ def persist(plan, ctx, s, *, command_name, table_kinds):
         from sqlalchemy.dialects.sqlite import insert
         stmt = insert(c.sequences).values(**data['sequence'])
         s.company.conn.execute(stmt.on_conflict_do_update(index_elements=['name'], set_=data['sequence']))
+    if companion is not None:
+        companion.write(s)
     return Applied(plan.preview, touched, summary, audited=True)

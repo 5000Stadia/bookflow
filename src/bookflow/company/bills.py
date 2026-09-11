@@ -406,10 +406,21 @@ def settlement_output(header, revision, obligation, applied, sources=None):
 # ---------------------------------------------------------------- reads
 
 
-def summary(header, revision, profile, settlement):
+def order_ids(s, transaction_ids):
+    """The purchase order each of these bills was entered from, where there was one."""
+    identifiers = list(transaction_ids)
+    if not identifiers:
+        return {}
+    t = c.purchase_order_conversions
+    return {row['destination_transaction_id']: row['source_document_id']
+            for row in effects.rows(s, t, t.c.destination_transaction_id.in_(identifiers))}
+
+
+def summary(header, revision, profile, settlement, purchase_order_id=None):
     currency = revision['currency']
     captured = BillProfile.model_validate_json(profile['profile_snapshot'])
-    return dict(header, date=revision['date'], due_date=profile['due_date'],
+    return dict(header, purchase_order_id=purchase_order_id,
+                date=revision['date'], due_date=profile['due_date'],
                 vendor_id=profile['vendor_id'], vendor_name=captured.vendor.label,
                 ap_account_id=profile['ap_account_id'],
                 supplier_reference=profile['supplier_reference'], memo=revision['memo'],
@@ -490,7 +501,8 @@ def show(s, inp):
     requested = journals.revision(s, header, inp.revision_number)
     profile = profile_row(s, requested)
     return BillOutput(
-        **summary(header, requested, profile, current_settlement(s, header)),
+        **summary(header, requested, profile, current_settlement(s, header),
+                  order_ids(s, [header['id']]).get(header['id'])),
         revision=revision_output(s, header, requested),
         duplicate_references=duplicate_references(
             s, profile['vendor_id'], profile['supplier_reference_key'], header['id']))
@@ -564,6 +576,7 @@ def page(s, ctx, inp, *, history=False):
     keys = [row['id'] for row in obligations.values()]
     applied = applied_totals(s, keys)
     composed = applied_sources(s, keys)
+    orders = order_ids(s, identifiers)
     items = []
     for header in ordered:
         revision = revisions.get(header['current_revision_id'])
@@ -573,7 +586,8 @@ def page(s, ctx, inp, *, history=False):
         settlement = settlement_output(header, revision, obligation,
                                        applied.get(obligation['id'], 0) if obligation else 0,
                                        composed.get(obligation['id']) if obligation else None)
-        items.append(BillSummaryOutput(**summary(header, revision, profiles[revision['id']], settlement)))
+        items.append(BillSummaryOutput(**summary(header, revision, profiles[revision['id']], settlement,
+                                                 orders.get(header['id']))))
     return BillPageOutput(items=items, **shared)
 
 
@@ -774,7 +788,31 @@ def _has_applications(s, header):
     return bool(applied_totals(s, [obligation['id']]).get(obligation['id']))
 
 
+def _from_order(s, inp, operation):
+    """The purchase order this bill is being entered from, and the entry it fills in.
+
+    What the caller supplied wins; the order fills in the rest. Returning a copy rather than
+    mutating keeps ``plan.data['input']`` the caller's own words, so ``apply`` re-derives from
+    the order inside the writing transaction instead of trusting what the preview read.
+    """
+    if operation != 'post' or getattr(inp, 'purchase_order', None) is None:
+        return None, inp
+    from bookflow.company import purchase_orders as orders
+    source = orders.bill_source(s, inp.purchase_order)
+    carried = orders.bill_entry(source[1], source[2])
+    supplied = inp.model_fields_set
+    if inp.vendor is not None and resolve_party(s.company, 'vendor', inp.vendor)['id'] != carried['vendor']:
+        # The one field the caller may not override: a bill owed to a different vendor is not
+        # this order's bill, and nothing downstream would notice -- the conversion row records
+        # which order became which bill, not who either was owed to.
+        raise _invalid('vendor', 'the bill is owed to the vendor the purchase order was placed with; '
+                                 'omit vendor, or enter this bill without naming the order')
+    return source, inp.model_copy(update={key: value for key, value in carried.items()
+                                          if key not in supplied or getattr(inp, key) is None})
+
+
 def prepare(s, ctx, inp, operation):
+    source, entry = _from_order(s, inp, operation)
     old_header = resolve(s, inp.bill) if operation != 'post' else None
     old_revision = journals.revision(s, old_header) if old_header else None
     meta = _version(s, old_header, inp.expected_version) if old_header else None
@@ -791,10 +829,14 @@ def prepare(s, ctx, inp, operation):
             'bill_id': old_header['id'],
             'next': 'Unapply what has been paid against this bill before correcting or voiding it.'})
 
+    order_id = source[0]['id'] if source else (
+        order_ids(s, [old_header['id']]).get(old_header['id']) if old_header else None)
+
     def unchanged(header, revision):
         profile = profile_row(s, revision)
         return Plan(BillWriteOutput(
-            **summary(header, revision, profile, current_settlement(s, header, revision=revision)),
+            **summary(header, revision, profile, current_settlement(s, header, revision=revision),
+                      order_id),
             revision=revision_output(s, header, revision), changed=False, warnings=warnings,
             duplicate_references=duplicate_references(
                 s, profile['vendor_id'], profile['supplier_reference_key'], header['id'])),
@@ -816,7 +858,7 @@ def prepare(s, ctx, inp, operation):
     resolved, changed_fields, custom_plan, sequence = None, [], None, None
 
     if operation != 'void':
-        resolved = commercial(s, inp, old_header, old_revision, document_id=header['id'])
+        resolved = commercial(s, entry, old_header, old_revision, document_id=header['id'])
         changed_fields = _changes(_saved_semantic(s, old_revision), resolved['semantic']) if old_revision else []
         if old_revision and not changed_fields and not resolved['custom_plan'].changed:
             return unchanged(old_header, old_revision)
@@ -888,6 +930,11 @@ def prepare(s, ctx, inp, operation):
         pending['posting_batches'].append(batch)
         _business_postings(s, header, revision, batch, resolved, pending, created, event)
 
+    consumption = None
+    if source is not None:
+        from bookflow.company import purchase_orders as orders
+        consumption = orders.consume(s, ctx, source, header['id'], revision['id'], at, event)
+
     view_profile = (pending['purchase_profiles'][0] if pending['purchase_profiles']
                     else profile_row(s, revision))
     obligation = obligation_row(s, header['id'], pending)
@@ -896,7 +943,7 @@ def prepare(s, ctx, inp, operation):
     output = BillWriteOutput(
         **summary(header, revision, view_profile, settlement_output(
             header, revision, obligation, applied.get(obligation['id'], 0) if obligation else 0,
-            applied_sources(s, keys).get(obligation['id']) if obligation else None)),
+            applied_sources(s, keys).get(obligation['id']) if obligation else None), order_id),
         revision=revision_output(s, header, revision, pending),
         warnings=warnings, changed_fields=changed_fields,
         duplicate_references=duplicate_references(
@@ -904,6 +951,7 @@ def prepare(s, ctx, inp, operation):
     plan = Plan(output, dict(input=inp, operation=operation, changed=True, header=header,
                              before=old_header, old_revision=old_revision, pending=pending,
                              sequence=sequence, event=event, custom_plan=custom_plan,
+                             consumption=consumption,
                              semantic=resolved['semantic'] if resolved else None))
     from bookflow.company.bill_validation import validate
     validate(plan, s, ctx)
@@ -978,4 +1026,4 @@ def apply(plan, ctx, s):
     from bookflow.company.bill_validation import validate
     validate(fresh, s, ctx)
     return effects.persist(fresh, ctx, s, command_name='bill ' + plan.data['operation'],
-                           table_kinds=TABLE_KINDS)
+                           table_kinds=TABLE_KINDS, companion=fresh.data.get('consumption'))

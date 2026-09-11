@@ -32,7 +32,9 @@ _HEADER = (
 _ENTRY_ERRORS = ['E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_VALIDATION', 'E_VALUE_RANGE',
                  'E_AMOUNT_PRECISION', 'E_PERIOD_CLOSED', 'E_DUPLICATE_NUMBER']
 WRITE_ERRORS = {
-    'post': _ENTRY_ERRORS,
+    # A bill entered from a purchase order can be refused for that order's sake: it was
+    # withdrawn, or another bill already consumed it.
+    'post': _ENTRY_ERRORS + ['E_WORK_DEPENDENCY'],
     'update': _ENTRY_ERRORS + ['E_VERSION_CONFLICT', 'E_HAS_APPLICATIONS'],
     'void': ['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION', 'E_REASON_REQUIRED',
              'E_PERIOD_CLOSED', 'E_HAS_APPLICATIONS'],
@@ -41,6 +43,13 @@ WRITE_ERRORS = {
 DESCRIPTIONS = {
     'post': ('Enter a vendor bill. Each expense line debits its own account and Accounts Payable is'
              ' credited the total, so the bill stands open at that total until it is paid.'
+             ' `purchase_order` enters this bill from an order: the order fills in the vendor,'
+             ' the terms, the class, the memo and one expense row per ordered line, and anything'
+             ' supplied here wins over it, so a delivery that came in at a different price is'
+             ' entered by supplying `expenses` and letting the rest carry. The order is then'
+             ' closed and permanently recorded as consumed by this bill, so it can never be'
+             ' billed twice; a withdrawn order is refused. Voiding the bill does not free the'
+             ' order again: enter the replacement bill outright.'
              + _HEADER + _LINES),
     'update': ('Correct a bill. The old accounting is reversed at its original date and replaced in'
                ' full at the new one; every earlier revision stays readable. Supply `expenses` to'

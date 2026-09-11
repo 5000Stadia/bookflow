@@ -151,7 +151,7 @@ PANELS: tuple[Panel, ...] = (
                 title="Purchase order",
                 summary="Order goods or services from a vendor.",
                 action=Action("Write a purchase order", WRITE),
-                waits_on="purchase order commands",
+                waits_on="a purchase order page in the browser; the commands exist",
             ),
             Step(
                 id="receive-items",

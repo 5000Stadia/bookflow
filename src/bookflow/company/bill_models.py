@@ -99,13 +99,27 @@ class _BillFields(_Input):
 
 
 class BillPostInput(_BillFields):
+    """A new bill, entered outright or made from a purchase order.
+
+    ``purchase_order`` names an order to enter this bill from. What the order says then fills
+    in what the caller did not: the vendor, the terms, the class, the memo, and one expense
+    row per ordered line. Anything supplied here wins over the order, so a bill that arrived
+    for a different amount is entered by supplying ``expenses`` and letting the rest carry.
+    The order is closed and permanently recorded as consumed by this bill.
+    """
+
     date: _Date
-    vendor: _Selector
-    expenses: Expenses
+    vendor: _Selector | None = None
+    purchase_order: _Selector | None = None
+    expenses: Expenses | None = None
 
     @model_validator(mode='after')
     def new_lines(self) -> Self:
-        if any(line.line_id is not None for line in self.expenses):
+        if self.purchase_order is None:
+            for field in ('vendor', 'expenses'):
+                if getattr(self, field) is None:
+                    raise ValueError(f'{field} is required unless the bill names a purchase order')
+        if self.expenses and any(line.line_id is not None for line in self.expenses):
             raise ValueError('new expense lines cannot supply an existing line identity')
         return self
 
@@ -317,6 +331,8 @@ class BillSummaryOutput(CommonOut):
     total_minor_units: int
     currency: str
     settlement_current: BillSettlementOutput
+    # The purchase order this bill was entered from; null when it was entered outright.
+    purchase_order_id: str | None = None
 
 
 class BillOutput(BillSummaryOutput):
