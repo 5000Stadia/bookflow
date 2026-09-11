@@ -27,6 +27,7 @@ from bookflow.adapters.workbench import work as Work
 from bookflow.adapters.workbench import billing as Billing
 from bookflow.adapters.workbench import home as Home
 from bookflow.core.money import Money
+from bookflow.adapters.workbench import bills as Bills
 from bookflow.adapters.workbench import document_form as Document
 from bookflow.adapters.workbench import document_nav as Nav
 from bookflow.adapters.workbench import list_paging as Paging
@@ -206,6 +207,8 @@ def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
         return Work.editable_values(shown)
     if noun in ('invoice', 'sales-receipt'):
         return Sales.editable_values(shown)
+    if noun == 'bill':
+        return Bills.editable_values(shown)
     if noun == "journal":
         revision = shown.get("revision", {})
         return {
@@ -950,7 +953,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 raw["projection"] = "summary"
             if request.query_params.get("cursor"):
                 raw["cursor"] = request.query_params["cursor"]
-        for field in ("query", "sort", "direction", "date_from", "date_to", "status", "from_currency", "customer", "number", "title", "active", "minimum_net", "maximum_net"):
+        for field in ("query", "sort", "direction", "date_from", "date_to", "status", "from_currency", "customer", "vendor", "number", "title", "active", "minimum_net", "maximum_net", "due_from", "due_to", "supplier_reference"):
             value = request.query_params.get(field)
             if value and field in cmd.input_model.model_fields:
                 # The same typed translator the generated form uses, so a flag arrives
@@ -979,7 +982,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                    ["number", "date", "title", "customer_name", "total", "status"] if noun in Work.NOUNS else
                    ["number", "date", "customer_name", "due_date", "total", "status"] if noun in ('invoice', 'sales-receipt') else
                    ["date", "from_currency", "to_currency", "rate", "source", "version"] if noun == "rate" else
-                   list(definition.summary_columns) if definition is not None else list_columns(items))
+                   ["number", "date", "vendor_name", "due_date", "total", "status"] if noun == 'bill' else
+                   list(definition.summary_columns) if definition is not None else
+                   # No rows means no keys to derive columns from; an empty list is a page,
+                   # not a failure, so the table renders its heading and says so.
+                   (list_columns(items) or []))
         column_text = request.query_params.get("columns", "")
         if column_text and definition is not None:
             requested_columns = [field.strip() for field in column_text.split(",") if field.strip()]
@@ -1012,6 +1019,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             rate_filters=raw if noun == "rate" else None,
             work_filters=raw if noun in Work.NOUNS else None,
             sales_filters=raw if noun in ('invoice', 'sales-receipt') else None,
+            bill_filters=raw if noun == 'bill' else None,
             filters=filters,
             selected_sort=raw.get("sort", ""),
             selected_direction=raw.get("direction", "asc"),
@@ -1038,7 +1046,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         show_selector = _record_selector(show, command_noun)
         raw = {show_selector: record_id} if show_selector else {}
         try:
-            if command_noun in ("journal", "invoice", "sales-receipt", *Work.NOUNS) and request.query_params.get("revision_number"):
+            if command_noun in ("journal", "invoice", "sales-receipt", "bill", *Work.NOUNS) and request.query_params.get("revision_number"):
                 try:
                     raw["revision_number"] = int(request.query_params["revision_number"])
                 except ValueError:
@@ -1104,7 +1112,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             ),
             record_id,
         )
-        if command_noun in ("journal", "invoice", "sales-receipt", *Work.NOUNS):
+        if command_noun in ("journal", "invoice", "sales-receipt", "bill", *Work.NOUNS):
             record_title = out["revision"]["number"]
         contact_copy = None
         if company_id is not None and command_noun in ("customer", "vendor"):
@@ -1166,6 +1174,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       work=Work.detail_context(out, company_id) if noun in Work.NOUNS else None,
                       document_nav=Nav.strip(lambda name, raw, company: run(request, name, raw, company), company_id, noun, out),
                       sale=Sales.detail_context(out, company_id) if command_noun in ('invoice', 'sales-receipt') else None,
+                      bill=Bills.detail_context(out, company_id) if command_noun == 'bill' else None,
                       audit_undo=audit_undo, contact_copy=contact_copy, workspace=workspace,
                       annotations=annotation_context,
                       presence=(meta["record_type"] in _presence_types()) and company_id is not None
@@ -1585,7 +1594,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     collect_references(leaf["collection"], leaf["collection"]["values"], leaf["path"])
         except BookflowError as err:
             return page_error(request, err)
-        runtime_scope = (noun.replace('-', '_') if noun in ('invoice', 'sales-receipt') and verb in ('post', 'update') else
+        runtime_scope = (noun.replace('-', '_') if noun in ('invoice', 'sales-receipt', 'bill') and verb in ('post', 'update') else
                          "journal_entry" if (noun in ("journal", "register", *Document.MONEY_OUT)
                                              and verb in ("post", "update")) else
                          definition.record_type if definition is not None and definition.runtime_field_provider == "custom-fields" else None)
@@ -1635,6 +1644,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       sales_fingerprint=(result.get('facts_fingerprint', '') if preview and result else
                           '' if error and error.get('code') in ('E_PREVIEW_STALE', 'E_VERSION_CONFLICT') else attempted.get('f:expected_facts_fingerprint', '')),
                       sale=Sales.detail_context(result, company_id, preview=preview) if result and (noun in ('invoice', 'sales-receipt') or Billing.is_conversion(noun, verb)) and 'revision' in result else None,
+                      bill=Bills.detail_context(result, company_id, preview=preview) if result and noun == 'bill' and 'revision' in result else None,
                       sales_history=result if noun in ('invoice', 'sales-receipt') and verb == 'history' else None,
                       statement=S.view(result, report_input, company_id, cmd.name) if result and report_input is not None and cmd.name in S.COMMANDS else None,
                       receivables=Receivable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Receivable.COMMANDS else None,

@@ -141,8 +141,10 @@ def test_record_heading_uses_the_declared_authoritative_display_field(hosted):
         f"/c/{hosted.company_id}/customer/{created['id']}"
     )
     assert page.status_code == 200
-    assert "<h1>Riverside Apartments</h1>" in page.text
-    assert f"<h1>{created['id']}</h1>" not in page.text
+    # Matched past the heading's own class, which it has carried since the record page
+    # gained one; the assertion is about which field reaches the heading, not its markup.
+    assert ">Riverside Apartments</h1>" in page.text
+    assert f">{created['id']}</h1>" not in page.text
 
 
 def test_shell_declares_mobile_viewport_and_scopes_horizontal_scroll_to_tables(hosted):

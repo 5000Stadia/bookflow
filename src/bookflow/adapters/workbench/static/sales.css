@@ -144,8 +144,14 @@
     order: 1; grid-column: 1 / -1; }
   [data-collection-path="expenses"] .line-cell[data-line-column="amount"] { order: 2; }
   [data-collection-path="expenses"] .line-cell[data-line-column="class_id"] { order: 3; }
-  [data-collection-path="expenses"] .line-cell[data-line-column="memo"] {
+  /* A bill's grid carries two more columns. The customer or job a cost belongs to is a
+     picker and takes the whole width; Billable is the checkbox that qualifies it and sits
+     directly under it, because a billable line without a customer is refused. */
+  [data-collection-path="expenses"] .line-cell[data-line-column="customer"] {
     order: 4; grid-column: 1 / -1; }
+  [data-collection-path="expenses"] .line-cell[data-line-column="billable"] { order: 5; }
+  [data-collection-path="expenses"] .line-cell[data-line-column="memo"] {
+    order: 6; grid-column: 1 / -1; }
 
   /* The number a person checks, as the block's own footer. Still the server's figure. */
   .line-cell[data-line-column="@amount"] { order: 10; grid-column: 1 / -1;
@@ -199,6 +205,8 @@
 /* Saved documents use one table. Phone screens present its rows as line cards;
    print keeps the table even when initiated from a narrow screen. */
 .sales-cell-label { display: none; }
+.bill-lines td[data-label="Amount"], .bill-lines tfoot th:last-child {
+  text-align: right; font-variant-numeric: tabular-nums; }
 @media screen and (max-width: 700px) {
   .sales-document .sales-lines { display: block; min-width: 0; width: 100%; }
   .sales-lines thead { position: absolute; width: 1px; height: 1px; overflow: hidden;
@@ -217,4 +225,27 @@
   .sales-lines tfoot th:first-child, .sales-lines tfoot th:last-child { grid-column: 1 / -1; }
   .sales-document .sales-lines td:last-child, .sales-document .sales-lines tfoot th:last-child {
     background: #f4f7fb; padding: .4rem; font-size: 1.05rem; font-weight: 700; }
+
+  /* A saved bill's expense lines become the same cards, with the columns a payable has:
+     what it was spent on, what it was for and who it is for each read across the card,
+     the amount stands on its own line, and Billable and the class pair up beneath it. */
+  .sales-document .bill-lines { display: block; min-width: 0; width: 100%; }
+  .bill-lines thead { position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip-path: inset(50%); }
+  .bill-lines tbody, .bill-lines tfoot { display: block; }
+  .bill-lines tbody tr, .bill-lines tfoot tr { display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem .75rem;
+    margin: .5rem 0; padding: .6rem; border: 1px solid #c3d0de;
+    border-radius: .35rem; background: #fff; }
+  .sales-document .bill-lines td, .sales-document .bill-lines tfoot th {
+    min-width: 0; padding: .3rem 0; border: 0; white-space: normal;
+    overflow-wrap: anywhere; text-align: left; }
+  .bill-lines .sales-cell-label { display: block; font-size: .75rem;
+    font-weight: 600; color: #3c4a5a; margin-bottom: .15rem; }
+  .bill-lines td:nth-child(1), .bill-lines td:nth-child(3), .bill-lines td:nth-child(4),
+  .bill-lines tfoot th:first-child, .bill-lines tfoot th:last-child { grid-column: 1 / -1; }
+  .sales-document .bill-lines td[data-label="Amount"] { text-align: left; }
+  .sales-document .bill-lines tfoot th:last-child {
+    background: #f4f7fb; padding: .4rem; font-size: 1.05rem; font-weight: 700;
+    text-align: left; }
 }

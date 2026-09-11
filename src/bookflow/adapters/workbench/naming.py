@@ -55,6 +55,7 @@ PHRASES = {
 
 # Column names a person would not recognise from the field's own words.
 COLUMNS = {'customer_name': 'Customer', 'display_customer_label': 'Customer',
+           'vendor_name': 'Vendor',
            'total': 'Total', 'net': 'Net', 'tax': 'Tax', 'number': 'Number',
            'memo': 'Memo', 'status': 'Status', 'rate': 'Rate', 'source': 'Source',
            'from_currency': 'From currency', 'to_currency': 'To currency'}

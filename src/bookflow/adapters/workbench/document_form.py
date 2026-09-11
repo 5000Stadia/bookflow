@@ -1,8 +1,9 @@
 """Document-window layout: header band, line grid where there is one, footer band.
 
-Three families share this window. The sales documents have a priced line grid; the money-out
-documents have an expenses grid; a transfer has no grid at all, because it is two legs of one
-amount and there is nothing to itemise.
+Four families share this window. The sales documents have a priced line grid; the money-out
+documents and the bill have an expenses grid, the bill's carrying the two columns a payable
+adds; a transfer has no grid at all, because it is two legs of one amount and there is nothing
+to itemise.
 
 Presentation only. Every control keeps the form name the generated form gives it, so
 the browser submits exactly the command input an agent sends over MCP. Nothing here
@@ -15,7 +16,7 @@ does not place reach the reader in the advanced sections rather than disappearin
 """
 from bookflow.core.money import Money
 
-NOUNS = ('invoice', 'sales-receipt', 'estimate')
+NOUNS = ('invoice', 'sales-receipt', 'estimate', 'bill')
 
 # The money-out documents: a check written on a bank account, a charge made on a credit card.
 # They open in this same window and use this same grid; what differs is the account that funds
@@ -29,12 +30,21 @@ MONEY_OUT = ('check', 'card-charge')
 # twice and leave room for a row that could never balance.
 TRANSFER = 'transfer'
 
+# The bill: what a vendor has charged the company, standing open at that total until it is
+# paid. It is the payables mirror of the invoice and it opens in this same window -- the same
+# header band, the same Expenses grid the check writes, the same footer -- in its own words: a
+# vendor rather than a customer, a due date the vendor's terms derive, and a reference number
+# that is the vendor's own spelling rather than ours. It has a list page and document arrows,
+# which is why it is in NOUNS and the money-out pair is not.
+BILL = 'bill'
+
 # Documents with no list page and no arrows of their own; Cancel returns them to the board
 # they were opened from.
 NO_LIST = (*MONEY_OUT, TRANSFER)
 
 TITLES = {'invoice': 'Invoice', 'sales-receipt': 'Sales receipt', 'estimate': 'Estimate',
-          'check': 'Check', 'card-charge': 'Credit card charge', 'transfer': 'Transfer'}
+          'check': 'Check', 'card-charge': 'Credit card charge', 'transfer': 'Transfer',
+          'bill': 'Bill'}
 
 # Header band, first row: who and when, in the order a document window reads.
 PRIMARY = ('customer', 'title', 'class_id', 'date', 'number', 'expires_on', 'status', 'decision_note')
@@ -56,7 +66,7 @@ ADDRESSES = {'sales-receipt': (('Sold To', 'billing_address'), ('Ship To', 'ship
 DEFAULT_ADDRESSES = (('Bill To', 'billing_address'), ('Ship To', 'shipping_address'))
 
 NUMBER_LABELS = {'invoice': 'Invoice #', 'sales-receipt': 'Sale #', 'estimate': 'Estimate #',
-                 'check': 'Check No.'}
+                 'check': 'Check No.', 'bill': 'Bill #'}
 
 # Grid columns, in document order. Every one of them is a value a person reads off the
 # line or types into it. ``@amount`` is the exception the reader still expects to see:
@@ -96,6 +106,23 @@ TRANSFER_FOOTER = ('memo',)
 EXPENSE_GRID = (('account', 'Account'), ('amount', 'Amount'), ('memo', 'Memo'),
                 ('class_id', 'Class'))
 
+# The header of a bill, in the order the payables window reads it: who it is owed to, when it
+# was written, our own number for it, and the number the vendor printed on their own document.
+BILL_PRIMARY = ('vendor', 'date', 'number', 'supplier_reference')
+
+# What was agreed about paying it. ``terms`` derives ``due_date`` on the server, so both are
+# shown: the rule, and the date it produced, which a person may overrule outright.
+BILL_TERMS = ('terms', 'due_date', 'ap_account', 'class_id')
+BILL_FOOTER = ('memo',)
+
+# The bill's Expenses grid. It is the check's grid with the two columns a payable adds: the
+# customer or job the cost belongs to, and whether it is to be passed on to them. ``amount``
+# is typed here too, and the bill's total is what these rows add up to -- there is no figure
+# on the face of the document to reconcile against, which is the one way this differs from a
+# check written for a fixed sum.
+BILL_GRID = (('account', 'Account'), ('amount', 'Amount'), ('memo', 'Memo'),
+             ('customer', 'Customer:Job'), ('billable', 'Billable'), ('class_id', 'Class'))
+
 # What each column head means, written for the person who has to tell two of them apart.
 # A bookkeeper reading this grid asked what Unit was next to Quantity; a head that needs
 # that question asked is a head that has not explained itself. The same words are the
@@ -114,6 +141,8 @@ COLUMN_HINTS = {
     'account': 'What the money was spent on',
     'amount': 'How much of the total this line is',
     'memo': 'What this line was for',
+    'customer': 'Customer or job this cost belongs to',
+    'billable': 'Pass this cost on to that customer later',
 }
 
 # The pricing selector, in the row's own panel rather than in the columns.
@@ -130,7 +159,8 @@ WIDTHS = {'item': ('minmax(9rem, 1.2fr)', 9), 'description': ('minmax(9rem, 1.5f
           'markup_percent': ('5rem', 5), 'class_id': ('6.5rem', 6.5),
           '@amount': ('5.5rem', 5.5), 'tax_code': ('6.5rem', 6.5),
           'account': ('minmax(9rem, 1.4fr)', 9), 'amount': ('6.5rem', 6.5),
-          'memo': ('minmax(9rem, 1.6fr)', 9)}
+          'memo': ('minmax(9rem, 1.6fr)', 9), 'customer': ('minmax(8rem, 1.1fr)', 8),
+          'billable': ('4.5rem', 4.5)}
 ACTIONS_WIDTH = ('4.5rem', 4.5)
 
 # Per-line controls that belong to pricing machinery rather than the document grid.
@@ -171,6 +201,7 @@ LINE_LABELS = {
     'refresh_defaults': 'Reprice this line from the current records',
     'use_defaults': 'Fields on this line to return to their defaults',
     'account': 'Account', 'amount': 'Amount', 'memo': 'Memo',
+    'customer': 'Customer:Job',
     'class_mode': 'How this line is classed',
     'party': 'Customer, job or other name this line is for',
 }
@@ -219,6 +250,9 @@ HELP = {
     'transfer': 'A transfer moves money between two accounts the company already owns. It is neither income '
                 'nor expense, so it changes no profit. Both accounts have to be balance-sheet accounts: a '
                 'bank, a credit card, another asset, a loan, or equity.',
+    'bill': 'A bill records what a vendor has charged you and what it was for. Each expense line debits '
+            'its own account and Accounts Payable is credited the total, so the bill stands open at that '
+            'total until it is paid. Nothing is paid here, and nothing is sent to the vendor.',
 }
 
 # The same window, in each document's own words. A label or an explanation here overrides the
@@ -231,6 +265,8 @@ NOUN_LABELS = {
                     'pay_to.name_id': 'Purchased From', 'amount': 'Amount of this charge'},
     'transfer': {'from_account': 'Transfer Funds From', 'to_account': 'Transfer Funds To',
                  'amount': 'Transfer Amount'},
+    'bill': {'vendor': 'Vendor', 'supplier_reference': 'Ref. No.', 'terms': 'Terms',
+             'due_date': 'Bill Due', 'ap_account': 'A/P Account'},
 }
 
 NOUN_DESCRIPTIONS = {
@@ -248,6 +284,19 @@ NOUN_DESCRIPTIONS = {
                  'to_account': 'The account the money goes into. It is debited, so a bank balance '
                                'rises and what is owed on a card falls.',
                  'amount': 'How much moves. Both accounts move by exactly this.'},
+    'bill': {'vendor': 'Search by vendor name, then choose the match.',
+             'supplier_reference': "The vendor's own number on the document they sent, kept as typed. "
+                                   'Another bill from this vendor carrying the same one is reported '
+                                   'back to you, never refused.',
+             'terms': 'How long you have to pay. Left empty it comes from the vendor record, and '
+                      'whatever it is it fixes the due date.',
+             'due_date': 'When this bill has to be paid. Left empty the terms derive it; a date '
+                         'entered here overrides them outright.',
+             'ap_account': 'The Accounts Payable account this bill is owed from.',
+             'number': "Bookflow's own number for this bill, which is not the vendor's. Leave it "
+                       'empty to take the next one.',
+             'class_id': 'The class the whole bill is tracked under. A line with a class of its '
+                         'own keeps it.'},
 }
 
 # What the money-out footer calls the figure on the face of the document.
@@ -266,6 +315,7 @@ def is_document(noun, verb):
     return ((noun in ('invoice', 'sales-receipt') and verb in ('post', 'update'))
             or (noun == 'estimate' and verb in ('create', 'update'))
             or (noun in MONEY_OUT and verb == 'post')
+            or (noun == BILL and verb in ('post', 'update'))
             or (noun == TRANSFER and verb == 'post'))
 
 
@@ -329,8 +379,12 @@ def layout(noun, leaves):
     by_path, placed = {leaf['path']: leaf for leaf in leaves}, set()
     transfer = noun == TRANSFER
     money_out = noun in MONEY_OUT
+    bill = noun == BILL
     header_only = transfer or money_out
-    grid = () if transfer else EXPENSE_GRID if money_out else \
+    # A bill has a terms band of its own but none of the sales bands: no addresses to print
+    # on, no quoted scope, and no price rules, because nothing here is being sold.
+    plain = header_only or bill
+    grid = () if transfer else BILL_GRID if bill else EXPENSE_GRID if money_out else \
         WORK_GRID if noun == 'estimate' else SALE_GRID
 
     def take(paths):
@@ -342,20 +396,22 @@ def layout(noun, leaves):
                 found.append(leaf)
         return found
 
-    primary = take(TRANSFER_PRIMARY if transfer else MONEY_OUT_PRIMARY if money_out else PRIMARY)
-    terms = [] if header_only else take(TERMS)
-    addresses = [] if header_only else [group for group in
+    primary = take(BILL_PRIMARY if bill else TRANSFER_PRIMARY if transfer else
+                   MONEY_OUT_PRIMARY if money_out else PRIMARY)
+    terms = take(BILL_TERMS) if bill else [] if header_only else take(TERMS)
+    addresses = [] if plain else [group for group in
                  (_address_group(title, prefix, leaves, placed)
                   for title, prefix in ADDRESSES.get(noun, DEFAULT_ADDRESSES))
                  if group is not None]
-    scope = [] if header_only else take(SCOPE)
+    scope = [] if plain else take(SCOPE)
     # A transfer has no line collection at all, which is what leaves the grid band out of
     # the page rather than rendering an empty one.
-    lines = None if transfer else by_path.get('expenses' if money_out else 'lines')
+    lines = None if transfer else by_path.get('expenses' if money_out or bill else 'lines')
     if lines is not None:
         placed.add(lines['path'])
-    footer = take(TRANSFER_FOOTER if transfer else MONEY_OUT_FOOTER if money_out else FOOTER)
-    pricing = [] if header_only else take(PRICING)
+    footer = take(BILL_FOOTER if bill else TRANSFER_FOOTER if transfer else
+                  MONEY_OUT_FOOTER if money_out else FOOTER)
+    pricing = [] if plain else take(PRICING)
     record = take(RECORD)
     # Anything this layout does not name still reaches the reader, rather than
     # disappearing from a form that must stay input-identical to the command.
@@ -373,8 +429,8 @@ def layout(noun, leaves):
     tracks = [WIDTHS.get(column['name'], ('9rem', 9)) for column in columns] + [ACTIONS_WIDTH]
     return {'primary': primary, 'addresses': addresses, 'terms': terms, 'scope': scope,
             'lines': lines, 'columns': columns, 'line_extras': extras,
-            'line_pricing': None if header_only else LINE_PRICING,
-            'lines_title': 'Expenses' if money_out else 'Lines',
+            'line_pricing': None if plain else LINE_PRICING,
+            'lines_title': 'Expenses' if money_out or bill else 'Lines',
             'footer': footer, 'pricing': pricing, 'record': record,
             'grid_template': ' '.join(track for track, _ in tracks),
             'grid_width': format(sum(width for _, width in tracks), 'g') + 'rem'}
@@ -447,6 +503,28 @@ def money_out_totals(noun, result, error):
     return [], None, None
 
 
+def bill_totals(result):
+    """The bill footer: what the lines add up to, what is owed, and when it falls due.
+
+    Every figure is the server's own. A bill has no figure written on its face, so there is
+    nothing to reconcile against the way a check has: the total *is* what the expense lines
+    add up to, and the sentence under it says the two things a person opening a payable wants
+    to know — when it is due, and that nothing here has been paid.
+    """
+    if not isinstance(result, dict) or not isinstance(result.get('total'), dict):
+        return [], None, None
+    currency = result['currency']
+    rows = [_row('Expenses', f"{result['expense_total']['amount']} {currency}"),
+            _row('Amount due', f"{result['total']['amount']} {currency}", True)]
+    settlement = result.get('settlement_current')
+    if isinstance(settlement, dict) and settlement.get('applied_minor_units'):
+        rows += [_row('Paid so far', settlement['applied']['amount']),
+                 _row('Still open', f"{settlement['open']['amount']} {currency}", True)]
+    terms = ((result.get('revision') or {}).get('profile') or {}).get('terms')
+    said = 'Due ' + str(result['due_date']) + (' on ' + terms['label'] if terms else '') + '.'
+    return rows, said + ' Accounts Payable carries it until it is paid.', True
+
+
 def _leg_figure(leg):
     """What this end's own figure is called: on a card or a loan it is what you owe."""
     return (f'what you owe on {leg["name"]}' if leg['type'] in OWED_TYPES else leg['name'])
@@ -476,7 +554,10 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
     """Everything the document template needs, with money taken from the server alone."""
     transfer = noun == TRANSFER
     money_out = noun in MONEY_OUT
-    figures = None if transfer or money_out else (computed(result) or computed(shown))
+    bill = noun == BILL
+    # A bill's line amounts are typed, not computed, so there is no per-line server figure to
+    # copy back and no ``@amount`` column asking for one.
+    figures = None if transfer or money_out or bill else (computed(result) or computed(shown))
     fresh = result is not None
 
     def line_amount(line_id, index):
@@ -490,6 +571,10 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
     if transfer:
         totals, reconciliation, reconciled = transfer_totals(result)
         empty = 'Preview to see what each of the two accounts does.'
+    elif bill:
+        totals, reconciliation, reconciled = bill_totals(result)
+        empty = ('Preview to see what the expense lines add up to and when the terms make '
+                 'this bill due.')
     elif money_out:
         totals, reconciliation, reconciled = money_out_totals(noun, result, error)
         empty = ('Preview to see what the expense lines add up to and whether it agrees '
@@ -508,5 +593,5 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
                 preview=preview, creating=verb in ('post', 'create'),
                 settled=noun == 'invoice', base=base, record_id=record_id,
                 context_labels=CONTEXT_LABELS,
-                origin=('the values you entered' if (transfer or money_out) and not fresh else
-                        'the last preview' if fresh else 'the saved document'))
+                origin=('the values you entered' if (transfer or money_out or bill) and not fresh
+                        else 'the last preview' if fresh else 'the saved document'))
