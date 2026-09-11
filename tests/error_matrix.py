@@ -166,6 +166,26 @@ STANDALONE_MATRIX = {
     "docs generate": {"E_DOCS_STALE": "--check found missing, extra, or changed generated documentation"},
 }
 
+# Bank reconciliation raises these before any `reconcile ...` command is registered, so
+# they have no command row yet. What produces each is recorded here so the row that
+# registers those commands copies meanings rather than inventing them; the set itself is
+# read from `core.errors.RECONCILIATION_CODES`, never retyped.
+RECONCILIATION_MATRIX = {
+    "E_RECONCILIATION_ATTEMPT_STATE": "a second attempt on one draft, a chunk out of order, or seal/apply on an attempt that is not uploading/sealed",
+    "E_RECONCILIATION_CHAIN_STALE": "a draft whose base chain version, opening or head certificate is no longer the account's",
+    "E_RECONCILIATION_DATE": "a statement date not after the previous one, a marked movement dated after the cutoff, or a proposal dated past the statement",
+    "E_RECONCILIATION_DEPENDENCY": "an opening draft on an account that already has one, or an amendment whose head certificate moved",
+    "E_RECONCILIATION_DIFFERENCE": "finishing a statement whose cleared balance does not equal the entered ending balance",
+    "E_RECONCILIATION_DRAFT_STATE": "a draft that is consumed or canceled, or the wrong kind for the step",
+    "E_RECONCILIATION_MANIFEST": "a selection that splits a movement group, repeats a key, mixes actions, or does not match the proposals it declares",
+    "E_RECONCILIATION_MEMBERSHIP_CONFLICT": "marking a movement already covered by the opening or held by another certificate",
+    "E_RECONCILIATION_OPENING_UNPROVEN": "an opening that leaves an eligible movement unclassified, or whose covered sum misses the entered balance",
+    "E_RECONCILIATION_OPERATION_KEY_REUSED": "a permanent operation or chunk key replayed with different content",
+    "E_RECONCILIATION_SELECTION_STALE": "a selected version that is no longer the movement's current one, or a candidate page whose fingerprint moved",
+    "E_RECONCILIATION_SOURCE_INVALID": "stored effects that do not sum to the general ledger for the account, or source rows the adapters cannot read",
+    "E_RECONCILIATION_UNSUPPORTED": "a foreign-currency or non-bank account, or a document the statement adapters cannot represent",
+}
+
 INFRASTRUCTURE = ["E_USAGE", "E_VALIDATION", "E_CONTEXT_IN_INPUT", "E_NOT_INITIALIZED", "E_NO_ACTOR", "E_PERMISSION", "E_COMPANY_NOT_FOUND",
                   "E_COMPANY_AMBIGUOUS", "E_ORGANIZATION_NOT_FOUND", "E_DB_BUSY", "E_NETWORK_SHARE", "E_FS_UNKNOWN", "E_SCHEMA_UNKNOWN",
                   "E_SCHEMA_BEHIND", "E_MIGRATION_FAILED", "E_CONFIG_INVALID", "E_IO", "E_PARTIAL_WRITE", "E_REASON_REQUIRED", "E_FEATURE_DISABLED", "E_UNAUTHENTICATED", "E_INTERNAL"]

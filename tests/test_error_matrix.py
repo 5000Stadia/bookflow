@@ -4,8 +4,8 @@ import re
 from pathlib import Path
 
 from bookflow.core import registry
-from bookflow.core.errors import ALL_CODES, INFRASTRUCTURE_CODES
-from tests.error_matrix import INFRASTRUCTURE, MATRIX
+from bookflow.core.errors import ALL_CODES, INFRASTRUCTURE_CODES, RECONCILIATION_CODES
+from tests.error_matrix import INFRASTRUCTURE, MATRIX, RECONCILIATION_MATRIX
 
 
 def test_matrix_matches_registry():
@@ -21,6 +21,28 @@ def test_matrix_matches_registry():
     orphan_codes = sorted({code for row in MATRIX.values() for code in row if code not in ALL_CODES})
     assert not orphan_codes, f"matrix codes that do not exist: {orphan_codes}"
     assert set(INFRASTRUCTURE) == set(INFRASTRUCTURE_CODES)
+
+
+def test_every_reconciliation_reason_is_a_declared_described_code():
+    """The reasons the reconciliation modules raise, the codes, and the matrix are one set.
+
+    These have no command row yet, so `test_matrix_matches_registry` cannot see them: it walks
+    the registry, and nothing registers `reconcile ...`. Without this, a new `require(...,
+    'E_RECONCILIATION_SOMETHING')` would raise ValueError at the moment it fired -- inside the
+    failure it was meant to name -- and no test would have said so beforehand. So the set is
+    read from the modules that raise it rather than from any list anyone maintains.
+    """
+    company = Path(__file__).resolve().parents[1] / "src" / "bookflow" / "company"
+    raised = set()
+    for path in sorted(company.glob("reconciliation_*.py")):
+        raised |= set(re.findall(r"'(E_RECONCILIATION_[A-Z_]+)'", path.read_text()))
+        raised |= set(re.findall(r'"(E_RECONCILIATION_[A-Z_]+)"', path.read_text()))
+    assert raised, "no reconciliation reasons found; the search pattern has gone stale"
+    assert raised <= set(RECONCILIATION_CODES), sorted(raised - set(RECONCILIATION_CODES))
+    assert set(RECONCILIATION_CODES) == set(RECONCILIATION_MATRIX)
+    assert set(RECONCILIATION_CODES) <= set(ALL_CODES) - set(INFRASTRUCTURE_CODES)
+    from bookflow.company.reconciliation_preparation import PRIVATE_REASONS
+    assert set(PRIVATE_REASONS) == set(RECONCILIATION_CODES)
 
 
 def test_raised_codes_are_declared_or_infrastructure():
