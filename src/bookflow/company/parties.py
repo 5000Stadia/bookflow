@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 import sqlalchemy as sa
 
 from bookflow.company import custom_fields, list_service, schema
-from bookflow.company.lists import get_list_definition, hierarchy_projection, normalize_display_name
+from bookflow.company.lists import PARTY_LISTS, get_list_definition, hierarchy_projection, normalize_display_name
 from bookflow.core import audit, clock
 from bookflow.core.errors import BookflowError
 from bookflow.core.exact import INT64_MAX, INT64_MIN, format_quantity_micro_units
@@ -28,7 +28,8 @@ from bookflow.storage.engine import Database
 
 
 PartyNoun = Literal["customer", "vendor", "employee", "other-name"]
-PARTY_NOUNS: tuple[PartyNoun, ...] = ("customer", "vendor", "employee", "other-name")
+# The set itself is declared once in `lists`, where the form contracts read it too.
+PARTY_NOUNS: tuple[PartyNoun, ...] = PARTY_LISTS  # type: ignore[assignment]
 TABLES: dict[str, sa.Table] = {
     "customer": schema.customers,
     "vendor": schema.vendors,
