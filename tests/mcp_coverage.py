@@ -214,6 +214,21 @@ mcp
 membership grant
 membership list
 membership revoke
+memorized create
+memorized delete
+memorized enter
+memorized list
+memorized process
+memorized retry
+memorized show
+memorized skip
+memorized update
+memorized-group create
+memorized-group delete
+memorized-group enter
+memorized-group list
+memorized-group show
+memorized-group update
 note add
 note edit
 note list
@@ -458,6 +473,7 @@ def execution_map():
     from tests.test_sales_tax_remittance import COMMANDS as SALES_TAX_COMMANDS
     from tests.test_transfer_funds import COMMANDS as TRANSFER_COMMANDS
     from tests.test_payment_recovery_interfaces import COMMANDS as RECOVERY_COMMANDS
+    from tests.test_memorized_transactions import COMMANDS as MEMORIZED_COMMANDS
     registry.load_all()
     commands = registry.all_commands(include_standalone=True)
     assert {c.name for c in commands} == FROZEN_COMMANDS, 'New or removed command needs a deliberate coverage disposition'
@@ -487,6 +503,7 @@ def execution_map():
                    'tests/test_sales_tax_remittance.py::test_the_same_sales_tax_remittance_through_python_cli_http_and_mcp' if cmd.name in SALES_TAX_COMMANDS else
                    'tests/test_transfer_funds.py::test_the_same_transfer_through_python_cli_http_and_mcp' if cmd.name in TRANSFER_COMMANDS else
                    'tests/test_payment_recovery_interfaces.py::test_complete_recovery_contract_on_all_four_interfaces' if cmd.name in RECOVERY_COMMANDS else
+                   'tests/test_memorized_transactions.py::test_the_same_memorized_transaction_through_python_cli_http_and_mcp' if cmd.name in MEMORIZED_COMMANDS else
                    'tests/test_mcp_registry_hub_reads.py::test_hub_read_full_documents_and_scope_boundaries' if any(cmd.name in names for names in HUB_FAMILIES.values()) else
                    'tests/test_mcp_registry_work.py::test_nonposting_work_lifecycle_full_documents_and_lineage' if any(cmd.name in names for names in WORK_FAMILIES.values()) else
                    'tests/test_mcp_registry_work_billing.py::test_work_billing_full_documents_retries_and_exact_batches' if any(cmd.name in names for names in BILLING_FAMILIES.values()) else

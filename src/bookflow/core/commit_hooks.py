@@ -55,6 +55,7 @@ OWNERS = {
     "profiles.standard": Impact.CONSERVATIVE,
     "attachments.finish": Impact.CONSERVATIVE,
     "attachments.collect": Impact.CONSERVATIVE,
+    "memorized.enter": Impact.CONSERVATIVE,
     "config.flush": Impact.PROJECTION,
 }
 

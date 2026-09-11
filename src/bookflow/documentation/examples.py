@@ -801,3 +801,69 @@ EXAMPLES.update({
         ' --company "Demo Plumbing Co" --json',
         {"date_from": "2026-01-01", "date_to": "2026-12-31", "limit": 25}),
 })
+EXAMPLES.update({
+    "memorized create": Example(
+        'bookflow memorized create --name "Monthly office rent" --command "bill post"'
+        ' --payload \'{"vendor":"Harbor Property","expenses":[{"account":"Rent","amount":"1800.00"}]}\''
+        ' --frequency monthly --start-date 2026-05-01 --days-in-advance 5'
+        ' --mode enter_automatically --company "Demo Plumbing Co" --json',
+        {"name": "Monthly office rent", "command": "bill post",
+         "payload": {"vendor": "Harbor Property",
+                     "expenses": [{"account": "Rent", "amount": "1800.00"}]},
+         "frequency": "monthly", "start_date": "2026-05-01", "days_in_advance": 5,
+         "mode": "enter_automatically"}),
+    "memorized update": Example(
+        'bookflow memorized update "Monthly office rent" --expected-version 1'
+        ' --frequency quarterly --start-date 2026-07-01 --company "Demo Plumbing Co" --json',
+        {"memorized": "Monthly office rent", "expected_version": 1,
+         "frequency": "quarterly", "start_date": "2026-07-01"}),
+    "memorized delete": Example(
+        'bookflow memorized delete "Monthly office rent" --expected-version 2'
+        ' --company "Demo Plumbing Co" --json',
+        {"memorized": "Monthly office rent", "expected_version": 2}),
+    "memorized show": Example(
+        'bookflow memorized show "Monthly office rent" --company "Demo Plumbing Co" --json',
+        {"memorized": "Monthly office rent"}),
+    "memorized list": Example(
+        'bookflow memorized list --due-only --limit 25 --company "Demo Plumbing Co" --json',
+        {"due_only": True, "limit": 25}),
+    "memorized enter": Example(
+        'bookflow memorized enter "Monthly office rent" --date 2026-05-01'
+        ' --company "Demo Plumbing Co" --reason "Landlord asked for it early" --json',
+        {"memorized": "Monthly office rent", "date": "2026-05-01"}),
+    "memorized process": Example(
+        'bookflow memorized process --as-of 2026-05-01 --limit 50 --company "Demo Plumbing Co"'
+        ' --reason "Monthly run" --json',
+        {"as_of": "2026-05-01", "limit": 50}),
+    "memorized retry": Example(
+        f'bookflow memorized retry {ID} --expected-version 2 --company "Demo Plumbing Co"'
+        ' --reason "The account is active again" --json',
+        {"occurrence": ID, "expected_version": 2}),
+    "memorized skip": Example(
+        f'bookflow memorized skip {ID} --expected-version 2 --company "Demo Plumbing Co"'
+        ' --reason "No rent due this month" --json',
+        {"occurrence": ID, "expected_version": 2}),
+    "memorized-group create": Example(
+        'bookflow memorized-group create --name "Month-end closing" --frequency monthly'
+        ' --start-date 2026-05-31 --mode enter_automatically --company "Demo Plumbing Co" --json',
+        {"name": "Month-end closing", "frequency": "monthly", "start_date": "2026-05-31",
+         "mode": "enter_automatically"}),
+    "memorized-group update": Example(
+        'bookflow memorized-group update "Month-end closing" --expected-version 1 --status paused'
+        ' --company "Demo Plumbing Co" --json',
+        {"memorized_group": "Month-end closing", "expected_version": 1, "status": "paused"}),
+    "memorized-group delete": Example(
+        'bookflow memorized-group delete "Month-end closing" --expected-version 2'
+        ' --company "Demo Plumbing Co" --json',
+        {"memorized_group": "Month-end closing", "expected_version": 2}),
+    "memorized-group show": Example(
+        'bookflow memorized-group show "Month-end closing" --company "Demo Plumbing Co" --json',
+        {"memorized_group": "Month-end closing"}),
+    "memorized-group list": Example(
+        'bookflow memorized-group list --limit 25 --company "Demo Plumbing Co" --json',
+        {"limit": 25}),
+    "memorized-group enter": Example(
+        'bookflow memorized-group enter "Month-end closing" --date 2026-05-31'
+        ' --company "Demo Plumbing Co" --reason "Close the month" --json',
+        {"memorized_group": "Month-end closing", "date": "2026-05-31"}),
+})

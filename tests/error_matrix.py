@@ -1245,3 +1245,75 @@ MATRIX["batch-invoice retry"] = {
 }
 MATRIX["batch-invoice show"] = {"E_RECORD_NOT_FOUND": "unknown batch"}
 MATRIX["batch-invoice query"] = {"E_RECORD_NOT_FOUND": "unknown billing group filter"}
+
+
+# Memorized transactions. A failed entry is a blocked occurrence, not a raised error, so the
+# rows below are about the template and the schedule rather than about what an entry posts.
+MATRIX["memorized create"] = {
+    "E_VALIDATION": "a command that is not a create/post one, a payload that command rejects, a schedule with no start date, or a group member carrying its own schedule",
+    "E_NAME_TAKEN": "another memorized transaction already has that name",
+    "E_RECORD_NOT_FOUND": "unknown group",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown directive", "E_DIRECTIVE_INACTIVE": "inactive directive",
+}
+MATRIX["memorized update"] = {
+    "E_VALIDATION": "a payload the command rejects, a schedule with no start date, a group member carrying its own schedule, or an unknown or non-nullable --clear",
+    "E_NAME_TAKEN": "another memorized transaction already has that name",
+    "E_RECORD_NOT_FOUND": "unknown template or group",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown directive", "E_DIRECTIVE_INACTIVE": "inactive directive",
+}
+MATRIX["memorized delete"] = {
+    "E_RECORD_NOT_FOUND": "unknown template", "E_VERSION_CONFLICT": "stale expected_version",
+    "E_VALIDATION": "empty selector", "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown directive", "E_DIRECTIVE_INACTIVE": "inactive directive",
+}
+MATRIX["memorized enter"] = {
+    "E_RECORD_NOT_FOUND": "unknown template", "E_VALIDATION": "a deleted template or a bad date",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown directive", "E_DIRECTIVE_INACTIVE": "inactive directive",
+}
+MATRIX["memorized process"] = {
+    "E_RECORD_NOT_FOUND": "unknown template named by --memorized", "E_VALIDATION": "a bad as-of date or limit",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown directive", "E_DIRECTIVE_INACTIVE": "inactive directive",
+}
+MATRIX["memorized retry"] = {
+    "E_RECORD_NOT_FOUND": "unknown occurrence", "E_VERSION_CONFLICT": "stale expected_version",
+    "E_VALIDATION": "an occurrence that is already entered or skipped",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown directive", "E_DIRECTIVE_INACTIVE": "inactive directive",
+}
+MATRIX["memorized skip"] = {
+    "E_RECORD_NOT_FOUND": "unknown occurrence", "E_VERSION_CONFLICT": "stale expected_version",
+    "E_VALIDATION": "an occurrence that is already entered or skipped",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown directive", "E_DIRECTIVE_INACTIVE": "inactive directive",
+}
+MATRIX["memorized show"] = {"E_RECORD_NOT_FOUND": "unknown template", "E_VALIDATION": "empty selector"}
+MATRIX["memorized list"] = {"E_VALIDATION": "a bad cursor, as-of date or limit"}
+MATRIX["memorized-group create"] = {
+    "E_VALIDATION": "a schedule with no start date", "E_NAME_TAKEN": "another group already has that name",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown directive", "E_DIRECTIVE_INACTIVE": "inactive directive",
+}
+MATRIX["memorized-group update"] = {
+    "E_VALIDATION": "a shared schedule while a member carries its own, or an unknown or non-nullable --clear",
+    "E_NAME_TAKEN": "another group already has that name", "E_RECORD_NOT_FOUND": "unknown group",
+    "E_VERSION_CONFLICT": "stale expected_version", "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown directive", "E_DIRECTIVE_INACTIVE": "inactive directive",
+}
+MATRIX["memorized-group delete"] = {
+    "E_RECORD_NOT_FOUND": "unknown group", "E_VERSION_CONFLICT": "stale expected_version",
+    "E_ACTIVE_DEPENDENTS": "the group still has members", "E_VALIDATION": "empty selector",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown directive", "E_DIRECTIVE_INACTIVE": "inactive directive",
+}
+MATRIX["memorized-group enter"] = {
+    "E_RECORD_NOT_FOUND": "unknown group", "E_VALIDATION": "a deleted or empty group, or a bad date",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown directive", "E_DIRECTIVE_INACTIVE": "inactive directive",
+}
+MATRIX["memorized-group show"] = {"E_RECORD_NOT_FOUND": "unknown group", "E_VALIDATION": "empty selector"}
+MATRIX["memorized-group list"] = {"E_VALIDATION": "a bad cursor or limit"}
