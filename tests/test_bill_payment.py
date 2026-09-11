@@ -24,6 +24,10 @@ OWED = '399.85'            # 284.60 + 75.25 + 40.00
 PART_PAYMENT = '100.00'
 STILL_OPEN = '184.60'      # 284.60 - 100.00
 NORTHSIDE_GROUP = '359.85'  # 284.60 + 75.25
+# Freeing the 284.60 check off the first bill and pointing it at the second: the second is
+# only open for 75.25, so that is all it can take, and 209.35 of the check answers nothing.
+REPOINTED = '75.25'
+STILL_FREE = '209.35'      # 284.60 - 75.25
 
 
 @pytest.fixture
@@ -99,6 +103,31 @@ def _open_total(books):
 
 def _settlement(books, bill):
     return books['run']('bill show', {'bill': bill})['settlement_current']
+
+
+def _unpaid(books, date='2017-03-31'):
+    """What `report unpaid-bills` says, per bill number, straight from the report command."""
+    report = books['run']('report unpaid-bills', dict(as_of=date, limit=50))
+    return ({row['number']: (row['amount']['amount'], row['applied']['amount'],
+                             row['balance']['amount'], row['settlement_status'])
+             for row in report['rows']},
+            {key: report['totals'][key]['minor_units'] for key in ('amount', 'applied', 'balance')})
+
+
+def _aging(books, date='2017-03-31'):
+    report = books['run']('report ap-aging', dict(as_of=date, limit=50))
+    return ({row['display_vendor_label']: row['total']['minor_units'] for row in report['rows']},
+            report['totals']['total']['minor_units'])
+
+
+def _apply(books, payment, bills, **extra):
+    return books['run']('bill payment apply', dict(payment=payment['id'], bills=bills, **extra),
+                        reason='Point the check at the right bill')
+
+
+def _unapply(books, payment, **extra):
+    return books['run']('bill payment unapply', dict(payment=payment['id'], **extra),
+                        reason='Applied to the wrong bill')
 
 
 # ---------------------------------------------------------------- the money moves
@@ -309,6 +338,362 @@ def test_unapplying_nothing_is_no_change_rather_than_an_error(books):
     assert again['settlement_current']['applied']['amount'] == '0.00'
 
 
+# ------------------------------------------------ pointing the same money at another bill
+
+
+def test_a_freed_payment_answers_another_bill_and_moves_not_a_cent(books):
+    """The whole cycle: applied to one bill, freed, pointed at another, same check."""
+    first, second, _ = _bills(books)
+    payment = _pay(books, [{'bill': first['id']}], check_number='1041')['payments'][0]
+    during, _ = _balances(books)
+    assert _settlement(books, first['id'])['status'] == 'paid'
+
+    taken = _unapply(books, payment, expected_version=payment['version'])
+    moved = _apply(books, payment, [{'bill': second['id']}], expected_version=taken['version'])
+
+    # The same document, not a new one: the check number and the number it was written on
+    # survive, which is exactly what voiding and paying again would have destroyed.
+    assert moved['id'] == payment['id'] and moved['number'] == payment['number']
+    assert moved['check_number'] == '1041' and moved['status'] == 'posted'
+    assert moved['total']['amount'] == FIRST
+
+    # 75.25 of the 284.60 answers the second bill; the other 209.35 answers nothing yet.
+    assert moved['settlement_current']['applied']['amount'] == REPOINTED
+    assert moved['settlement_current']['unapplied']['amount'] == STILL_FREE
+    assert moved['settlement_current']['status'] == 'partial'
+
+    assert _settlement(books, first['id'])['open']['amount'] == FIRST
+    assert _settlement(books, first['id'])['status'] == 'unpaid'
+    settled = _settlement(books, second['id'])
+    assert settled['applied']['amount'] == REPOINTED and settled['open']['amount'] == '0.00'
+    assert settled['status'] == 'paid'
+    assert settled['applied_minor_units'] + settled['open_minor_units'] == settled['gross_minor_units']
+
+    after, report = _balances(books)
+    # An application posts nothing: the cash left when the payment posted.
+    assert after == during
+    assert after[books['payable']] == -11525 and after[books['bank']] == -28460
+    assert report['totals']['debit']['minor_units'] == report['totals']['credit']['minor_units']
+    # 284.60 + 40.00 still open against a 115.25 payable; the 209.35 gap is the free check.
+    assert _open_total(books) == 32460
+    assert _open_total(books) + after[books['payable']] == 20935
+
+
+def test_the_reports_agree_with_the_bill_at_every_step_of_the_cycle(books):
+    first, second, _ = _bills(books)
+    rows, totals = _unpaid(books)
+    assert rows[first['number']] == (FIRST, '0.00', FIRST, 'unpaid')
+    assert totals == dict(amount=39985, applied=0, balance=39985)
+    assert _aging(books) == ({'Northside Supply': 35985, 'Corner Hardware': 4000}, 39985)
+
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+    rows, totals = _unpaid(books)
+    # A paid bill leaves the report entirely; what is left is the 75.25 and the 40.00.
+    assert first['number'] not in rows
+    assert rows[second['number']] == (SECOND, '0.00', SECOND, 'unpaid')
+    assert totals == dict(amount=11525, applied=0, balance=11525)
+    assert _aging(books) == ({'Northside Supply': 7525, 'Corner Hardware': 4000}, 11525)
+
+    taken = _unapply(books, payment, expected_version=payment['version'])
+    rows, totals = _unpaid(books)
+    assert rows[first['number']] == (FIRST, '0.00', FIRST, 'unpaid')
+    assert totals == dict(amount=39985, applied=0, balance=39985)
+    # Aging groups by vendor, so the freed check still nets against Northside's own bills.
+    assert _aging(books) == ({'Northside Supply': 7525, 'Corner Hardware': 4000}, 11525)
+
+    _apply(books, payment, [{'bill': second['id']}], expected_version=taken['version'])
+    rows, totals = _unpaid(books)
+    assert second['number'] not in rows
+    assert rows[first['number']] == (FIRST, '0.00', FIRST, 'unpaid')
+    assert totals == dict(amount=32460, applied=0, balance=32460)
+    assert _aging(books) == ({'Northside Supply': 7525, 'Corner Hardware': 4000}, 11525)
+    for bill in (first, second):
+        settlement = _settlement(books, bill['id'])
+        reported = rows.get(bill['number'], (None, None, '0.00', None))
+        assert reported[2] == settlement['open']['amount']
+
+
+def test_applying_part_of_what_is_free_leaves_the_rest_free(books):
+    first, second, _ = _bills(books)
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+    taken = _unapply(books, payment, expected_version=payment['version'])
+
+    part = _apply(books, payment, [{'bill': second['id'], 'amount': '25.00'}],
+                  expected_version=taken['version'])
+
+    assert part['settlement_current']['applied']['amount'] == '25.00'
+    assert part['settlement_current']['unapplied']['amount'] == '259.60'  # 284.60 - 25.00
+    settlement = _settlement(books, second['id'])
+    assert settlement['open']['amount'] == '50.25' and settlement['status'] == 'partial'
+
+    rest = _apply(books, payment, [{'bill': second['id']}], expected_version=part['version'])
+    assert rest['settlement_current']['applied']['amount'] == REPOINTED
+    assert rest['settlement_current']['unapplied']['amount'] == STILL_FREE
+    assert _settlement(books, second['id'])['open']['amount'] == '0.00'
+
+
+def test_one_entered_line_can_answer_two_bills_once_it_has_been_freed(books):
+    first, second, _ = _bills(books)
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+    taken = _unapply(books, payment, expected_version=payment['version'])
+
+    split = _apply(books, payment, [{'bill': first['id'], 'amount': PART_PAYMENT},
+                                    {'bill': second['id']}],
+                   expected_version=taken['version'])
+
+    assert split['settlement_current']['applied']['amount'] == '175.25'  # 100.00 + 75.25
+    assert split['settlement_current']['unapplied']['amount'] == '109.35'
+    assert _settlement(books, first['id'])['open']['amount'] == STILL_OPEN
+    assert _settlement(books, second['id'])['open']['amount'] == '0.00'
+    # One entered line, one component, two live edges: the line names neither bill now, and
+    # what it is worth is still the whole 284.60 it was entered for.
+    line = split['revision']['lines'][0]
+    assert line['bill_number'] == '' and line['amount']['amount'] == FIRST
+    assert line['applied']['amount'] == '175.25'
+    live = [edge for edge in split['applications'] if edge['active']]
+    assert sorted(edge['amount']['amount'] for edge in live) == [PART_PAYMENT, SECOND]
+    assert len({edge['source_component_id'] for edge in live}) == 1
+
+
+def test_a_line_names_the_bill_its_money_answers_now(books):
+    first, second, _ = _bills(books)
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+    assert payment['revision']['lines'][0]['bill_number'] == first['number']
+    taken = _unapply(books, payment, expected_version=payment['version'])
+    assert taken['revision']['lines'][0]['bill_number'] == ''
+    moved = _apply(books, payment, [{'bill': second['id']}], expected_version=taken['version'])
+    line = moved['revision']['lines'][0]
+    assert line['bill_number'] == second['number']
+    # What it was entered for is still on the line itself.
+    assert line['description'] == f'Bill {first["number"]}'
+
+
+def test_applying_more_than_the_payment_has_free_is_refused(books):
+    first, second, _ = _bills(books)
+    payment = _pay(books, [{'bill': second['id']}])['payments'][0]
+    taken = _unapply(books, payment, expected_version=payment['version'])
+
+    with pytest.raises(BookflowError) as excinfo:
+        _apply(books, payment, [{'bill': first['id'], 'amount': '100.00'}],
+               expected_version=taken['version'])
+
+    assert excinfo.value.code == 'E_APPLICATION_CAPACITY'
+    assert excinfo.value.details['available_minor_units'] == 7525
+    assert excinfo.value.details['requested_minor_units'] == 10000
+    assert excinfo.value.details['payment_id'] == payment['id']
+    assert _settlement(books, first['id'])['open']['amount'] == FIRST
+
+
+def test_a_payment_with_nothing_free_has_nothing_to_apply(books):
+    first, second, _ = _bills(books)
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+
+    with pytest.raises(BookflowError) as excinfo:
+        _apply(books, payment, [{'bill': second['id']}], expected_version=payment['version'])
+
+    assert excinfo.value.code == 'E_APPLICATION_CAPACITY'
+    assert excinfo.value.details['available_minor_units'] == 0
+    assert _settlement(books, second['id'])['open']['amount'] == SECOND
+
+
+def test_applying_more_than_is_open_on_the_bill_is_refused(books):
+    first, second, _ = _bills(books)
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+    taken = _unapply(books, payment, expected_version=payment['version'])
+
+    with pytest.raises(BookflowError) as excinfo:
+        _apply(books, payment, [{'bill': second['id'], 'amount': '80.00'}],
+               expected_version=taken['version'])
+
+    # The same typed refusal the paying path gives, and the same figures.
+    assert excinfo.value.code == 'E_APPLICATION_CAPACITY'
+    assert excinfo.value.details['available_minor_units'] == 7525
+    assert excinfo.value.details['bill_number'] == second['number']
+    assert _settlement(books, second['id'])['open']['amount'] == SECOND
+
+
+def test_a_payment_cannot_answer_another_vendors_bill(books):
+    first, _, third = _bills(books)
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+    taken = _unapply(books, payment, expected_version=payment['version'])
+
+    with pytest.raises(BookflowError) as excinfo:
+        _apply(books, payment, [{'bill': third['id']}], expected_version=taken['version'])
+
+    assert excinfo.value.code == 'E_APPLICATION_INCOMPATIBLE'
+    assert excinfo.value.details['bill_number'] == third['number']
+    assert _settlement(books, third['id'])['open']['amount'] == THIRD
+
+
+def test_a_voided_payment_answers_nothing(books):
+    first, second, _ = _bills(books)
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+    taken = _unapply(books, payment, expected_version=payment['version'])
+    books['run']('bill payment void', dict(payment=payment['id'],
+                                           expected_version=taken['version']),
+                 reason='The check was never sent')
+
+    with pytest.raises(BookflowError) as excinfo:
+        _apply(books, payment, [{'bill': second['id']}])
+
+    assert excinfo.value.code == 'E_APPLICATION_INACTIVE'
+    assert _settlement(books, second['id'])['open']['amount'] == SECOND
+
+
+def test_a_voided_bill_cannot_be_settled_by_a_freed_payment(books):
+    first, second, _ = _bills(books)
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+    taken = _unapply(books, payment, expected_version=payment['version'])
+    books['run']('bill void', dict(bill=second['id']), reason='Entered twice')
+
+    with pytest.raises(BookflowError) as excinfo:
+        _apply(books, payment, [{'bill': second['id']}], expected_version=taken['version'])
+
+    assert excinfo.value.code == 'E_APPLICATION_INACTIVE'
+    assert _settlement(books, first['id'])['open']['amount'] == FIRST
+
+
+def test_a_stale_expected_version_refuses_the_whole_apply(books):
+    first, second, _ = _bills(books)
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+    taken = _unapply(books, payment, expected_version=payment['version'])
+
+    with pytest.raises(BookflowError) as stale_payment:
+        _apply(books, payment, [{'bill': second['id']}], expected_version=payment['version'])
+    assert stale_payment.value.code == 'E_VERSION_CONFLICT'
+
+    books['run']('bill update', dict(bill=second['id'], memo='Reworded'), reason='Fix it')
+    with pytest.raises(BookflowError) as stale_bill:
+        _apply(books, payment, [{'bill': second['id'], 'expected_version': second['version']}],
+               expected_version=taken['version'])
+    assert stale_bill.value.code == 'E_VERSION_CONFLICT'
+    assert _settlement(books, second['id'])['open']['amount'] == SECOND
+    assert _settlement(books, first['id'])['open']['amount'] == FIRST
+
+
+def test_an_application_cannot_be_dated_before_the_money_left(books):
+    first, second, _ = _bills(books)
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+    taken = _unapply(books, payment, expected_version=payment['version'])
+
+    with pytest.raises(BookflowError) as excinfo:
+        _apply(books, payment, [{'bill': second['id']}], date='2017-03-09',
+               expected_version=taken['version'])
+
+    assert excinfo.value.code == 'E_VALIDATION'
+    assert _settlement(books, second['id'])['open']['amount'] == SECOND
+
+
+def test_applying_into_a_closed_period_is_refused(books):
+    first, second, _ = _bills(books)
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+    taken = _unapply(books, payment, expected_version=payment['version'])
+    books['client'].company.update(company=books['company'], closing_date='2017-03-31')
+
+    with pytest.raises(BookflowError) as excinfo:
+        _apply(books, payment, [{'bill': second['id']}], expected_version=taken['version'])
+
+    assert excinfo.value.code == 'E_PERIOD_CLOSED'
+    assert _settlement(books, second['id'])['open']['amount'] == SECOND
+
+
+def test_a_later_application_answers_a_bill_entered_after_the_check_was_written(books):
+    first, _, _ = _bills(books)
+    later = books['run']('bill post', dict(
+        vendor=books['north'], date='2017-03-20',
+        expenses=[{'account': books['parts'], 'amount': '50.00'}]), reason='A later bill')
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+    taken = _unapply(books, payment, expected_version=payment['version'])
+
+    # Dated at the check, the later bill is out of reach; dated at the bill, it is not.
+    with pytest.raises(BookflowError) as excinfo:
+        _apply(books, payment, [{'bill': later['id']}], expected_version=taken['version'])
+    assert excinfo.value.code == 'E_VALIDATION'
+
+    moved = _apply(books, payment, [{'bill': later['id']}], date='2017-03-20',
+                   expected_version=taken['version'])
+    assert moved['settlement_current']['applied']['amount'] == '50.00'
+    assert _settlement(books, later['id'])['open']['amount'] == '0.00'
+    edge = next(row for row in moved['applications'] if row['active'])
+    assert edge['effective_date'] == '2017-03-20'
+    after, _ = _balances(books)
+    assert after[books['bank']] == -28460 and after[books['payable']] == -16525
+
+
+def test_the_same_bill_cannot_be_named_twice_in_one_apply(books):
+    first, second, _ = _bills(books)
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+    taken = _unapply(books, payment, expected_version=payment['version'])
+    with pytest.raises(BookflowError) as excinfo:
+        _apply(books, payment, [{'bill': second['id'], 'amount': '10.00'},
+                                {'bill': second['id'], 'amount': '10.00'}],
+               expected_version=taken['version'])
+    assert excinfo.value.code == 'E_VALIDATION'
+
+
+def test_applying_locks_the_bill_and_the_payment_again(books):
+    first, second, _ = _bills(books)
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+    taken = _unapply(books, payment, expected_version=payment['version'])
+    moved = _apply(books, payment, [{'bill': second['id']}], expected_version=taken['version'])
+
+    with pytest.raises(BookflowError) as voiding:
+        books['run']('bill payment void', dict(payment=payment['id'],
+                                               expected_version=moved['version']),
+                     reason='Sent in error')
+    assert voiding.value.code == 'E_HAS_APPLICATIONS'
+    with pytest.raises(BookflowError) as correcting:
+        books['run']('bill update', dict(bill=second['id'], memo='Reworded'), reason='Fix it')
+    assert correcting.value.code == 'E_HAS_APPLICATIONS'
+
+
+def test_a_dry_run_applies_nothing(books):
+    first, second, _ = _bills(books)
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+    taken = _unapply(books, payment, expected_version=payment['version'])
+
+    preview = books['run']('bill payment apply',
+                           dict(payment=payment['id'], bills=[{'bill': second['id']}],
+                                expected_version=taken['version']),
+                           reason='Have a look', dry_run=True)
+
+    assert preview['dry_run'] and preview['settlement_current']['applied']['amount'] == REPOINTED
+    assert _settlement(books, second['id'])['open']['amount'] == SECOND
+    assert books['run']('bill payment show', {'payment': payment['id']})[
+        'settlement_current']['unapplied']['amount'] == FIRST
+
+
+def test_the_same_idempotency_key_applies_once(books):
+    first, second, _ = _bills(books)
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+    taken = _unapply(books, payment, expected_version=payment['version'])
+    values = dict(payment=payment['id'], bills=[{'bill': second['id']}],
+                  expected_version=taken['version'])
+
+    once = books['run']('bill payment apply', deepcopy(values), reason='Point it',
+                        idempotency_key='apply-1')
+    twice = books['run']('bill payment apply', deepcopy(values), reason='Point it',
+                         idempotency_key='apply-1')
+
+    assert twice['idempotent_replay'] and once['version'] == twice['version']
+    assert _settlement(books, second['id'])['applied']['amount'] == REPOINTED
+    live = [edge for edge in books['run']('bill payment show', {'payment': payment['id']})[
+        'applications'] if edge['active']]
+    assert len(live) == 1
+
+
+def test_every_apply_is_attributed_in_the_company_audit(books):
+    first, second, _ = _bills(books)
+    payment = _pay(books, [{'bill': first['id']}])['payments'][0]
+    taken = _unapply(books, payment, expected_version=payment['version'])
+    _apply(books, payment, [{'bill': second['id']}], expected_version=taken['version'])
+
+    events = books['run']('audit list', dict(limit=20))['items']
+    applied = next(event for event in events if event['command'] == 'bill payment apply')
+    assert applied['summary'] == f"apply bill payment {payment['number']}"
+    assert applied['reason'] == 'Point the check at the right bill'
+
+
 # ---------------------------------------------------------------- the seam back into the bill
 
 
@@ -507,7 +892,7 @@ def test_every_write_is_attributed_in_the_company_audit(books):
 # ---------------------------------------------------------------- every surface, same result
 
 COMMANDS = frozenset(('bill pay', 'bill payment show', 'bill payment query',
-                      'bill payment unapply', 'bill payment void'))
+                      'bill payment apply', 'bill payment unapply', 'bill payment void'))
 
 
 @pytest.mark.timeout(300)
@@ -557,8 +942,15 @@ def test_the_same_bill_payment_through_python_cli_http_and_mcp(root, tmp_path):
                 await call('bill payment query', {'vendor': vendor, 'limit': 10})
                 taken = await call('bill payment unapply', {
                     'payment': payment['id'], 'expected_version': payment['version']})
+                assert taken['settlement_current']['unapplied']['amount'] == FIRST
+                back = await call('bill payment apply', {
+                    'payment': payment['id'], 'expected_version': taken['version'],
+                    'bills': [{'bill': bill['id']}]})
+                assert back['settlement_current']['applied']['amount'] == FIRST
+                freed = await call('bill payment unapply', {
+                    'payment': payment['id'], 'expected_version': back['version']})
                 await call('bill payment void', {'payment': payment['id'],
-                                                 'expected_version': taken['version']})
+                                                 'expected_version': freed['version']})
 
                 refused = await call('bill pay', {
                     **request, 'number': 'PARITY-PAY-2',

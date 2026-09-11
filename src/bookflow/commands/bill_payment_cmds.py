@@ -1,12 +1,16 @@
-"""Pay open bills, read back what was paid, and take a payment back.
+"""Pay open bills, read back what was paid, and move or take back what a payment answered.
 
 ``bill pay`` is the verb; ``bill payment`` is the noun it writes. That split is deliberate --
 you pay bills, and what you get is payments, one per payee.
+
+``apply`` and ``unapply`` are the two directions of the same fact, and neither moves money:
+which payables a payment answers is a decision that can be taken back and made again, so a
+check pointed at the wrong bill is re-pointed rather than voided and rewritten.
 """
 from bookflow.core.registry import Plan, command
 from bookflow.company import bill_payments
 from bookflow.company.bill_payment_models import (
-    BillPayInput, BillPayOutput, BillPaymentOutput, BillPaymentPageOutput,
+    BillPayInput, BillPayOutput, BillPaymentApplyInput, BillPaymentOutput, BillPaymentPageOutput,
     BillPaymentQueryInput, BillPaymentShowInput, BillPaymentUnapplyInput,
     BillPaymentVoidInput, BillPaymentWriteOutput,
 )
@@ -27,13 +31,31 @@ ERRORS = {
     'pay': ['E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_VALIDATION', 'E_VALUE_RANGE',
             'E_AMOUNT_PRECISION', 'E_PERIOD_CLOSED', 'E_DUPLICATE_NUMBER', 'E_VERSION_CONFLICT',
             'E_APPLICATION_CAPACITY', 'E_APPLICATION_INCOMPATIBLE', 'E_APPLICATION_INACTIVE'],
+    'apply': ['E_RECORD_NOT_FOUND', 'E_VALIDATION', 'E_AMOUNT_PRECISION', 'E_VALUE_RANGE',
+              'E_PERIOD_CLOSED', 'E_VERSION_CONFLICT', 'E_APPLICATION_CAPACITY',
+              'E_APPLICATION_INCOMPATIBLE', 'E_APPLICATION_INACTIVE'],
     'unapply': ['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_APPLICATION_INACTIVE', 'E_VALIDATION'],
     'void': ['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION', 'E_REASON_REQUIRED',
              'E_PERIOD_CLOSED', 'E_APPLICATION_INACTIVE', 'E_HAS_APPLICATIONS'],
 }
 
+_APPLY = (
+    'Attach what a bill payment still has free to one or more open bills of the same vendor.'
+    ' Nothing is posted and no money moves: the cash left when the payment posted, so this only'
+    ' decides which payables it answers, and the bills fall by exactly what is attached to them.'
+    " Free capacity is the payment's amount less what it currently answers -- money never"
+    ' applied, or freed by `bill payment unapply` -- so a payment pointed at the wrong bill is'
+    ' re-pointed here rather than voided and written again. Each named bill takes what you name'
+    ' for it, or everything still open on it when you name nothing; applying less than what is'
+    ' free leaves the rest free. The vendor, the payable account and the currency must match the'
+    ' payment exactly. `date` is the settlement date and defaults to the payment date; it may be'
+    ' later but never earlier than the payment or than a bill it settles, and never on or before'
+    ' the closing date.'
+)
+
 DESCRIPTIONS = {
     'pay': _PAY,
+    'apply': _APPLY,
     'unapply': ('Take a payment back off the bills it settled, without moving any money. The'
                 ' bills go back to open for what was applied and the bank is untouched, which'
                 ' leaves the payment standing as an unapplied debit against the vendor. Name'
@@ -80,10 +102,11 @@ def _read(verb, model, output_model):
 
 
 bill_pay = _write('bill pay', 'pay', BillPayInput, BillPayOutput)
+bill_payment_apply = _write('bill payment apply', 'apply', BillPaymentApplyInput, BillPaymentWriteOutput)
 bill_payment_unapply = _write('bill payment unapply', 'unapply', BillPaymentUnapplyInput, BillPaymentWriteOutput)
 bill_payment_void = _write('bill payment void', 'void', BillPaymentVoidInput, BillPaymentWriteOutput)
 bill_payment_show = _read('show', BillPaymentShowInput, BillPaymentOutput)
 bill_payment_query = _read('query', BillPaymentQueryInput, BillPaymentPageOutput)
 
-BILL_PAYMENT_COMMANDS = [bill_pay, bill_payment_show, bill_payment_query,
+BILL_PAYMENT_COMMANDS = [bill_pay, bill_payment_show, bill_payment_query, bill_payment_apply,
                          bill_payment_unapply, bill_payment_void]

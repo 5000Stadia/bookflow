@@ -746,6 +746,22 @@ MATRIX["bill pay"] = {
     "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
     "E_DIRECTIVE_INACTIVE": "deactivated --directive",
 }
+# Applying capacity that already exists refuses for both sides of the edge: what the payment
+# has free, and what the bill still has open.
+MATRIX["bill payment apply"] = {
+    "E_RECORD_NOT_FOUND": "unknown payment or bill",
+    "E_VALIDATION": "a settlement dated before the payment or before a bill it settles, a repeated bill selector, or a row reached with nothing left to apply",
+    "E_AMOUNT_PRECISION": "an amount with more precision than the currency has",
+    "E_VALUE_RANGE": "an amount of zero or less",
+    "E_PERIOD_CLOSED": "settlement date on or before the closing date",
+    "E_VERSION_CONFLICT": "stale expected_version on the payment or on a selected bill",
+    "E_APPLICATION_CAPACITY": "more than the payment has free or more than the bill has open, including a concurrent write that took either first",
+    "E_APPLICATION_INCOMPATIBLE": "a bill owed to another vendor, from another payable account, or in another currency",
+    "E_APPLICATION_INACTIVE": "a voided payment, a voided bill, or a bill with no payable",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
 MATRIX["bill payment unapply"] = {
     "E_RECORD_NOT_FOUND": "unknown payment or bill",
     "E_VERSION_CONFLICT": "stale expected_version",
