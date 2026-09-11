@@ -132,6 +132,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.expense_total.currency` | string | yes | no | — | — |
 | `items[].document.expense_total.minor_units` | integer | yes | no | — | — |
 | `items[].document.expense_lines` | integer | yes | no | — | — |
+| `items[].document.check_number` | string \| null | no | yes | null | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -420,6 +421,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.expense_total.currency` | string | yes | no | — | — |
 | `document.expense_total.minor_units` | integer | yes | no | — | — |
 | `document.expense_lines` | integer | yes | no | — | — |
+| `document.check_number` | string \| null | no | yes | null | — |
 
 Example JSON output:
 
@@ -452,6 +454,7 @@ Example JSON output:
       "currency": "USD",
       "minor_units": 1
     },
+    "check_number": null,
     "currency": "USD",
     "expense_lines": 1,
     "expense_total": {
@@ -592,7 +595,7 @@ Page credit card charges in accounting-date and stable-id order, oldest first or
 | `date_from` | `--date-from` | string \| null | no | yes | null | — |
 | `date_to` | `--date-to` | string \| null | no | yes | null | — |
 | `status` | `--status` | literal["posted", "voided"] \| null | no | yes | null | — |
-| `number` | `--number` | string \| null | no | yes | null | — |
+| `number` | `--number` | string \| null | no | yes | null | Match part of the cheque's own number for a check, or part of the document reference for a card charge. |
 | `account` | `--account` | string \| null | no | yes | null | — |
 | `payee` | `--payee` | string \| null | no | yes | null | — |
 | `payee_type` | `--payee-type` | literal["vendor", "customer", "employee", "other_name"] | no | no | "vendor" | — |
@@ -674,6 +677,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.expense_total.currency` | string | yes | no | — | — |
 | `items[].document.expense_total.minor_units` | integer | yes | no | — | — |
 | `items[].document.expense_lines` | integer | yes | no | — | — |
+| `items[].document.check_number` | string \| null | no | yes | null | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -924,6 +928,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.expense_total.currency` | string | yes | no | — | — |
 | `document.expense_total.minor_units` | integer | yes | no | — | — |
 | `document.expense_lines` | integer | yes | no | — | — |
+| `document.check_number` | string \| null | no | yes | null | — |
 
 Example JSON output:
 
@@ -954,6 +959,7 @@ Example JSON output:
       "currency": "USD",
       "minor_units": 1
     },
+    "check_number": null,
     "currency": "USD",
     "expense_lines": 1,
     "expense_total": {
@@ -1294,6 +1300,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.expense_total.currency` | string | yes | no | — | — |
 | `document.expense_total.minor_units` | integer | yes | no | — | — |
 | `document.expense_lines` | integer | yes | no | — | — |
+| `document.check_number` | string \| null | no | yes | null | — |
 
 Example JSON output:
 
@@ -1326,6 +1333,7 @@ Example JSON output:
       "currency": "USD",
       "minor_units": 1
     },
+    "check_number": null,
     "currency": "USD",
     "expense_lines": 1,
     "expense_total": {
@@ -1662,6 +1670,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.expense_total.currency` | string | yes | no | — | — |
 | `document.expense_total.minor_units` | integer | yes | no | — | — |
 | `document.expense_lines` | integer | yes | no | — | — |
+| `document.check_number` | string \| null | no | yes | null | — |
 
 Example JSON output:
 
@@ -1694,6 +1703,7 @@ Example JSON output:
       "currency": "USD",
       "minor_units": 1
     },
+    "check_number": null,
     "currency": "USD",
     "expense_lines": 1,
     "expense_total": {

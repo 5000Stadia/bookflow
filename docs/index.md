@@ -131,6 +131,8 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`company/bank_effect_versions`](schema/company/bank_effect_versions.md)
 - [`company/billing_group_members`](schema/company/billing_group_members.md)
 - [`company/billing_groups`](schema/company/billing_groups.md)
+- [`company/check_instrument_revisions`](schema/company/check_instrument_revisions.md)
+- [`company/check_instruments`](schema/company/check_instruments.md)
 - [`company/classes`](schema/company/classes.md)
 - [`company/company_info`](schema/company/company_info.md)
 - [`company/credit_components`](schema/company/credit_components.md)

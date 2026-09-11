@@ -389,8 +389,14 @@
         invoice: {noun: 'invoice', label: 'Invoice'},
         sales_receipt: {noun: 'sales-receipt', label: 'Sales receipt'},
       }[row.transaction_type];
+      // A bank register's Number column is a chequebook column: a cheque shows the number
+      // written on its face, and the shared document reference follows it so the journal is
+      // still reachable from the row.
+      const reference = row.check_number
+        ? `${row.check_number} · Check · ${row.transaction_number}`
+        : `${row.transaction_number} · ${document?.label || row.transaction_type || ''}`;
       const values = [row.effective_date + '\n' + row.recorded_at,
-        `${row.transaction_number} · ${document?.label || row.transaction_type || ''} · ${row.batch_kind}`, row.party_name, row.category_label,
+        `${reference} · ${row.batch_kind}`, row.party_name, row.category_label,
         [row.memo, row.description !== row.memo ? row.description : null].filter(Boolean).join(' / '),
         row.class_summary, money(row.increase), money(row.decrease), money(row.running_balance)];
       values.forEach((value, i) => tr.append(node('td', value || '', i >= 6 ? 'register-money' : '')));

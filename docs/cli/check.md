@@ -132,6 +132,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.expense_total.currency` | string | yes | no | — | — |
 | `items[].document.expense_total.minor_units` | integer | yes | no | — | — |
 | `items[].document.expense_lines` | integer | yes | no | — | — |
+| `items[].document.check_number` | string \| null | no | yes | null | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -185,7 +186,7 @@ Example JSON output:
 
 ## `check post`
 
-Write a check on a bank account. The bank balance goes down by `amount` and the expense accounts go up by their own line amounts. `account` must be a bank account. `number` is the check number; leave it out to take the next number for this company. `expenses` is one to 199 lines of account, amount, memo and class saying what the money was spent on; they must add up to `amount` exactly, and a total that does not is refused with the difference. A line's own `class_id` is that line's class and a line without one takes the document's `class_id`; set `class_mode` to `none` to leave one line unclassified even when the document carries a class. `pay_to` names who the money went to, from the vendor, customer, employee or other-name lists.
+Write a check on a bank account. The bank balance goes down by `amount` and the expense accounts go up by their own line amounts. `account` must be a bank account. `number` is the number written on the face of the cheque; it belongs to this bank account, so two bank accounts can each have a cheque 1001 and a number already used on this one is refused. Leave it out to take the next number from the account’s own next check number, skipping any it has already issued. The journal this posts as keeps its own document reference from the shared series, which is not the check number. `expenses` is one to 199 lines of account, amount, memo and class saying what the money was spent on; they must add up to `amount` exactly, and a total that does not is refused with the difference. A line's own `class_id` is that line's class and a line without one takes the document's `class_id`; set `class_mode` to `none` to leave one line unclassified even when the document carries a class. `pay_to` names who the money went to, from the vendor, customer, employee or other-name lists.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -224,7 +225,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `expenses[].party.name_id` | inside `--expenses` JSON array | string | yes | no | — | minimum length 1 |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
-| `number` | `--number` | string \| null | no | yes | null | — |
+| `number` | `--number` | string \| null | no | yes | null | The number written on the face of the cheque, which belongs to this bank account and not to the shared document series. Leave it out to take the next number from the account's own next check number, skipping any it has already issued. A number below that pointer is accepted and does not move it backwards; a number already on another cheque drawn on the same account is refused. Leading zeros are kept as typed, and 01001 and 1001 are one number. A number that is not a plain run of digits is a real cheque number with no place in the sequence. |
 
 ### Command and context options
 
@@ -421,6 +422,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.expense_total.currency` | string | yes | no | — | — |
 | `document.expense_total.minor_units` | integer | yes | no | — | — |
 | `document.expense_lines` | integer | yes | no | — | — |
+| `document.check_number` | string \| null | no | yes | null | — |
 
 Example JSON output:
 
@@ -453,6 +455,7 @@ Example JSON output:
       "currency": "USD",
       "minor_units": 1
     },
+    "check_number": null,
     "currency": "USD",
     "expense_lines": 1,
     "expense_total": {
@@ -568,7 +571,7 @@ Example JSON output:
 
 ## `check query`
 
-Page checks in accounting-date and stable-id order, oldest first or newest first, with bank-account, payee, date, status, number and text filters; restart on company audit changes.
+Page checks in accounting-date and stable-id order, oldest first or newest first, with bank-account, payee, date, status, check-number and text filters; restart on company audit changes.
 
 | Contract | Value |
 |---|---|
@@ -593,7 +596,7 @@ Page checks in accounting-date and stable-id order, oldest first or newest first
 | `date_from` | `--date-from` | string \| null | no | yes | null | — |
 | `date_to` | `--date-to` | string \| null | no | yes | null | — |
 | `status` | `--status` | literal["posted", "voided"] \| null | no | yes | null | — |
-| `number` | `--number` | string \| null | no | yes | null | — |
+| `number` | `--number` | string \| null | no | yes | null | Match part of the cheque's own number for a check, or part of the document reference for a card charge. |
 | `account` | `--account` | string \| null | no | yes | null | — |
 | `payee` | `--payee` | string \| null | no | yes | null | — |
 | `payee_type` | `--payee-type` | literal["vendor", "customer", "employee", "other_name"] | no | no | "vendor" | — |
@@ -675,6 +678,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.expense_total.currency` | string | yes | no | — | — |
 | `items[].document.expense_total.minor_units` | integer | yes | no | — | — |
 | `items[].document.expense_lines` | integer | yes | no | — | — |
+| `items[].document.check_number` | string \| null | no | yes | null | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -723,7 +727,7 @@ Example JSON output:
 
 ## `check show`
 
-Show a check: its current or a selected earlier revision, the bank account it is drawn on, who it was paid to, the expense lines, the posting batches and the figures on its own footer.
+Show a check: its current or a selected earlier revision, the bank account it is drawn on, who it was paid to, the expense lines, the posting batches and the figures on its own footer, including the check number that revision was written with. A check is named by its id or by its check number; when two bank accounts both issued that number, both are named and neither is opened.
 
 | Contract | Value |
 |---|---|
@@ -925,6 +929,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.expense_total.currency` | string | yes | no | — | — |
 | `document.expense_total.minor_units` | integer | yes | no | — | — |
 | `document.expense_lines` | integer | yes | no | — | — |
+| `document.check_number` | string \| null | no | yes | null | — |
 
 Example JSON output:
 
@@ -955,6 +960,7 @@ Example JSON output:
       "currency": "USD",
       "minor_units": 1
     },
+    "check_number": null,
     "currency": "USD",
     "expense_lines": 1,
     "expense_total": {
@@ -1057,7 +1063,7 @@ Example JSON output:
 
 ## `check update`
 
-Correct a check, including moving it to another bank account. Every field is optional and a field left out keeps what was captured. Supply `expenses` to replace the whole grid, carrying each surviving row’s `line_id` and omitting it on a new row; leave `expenses` out to correct the header alone and keep the rows exactly as they were captured. A replaced grid resolves `class_mode: inherit` against the `class_id` supplied on this call, so send the document’s class again with the rows if it still applies. The old accounting is reversed at its original date and replaced in full at the new one; every earlier revision stays readable.
+Correct a check, including moving it to another bank account or giving it a different number. A cheque that moves keeps its number unless a new one is supplied; the number it had stays on the revision that carried it and is never handed out automatically again. Every field is optional and a field left out keeps what was captured. Supply `expenses` to replace the whole grid, carrying each surviving row’s `line_id` and omitting it on a new row; leave `expenses` out to correct the header alone and keep the rows exactly as they were captured. A replaced grid resolves `class_mode: inherit` against the `class_id` supplied on this call, so send the document’s class again with the rows if it still applies. The old accounting is reversed at its original date and replaced in full at the new one; every earlier revision stays readable.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1098,7 +1104,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `check` | `CHECK` | string | yes | no | — | minimum length 1 |
-| `number` | `--number` | string \| null | no | yes | null | — |
+| `number` | `--number` | string \| null | no | yes | null | A different number for this cheque. Leave it out to keep the one it has, including when the cheque moves to another bank account. The number it had stays on the revision that carried it, so history and printing keep reading what was issued, and it is never handed out again automatically. |
 
 ### Command and context options
 
@@ -1296,6 +1302,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.expense_total.currency` | string | yes | no | — | — |
 | `document.expense_total.minor_units` | integer | yes | no | — | — |
 | `document.expense_lines` | integer | yes | no | — | — |
+| `document.check_number` | string \| null | no | yes | null | — |
 
 Example JSON output:
 
@@ -1328,6 +1335,7 @@ Example JSON output:
       "currency": "USD",
       "minor_units": 1
     },
+    "check_number": null,
     "currency": "USD",
     "expense_lines": 1,
     "expense_total": {
@@ -1664,6 +1672,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.expense_total.currency` | string | yes | no | — | — |
 | `document.expense_total.minor_units` | integer | yes | no | — | — |
 | `document.expense_lines` | integer | yes | no | — | — |
+| `document.check_number` | string \| null | no | yes | null | — |
 
 Example JSON output:
 
@@ -1696,6 +1705,7 @@ Example JSON output:
       "currency": "USD",
       "minor_units": 1
     },
+    "check_number": null,
     "currency": "USD",
     "expense_lines": 1,
     "expense_total": {

@@ -1766,7 +1766,7 @@ Example JSON output:
 
 ## `report missing-checks`
 
-Holes and repeats in each bank account's check-number sequence as of as_of, so an unrecorded or twice-entered check can be found. One row per hole, naming the first and last missing number and the checks that occupy the numbers immediately below and above it, and one row per number two or more checks carry. A check counts as drawn on the bank account its first entered line credits, so a correction that moves it moves it here too, and a voided check still occupies its number because the paper it was written on is still gone. A check whose number is not a plain run of digits has no position in a sequence and is counted rather than placed; so is one no longer drawn on a bank account. account limits the report to one bank account. Totals cover every examined check and rows are paged.
+Holes and repeats in each bank account's check-number sequence as of as_of, so an unrecorded or twice-entered check can be found. The number read is the one written on the face of the cheque, which belongs to the bank account it was written from and not to the shared document series the journal it posts as takes its reference from. One row per hole, naming the first and last missing number and the checks occupying the numbers immediately below and above it; one row per number two or more checks carry; and one row per number a correction gave up, which is accounted for rather than missing and is never handed out again. A correction that moves a check to another bank account moves it to that account's sequence here too, and a voided check still occupies its number because the paper it was written on is still gone. A check whose number is not a plain run of digits has no position in a sequence and is counted rather than placed; so is one whose lines no longer credit the account it was written from. disclosure says what the evidence cannot settle: gaps marked legacy_uncertain sit among numbers carried over from the shared document series when the file was upgraded, and cheques written to pay bills carry their number on the bill payment and are not placed here. account limits the report to one bank account. Totals cover every examined check and rows are paged.
 
 | Contract | Value |
 |---|---|
@@ -1839,8 +1839,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `totals.missing_numbers` | integer | yes | no | — | — |
 | `totals.duplicate_numbers` | integer | yes | no | — | — |
 | `totals.duplicate_checks` | integer | yes | no | — | — |
+| `totals.retired_numbers` | integer | no | no | 0 | — |
+| `totals.legacy_uncertain_gaps` | integer | no | no | 0 | — |
+| `totals.checks_numbered_before_the_upgrade` | integer | no | no | 0 | — |
+| `disclosure` | string \| null | no | yes | null | — |
 | `rows` | array[object] | yes | no | — | — |
-| `rows[].kind` | literal["gap", "duplicate"] | yes | no | — | — |
+| `rows[].kind` | literal["gap", "duplicate", "retired"] | yes | no | — | — |
 | `rows[].account_id` | string | yes | no | — | — |
 | `rows[].current_account_label` | string | yes | no | — | — |
 | `rows[].current_account_name` | string | yes | no | — | — |
@@ -1851,6 +1855,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].missing_count` | integer | no | no | 0 | — |
 | `rows[].duplicate_number` | integer \| null | no | yes | null | — |
 | `rows[].times_used` | integer \| null | no | yes | null | — |
+| `rows[].retired_number` | integer \| null | no | yes | null | — |
+| `rows[].legacy_uncertain` | boolean | no | no | false | — |
 | `rows[].before` | object \| null | no | yes | null | — |
 | `rows[].before.transaction_id` | string | yes | no | — | — |
 | `rows[].before.number` | string | yes | no | — | — |
@@ -1893,6 +1899,7 @@ Example JSON output:
 ```json
 {
   "count": 0,
+  "disclosure": null,
   "metadata": {
     "audit_watermark": 1,
     "basis": "accrual",
@@ -1910,12 +1917,15 @@ Example JSON output:
   "rows": [],
   "totals": {
     "checks_examined": 1,
+    "checks_numbered_before_the_upgrade": 0,
     "checks_off_a_bank_account": 1,
     "duplicate_checks": 1,
     "duplicate_numbers": 1,
     "gaps": 1,
+    "legacy_uncertain_gaps": 0,
     "missing_numbers": 1,
     "numbered_checks": 1,
+    "retired_numbers": 0,
     "unnumbered_checks": 1
   }
 }

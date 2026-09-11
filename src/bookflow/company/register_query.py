@@ -51,6 +51,12 @@ class RegisterRow(reports.GeneralLedgerRow):
     memo: str | None = None
     category_label: str | None = None
     class_summary: str | None = None
+    # The number written on the cheque, when this row is a cheque drawn on the account being
+    # read. A bank register's Number column is a chequebook column: showing the shared
+    # document reference there is what made `report missing-checks` and the register disagree
+    # about what number a cheque carries. Null on every other row, and on a cheque seen from
+    # the other side of its own entry.
+    check_number: str | None = None
 
 
 class RegisterQueryOutput(reports.Page):
@@ -106,6 +112,16 @@ def _label(snapshot, info):
     if info.get('use_account_numbers') and snapshot.get('number'):
         label = str(snapshot['number']) + ' · ' + label
     return label
+
+
+def _check_numbers(db, transaction_ids, account_id):
+    """The cheque number each of these rows carries in this account's own chequebook."""
+    if not transaction_ids:
+        return {}
+    t = schema.check_instruments
+    return {row.transaction_id: row.check_number for row in db.conn.execute(
+        sa.select(t.c.transaction_id, t.c.check_number).where(
+            t.c.transaction_id.in_(sorted(transaction_ids)), t.c.account_id == account_id))}
 
 
 def _revision_summaries(db, revision_ids, selected_id, info):
@@ -164,6 +180,8 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
         result = reports.general_ledger(report_input, s, principal_id=principal_id)
         revision_ids = {row.revision_id for row in result.rows if row.revision_id is not None}
         summaries = _revision_summaries(db, revision_ids, account['id'], info)
+        cheques = _check_numbers(db, {row.transaction_id for row in result.rows
+                                      if row.transaction_id is not None}, account['id'])
         rows = []
         for row in result.rows:
             values = row.model_dump()
@@ -185,7 +203,8 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
                 decrease=row.debit if side == 'credit' else row.credit,
                 running_balance=reports.money(row.signed_balance.minor_units * normal_sign, currency),
                 revision_number=summary['revision_number'] if summary else None,
-                memo=memo, category_label=category, class_summary=class_label))
+                memo=memo, category_label=category, class_summary=class_label,
+                check_number=cheques.get(row.transaction_id)))
         net = db.raw.execute('SELECT bookflow_sum_int(debit_minor_units-credit_minor_units) FROM posting_lines WHERE account_id=?',
                              (account['id'],)).fetchone()[0]
         current = CurrentBalanceSnapshot(balance=reports.money(int(net or 0) * normal_sign, currency),

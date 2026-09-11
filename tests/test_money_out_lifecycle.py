@@ -93,7 +93,9 @@ def test_a_check_is_found_read_corrected_and_voided_and_the_ledger_follows_it(bo
                                         'limit': 10})
     assert page['count'] == 1 and page['has_more'] is False and page['next_cursor'] is None
     assert page['items'][0]['id'] == posted['id']
-    assert page['items'][0]['number'] == '1042'
+    # A cheque is listed by the number on its face, not by the document reference the
+    # journal it posts as takes from the shared series.
+    assert page['items'][0]['document']['check_number'] == '1042'
     assert page['items'][0]['document']['amount']['amount'] == CHECK
     assert page['items'][0]['document']['expense_lines'] == 2
 
@@ -104,7 +106,7 @@ def test_a_check_is_found_read_corrected_and_voided_and_the_ledger_follows_it(bo
         'kind': 'check', 'account_id': books['bank'], 'funding': 'bank', 'currency': 'USD',
         'amount': {'amount': CHECK, 'currency': 'USD', 'minor_units': 28460},
         'expense_total': {'amount': CHECK, 'currency': 'USD', 'minor_units': 28460},
-        'expense_lines': 2}
+        'expense_lines': 2, 'check_number': '1042'}
     assert shown['revision']['lines'][0]['party_name'] == 'Northside Supply'
     assert [line['description'] for line in shown['revision']['lines']] == \
            ['March supplies', 'Parts', 'Fuel']
@@ -433,10 +435,11 @@ def test_a_check_page_carries_its_cursor_and_restarts_when_the_books_move(books)
     assert first['count'] == 2 and first['has_more'] is True and first['next_cursor']
     second = books['run']('check query', {'limit': 2, 'cursor': first['next_cursor']})
     assert second['count'] == 1 and second['has_more'] is False and second['next_cursor'] is None
-    assert [item['number'] for item in first['items'] + second['items']] == ['1001', '1002', '1003']
+    assert [item['document']['check_number']
+            for item in first['items'] + second['items']] == ['1001', '1002', '1003']
 
     newest = books['run']('check query', {'limit': 3, 'direction': 'desc'})
-    assert [item['number'] for item in newest['items']] == ['1003', '1002', '1001']
+    assert [item['document']['check_number'] for item in newest['items']] == ['1003', '1002', '1001']
 
     # A cursor belongs to the contract that minted it.
     with pytest.raises(BookflowError) as raised:
@@ -457,7 +460,7 @@ def test_the_query_filters_each_narrow_the_page_they_say_they_do(books):
         account=books['other_bank'], pay_to={'name_type': 'vendor', 'name_id': books['other_vendor']},
         date='2026-04-04', number='2002', amount=SECOND, memo='April tools',
         expenses=[{'account': books['first'], 'amount': SECOND}]), reason='Pay Southside Tools')
-    query = lambda **raw: [item['number'] for item in
+    query = lambda **raw: [item['document']['check_number'] for item in
                            books['run']('check query', dict(limit=20, **raw))['items']]
     assert query() == ['2001', '2002']
     assert query(account=books['other_bank']) == ['2002']

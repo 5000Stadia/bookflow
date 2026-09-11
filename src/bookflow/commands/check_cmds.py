@@ -39,16 +39,25 @@ DESCRIPTIONS = {
         'post': (
             'Write a check on a bank account. The bank balance goes down by `amount` and the expense'
             ' accounts go up by their own line amounts. `account` must be a bank account. `number` is'
-            ' the check number; leave it out to take the next number for this company.' + _SHARED),
-        'update': ('Correct a check, including moving it to another bank account.' + _CORRECTION),
+            ' the number written on the face of the cheque; it belongs to this bank account, so two'
+            ' bank accounts can each have a cheque 1001 and a number already used on this one is'
+            ' refused. Leave it out to take the next number from the account’s own next check number,'
+            ' skipping any it has already issued. The journal this posts as keeps its own document'
+            ' reference from the shared series, which is not the check number.' + _SHARED),
+        'update': ('Correct a check, including moving it to another bank account or giving it a'
+                   ' different number. A cheque that moves keeps its number unless a new one is'
+                   ' supplied; the number it had stays on the revision that carried it and is never'
+                   ' handed out automatically again.' + _CORRECTION),
         'void': ('Void a check with a required reason: the cheque that was lost, stale or never'
                  ' cashed. Its accounting is reversed exactly, at the check’s own date, so no'
                  ' earlier period moves; its number stays occupied and its history stays readable.'),
         'show': ('Show a check: its current or a selected earlier revision, the bank account it is'
                  ' drawn on, who it was paid to, the expense lines, the posting batches and the'
-                 ' figures on its own footer.'),
+                 ' figures on its own footer, including the check number that revision was written'
+                 ' with. A check is named by its id or by its check number; when two bank accounts'
+                 ' both issued that number, both are named and neither is opened.'),
         'query': ('Page checks in accounting-date and stable-id order, oldest first or newest first,'
-                  ' with bank-account, payee, date, status, number and text filters; restart on'
+                  ' with bank-account, payee, date, status, check-number and text filters; restart on'
                   ' company audit changes.'),
         'history': ('Page a check’s immutable revisions in revision-number order, each with what its'
                     ' own footer showed and the correction and void batches it carries.'),
