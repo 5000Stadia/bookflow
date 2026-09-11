@@ -173,8 +173,11 @@ def test_the_enter_bill_tile_opens_a_window_that_posts_what_the_command_posts(re
     assert 'Unpaid' in _text(b, '[data-bill-settlement]')
 
     # And the bill entered through the window is in the list of bills, at its own total.
+    # Wait for the list page itself, not merely for a table cell: the detail page being
+    # left has its own line table, so `table td` is already true before the navigation
+    # starts and the read races it. This is a full page load, so the path is the signal.
     b.evaluate('document.querySelector(".document-nav-find").click()')
-    b.wait_for('!!document.querySelector("table td")')
+    b.wait_for('location.pathname.endsWith("/bill") && !!document.querySelector("table td")')
     entered = b.evaluate(f'''[...document.querySelectorAll("table tr")].slice(1)
         .map(r => [...r.querySelectorAll("td")].map(c => c.innerText.trim()))
         .find(row => row[0] === {json.dumps(written["number"])})''')
