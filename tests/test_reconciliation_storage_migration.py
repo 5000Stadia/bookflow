@@ -18,12 +18,27 @@ from bookflow.company.deposit_dependencies import RECONCILIATION
 from bookflow.company.reconciliation_schema import guards
 from bookflow.company.reconciliation_storage_validation import validate
 from bookflow.storage.engine import open_database
-from bookflow.storage.migrate import migrate_to_head, feature_admission
+from bookflow.storage.migrate import HEADS, migrate_to_head, feature_admission
 from bookflow.core.errors import BookflowError
 from tests.payment_raw_evidence import table, attachments
 
 BASE='a041caa2b98365649112eac55d600c586ca22b08'
 M=importlib.import_module('bookflow.storage.company_migrations.versions.0022_reconciliation_storage')
+
+
+@pytest.fixture
+def step(monkeypatch):
+    """Stop the chain at the migration this file is about, wherever the head has moved to.
+
+    Three tests here assert what this one migration does to an existing company file -- every
+    row, rowid, storage class and custom object preserved, a failure rolling back to exactly
+    what was there, and the public upgrade command publishing that same result. Later
+    migrations rebuild tables and add columns of their own, so running them would be asserting
+    their behaviour under this one's name. The target is read from the migration module, so it
+    cannot go stale the way a repinned literal does; the fresh-database test above keeps the
+    real head, which is what proves these tables survive the rest of the chain."""
+    monkeypatch.setitem(HEADS,'company',M.revision)
+    return M.revision
 
 
 def empty(raw):
@@ -46,13 +61,13 @@ def test_exact_metadata_fresh_current_empty_off_and_composite_fk_targets(tmp_pat
             assert columns in targets,(name,columns,remote.name)
     assert M.DDL==ddl and M.GUARDS==guards(M.NEW_TABLES)
     with open_database(tmp_path/'fresh.db',writable=True,create=True) as db:
-        assert migrate_to_head(db,'company',None)==(None,'co0022')
+        assert migrate_to_head(db,'company',None)==(None,HEADS['company'])
         empty(db.raw)
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
         assert db.raw.execute('PRAGMA integrity_check').fetchall()==[('ok',)]
         assert feature_admission(db,RECONCILIATION,resolver=None) is None
         before=list(db.raw.iterdump())
-        assert migrate_to_head(db,'company',None)==('co0022','co0022')
+        assert migrate_to_head(db,'company',None)==(HEADS['company'],HEADS['company'])
         assert list(db.raw.iterdump())==before
 
 
@@ -68,7 +83,7 @@ def old(tmp_path_factory):
     return root,source
 
 
-def test_old_upgrade_preserves_all_rows_rowids_storage_classes_custom_ddl_attachments_backup(old,tmp_path):
+def test_old_upgrade_preserves_all_rows_rowids_storage_classes_custom_ddl_attachments_backup(old,tmp_path,step):
     root=tmp_path/'root';shutil.copytree(old[0],root)
     path=next(root.glob('organizations/*/Demo Plumbing Co/company.db'))
     with sqlite3.connect(path) as raw:
@@ -85,7 +100,7 @@ def test_old_upgrade_preserves_all_rows_rowids_storage_classes_custom_ddl_attach
         ddl=raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name').fetchall()
     files=attachments(root)
     with open_database(path,writable=True) as db:
-        assert migrate_to_head(db,'company',tmp_path/'backups')==('co0021','co0022')
+        assert migrate_to_head(db,'company',tmp_path/'backups')==('co0021',step)
         assert {n:table(db.raw,n) for n in names}==before
         assert set(ddl)<=set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema').fetchall())
         empty(db.raw)
@@ -128,7 +143,7 @@ def test_complete_case_insensitive_collision_preflight_rolls_back(old,tmp_path,k
         assert db.raw.execute("SELECT name FROM sqlite_schema WHERE name='reconciliation_keys'").fetchall()==[]
 
 
-def test_late_migration_failure_rolls_back_complete_new_ddl(old,tmp_path,monkeypatch):
+def test_late_migration_failure_rolls_back_complete_new_ddl(old,tmp_path,monkeypatch,step):
     from alembic import command
     path=tmp_path/'late.db';shutil.copy2(next(old[0].glob('organizations/*/Demo Plumbing Co/company.db')),path)
     original=command.upgrade
@@ -143,11 +158,11 @@ def test_late_migration_failure_rolls_back_complete_new_ddl(old,tmp_path,monkeyp
         assert caught.value.code=='E_MIGRATION_FAILED'
         assert list(db.raw.iterdump())==before
         assert db.raw.execute("SELECT name FROM sqlite_schema WHERE name='reconciliation_keys'").fetchall()==[]
-        assert migrate_to_head(db,'company',tmp_path/'backups')==('co0021','co0022')
+        assert migrate_to_head(db,'company',tmp_path/'backups')==('co0021',step)
         empty(db.raw)
 
 
-def test_public_upgrade_publication_exact_old_prefix_and_noop(old,tmp_path):
+def test_public_upgrade_publication_exact_old_prefix_and_noop(old,tmp_path,step):
     import bookflow
     from bookflow.storage.paths import read_company_marker
     root=tmp_path/'root';shutil.copytree(old[0],root)
@@ -165,11 +180,11 @@ def test_public_upgrade_publication_exact_old_prefix_and_noop(old,tmp_path):
     output=c.run('upgrade',{})
     assert output['companies_migrated'] and not output['companies_failed']
     marker=read_company_marker(path.parent)
-    assert marker['schema_revision']=='co0022'
+    assert marker['schema_revision']==HEADS['company']
     with sqlite3.connect(root/'hub.db') as raw:
-        assert raw.execute('SELECT schema_revision FROM companies WHERE id=?',(marker['company_id'],)).fetchone()==('co0022',)
+        assert raw.execute('SELECT schema_revision FROM companies WHERE id=?',(marker['company_id'],)).fetchone()==(HEADS['company'],)
     with sqlite3.connect(path) as raw:
-        assert raw.execute('SELECT version_num FROM alembic_version').fetchone()==('co0022',)
+        assert raw.execute('SELECT version_num FROM alembic_version').fetchone()==(HEADS['company'],)
         # The DDL-only witness above preserves EVERY principal byte. The
         # existing public migrate_company owner separately refreshes last_seen
         # and admits the system principal; assert that exact bookkeeping delta.

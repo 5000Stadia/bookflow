@@ -556,7 +556,13 @@ def legacy_world(request,reconciliation_legacy_worlds,tmp_path,monkeypatch):
     expected=json.loads((parent/(kind+'-raw.json')).read_text())
     assert {str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file()}==expected
     monkeypatch.setenv('BOOKFLOW_DATA_ROOT',str(root));monkeypatch.delenv('BOOKFLOW_COMPANY',raising=False)
-    yield bookflow.connect(data_root=str(root)),json.loads((parent/(kind+'.json')).read_text())
+    world=bookflow.connect(data_root=str(root))
+    # Written by a pinned older binary, so this file is behind the chain exactly as a real
+    # user's file is after an update, and the first thing that happens to a real one is the
+    # upgrade. Run it on the copy; the pinned original below is never touched, which is what
+    # keeps this a test of retained old data rather than of data written by today's writer.
+    assert not world.run('upgrade',{})['companies_failed']
+    yield world,json.loads((parent/(kind+'.json')).read_text())
     original=parent/kind
     assert {str(p.relative_to(original)):hashlib.sha256(p.read_bytes()).hexdigest() for p in original.rglob('*') if p.is_file()}==expected
 
@@ -634,3 +640,171 @@ def test_actual_operation_owner_inventory_and_retained_participant_denial(client
     assert error.value.code=='E_PERMISSION' and not error.value.details
     assert observed==expected_operations
     assert driver.dump()==before
+
+
+@pytest.fixture
+def payables(client):
+    """Every document type the ledger gained after `deposit`, in one ordinary company file.
+
+    None of this is a corner case. A bill paid out of the checking account is most of what a
+    real bank reconciliation is made of, and the same file holds the credit memo, the refund,
+    the vendor credit and the remittance below.
+    """
+    seeded=min(row['id'] for row in run(client,'item query',dict(limit=200))['items']
+               if row['type']=='sales_tax_item')
+    agency=run(client,'vendor create',dict(name='R0 remittance agency',is_tax_agency=True))['id']
+    tax=run(client,'item create',dict(name='R0 six percent',type='sales_tax_item',tax_percent='6',
+        tax_agency_vendor_id=agency,
+        liability_account_id=run(client,'item show',dict(item=seeded))['liability_account_id']))['id']
+    payable=next(row['id'] for row in run(client,'account query',dict(limit=200))['items']
+                 if row['type']=='accounts_payable')
+    bank=account(client,'R0 payables bank');card=account(client,'R0 payables card','credit_card')
+    expense=account(client,'R0 payables expense','expense')
+    income=account(client,'R0 payables income','income')
+    vendor=run(client,'vendor create',dict(name='R0 payables vendor'))['id']
+    customer=run(client,'customer create',dict(name='R0 payables customer'))['id']
+    taxable=next(row['id'] for row in run(client,'sales-tax-code list',{})['items'] if row['taxable'])
+    sold=run(client,'item create',dict(name='R0 payables service',type='service',sales_enabled=True,
+        description='R0 payables service',income_account_id=income,price='40.00',
+        sales_tax_code_id=taxable))['id']
+
+    def bill(amount,date='2026-03-01'):
+        return run(client,'bill post',dict(vendor=vendor,date=date,ap_account=payable,
+            expenses=[dict(account=expense,amount=amount)]))
+
+    return dict(bank=bank,card=card,expense=expense,payable=payable,vendor=vendor,agency=agency,
+                customer=customer,tax=tax,item=sold,method=method(client),bill=bill)
+
+
+def test_every_ledger_document_type_has_a_statement_adapter(client,driver):
+    """The required set is read from the ledger, so the next omission cannot be silent either.
+
+    A producer with no adapter is not a degradation: `enumerate_graph` refuses the whole graph,
+    so a single unadapted document makes every account it touches permanently unreconcilable.
+    Six types reached the ledger that way before anything noticed, which is why this reads the
+    live check constraint rather than any list a person is expected to keep in step.
+    """
+    import re,typing
+    import sqlalchemy as sa
+    from bookflow.company import ledger_schema, schema as company
+    from bookflow.company.reconciliation_models import Producer
+    check=next(x for x in company.transactions.constraints
+               if getattr(x,'name',None)=='ck_transaction_type')
+    declared=tuple(re.findall(r"'([a-z_]+)'",str(check.sqltext)))
+    assert declared==ledger_schema.TRANSACTION_TYPES and len(declared)>5
+    assert typing.get_args(Producer)==declared
+    assert set(r.REGISTRY)==set(declared) and r.UNCOVERED_PRODUCERS==()
+    # And the refusal the registry stands in front of is real, not assumed: drop one entry and
+    # the same graph that proved a moment ago stops producing a population at all.
+    a=account(client,'R0 coverage bank');equity=account(client,'R0 coverage equity','equity')
+    journal(client,pair(a,equity))
+    assert population(driver,a).signed_total==10000
+    short={name:adapter for name,adapter in r.REGISTRY.items() if name!='journal_entry'}
+    with driver.session() as s:
+        ids=set(s.company.conn.execute(sa.select(company.posting_lines.c.transaction_id).where(
+            company.posting_lines.c.account_id==a)).scalars())
+        graph=r.graph(s,ids)
+        r.enumerate_graph(graph)
+        original=r.REGISTRY
+        try:
+            r.REGISTRY=short
+            with pytest.raises(r.Unsupported,match='unknown_producer'):r.enumerate_graph(graph)
+            assert r.population(s,a,'2026-12-31').reason=='unknown_producer'
+        finally:
+            r.REGISTRY=original
+
+
+def test_money_out_documents_are_statement_lines_on_a_bank_and_a_card(client,payables,driver):
+    """A bill payment, a refund and a remittance, each read back off the account they left.
+
+    The card side is the one worth stating: crediting a card raises what is owed, so the same
+    negative signed debit is a positive statement amount there and a negative one on the bank.
+    """
+    bank,card=payables['bank'],payables['card']
+    first=payables['bill']('100.00')
+    paid=run(client,'bill pay',dict(date='2026-03-05',funding_account=bank,method=payables['method'],
+        bills=[dict(bill=first['id'])]))['payments'][0]
+    out=population(driver,bank)
+    assert out.signed_total==-10000 and len(out.eligible)==1
+    line=out.eligible[0]
+    assert (line.ref.producer,line.ref.role)==('bill_payment','funding')
+    assert line.ref.component_id==paid['id'] and line.statement_amount==-10000
+    assert line.account_type=='bank' and line.effective_date=='2026-03-05'
+    # One check paying two bills is one statement line, not two.
+    grouped=run(client,'bill pay',dict(date='2026-03-06',funding_account=card,
+        method=payables['method'],bills=[dict(bill=payables['bill']('25.00','2026-03-02')['id']),
+                                         dict(bill=payables['bill']('35.00','2026-03-02')['id'])]))
+    charged=population(driver,card)
+    assert charged.signed_total==-6000 and len(charged.eligible)==1
+    assert charged.eligible[0].statement_amount==6000 and charged.eligible[0].account_type=='credit_card'
+    assert len(charged.eligible[0].posting_line_ids)==1 and len(charged.eligible[0].source_ids)==2
+    # A credit memo refunded in cash, and a remittance of the tax a taxable sale charged.
+    run(client,'invoice post',dict(customer=payables['customer'],date='2026-03-02',
+        sales_tax_item=payables['tax'],lines=[dict(item=payables['item'],quantity='2')]))
+    memo=run(client,'credit-memo post',dict(customer=payables['customer'],date='2026-03-06',
+        sales_tax_item=payables['tax'],lines=[dict(item=payables['item'],quantity='1')]))
+    run(client,'customer-refund post',dict(date='2026-03-08',funding_account=bank,
+        method=payables['method'],sources=[dict(credit_memo=memo['id'])]))
+    run(client,'sales-tax pay',dict(agency=payables['agency'],date='2026-03-12',
+        funding_account=bank,method=payables['method'],amount='1.00'))
+    final=population(driver,bank)
+    assert {v.ref.producer for v in final.eligible}=={'bill_payment','customer_refund','sales_tax_payment'}
+    assert sorted(v.signed_debit for v in final.eligible)==[-10000,-4240,-100]
+    assert final.signed_total==-14340
+    # Unapplying settles nothing back out of the bank: the money already left.
+    run(client,'bill payment unapply',dict(payment=paid['id'],expected_version=1))
+    assert population(driver,bank).signed_total==-14340
+    # Voiding the check takes its line off the statement without deleting its history.
+    run(client,'bill payment void',dict(payment=paid['id'],expected_version=2))
+    voided=population(driver,bank)
+    assert voided.signed_total==-4340
+    retired=next(v for v in voided.current if v.ref.transaction_id==paid['id'])
+    assert not retired.active and retired.transition_batch_id and retired.ref==line.ref
+    assert len(voided.history)>len(voided.current)
+    with driver.session() as s:assert r.resolve(s,line.ref,line.version_id)==line
+
+
+def test_settled_documents_carry_no_statement_line_and_still_prove(client,payables,driver):
+    """A bill, a credit memo and a vendor credit are in the books but never on a statement.
+
+    They are registered producers all the same, because the graph a reader assembles is not
+    always one account's: `enumerate_graph` walks whatever headers it is handed, and one
+    unregistered type in that set refuses the lot. Proving the whole company's ledger at once
+    is the strongest form of that, and it is what a bank reconciliation eventually reads.
+    """
+    import sqlalchemy as sa
+    from bookflow.company import schema as company
+    from bookflow.company.reconciliation_models import STATEMENT_ACCOUNTS
+    from bookflow.company.reconciliation_proof import prove
+    first=payables['bill']('60.00')
+    credit=run(client,'vendor-credit post',dict(vendor=payables['vendor'],date='2026-03-09',
+        ap_account=payables['payable'],expenses=[dict(account=payables['expense'],amount='10.00')]))
+    run(client,'vendor-credit apply',dict(credit=credit['id'],expected_version=1,date='2026-03-10',
+        bills=[dict(bill=first['id'],expected_version=1,amount='10.00')]))
+    run(client,'bill pay',dict(date='2026-03-11',funding_account=payables['card'],
+        method=payables['method'],bills=[dict(bill=first['id'])]))
+    invoice=run(client,'invoice post',dict(customer=payables['customer'],date='2026-03-02',
+        sales_tax_item=payables['tax'],lines=[dict(item=payables['item'],quantity='2')]))
+    memo=run(client,'credit-memo post',dict(customer=payables['customer'],date='2026-03-06',
+        sales_tax_item=payables['tax'],lines=[dict(item=payables['item'],quantity='1')]))
+    run(client,'customer-credit apply',dict(credit_memo=memo['id'],expected_version=1,
+        date='2026-03-07',applications=[dict(invoice=invoice['id'],expected_version=1,amount='10.00')]))
+    assert population(driver,payables['card']).signed_total==-5000
+    with driver.session() as s:
+        types=dict(s.company.conn.execute(sa.select(company.transactions.c.id,
+                                                    company.transactions.c.type)).all())
+        graph=r.graph(s,set(types))
+        assert {'bill','credit_memo','vendor_credit'}<=set(types.values())
+        history,current=r.enumerate_graph(graph)
+        assert history and not any(v.ref.producer in ('bill','credit_memo','vendor_credit')
+                                   for v in history)
+        statement=[identifier for identifier,row in graph.accounts.items()
+                   if row['type'] in STATEMENT_ACCOUNTS]
+        assert statement
+        for identifier in statement:
+            total,gl=prove(graph,history,current,identifier,'9999-12-31')
+            assert total==gl
+        # A settled document that ever did post to a bank is a named refusal, never a line
+        # quietly missing from a statement that still adds up.
+        graph.accounts[payables['expense']]=dict(graph.accounts[payables['expense']],type='bank')
+        with pytest.raises(r.Unsupported,match='statement_leg'):r.enumerate_graph(graph)

@@ -1,4 +1,4 @@
-"""Private five-producer statement adapters over one caller-owned snapshot.
+"""Private statement adapters over one caller-owned snapshot, one per ledger document type.
 
 No writer, certificate resolver, authentication admission or cross-request cache.
 """
@@ -7,19 +7,28 @@ import json
 from types import MappingProxyType
 import sqlalchemy as sa
 from bookflow.company import schema as c, payment_authority
+from bookflow.company.ledger_schema import TRANSACTION_TYPES
 from bookflow.core.errors import BookflowError
 from bookflow.core.registry import Plan
 from bookflow.hub import access
 from bookflow.company.reconciliation_models import (
     StatementEffectRef, StatementEffectVersion, MovementKey, CompletePopulation,
     UnsupportedPopulation, InvalidPopulation, StaleReference, ChangedEffects,
+    STATEMENT_ACCOUNTS,
 )
 
 TABLES = ('transactions', 'transaction_revisions', 'document_line_identities', 'document_lines',
           'posting_batches', 'posting_lines', 'posting_line_sources', 'sales_profiles',
           'sales_line_profiles', 'sales_tax_components', 'payment_profiles', 'payment_components',
           'work_billing_allocations', 'deposit_profiles', 'deposit_components', 'deposit_row_keys',
-          'bank_effect_keys', 'bank_effect_versions', 'bank_effect_current')
+          'bank_effect_keys', 'bank_effect_versions', 'bank_effect_current',
+          'ap_payment_profiles', 'customer_refund_profiles', 'sales_tax_payment_profiles')
+
+# Captured per-revision facts that ride along with an effect as evidence. A producer whose
+# facts live in its own profile table adds that table here and to TABLES together.
+REVISION_FACTS = ('document_lines', 'sales_profiles', 'sales_line_profiles', 'payment_profiles',
+                  'payment_components', 'work_billing_allocations', 'deposit_profiles',
+                  'ap_payment_profiles', 'customer_refund_profiles', 'sales_tax_payment_profiles')
 
 
 class Unsupported(Exception):
@@ -125,14 +134,14 @@ def _version(g, header, revision, batch, role, component, legs, *, prior=None,
         account_id, signed = prior.account_id, 0
     account = g.accounts[account_id]
     ref = StatementEffectRef(producer=header['type'], transaction_id=header['id'], component_id=component, role=role)
-    grouped = role in ('cash', 'control', 'net')
+    grouped = role in ('cash', 'control', 'net', 'funding')
     movement = MovementKey(producer=header['type'], transaction_id=header['id'], revision_id=revision['id'],
         account_id=account_id, role=role, component_id=None if grouped else component)
     physical = {r['document_line_id'] for r in sources}
     provenance = [canonical(revision), canonical(batch), *(canonical(r) for r in legs), *(canonical(r) for r in sources)]
     if transition:
         provenance.append(canonical(g.by_id('posting_batches')[transition]))
-    for name in ('document_lines', 'sales_profiles', 'sales_line_profiles', 'payment_profiles', 'payment_components', 'work_billing_allocations', 'deposit_profiles'):
+    for name in REVISION_FACTS:
         provenance.extend(canonical(r) for r in g.owned(name, header['id']) if r.get('revision_id') == revision['id'])
     return StatementEffectVersion(ref=ref, version_id=version_id or (transition or batch['id']) + ':' + role + ':' + component,
         revision_id=revision['id'], business_batch_id=batch['id'], transition_batch_id=transition,
@@ -144,46 +153,30 @@ def _version(g, header, revision, batch, role, component, legs, *, prior=None,
         document_line_ids=tuple(sorted(physical)), provenance=tuple(provenance))
 
 
-def _commercial(g, header):
+def _walk(g, header, component):
+    """One revision-ordered pass over a document: its statement legs, retirements and void.
+
+    Every posting producer has the same life. Each business batch is one revision of the
+    document; a statement leg in it is one effect; a component the previous revision carried
+    and this one does not is retired as an inactive zero rather than forgotten; and a void
+    retires whatever was live at the exact reversal batch. ``component`` is the only thing a
+    producer actually differs in: given a statement leg and its attributions it returns the
+    ``(role, component_id)`` that names which part of the document the leg is.
+    """
     identity = header['id']
     revisions = {r['id']: r for r in g.owned('transaction_revisions', identity)}
-    lines = g.by_id('document_lines')
-    identities = g.by_id('document_line_identities')
     batches = sorted((r for r in g.owned('posting_batches', identity) if r['kind'] != 'reversal'), key=lambda r: revisions[r['revision_id']]['revision_number'])
     history, current = [], {}
     for batch in batches:
         revision = revisions[batch['revision_id']]
         found = {}
         for leg in g.owned('posting_lines', identity):
-            if leg['batch_id'] != batch['id'] or g.accounts[leg['account_id']]['type'] not in ('bank', 'credit_card'):
+            if leg['batch_id'] != batch['id'] or g.accounts[leg['account_id']]['type'] not in STATEMENT_ACCOUNTS:
                 continue
             sources = [r for r in g.owned('posting_line_sources', identity) if r['posting_line_id'] == leg['id']]
-            physical = {r['document_line_id'] for r in sources}
-            require(len(physical) == 1, 'ambiguous_commercial_line')
-            line = lines[next(iter(physical))]
-            require(line['transaction_id'] == identity and line['revision_id'] == revision['id'], 'line_owner')
-            require(identities[line['line_id']]['transaction_id'] == identity, 'stable_line_owner')
-            producer = header['type']
-            if producer == 'journal_entry':
-                role = 'entered'
-            elif producer == 'payment':
-                profile = next(r for r in g.owned('payment_profiles', identity) if r['revision_id'] == revision['id'])
-                if leg['account_id'] != profile['deposit_account_id'] or not leg['debit_minor_units']:
-                    raise Unsupported('payment_non_cash_bank_leg')
-                role = 'cash'
-            else:
-                profile = next(r for r in g.owned('sales_profiles', identity) if r['revision_id'] == revision['id'])
-                saved = next(r for r in g.owned('sales_line_profiles', identity) if r['document_line_id'] == line['id'])
-                income = json.loads(saved['item_snapshot'])['income_account']['id']
-                if producer == 'sales_receipt' and leg['account_id'] == profile['control_account_id'] and leg['debit_minor_units']:
-                    role = 'control'
-                elif leg['account_id'] == income and leg['credit_minor_units'] and all(r.get('tax_component_id') is None for r in sources):
-                    role = 'net'
-                else:
-                    raise Unsupported('unsupported_sales_bank_role')
-            key = (role, line['line_id'])
+            key = component(g, header, revision, leg, sources)
             require(key not in found, 'duplicate_component')
-            found[key] = _version(g, header, revision, batch, role, line['line_id'], [leg])
+            found[key] = _version(g, header, revision, batch, key[0], key[1], [leg])
         for key, old in current.items():
             if key not in found:
                 found[key] = _version(g, header, revision, batch, *key, [], prior=old, active=False)
@@ -197,6 +190,73 @@ def _commercial(g, header):
             prior=old, active=False, transition=inverse['id'], event=inverse['audit_event_id']) for key, old in current.items()}
         history.extend(current.values())
     return tuple(history), tuple(current.values())
+
+
+def _entered_component(g, header, revision, leg, sources):
+    """An entered line is the component: a journal row, a receipt's cash, a sale's bank income."""
+    identity = header['id']
+    lines = g.by_id('document_lines')
+    identities = g.by_id('document_line_identities')
+    physical = {r['document_line_id'] for r in sources}
+    require(len(physical) == 1, 'ambiguous_commercial_line')
+    line = lines[next(iter(physical))]
+    require(line['transaction_id'] == identity and line['revision_id'] == revision['id'], 'line_owner')
+    require(identities[line['line_id']]['transaction_id'] == identity, 'stable_line_owner')
+    producer = header['type']
+    if producer == 'journal_entry':
+        role = 'entered'
+    elif producer == 'payment':
+        profile = next(r for r in g.owned('payment_profiles', identity) if r['revision_id'] == revision['id'])
+        if leg['account_id'] != profile['deposit_account_id'] or not leg['debit_minor_units']:
+            raise Unsupported('payment_non_cash_bank_leg')
+        role = 'cash'
+    else:
+        profile = next(r for r in g.owned('sales_profiles', identity) if r['revision_id'] == revision['id'])
+        saved = next(r for r in g.owned('sales_line_profiles', identity) if r['document_line_id'] == line['id'])
+        income = json.loads(saved['item_snapshot'])['income_account']['id']
+        if producer == 'sales_receipt' and leg['account_id'] == profile['control_account_id'] and leg['debit_minor_units']:
+            role = 'control'
+        elif leg['account_id'] == income and leg['credit_minor_units'] and all(r.get('tax_component_id') is None for r in sources):
+            role = 'net'
+        else:
+            raise Unsupported('unsupported_sales_bank_role')
+    return role, line['line_id']
+
+
+def _commercial(g, header):
+    return _walk(g, header, _entered_component)
+
+
+def _funded_component(g, header, revision, leg, sources):
+    """The document is the component: money out is one statement line, however it splits.
+
+    A bill payment, a customer refund and a sales tax remittance each post one debit to what
+    they settle and one credit to the account that funded them -- a bank, which falls, or a
+    card, which rises. What a bill payment splits across is bills, and every one of them is
+    attributed to the same single funding leg, so the statement line is the document and not
+    any row on it. Naming the document rather than a row also keeps the reference stable if
+    one of these ever gains a correction: the effect would gain a version, not a new identity.
+    """
+    return 'funding', header['id']
+
+
+def _funding(g, header):
+    return _walk(g, header, _funded_component)
+
+
+def _offbank(g, header):
+    """A producer that posts no statement line of its own, checked rather than assumed.
+
+    A bill, a credit memo and a vendor credit reach this graph through what settles them, not
+    through a bank account: they post to payables, receivables, income and expense, and the
+    account rules of their own writers refuse anything else. Reading their legs and refusing a
+    statement account is what turns a future line on a bank into a named unsupported
+    population instead of a statement quietly missing an item it should have shown.
+    """
+    for leg in g.owned('posting_lines', header['id']):
+        if g.accounts[leg['account_id']]['type'] in STATEMENT_ACCOUNTS:
+            raise Unsupported(header['type'] + '_statement_leg')
+    return (), ()
 
 
 def _deposit(g, header):
@@ -238,9 +298,16 @@ def _deposit(g, header):
     return tuple(history), tuple(current.values())
 
 
-# Closed trusted dispatch. Register and billing delegate to their actual journal/sale.
+# Trusted dispatch, one entry per type the ledger admits. Register and billing delegate to
+# their actual journal/sale. `tests/test_reconciliation_adapters.py` fails the moment
+# `ledger_schema.TRANSACTION_TYPES` admits a type with no entry here, because a missing entry
+# is not a degradation: `enumerate_graph` refuses the whole graph, so one unadapted document
+# makes every account it touches unreconcilable, and nothing says so until someone tries.
 REGISTRY = MappingProxyType({'journal_entry': _commercial, 'payment': _commercial,
-    'sales_receipt': _commercial, 'invoice': _commercial, 'deposit': _deposit})
+    'sales_receipt': _commercial, 'invoice': _commercial, 'deposit': _deposit,
+    'bill_payment': _funding, 'customer_refund': _funding, 'sales_tax_payment': _funding,
+    'bill': _offbank, 'credit_memo': _offbank, 'vendor_credit': _offbank})
+UNCOVERED_PRODUCERS = tuple(name for name in TRANSACTION_TYPES if name not in REGISTRY)
 
 
 def enumerate_graph(g):
@@ -268,7 +335,7 @@ def population(s, account_id, cutoff):
     home = s.company_info_row['home_currency']
     if account['currency'] != home:
         return UnsupportedPopulation(kind='account_currency_unsupported',account_id=account_id,account_currency=account['currency'],home_currency=home,reason='foreign_statement_units_not_activated')
-    if account['type'] not in ('bank','credit_card'):
+    if account['type'] not in STATEMENT_ACCOUNTS:
         return UnsupportedPopulation(kind='population_unsupported',account_id=account_id,account_currency=account['currency'],home_currency=home,reason='account_not_bank_or_card')
     try:
         g = graph(s, ids)
@@ -401,7 +468,7 @@ def prepare_prospective(s, ctx, plan):
     home=s.company_info_row['home_currency']
     for identifier in sorted(affected_accounts):
         account=after_graph.accounts[identifier]
-        if account['type'] in ('bank','credit_card') and account['currency']!=home:
+        if account['type'] in STATEMENT_ACCOUNTS and account['currency']!=home:
             return PreparedProjection(UnsupportedPopulation(kind='account_currency_unsupported',account_id=identifier,
                 account_currency=account['currency'],home_currency=home,reason='foreign_statement_units_not_activated'),aggregate)
     before_history,before=enumerate_graph(before_graph)

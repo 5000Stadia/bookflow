@@ -2,9 +2,17 @@
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from bookflow.core.exact import INT64_MAX
+from bookflow.company.ledger_schema import TRANSACTION_TYPES
 
-Producer = Literal['journal_entry', 'payment', 'sales_receipt', 'invoice', 'deposit']
-Role = Literal['entered', 'cash', 'control', 'net', 'main_bank', 'cash_back', 'additional']
+# Read from the ledger's own declaration rather than retyped: a closed literal here is what
+# made a reference to a real posted document unrepresentable, which reads as a corrupt
+# population rather than as the missing adapter it actually is.
+Producer = Literal[TRANSACTION_TYPES]
+Role = Literal['entered', 'cash', 'control', 'net', 'main_bank', 'cash_back', 'additional', 'funding']
+# The account types a statement is written about. Every other leg of a document is the other
+# side of one of these and is never a line a statement shows. Declared once here because the
+# adapters, the proof and the version contract all have to agree on it.
+STATEMENT_ACCOUNTS = ('bank', 'credit_card')
 
 
 class Frozen(BaseModel):
@@ -36,7 +44,7 @@ class StatementEffectVersion(Frozen):
     audit_event_id: str
     movement_key: MovementKey
     account_id: str
-    account_type: Literal['bank', 'credit_card']
+    account_type: Literal[STATEMENT_ACCOUNTS]
     currency: str
     effective_date: str
     signed_debit: int = Field(ge=-INT64_MAX, le=INT64_MAX)

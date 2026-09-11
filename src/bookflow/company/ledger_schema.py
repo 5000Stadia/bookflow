@@ -2,19 +2,18 @@
 
 import sqlalchemy as sa
 
-# Every business document type a transaction can be, and every state one can be in, each
-# written once. The CHECK constraints and the column descriptions below are built from
-# these tuples, and a report that needs "all document types" reads them rather than
-# retyping the set -- a second hand-listed copy is how a new document type goes missing
-# from a report nobody thought to update.
+# Every business document type the ledger admits, and every state one can be in, each written
+# once. The CHECK constraints and the column descriptions below are built from these, and
+# anything needing "all document types" reads them here rather than retyping the set. A retyped
+# copy goes stale in silence, and what finds out is a reader that simply stops working on
+# documents it was never told about -- which is exactly how the statement adapters came to
+# cover five of eleven types.
 TRANSACTION_TYPES = ('journal_entry', 'invoice', 'sales_receipt', 'payment', 'deposit', 'bill',
                      'bill_payment', 'credit_memo', 'sales_tax_payment', 'customer_refund',
                      'vendor_credit')
+TRANSACTION_TYPE_PROSE = ', '.join(TRANSACTION_TYPES[:-1]) + ' or ' + TRANSACTION_TYPES[-1]
+TRANSACTION_TYPE_CHECK = 'type IN (' + ', '.join("'" + name + "'" for name in TRANSACTION_TYPES) + ')'
 POSTED, VOIDED = TRANSACTION_STATUSES = ('posted', 'voided')
-
-
-def _sql_list(values):
-    return ', '.join(f"'{value}'" for value in values)
 
 
 def define_tables(metadata, column, table, common):
@@ -76,8 +75,7 @@ def define_tables(metadata, column, table, common):
             name='ck_ledger_party_pair')
 
     transactions = T('transactions', *common(),
-        text('type', 'Business document type: '
-             + ', '.join(TRANSACTION_TYPES[:-1]) + ' or ' + TRANSACTION_TYPES[-1] + '.', size=32),
+        text('type', 'Business document type: ' + TRANSACTION_TYPE_PROSE + '.', size=32),
         text('number', 'Unique editable number within the document type.', size=64),
         identifier('current_revision_id', 'Immutable revision currently displayed.'),
         text('status', 'Current workflow state: '
@@ -87,7 +85,7 @@ def define_tables(metadata, column, table, common):
         text('void_reason', 'Reason supplied for the final void.', True, 140),
         identifier('void_posting_batch_id', 'Final reversal batch; no separate business number.', True),
         sa.UniqueConstraint('type', 'number', name='uq_transaction_type_number'),
-        sa.CheckConstraint(f'type IN ({_sql_list(TRANSACTION_TYPES)})', name='ck_transaction_type'),
+        sa.CheckConstraint(TRANSACTION_TYPE_CHECK, name='ck_transaction_type'),
         sa.UniqueConstraint('id', 'type', name='uq_transaction_id_type'),
         sa.CheckConstraint("length(trim(number)) BETWEEN 1 AND 64", name='ck_transaction_number'),
         sa.CheckConstraint(f"(status = '{POSTED}' AND voided_at IS NULL AND voided_by IS NULL AND void_reason IS NULL AND void_posting_batch_id IS NULL) OR "
