@@ -17,7 +17,7 @@ from typing import Any, Literal
 import sqlalchemy as sa
 
 from bookflow.company import custom_fields, list_service, schema
-from bookflow.company.lists import get_list_definition, normalize_display_name
+from bookflow.company.lists import all_list_definitions, get_list_definition, normalize_display_name
 from bookflow.core import audit
 from bookflow.core.context import Context
 from bookflow.core.errors import BookflowError
@@ -1479,12 +1479,16 @@ def _active_dependents(
             dependents.append({"record_type": reference.table.name, "count": count})
     if record_type == "custom_field":
         count = 0
+        # Both halves read the scope sets `custom_fields` declares rather than naming record
+        # types again here. A hand-listed copy of either one silently stops guarding whatever
+        # scope was added last: this branch counted values on invoices, sales receipts and
+        # journal entries while bills, credit memos, payments, deposits, vendor credits,
+        # statement charges and every other document type that grew custom fields went unseen,
+        # so `undo` would deactivate a definition those documents were still carrying.
         owners = {
-            "customer": schema.customers,
-            "vendor": schema.vendors,
-            "employee": schema.employees,
-            "other_name": schema.other_names,
-            "item": schema.items,
+            definition.record_type: schema.metadata.tables[definition.table]
+            for definition in all_list_definitions()
+            if definition.record_type in custom_fields.LIST_VALUE_SCOPES
         }
         for owner_type, owner_table in owners.items():
             count += int(
@@ -1504,15 +1508,15 @@ def _active_dependents(
                     )
                 ).scalar_one()
             )
-        # Transaction slots remain dependencies when their document is voided.
+        # A transaction slot stays a dependency while its document carries the value, and a
+        # void does not clear it -- voiding writes no value plan at all, so `active` is still
+        # true afterwards and the guard still fires. Clearing the value is the one thing that
+        # releases the definition, exactly as it does for a list record.
         count += int(connection.execute(
             sa.select(sa.func.count()).select_from(schema.custom_field_values).where(
                 schema.custom_field_values.c.def_id == record_id,
-                sa.or_(
-                    schema.custom_field_values.c.record_type.in_({"invoice", "sales_receipt"}),
-                    sa.and_(schema.custom_field_values.c.record_type == "journal_entry",
-                            schema.custom_field_values.c.active.is_(True)),
-                ),
+                schema.custom_field_values.c.record_type.in_(sorted(custom_fields.TRANSACTION_SCOPES)),
+                schema.custom_field_values.c.active.is_(True),
             )
         ).scalar_one())
         if count:

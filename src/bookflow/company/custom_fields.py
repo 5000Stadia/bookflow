@@ -59,7 +59,15 @@ CustomFieldScope = Literal[
 ]
 
 LIST_VALUE_SCOPES = frozenset({"customer", "vendor", "employee", "other_name", "item"})
-SUPPORTED_VALUE_SCOPES = LIST_VALUE_SCOPES | {"journal_entry", "invoice", "sales_receipt", "payment", "proposal", "estimate", "work_order", "deposit", "bill", "credit_memo", "statement_charge"}
+# The transaction scopes whose owning service can persist a value today.  The rest of
+# TRANSACTION_SCOPES is declared but not yet wired, and plan_owner_value_patch says so in
+# its own words.  Written once here: the revision-snapshot validator reads this set rather
+# than repeating it, because the copy it used to hold went stale three document types ago.
+SUPPORTED_TRANSACTION_SCOPES = frozenset(
+    {"journal_entry", "invoice", "sales_receipt", "payment", "proposal", "estimate",
+     "work_order", "deposit", "bill", "credit_memo", "statement_charge"}
+)
+SUPPORTED_VALUE_SCOPES = LIST_VALUE_SCOPES | SUPPORTED_TRANSACTION_SCOPES
 TRANSACTION_SCOPES = frozenset(
     {
         "journal_entry",
@@ -1104,6 +1112,8 @@ __all__ = [
     "CustomFieldValuePatch",
     "EMPLOYEE_BUILTIN_REQUIREMENT_PATHS",
     "LIST_VALUE_SCOPES",
+    "SUPPORTED_TRANSACTION_SCOPES",
+    "SUPPORTED_VALUE_SCOPES",
     "OwnerCustomFieldPlan",
     "TRANSACTION_SCOPES",
     "apply_owner_value_plan",
