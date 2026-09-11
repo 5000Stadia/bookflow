@@ -1075,6 +1075,9 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                    ["number", "date", "memo", "total", "status"] if noun == "journal" else
                    ["number", "date", "title", "customer_name", "total", "status"] if noun in Work.NOUNS else
                    ["number", "date", "customer_name", "due_date", "total", "status"] if noun in ('invoice', 'sales-receipt') else
+                   # A statement charge has no terms and no due date, so the column an invoice
+                   # list spends on one is spent here on what the charge was for.
+                   ["number", "date", "customer_name", "memo", "total", "status"] if noun == 'statement-charge' else
                    ["date", "from_currency", "to_currency", "rate", "source", "version"] if noun == "rate" else
                    ["number", "date", "vendor_name", "due_date", "total", "status"] if noun == 'bill' else
                    list(definition.summary_columns) if definition is not None else

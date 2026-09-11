@@ -31,10 +31,10 @@
 <button type="button" id="payment-load">Use this customer and date</button>
 </fieldset>
 <section id="payment-balances" aria-label="Current customer balances" hidden><h2>Current net accounts receivable</h2><p><strong id="payment-payer-balance"></strong> — selected customer/job only</p><p><strong id="payment-family-balance"></strong> — selected customer/job and descendants</p><p class="muted">Posting-derived balances include unapplied credit; they are separate from the selected invoice totals below.</p></section>
-<section id="payment-selection"><h2 id="payment-selection-title">Invoices to settle</h2><p id="payment-selection-status"></p>
+<section id="payment-selection"><h2 id="payment-selection-title">Invoices and statement charges to settle</h2><p id="payment-selection-status"></p>
 <div class="payment-actions"><button type="button" id="payment-auto">Auto Apply</button><button type="button" id="payment-calculate">Calculate selected amounts</button><button type="button" id="payment-clear">Clear draft selections</button><button type="button" id="payment-refresh-draft">Reload shared selection</button></div>
-<div class="payment-table-wrap"><table class="payment-invoices"><thead><tr><th>Select</th><th>Date</th><th>Job / invoice</th><th>Original</th><th>Current</th><th>Applied</th><th>Due</th><th>Payment</th></tr></thead><tbody id="payment-invoices"></tbody></table></div>
-<button type="button" id="payment-more" hidden>Next invoice page</button>
+<div class="payment-table-wrap"><table class="payment-invoices"><thead><tr><th>Select</th><th>Date</th><th>Job / document</th><th>Original</th><th>Current</th><th>Applied</th><th>Due</th><th>Payment</th></tr></thead><tbody id="payment-invoices"></tbody></table></div>
+<button type="button" id="payment-more" hidden>Next page</button>
 <div id="payment-totals" aria-live="polite"></div>
 </section>
 <label id="payment-reason-label">Reason for correction / unapply / void (required)<input id="payment-reason" maxlength="140"></label>

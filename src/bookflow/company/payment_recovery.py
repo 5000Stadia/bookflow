@@ -4,6 +4,7 @@ import sqlalchemy as sa
 from bookflow.company import schema as c, payment_selection as selection, payment_queries as q
 from bookflow.company import payment_calculations as calc, payment_authority as authority
 from bookflow.company import document_effects as effects
+from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES
 from bookflow.company.payment_recovery_models import RecoveryEntry
 from bookflow.company.payment_recovery_outputs import RecoveryWriteOutput, RecoveryOutput, ComparisonOutput
 from bookflow.core import audit, clock
@@ -413,7 +414,7 @@ def validate_upload(s,row,inp):
     identifiers=[entry.invoice_id for entry in inp.entries]
     if identifiers!=sorted(set(identifiers)):
         fail('E_VALIDATION',reason='chunk_order')
-    present=set(s.company.conn.execute(sa.select(c.transactions.c.id).where(c.transactions.c.id.in_(identifiers),c.transactions.c.type=='invoice')).scalars())
+    present=set(s.company.conn.execute(sa.select(c.transactions.c.id).where(c.transactions.c.id.in_(identifiers),c.transactions.c.type.in_(SETTLEABLE_RECEIVABLE_TYPES))).scalars())
     if present != set(identifiers):
         fail('E_RECORD_NOT_FOUND',record_type='invoice')
     lower=s.company.conn.execute(sa.select(I.c.invoice_id).where(I.c.recovery_id==row['id'],I.c.entry_index<=start).order_by(I.c.entry_index.desc()).limit(1)).scalar()
@@ -527,9 +528,14 @@ def apply(plan,ctx,s):
         receipt.update(chunk_index=inp.chunk_index,received_entry_count=received+len(inp.entries))
         chunk=dict(id=new_id(),selection_id=row['selection_id'],recovery_id=row['id'],chunk_index=inp.chunk_index,
             request_hash=digest,request_snapshot=q.canonical(snapshot),receipt_snapshot=q.canonical(receipt),**created)
+        # The evidence records which receivable each attempted edit named, because the
+        # composite foreign key is (id, type): writing 'invoice' over a statement charge
+        # would be refused by the database, and pinning it would be a lie if it were not.
+        kinds=dict(s.company.conn.execute(sa.select(c.transactions.c.id,c.transactions.c.type).where(
+            c.transactions.c.id.in_([entry.invoice_id for entry in inp.entries]))).all())
         for offset,entry in enumerate(inp.entries):
             mutations.append((I,dict(id=new_id(),selection_id=row['selection_id'],recovery_id=row['id'],
-                entry_index=inp.chunk_index*200+offset+1,invoice_type='invoice',**entry.model_dump(),**created),None))
+                entry_index=inp.chunk_index*200+offset+1,invoice_type=kinds[entry.invoice_id],**entry.model_dump(),**created),None))
         mutations.append((C,chunk,None))
     elif verb=='seal':
         row['state']='sealed'
@@ -632,7 +638,7 @@ def history_changes(s,ids,attempted,prior):
             if observed is None or row['version_after'] is None or row['version_after']<=observed:
                 continue
             before,after=_history_snapshot(row['before']),_history_snapshot(row['after'])
-            valid=all(value is not None and value.get('id')==key and value.get('type')=='invoice' and type(value.get('version')) is int for value in (before,after))
+            valid=all(value is not None and value.get('id')==key and value.get('type') in SETTLEABLE_RECEIVABLE_TYPES and type(value.get('version')) is int for value in (before,after))
             fields=None
             if valid:
                 fields=sorted(k for k in set(before)|set(after) if before.get(k)!=after.get(k) and k not in {

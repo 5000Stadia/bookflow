@@ -7,9 +7,9 @@ import json
 import sqlalchemy as sa
 
 from bookflow.company import schema as c, sales, document_effects as effects
+from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES
 from bookflow.company.payment_authority import authorize
 from bookflow.core.errors import BookflowError
-from bookflow.core.ids import is_ulid
 from bookflow.company.ledger_reports import _cursor_key
 
 
@@ -64,32 +64,16 @@ def active_applications(s, *, invoice=None, payment=None):
     return [dict(row) for row in s.company.conn.execute(query.order_by(app.c.effective_date, app.c.id)).mappings()]
 
 
-def _statement_charge_hint(s, selector, exc):
-    """A statement charge answered for, rather than reported as a missing invoice.
-
-    A charge is receivable and ages like one, but no settlement edge reaches it yet: the
-    `applications` insertion fence admits an invoice and nothing else. Somebody who names
-    one here has found the real boundary of the feature, so the refusal says what they
-    found instead of leaving them to conclude they mistyped an invoice number.
-    """
-    t = c.transactions
-    key = selector.upper() if is_ulid(selector) else selector
-    found = effects.rows(s, t, t.c.type == 'statement_charge',
-                         sa.or_(t.c.id == key, t.c.number == selector))
-    if not found:
-        return exc
-    exc.details['found_type'] = 'statement_charge'
-    return BookflowError(exc.code, details=exc.details, message=(
-        'That is a statement charge, not an invoice. A statement charge is receivable and '
-        'ages on its own date, but nothing can settle one yet; only an invoice can be named '
-        'here.'))
-
-
 def invoice_facts(s, selector, *, write=False):
-    try:
-        header = sales.resolve(s, selector, 'invoice')
-    except BookflowError as exc:
-        raise (_statement_charge_hint(s, selector, exc) if exc.code == 'E_RECORD_NOT_FOUND' else exc) from None
+    """Current settlement capacity of one receivable document a customer's money can settle.
+
+    Named for the invoice because that is what nearly every caller is holding, but a statement
+    charge is the same shape to everything downstream: a `sales_profiles` row naming the customer
+    and the control account, commercial lines carrying their own posting attribution, and a gross
+    the active applications subtract from. `SETTLEABLE_RECEIVABLE_TYPES` is the whole difference,
+    which is why it is read here rather than written out.
+    """
+    header = sales.resolve(s, selector, SETTLEABLE_RECEIVABLE_TYPES)
     authorize(s, [header['id']], write=write)
     revision = effects.rows(s, c.transaction_revisions, c.transaction_revisions.c.id == header['current_revision_id'])[0]
     profile = sales.profile_row(s, revision)

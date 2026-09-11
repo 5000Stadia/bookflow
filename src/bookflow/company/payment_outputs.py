@@ -2,6 +2,7 @@
 from typing import Annotated, Literal
 from pydantic import Field
 
+from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES
 from bookflow.company.sales_models import StrictModel
 from bookflow.company.journal_outputs import JournalMoneyOutput
 from bookflow.core.models import WriteOutput
@@ -462,11 +463,12 @@ class PaymentCandidateOutput(StrictModel):
     original_revision_id: str = Field(description='First immutable commercial revision, distinct from the current correction.')
     original_gross_minor_units: int = Field(description='Original gross in currency minor units, before any commercial corrections.')
     invoice_id: str
+    document_type: Literal[SETTLEABLE_RECEIVABLE_TYPES] = Field(description='Which receivable this row is: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields.')
     expected_version: int
     number: str
     customer_id: str
     date: str
-    due_date: str
+    due_date: str | None = Field(description='When this document falls due. Null on a statement charge, which has no terms and ages by its own date.')
     currency: str
     gross_minor_units: int
     applied_minor_units: int

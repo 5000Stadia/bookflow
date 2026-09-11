@@ -235,28 +235,140 @@ def test_a_charge_is_not_an_invoice_and_takes_its_own_number_series(books):
     assert refused.value.code == 'E_DUPLICATE_NUMBER'
 
 
-def test_a_payment_cannot_settle_a_charge_yet_and_says_which_it_found(books):
-    """The real boundary of this increment, asserted rather than described.
+def _receivable_control(books, date_to):
+    """Accounts Receivable on the balance sheet, which every receivable report must tie to."""
+    sheet = books['run']('report balance-sheet', dict(date_to=date_to, limit=200))
+    row = next(row for row in sheet['rows'] if row['account_id'] == books['ar'])
+    return row['amount']['minor_units']
 
-    A charge is receivable and ages like one, but no settlement edge reaches it: the
-    ``applications`` insertion fence admits an invoice and nothing else. Somebody who names a
-    charge where an invoice goes gets told what they named, not that nothing was found.
+
+def _owed(books, date_to='2026-08-31'):
+    """The same figure read five ways: aging, open receivables, statement, customer, control.
+
+    These are five separate expressions over the same posting effects, and the only reason to
+    read them together is that a half-widened settlement moves some and not others -- which is
+    exactly how a settled charge disappears from a report whose total still balances.
+    """
+    run = books['run']
+    aging = run('report ar-aging', dict(as_of=date_to))
+    openinv = run('report open-invoices', dict(as_of=date_to))
+    statement = run('report statement', dict(date_from='2026-01-01', date_to=date_to,
+                                             customer=books['customer']))
+    customer = books['client'].customer.show(customer=books['customer'], company=books['company'])
+    return dict(
+        aging=aging['totals']['total']['minor_units'],
+        aging_columns={name: aging['totals'][name]['minor_units'] for name in
+                       ('current', 'days_1_30', 'days_31_60', 'days_61_90', 'over_90')},
+        open_rows=[(row['document_type'], row['number'], row['balance']['minor_units'])
+                   for row in openinv['rows']],
+        open_total=openinv['totals']['balance']['minor_units'],
+        statement=statement['totals']['closing']['minor_units'],
+        statement_rows=[(row['entry'], row['number'], row['amount']['minor_units'])
+                        for row in statement['rows'] if row['kind'] == 'activity'],
+        customer=customer['current_balance']['minor_units'],
+        open_balance=customer['open_balance']['minor_units'],
+        control=_receivable_control(books, date_to))
+
+
+def test_a_receipt_settles_a_charge_and_the_whole_receivable_picture_moves_with_it(books):
+    """The charge is paid off, and five separate readings of what is owed still agree.
+
+    The worked case is the module's own, with SC-2 paid on 2026-08-01:
+
+        60.00 + 300.00 - 300.00 + 125.00 - 125.00 = 60.00
+
+    so on 2026-08-31 only SC-1 is left. It is 89 days old and has no terms, so it ages by its
+    own date into 61-90; the aging total, the open-receivables total, the statement's closing
+    balance, the customer's own balance and Accounts Receivable on the balance sheet are all
+    that same 60.00. Nothing here is read off the writer's output.
+    """
+    _first(books)
+    _invoice_and_receipt(books)
+    second = _second(books)
+    # A charge is offered as something to pay, named as what it is rather than as an invoice.
+    offered = books['run']('payment invoices', dict(mode='new_receipt', customer=books['customer'],
+                                                    date='2026-08-01', limit=10))
+    assert [(row['number'], row['document_type'], row['due_date'], row['due_minor_units'])
+            for row in offered['items']] == [('SC-1', 'statement_charge', None, SC1_UNITS),
+                                             ('SC-2', 'statement_charge', None, SC2_UNITS)]
+
+    before = _owed(books)
+    assert before['aging'] == OWED_UNITS and before['control'] == OWED_UNITS
+    assert before['open_rows'] == [('statement_charge', 'SC-1', SC1_UNITS),
+                                   ('statement_charge', 'SC-2', SC2_UNITS)]
+
+    receipt = books['run']('payment receive', dict(
+        customer=books['customer'], date='2026-08-01', amount=SC2, operation_key='pay-sc-2',
+        deposit_to=books['bank'], payment_method=books['check'],
+        applications={'mode': 'inline', 'items': [
+            dict(invoice=second['id'], amount=SC2, expected_version=second['version'])]}),
+        reason='Settle the filing fee')
+
+    after = _owed(books)
+    assert after['aging'] == SC1_UNITS
+    assert after['aging_columns'] == {'current': 0, 'days_1_30': 0, 'days_31_60': 0,
+                                      'days_61_90': SC1_UNITS, 'over_90': 0}
+    assert after['open_rows'] == [('statement_charge', 'SC-1', SC1_UNITS)]
+    assert after['open_total'] == SC1_UNITS
+    assert after['statement'] == SC1_UNITS
+    assert after['customer'] == SC1_UNITS and after['open_balance'] == SC1_UNITS
+    assert after['control'] == SC1_UNITS
+    # The settled charge is still on the statement, with the receipt that paid it beside it.
+    assert ('statement_charge', 'SC-2', SC2_UNITS) in after['statement_rows']
+    assert ('payment', '2', -SC2_UNITS) in after['statement_rows']
+    # And the charge itself reports what happened to it, through the settlement read.
+    settled = books['run']('invoice settlement', {'invoice': second['id']})
+    assert (settled['status'], settled['gross_minor_units'], settled['applied_minor_units'],
+            settled['due_minor_units']) == ('paid', SC2_UNITS, SC2_UNITS, 0)
+    # Unapplying releases the charge, and what that does to each reading is exactly what it
+    # does when an invoice is unapplied: the cash stays the customer's, as unapplied credit, so
+    # Accounts Receivable does not move -- only the document-level allocation goes back.
+    application = books['run']('payment settlement', {'payment': receipt['id'],
+                                                      'kind': 'applications'})['items'][0]
+    books['run']('payment unapply', dict(payment=receipt['id'], expected_version=receipt['version'],
+        operation_key='undo-sc-2', applications=[dict(application_id=application['application_id'],
+            invoice_expected_version=application['invoice_version'])]),
+        reason='Applied to the wrong charge')
+    released = _owed(books)
+    assert books['run']('invoice settlement', {'invoice': second['id']})['due_minor_units'] == SC2_UNITS
+    assert released['open_rows'] == before['open_rows'] and released['open_total'] == OWED_UNITS
+    # Receivables before unapplied credit is 185.00 again; the balance that ties to the
+    # balance sheet is still 60.00, because the 125.00 of cash is still sitting on the account.
+    assert released['aging'] == SC1_UNITS
+    assert released['statement'] == SC1_UNITS == released['customer'] == released['control']
+
+
+def test_a_charge_and_an_invoice_sharing_a_number_are_refused_rather_than_guessed(books):
+    """Separate number series mean the same number can name one of each; picking is not allowed.
+
+    ``SC-1`` is the charge's number here, so the collision is made deliberately: an invoice
+    numbered SC-1 is legal, because the two series are separate, and after that ``SC-1`` names
+    two documents that owe two different amounts.
     """
     charge = _first(books)
+    invoice = books['run']('invoice post', dict(
+        customer=books['customer'], date='2026-06-10', number='SC-1', due_date='2026-07-10',
+        lines=[dict(item=books['consultation'], quantity='1.25', unit_price=RATE)]),
+        reason='An invoice may reuse a charge number')
     with pytest.raises(BookflowError) as refused:
         books['run']('payment receive', dict(
-            customer=books['customer'], date='2026-06-05', amount=SC1, operation_key='try-charge',
+            customer=books['customer'], date='2026-07-01', amount=SC1, operation_key='ambiguous',
             deposit_to=books['bank'], payment_method=books['check'],
             applications={'mode': 'inline', 'items': [
-                dict(invoice=charge['id'], amount=SC1, expected_version=charge['version'])]}),
-            reason='Try to settle a charge')
-    assert refused.value.code == 'E_RECORD_NOT_FOUND'
-    assert refused.value.details['found_type'] == 'statement_charge'
-    assert 'statement charge' in (refused.value.message or '')
-    # And it is not offered as something to pay, which is why naming one is a mistake to catch.
-    assert books['run']('report open-invoices', dict(as_of='2026-12-31'))['rows'] == []
-    assert books['run']('payment invoices', dict(mode='new_receipt', customer=books['customer'],
-                                                 date='2026-06-05', limit=10))['items'] == []
+                dict(invoice='SC-1', amount=SC1, expected_version=1)]}),
+            reason='Name the ambiguous number')
+    assert refused.value.code == 'E_VALIDATION'
+    problem = refused.value.details['fields'][0]['problem']
+    assert 'invoice SC-1' in problem and 'statement charge SC-1' in problem
+    # Naming either one by its id is unambiguous and settles exactly that document.
+    for target, amount in ((charge, SC1), (invoice, INVOICE)):
+        books['run']('payment receive', dict(
+            customer=books['customer'], date='2026-07-01', amount=amount,
+            operation_key='by-id-' + target['id'], deposit_to=books['bank'],
+            payment_method=books['check'], applications={'mode': 'inline', 'items': [
+                dict(invoice=target['id'], amount=amount, expected_version=target['version'])]}),
+            reason='Name it by id')
+    assert books['run']('report ar-aging', dict(as_of='2026-12-31'))['totals']['total']['minor_units'] == 0
 
 
 COMMANDS = frozenset(('statement-charge post', 'statement-charge show',

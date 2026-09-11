@@ -26,10 +26,16 @@ from urllib.parse import urlencode
 from bookflow.adapters.workbench.document_form import NOUNS as _SALES_NOUNS
 from bookflow.adapters.workbench.work import NOUNS as _WORK_NOUNS
 
+# Documents a bookkeeper writes that open in the generated form rather than the document
+# window: a statement charge is one line and no grid, so there is nothing for the window's
+# line grid to lay out. Its list is still opened with the same question as every other
+# document list, which is what this tuple answers.
+_GENERATED_FORM_DOCUMENTS = ('statement-charge',)
+
 # The lists of documents a bookkeeper writes. These open on the most recently written
 # one, because "show me the one I just wrote" is the question a document list is opened
 # with; every other list keeps the order its own records already carry.
-NEWEST_FIRST = tuple(dict.fromkeys(_SALES_NOUNS + _WORK_NOUNS))
+NEWEST_FIRST = tuple(dict.fromkeys(_SALES_NOUNS + _WORK_NOUNS + _GENERATED_FORM_DOCUMENTS))
 
 # The address is the page's whole memory, so these two names are reserved on a list URL.
 TRAIL = 'trail'

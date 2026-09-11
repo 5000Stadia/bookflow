@@ -22,7 +22,8 @@ Accounts Receivable balance on the balance sheet. Between the opening balance
 and the closing balance the statement lists one row per document per date at
 what that document did to the receivable on that date. A statement charge, which
 exists only to be summarised here, is one of those documents, carrying its own
-entry kind rather than wearing an invoice's. A document worth nothing -- a voided
+entry kind rather than wearing an invoice's; a receipt settles one exactly as it settles an
+invoice, so the movement rows below carry it without knowing which of the two they hold. A document worth nothing -- a voided
 invoice, whose reversal carries the original date -- has no row because it has no
 amount, not because a status was filtered. Applying a
 receipt to an invoice of the same customer posts nothing and moves nothing that
@@ -51,6 +52,7 @@ from bookflow.company.aging import (  # noqa: F401
     bucket_edges, bucket_of, days_past_due,
 )
 from bookflow.company.ledger_reports import MoneyOutput, StrictModel, iso_date, money
+from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_SQL, SETTLEABLE_RECEIVABLE_TYPES
 from bookflow.core.errors import BookflowError
 
 
@@ -126,6 +128,7 @@ class OpenInvoicesTotals(StrictModel):
 
 class OpenInvoiceRow(StrictModel):
     transaction_id: str
+    document_type: Literal[SETTLEABLE_RECEIVABLE_TYPES]
     number: str
     date: str
     due_date: str
@@ -260,7 +263,7 @@ _OPEN = _EFFECTS + f""", ledger_gross AS (
  SELECT invoice, debit_party, bookflow_sum_int(amount) AS applied
  FROM settled_party GROUP BY invoice, debit_party
 ), selected AS (
- SELECT d.tx, d.party, d.net, d.document_number, d.document_date, d.aging_date,
+ SELECT d.tx, d.party, d.net, d.document_type, d.document_number, d.document_date, d.aging_date,
    coalesce(g.gross,'0') AS gross, coalesce(a.applied,'0') AS applied,
    {_BUCKET} AS bucket,
    c.id AS customer_id, c.full_name, c.name, c.full_name_key, c.parent_id
@@ -268,7 +271,7 @@ _OPEN = _EFFECTS + f""", ledger_gross AS (
  LEFT JOIN ledger_gross g ON g.tx=d.tx AND g.party IS d.party
  LEFT JOIN invoice_applied a ON a.invoice=d.tx AND a.debit_party IS d.party
  LEFT JOIN customers c ON c.id=d.party
- WHERE d.document_type='invoice' AND d.net!='0'
+ WHERE d.document_type IN {SETTLEABLE_RECEIVABLE_SQL} AND d.net!='0'
    AND (:customer IS NULL OR d.party=:customer)
    AND (:past_due_only=0 OR {_BUCKET}>0)
 ) """
@@ -277,6 +280,10 @@ _OPEN = _EFFECTS + f""", ledger_gross AS (
 # named under; parties with no customer record follow them all, by stable id.
 _CUSTOMER_ORDER = "full_name_key IS NULL, full_name_key, coalesce(party,'')"
 
+# What `report open-invoices` lists: every receivable a customer's money can still settle and
+# has not, which is an invoice or a statement charge. Filtering to the invoice alone would hide
+# an unpaid charge that the aging beside it is still carrying.
+#
 # The aging report's own rows and the open-invoice report's own rows, in their own
 # order. `ar_aging` and `open_invoices` page these; the collections report reads the
 # same two whole and filters them, so there is one aging arithmetic on this side of
@@ -425,7 +432,8 @@ def open_invoices(inp: OpenInvoicesInput, s, *, principal_id=None) -> OpenInvoic
                 totals[key] += money(int(value), currency).minor_units
         page = _rows(raw.execute(OPEN_INVOICE_ROWS + " LIMIT :limit OFFSET :offset",
             {**params, "limit": inp.limit + 1, "offset": offset}))
-        rows = [OpenInvoiceRow(transaction_id=row["tx"], number=row["document_number"],
+        rows = [OpenInvoiceRow(transaction_id=row["tx"], document_type=row["document_type"],
+            number=row["document_number"],
             date=row["document_date"], due_date=row["aging_date"],
             days_past_due=days_past_due(inp.as_of, row["aging_date"]),
             aging_bucket=BUCKETS[row["bucket"]],

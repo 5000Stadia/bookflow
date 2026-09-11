@@ -15,6 +15,19 @@ TRANSACTION_TYPE_PROSE = ', '.join(TRANSACTION_TYPES[:-1]) + ' or ' + TRANSACTIO
 TRANSACTION_TYPE_CHECK = 'type IN (' + ', '.join("'" + name + "'" for name in TRANSACTION_TYPES) + ')'
 POSTED, VOIDED = TRANSACTION_STATUSES = ('posted', 'voided')
 
+# The receivable documents a customer's money can settle: a document that debits Accounts
+# Receivable through a `sales_profiles` row naming the customer and the control account, and
+# whose commercial lines carry their own posting attribution. An invoice and a statement
+# charge are the two; a sales receipt is paid at the moment of sale and a credit memo is a
+# settlement *source*, not a target.
+#
+# Written once here, because half a widening is worse than none: the insertion fences, the
+# `payment invoices` candidate query, the selection resolver, the recovery evidence and the
+# open-receivables report all read this tuple, and a retyped copy is exactly how a settled
+# charge would vanish from a report while the aging it belongs to still balanced.
+SETTLEABLE_RECEIVABLE_TYPES = ('invoice', 'statement_charge')
+SETTLEABLE_RECEIVABLE_SQL = '(' + ', '.join("'" + name + "'" for name in SETTLEABLE_RECEIVABLE_TYPES) + ')'
+
 
 def define_tables(metadata, column, table, common):
     C, T = column, table
