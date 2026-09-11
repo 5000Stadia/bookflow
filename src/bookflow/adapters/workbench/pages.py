@@ -21,6 +21,7 @@ from bookflow.adapters.workbench import forms as F
 from bookflow.adapters.workbench import workflows as W
 from bookflow.adapters.workbench import statements as S
 from bookflow.adapters.workbench import receivables as Receivable
+from bookflow.adapters.workbench import payables as Payable
 from bookflow.adapters.workbench import customer_statement as Statement
 from bookflow.adapters.workbench import sales as Sales
 from bookflow.adapters.workbench import work as Work
@@ -45,6 +46,13 @@ FLASH_TTL_SECONDS = 60.0
 env = Environment(loader=FileSystemLoader(str(HERE / "templates")), autoescape=select_autoescape(["html"]))
 # One humaniser for every template, so no table anywhere heads a column with a field name.
 env.filters["label"] = Naming.column_label
+
+# Every paged report whose rendered result carries its own Next form, which owns
+# the signed continuation. Their filter form drops the `cursor` leaf, so changing
+# a filter starts a fresh report instead of submitting the previous page's
+# continuation against different inputs. A report joins this set by being listed
+# in its own presentation module; nothing names the commands a second time.
+CURSOR_FREE_REPORTS = S.COMMANDS | Statement.COMMANDS | Receivable.COMMANDS | Payable.COMMANDS
 
 
 class _FlashStore:
@@ -131,6 +139,28 @@ def _grouped_nouns(noun_rows: list[tuple[str, list[registry.Command]]], *, compa
         (group, sorted(rows, key=lambda row: (_noun_meta(row[0]).get("ui_order", 999), row[0])))
         for group, rows in sorted(grouped.items(), key=lambda item: (order.get(item[0], 999), item[0]))
     ]
+
+
+def runtime_custom_field_scope(noun, verb, cmd, definition):
+    """The custom-field target type whose definitions this form renders, or None.
+
+    A form with a scope renders one `cf:` control per defined field and drops the raw
+    `custom_fields` leaf; a form without one renders that leaf itself. Anything needing
+    to know which shape a form takes asks here rather than keeping its own list of
+    nouns - a hand-listed set silently omits the next document type, which is how
+    `bill post` came to be asserted against a control it correctly does not render.
+    """
+    if noun in Work.NOUNS and 'custom_fields' in cmd.input_model.model_fields:
+        if Billing.is_conversion(noun, verb):
+            return verb.replace('-', '_')
+        return 'estimate' if verb == 'estimate' else 'work_order' if verb == 'work-order' else noun.replace('-', '_')
+    if noun in ('invoice', 'sales-receipt', 'bill') and verb in ('post', 'update'):
+        return noun.replace('-', '_')
+    if noun in ('journal', 'register', *Document.MONEY_OUT) and verb in ('post', 'update'):
+        return 'journal_entry'
+    if definition is not None and definition.runtime_field_provider == 'custom-fields':
+        return definition.record_type
+    return None
 
 
 def _presence_types() -> set[str]:
@@ -1434,7 +1464,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         if noun == 'sales-receipt' and verb == 'update':
             # The dedicated decimal control uses the shared typed form translator.
             described = [leaf for leaf in described if leaf['path'] != 'amount_received']
-        if cmd.name in S.COMMANDS or cmd.name in Statement.COMMANDS or cmd.name in Receivable.COMMANDS:
+        if cmd.name in CURSOR_FREE_REPORTS:
             # The visible filter form always starts fresh; continuation has its
             # own immutable filter fields and signed cursor in a separate form.
             # A cursor left in the visible form is worse than absent: the next
@@ -1594,12 +1624,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     collect_references(leaf["collection"], leaf["collection"]["values"], leaf["path"])
         except BookflowError as err:
             return page_error(request, err)
-        runtime_scope = (noun.replace('-', '_') if noun in ('invoice', 'sales-receipt', 'bill') and verb in ('post', 'update') else
-                         "journal_entry" if (noun in ("journal", "register", *Document.MONEY_OUT)
-                                             and verb in ("post", "update")) else
-                         definition.record_type if definition is not None and definition.runtime_field_provider == "custom-fields" else None)
-        if noun in Work.NOUNS and 'custom_fields' in cmd.input_model.model_fields:
-            runtime_scope = verb.replace('-', '_') if Billing.is_conversion(noun, verb) else 'estimate' if verb == 'estimate' else 'work_order' if verb == 'work-order' else noun.replace('-', '_')
+        runtime_scope = runtime_custom_field_scope(noun, verb, cmd, definition)
         if company_id is not None and runtime_scope:
             try:
                 definitions = run(
@@ -1648,6 +1673,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       sales_history=result if noun in ('invoice', 'sales-receipt') and verb == 'history' else None,
                       statement=S.view(result, report_input, company_id, cmd.name) if result and report_input is not None and cmd.name in S.COMMANDS else None,
                       receivables=Receivable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Receivable.COMMANDS else None,
+                      payables=Payable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Payable.COMMANDS else None,
                       customer_statement=Statement.view(result, report_input, company_id) if result and report_input is not None and cmd.name in Statement.COMMANDS else None,
                       source_report_watermark=source_report_watermark,
                       preview=preview, get=F.get_path, form_value=F.form_value,

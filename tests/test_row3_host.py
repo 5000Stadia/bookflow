@@ -657,6 +657,7 @@ def _read_calls(hosted):
         "rate query": ({"from_currency": "JPY", "limit": 2}, cid),
         "register query": ({"account": "Checking", "date_from": "2026-01-01", "date_to": "2026-12-31"}, cid),
         "register calculate": ({"account": "Checking", "direction": "decrease", "allocations": [{"account": "Professional Fees", "amount": "125.00"}]}, cid),
+        "report ap-aging": ({"as_of": "2026-12-31"}, cid),
         "report ar-aging": ({"as_of": "2026-12-31"}, cid),
         "report statement": ({"date_from": "2026-01-01", "date_to": "2026-12-31"}, cid),
         "report open-invoices": ({"as_of": "2026-12-31"}, cid),
@@ -664,6 +665,7 @@ def _read_calls(hosted):
         "report balance-sheet": ({"date_to": "2026-12-31"}, cid),
         "report trial-balance": ({"date_to": "2026-12-31"}, cid),
         "report general-ledger": ({"date_from": "2026-01-01", "date_to": "2026-12-31"}, cid),
+        "report unpaid-bills": ({"as_of": "2026-12-31"}, cid),
     })
     paid = hosted.ok("payment.query", {"status": "posted", "limit": 1}, company=cid)["items"][0]
     payment = hosted.ok("payment.show", {"payment": paid["id"]}, company=cid)
@@ -1419,26 +1421,38 @@ def _page_url(cmd, company_id):
 
 
 def _cursor_free_reports():
-    """Reports whose filter form drops the cursor, taken from the pages that drop it.
+    """Reports whose filter form drops the cursor, taken from the page that drops it.
 
     Naming them here by hand is how this list went stale: the behaviour grew to seven
     reports while the literal still named two, so the test asserted nothing for five of
-    them. Read the same constants the workbench reads instead.
+    them. Read the same constant the workbench branches on instead, so a report added
+    to one of the presentation modules is asserted here the moment it exists.
     """
-    from bookflow.adapters.workbench import statements, customer_statement, receivables
-    return statements.COMMANDS | customer_statement.COMMANDS | receivables.COMMANDS
+    from bookflow.adapters.workbench.pages import CURSOR_FREE_REPORTS
+    return CURSOR_FREE_REPORTS
 
 
 def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted, tmp_path):
     import re
 
-    from bookflow.adapters.workbench import forms as F
+    from bookflow.adapters.workbench import forms as F, pages
     from bookflow.core import registry
     registry.load_all()
     from tests.mcp_coverage import workbench_row, local_workbench_boundaries, workbench_family_map, workbench_variant_map, payment_workspace_row
     coverage = []
     commercial_fields = {}
-    for noun in ("invoice", "sales-receipt", "proposal", "estimate", "work-order", "payment"):
+    # The nouns whose forms render their own custom-field scope, derived from the
+    # workbench rather than listed here. A list would omit the next document type and
+    # then assert its form against controls the fixture never gave it anything to render.
+    # `definition=None` is right: the list-noun branch of the predicate reads a Row-5 list
+    # definition, and those nouns take their scope from it rather than owning one.
+    # `payment` is kept explicitly: its workspace is asserted through its own branch
+    # below, which returns before the leaf loop, so the predicate never names it.
+    owning_nouns = sorted({
+        cmd.noun for cmd in registry.routed_commands()
+        if pages.runtime_custom_field_scope(cmd.noun, cmd.verb, cmd, None) == cmd.noun.replace("-", "_")
+    } | {"payment"})
+    for noun in owning_nouns:
         scope = noun.replace("-", "_")
         hosted.ok("custom-field.create", {
             "name": f"{noun} form ownership", "kind": "text", "scopes": [scope],
@@ -1502,18 +1516,17 @@ def test_every_routed_command_has_a_form_with_one_control_per_input_leaf(hosted,
         for leaf in F.leaves(cmd.input_model):
             for parent in leaf.get("object_controls", []):
                 assert page.text.count(f'name="clear:{parent}"') == 1, (cmd.name, parent)
-            if leaf["path"] == "custom_fields" and (
-                getattr(definition, "runtime_field_provider", None) == "custom-fields"
-                or (cmd.noun in ("journal", "register", "invoice", "sales-receipt",
-                                 "check", "card-charge")
-                    and cmd.verb in ("post", "update"))
-                or cmd.noun in ("proposal", "estimate", "work-order")
+            # Ask the workbench which shape this form takes rather than keeping a second
+            # list of nouns here. The copy is what went stale: `bill post` renders `cf:`
+            # controls correctly and was asserted against an `f:custom_fields` control it
+            # is right not to have, because nobody added it to the list.
+            if leaf["path"] == "custom_fields" and pages.runtime_custom_field_scope(
+                cmd.noun, cmd.verb, cmd, definition
             ):
                 assert 'name="f:custom_fields"' not in page.text, cmd.name
                 assert 'name="cf:' in page.text, cmd.name
-            elif leaf["path"] == "custom_field_kinds" and cmd.noun in (
-                "journal", "register", "invoice", "sales-receipt", "proposal", "estimate",
-                "work-order", "check", "card-charge"
+            elif leaf["path"] == "custom_field_kinds" and pages.runtime_custom_field_scope(
+                cmd.noun, cmd.verb, cmd, definition
             ):
                 assert 'name="f:custom_field_kinds"' not in page.text, cmd.name
                 kinds = re.findall(r'name="cf-kind:([^"]+)"', page.text)

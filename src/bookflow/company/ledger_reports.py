@@ -328,12 +328,17 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True):
     # receivables report and takes the receivable branch, like its two neighbours.
     financial = report in {"profit-and-loss", "balance-sheet"}
     receivable = report in {"ar-aging", "open-invoices", "statement"}
+    payable = report in {"ap-aging", "unpaid-bills"}
     if financial:
         label_query = "SELECT id, full_name, full_name_key, name, number, type, parent_id, active FROM accounts ORDER BY id"
     elif receivable:
         # Receivables rows are customers, not accounts, and the hierarchy name
         # is both the row label and the row order.
         label_query = "SELECT id, full_name, full_name_key, name, parent_id, active FROM customers ORDER BY id"
+    elif payable:
+        # Payables rows are vendors, which are a flat list, so the one name is
+        # both the row label and the row order.
+        label_query = "SELECT id, name, name_key, active FROM vendors ORDER BY id"
     elif report == "trial-balance":
         label_query = _EFFECTS + """SELECT a.id, a.full_name, a.name, a.number, a.active FROM accounts a
             LEFT JOIN balances b ON b.account_id=a.id
@@ -364,6 +369,13 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True):
             "SELECT count(*), max(id) FROM applications WHERE effective_date<=:date_to",
             {"date_to": inp.date_to}).fetchone()),
             raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]]
+    elif payable:
+        # A payable row is a vendor's name and a posting effect today, and
+        # nothing settles a bill yet. The audit sequence is carried anyway, so
+        # the day A/P settlement lands -- which posts nothing, exactly as a
+        # receivable application posts nothing -- a continuation minted before
+        # it already stales instead of paging into a different set of rows.
+        extra_state = [raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]]
     watermark = _hash([tuple(effect), labels.hexdigest(), currency, revision, extra_state]) if extra_state is not None else _hash([tuple(effect), labels.hexdigest(), currency, revision])
     permissions = _hash([permission_fingerprint(s, principal_id), s.memberships])
     query = _hash([report, inp.model_dump(exclude={"cursor"})])
