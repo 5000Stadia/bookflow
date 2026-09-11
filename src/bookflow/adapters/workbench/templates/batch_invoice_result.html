@@ -1,0 +1,20 @@
+<section class="workspace-card" id="batch-invoice-result" aria-label="{{ 'What this batch will create' if preview else 'What this batch did' }}">
+<h2>{{ "What this batch will create" if preview else "What this batch did" }}</h2>
+<p>{{ result.date }}{% if result.billing_group_name %} · {{ result.billing_group_name }}{% endif %} · {{ result.requested_count }} customers · <span data-batch-created>{{ result.created_count }}</span> {{ 'to invoice' if preview else 'invoiced' }}{% if result.failed_count %} · <span class="warn" data-batch-failed>{{ result.failed_count }} refused</span>{% endif %}</p>
+{% if preview %}<p class="workflow-note">Nothing is written yet. Every row below is resolved against its own customer, so two customers on different price levels show two different amounts. Document numbers are allocated when the invoices are created, so a preview shows none.</p>{% endif %}
+<div class="table-wrap"><table id="batch-rows"><caption>One row per customer, in invoicing order</caption>
+<thead><tr><th>#</th><th>Customer</th><th>Terms</th><th>Price level</th><th>Due</th><th>Amount</th><th>Number</th><th>Outcome</th></tr></thead>
+<tbody>{% for row in result.batch_rows %}<tr data-customer="{{ row.customer_id }}" data-status="{{ row.status }}">
+<td>{{ row.position }}</td>
+<td data-customer-label>{% if row.transaction_id %}<a href="/c/{{ company_id }}/invoice/{{ row.transaction_id }}">{{ row.customer_label }}</a>{% else %}{{ row.customer_label }}{% endif %}</td>
+<td>{{ row.terms or '' }}</td>
+<td>{{ row.price_level or '' }}</td>
+<td>{{ row.due_date or '' }}</td>
+<td data-amount>{% if row.total %}{{ row.total.amount }} {{ row.total.currency }}{% endif %}</td>
+<td>{{ row.number or '' }}</td>
+<td>{% if row.status == 'failed' %}<span class="warn" data-error-code>{{ row.error_code }}</span> {{ row.error_message }}{% elif row.status == 'created' %}Invoiced{% else %}Will be invoiced{% endif %}</td>
+</tr>{% endfor %}</tbody>
+<tfoot><tr><td colspan="5">{{ 'Total to invoice' if preview else 'Total invoiced' }}</td><td data-batch-total>{{ result.created_total.amount }} {{ result.created_total.currency }}</td><td colspan="2"></td></tr></tfoot>
+</table></div>
+{% if not preview and result.batch_id %}<p><a href="/c/{{ company_id }}/batch-invoice/{{ result.batch_id }}">Open this batch</a>{% if result.failed_count %} · <a href="/c/{{ company_id }}/batch-invoice/{{ result.batch_id }}/retry">Invoice the customers this batch missed</a>{% endif %}</p>{% endif %}
+</section>

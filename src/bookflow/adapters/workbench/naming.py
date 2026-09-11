@@ -65,6 +65,7 @@ PHRASES = {
     'options': 'What {plural} can be searched by',
     'history': 'History of this {subject}',
     'void': 'Void this {subject}', 'copy': 'Copy this {subject}',
+    'delete': 'Delete this {subject}',
     'activate': 'Make this {subject} active again',
     'deactivate': 'Make this {subject} inactive',
     'convert': 'Convert this {subject}',
@@ -73,6 +74,17 @@ PHRASES = {
     'settlement': 'Settlement of this {subject}',
     'children': 'Rows within this {subject}',
 }
+
+# A handful of verbs mean something different under one noun than they mean everywhere else.
+# `add` is "new" on almost every noun and "put customers in" on a billing group, so a title
+# taken from the verb alone would call the membership form "New billing group". Keyed by the
+# pair rather than by the verb, and consulted before the general map.
+NOUN_PHRASES = {
+    ('billing-group', 'add'): 'Add customers to this {subject}',
+    ('billing-group', 'remove'): 'Take customers out of this {subject}',
+    ('batch-invoice', 'retry'): 'Invoice the customers this batch missed',
+}
+
 
 # Column names a person would not recognise from the field's own words.
 COLUMNS = {'customer_name': 'Customer', 'display_customer_label': 'Customer',
@@ -112,7 +124,7 @@ def heading(noun, verb, meta=None):
     one, many = subject(noun, meta), subject(noun, meta, plural=True)
     if not verb:
         return one
-    phrase = PHRASES.get(verb)
+    phrase = NOUN_PHRASES.get((noun, verb)) or PHRASES.get(verb)
     if phrase is None:
         return one + ' — ' + words(verb).lower()
     return phrase.format(subject=one.lower(), Subject=one, plural=many.lower(), Plural=many)

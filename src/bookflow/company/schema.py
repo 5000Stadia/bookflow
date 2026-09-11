@@ -1118,3 +1118,5 @@ from bookflow.company.inventory_schema import define_tables as _define_inventory
 globals().update(_define_inventory_tables(metadata, _column, _table))
 from bookflow.company.purchase_order_schema import define_tables as _define_purchase_order_tables
 globals().update(_define_purchase_order_tables(metadata, _column, _table, _common))
+from bookflow.company.batch_invoicing_schema import define_tables as _define_batch_invoicing_tables
+globals().update(_define_batch_invoicing_tables(metadata, _column, _table, _common))

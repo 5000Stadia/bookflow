@@ -755,3 +755,49 @@ EXAMPLES.update({
         f'bookflow purchase-order history {ID} --limit 25 --company "Demo Plumbing Co" --json',
         {"purchase_order": ID, "limit": 25}),
 })
+EXAMPLES.update({
+    "billing-group create": Example(
+        'bookflow billing-group create --name "Monthly retainers"'
+        ' --customers \'["Riverside Apartments","Rivera Construction"]\''
+        ' --company "Demo Plumbing Co" --reason "Set up the retainer round" --json',
+        {"name": "Monthly retainers",
+         "customers": ["Riverside Apartments", "Rivera Construction"]}),
+    "billing-group rename": Example(
+        f'bookflow billing-group rename {ID} --name "Monthly retainers 2026" --expected-version 1'
+        ' --company "Demo Plumbing Co" --reason "Name the year" --json',
+        {"billing_group": ID, "name": "Monthly retainers 2026", "expected_version": 1}),
+    "billing-group delete": Example(
+        f'bookflow billing-group delete {ID} --expected-version 1 --company "Demo Plumbing Co"'
+        ' --reason "The retainer round ended" --json',
+        {"billing_group": ID, "expected_version": 1}),
+    "billing-group add": Example(
+        f'bookflow billing-group add {ID} --customers \'["Harborview Condos"]\''
+        ' --company "Demo Plumbing Co" --reason "New retainer customer" --json',
+        {"billing_group": ID, "customers": ["Harborview Condos"]}),
+    "billing-group remove": Example(
+        f'bookflow billing-group remove {ID} --customers \'["Harborview Condos"]\''
+        ' --company "Demo Plumbing Co" --reason "They ended the retainer" --json',
+        {"billing_group": ID, "customers": ["Harborview Condos"]}),
+    "billing-group show": Example(
+        f'bookflow billing-group show {ID} --company "Demo Plumbing Co" --json',
+        {"billing_group": ID}),
+    "billing-group list": Example(
+        'bookflow billing-group list --query retainer --limit 25 --company "Demo Plumbing Co" --json',
+        {"query": "retainer", "limit": 25}),
+    "batch-invoice post": Example(
+        'bookflow batch-invoice post --date 2026-09-01 --billing-group "Monthly retainers"'
+        ' --lines \'[{"item":"Service Call","quantity":"1"}]\' --memo "September retainer"'
+        ' --dry-run --company "Demo Plumbing Co" --reason "Bill the monthly retainer" --json',
+        {"date": "2026-09-01", "billing_group": "Monthly retainers",
+         "lines": [{"item": "Service Call", "quantity": "1"}], "memo": "September retainer"}),
+    "batch-invoice retry": Example(
+        f'bookflow batch-invoice retry {ID} --company "Demo Plumbing Co"'
+        ' --reason "The tax code is fixed now" --json',
+        {"batch": ID}),
+    "batch-invoice show": Example(
+        f'bookflow batch-invoice show {ID} --company "Demo Plumbing Co" --json', {"batch": ID}),
+    "batch-invoice query": Example(
+        'bookflow batch-invoice query --date-from 2026-01-01 --date-to 2026-12-31 --limit 25'
+        ' --company "Demo Plumbing Co" --json',
+        {"date_from": "2026-01-01", "date_to": "2026-12-31", "limit": 25}),
+})

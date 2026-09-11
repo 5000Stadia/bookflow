@@ -945,6 +945,11 @@ _HARD_REFERENCES: dict[str, tuple[HardReference, ...]] = {
     "customer": (
         HardReference(schema.customers, "parent_id"),
         HardReference(schema.customer_vendor_links, "customer_id"),
+        # A billing group is a set somebody built by hand. Removing one of its customers for
+        # good must be asked for, not absorbed: the refusal names the membership so the person
+        # takes the customer out of its groups first, rather than finding the next batch
+        # quietly one invoice shorter.
+        HardReference(schema.billing_group_members, "customer_id"),
     ),
     "vendor": (
         HardReference(schema.customer_vendor_links, "vendor_id"),

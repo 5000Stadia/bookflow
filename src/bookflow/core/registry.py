@@ -271,6 +271,7 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.bill_payment_cmds": ["bill", "bill payment"],
     "bookflow.commands.vendor_credit_cmds": ["vendor-credit"],
     "bookflow.commands.purchase_order_cmds": ["purchase-order"],
+    "bookflow.commands.batch_invoicing_cmds": ["billing-group", "batch-invoice"],
     "bookflow.commands.transfer_cmds": ["transfer"],
     "bookflow.commands.sales_tax_cmds": ["sales-tax", "sales-tax payment"],
     "bookflow.commands.report_cmds": ["report"],
@@ -358,6 +359,8 @@ def all_nouns() -> list[str]:
 NOUN_META_OVERRIDES: dict[str, dict[str, str | None]] = {
     "payment": {"record_type": "transaction", "identifier": "payment", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "number", "singular_label": "Customer payment", "plural_label": "Customer payments"},
     "invoice": {"record_type": "transaction", "identifier": "invoice", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "number", "singular_label": "Invoice", "plural_label": "Invoices"},
+    "billing-group": {"record_type": "billing_group", "identifier": "billing_group", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "name", "singular_label": "Billing group", "plural_label": "Billing groups"},
+    "batch-invoice": {"record_type": "invoice_batch", "identifier": "batch", "output_identifier": "batch_id", "ui_group": "Customers and sales", "display_field": "date", "singular_label": "Batch of invoices", "plural_label": "Batches of invoices"},
     "sales-receipt": {"record_type": "transaction", "identifier": "sales_receipt", "output_identifier": "id", "ui_group": "Customers and sales", "display_field": "number", "singular_label": "Sales receipt", "plural_label": "Sales receipts"},
     # No ui_group: there is no statement-charge page behind one yet, and a group with no
     # page is a tile that goes nowhere. It joins "Customers and sales" with its window.
