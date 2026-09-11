@@ -15,8 +15,8 @@ def resolves(witness):
 
 def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     rows = execution_map()
-    assert len(rows) == 392
-    assert sum(row["coverage"] == "four_surface_scenario" for row in rows) == 387
+    assert len(rows) == 396
+    assert sum(row["coverage"] == "four_surface_scenario" for row in rows) == 391
     assert sum(row['coverage'] == 'local_lifecycle_scenario' for row in rows) == 5
     assert all(row['execution_witness'] and not row['coverage'].startswith('pending') for row in rows)
     assert all(row['local_valid_witnesses'] for row in rows if row['coverage'] == 'local_lifecycle_scenario')
@@ -63,7 +63,7 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # The census of material schema nodes. It moves whenever a routed command gains input
     # shape. Measured from the merged tree on every merge -- no branch's number survives
     # another branch landing.
-    assert sum(len(group["paths"]) for group in mapped)==2351
+    assert sum(len(group["paths"]) for group in mapped)==2373
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

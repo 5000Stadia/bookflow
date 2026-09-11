@@ -1105,7 +1105,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].batch_id` | string \| null | no | yes | null | — |
 | `rows[].batch_kind` | literal["original", "reversal", "replacement"] \| null | no | yes | null | — |
 | `rows[].transaction_id` | string \| null | no | yes | null | — |
-| `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit"] \| null | no | yes | null | — |
+| `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] \| null | no | yes | null | — |
 | `rows[].transaction_number` | string \| null | no | yes | null | — |
 | `rows[].revision_id` | string \| null | no | yes | null | — |
 | `rows[].reverses_batch_id` | string \| null | no | yes | null | — |
@@ -2508,7 +2508,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `aging.total.minor_units` | integer | yes | no | — | — |
 | `rows` | array[object] | yes | no | — | — |
 | `rows[].kind` | literal["opening", "activity", "closing"] | yes | no | — | — |
-| `rows[].entry` | literal["balance_forward", "invoice", "sales_receipt", "payment", "deposit", "journal_entry", "credit_memo", "customer_refund", "applied_credit", "balance_due"] | yes | no | — | — |
+| `rows[].entry` | literal["balance_forward", "invoice", "statement_charge", "sales_receipt", "payment", "deposit", "journal_entry", "credit_memo", "customer_refund", "applied_credit", "balance_due"] | yes | no | — | — |
 | `rows[].customer_id` | string \| null | yes | yes | — | — |
 | `rows[].current_customer_label` | string \| null | yes | yes | — | — |
 | `rows[].current_customer_name` | string \| null | yes | yes | — | — |
@@ -2730,7 +2730,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].current_account_number` | string \| null | yes | yes | — | — |
 | `rows[].display_account_label` | string | yes | no | — | — |
 | `rows[].date` | string \| null | no | yes | null | — |
-| `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit"] \| null | no | yes | null | — |
+| `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit", "statement_charge"] \| null | no | yes | null | — |
 | `rows[].transaction_number` | string \| null | no | yes | null | — |
 | `rows[].party_name` | string \| null | no | yes | null | — |
 | `rows[].description` | string \| null | no | yes | null | — |

@@ -10,7 +10,7 @@ import sqlalchemy as sa
 # cover five of eleven types.
 TRANSACTION_TYPES = ('journal_entry', 'invoice', 'sales_receipt', 'payment', 'deposit', 'bill',
                      'bill_payment', 'credit_memo', 'sales_tax_payment', 'customer_refund',
-                     'vendor_credit')
+                     'vendor_credit', 'statement_charge')
 TRANSACTION_TYPE_PROSE = ', '.join(TRANSACTION_TYPES[:-1]) + ' or ' + TRANSACTION_TYPES[-1]
 TRANSACTION_TYPE_CHECK = 'type IN (' + ', '.join("'" + name + "'" for name in TRANSACTION_TYPES) + ')'
 POSTED, VOIDED = TRANSACTION_STATUSES = ('posted', 'voided')

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_serializer, model_validator
 
@@ -321,3 +321,91 @@ class InvoiceHistoryInput(SalesPageInput):
 
 class SalesReceiptHistoryInput(SalesPageInput):
     sales_receipt: Selector
+
+
+
+class StatementChargeShowInput(SalesShowInput):
+    statement_charge: Selector
+
+
+class StatementChargeVoidInput(StrictModel):
+    statement_charge: Selector
+    expected_version: _Version | None = None
+
+
+class StatementChargePostInput(StrictModel):
+    """One charge entered straight onto a customer's account, with no invoice around it.
+
+    The case this is shaped for is the anchor product's own: a professional's quarter hour,
+    charged to a client today and summarised on their statement at the end of the month. So
+    the line *is* the document -- there is no ``lines`` collection, and the single line is
+    spelled out on the header where somebody entering a charge would look for it. ``lines``
+    below is what the shared commercial resolver reads, built from those fields; it is
+    deliberately not an input, because a statement charge with two lines is an invoice and
+    should be entered as one.
+
+    The header carries what a charge has and nothing an invoice merely also has. There is no
+    shipping address, ship date, ship method, sales rep, customer message or purchase order
+    here: a charge is not shipped and not sent, it is only summarised. Those facts are still
+    *captured* from the customer onto the revision, the way an invoice captures them, so the
+    document records who was charged as they were; they are simply not asked for.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    # The shared commercial resolver asks which fields to return to their defaults and whether
+    # to resolve defaults again. Both are questions about a correction, and a statement charge
+    # is only ever posted: there is no previous value to return anything to. They are
+    # constants rather than inputs so the surface offers no verb a charge cannot have.
+    use_defaults: ClassVar[tuple[()]] = ()
+    refresh_defaults: ClassVar[bool] = False
+
+    @model_serializer(mode='wrap')
+    def legacy_tax_request(self, handler):
+        values = handler(self)
+        if 'sales_tax_calculation' not in self.model_fields_set:
+            values.pop('sales_tax_calculation', None)
+        return values
+
+    date: _Date
+    customer: Selector
+    item: Selector
+    quantity: Quantity = "1"
+    unit: Selector | None = None
+    rate: str | SalesMoneyInput | None = None
+    amount: str | SalesMoneyInput | None = None
+    description: Text | None = None
+    class_id: Selector | None = None
+    tax_code: Selector | None = None
+    customer_tax_code: Selector | None = None
+    sales_tax_item: Selector | None = None
+    sales_tax_calculation: Policy = Field(None, description="Captured tax calculation; omission selects the company default")
+    ar_account: Selector | None = None
+    number: _Number | None = None
+    memo: Text | None = None
+    expected_facts_fingerprint: Fingerprint | None = None
+    custom_fields: CustomFieldValuePatch = Field(default_factory=lambda: CustomFieldValuePatch({}))
+    custom_field_kinds: CustomFieldKindExpectations = Field(default_factory=lambda: CustomFieldKindExpectations({}))
+
+    @model_validator(mode="after")
+    def charge(self):
+        for field in ("rate", "amount", "description", "tax_code", "unit"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null; omit it instead")
+        if {"rate", "amount"} <= self.model_fields_set:
+            raise ValueError("give rate or amount, not both")
+        # What the customer reads on the statement is the revision memo, and what somebody
+        # entering a charge writes is the description. Keeping them one value unless they are
+        # deliberately parted is why a charge says on the statement what it was for.
+        if "memo" not in self.model_fields_set and self.description is not None:
+            self.memo = self.description
+        return self
+
+    @property
+    def lines(self) -> list[SalesLineInput]:
+        values = {"item": self.item, "quantity": self.quantity}
+        for mine, theirs in (("unit", "unit"), ("rate", "unit_price"), ("amount", "net_amount"),
+                             ("description", "description"), ("tax_code", "tax_code")):
+            if mine in self.model_fields_set:
+                values[theirs] = getattr(self, mine)
+        return [SalesLineInput(**values)]

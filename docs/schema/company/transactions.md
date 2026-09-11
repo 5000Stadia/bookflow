@@ -16,7 +16,7 @@ Database: `company`.
 | `updated_at` | VARCHAR(32) | no | — | — | — | — | UTC timestamp of the latest update to this record. |
 | `updated_by` | VARCHAR(26) | no | — | — | — | — | User id recorded for the latest update to this record. |
 | `updated_via` | VARCHAR(16) | no | — | — | — | — | Interface recorded for the latest update to this record. |
-| `type` | VARCHAR(32) | no | — | unique with id + type, unique with type + number | ix_co17_transactions_current, ix_co17_transactions_type | — | Business document type: journal_entry, invoice, sales_receipt, payment, deposit, bill, bill_payment, credit_memo, sales_tax_payment, customer_refund or vendor_credit. |
+| `type` | VARCHAR(32) | no | — | unique with id + type, unique with type + number | ix_co17_transactions_current, ix_co17_transactions_type | — | Business document type: journal_entry, invoice, sales_receipt, payment, deposit, bill, bill_payment, credit_memo, sales_tax_payment, customer_refund, vendor_credit or statement_charge. |
 | `number` | VARCHAR(64) | no | — | unique with type + number | ix_co17_transactions_current, ix_co17_transactions_type, ix_transactions_status_number, uq_transaction_receivable_number | — | Unique editable number within the document type. |
 | `current_revision_id` | VARCHAR(26) | no | — | — | ix_co17_transactions_current, ix_co17_transactions_type | transaction_revisions.id | Immutable revision currently displayed. |
 | `status` | VARCHAR(16) | no | — | — | ix_co17_transactions_current, ix_co17_transactions_type, ix_transactions_status_number | — | Current workflow state: posted or voided. |

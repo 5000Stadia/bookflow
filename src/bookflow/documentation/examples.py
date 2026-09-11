@@ -680,3 +680,29 @@ EXAMPLES.update({
         ' --reason "Drawn on the wrong bank account" --json',
         {"refund": ID, "expected_version": 1}),
 })
+
+
+# A statement charge is entered the way the anchor's own guide describes it: the quarter hour
+# a lawyer bills today, charged to the client's account with no invoice, and read as one total
+# on the statement at the end of the month.
+EXAMPLES.update({
+    "statement-charge post": Example(
+        'bookflow statement-charge post --customer "Hayes, Marcus" --date 2026-04-18'
+        ' --item "Consultation" --quantity 0.25 --rate 240.00'
+        ' --description "Call about the lease renewal"'
+        ' --company "Demo Plumbing Co" --reason "Charge the client for the call" --json',
+        {"customer": "Hayes, Marcus", "date": "2026-04-18", "item": "Consultation",
+         "quantity": "0.25", "rate": "240.00",
+         "description": "Call about the lease renewal"}),
+    "statement-charge show": Example(
+        f'bookflow statement-charge show {ID} --company "Demo Plumbing Co" --json',
+        {"statement_charge": ID}),
+    "statement-charge query": Example(
+        'bookflow statement-charge query --customer "Hayes, Marcus" --date-from 2026-04-01'
+        ' --status posted --limit 25 --company "Demo Plumbing Co" --json',
+        {"customer": "Hayes, Marcus", "date_from": "2026-04-01", "status": "posted", "limit": 25}),
+    "statement-charge void": Example(
+        f'bookflow statement-charge void {ID} --expected-version 1 --company "Demo Plumbing Co"'
+        ' --reason "Charged to the wrong client" --json',
+        {"statement_charge": ID, "expected_version": 1}),
+})

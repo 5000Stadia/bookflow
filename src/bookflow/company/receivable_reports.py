@@ -9,9 +9,10 @@ reports for the same date, whatever the settlement history looks like.
 
 Aging is by due date for an invoice and by accounting date for everything else
 that reaches Accounts Receivable, which is what gives an unapplied customer
-credit and a receivable journal entry a column of their own. Rows whose columns
-are all zero -- a paid invoice, a voided one, a fully applied receipt -- are
-omitted, which cannot move a total.
+credit, a receivable journal entry and a statement charge a column of their own;
+a statement charge has no terms and no invoice, so its own date is the only date
+it could age by. Rows whose columns are all zero -- a paid invoice, a voided one,
+a fully applied receipt -- are omitted, which cannot move a total.
 
 The statement is the same arithmetic read along the date axis instead of the
 age axis. A customer's closing balance is every Accounts Receivable effect
@@ -19,9 +20,11 @@ dated on or before the period end, which is the identical expression the aging
 sums for that customer, so the two always agree and their totals are both the
 Accounts Receivable balance on the balance sheet. Between the opening balance
 and the closing balance the statement lists one row per document per date at
-what that document did to the receivable on that date, so a document worth
-nothing -- a voided invoice, whose reversal carries the original date -- has no
-row because it has no amount, not because a status was filtered. Applying a
+what that document did to the receivable on that date. A statement charge, which
+exists only to be summarised here, is one of those documents, carrying its own
+entry kind rather than wearing an invoice's. A document worth nothing -- a voided
+invoice, whose reversal carries the original date -- has no row because it has no
+amount, not because a status was filtered. Applying a
 receipt to an invoice of the same customer posts nothing and moves nothing that
 customer owes, so it produces no row; a settlement whose paying party and whose
 invoice customer are different customers does move a balance between them, and
@@ -148,8 +151,9 @@ class StatementTotals(StrictModel):
 
 class StatementRow(StrictModel):
     kind: Literal["opening", "activity", "closing"]
-    entry: Literal["balance_forward", "invoice", "sales_receipt", "payment", "deposit",
-                   "journal_entry", "credit_memo", "customer_refund", "applied_credit", "balance_due"]
+    entry: Literal["balance_forward", "invoice", "statement_charge", "sales_receipt", "payment",
+                   "deposit", "journal_entry", "credit_memo", "customer_refund", "applied_credit",
+                   "balance_due"]
     customer_id: str | None
     current_customer_label: str | None
     current_customer_name: str | None

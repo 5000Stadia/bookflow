@@ -177,17 +177,18 @@ def _tax_rules(db, selector, source=None):
     return _ref(row), rules
 
 
-# Document types whose control account is a receivable: an invoice puts money there and a
-# credit memo takes it back out, so both resolve the same account the same way.
-RECEIVABLE_TYPES = ('invoice', 'credit_memo')
+# Document types whose control account is a receivable: an invoice puts money there, a
+# credit memo takes it back out, and a statement charge puts it there with no invoice around
+# it, so all three resolve the same account the same way.
+RECEIVABLE_TYPES = ('invoice', 'credit_memo', 'statement_charge')
 
 
 def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
                    old_date: str | None = None) -> tuple[SalesProfile, list[str]]:
     """Resolve a header without identities, audit, or database mutations."""
     nonposting = doc_type in ('proposal', 'estimate', 'work_order')
-    if doc_type not in ('invoice', 'sales_receipt', 'credit_memo') and not nonposting:
-        raise _invalid('type', 'expected invoice, sales_receipt or credit_memo')
+    if doc_type not in ('invoice', 'sales_receipt', 'credit_memo', 'statement_charge') and not nonposting:
+        raise _invalid('type', 'expected invoice, sales_receipt, credit_memo or statement_charge')
     db = s.company
     info = _info(db)
     refresh = inp.refresh_defaults

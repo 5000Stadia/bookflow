@@ -35,7 +35,7 @@ def _validate(plan, s, ctx):
         return
     header, pending, old = data['header'], data['pending'], data['before']
     operation, document_type = data['operation'], data['document_type']
-    require(document_type in ('invoice', 'sales_receipt') and header['type'] == document_type, 'wrong document type')
+    require(document_type in ('invoice', 'sales_receipt', 'statement_charge') and header['type'] == document_type, 'wrong document type')
     require(operation in ('post', 'update', 'void'), 'wrong operation')
     require(header['updated_by'] == s.actor.id and header['updated_via'] == ctx.interface.value, 'header writer attribution')
     require(set(pending) == {table for table, _, _ in sales.TABLE_KINDS}, 'incomplete graph')
@@ -157,7 +157,8 @@ def _validate(plan, s, ctx):
     require(business[0]['kind'] == ('replacement' if old else 'original') and business[0]['revision_id'] == revision['id']
             and business[0]['effective_date'] == revision['date'], 'wrong business effect')
     require(business[0]['replaces_batch_id'] == (inverses[0]['reverses_batch_id'] if old else None), 'wrong replacement predecessor')
-    expected_type = {'accounts_receivable'} if document_type == 'invoice' else {'bank', 'other_current_asset'}
+    expected_type = ({'accounts_receivable'} if document_type in ('invoice', 'statement_charge')
+                     else {'bank', 'other_current_asset'})
     require(profile.control_account.type in expected_type, 'wrong control account type')
     envelopes, lines, components = pending['document_lines'], pending['sales_line_profiles'], pending['sales_tax_components']
     require(1 <= len(envelopes) <= 200 and len(envelopes) == len(lines), 'commercial line count')

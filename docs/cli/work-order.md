@@ -193,7 +193,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `destinations[].settlement_current.all_committed_current.due_minor_units` | integer | yes | no | — | — |
 | `destinations[].settlement_current.all_committed_current.currency` | string | yes | no | — | — |
 | `destinations[].settlement_current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
-| `destinations[].type` | literal["invoice", "sales_receipt"] | yes | no | — | — |
+| `destinations[].type` | literal["invoice", "sales_receipt", "statement_charge"] | yes | no | — | — |
 | `destinations[].number` | string | yes | no | — | — |
 | `destinations[].current_revision_id` | string | yes | no | — | — |
 | `destinations[].status` | literal["posted", "voided"] | yes | no | — | — |
@@ -2845,7 +2845,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.all_committed_current.due_minor_units` | integer | yes | no | — | — |
 | `settlement_current.all_committed_current.currency` | string | yes | no | — | — |
 | `settlement_current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
-| `type` | literal["invoice", "sales_receipt"] | yes | no | — | — |
+| `type` | literal["invoice", "sales_receipt", "statement_charge"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["posted", "voided"] | yes | no | — | — |
@@ -4129,7 +4129,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.all_committed_current.due_minor_units` | integer | yes | no | — | — |
 | `settlement_current.all_committed_current.currency` | string | yes | no | — | — |
 | `settlement_current.all_committed_current.status` | literal["unpaid", "partial", "paid", "voided", "not_effective"] | yes | no | — | — |
-| `type` | literal["invoice", "sales_receipt"] | yes | no | — | — |
+| `type` | literal["invoice", "sales_receipt", "statement_charge"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
 | `status` | literal["posted", "voided"] | yes | no | — | — |

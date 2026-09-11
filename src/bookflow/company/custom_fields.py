@@ -55,10 +55,11 @@ CustomFieldScope = Literal[
     "purchase_order",
     "item_receipt",
     "statement",
+    "statement_charge",
 ]
 
 LIST_VALUE_SCOPES = frozenset({"customer", "vendor", "employee", "other_name", "item"})
-SUPPORTED_VALUE_SCOPES = LIST_VALUE_SCOPES | {"journal_entry", "invoice", "sales_receipt", "payment", "proposal", "estimate", "work_order", "deposit", "bill", "credit_memo"}
+SUPPORTED_VALUE_SCOPES = LIST_VALUE_SCOPES | {"journal_entry", "invoice", "sales_receipt", "payment", "proposal", "estimate", "work_order", "deposit", "bill", "credit_memo", "statement_charge"}
 TRANSACTION_SCOPES = frozenset(
     {
         "journal_entry",
@@ -81,6 +82,7 @@ TRANSACTION_SCOPES = frozenset(
         "purchase_order",
         "item_receipt",
         "statement",
+        "statement_charge",
     }
 )
 

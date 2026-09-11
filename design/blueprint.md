@@ -686,6 +686,7 @@ Each type has its own document profile and a fixed posting rule. The table gives
 | invoice | `invoice post` | customer or job | Dr AR; Cr income per item; Cr Sales Tax Payable; inventory items also Dr COGS, Cr Inventory Asset |
 | sales_receipt | `sales-receipt post` | customer or job | Dr deposit-to account or Undeposited Funds; Cr income; tax and inventory as invoice |
 | credit_memo | `credit-memo post` | customer or job | sales credit: Dr income/tax liability; Cr AR; inventory returned only for explicitly returned quantities |
+| statement_charge | `statement-charge post` | customer or job | Dr AR; Cr income per item; one charge to the account with no invoice, summarised by the statement |
 | payment | `payment receive` | customer or job | Dr Undeposited Funds or bank; Cr AR; applies to open invoices |
 | deposit | `deposit post` | none | Dr bank; Cr Undeposited Funds and any other lines |
 | bill | `bill post` | vendor | Dr expense, COGS, or Inventory Asset per line; Cr AP |

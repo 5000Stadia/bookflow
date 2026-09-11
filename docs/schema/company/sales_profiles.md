@@ -13,7 +13,7 @@ Database: `company`.
 | `created_at` | VARCHAR(32) | no | — | — | — | — | UTC time this commercial history was written. |
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Company principal that wrote this commercial history. |
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface that wrote this commercial history. |
-| `type` | VARCHAR(32) | no | — | — | — | transactions.type | Commercial type: invoice or sales_receipt. |
+| `type` | VARCHAR(32) | no | — | — | — | transactions.type | Commercial type: invoice, sales_receipt or statement_charge. |
 | `customer_id` | VARCHAR(26) | no | — | — | ix_co17_sales_party, ix_co17_sales_revision | customers.id | Customer or job captured for the sale. |
 | `control_account_id` | VARCHAR(26) | no | — | — | ix_co17_sales_party, ix_co17_sales_revision | accounts.id | Receivable account for an invoice or deposit account for a receipt. |
 | `due_date` | VARCHAR(10) | yes | — | — | ix_co17_sales_revision | — | Captured invoice due date; null for a sales receipt. |
