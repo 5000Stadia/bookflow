@@ -1140,50 +1140,73 @@ cost is introduced: they read `posting_lines` and `posting_batches` exactly as
 the other reports do.
 
 Both start from Accounts Payable posting effects dated on or before `as_of`,
-signed credit minus debit because a payable is credit-normal, and group them by
-the vendor the posting line names and by document. Entering a bill credits
-Accounts Payable, correcting one reverses the old credit and posts a new one,
-and voiding one reverses at the original date, so a document's net is what is
-still owed on it whatever its history is; that is also exactly what the balance
-sheet reports for Accounts Payable on the same date, so `report ap-aging` ties
-to it by construction rather than by agreement. `E_INTERNAL` guards the columns
-summing to the total on every run. Amounts are grouped losslessly through
-`bookflow_sum_int`, twice, exactly as the receivables reports group them.
+signed credit minus debit because a payable is credit-normal, then move each
+active settlement application from the payment that supplied the cash onto the
+bill it settles, and group the result by the vendor the posting line names and
+by document. Entering a bill credits Accounts Payable, correcting one reverses
+the old credit and posts a new one, voiding one reverses at the original date,
+and paying one debits it, so a document's net is what is still owed on it
+whatever its history is; the settlement movement transfers between two rows and
+never creates or destroys one, so the aging total is still exactly what the
+balance sheet reports for Accounts Payable on the same date, and `report
+ap-aging` ties to it by construction rather than by agreement. `E_INTERNAL`
+guards the columns summing to the total on every run, and guards each unpaid
+bill's balance being its amount less what was applied to it. Amounts are grouped
+losslessly through `bookflow_sum_int`, twice, exactly as the receivables reports
+group them.
 
 A bill ages on the captured due date of its current revision; everything else
-that reaches payable -- a vendor credit or adjustment entered as a journal, which
-`journals.py` already requires to name a vendor -- ages on its accounting date.
+that reaches payable -- a bill payment with capacity nothing is applied to, and a
+vendor credit or adjustment entered as a journal, which `journals.py` already
+requires to name a vendor -- ages on its accounting date.
 Columns and edges are `company/aging.py`'s, so an A/P column and an A/R column of
 the same name are the same number of days.
 
 Aging rows are vendors in name order, one row each, holding Current, 1-30,
-31-60, 61-90, Over 90 and a total; a row whose columns are all zero -- a voided
-bill, a correction that took a bill to nothing -- is omitted, which cannot move a
-total. A payable posting under no vendor keeps its own row labelled "No name" so
-the tie survives it. Unpaid bills are bills only, oldest due date first, with
+31-60, 61-90, Over 90 and a total; a row whose columns are all zero -- a paid
+bill, a voided one, a fully applied payment, a correction that took a bill to
+nothing -- is omitted, which cannot move a total. A payable posting under no
+vendor keeps its own row labelled "No name" so the tie survives it. Unpaid bills
+are unpaid and partly paid bills only, oldest due date first, with
 vendor, bill date, due date, days past due, column, the vendor's own reference,
 bill amount, applied amount and open balance, optionally filtered to one vendor
-or to past-due rows; because it lists bills it excludes vendor credit, so it
-exceeds Accounts Payable by whatever credit stands unattached.
+or to past-due rows; because it lists bills it excludes vendor credit and
+unapplied payment capacity, so it exceeds Accounts Payable by whatever credit
+stands unattached.
 
-**Nothing settles a bill yet.** `bills.applied_totals` answers zero for every
-payable and there is no A/P application table, so every bill's applied amount is
-the literal zero in `_UNPAID` and every open balance is the whole bill.
-`settlement_status` already carries `partly_paid` so the output shape does not
-move when settlement lands. Two things change in `payable_reports.py` then and
-nothing else: `_EFFECTS` gains the settlement union that
-`receivable_reports._EFFECTS` already has -- each active application moving an
-amount from the paying document's row onto the bill it pays, before anything is
-bucketed or totalled -- and `_UNPAID` reads a real applied sum. Because that
-movement transfers between two rows and never creates or destroys one, the aging
-total stays the Accounts Payable balance.
+**A paid bill is not on a report called unpaid bills.** `_UNPAID` keeps its
+`d.net!='0'` filter and `d.net` now carries the settlement movement, so a bill
+settled to nothing leaves the report because it is worth zero, exactly as a
+voided bill does and exactly as a paid invoice leaves `report open-invoices`.
+The aging drops the same zero row, so the two payables reports never disagree
+about what is outstanding, and neither total moves when a bill is paid off.
+`settlement_status` therefore has only the two answers a listed bill can
+truthfully give, `unpaid` and `partly_paid`.
+
+`_EFFECTS` carries the settlement union that `receivable_reports._EFFECTS`
+already has: an apply dated on or before `as_of` that no unapply dated on or
+before `as_of` has taken back moves its amount off the bill's row and onto the
+paying document's, before anything is bucketed or totalled. An unapply is a
+whole-edge inverse carrying the same amount as its apply -- enforced by a storage
+trigger and relied on by `ap_settlement.applied_totals` -- so excluding the
+reversed apply outright is the whole of the netting. The vendor the transfer
+belongs to is `ap_obligation_keys.vendor_id`, which `bill_validation` requires to
+equal the vendor of every revision of the bill and which the
+`ap_applications_exact_party` trigger requires to equal the paying source's
+vendor, so both halves land on the same party the posting lines name and a
+settlement can never move a balance between two vendors the way a parent and a
+job can on the receivables side. `_UNPAID` reads three independent
+`bookflow_sum_int` columns -- the bill's own payable posting as `gross`, the
+active applications as `applied`, and the transferred `net` as the balance -- and
+`unpaid_bills` checks `gross - applied == net` in Python, with
+arbitrary-precision integers, on every row it totals.
 
 Their continuations extend the shared HMAC state with vendor presentation and the
 company audit watermark, so any audited company write stales a continuation --
-including, when it lands, an A/P settlement, which posts nothing and which the
-posting-effect watermark alone could not see. The vendor filter's resolved stable
-ID rides in the cursor under `account_scoped=False`, so renaming that vendor
-stales the continuation instead of failing to resolve on page two.
+including an A/P settlement, which posts nothing and which the posting-effect
+watermark alone could not see. The vendor filter's resolved stable ID rides in
+the cursor under `account_scoped=False`, so renaming that vendor stales the
+continuation instead of failing to resolve on page two.
 
 Workbench `payables.py` and `payables.html` project both results without
 accounting logic: an aging column table with each vendor linking to their own

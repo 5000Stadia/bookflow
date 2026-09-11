@@ -275,11 +275,11 @@ MATRIX['report open-invoices'] = {
     'E_RECORD_NOT_FOUND': 'customer filter does not resolve',
 }
 MATRIX['report ap-aging'] = {
-    'E_QUERY_STALE': 'posting or vendor display facts changed between aging pages',
+    'E_QUERY_STALE': 'posting, settlement or vendor display facts changed between aging pages',
     'E_VALUE_RANGE': 'public aging column or aging total exceeds signed 64-bit range',
 }
 MATRIX['report unpaid-bills'] = {
-    'E_QUERY_STALE': 'posting or vendor display facts changed between unpaid-bill pages',
+    'E_QUERY_STALE': 'posting, settlement or vendor display facts changed between unpaid-bill pages',
     'E_VALUE_RANGE': 'public bill amount or unpaid-bill total exceeds signed 64-bit range',
     'E_RECORD_NOT_FOUND': 'vendor filter does not resolve',
 }

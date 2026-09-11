@@ -151,7 +151,7 @@ def test_unpaid_bills_carry_due_dates_references_open_balances_and_filters(books
              row["amount"]["minor_units"], row["applied"]["minor_units"],
              row["balance"]["minor_units"], row["display_vendor_label"],
              row["supplier_reference"]) for row in page["rows"]] == EXPECTED_UNPAID
-    # Nothing can settle a bill yet, so every bill is unpaid for its whole amount.
+    # Nothing is paid in this fixture, so every bill is unpaid for its whole amount.
     assert {row["settlement_status"] for row in page["rows"]} == {"unpaid"}
     assert [page["totals"][key]["minor_units"] for key in ("amount", "applied", "balance")] == [346550, 0, 346550]
     assert page["totals"]["balance"]["minor_units"] == payable_on_the_balance_sheet(client)
@@ -167,6 +167,158 @@ def test_unpaid_bills_carry_due_dates_references_open_balances_and_filters(books
     with pytest.raises(BookflowError) as caught:
         client.run("report unpaid-bills", {"as_of": AS_OF, "vendor": "No Such Vendor"}, company=COMPANY)
     assert caught.value.code == "E_RECORD_NOT_FOUND"
+
+
+# What settling the fixture's bills is hand-computed to do, all four ways a bill
+# payment can end up. Every payment is dated 2026-06-20, which is 10 days past on
+# the as-of date, so any capacity left unattached ages into 1-30 on its own date.
+#
+#   AP-TODAY  800.00 part-paid 300.00      -> open 500.00, partly paid
+#   AP-30     240.50 paid in full          -> open nothing, so it is listed on neither
+#   AP-91     700.00 paid then unapplied   -> open 700.00 again, and the payment's
+#                                             700.00 stands as unattached capacity
+#   AP-OLD    400.00 paid, unapplied, then the payment voided -> open 400.00, no credit
+PAID = "2026-06-20"
+SETTLED_ROWS = [
+    ("Aging Freight LLC", dict(current=0, days_1_30=27500, days_31_60=31000, days_61_90=0, over_90=0, total=58500)),
+    ("Aging Parts Inc", dict(current=0, days_1_30=-70000, days_31_60=0, days_61_90=0, over_90=110000, total=40000)),
+    ("Aging Supply Co", dict(current=62500, days_1_30=0, days_31_60=0, days_61_90=61500, over_90=0, total=124000)),
+]
+SETTLED_TOTALS = dict(current=62500, days_1_30=-42500, days_31_60=31000,
+                      days_61_90=61500, over_90=110000, total=222500)
+# due date, number, days past due, column, amount, applied, balance, status
+SETTLED_UNPAID = [
+    ("2026-03-01", "AP-OLD", 121, "over_90", 40000, 0, 40000, "unpaid"),
+    ("2026-03-31", "AP-91", 91, "over_90", 70000, 0, 70000, "unpaid"),
+    ("2026-04-01", "AP-90", 90, "days_61_90", 61500, 0, 61500, "unpaid"),
+    ("2026-05-30", "AP-31", 31, "days_31_60", 31000, 0, 31000, "unpaid"),
+    ("2026-06-10", "AP-FIXED", 20, "days_1_30", 27500, 0, 27500, "unpaid"),
+    ("2026-06-30", "AP-TODAY", 0, "current", 80000, 30000, 50000, "partly_paid"),
+    ("2026-07-15", "AP-CURRENT", -15, "current", 12500, 0, 12500, "unpaid"),
+]
+
+
+def settle(run, made):
+    """Pay the fixture's bills four different ways, through the real payment commands."""
+    accounts = run("account query", {"limit": 200})["items"]
+    bank = next(row["id"] for row in accounts if row["type"] == "bank")
+    method = run("payment-method query", {"limit": 200})["items"][0]["id"]
+    payments = {number: run("bill pay", {"date": PAID, "funding_account": bank, "method": method,
+        "bills": [{"bill": made["bills"][number]["id"], "amount": amount}]})["payments"][0]
+        for number, amount in (("AP-TODAY", "300.00"), ("AP-30", "240.50"),
+                               ("AP-91", "700.00"), ("AP-OLD", "400.00"))}
+    for number in ("AP-91", "AP-OLD"):
+        payments[number] = run("bill payment unapply", {"payment": payments[number]["id"],
+            "expected_version": payments[number]["version"]}, reason="Applied to the wrong bill")
+    run("bill payment void", {"payment": payments["AP-OLD"]["id"],
+        "expected_version": payments["AP-OLD"]["version"]}, reason="The check never went out")
+    return payments
+
+
+@pytest.fixture
+def settled_books(client):
+    def run(command, body, *, reason=None):
+        return client.run(command, body, company=COMPANY, **({"reason": reason} if reason else {}))
+    made = build(run)
+    return client, made, settle(run, made)
+
+
+def test_a_paid_bill_leaves_both_payables_reports_and_neither_total_moves(settled_books):
+    client, made, _ = settled_books
+    unpaid = client.run("report unpaid-bills", {"as_of": AS_OF, "limit": 200}, company=COMPANY)
+    assert [(row["due_date"], row["number"], row["days_past_due"], row["aging_bucket"],
+             row["amount"]["minor_units"], row["applied"]["minor_units"],
+             row["balance"]["minor_units"], row["settlement_status"])
+            for row in unpaid["rows"]] == SETTLED_UNPAID
+    # AP-30 is settled to nothing, so it is listed on neither payables report
+    # and contributes to neither total: it left because it is worth zero,
+    # exactly as the voided AP-VOID did.
+    assert "AP-30" not in {row["number"] for row in unpaid["rows"]}
+    paid = client.run("bill show", {"bill": made["bills"]["AP-30"]["id"]}, company=COMPANY)
+    assert paid["status"] == "posted" and paid["settlement_current"]["status"] == "paid"
+    assert paid["settlement_current"]["open_minor_units"] == 0
+    aging = client.run("report ap-aging", {"as_of": AS_OF, "limit": 200}, company=COMPANY)
+    assert [(row["display_vendor_label"], units(row)) for row in aging["rows"]] == SETTLED_ROWS
+    assert units(aging["totals"]) == SETTLED_TOTALS
+
+    # The whole point of the report survives settlement: it still ties.
+    assert aging["totals"]["total"]["minor_units"] == payable_on_the_balance_sheet(client)
+    assert [unpaid["totals"][key]["minor_units"] for key in ("amount", "applied", "balance")] == \
+        [322500, 30000, 292500]
+    # Unpaid bills lists bills, so it exceeds Accounts Payable by exactly the
+    # 700.00 of payment capacity the unapply left attached to no bill.
+    assert unpaid["totals"]["balance"]["minor_units"] - 70000 == payable_on_the_balance_sheet(client)
+
+
+def test_the_two_payables_reports_and_bill_show_agree_bill_by_bill(settled_books):
+    client, made, _ = settled_books
+    listed = {row["number"]: row for row in client.run("report unpaid-bills",
+        {"as_of": AS_OF, "limit": 200}, company=COMPANY)["rows"]}
+    for number, identifier in made["bills"].items():
+        current = client.run("bill show", {"bill": identifier["id"]}, company=COMPANY)["settlement_current"]
+        row = listed.get(number)
+        if row is None:
+            # Off the report means nothing is open on it, whichever way it got there.
+            assert current["open_minor_units"] == 0, number
+            assert current["status"] in ("paid", "voided"), number
+            continue
+        assert (row["amount"]["minor_units"], row["applied"]["minor_units"],
+                row["balance"]["minor_units"]) == (current["gross_minor_units"],
+                current["applied_minor_units"], current["open_minor_units"]), number
+        assert row["settlement_status"] == ("partly_paid" if current["status"] == "partial" else "unpaid"), number
+    # Every vendor's aging total is their own open bills less what stands unattached.
+    aging = {row["display_vendor_label"]: row["total"]["minor_units"] for row in
+             client.run("report ap-aging", {"as_of": AS_OF, "limit": 200}, company=COMPANY)["rows"]}
+    assert aging == {"Aging Freight LLC": 58500, "Aging Parts Inc": 40000, "Aging Supply Co": 124000}
+
+
+def test_a_payment_dated_after_the_as_of_date_does_not_reduce_an_earlier_balance(settled_books):
+    client, _, _ = settled_books
+    before = client.run("report unpaid-bills", {"as_of": "2026-06-19", "limit": 200}, company=COMPANY)
+    # The day before every payment: each bill is open for its whole amount, the
+    # settled AP-30 is back on the report, and the money reads exactly as it did
+    # before any payment was posted. Ages are against this earlier date, so they
+    # come from the one aging rule rather than from the 2026-06-30 oracle.
+    assert [(row["due_date"], row["number"], row["days_past_due"], row["aging_bucket"],
+             row["amount"]["minor_units"], row["applied"]["minor_units"],
+             row["balance"]["minor_units"]) for row in before["rows"]] == \
+        [(due, number, days_past_due("2026-06-19", due), bucket_of("2026-06-19", due),
+          amount, applied, balance)
+         for due, number, _, _, amount, applied, balance, _, _ in EXPECTED_UNPAID]
+    assert {row["settlement_status"] for row in before["rows"]} == {"unpaid"}
+    assert [before["totals"][key]["minor_units"] for key in ("amount", "applied", "balance")] == \
+        [346550, 0, 346550]
+    aging = client.run("report ap-aging", {"as_of": "2026-06-19", "limit": 200}, company=COMPANY)
+    # Columns are aged against this date and move with it; what cannot move is
+    # the total, because every bill was entered before it and no payment falls
+    # on or before it.
+    assert aging["totals"]["total"]["minor_units"] == EXPECTED_TOTALS["total"]
+    assert aging["totals"]["total"]["minor_units"] == payable_on_the_balance_sheet(client, "2026-06-19")
+    assert sum(aging["totals"][column]["minor_units"] for column in COLUMNS[:-1]) == EXPECTED_TOTALS["total"]
+
+
+def test_unapplying_restores_the_bill_and_moves_nothing_the_ledger_reports(settled_books):
+    client, made, _ = settled_books
+    # AP-91 was paid in full and unapplied. The bill is open again for all of it,
+    # and the 700.00 is an unattached vendor debit ageing on the payment's own
+    # date -- the payables twin of unapplied customer credit -- so the vendor's
+    # aging total falls by it while the balance sheet does not move.
+    row = next(row for row in client.run("report unpaid-bills", {"as_of": AS_OF, "limit": 200},
+                                         company=COMPANY)["rows"] if row["number"] == "AP-91")
+    assert (row["applied"]["minor_units"], row["balance"]["minor_units"],
+            row["settlement_status"]) == (0, 70000, "unpaid")
+    parts = next(row for row in client.run("report ap-aging", {"as_of": AS_OF, "limit": 200},
+        company=COMPANY)["rows"] if row["display_vendor_label"] == "Aging Parts Inc")
+    assert (parts["over_90"]["minor_units"], parts["days_1_30"]["minor_units"]) == (110000, -70000)
+
+    # AP-OLD went further: unapplied and then the payment voided, so the cash came
+    # back too and the vendor holds no unattached credit for it at all.
+    old = next(row for row in client.run("report unpaid-bills", {"as_of": AS_OF, "limit": 200},
+                                         company=COMPANY)["rows"] if row["number"] == "AP-OLD")
+    assert (old["applied"]["minor_units"], old["balance"]["minor_units"]) == (0, 40000)
+    current = client.run("bill show", {"bill": made["bills"]["AP-OLD"]["id"]},
+                         company=COMPANY)["settlement_current"]
+    assert (current["applied_minor_units"], current["open_minor_units"], current["status"]) == (0, 40000, "unpaid")
 
 
 def test_a_payable_journal_entry_ages_on_its_own_date_and_the_aging_still_ties(books):

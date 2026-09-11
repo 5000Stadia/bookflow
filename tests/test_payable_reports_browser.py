@@ -100,9 +100,14 @@ def test_a_bookkeeper_reaches_both_payables_reports_and_reads_the_money(browser_
         # The bill itself, opened from its number.
         browser.evaluate("""[...document.querySelectorAll('#payables-unpaid a')]
             .find(a => a.textContent.trim() === 'AP-30').click()""")
-        browser.wait_for("!!document.body.innerText.includes('AP-30')")
+        # Opening a bill is a full page load, so wait on the navigation itself.
+        # The report page this leaves already prints AP-30 in the row that was
+        # clicked, so waiting on that text is satisfied before the click has
+        # gone anywhere and the read below races a document with no body yet.
+        browser.wait_for(f'location.pathname.startsWith("/c/{site.company_id}/bill/")'
+                         ' && document.readyState !== "loading"')
+        assert "AP-30" in browser.evaluate("document.body.innerText")
         assert "SUP-51" in browser.evaluate("document.body.innerText")
-        assert browser.evaluate("location.pathname").startswith(f"/c/{site.company_id}/bill/")
 
         # Unfiltered, the open bills add to the aging total the same page showed.
         browser.navigate(f"{site.base_url}/c/{site.company_id}/report/unpaid-bills")

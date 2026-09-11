@@ -370,11 +370,11 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True):
             {"date_to": inp.date_to}).fetchone()),
             raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]]
     elif payable:
-        # A payable row is a vendor's name and a posting effect today, and
-        # nothing settles a bill yet. The audit sequence is carried anyway, so
-        # the day A/P settlement lands -- which posts nothing, exactly as a
-        # receivable application posts nothing -- a continuation minted before
-        # it already stales instead of paging into a different set of rows.
+        # A payable row moves with settlement history, which posts nothing,
+        # so the posting effect alone cannot see an apply or an unapply. The
+        # audit sequence covers both: every application is written under an
+        # audit event, so any settlement stales a continuation minted before it
+        # instead of letting it page into a different set of rows.
         extra_state = [raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]]
     watermark = _hash([tuple(effect), labels.hexdigest(), currency, revision, extra_state]) if extra_state is not None else _hash([tuple(effect), labels.hexdigest(), currency, revision])
     permissions = _hash([permission_fingerprint(s, principal_id), s.memberships])
