@@ -468,7 +468,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "deposit-picker.js", "deposit.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css")
+        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -569,10 +569,13 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
 
     from bookflow.adapters.workbench import payments as Payments
     from bookflow.adapters.workbench import deposits as Deposits
+    from bookflow.adapters.workbench import bill_payments as BillPayments
     Deposits.mount(app, render=render, run=run, credential=credential, page_error=page_error,
                    role_allows=_role_allows, form_page=lambda *a, **kw: form_page(*a, **kw))
     Payments.mount(app, render=render, run=run, credential=credential, page_error=page_error, role_allows=_role_allows,
         form_page=lambda request, company_id, noun, verb: form_page(request, company_id, noun, verb, None))
+    BillPayments.mount(app, render=render, run=run, credential=credential, page_error=page_error,
+                       role_allows=_role_allows)
 
     @app.get("/static/{name}")
     def static(name: str):

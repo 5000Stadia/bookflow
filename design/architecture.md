@@ -637,8 +637,9 @@ per line, both asserted at 390px in `tests/test_bill_form_browser.py` as the ele
 document, so there is no print route beside the four customer-facing ones.
 
 Not built here: the Item tab, and a browser page for `bill history`, which is reachable only
-through the command surfaces. The bill detail page still says a posted bill stands open; it
-does not yet read `settlement_current` back, and there is no Pay Bills form.
+through the command surfaces. The bill detail page reads `settlement_current` back and, while
+anything is open on a posted bill, links to the Pay Bills window filtered to that vendor and to
+the payments already made against that bill.
 
 ### Paying a bill: the settlement side of the payable
 
@@ -705,11 +706,44 @@ Migration `co0026` widens the `transactions` type CHECK and the `document_lines`
 table-rebuild `co0025` used, then creates the four settlement tables with their immutability,
 document-type, exact-inverse and exact-party triggers.
 
+**The browser surface.** `bill payment` carries `ui_group` "Vendors and purchases", so its
+commands file under Vendors rather than falling through to Hub, and the Pay Bills tile on the
+Vendors panel is live at `/pay-bills` with a Bill payments tile beside it at `/bill-payment`.
+`adapters/workbench/bill_payments.py` mounts all three routes before the generated noun routes,
+because `bill payment` is a two-word noun and a hyphenated path reads better than an escaped
+space; it holds no business logic, and `GROUP_FIELDS` is the one place the window's idea of a
+payee group lives.
+
+`templates/pay_bills.html` plus `static/pay-bills.js` are the window: one funding account, one
+method and one date for the page, an optional vendor filter, and the open bills underneath.
+Each row's original amount, due date and open balance come from that bill's own
+`settlement_current` as `bill query` returned it -- not from `report unpaid-bills`, whose applied
+column is still the literal zero the payables reports were written with, so it lists a paid bill
+as open. Ticking a row fills its payment with the whole open balance, which is what ticking a row
+on a Pay Bills screen means; typing over it is a partial payment. The running total and each
+group's total are exact minor-unit sums in `BigInt`, never a float.
+
+The window shows the split **before** the save: the funding account, the method and the currency
+are one choice for the whole page, so the pair that remains of the command's grouping key is
+(vendor, payable account), and one list item per group names the payee, the payable, that group's
+total and the bills in it. A check number is offered only where the command accepts one -- a
+check-kind method drawn on a bank account -- and is held back when the selection would write more
+than one payment, because one number cannot name two checks. One save is one `bill pay`, and the
+receipt panel names every payment it wrote, links to each, and lists the bills each settled.
+
+`templates/bill_payment_list.html` pages `bill payment query` newest first with the vendor, bill,
+number, check-number, date and status filters the command already takes;
+`templates/bill_payment_detail.html` reads one payment back -- who was paid, out of which account
+and by what method, the bills it settled with links to each, where its money stands, its dated
+settlement edges and its posting batches. Below 700px every one of those tables becomes one block
+per row, asserted at 390px in `tests/test_pay_bills_browser.py` as each element's own
+`scrollWidth` against its own `clientWidth`.
+
 Not built here: purchase discounts and vendor credits, which need their own documents and an
 adopted account-eligibility contract before a settlement can carry a third term; purchase tax;
-re-applying a freed component to a different bill; and any browser surface -- the Pay Bills tile
-on the Vendors panel is still grey, and `bill payment` registers no `ui_group`, so it has no
-navigation entry of its own.
+re-applying a freed component to a different bill; printing a check; and browser pages for
+`bill payment unapply` and `bill payment void`, which are reachable only through the command
+surfaces.
 
 ### Transfers between the company's own accounts
 

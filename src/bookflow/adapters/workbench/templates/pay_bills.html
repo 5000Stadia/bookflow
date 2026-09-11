@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Pay bills{% endblock %}
+{% block body %}
+<link rel="stylesheet" href="{{ static_urls['pay-bills.css'] }}">
+<script src="{{ static_urls['exact-json.js'] }}" defer></script>
+<script src="{{ static_urls['pay-bills.js'] }}" defer></script>
+<script type="application/json" id="pay-bills-config">{{ pay_bills | tojson }}</script>
+<div id="pay-bills">
+<nav class="pay-bills-actions" aria-label="Payables"><a href="/c/{{ company_id }}/bill-payment">Find bill payments</a><a href="/c/{{ company_id }}/bill">Find a bill</a><a href="/c/{{ company_id }}/bill/post">Enter a bill</a><a href="/c/{{ company_id }}/report/unpaid-bills">Unpaid bills report</a></nav>
+<h1>Pay bills</h1>
+<p id="pay-bills-message" role="status" aria-live="polite"></p>
+<section id="pay-bills-error" role="alert" hidden><h2>Nothing was paid</h2><p></p><div data-problems></div><button type="button" id="pay-bills-reload">Reload the open bills</button></section>
+<form id="pay-bills-form">
+<fieldset id="pay-bills-header"><legend>Payment details</legend>
+<div class="pay-bills-grid">
+<label for="pay-bills-date">Payment date<input id="pay-bills-date" type="date"></label>
+<label for="pay-bills-funding">Pay from<select id="pay-bills-funding"><option value="">Choose a bank or credit card account</option></select></label>
+<label for="pay-bills-method">Payment method<select id="pay-bills-method"><option value="">Choose a payment method</option></select></label>
+<label for="pay-bills-check" id="pay-bills-check-label" hidden>Check number<input id="pay-bills-check" maxlength="64" autocomplete="off"></label>
+<label for="pay-bills-reference">Reference<input id="pay-bills-reference" maxlength="128" autocomplete="off"></label>
+<label for="pay-bills-vendor">Show bills for one vendor (optional)<input id="pay-bills-vendor" autocomplete="off" placeholder="Search vendor"></label>
+<label for="pay-bills-memo">Memo<textarea id="pay-bills-memo" maxlength="2000"></textarea></label>
+</div>
+<div class="pay-bills-actions"><button type="button" id="pay-bills-find-vendor">Find vendor</button><button type="button" id="pay-bills-all-vendors">Every vendor</button><button type="button" id="pay-bills-load">Show open bills</button></div>
+<div id="pay-bills-vendor-results" aria-live="polite"></div>
+<p id="pay-bills-vendor-chosen" class="muted"></p>
+</fieldset>
+<section id="pay-bills-selection" aria-label="Open bills"><h2>Open bills</h2>
+<p id="pay-bills-selection-status"></p>
+<div class="pay-bills-table-wrap"><table class="pay-bills-open"><thead><tr><th>Select</th><th>Vendor</th><th>Bill</th><th>Due date</th><th>Original amount</th><th>Open balance</th><th>Payment</th></tr></thead><tbody id="pay-bills-rows"></tbody></table></div>
+<button type="button" id="pay-bills-more" hidden>Next page of open bills</button>
+<div id="pay-bills-totals" aria-live="polite"></div>
+</section>
+<section id="pay-bills-groups" aria-label="Payments this save will write"><h2>Payments this save will write</h2>
+<p id="pay-bills-groups-summary">Select bills to see how they are paid.</p>
+<ul id="pay-bills-group-list"></ul>
+<p class="muted">One payment per payee: bills are grouped by vendor, payable account, currency, the account above and the method above. Two vendors are never paid by one check.</p>
+</section>
+<div class="pay-bills-actions"><button type="button" id="pay-bills-save" disabled>Save &amp; pay bills</button></div>
+</form>
+<section id="pay-bills-result" hidden aria-label="Bill payments written"></section>
+</div>
+{% endblock %}

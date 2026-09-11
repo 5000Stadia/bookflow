@@ -170,14 +170,21 @@ PANELS: tuple[Panel, ...] = (
                 id="pay-bills",
                 title="Pay bills",
                 summary="Settle open bills and take them off the payables list.",
-                action=Action("Pay bills", WRITE),
-                waits_on="bill payment commands",
+                action=Action("Pay bills", WRITE, ("bill pay",), "/pay-bills"),
             ),
             Step(
                 id="vendor-check",
                 title="Pay a vendor",
                 summary="Write a check straight out of a bank account, without entering a bill first.",
                 action=Action("Write a check to a vendor", WRITE, ("check post",), "/check/post"),
+                aside=True,
+            ),
+            Step(
+                id="bill-payments",
+                title="Bill payments",
+                summary="Find a payment you made and read back which bills it settled.",
+                action=Action("Open the bill payment list", READ, ("bill payment query",),
+                              "/bill-payment"),
                 aside=True,
             ),
             Step(
