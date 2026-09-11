@@ -21,8 +21,6 @@ from bookflow.core.errors import BookflowError
 from tests.test_row3_host import PASSWORD, hosted  # noqa: F401
 
 
-REFERENCE = re.compile(
-    r'<details class="technical-details"><summary>Command reference</summary>.*?</details>', re.S)
 TILE = re.compile(r'<(?P<element>a|div) class="flow-tile[^"]*"[^>]*>(?P<body>.*?)</(?P=element)>', re.S)
 TITLE = re.compile(r'<span class="flow-tile-title">(.*?)</span>')
 
@@ -60,11 +58,7 @@ def navigate_witness(browser: TestClient, item, label: str) -> None:
         label, item.href, page.status_code, page.headers.get("location"),
         "the destination did not answer; a redirect is not a landing")
     assert 'name="password"' not in page.text, (label, item.href, "this destination asks a signed-in reader to log in")
-    # The command's own reference text is agent documentation and stays collapsed under its
-    # own disclosure; a wire error code named there is a command saying what it can refuse,
-    # not this page refusing anything. `test_no_machinery_identifier_reaches_a_visible_label`
-    # excludes the same block for the same reason.
-    body = REFERENCE.sub('', _main(page.text))
+    body = _main(page.text)
     assert 'class="error"' not in body, (label, item.href, body[:400])
     assert not re.search(r"\bE_[A-Z_]+\b", body), (label, item.href, body[:400])
     heading = re.search(r"<h1[^>]*>(.*?)</h1>", page.text, re.S)
