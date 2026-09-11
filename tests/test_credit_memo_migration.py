@@ -1,8 +1,8 @@
-"""co0027 widens two CHECK constraints and two settlement tables, preserving everything else.
+"""co0028 widens two CHECK constraints and two settlement tables, preserving everything else.
 
 The DDL in the migration is frozen text: it never imports the application's metadata, so the
 only thing that keeps the two in step is this test compiling the metadata and comparing. The
-rest of the file is the preservation question -- a company database already at co0026 carries
+rest of the file is the preservation question -- a company database already at co0027 carries
 rows, local tables, indexes, views and triggers, and this migration has to rebuild
 ``transactions``, ``document_lines``, ``applications`` and ``application_allocations``
 underneath them without touching a byte of what is stored.
@@ -19,7 +19,7 @@ from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, migrate_to_head
 from tests.payment_raw_evidence import table
 
-M = importlib.import_module('bookflow.storage.company_migrations.versions.0027_customer_credits')
+M = importlib.import_module('bookflow.storage.company_migrations.versions.0028_customer_credits')
 
 
 def _at(path, revision):
@@ -104,11 +104,11 @@ def test_the_widened_shapes_admit_the_credit_and_refuse_anything_else(tmp_path):
         assert "WHERE type IN ('invoice', 'credit_memo')" in sql('uq_transaction_receivable_number')
 
 
-def test_a_populated_co0026_database_keeps_every_value_and_every_local_object(tmp_path):
+def test_a_populated_co0027_database_keeps_every_value_and_every_local_object(tmp_path):
     path = tmp_path / 'company.db'
-    _at(path, 'co0026')
+    _at(path, 'co0027')
     with sqlite3.connect(path) as raw:
-        assert raw.execute('SELECT version_num FROM alembic_version').fetchone() == ('co0026',)
+        assert raw.execute('SELECT version_num FROM alembic_version').fetchone() == ('co0027',)
         # Rows in the rebuilt tables, including bytes and an embedded NUL that a quote()-only
         # copy would truncate.
         raw.execute("INSERT INTO audit_events (id, seq, at, command, actor_id, actor_kind,"
@@ -158,7 +158,7 @@ def test_a_populated_co0026_database_keeps_every_value_and_every_local_object(tm
                 ','.join(repr(name) for name in M.REPLACED))).fetchall())
 
     with open_database(path, writable=True) as db:
-        assert migrate_to_head(db, 'company', tmp_path / 'backups') == ('co0026', HEADS['company'])
+        assert migrate_to_head(db, 'company', tmp_path / 'backups') == ('co0027', HEADS['company'])
         after = {name: table(db.raw, name) for name in names}
         # The four rebuilt tables keep every stored value; two of them also gain a column,
         # which is exactly the difference the columns list is allowed to show.
@@ -188,7 +188,7 @@ def test_a_populated_co0026_database_keeps_every_value_and_every_local_object(tm
 def test_an_unexpected_settlement_guard_stops_the_migration(tmp_path):
     for name in ('document_lines_type_insert', 'applications_exact_party', 'applications_no_update'):
         path = tmp_path / (name + '.db')
-        _at(path, 'co0026')
+        _at(path, 'co0027')
         with sqlite3.connect(path) as raw:
             raw.execute('DROP TRIGGER ' + name)
             target = 'document_lines' if name.startswith('document_lines') else 'applications'
@@ -198,14 +198,14 @@ def test_an_unexpected_settlement_guard_stops_the_migration(tmp_path):
             try:
                 migrate_to_head(db, 'company', tmp_path / 'backups')
             except Exception as exc:
-                assert 'co0027' in str(exc) or 'co0027' in str(getattr(exc, '__cause__', '')), name
+                assert 'co0028' in str(exc) or 'co0028' in str(getattr(exc, '__cause__', '')), name
             else:
-                raise AssertionError('a rewritten settlement guard must stop co0027: ' + name)
+                raise AssertionError('a rewritten settlement guard must stop co0028: ' + name)
 
 
 def test_a_competing_local_guard_on_the_settlement_pair_stops_the_migration(tmp_path):
     path = tmp_path / 'company.db'
-    _at(path, 'co0026')
+    _at(path, 'co0027')
     with sqlite3.connect(path) as raw:
         raw.execute("CREATE TRIGGER local_settlement_rule BEFORE INSERT ON application_allocations"
                     " BEGIN SELECT 1; END")
@@ -214,6 +214,6 @@ def test_a_competing_local_guard_on_the_settlement_pair_stops_the_migration(tmp_
         try:
             migrate_to_head(db, 'company', tmp_path / 'backups')
         except Exception as exc:
-            assert 'co0027' in str(exc) or 'co0027' in str(getattr(exc, '__cause__', ''))
+            assert 'co0028' in str(exc) or 'co0028' in str(getattr(exc, '__cause__', ''))
         else:
-            raise AssertionError('an unknown local settlement guard must stop co0027')
+            raise AssertionError('an unknown local settlement guard must stop co0028')

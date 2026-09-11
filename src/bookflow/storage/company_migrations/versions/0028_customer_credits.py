@@ -17,8 +17,8 @@ import importlib
 import re
 from alembic import op
 
-revision = 'co0027'
-down_revision = 'co0026'
+revision = 'co0028'
+down_revision = 'co0027'
 branch_labels = None
 depends_on = None
 
@@ -106,21 +106,21 @@ def _rebuild(connection, table):
     _, parts, suffix = preserving._definitions(sql, table)
     columns = connection.exec_driver_sql(f'PRAGMA table_xinfo({quote(table)})').all()
     if any(row[1].lower() in ('rowid', '_rowid_', 'oid') for row in columns) or 'WITHOUT' in suffix.upper():
-        raise RuntimeError('co0027 cannot preserve custom row identity')
+        raise RuntimeError('co0028 cannot preserve custom row identity')
     for name in (column.strip().split()[0] for addition in ADDITIONS.get(table, ()) for column in (addition,)):
         if any(row[1] == name for row in columns):
-            raise RuntimeError('co0027 credit column already exists: ' + name)
+            raise RuntimeError('co0028 credit column already exists: ' + name)
     for old, new in REPLACEMENTS[table]:
         found = [i for i, part in enumerate(parts) if old in part]
         if len(found) != 1 or parts[found[0]].count(old) != 1:
-            raise RuntimeError('co0027 unknown constraint or column: ' + table)
+            raise RuntimeError('co0028 unknown constraint or column: ' + table)
         parts[found[0]] = parts[found[0]].replace(old, new, 1)
     # New columns go after the existing columns and before the table constraints, so every
     # pre-existing column keeps its ordinal position and a local `SELECT *` keeps its prefix.
     boundary = next((i for i, part in enumerate(parts) if re.match(
         r'^(?:CONSTRAINT\s|PRIMARY\s+KEY|UNIQUE\s*\(|CHECK\s*\(|FOREIGN\s+KEY)', part.strip(), re.I)), len(parts))
     parts = parts[:boundary] + list(ADDITIONS.get(table, ())) + parts[boundary:] + list(CONSTRAINTS.get(table, ()))
-    create = 'CREATE TABLE ' + quote('_co0027_' + table) + ' (' + ','.join(parts) + suffix
+    create = 'CREATE TABLE ' + quote('_co0028_' + table) + ' (' + ','.join(parts) + suffix
     writable = ','.join(['rowid'] + [quote(row[1]) for row in columns if row[6] == 0])
     selected = ','.join(['rowid'] + [expr for row in columns for expr in
         (f'typeof({quote(row[1])})', f'quote({quote(row[1])})', f'CAST({quote(row[1])} AS BLOB)')])
@@ -149,15 +149,15 @@ def upgrade():
     connection = op.get_bind()
     preserving = importlib.import_module('bookflow.storage.company_migrations.versions.0012_progress_billing')
     quote = preserving._quote
-    reserved = set(OBJECTS) | {'_co0027_' + name for name in CHANGED}
+    reserved = set(OBJECTS) | {'_co0028_' + name for name in CHANGED}
     existing = connection.exec_driver_sql('SELECT name FROM sqlite_schema').scalars().all()
     if reserved.intersection(existing):
-        raise RuntimeError('co0027 reserved object already exists')
+        raise RuntimeError('co0028 reserved object already exists')
     for _, name, _ in connection.exec_driver_sql('PRAGMA database_list'):
         attached = '"' + name.replace('"', '""') + '"'
         for row in connection.exec_driver_sql('SELECT name FROM ' + attached + '.sqlite_schema'):
             if row[0].casefold() in {value.casefold() for value in OBJECTS}:
-                raise RuntimeError('co0027 credit storage name collision')
+                raise RuntimeError('co0028 credit storage name collision')
     plans = {table: _rebuild(connection, table) for table in CHANGED}
     changed = ','.join(f"'{name}'" for name in CHANGED)
     retained = connection.exec_driver_sql(
@@ -167,26 +167,26 @@ def upgrade():
     stored = {name: sql for kind, name, sql in retained if kind == 'trigger'}
     expected = _expected_guards()
     if set(REPLACED) - set(expected) or any(stored.get(name) != sql for name, sql in expected.items()):
-        raise RuntimeError('co0027 unknown settlement or document type guard')
+        raise RuntimeError('co0028 unknown settlement or document type guard')
     # Keep unknown local objects verbatim; do not guess through competing guards.
     for name, sql in stored.items():
         if name in expected:
             continue
         if re.search(r'(?i)\b(?:NEW|OLD)\s*\.\s*["`\[]?type\b', sql) and re.search(r'(?i)\bON\s+["`\[]?transactions\b', sql):
-            raise RuntimeError('co0027 unknown competing document type guard')
+            raise RuntimeError('co0028 unknown competing document type guard')
         if re.search(r'(?i)\bON\s+["`\[]?(?:%s)\b' % '|'.join(SETTLEMENT_TABLES), sql):
-            raise RuntimeError('co0027 unknown competing settlement guard')
+            raise RuntimeError('co0028 unknown competing settlement guard')
     for kind in ('trigger', 'view'):
         for object_kind, name, _ in retained:
             if object_kind == kind:
                 connection.exec_driver_sql(f'DROP {kind.upper()} main.{quote(name)}')
     for table, (create, writable, selected) in plans.items():
-        temporary = '_co0027_' + table
+        temporary = '_co0028_' + table
         connection.exec_driver_sql(create)
         connection.exec_driver_sql(f'INSERT INTO {quote(temporary)} ({writable}) SELECT {writable} FROM {quote(table)}')
         for left, right in ((table, temporary), (temporary, table)):
             if connection.exec_driver_sql(f'SELECT {selected} FROM {quote(left)} EXCEPT SELECT {selected} FROM {quote(right)}').fetchone() is not None:
-                raise RuntimeError('co0027 rebuilt values differ: ' + table)
+                raise RuntimeError('co0028 rebuilt values differ: ' + table)
         connection.exec_driver_sql(f'DROP TABLE {quote(table)}')
         connection.exec_driver_sql(f'ALTER TABLE {quote(temporary)} RENAME TO {quote(table)}')
     for statement in DDL:
@@ -198,9 +198,9 @@ def upgrade():
         connection.exec_driver_sql(statement)
     for name in NEW_TABLES:
         if connection.exec_driver_sql('SELECT 1 FROM main."' + name + '" LIMIT 1').fetchone():
-            raise RuntimeError('co0027 credit storage must be empty')
+            raise RuntimeError('co0028 credit storage must be empty')
     if connection.exec_driver_sql('PRAGMA foreign_key_check').fetchone() is not None:
-        raise RuntimeError('co0027 foreign key check failed')
+        raise RuntimeError('co0028 foreign key check failed')
 
 
 def downgrade():

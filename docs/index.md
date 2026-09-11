@@ -166,6 +166,7 @@ Start with the agent guide for a complete authenticated HTTP write. Read concept
 - [`company/item_vendor_profiles`](schema/company/item_vendor_profiles.md)
 - [`company/items`](schema/company/items.md)
 - [`company/job_types`](schema/company/job_types.md)
+- [`company/money_out_documents`](schema/company/money_out_documents.md)
 - [`company/notes`](schema/company/notes.md)
 - [`company/other_names`](schema/company/other_names.md)
 - [`company/payment_component_keys`](schema/company/payment_component_keys.md)

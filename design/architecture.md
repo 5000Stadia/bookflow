@@ -523,8 +523,35 @@ name the difference. The write output is `MoneyOutWriteOutput`: the journal writ
 total and the line count. That summary is what the footer displays; nothing is recomputed in the
 browser.
 
-Correction is `register update` and voiding is `journal void`, the same as every other register
-entry: the document is a journal, its reversal posts at the original date and the revisions stay.
+`check show`, `check query`, `check update`, `check void` and `check history` give the document
+the lifecycle every other document has, and `card-charge` carries the identical six verbs.
+`company/checks.py` derives what `show` and `query` report from the stored revision -- line one is
+the funding line and the rest are the expense lines -- so no figure is kept twice. A correction is
+the same translation with each surviving line identity retained and `operation='update'`, so the
+journal writer appends an exact reversal of the old accounting at its old date and a full
+replacement at the new one; a void is that writer's exact reversal at the document's own date.
+`check update` accepts a different bank account, which is why `registers.translate` takes
+`moving=True`: standing in a register an entry cannot leave the account you are scrolling, but the
+bank account is an ordinary field on the check's own form. A field left out of a correction keeps
+what was captured, and leaving `expenses` out keeps the saved rows verbatim rather than re-reading
+accounts that may have been renamed since.
+
+The same entry is still an ordinary register row, so `register update` and `journal void` keep
+working on it and leave it a check; `tests/test_money_out_lifecycle.py` holds both doors open.
+
+`money_out_documents` is what makes `check query` possible. A check, a card charge and a transfer
+post the rows `register post` posts, so nothing in the posting distinguishes them; the table is one
+immutable row per transaction saying which document a person entered, written inside the same audit
+event as the accounting through `journals.persist_prepared(extra=...)`. Inferring the document from
+the shape of its lines was the alternative and it is wrong: a hand-typed journal entry crediting a
+bank account has a check's shape exactly.
+
+**What the browser still needs.** The six verbs exist on every command surface; the workbench has
+only the entry window. `Document.is_document` covers `post` alone, so `check update` renders as a
+generated form rather than as the check; `Document.NO_LIST` still sends Cancel to the home board
+although the generic list and detail routes now resolve; `Nav.NOUNS` excludes these three, so the
+document navigation bar and a history page are absent; and no panel carries a "Checks",
+"Credit card charges" or "Transfers" list tile.
 
 **Where an Items tab attaches.** The line collection is named `expenses`, not `lines`. A second
 line kind arrives as a sibling collection `items` on the same input models, translated into
@@ -802,9 +829,16 @@ holding the amount and, for each end, the account id, its name, its type, its no
 side it took, and whether its own figure went up or down. That summary is what the footer
 displays; nothing is recomputed in the browser.
 
-Correction is `register update` and voiding is `journal void`, the same as every other register
-entry. There is no `transfer` list page yet, so the window's Cancel returns to the home board
-(`Document.NO_LIST`) and a successful save lands on the posted journal.
+`transfer show`, `transfer query`, `transfer update`, `transfer void` and `transfer history` carry
+the same six verbs the money-out documents carry, through the same marker table and the same
+translation. The correction worth naming is a changed `to_account`: the journal writer reverses the
+whole entry at the transfer's own date and replaces it, so the money leaves the account it went
+into and arrives in the new one on that one date rather than on two. `register update` and
+`journal void` keep working on a transfer as well.
+
+`transfer` is still in `Document.NO_LIST`, so the window's Cancel returns to the home board and a
+successful save lands on the posted journal, even though `transfer query` now gives the generic
+list route something to answer with.
 
 In `adapters/workbench/document_form.py` the transfer is the one document with no line grid:
 `layout` returns `lines: None`, which leaves the grid band out of the rendered page rather than
