@@ -1307,6 +1307,90 @@ and the home window's Reports tile names both alongside the seven that were
 there before. A staled continuation on any report page now shows the restart
 note, not only on trial balance and general ledger.
 
+## Period summaries: where the money came from and where it went
+
+`company/summary_reports.py` supplies `report sales-by-customer`, `report
+sales-by-item`, `report sales-by-rep` and `report expenses-by-vendor` through the
+same registry and `reports` capability, with the same period metadata, HMAC
+continuation, streamed whole-filter totals and signed64 checks as the aging
+reports. All four take `date_from` and `date_to`, the inclusive bounds the
+metadata carries as `period`. No schema and no cached balance is introduced: they
+read `posting_lines`, `posting_batches`, `accounts` and the immutable document
+profiles the sale already wrote.
+
+**None of them selects on a document type.** An income effect is an effect on an
+account whose profit-and-loss section is `income`; a cost effect is one whose
+section is in `financial_statements.COST_SECTIONS`, which is derived from
+`PL_SECTIONS` and `DEBIT_TYPES` rather than written a second time. So
+`report expenses-by-vendor` covers bills, cheques, credit card charges, vendor
+credits and expense journal entries without naming any of them, and a document
+family added later is in these reports the day it posts. The sales reports cover
+the single `income` section, which is what makes their totals the `income` total
+`report profit-and-loss` prints for the same dates; `tests/test_summary_reports.py`
+asserts that equality on every one of the three.
+
+Sales by customer groups income by the customer dimension the posting line
+carries. A job is its own row and is never folded into its parent, so each row
+names `parent_id` and `parent_label` and the rows are ordered by
+`full_name_key`, which places a job directly under the customer it is named
+under. Income named to a party from another list, and income named to nobody, is
+the one row labelled `receivable_reports.NO_CUSTOMER`.
+
+Sales by item reads the income leg's own `posting_line_sources` attribution
+through to the entered line's one-to-one item profile, so a correction, a void
+and a credit memo take the units and the money back off the row they were added
+to, each at the sign its own posting carries. `ITEM_LINE_TABLES` is read off
+`schema.metadata` -- a profile keyed on `document_line_id` carrying an item, a
+base quantity and a line net -- so `sales_line_profiles` and
+`credit_line_profiles` are both covered and a third family joins without an
+edit. Income that reached no item at all is both a row labelled `No item` and
+the `no_item_income` total, and `E_INTERNAL` refuses to print figures where item
+income plus no-item income is not the period's income. Quantity is the item's
+base unit, so lines entered in different selected units add up; a line priced by
+allocation carries no quantity, which sets `quantity_complete` false and leaves
+`average_price` absent rather than dividing by a short quantity. Average price is
+income over quantity rounded once to the cent for reading and nothing sums it.
+
+Sales by rep reads the representative the sale itself captured, from
+`posting_batches.revision_id` through the revision's own `profile_snapshot`, and
+never from `customers.sales_rep_id`. That is the whole of the report: a customer
+reassigned today has not moved sales already made, and a correction that changes
+the rep reverses the old one at the old revision and posts the new one at the
+new, because a reversal batch names the revision it reverses.
+`COMMERCIAL_PROFILE_TABLES` is read off `schema.metadata` the same way the item
+lines are, so a credit memo's rep is counted beside an invoice's; a snapshot with
+no representative yields SQL NULL and lands in the row labelled `Unassigned`.
+
+Expenses by vendor takes the vendor the expense line itself names, and where the
+line names none, the single vendor named anywhere on the same posting batch. A
+bill writes its vendor onto every leg and needs no fallback; a cheque and a card
+charge carry the payee on the funding line only, so without it every cheque ever
+written would be filed under no vendor. Where a batch names two vendors neither
+is the document's and the line stays unattributed, in the row labelled
+`payable_reports.NO_VENDOR`. A bill payment posts nothing to a cost account, so
+it can never double-count what the bill already charged.
+
+Each report streams every row the filter selects to build its totals, then pages
+with LIMIT/OFFSET, so a total is the whole filter's on every page. Each checks
+its printed rows against an independent sum of the underlying effects and raises
+`E_INTERNAL` rather than printing a breakdown that does not add up. Percentages
+are exact integer coefficients in millionths of a percentage point
+(`core/exact.PERCENTAGE_SCALE`), null where the period total is zero because a
+share of nothing is not zero; no ratio is ever a float. `ledger_reports._state`
+labels these rows off `customers`, `items`, `sales_reps` and `vendors`
+respectively, and takes no settlement state, because applying a receipt moves
+nothing on an income or cost account.
+
+Workbench `summaries.py` and `summaries.html` project all four without accounting
+logic, deriving only the two-place percentage a person reads, by integer
+arithmetic. A customer row links to that customer's statement for the same
+period and a vendor row to that vendor's open bills; an item and a
+representative have no such report yet, so those rows carry no link rather than
+one that goes somewhere unrelated. `pages.CURSOR_FREE_REPORTS` gains them by
+containing `Summary.COMMANDS`, so nothing names the commands a second time. All
+four are titled from `naming.REPORTS` and listed on the home window's Reports
+tile.
+
 ## Customer work documents
 
 [Customer work](customer-work.md) owns the nonposting proposal, alternative

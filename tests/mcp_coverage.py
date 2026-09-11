@@ -274,9 +274,13 @@ register update
 report ap-aging
 report ar-aging
 report balance-sheet
+report expenses-by-vendor
 report general-ledger
 report open-invoices
 report profit-and-loss
+report sales-by-customer
+report sales-by-item
+report sales-by-rep
 report statement
 report trial-balance
 report unpaid-bills

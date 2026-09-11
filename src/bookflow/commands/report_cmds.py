@@ -16,6 +16,11 @@ from bookflow.company.payable_reports import (
     ApAgingInput, ApAgingOutput, UnpaidBillsInput, UnpaidBillsOutput,
     ap_aging, unpaid_bills,
 )
+from bookflow.company.summary_reports import (
+    ExpensesByVendorInput, ExpensesByVendorOutput, SalesByCustomerInput, SalesByCustomerOutput,
+    SalesByItemInput, SalesByItemOutput, SalesByRepInput, SalesByRepOutput,
+    expenses_by_vendor, sales_by_customer, sales_by_item, sales_by_rep,
+)
 
 
 @command("report ap-aging", scope="company", required_role="member", capability="reports",
@@ -88,3 +93,35 @@ def plan_profit_and_loss(inp, ctx, s):
     error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
 def plan_balance_sheet(inp, ctx, s):
     return Plan(preview=balance_sheet(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report sales-by-customer", scope="company", required_role="member", capability="reports",
+    description="Income between date_from and date_to grouped by the customer or job each sale was made to, in hierarchy-name order so a job reads directly under the customer it belongs to, with what that customer's share of the period came to as a percentage. A job's income is its own and is never rolled into its parent's figure; every row names its parent so the two can be added deliberately. Every income effect is counted whatever document posted it, including an income journal entry, and income posted against no customer -- or against a name from another list -- is the one row called No name rather than something dropped. The total is the income total report profit-and-loss shows for the same dates. Rows worth nothing on the period are omitted because they are worth nothing, not because a status was filtered; totals cover every customer and rows are paged.",
+    input_model=SalesByCustomerInput, output_model=SalesByCustomerOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_sales_by_customer(inp, ctx, s):
+    return Plan(preview=sales_by_customer(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report sales-by-item", scope="company", required_role="member", capability="reports",
+    description="The same period's income grouped by the item sold, each row with the quantity in the item's own base unit, the income, the average price that quantity fetched and the item's share of the period as a percentage. Quantity and income both come from the posting the sale made, so a correction, a void and a credit memo take the units and the money back off the row they were added to. Every sales line names an item, so income with no item is income no sale line posted -- an income journal entry, or a deposit taken straight to an income account: that is the row called No item, and no_item_income on the totals says what it came to, so item income plus no-item income is the income total report profit-and-loss shows for the same dates. Average price is income divided by quantity rounded to the cent for reading, and is omitted for a row whose quantity is unknown because a line was priced by allocation. Rows worth nothing are omitted; totals cover every item and rows are paged.",
+    input_model=SalesByItemInput, output_model=SalesByItemOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_sales_by_item(inp, ctx, s):
+    return Plan(preview=sales_by_item(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report expenses-by-vendor", scope="company", required_role="member", capability="reports",
+    description="Expense between date_from and date_to grouped by vendor, with each vendor's share of the period as a percentage. Cost of goods sold, ordinary expense and other expense are all counted, which is what makes the total the same figure the profit and loss reports for those three sections over the same dates. Every document that reaches one of those accounts is included -- bills, cheques, credit card charges, vendor credits and expense journal entries -- because the report selects on the account rather than on a list of document types. A line that names its own vendor is that vendor's; a line that names none takes the one vendor named elsewhere on the same posting, which is how a cheque's payee reaches its expense lines. Expense that names no vendor at all, including money paid to a name from another list, is the one row called No name. A vendor credit is negative and reduces the vendor. Rows worth nothing are omitted; totals cover every vendor and rows are paged.",
+    input_model=ExpensesByVendorInput, output_model=ExpensesByVendorOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_expenses_by_vendor(inp, ctx, s):
+    return Plan(preview=expenses_by_vendor(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report sales-by-rep", scope="company", required_role="member", capability="reports",
+    description="The same period's income grouped by the sales representative the sale itself captured, with each representative's share of the period as a percentage. The rep is read from the exact document revision that posted the effect, never from the customer's current sales representative, so reassigning a customer today does not move last year's sales and a correction that changes the rep moves only what it reposted. Income from a document that captured no representative, and income no sales document posted at all, is the one row called Unassigned. The total is the income total report profit-and-loss shows for the same dates. Rows worth nothing are omitted; totals cover every representative and rows are paged.",
+    input_model=SalesByRepInput, output_model=SalesByRepOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_sales_by_rep(inp, ctx, s):
+    return Plan(preview=sales_by_rep(inp, s, principal_id=ctx.on_behalf_of))

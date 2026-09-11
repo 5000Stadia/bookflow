@@ -331,16 +331,38 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True):
     # The sales tax liability is a payables report whose rows are agencies, which are
     # vendors, so it labels and orders its rows exactly as the other two do.
     payable = report in {"ap-aging", "unpaid-bills", "sales-tax-liability"}
+    # A period summary groups posting effects by the party or the item the effect names,
+    # so its rows are labelled and ordered off that master list exactly as a receivables
+    # or payables row is. It takes no settlement state at all: applying a receipt moves
+    # nothing on an income or expense account, so the posting effect alone already sees
+    # everything these reports can show.
+    by_customer = report == "sales-by-customer"
+    by_item = report == "sales-by-item"
+    by_rep = report == "sales-by-rep"
+    by_vendor = report == "expenses-by-vendor"
     if financial:
         label_query = "SELECT id, full_name, full_name_key, name, number, type, parent_id, active FROM accounts ORDER BY id"
     elif receivable:
         # Receivables rows are customers, not accounts, and the hierarchy name
         # is both the row label and the row order.
         label_query = "SELECT id, full_name, full_name_key, name, parent_id, active FROM customers ORDER BY id"
-    elif payable:
+    elif by_customer:
+        # The same customers, plus the job status the summary prints: a customer that
+        # becomes a job mid-report changes a printed cell, so it stales a continuation
+        # exactly as a rename does.
+        label_query = "SELECT id, full_name, full_name_key, name, parent_id, active, job_status FROM customers ORDER BY id"
+    elif payable or by_vendor:
         # Payables rows are vendors, which are a flat list, so the one name is
         # both the row label and the row order.
         label_query = "SELECT id, name, name_key, active FROM vendors ORDER BY id"
+    elif by_item:
+        # Item summary rows are items, labelled and ordered by the hierarchy name
+        # the same way a job is.
+        label_query = "SELECT id, full_name, full_name_key, name, type, parent_id, active FROM items ORDER BY id"
+    elif by_rep:
+        # Representative rows are a flat list, printed by name with the initials beside
+        # them. What the sale captured is immutable; only the label can move.
+        label_query = "SELECT id, name, name_key, initials, active FROM sales_reps ORDER BY id"
     elif report == "trial-balance":
         label_query = _EFFECTS + """SELECT a.id, a.full_name, a.name, a.number, a.active FROM accounts a
             LEFT JOIN balances b ON b.account_id=a.id

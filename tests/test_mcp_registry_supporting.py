@@ -19,7 +19,9 @@ FAMILIES = {
     'links': ('customer link-vendor', 'customer unlink-vendor', 'other-name convert'),
     'reports': ('report trial-balance', 'report general-ledger', 'report balance-sheet', 'report profit-and-loss',
                 'report ar-aging', 'report open-invoices', 'report statement',
-                'report ap-aging', 'report unpaid-bills'),
+                'report ap-aging', 'report unpaid-bills',
+                'report sales-by-customer', 'report sales-by-item', 'report sales-by-rep',
+                'report expenses-by-vendor'),
 }
 
 
