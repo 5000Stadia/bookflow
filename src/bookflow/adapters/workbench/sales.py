@@ -97,8 +97,14 @@ def detail_context(record, company_id, *, preview=False):
     url = base + '/' + quote(str(record['id']), safe='')
     links = []
     print_url = None
+    credit_url = None
     if not preview:
         print_url = document_url(company_id, noun, record['id'])
+        if noun == 'invoice' and record['status'] != 'voided':
+            # A return is written against this invoice, so it is opened from it: the credit
+            # window seeds one returned row per line rather than asking anyone to copy ids.
+            credit_url = ('/c/' + quote(str(company_id), safe='') + '/credit-memo/post?invoice='
+                          + quote(str(record['id']), safe=''))
         number = revision['revision_number']
         if number > 1:
             links.append(('Previous revision', url + '?revision_number=' + str(number - 1)))
@@ -116,7 +122,7 @@ def detail_context(record, company_id, *, preview=False):
         for field in ('gross', 'applied', 'due'):
             settlement[field] = Money(settlement[field + '_minor_units'], settlement['currency']).to_dict()
     return dict(record=record, revision=revision, profile=revision['profile'], preview=preview,
-                print_url=print_url,
+                print_url=print_url, credit_url=credit_url,
                 tax_labels=POLICY_LABELS, tax_explanations=POLICY_EXPLANATIONS,
                 settlement=settlement, settlement_url=url+'/settlement',
                 title='Invoice' if noun == 'invoice' else 'Sales receipt', links=links,

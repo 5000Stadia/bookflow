@@ -205,24 +205,25 @@ def _resolve_one(step: home.Step, catalogue: dict[str, registry.Command]) -> hom
     return board[0].steps[0]
 
 
-# The stand-in for work the product has not built. Vendor credits are a planned tile with no
+# The stand-in for work the product has not built. Purchase orders are a planned tile with no
 # commands and no page of their own, which is what makes them the honest example here: bills
-# used to hold this seat and no longer can, because a bill now has both.
-VIEW_CREDITS = home.Step(
-    id="view-vendor-credits", title="Vendor credits", summary="Credits a vendor owes you.",
-    action=home.Action("View vendor credits", home.READ, ("vendor-credit list",), "/vendor-credit"),
-    waits_on="vendor credit commands")
+# held this seat, then vendor credits did, and neither can any longer because both now have
+# commands and a page of their own. The seat belongs to whatever is genuinely still unbuilt.
+VIEW_ORDERS = home.Step(
+    id="view-purchase-orders", title="Purchase orders", summary="What you have ordered from a vendor.",
+    action=home.Action("View purchase orders", home.READ, ("purchase-order list",), "/purchase-order"),
+    waits_on="purchase order commands")
 
 
 def test_an_unregistered_command_is_a_placeholder():
-    assert registry.get("vendor-credit list") is None, "this branch is supposed to be without vendor credits"
-    item = _resolve_one(VIEW_CREDITS, {})
+    assert registry.get("purchase-order list") is None, "this branch is supposed to be without purchase orders"
+    item = _resolve_one(VIEW_ORDERS, {})
     assert not item.live and item.href is None
-    assert item.reason == "vendor credit commands"
+    assert item.reason == "purchase order commands"
 
 
 def test_a_local_only_command_is_a_placeholder():
-    item = _resolve_one(VIEW_CREDITS, {"vendor-credit list": _stub("vendor-credit list", local_only=True)})
+    item = _resolve_one(VIEW_ORDERS, {"purchase-order list": _stub("purchase-order list", local_only=True)})
     assert not item.live, "a command the host does not route is not something the browser may offer"
 
 
@@ -235,16 +236,16 @@ def test_a_working_command_with_no_destination_is_a_placeholder():
 
 
 def test_a_read_only_command_under_a_write_label_is_a_placeholder():
-    step = home.Step(id="mislabelled", title="Enter a vendor credit", summary="",
-                     action=home.Action("Enter a vendor credit", home.WRITE,
-                                        ("vendor-credit list",), "/vendor-credit"))
-    item = _resolve_one(step, {"vendor-credit list": _stub("vendor-credit list")})
+    step = home.Step(id="mislabelled", title="Write a purchase order", summary="",
+                     action=home.Action("Write a purchase order", home.WRITE,
+                                        ("purchase-order list",), "/purchase-order"))
+    item = _resolve_one(step, {"purchase-order list": _stub("purchase-order list")})
     assert not item.live and "only read" in item.reason
     # the same declaration, honestly labelled, passes the lookup half of the contract
-    honest = home.Step(id="honest", title="Vendor credits", summary="",
-                       action=home.Action("View vendor credits", home.READ,
-                                          ("vendor-credit list",), "/vendor-credit"))
-    assert _resolve_one(honest, {"vendor-credit list": _stub("vendor-credit list")}).live
+    honest = home.Step(id="honest", title="Purchase orders", summary="",
+                       action=home.Action("View purchase orders", home.READ,
+                                          ("purchase-order list",), "/purchase-order"))
+    assert _resolve_one(honest, {"purchase-order list": _stub("purchase-order list")}).live
 
 
 def test_the_map_never_labels_a_read_command_as_a_write():
@@ -277,16 +278,16 @@ def test_a_tile_flips_with_registry_state_and_no_template_edit(hosted):
 
 
 def test_registration_and_routing_alone_do_not_deliver_a_live_tile(hosted):
-    """Registering vendor-credit commands would satisfy the lookups. The witness still refuses."""
-    stub = {"vendor-credit list": _stub("vendor-credit list")}
-    item = _resolve_one(VIEW_CREDITS, stub)
+    """Registering purchase-order commands would satisfy the lookups. The witness still refuses."""
+    stub = {"purchase-order list": _stub("purchase-order list")}
+    item = _resolve_one(VIEW_ORDERS, stub)
     assert item.live, "the lookup half of the contract is satisfied by registration alone"
 
     browser = _browser(hosted)
     reachable = home.ResolvedStep(step=item.step, live=True, reason="",
-                                  href=f"/c/{hosted.company_id}/vendor-credit")
+                                  href=f"/c/{hosted.company_id}/purchase-order")
     with pytest.raises(AssertionError):
-        navigate_witness(browser, reachable, "vendor-credit")
+        navigate_witness(browser, reachable, "purchase-order")
 
 
 def test_a_signed_in_reader_whose_command_refuses_sees_the_error_not_a_login(hosted, monkeypatch):

@@ -4,6 +4,7 @@
 <h2>{{ sale.title }} {{ r.number }}</h2>
 <p><strong>{{ 'Preview — nothing written' if sale.preview else sale.record.status|capitalize }}</strong> · {{ r.date }} · Revision {{ r.revision_number }} · {{ r.currency }}</p>
 {% if sale.print_url %}<p class="actions document-print"><a class="primary-action" href="{{ sale.print_url }}" target="_blank" rel="noopener">Print / save PDF</a></p>{% endif %}
+{% if sale.credit_url %}<p class="actions"><a data-credit-this-invoice href="{{ sale.credit_url }}">Credit or return this invoice</a></p>{% endif %}
 {% if sale.record.void_reason %}<p class="warn">Voided: {{ sale.record.void_reason }}. Historical amounts remain visible; the reversal is in accounting history.</p>{% endif %}
 {% for warning in sale.record.warnings or [] %}<p class="warn">{{ warning }}</p>{% endfor %}
 <div class="sales-parties">

@@ -17,8 +17,8 @@ _LINES = (
     ' line of a posted invoice, with `quantity` saying how much of it comes back. A returned row'
     ' is priced entirely from what that invoice captured, so it takes no price, no amount and no'
     ' tax code, and changing the item price or the tax rate afterwards moves none of its cents.'
-    ' Return the same line again and you get the next units of it; return more than is left and'
-    ' the credit is refused whole with `E_RETURN_EXHAUSTED`.'
+    ' Return the same line again and you get the next units of it; ask for more than that line'
+    ' has left to give back and the whole credit is refused, so nothing is written.'
     ' One credit memo is all returns or all named items: the tax calculation rounds across a'
     ' whole document, so a document holding both would carry a tax total that is neither.'
 )
