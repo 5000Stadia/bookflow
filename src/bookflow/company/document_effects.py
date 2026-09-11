@@ -22,10 +22,21 @@ def rows(s, table, *where, order=None):
     return values
 
 
+# Document types that share one number series, each mapped to the whole family it draws
+# from; the first name in a family owns the `sequences` row. An invoice and a credit memo
+# share the invoice series -- a credit memo takes the next invoice number, the way the anchor
+# product issues one -- so a customer reads one unbroken series across both documents. The
+# mapping lives here rather than at the call sites because a caller that has to know its own
+# family is a hand-listed set waiting to omit the next document type.
+NUMBER_FAMILIES = {'invoice': ('invoice', 'credit_memo'), 'credit_memo': ('invoice', 'credit_memo')}
+
+
 def allocate(s, document_type, explicit, own=None):
     t = c.transactions
+    family = NUMBER_FAMILIES.get(document_type, (document_type,))
+    series = family[0]
     def occupied(number):
-        query = sa.select(t.c.id).where(t.c.type == document_type, t.c.number == number)
+        query = sa.select(t.c.id).where(t.c.type.in_(family), t.c.number == number)
         if own:
             query = query.where(t.c.id != own)
         return s.company.conn.execute(query).first() is not None
@@ -33,13 +44,13 @@ def allocate(s, document_type, explicit, own=None):
         if occupied(explicit):
             raise BookflowError('E_DUPLICATE_NUMBER', details={'number': explicit, 'type': document_type})
         return explicit, None
-    sequence = rows(s, c.sequences, c.sequences.c.name == document_type)
+    sequence = rows(s, c.sequences, c.sequences.c.name == series)
     number, prefix = (sequence[0]['next_number'], sequence[0]['prefix']) if sequence else (1, '')
     while occupied(f'{prefix}{number}'):
         number += 1
     if number >= 9223372036854775807:
         raise BookflowError('E_VALUE_RANGE', details={'field': 'next_number'})
-    return f'{prefix}{number}', dict(name=document_type, next_number=number + 1, prefix=prefix)
+    return f'{prefix}{number}', dict(name=series, next_number=number + 1, prefix=prefix)
 
 
 def reverse(s, header, revision, current_batch, event, created, pending):

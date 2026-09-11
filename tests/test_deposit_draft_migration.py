@@ -18,7 +18,7 @@ from bookflow.company.deposit_dependencies import RECONCILIATION
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS,migrate_to_head,feature_admission
 from bookflow.core.errors import BookflowError
-from tests.payment_raw_evidence import table,attachments
+from tests.payment_raw_evidence import preserved,table,attachments
 
 BASE='5fa513dd4bdb31517673e1510e7ddf2fc636c827'
 M=importlib.import_module('bookflow.storage.company_migrations.versions.0024_deposit_drafts')
@@ -63,6 +63,29 @@ print(json.dumps(dict(path=str(database_path(c)),operation=r.operation_id)))
     return parent,root,source
 
 
+def _rebuilt_since(revision):
+    """Every table and trigger the migrations after `revision` rebuild or replace.
+
+    Read from the migration modules rather than listed here: each one declares the tables it
+    rebuilds and the guards it reissues, and a hand-listed set is falsified silently by the
+    next migration that widens anything. That is exactly how this assertion came to be pinned
+    to three names while later revisions rebuilt four more.
+    """
+    import importlib
+    from pathlib import Path as _Path
+    versions=_Path(__file__).resolve().parents[1]/'src/bookflow/storage/company_migrations/versions'
+    seen,names=set(),set()
+    for path in sorted(versions.glob('[0-9]*.py')):
+        module=importlib.import_module('bookflow.storage.company_migrations.versions.'+path.stem)
+        guards={statement.split()[2] for statement in getattr(module,'GUARDS',())}
+        if module.revision>revision:
+            names.update(getattr(module,'CHANGED',()))
+            names.update(getattr(module,'REPLACED',()))
+            names.update(guards&seen)
+        seen.update(guards)
+    return names
+
+
 def test_raw_values_local_objects_backup_copy_upgrade_and_old_refusal(predecessor,tmp_path):
     root=tmp_path/'root';shutil.copytree(predecessor[1],root);path=next(root.glob('organizations/*/Demo Plumbing Co/company.db'))
     with sqlite3.connect(path) as raw:
@@ -78,12 +101,12 @@ def test_raw_values_local_objects_backup_copy_upgrade_and_old_refusal(predecesso
     files=attachments(root)
     with open_database(path,writable=True) as db:
         assert migrate_to_head(db,'company',tmp_path/'backups')==('co0023',HEADS['company'])
-        assert {n:table(db.raw,n) for n in names}==before
+        assert {n:preserved(db.raw,n,before[n]) for n in names}==before
         current=set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema'))
         # co0025 widens the transaction-type and entered-line-kind CHECKs, which SQLite can only
         # do by rebuilding those two tables and reinstating their type guard. Nothing else in a
         # co0023 database may change, and those three must change together.
-        rebuilt={'transactions','document_lines','document_lines_type_insert'}
+        rebuilt=_rebuilt_since('co0023')
         assert {row for row in ddl if row[1] not in rebuilt}<=current
         assert {row[1] for row in set(ddl)-current}==rebuilt
         assert all(db.raw.execute('SELECT count(*) FROM '+n).fetchone()==(0,) for n in M.NEW_TABLES)
@@ -94,7 +117,7 @@ def test_raw_values_local_objects_backup_copy_upgrade_and_old_refusal(predecesso
         assert raw.execute('SELECT version_num FROM alembic_version').fetchone()==('co0023',)
         assert {n:table(raw,n) for n in names}==before
     copied=tmp_path/'copied.db';shutil.copy2(path,copied)
-    with open_database(copied,writable=False) as db:assert {n:table(db.raw,n) for n in names}==before
+    with open_database(copied,writable=False) as db:assert {n:preserved(db.raw,n,before[n]) for n in names}==before
     code='''import sys,bookflow
 c=bookflow.connect(data_root=sys.argv[1])
 try:c.run('company show',{},company='Demo Plumbing Co')

@@ -12,9 +12,9 @@ Database: `company`.
 | `application_id` | VARCHAR(26) | no | — | — | ix_application_allocations_application | applications.id | Original apply identity. |
 | `kind` | VARCHAR(16) | no | — | — | — | — | allocation or reversal. |
 | `reverses_allocation_id` | VARCHAR(26) | yes | — | unique | — | application_allocations.id | Exact allocation reversed. |
-| `source_transaction_id` | VARCHAR(26) | no | — | — | — | payment_components.transaction_id, posting_line_sources.transaction_id | Source payment. |
-| `source_revision_id` | VARCHAR(26) | no | — | — | — | payment_components.revision_id | Captured payment revision. |
-| `source_component_id` | VARCHAR(26) | no | — | — | — | payment_components.id | Captured revision-local source capacity. |
+| `source_transaction_id` | VARCHAR(26) | no | — | — | — | credit_components.transaction_id, payment_components.transaction_id, posting_line_sources.transaction_id | Source payment. |
+| `source_revision_id` | VARCHAR(26) | no | — | — | — | credit_components.revision_id, payment_components.revision_id | Captured payment revision. |
+| `source_component_id` | VARCHAR(26) | yes | — | — | — | payment_components.id | Captured revision-local receipt capacity; null when a credit supplied it. |
 | `source_posting_source_id` | VARCHAR(26) | no | — | — | — | posting_line_sources.id | Exact source AR attribution. |
 | `target_transaction_id` | VARCHAR(26) | no | — | — | — | posting_line_sources.transaction_id, posting_line_sources.transaction_id, sales_line_profiles.transaction_id, sales_tax_components.transaction_id, settlement_line_keys.transaction_id | Target invoice. |
 | `target_revision_id` | VARCHAR(26) | no | — | — | — | sales_line_profiles.revision_id, sales_tax_components.revision_id | Captured invoice revision. |
@@ -35,3 +35,4 @@ Database: `company`.
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Principal creating this record. |
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface creating this record. |
 | `audit_event_id` | VARCHAR(26) | no | — | — | — | audit_events.id | Owned creation audit event. |
+| `credit_source_component_id` | VARCHAR(26) | yes | — | — | — | credit_components.id | Captured revision-local credit capacity; null when a receipt supplied it. |

@@ -363,7 +363,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
-| `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
@@ -588,7 +588,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].application.kind` | literal["apply", "unapply"] | yes | no | — | — |
 | `items[].application.paying_transaction_id` | string | yes | no | — | — |
 | `items[].application.paid_transaction_id` | string | yes | no | — | — |
-| `items[].application.source_component_key_id` | string | yes | no | — | — |
+| `items[].application.source_component_key_id` | string \| null | yes | yes | — | — |
+| `items[].application.credit_source_key_id` | string \| null | no | yes | null | — |
 | `items[].application.amount_minor_units` | integer | yes | no | — | — |
 | `items[].application.currency` | string | yes | no | — | — |
 | `items[].application.effective_date` | string | yes | no | — | — |
@@ -604,7 +605,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].allocation.reverses_allocation_id` | string \| null | yes | yes | — | — |
 | `items[].allocation.source_transaction_id` | string | yes | no | — | — |
 | `items[].allocation.source_revision_id` | string | yes | no | — | — |
-| `items[].allocation.source_component_id` | string | yes | no | — | — |
+| `items[].allocation.source_component_id` | string \| null | yes | yes | — | — |
+| `items[].allocation.credit_source_component_id` | string \| null | no | yes | null | — |
 | `items[].allocation.source_posting_source_id` | string | yes | no | — | — |
 | `items[].allocation.target_transaction_id` | string | yes | no | — | — |
 | `items[].allocation.target_revision_id` | string | yes | no | — | — |
@@ -1359,7 +1361,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
-| `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
@@ -2325,7 +2327,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
-| `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
@@ -2724,7 +2726,7 @@ Example JSON output:
 | `E_DEPOSIT_DEPENDENCY` | The receipt is claimed by a deposit; an atomic coordinated correction is required. |
 | `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
-| `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
@@ -3108,7 +3110,7 @@ Example JSON output:
 | `E_DEPOSIT_DEPENDENCY` | The receipt is claimed by a deposit; an atomic coordinated correction is required. |
 | `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
-| `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |

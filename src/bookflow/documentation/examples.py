@@ -485,3 +485,22 @@ EXAMPLES.update({
         ' --reason "The check was never sent" --json',
         {"payment": ID, "expected_version": 2}),
 })
+
+
+# A credit memo is entered either way it can be entered: the goodwill credit names its own item
+# and price, the return names the invoice line coming back and lets the capture price it.
+EXAMPLES.update({
+    "credit-memo post": Example(
+        'bookflow credit-memo post --customer "Rivera Construction" --date 2026-04-08'
+        ' --memo "Goodwill credit for the late visit"'
+        ' --lines \'[{"item":"Site visit","quantity":"1","unit_price":"30.00"}]\''
+        ' --company "Demo Plumbing Co" --reason "Credit the customer" --json',
+        {"customer": "Rivera Construction", "date": "2026-04-08",
+         "memo": "Goodwill credit for the late visit",
+         "lines": [{"item": "Site visit", "quantity": "1", "unit_price": "30.00"}]}),
+    "credit-memo show": Example(
+        f'bookflow credit-memo show {ID} --company "Demo Plumbing Co" --json', {"credit_memo": ID}),
+    "credit-memo history": Example(
+        f'bookflow credit-memo history {ID} --limit 25 --company "Demo Plumbing Co" --json',
+        {"credit_memo": ID, "limit": 25}),
+})

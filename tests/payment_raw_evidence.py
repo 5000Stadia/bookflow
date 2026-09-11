@@ -25,6 +25,19 @@ def table(raw,name,*,through_rowid=None,omit_columns=()):
     return dict(columns=columns,count=count,max_rowid=maximum,sha256=digest.hexdigest())
 
 
+def preserved(raw,name,before):
+    """The stored values of `name` as an earlier reading saw them, ignoring later columns.
+
+    An upgrade test asserts that not one stored value moved. A migration that widens a table
+    adds a column, and comparing the widened reading against the old one fails on the column
+    list alone -- which is how a pinned "what may change" set falsifies itself on every new
+    migration. Omitting exactly the columns that did not exist then keeps the assertion about
+    the values, which is what it was ever about.
+    """
+    columns=[r[1] for r in raw.execute('PRAGMA table_xinfo('+quote(name)+')')]
+    return table(raw,name,omit_columns=[c for c in columns if c not in before['columns']])
+
+
 def database(path):
     with sqlite3.connect(Path(path).resolve().as_uri()+'?mode=ro',uri=True) as raw:
         raw.execute('PRAGMA query_only=ON')

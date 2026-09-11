@@ -186,7 +186,11 @@ class CoordinateApplicationAllocationsRow(Frozen):
     reverses_allocation_id: str | None
     source_transaction_id: str
     source_revision_id: str
-    source_component_id: str
+    # Exactly one of these two names the capacity a settlement cent came from; both are
+    # optional on the wire because neither is on every row, and a producer that predates the
+    # credit column simply omits it.
+    source_component_id: str | None = None
+    credit_source_component_id: str | None = None
     source_posting_source_id: str
     target_transaction_id: str
     target_revision_id: str
@@ -214,7 +218,8 @@ class CoordinateApplicationsRow(Frozen):
     kind: str
     paying_transaction_id: str
     paid_transaction_id: str
-    source_component_key_id: str
+    source_component_key_id: str | None = None
+    credit_source_key_id: str | None = None
     amount_minor_units: int
     currency: str
     effective_date: str

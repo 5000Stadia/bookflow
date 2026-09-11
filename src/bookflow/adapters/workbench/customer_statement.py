@@ -16,7 +16,7 @@ COMMANDS = {"report statement"}
 ENTRIES = {"balance_forward": "Balance forward", "balance_due": "Balance due",
            "invoice": "Invoice", "sales_receipt": "Sales receipt", "payment": "Payment",
            "deposit": "Deposit", "journal_entry": "Adjustment",
-           "applied_credit": "Credit applied"}
+           "credit_memo": "Credit memo", "applied_credit": "Credit applied"}
 # The record page a document row opens, by the noun that owns the document.
 NOUNS = {"invoice": "invoice", "sales_receipt": "sales-receipt", "payment": "payment",
          "deposit": "deposit", "journal_entry": "journal"}
