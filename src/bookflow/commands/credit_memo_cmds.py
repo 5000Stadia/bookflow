@@ -6,8 +6,9 @@ already know here. The accounting lives in ``company/credits.py``.
 from bookflow.core.registry import Plan, command
 from bookflow.company import credits
 from bookflow.company.credit_models import (
-    CreditMemoHistoryInput, CreditMemoHistoryOutput, CreditMemoOutput, CreditMemoPostInput,
-    CreditMemoShowInput, CreditMemoWriteOutput,
+    CreditMemoHistoryInput, CreditMemoHistoryOutput, CreditMemoOutput, CreditMemoPageOutput,
+    CreditMemoPostInput, CreditMemoQueryInput, CreditMemoShowInput, CreditMemoVoidInput,
+    CreditMemoWriteOutput,
 )
 
 _LINES = (
@@ -52,6 +53,19 @@ DESCRIPTIONS = {
              ' is worth now after anything applied from it.'),
     'history': ('Page immutable credit memo revisions in revision-number order with the current'
                 ' header and version and their posting batches; restart on company audit changes.'),
+    'void': ('Void a credit memo with a required reason. Its accounting is reversed at its own'
+             ' date, so the income and the sales tax it took back go back where they were and'
+             ' the customer owes the full amount again; every source invoice quantity it'
+             ' claimed is released and can be returned again; its number stays occupied and'
+             ' every revision stays readable. A credit still applied to an invoice is refused'
+             ' with `E_HAS_APPLICATIONS` and one a refund has paid out with `E_HAS_REFUND`:'
+             ' take the credit back off the invoice, or void the refund, first.'),
+    'query': ('Page credit memos in accounting-date and stable-id order, oldest first or newest'
+              ' first, with exact customer, receivable-account, date, number, origin and status'
+              ' filters. Each row carries what the credit is still worth -- its total less what'
+              ' has been applied to invoices and less what has been refunded -- and'
+              ' `available_only` keeps just the credits still worth something, which is how you'
+              " find what a customer has in hand. Restart on company audit changes."),
 }
 
 
@@ -82,10 +96,35 @@ credit_memo_show = command(
     required_role='member', capability='ledger.read', positional=['credit_memo'],
     error_codes=['E_RECORD_NOT_FOUND'])(_show)
 
+def _void(inp, ctx, s):
+    return credits.prepare_void(s, ctx, inp)
+
+
+def _query(inp, ctx, s):
+    return Plan(credits.query_page(s, ctx, inp))
+
+
+credit_memo_void = command(
+    'credit-memo void', scope='company', description=DESCRIPTIONS['void'],
+    input_model=CreditMemoVoidInput, output_model=CreditMemoWriteOutput, writes={'company'},
+    required_role='standard', capability='ledger.post', accepts_idempotency_key=True,
+    positional=['credit_memo'], version_source=('credit-memo show', 'credit_memo', 'version'),
+    error_codes=['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION', 'E_REASON_REQUIRED',
+                 'E_PERIOD_CLOSED', 'E_HAS_APPLICATIONS', 'E_HAS_REFUND'])(_void)
+credit_memo_void.ledger = True
+credit_memo_void.applier(credits.apply)
+
+credit_memo_query = command(
+    'credit-memo query', scope='company', description=DESCRIPTIONS['query'],
+    input_model=CreditMemoQueryInput, output_model=CreditMemoPageOutput,
+    required_role='member', capability='ledger.read', positional=[],
+    error_codes=['E_RECORD_NOT_FOUND', 'E_QUERY_STALE'])(_query)
+
 credit_memo_history = command(
     'credit-memo history', scope='company', description=DESCRIPTIONS['history'],
     input_model=CreditMemoHistoryInput, output_model=CreditMemoHistoryOutput,
     required_role='member', capability='ledger.read', positional=['credit_memo'],
     error_codes=['E_RECORD_NOT_FOUND', 'E_QUERY_STALE'])(_history)
 
-CREDIT_MEMO_COMMANDS = [credit_memo_post, credit_memo_show, credit_memo_history]
+CREDIT_MEMO_COMMANDS = [credit_memo_post, credit_memo_show, credit_memo_query,
+                        credit_memo_history, credit_memo_void]

@@ -166,3 +166,76 @@ def _source(s, line):
         c.sales_profiles.c.revision_id == line['source_revision_id'])).mappings().all()
     _require(len(source_profile) == 1, 'the claimed source revision exists')
     return dict(line=dict(row[0]), taxes=taxes, profile=dict(source_profile[0]))
+
+
+def validate_void(plan, s, ctx):
+    """An independent reading of what voiding a credit memo is about to store.
+
+    The reversal is compared leg for leg with the batch it undoes, read again from storage
+    rather than from the preparer's copy, and every claim release is compared cell for cell
+    with the claim it gives back. What is checked last is what the refusal is for: nothing may
+    still stand on the credit at the moment of the write, because a settled invoice or a paid
+    refund would otherwise be left pointing at a document that is gone.
+    """
+    from bookflow.company import credits, document_effects as effects
+
+    data = plan.data
+    if not data['changed']:
+        return
+    pending, header, before = data['pending'], data['header'], data['before']
+    _require(header['type'] == 'credit_memo' and header['status'] == 'voided', 'wrong document state')
+    _require(header['version'] == before['version'] + 1, 'wrong credit memo version')
+    mutable = {'version', 'updated_at', 'updated_by', 'updated_via', 'status', 'voided_at',
+               'voided_by', 'void_reason', 'void_posting_batch_id'}
+    _require({k: v for k, v in header.items() if k not in mutable}
+             == {k: v for k, v in before.items() if k not in mutable}, 'a void changes only the state')
+    for table in ('transaction_revisions', 'credit_profiles', 'credit_line_profiles',
+                  'credit_tax_components', 'credit_source_keys', 'credit_components',
+                  'document_lines', 'document_line_identities', 'sales_tax_line_keys'):
+        _require(not pending[table], 'a void writes no new commercial history')
+    batches = pending['posting_batches']
+    _require(len(batches) == 1 and batches[0]['kind'] == 'reversal', 'one reversing batch')
+    _require(header['void_posting_batch_id'] == batches[0]['id'], 'the void names its own reversal')
+    original = effects.rows(s, c.posting_batches, c.posting_batches.c.id == batches[0]['reverses_batch_id'])
+    _require(len(original) == 1 and original[0]['revision_id'] == data['revision']['id'],
+             'the reversal undoes this revision\'s own effect')
+    _require(batches[0]['effective_date'] == original[0]['effective_date'],
+             'a void is dated where the credit is')
+    old_legs = {row['id']: row for row in effects.rows(
+        s, c.posting_lines, c.posting_lines.c.batch_id == original[0]['id'])}
+    _require({row['reversed_line_id'] for row in pending['posting_lines']} == set(old_legs),
+             'the reversal is not leg for leg')
+    debit = credit = 0
+    for leg in pending['posting_lines']:
+        old = old_legs[leg['reversed_line_id']]
+        _require(leg['debit_minor_units'] == old['credit_minor_units']
+                 and leg['credit_minor_units'] == old['debit_minor_units'], 'a leg is not inverted')
+        _require(leg['account_id'] == old['account_id'] and leg['name_id'] == old['name_id'],
+                 'a reversal moves a leg to another account or party')
+        debit += leg['debit_minor_units']
+        credit += leg['credit_minor_units']
+    _require(debit == credit == data['revision']['total_minor_units'],
+             'the reversal does not balance at the credit\'s own total')
+    fields = ('credit_transaction_id', 'credit_revision_id', 'credit_document_line_id',
+              'source_transaction_id', 'source_revision_id', 'source_document_line_id',
+              'source_line_id', 'start_microunits', 'end_microunits',
+              'source_base_quantity_microunits', 'source_net_minor_units', 'effective_date')
+    live = {row['id']: row for row in _claims_made_by(s, header['id'])}
+    _require({row['reverses_claim_id'] for row in pending['credit_source_claims']} == set(live),
+             'a void releases every interval this credit claimed, and only those')
+    for row in pending['credit_source_claims']:
+        _require(row['kind'] == 'release', 'a void writes releases')
+        claim = live[row['reverses_claim_id']]
+        _require(all(row[name] == claim[name] for name in fields), 'a release is not exact')
+    _require(not credits.active_applications(s, header['id']),
+             'a credit with a live application cannot be voided')
+    _require(not credits.active_consumptions(s, key_id=data['source']['key']['id']),
+             'a credit a refund has paid out cannot be voided')
+
+
+def _claims_made_by(s, transaction_id):
+    from bookflow.company import document_effects as effects
+    claims = c.credit_source_claims
+    released = sa.select(claims.c.reverses_claim_id).where(claims.c.kind == 'release')
+    return effects.rows(s, claims, claims.c.credit_transaction_id == transaction_id,
+                        claims.c.kind == 'claim', claims.c.id.notin_(released), order=claims.c.id)

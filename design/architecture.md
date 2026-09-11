@@ -2925,12 +2925,103 @@ customer reads one unbroken run across both documents. `uq_transaction_type_numb
 and cannot say that, so the partial unique index `uq_transaction_receivable_number` refuses the
 same number on an invoice and a credit memo, for a generated number and an explicit one alike.
 
-**What this increment deliberately does not do.** There is no `credit-memo update`, `void` or
-`query`, no `customer-credit apply`/`unapply`, no refund, no recovery family, and no browser
-page — the home window's credit-memo tile stays planned, because a tile is live only when a
-command, a route and a page all exist. Price allowances against a source line, stocked returns
-and cost restoration, cross-party (parent↔job) credit, cash-basis treatment and print are
-outside the release entirely and are refused rather than approximated; the command help says so.
+## Applying a credit, refunding one, and the rest of a credit memo's life
+
+**Applying a credit posts nothing.** The credit memo already moved the money: it debited the
+income the sale recognised and credited the customer's receivable. What an application changes
+is which of the two a reader sees them against, so `customer-credit apply` writes settlement
+rows and never a posting line, and the trial balance is identical cent for cent either side of
+it. What moves is the invoice's due, the credit's remaining worth, and where the A/R aging puts
+the money — the aging total is the receivable control before, during and after.
+
+**One application per credit component.** A credit's capacity is one `credit_components` row per
+credited line, and an `applications` row names exactly one of them, drawing the components down
+in id order; a request spanning two credited lines writes two application rows against the same
+invoice. That is not an accident of implementation. `payment_restatement.validate` re-derives an
+invoice correction's split and requires **one allocation per target component per application**;
+a single application drawing on two source components would need two rows for one target
+component and would fail there. Keeping the draw inside one component per application keeps the
+invoice-side rule intact, and `payment_restatement.prepare` then copies the source columns from
+the application's own first allocation, which is exactly right when they all name one component.
+
+**Where a credit's remaining worth is computed: `credits.facts`, once.** Available is capacity
+less active applications less active refund consumptions, and `remaining` breaks the same
+arithmetic down per component. Both subtractions live in one function so no reader can take one
+and miss the other; `credit-memo show`, `credit-memo query`, `customer-credit apply`,
+`customer-refund post` and the refund's independent validator all read it.
+
+**`receivable_reports._EFFECTS` joins the union, not the payment keys.** Its `settled` CTE used
+to inner-join `payment_component_keys`, which would have silently dropped every credit
+application: the report's total would still have tied to Accounts Receivable, but the invoice
+would have aged at gross with the credit aged separately as a negative. The join is now over
+`settlement_sources`, a literal `UNION ALL` of the payment keys and the credit keys — the two
+tables carry the same `(transaction_id, id, party_id)` triple deliberately, so the union is one
+projection and the two branches cannot drift.
+
+**What a refund is.** `customer-refund post` debits the customer's receivable and credits the
+bank account the money left, and posts nothing else. No income leg and no tax leg: the credit
+memo already reversed the sale, and touching either again would take the same revenue down
+twice. `refund_validation.py` asserts that by account *type*, because a second reversal is
+invisible in a total that still balances. `registers.REGISTER_TYPES` already admits a
+receivable register, so a check debiting A/R for a customer posts the cash correctly and
+consumes nothing at all — that double-spend is what the typed document closes.
+
+**Consumed once.** `customer_refund_consumptions` is an immutable positive row naming one credit
+source key and one credit component, with a unique inverse column mirroring `uq_payment_unapply`.
+A refund is not an `applications` row and the rule that keeps the two apart is stated once:
+**`applications` edges settle obligations; refunds consume sources.** A settlement row targeting
+a refund would be dropped by `_EFFECTS`'s `settled_party` inner join to `sales_profiles`, which a
+refund has none of — the right total by accident. A refund is also not an obligation: it has no
+line components for an allocation to attribute to, and nothing about it is due.
+
+**The three dispositions, and their exclusivity.** Retain, apply elsewhere, refund — the three
+the anchor product's own Available Credit dialog offers. They are mutually exclusive by one
+subtraction: after a refund the credit cannot also be applied, and after an application it
+cannot be refunded beyond what is left. Both answer `E_CREDIT_UNAVAILABLE` and write nothing.
+
+**Void.** `customer-refund void` reverses the accounting at the refund's own date and writes an
+exact release for every consumption it made, so the credits it paid out are worth again exactly
+what they were worth before. `credit-memo void` reverses the credit at its own date, releases
+every source interval it claimed — re-returning a released unit yields the identical cents, by
+the endpoint rule — leaves the number occupied and every revision readable. A credit something
+still stands on is refused rather than quietly released: `E_HAS_APPLICATIONS` for a live
+application, `E_HAS_REFUND` for a live refund.
+
+**An invoice correction cannot contradict a live claim.** The credit side already failed closed:
+`credits._returned` compares a live claim against the line as it stands and answers
+`E_SOURCE_CORRECTION_CONFLICT` rather than pricing a return from a line that has moved. The
+invoice side did not fail at all, so a correction could reprice a line an issued credit was
+built from, in silence. `credits.require_claims_intact`, called from
+`payment_invoice_corrections.prepare` — the single door every `invoice update` goes through —
+is the other half of that fence, comparing a claimed line's base quantity, its net, and the tax
+cells the credit's own cells were captured from. An issued credit is never repriced from a
+corrected source, so the only two honest answers are "leave the claimed line alone" and
+"refuse"; correcting an *unclaimed* line of the same invoice still works, because a claim names
+the permanent line occurrence.
+
+**`payment_invoice_corrections` had to learn about the second source kind.** It resolved every
+`paying_transaction_id` through `payment_facts`, which resolves a document of type `payment`, so
+an invoice with an applied credit answered `E_RECORD_NOT_FOUND {record_type: payment}` on every
+correction — `payment_restatement` itself was correct but unreachable through the only door.
+`_source_facts` now branches on the stored document type, `settlement_versions` accepts a credit
+memo as readily as a receipt, and a credit reports its current settlement through
+`credits.settlement_current_output`, which is the receipt's own shape because
+`credit_source_keys` carries the same party/receivable/currency triple `payment_component_keys`
+does.
+
+**What this increment deliberately does not do.** There is no `credit-memo update`: a credit's
+correction has to release and re-take the source intervals its returned lines claimed, within
+one operation, and that is a distinct piece of work from the rest of its lifecycle — a wrong
+credit is voided and written again meanwhile. `customer-refund` has no update either, and for
+the settled reason: a refund is one customer, one amount, one date and one account, so changing
+any of them makes it a different refund and the document carries one revision for life. A
+refund's source is a credit memo only; refunding unapplied payment overage needs
+`payment_facts.available` to gain the consumption term and is not built. There is no recovery
+family, no browser page and no tile — a tile is live only when a command, a route and a page all
+exist, and no `ui_group` is registered for either noun. Price allowances against a source line,
+stocked returns and cost restoration, cross-party (parent↔job) credit, cash-basis treatment, the
+refund's reconciliation producer and print are outside the release entirely and are refused
+rather than approximated; the command help says so.
 
 ## Sales tax liability, and the document that remits it
 

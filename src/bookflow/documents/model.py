@@ -28,7 +28,8 @@ ADDRESS_FIELDS = ("line1", "line2", "city", "state", "postal_code", "country")
 ENTRIES = {"balance_forward": "Balance forward", "balance_due": "Balance due",
            "invoice": "Invoice", "sales_receipt": "Sales receipt", "payment": "Payment",
            "deposit": "Deposit", "journal_entry": "Adjustment",
-           "credit_memo": "Credit memo", "applied_credit": "Credit applied"}
+           "credit_memo": "Credit memo", "customer_refund": "Refund",
+           "applied_credit": "Credit applied"}
 
 AGING = (("current", "Current"), ("days_1_30", "1-30"), ("days_31_60", "31-60"),
          ("days_61_90", "61-90"), ("over_90", "Over 90"), ("total", "Total"))

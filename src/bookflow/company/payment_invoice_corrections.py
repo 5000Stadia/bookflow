@@ -2,7 +2,7 @@
 import json
 
 from bookflow.company import schema as c, sales, journals, billing, document_effects as effects
-from bookflow.company import journal_custom_fields as custom, payment_operations as operations
+from bookflow.company import credits, journal_custom_fields as custom, payment_operations as operations
 from bookflow.company import payment_queries as query, payment_dependencies as dependencies, payments
 from bookflow.company import payment_restatement as restatement
 from bookflow.company.payment_outputs import InvoiceCorrectionOutput
@@ -13,6 +13,32 @@ from bookflow.core.money import Money
 from bookflow.core.registry import Plan, Applied, Touched
 
 
+# One receivable settlement edge, two kinds of paying document. An application's source is a
+# receipt or a credit memo, and a correction has to read, version-check and report whichever it
+# is: resolving every paying document as a payment answered E_RECORD_NOT_FOUND for a credit,
+# which made an applied credit unable to have its invoice corrected at all.
+def _source_facts(s, identifier):
+    header = effects.rows(s, c.transactions, c.transactions.c.id == identifier)
+    if header and header[0]['type'] == 'credit_memo':
+        return credits.facts(s, header[0], write=True), True
+    return query.payment_facts(s, identifier, write=True), False
+
+
+def _selected_source(s, selector):
+    """Resolve a settlement_versions reference, which may name a receipt or a credit memo."""
+    try:
+        return query.payment_facts(s, selector, write=True)
+    except BookflowError as exc:
+        if exc.code != 'E_RECORD_NOT_FOUND':
+            raise
+    return credits.facts(s, selector, write=True)
+
+
+def _source_current(s, identifier):
+    facts, is_credit = _source_facts(s, identifier)
+    return credits.settlement_current_output(s, facts) if is_credit else payments.current_output(s, identifier)
+
+
 def prepare(s, ctx, inp):
     if inp.operation_key and operations.find(s, inp.operation_key):
         recovered = operations.recover(inp, ctx, s, 'invoice update')
@@ -21,7 +47,7 @@ def prepare(s, ctx, inp):
         raise BookflowError('E_PAYMENT_OPERATION_KEY_REUSED')
     facts = query.invoice_facts(s, inp.invoice, write=True)
     apps = query.active_applications(s, invoice=facts['header']['id'])
-    funding = {row['paying_transaction_id']: query.payment_facts(s, row['paying_transaction_id'], write=True) for row in apps}
+    funding = {row['paying_transaction_id']: _source_facts(s, row['paying_transaction_id'])[0] for row in apps}
     if apps and not inp.operation_key:
         raise BookflowError('E_VALIDATION', message='This invoice has applied payments. Supply one operation_key for this correction and a reason; reuse the key for preview, save and retries.', details={'field': 'operation_key', 'reason': 'applied_invoice_correction'})
     if apps and inp.expected_version is None:
@@ -34,6 +60,7 @@ def prepare(s, ctx, inp):
     data['input'] = inp
     data['settlement_applications'] = apps
     if data['changed']:
+        credits.require_claims_intact(s, facts['header']['id'], facts['revision'], data['pending'])
         if apps:
             if inp.expected_version is None:
                 raise BookflowError('E_VALIDATION', details={'field': 'expected_version'})
@@ -42,7 +69,7 @@ def prepare(s, ctx, inp):
             else:
                 supplied = {}
                 for ref in inp.settlement_versions:
-                    payment = query.payment_facts(s, ref.payment, write=True)
+                    payment = _selected_source(s, ref.payment)
                     identifier = payment['header']['id']
                     if identifier in supplied:
                         raise BookflowError('E_VALIDATION', message='Supply each payment version once.')
@@ -66,7 +93,7 @@ def prepare(s, ctx, inp):
         old = funding[identifier]['header']
         after = dict(old, version=old['version'] + 1, updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
         changed_headers.append((old, after))
-        payment_outputs.append(dict(payments.current_output(s, identifier), version=after['version']))
+        payment_outputs.append(dict(_source_current(s, identifier), version=after['version']))
     data['settlement_headers'] = changed_headers
     fp = query.digest([operations.request(inp, ctx, s, 'invoice update'), plan.preview.facts_fingerprint,
         [value['header'] for _, value in sorted(funding.items())], apps, data.get('settlement_recipe', [])])

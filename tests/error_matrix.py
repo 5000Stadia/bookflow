@@ -897,3 +897,83 @@ MATRIX["sales-tax payment query"] = {
     "E_RECORD_NOT_FOUND": "unknown agency, funding account or method filter",
     "E_QUERY_STALE": "company audit changed between remittance pages",
 }
+
+
+# What can go wrong when a credit is used. Two codes are this family's own: a credit that has
+# already been spent (applied or refunded) is `E_CREDIT_UNAVAILABLE`, and a credit something
+# still stands on is `E_HAS_APPLICATIONS` or `E_HAS_REFUND`. Everything else is the invoice's
+# own vocabulary, because the target of an application is an invoice.
+MATRIX["customer-credit apply"] = {
+    "E_RECORD_NOT_FOUND": "unknown credit memo or invoice",
+    "E_VERSION_CONFLICT": "stale expected_version on the credit memo or an invoice",
+    "E_VALIDATION": "the same invoice twice, a non-positive amount, or a date before the credit memo",
+    "E_VALUE_RANGE": "amount outside signed 64-bit minor units",
+    "E_AMOUNT_PRECISION": "more decimals than the home currency has",
+    "E_PERIOD_CLOSED": "settlement date in a closed period",
+    "E_PREVIEW_STALE": "expected_facts_fingerprint no longer matches the live settlement",
+    "E_APPLICATION_CAPACITY": "more than the invoice still owes",
+    "E_APPLICATION_INCOMPATIBLE": "another customer, receivable account or currency",
+    "E_APPLICATION_INACTIVE": "voided credit memo",
+    "E_CREDIT_UNAVAILABLE": "more than the credit is still worth after applications and refunds",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["customer-credit unapply"] = {
+    "E_RECORD_NOT_FOUND": "unknown credit memo",
+    "E_VERSION_CONFLICT": "stale expected_version on the credit memo or an invoice",
+    "E_VALIDATION": "the same application twice, or incomplete allocation evidence",
+    "E_PERIOD_CLOSED": "the original application's own date is in a closed period",
+    "E_PREVIEW_STALE": "expected_facts_fingerprint no longer matches the live settlement",
+    "E_APPLICATION_INACTIVE": "unknown or already-undone application, or a voided credit memo",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["credit-memo void"] = {
+    "E_RECORD_NOT_FOUND": "unknown credit memo",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_VALIDATION": "a reason longer than 140 characters, or ambiguous posting evidence",
+    "E_REASON_REQUIRED": "no reason given",
+    "E_PERIOD_CLOSED": "the credit memo's own date is in a closed period",
+    "E_HAS_APPLICATIONS": "a live application; unapply it first",
+    "E_HAS_REFUND": "a live refund consumption; void the refund first",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["credit-memo query"] = {
+    "E_RECORD_NOT_FOUND": "unknown customer or receivable account filter",
+    "E_QUERY_STALE": "company audit changed between credit pages",
+}
+MATRIX["customer-refund post"] = {
+    "E_RECORD_NOT_FOUND": "unknown credit memo, customer, funding account or method",
+    "E_INACTIVE_REFERENCE": "deactivated funding account, method or class",
+    "E_VALIDATION": "a funding account that is not a bank account, a check number on something that is not a check, the same credit twice, a guard customer the credits do not belong to, or a date before a credit memo",
+    "E_VALUE_RANGE": "amount outside signed 64-bit minor units",
+    "E_AMOUNT_PRECISION": "more decimals than the home currency has",
+    "E_PERIOD_CLOSED": "refund date in a closed period",
+    "E_DUPLICATE_NUMBER": "explicit --number already used by another refund",
+    "E_APPLICATION_INACTIVE": "a voided credit memo",
+    "E_APPLICATION_INCOMPATIBLE": "credits belonging to different customers, receivable accounts or currencies",
+    "E_CREDIT_UNAVAILABLE": "more than a credit is still worth after applications and refunds",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["customer-refund void"] = {
+    "E_RECORD_NOT_FOUND": "unknown refund",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_VALIDATION": "a reason longer than 140 characters",
+    "E_REASON_REQUIRED": "no reason given",
+    "E_PERIOD_CLOSED": "the refund's own date is in a closed period",
+    "E_APPLICATION_INACTIVE": "already voided",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["customer-refund show"] = {"E_RECORD_NOT_FOUND": "unknown refund"}
+MATRIX["customer-refund query"] = {
+    "E_RECORD_NOT_FOUND": "unknown customer, funding account or method filter",
+    "E_QUERY_STALE": "company audit changed between refund pages",
+}

@@ -473,11 +473,12 @@ def test_the_same_credit_memo_through_python_cli_http_and_mcp(root, tmp_path):
     anyio.run(witness)
 
 
-def test_releasing_a_claim_gives_the_same_cents_back_when_it_is_claimed_again(books):
-    """The endpoint rule's whole point, exercised through the real command.
+def test_a_release_that_is_not_an_exact_undo_is_refused_by_storage_itself(books):
+    """The fence under `credit-memo void`, checked at the row rather than at the command.
 
-    A void has not been built yet, so the release row is written here the way the void will
-    write it -- through the same fence, which refuses anything that is not an exact undo.
+    What the void writes is checked through the real command in
+    `tests/test_credit_memo_lifecycle.py`; this is the storage trigger underneath it, which no
+    command can talk its way past -- a release that moves one endpoint is not an undo.
     """
     from bookflow.company import schema as c
     from bookflow.core.ids import new_id

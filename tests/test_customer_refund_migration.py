@@ -1,8 +1,8 @@
-"""co0030 adds the remittance header and widens two CHECK constraints, preserving everything else.
+"""co0031 adds the refund header and its consumptions, and widens two CHECK constraints.
 
 The DDL in the migration is frozen text: it never imports the application's metadata, so the
 only thing that keeps the two in step is this test compiling the metadata and comparing. The
-rest of the file is the preservation question -- a company database already at co0029 carries
+rest of the file is the preservation question -- a company database already at co0030 carries
 rows, local tables, indexes, views and triggers, and this migration has to rebuild
 ``transactions`` and ``document_lines`` underneath them without touching a byte of what is
 stored.
@@ -15,14 +15,14 @@ from sqlalchemy.schema import CreateIndex, CreateTable
 
 from bookflow.company import schema as c
 from bookflow.company.credit_schema import settlement_guard_statements
-from bookflow.company.sales_tax_settlement_schema import guard_statements
+from bookflow.company.refund_schema import guard_statements
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, known_revisions, migrate_to_head
-from tests.test_credit_memo_migration import _superseded_after
 from tests.payment_raw_evidence import table
+from tests.test_credit_memo_migration import _superseded_after
 
-M = importlib.import_module('bookflow.storage.company_migrations.versions.0030_sales_tax_payments')
-PREVIOUS = 'co0029'
+M = importlib.import_module('bookflow.storage.company_migrations.versions.0031_customer_refunds')
+PREVIOUS = 'co0030'
 
 
 def _at(path, revision):
@@ -68,17 +68,13 @@ def test_frozen_ddl_is_the_current_metadata_and_the_guards_are_the_schema_module
             assert columns in allowed, (name, columns)
 
 
-def test_the_migration_follows_the_estimate_void_revision():
-    """Derived, never a second copy of the number: the chain is the only authority.
-
-    This revision is a link in the chain, not necessarily its head. Pinning it as the head
-    made every later migration falsify a test about sales tax remittance.
-    """
+def test_the_migration_follows_the_remittance_revision():
+    """Derived, never a second copy of the number: the chain is the only authority."""
     assert M.down_revision == PREVIOUS
     assert M.revision in known_revisions('company')
 
 
-def test_a_fresh_database_reaches_the_head_with_empty_remittance_storage(tmp_path):
+def test_a_fresh_database_reaches_the_head_with_empty_refund_storage(tmp_path):
     with open_database(tmp_path / 'fresh.db', writable=True, create=True) as db:
         assert migrate_to_head(db, 'company', None) == (None, HEADS['company'])
         assert all(db.raw.execute('SELECT count(*) FROM ' + name).fetchone() == (0,)
@@ -90,21 +86,24 @@ def test_a_fresh_database_reaches_the_head_with_empty_remittance_storage(tmp_pat
         assert list(db.raw.iterdump()) == before
 
 
-def test_the_widened_shapes_admit_the_remittance_and_refuse_anything_else(tmp_path):
+def test_the_widened_shapes_admit_the_refund_and_refuse_anything_else(tmp_path):
     with open_database(tmp_path / 'fresh.db', writable=True, create=True) as db:
         migrate_to_head(db, 'company', None)
 
         def sql(name):
             return db.raw.execute('SELECT sql FROM sqlite_schema WHERE name=?', (name,)).fetchone()[0]
 
-        assert "'credit_memo', 'sales_tax_payment'" in sql('transactions')
-        assert "'credit', 'sales_tax_payment'" in sql('document_lines')
-        assert "(type = 'sales_tax_payment' AND NEW.kind <> 'sales_tax_payment')" in sql(
+        assert "'sales_tax_payment', 'customer_refund'" in sql('transactions')
+        assert "'sales_tax_payment', 'refund'" in sql('document_lines')
+        assert "(type = 'customer_refund' AND NEW.kind <> 'refund')" in sql(
             'document_lines_type_insert')
-        header = sql('sales_tax_payment_profiles')
-        assert "CHECK (type = 'sales_tax_payment')" in header
+        header = sql('customer_refund_profiles')
+        assert "CHECK (type = 'customer_refund')" in header
         assert 'REFERENCES posting_line_sources (transaction_id, id)' in header
-        assert "CHECK (check_number IS NULL OR funding_kind = 'bank_cash')" in header
+        consumption = sql('customer_refund_consumptions')
+        assert 'CONSTRAINT uq_customer_refund_release UNIQUE (reverses_consumption_id)' in consumption
+        assert 'REFERENCES credit_source_keys (id)' in consumption
+        assert 'REFERENCES credit_components (id)' in consumption
         # The document type check refuses a type nothing declares, in storage.
         db.raw.execute("INSERT INTO audit_events (id, seq, at, command, actor_id, actor_kind,"
                        " on_behalf_of, interface, client_name, client_version, client_host,"
@@ -117,7 +116,7 @@ def test_the_widened_shapes_admit_the_remittance_and_refuse_anything_else(tmp_pa
                            " created_via, updated_at, updated_by, updated_via, type, number,"
                            " current_revision_id, status, voided_at, voided_by, void_reason,"
                            " void_posting_batch_id) VALUES ('T9', 1, 'now', 'U', 'cli', 'now',"
-                           " 'U', 'cli', 'sales_tax_adjustment', 'X-1', NULL, 'posted', NULL,"
+                           " 'U', 'cli', 'customer_rebate', 'X-1', NULL, 'posted', NULL,"
                            " NULL, NULL, NULL)")
         except sqlite3.IntegrityError:
             pass
@@ -141,14 +140,14 @@ def test_a_populated_previous_database_keeps_every_value_and_every_local_object(
         raw.execute("INSERT INTO transactions (id, version, created_at, created_by, created_via,"
                     " updated_at, updated_by, updated_via, type, number, current_revision_id,"
                     " status, voided_at, voided_by, void_reason, void_posting_batch_id)"
-                    " VALUES ('T1', 3, ?, 'U', 'cli', ?, 'U', 'cli', 'invoice',"
-                    " 'INV-1', 'R1', 'posted', NULL, NULL, NULL, NULL)",
+                    " VALUES ('T1', 3, ?, 'U', 'cli', ?, 'U', 'cli', 'credit_memo',"
+                    " 'CM-1', 'R1', 'posted', NULL, NULL, NULL, NULL)",
                     ('A\x00B', 'A\x00B'))
         raw.execute("INSERT INTO transaction_revisions (id, created_at, created_by, created_via,"
                     " transaction_id, revision_number, supersedes_revision_id, date, number,"
                     " name_type, name_id, memo, total_minor_units, currency, issuer_snapshot,"
                     " custom_fields_snapshot, audit_event_id)"
-                    " VALUES ('R1', 'now', 'U', 'cli', 'T1', 1, NULL, '2017-03-03', 'INV-1',"
+                    " VALUES ('R1', 'now', 'U', 'cli', 'T1', 1, NULL, '2017-03-03', 'CM-1',"
                     " 'customer', 'C1', NULL, 100, 'USD', '{}', '{}', 'E1')")
         raw.execute("INSERT INTO document_line_identities (id, created_at, created_by,"
                     " created_via, transaction_id) VALUES ('I1', 'now', 'U', 'cli', 'T1')")
@@ -157,15 +156,15 @@ def test_a_populated_previous_database_keeps_every_value_and_every_local_object(
                     " amount_minor_units, currency, account_snapshot, name_type, name_id,"
                     " party_name, class_id, class_name, description, original_minor_units,"
                     " original_currency, rate_used, rate_source)"
-                    " VALUES ('L1', 'now', 'U', 'cli', 'T1', 'R1', 'I1', 1, 'sale', NULL,"
+                    " VALUES ('L1', 'now', 'U', 'cli', 'T1', 'R1', 'I1', 1, 'credit', NULL,"
                     " NULL, NULL, 'USD', NULL, 'customer', 'C1', 'N', NULL, NULL, ?, NULL, NULL,"
                     " NULL, NULL)", (b'\x00\xff\x80',))
-        raw.execute('CREATE TABLE local_tax_bytes (id INTEGER PRIMARY KEY, t TEXT, b BLOB, f REAL)')
-        raw.execute('INSERT INTO local_tax_bytes VALUES (7, ?, ?, 1.5)', ('A\x00B', b'\x00\xff'))
-        raw.execute('CREATE INDEX local_tax_expression ON local_tax_bytes (length(t))')
-        raw.execute('CREATE INDEX local_tax_on_document_lines ON document_lines (currency, kind)')
-        raw.execute('CREATE VIEW local_tax_view AS SELECT id, number FROM transactions')
-        raw.execute('CREATE TRIGGER local_tax_trigger AFTER INSERT ON local_tax_bytes'
+        raw.execute('CREATE TABLE local_refund_bytes (id INTEGER PRIMARY KEY, t TEXT, b BLOB, f REAL)')
+        raw.execute('INSERT INTO local_refund_bytes VALUES (7, ?, ?, 1.5)', ('A\x00B', b'\x00\xff'))
+        raw.execute('CREATE INDEX local_refund_expression ON local_refund_bytes (length(t))')
+        raw.execute('CREATE INDEX local_refund_on_document_lines ON document_lines (currency, kind)')
+        raw.execute('CREATE VIEW local_refund_view AS SELECT id, number FROM transactions')
+        raw.execute('CREATE TRIGGER local_refund_trigger AFTER INSERT ON local_refund_bytes'
                     ' BEGIN SELECT 1; END')
         raw.commit()
         names = [row[0] for row in raw.execute(
@@ -190,7 +189,8 @@ def test_a_populated_previous_database_keeps_every_value_and_every_local_object(
         assert objects <= objects_after
         assert db.raw.execute('PRAGMA main.foreign_key_check').fetchall() == []
         assert db.raw.execute('PRAGMA main.integrity_check').fetchall() == [('ok',)]
-        assert db.raw.execute('SELECT count(*) FROM sales_tax_payment_profiles').fetchone() == (0,)
+        assert db.raw.execute('SELECT count(*) FROM customer_refund_profiles').fetchone() == (0,)
+        assert db.raw.execute('SELECT count(*) FROM customer_refund_consumptions').fetchone() == (0,)
 
 
 def test_a_rewritten_document_type_guard_stops_the_migration(tmp_path):
@@ -205,9 +205,9 @@ def test_a_rewritten_document_type_guard_stops_the_migration(tmp_path):
         try:
             migrate_to_head(db, 'company', tmp_path / 'backups')
         except Exception as exc:
-            assert 'co0030' in str(exc) or 'co0030' in str(getattr(exc, '__cause__', ''))
+            assert 'co0031' in str(exc) or 'co0031' in str(getattr(exc, '__cause__', ''))
         else:
-            raise AssertionError('a rewritten document type guard must stop co0030')
+            raise AssertionError('a rewritten document type guard must stop co0031')
 
 
 def test_a_competing_local_document_type_guard_stops_the_migration(tmp_path):
@@ -221,21 +221,21 @@ def test_a_competing_local_document_type_guard_stops_the_migration(tmp_path):
         try:
             migrate_to_head(db, 'company', tmp_path / 'backups')
         except Exception as exc:
-            assert 'co0030' in str(exc) or 'co0030' in str(getattr(exc, '__cause__', ''))
+            assert 'co0031' in str(exc) or 'co0031' in str(getattr(exc, '__cause__', ''))
         else:
-            raise AssertionError('an unknown competing document type guard must stop co0030')
+            raise AssertionError('an unknown competing document type guard must stop co0031')
 
 
-def test_a_reserved_remittance_name_already_in_use_stops_the_migration(tmp_path):
+def test_a_reserved_refund_name_already_in_use_stops_the_migration(tmp_path):
     path = tmp_path / 'reserved.db'
     _at(path, PREVIOUS)
     with sqlite3.connect(path) as raw:
-        raw.execute('CREATE TABLE sales_tax_payment_profiles (id INTEGER PRIMARY KEY)')
+        raw.execute('CREATE TABLE customer_refund_consumptions (id INTEGER PRIMARY KEY)')
         raw.commit()
     with open_database(path, writable=True) as db:
         try:
             migrate_to_head(db, 'company', tmp_path / 'backups')
         except Exception as exc:
-            assert 'co0030' in str(exc) or 'co0030' in str(getattr(exc, '__cause__', ''))
+            assert 'co0031' in str(exc) or 'co0031' in str(getattr(exc, '__cause__', ''))
         else:
-            raise AssertionError('a reserved remittance object name must stop co0030')
+            raise AssertionError('a reserved refund object name must stop co0031')
