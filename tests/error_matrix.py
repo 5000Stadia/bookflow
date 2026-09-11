@@ -828,6 +828,8 @@ MATRIX["bill payment query"] = {
 }
 MATRIX["bill payment history"] = {
     "E_RECORD_NOT_FOUND": "unknown payment",
+    "E_QUERY_STALE": "company audit changed between history pages",
+}
 
 
 # A credit memo refuses for the invoice's reasons -- it is the same resolver on the same
