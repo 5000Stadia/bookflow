@@ -1,7 +1,7 @@
 <section id="payables-report" aria-label="Payables report">
 <p>{{ company_label }} · {{ payables.metadata.basis|capitalize }} · {{ payables.metadata.currency }} · As of {{ payables.as_of }}</p>
 {% if verb == 'ap-aging' %}
-<p class="muted">Bills are aged on their due date and carry what is still owed on them. A bill due exactly 30 days before the as-of date is in 1-30. A payable journal entry ages on its own date, so the Total column equals Accounts Payable on the balance sheet for the same date. A voided bill is worth nothing and a vendor with nothing in any column is omitted.</p>
+<p class="muted">Bills are aged on their due date and carry what is still owed on them after what bill payments have settled against them. A bill due exactly 30 days before the as-of date is in 1-30. An unapplied bill payment and a payable journal entry age on their own date, so the Total column equals Accounts Payable on the balance sheet for the same date. A paid or voided bill is worth nothing and a vendor with nothing in any column is omitted.</p>
 <div class="table-wrap"><table id="payables-totals"><caption>Whole-report totals — all pages</caption><thead><tr>{% for key in payables.columns %}<th scope="col">{{ payables.headings[key] }}</th>{% endfor %}<th scope="col">Total</th></tr></thead><tbody>
 <tr>{% for key in payables.columns %}<td data-total="{{ key }}">{{ payables.totals[key].amount }}</td>{% endfor %}<td data-total="total">{{ payables.totals.total.amount }}</td></tr>
 </tbody></table></div>
@@ -10,7 +10,7 @@
 {% for row in payables.rows %}<tr><th scope="row">{% if row.detail_url %}<a href="{{ row.detail_url }}">{{ row.display_vendor_label }}</a>{% else %}{{ row.display_vendor_label }}{% endif %}{% if row.active is not none and not row.active %} (inactive){% endif %}</th>{% for key in payables.columns %}<td>{{ row[key].amount }}</td>{% endfor %}<td>{{ row.total.amount }}</td></tr>{% else %}<tr><td colspan="7">No vendor is owed anything on this date.</td></tr>{% endfor %}
 </tbody></table></div>
 {% else %}
-<p class="muted">Open vendor bills, oldest due date first. Open balance is what is still owed on the bill on the as-of date. Voided bills are omitted. This lists bills only, so its Open balance total is payables before any vendor credit; the A/P aging summary is the report that ties to Accounts Payable. Nothing settles a bill yet, so every Applied amount is zero.</p>
+<p class="muted">Unpaid and partly paid bills, oldest due date first. Applied is what bill payments have settled against the bill on or before the as-of date, and Open balance is what is left. Paid and voided bills are omitted. This lists bills only, so its Open balance total is payables before any vendor credit or unapplied bill payment; the A/P aging summary is the report that ties to Accounts Payable.</p>
 <div class="table-wrap"><table id="payables-totals"><caption>Whole-report totals — all pages</caption><thead><tr><th scope="col">Amount</th><th scope="col">Applied</th><th scope="col">Open balance</th></tr></thead><tbody>
 <tr>{% for key in ('amount', 'applied', 'balance') %}<td data-total="{{ key }}">{{ payables.totals[key].amount }}</td>{% endfor %}</tr>
 </tbody></table></div>
