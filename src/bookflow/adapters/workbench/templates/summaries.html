@@ -9,6 +9,13 @@
 {% else %}
 <p class="muted">Expense for the period grouped by vendor, covering cost of goods sold, ordinary expense and other expense — every bill, cheque, credit card charge, vendor credit and expense journal entry that reached one of those accounts. A line that names no vendor takes the one vendor named elsewhere on the same posting, which is how a cheque's payee reaches its expense lines. A vendor credit is negative. Expense naming no vendor at all is the row called No name. Select a vendor to list that vendor's open bills.</p>
 {% endif %}
+{% if summaries.filter_summary %}<p id="summary-filter" class="warn">{{ summaries.filter_summary }}</p>
+<div class="table-wrap"><table id="summary-scope"><caption>What the filter left out</caption><thead><tr>
+<th scope="col">Whole period</th><th scope="col">Not on this report</th></tr></thead><tbody>
+<tr><td data-scope="period">{{ summaries.scope.period.amount }}</td><td data-scope="excluded">{{ summaries.scope.excluded.amount }}</td></tr>
+</tbody></table></div>
+<p class="muted">The whole period is the figure the profit and loss reports for these same dates, so this report's own total plus what is not on it is that figure. A row does not open another report while a filter is in force, because the report it would open does not take the same filter and would answer with a figure that does not match the row.</p>
+{% endif %}
 <div class="table-wrap"><table id="summary-totals"><caption>Whole-report totals — all pages</caption><thead><tr>
 {% if summaries.verb == 'sales-by-item' %}<th scope="col">Item income</th><th scope="col">No-item income</th>{% endif %}
 <th scope="col">{{ summaries.shape.amount_heading }}</th></tr></thead><tbody>

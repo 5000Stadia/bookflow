@@ -11,6 +11,9 @@ from urllib.parse import urlencode
 COMMANDS = {"report sales-by-customer", "report sales-by-item", "report sales-by-rep",
             "report expenses-by-vendor"}
 
+# What each filter is called where a person reads it, by the input field that names it.
+FILTER_LABELS = {"class_id": "class", "customer": "customer or job"}
+
 # What each report calls its rows and its money, in the words a bookkeeper expects.
 SHAPE = {
     "sales-by-customer": {"row": "Customer", "amount": "income", "amount_heading": "Income",
@@ -39,17 +42,42 @@ def percent(millionths):
     return f"{sign}{whole}.{hundredths:02d}%"
 
 
+def filter_summary(scope):
+    """What a filtered report is showing and what it is not, in one sentence.
+
+    The figures are the command's own; the only thing composed here is the sentence,
+    because a person reading a smaller total needs to be told it is smaller and why in
+    the place they are reading it, not in a structured block further down the page.
+    """
+    if not scope["filtered"]:
+        return None
+    named = ", ".join(
+        f"{FILTER_LABELS[choice['filter']]} {choice['label']}"
+        + ("" if choice["active"] else " (inactive)") for choice in scope["selected"])
+    return (f"Filtered to {named}. The whole period came to {scope['period']['amount']}"
+            f" {scope['period']['currency']}, of which {scope['excluded']['amount']}"
+            " is not on this report.")
+
+
 def view(result, inputs, company_id, verb):
     period = result["metadata"]["period"]
     shape = SHAPE[verb]
     watermark = result["metadata"]["audit_watermark"]
+    scope = result["scope"]
     rows = []
     for row in result["rows"]:
         # A drill-down exists only where one report really answers the next question a
         # reader has. An item and a representative have no such report yet, so their
         # rows are plain rather than carrying a link that goes somewhere unrelated.
+        #
+        # Nor does one exist while a filter is in force: neither the customer statement
+        # nor the unpaid bills report takes a class, so the page they would open would
+        # answer with a figure that does not match the row it was opened from, and a link
+        # to a number that will not agree is worse than no link.
         detail = None
-        if verb == "sales-by-customer" and row["customer_id"]:
+        if scope["filtered"]:
+            detail = None
+        elif verb == "sales-by-customer" and row["customer_id"]:
             detail = f"/c/{company_id}/report/statement?" + urlencode(
                 {"f:date_from": period["date_from"], "f:date_to": period["date_to"],
                  "f:customer": row["customer_id"], "source_report_watermark": watermark})
@@ -66,4 +94,5 @@ def view(result, inputs, company_id, verb):
     next_fields["f:cursor"] = result["next_cursor"]
     return {**result, "rows": rows, "next_fields": next_fields, "verb": verb, "shape": shape,
             "date_from": period["date_from"], "date_to": period["date_to"],
+            "filter_summary": filter_summary(scope),
             "total_amount": result["totals"][shape["amount"]]["amount"]}
