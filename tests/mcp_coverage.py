@@ -54,6 +54,11 @@ audit list
 audit show
 audit tail
 bill history
+bill pay
+bill payment query
+bill payment show
+bill payment unapply
+bill payment void
 bill post
 bill query
 bill show
@@ -365,6 +370,7 @@ def execution_map():
     from tests.test_mcp_registry_identity import COMMANDS as IDENTITY_COMMANDS
     from tests.test_money_out_documents import COMMANDS as MONEY_OUT_COMMANDS
     from tests.test_bill_entry import COMMANDS as BILL_COMMANDS
+    from tests.test_bill_payment import COMMANDS as BILL_PAYMENT_COMMANDS
     from tests.test_transfer_funds import COMMANDS as TRANSFER_COMMANDS
     from tests.test_payment_recovery_interfaces import COMMANDS as RECOVERY_COMMANDS
     registry.load_all()
@@ -383,6 +389,7 @@ def execution_map():
                    'tests/test_mcp_registry_identity.py::test_identity_lifecycle_full_documents_owned_password_and_rejected_state' if cmd.name in IDENTITY_COMMANDS else
                    'tests/test_money_out_documents.py::test_the_same_check_and_card_charge_through_python_cli_http_and_mcp' if cmd.name in MONEY_OUT_COMMANDS else
                    'tests/test_bill_entry.py::test_the_same_bill_through_python_cli_http_and_mcp' if cmd.name in BILL_COMMANDS else
+                   'tests/test_bill_payment.py::test_the_same_bill_payment_through_python_cli_http_and_mcp' if cmd.name in BILL_PAYMENT_COMMANDS else
                    'tests/test_transfer_funds.py::test_the_same_transfer_through_python_cli_http_and_mcp' if cmd.name in TRANSFER_COMMANDS else
                    'tests/test_payment_recovery_interfaces.py::test_complete_recovery_contract_on_all_four_interfaces' if cmd.name in RECOVERY_COMMANDS else
                    'tests/test_mcp_registry_hub_reads.py::test_hub_read_full_documents_and_scope_boundaries' if any(cmd.name in names for names in HUB_FAMILIES.values()) else
@@ -450,6 +457,12 @@ def variant_policies():
              'and the picker left at its opening value at 390px on check and card charge alike; the per-line '
              '/expenses/[]/party alternative has no column in the Expenses grid and no browser case at all']),
         ('anyOf', ('MoneyInput', 'string')): (['tests/test_mcp_nested_gui_browser.py::test_nested_collection_model_object_null_and_full_error', 'tests/test_mcp_money_gui_browser.py::test_structured_integer_money_object_exact_bytes_and_core_rejection'], []),
+        ('anyOf', ('MoneyInput', 'null', 'string')): ([
+            'tests/test_mcp_money_gui_browser.py::test_structured_integer_money_object_exact_bytes_and_core_rejection',
+            'tests/test_bill_payment.py::test_the_same_bill_payment_through_python_cli_http_and_mcp'],
+            ['the omitted branch of a bill-payment amount means "everything still open on that bill"; '
+             'there is no Pay Bills form, so no browser case reaches it and the four-surface witness '
+             'is the only executable evidence']),
         ('anyOf', ('SalesMoneyInput', 'null', 'string')): ([money, 'tests/test_mcp_money_gui_browser.py::test_top_level_money_object_nullable_branch_and_complete_calculation', 'tests/test_mcp_sales_money_origin_browser.py::test_sales_line_money_object_null_rejection_and_current_default_origin'], []),
         ('anyOf', ('SignedMoney', 'string')): ([
             'tests/test_mcp_registry_deposits.py::test_deposit_lifecycle_full_documents_and_exact_ledger'],

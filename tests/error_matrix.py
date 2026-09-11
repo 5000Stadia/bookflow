@@ -726,3 +726,49 @@ MATRIX["bill void"] = {
 MATRIX["bill show"] = {"E_RECORD_NOT_FOUND": "unknown bill or revision number"}
 MATRIX["bill query"] = {"E_RECORD_NOT_FOUND": "unknown vendor filter", "E_QUERY_STALE": "company audit changed between bill pages"}
 MATRIX["bill history"] = {"E_RECORD_NOT_FOUND": "unknown bill", "E_QUERY_STALE": "company audit changed between history pages"}
+
+
+# Paying a bill reaches across documents, so it refuses for the bill's reasons and the
+# settlement's: an ineligible funding account, a stale bill, and a bill that is already paid.
+MATRIX["bill pay"] = {
+    "E_RECORD_NOT_FOUND": "unknown bill, funding account, method or class",
+    "E_INACTIVE_REFERENCE": "deactivated funding account, method, class or payable account",
+    "E_VALIDATION": "an ineligible funding account, a check number on something that is not a check, a payment dated before a bill it settles, a repeated bill selector, or an explicit number with more than one payee group",
+    "E_VALUE_RANGE": "an amount of zero or less, or an exhausted payment number sequence",
+    "E_AMOUNT_PRECISION": "an amount with more precision than the currency has",
+    "E_PERIOD_CLOSED": "payment date on or before the closing date",
+    "E_DUPLICATE_NUMBER": "explicit number already occupied by another bill payment",
+    "E_VERSION_CONFLICT": "stale expected_version on a selected bill",
+    "E_APPLICATION_CAPACITY": "more than the bill has open, including a concurrent payment that took it first",
+    "E_APPLICATION_INCOMPATIBLE": "a bill owed in another currency",
+    "E_APPLICATION_INACTIVE": "a voided bill, or one with no payable",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["bill payment unapply"] = {
+    "E_RECORD_NOT_FOUND": "unknown payment or bill",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_APPLICATION_INACTIVE": "a voided payment, or a named bill this payment has nothing applied to",
+    "E_VALIDATION": "a repeated bill selector",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["bill payment void"] = {
+    "E_RECORD_NOT_FOUND": "unknown payment",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_VALIDATION": "a reason longer than 140 characters",
+    "E_REASON_REQUIRED": "void without a reason",
+    "E_PERIOD_CLOSED": "payment date on or before the closing date",
+    "E_APPLICATION_INACTIVE": "an already voided payment",
+    "E_HAS_APPLICATIONS": "the payment still settles a bill",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["bill payment show"] = {"E_RECORD_NOT_FOUND": "unknown payment"}
+MATRIX["bill payment query"] = {
+    "E_RECORD_NOT_FOUND": "unknown vendor, bill, funding account or method filter",
+    "E_QUERY_STALE": "company audit changed between payment pages",
+}

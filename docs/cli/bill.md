@@ -165,6 +165,336 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 
+## `bill pay`
+
+Pay open bills. Each selected bill is settled by what you name for it, or by everything still open on it when you name nothing, and the payment debits Accounts Payable and credits the account the money came from -- a bank account, which falls, or a credit card account, which rises. Bills are grouped by vendor, payable account, currency, funding account and method, and each group is one payment, so two vendors are never paid by one check; `group_count` says how many the selection made. Paying less than what is open leaves the remainder open. `check_number` is the number on the paper check and is accepted only when the method is a check drawn on a bank account. Purchase discounts and vendor credits are separate documents and are not entered here.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | ledger.post |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/bill.pay` |
+| External binary body | none |
+
+### CLI
+
+`bookflow bill pay --date 2026-04-15 --funding-account "Checking" --method "Check" --check-number 1041 --memo "April payables" --bills '[{"bill":"BILL-104"},{"bill":"BILL-108","amount":"250.00"}]' --company "Demo Plumbing Co" --reason "Pay the April bills" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
+| `bills[].bill` | inside `--bills` JSON array | string | yes | no | — | minimum length 1 |
+| `bills[].amount` | inside `--bills` JSON array | string \| object \| null | no | yes | null | — |
+| `bills[].expected_version` | inside `--bills` JSON array | integer \| null | no | yes | null | — |
+| `funding_account` | `--funding-account` | string | yes | no | — | minimum length 1 |
+| `method` | `--method` | string | yes | no | — | minimum length 1 |
+| `check_number` | `--check-number` | string \| null | no | yes | null | — |
+| `reference` | `--reference` | string \| null | no | yes | null | — |
+| `memo` | `--memo` | string \| null | no | yes | null | — |
+| `number` | `--number` | string \| null | no | yes | null | — |
+| `class_id` | `--class-id` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--idempotency-key TEXT` | Retry-safe key for this create command. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/bill.pay`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+| `Idempotency-Key` | optional | Retry-safe key for this create command |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `dry_run` | boolean | no | no | false | — |
+| `warnings` | array[string] | no | no | [] | — |
+| `payments` | array[object] | yes | no | — | — |
+| `payments[].id` | string | yes | no | — | — |
+| `payments[].version` | integer | yes | no | — | — |
+| `payments[].created_at` | string | yes | no | — | — |
+| `payments[].created_by` | string | yes | no | — | — |
+| `payments[].created_via` | string | yes | no | — | — |
+| `payments[].updated_at` | string | yes | no | — | — |
+| `payments[].updated_by` | string | yes | no | — | — |
+| `payments[].updated_via` | string | yes | no | — | — |
+| `payments[].type` | literal["bill_payment"] | yes | no | — | — |
+| `payments[].number` | string | yes | no | — | — |
+| `payments[].current_revision_id` | string | yes | no | — | — |
+| `payments[].status` | literal["posted", "voided"] | yes | no | — | — |
+| `payments[].voided_at` | string \| null | yes | yes | — | — |
+| `payments[].voided_by` | string \| null | yes | yes | — | — |
+| `payments[].void_reason` | string \| null | yes | yes | — | — |
+| `payments[].void_posting_batch_id` | string \| null | yes | yes | — | — |
+| `payments[].date` | string | yes | no | — | — |
+| `payments[].vendor_id` | string | yes | no | — | — |
+| `payments[].vendor_name` | string | yes | no | — | — |
+| `payments[].ap_account_id` | string | yes | no | — | — |
+| `payments[].funding_account_id` | string | yes | no | — | — |
+| `payments[].funding_kind` | literal["bank_cash", "card_liability"] | yes | no | — | — |
+| `payments[].payment_method_id` | string | yes | no | — | — |
+| `payments[].payment_method_name` | string | yes | no | — | — |
+| `payments[].check_number` | string \| null | yes | yes | — | — |
+| `payments[].reference` | string \| null | yes | yes | — | — |
+| `payments[].memo` | string \| null | yes | yes | — | — |
+| `payments[].total` | object | yes | no | — | — |
+| `payments[].total.amount` | string | yes | no | — | — |
+| `payments[].total.currency` | string | yes | no | — | — |
+| `payments[].total.minor_units` | integer | yes | no | — | — |
+| `payments[].total_minor_units` | integer | yes | no | — | — |
+| `payments[].currency` | string | yes | no | — | — |
+| `payments[].settlement_current` | object | yes | no | — | — |
+| `payments[].settlement_current.payment_id` | string | yes | no | — | — |
+| `payments[].settlement_current.source_key_id` | string | yes | no | — | — |
+| `payments[].settlement_current.version` | integer | yes | no | — | — |
+| `payments[].settlement_current.revision_id` | string | yes | no | — | — |
+| `payments[].settlement_current.amount_minor_units` | integer | yes | no | — | — |
+| `payments[].settlement_current.applied_minor_units` | integer | yes | no | — | — |
+| `payments[].settlement_current.unapplied_minor_units` | integer | yes | no | — | — |
+| `payments[].settlement_current.amount` | object | yes | no | — | — |
+| `payments[].settlement_current.amount.amount` | string | yes | no | — | — |
+| `payments[].settlement_current.amount.currency` | string | yes | no | — | — |
+| `payments[].settlement_current.amount.minor_units` | integer | yes | no | — | — |
+| `payments[].settlement_current.applied` | object | yes | no | — | — |
+| `payments[].settlement_current.applied.amount` | string | yes | no | — | — |
+| `payments[].settlement_current.applied.currency` | string | yes | no | — | — |
+| `payments[].settlement_current.applied.minor_units` | integer | yes | no | — | — |
+| `payments[].settlement_current.unapplied` | object | yes | no | — | — |
+| `payments[].settlement_current.unapplied.amount` | string | yes | no | — | — |
+| `payments[].settlement_current.unapplied.currency` | string | yes | no | — | — |
+| `payments[].settlement_current.unapplied.minor_units` | integer | yes | no | — | — |
+| `payments[].settlement_current.currency` | string | yes | no | — | — |
+| `payments[].settlement_current.status` | literal["voided", "applied", "partial", "unapplied"] | yes | no | — | — |
+| `payments[].revision` | object | yes | no | — | — |
+| `payments[].revision.id` | string | yes | no | — | — |
+| `payments[].revision.created_at` | string | yes | no | — | — |
+| `payments[].revision.created_by` | string | yes | no | — | — |
+| `payments[].revision.created_via` | string | yes | no | — | — |
+| `payments[].revision.transaction_id` | string | yes | no | — | — |
+| `payments[].revision.revision_number` | integer | yes | no | — | — |
+| `payments[].revision.supersedes_revision_id` | string \| null | yes | yes | — | — |
+| `payments[].revision.date` | string | yes | no | — | — |
+| `payments[].revision.number` | string | yes | no | — | — |
+| `payments[].revision.name_type` | literal["vendor"] | yes | no | — | — |
+| `payments[].revision.name_id` | string | yes | no | — | — |
+| `payments[].revision.memo` | string \| null | yes | yes | — | — |
+| `payments[].revision.total` | object | yes | no | — | — |
+| `payments[].revision.total.amount` | string | yes | no | — | — |
+| `payments[].revision.total.currency` | string | yes | no | — | — |
+| `payments[].revision.total.minor_units` | integer | yes | no | — | — |
+| `payments[].revision.total_minor_units` | integer | yes | no | — | — |
+| `payments[].revision.currency` | string | yes | no | — | — |
+| `payments[].revision.audit_event_id` | string | yes | no | — | — |
+| `payments[].revision.profile` | object | yes | no | — | — |
+| `payments[].revision.profile.vendor` | object | yes | no | — | — |
+| `payments[].revision.profile.vendor.id` | string | yes | no | — | — |
+| `payments[].revision.profile.vendor.label` | string | yes | no | — | — |
+| `payments[].revision.profile.vendor.version` | integer | yes | no | — | — |
+| `payments[].revision.profile.vendor.company_name` | string \| null | no | yes | null | — |
+| `payments[].revision.profile.vendor.email` | string \| null | no | yes | null | — |
+| `payments[].revision.profile.vendor.phone` | string \| null | no | yes | null | — |
+| `payments[].revision.profile.vendor.account_number` | string \| null | no | yes | null | — |
+| `payments[].revision.profile.ap_account` | object | yes | no | — | — |
+| `payments[].revision.profile.ap_account.id` | string | yes | no | — | — |
+| `payments[].revision.profile.ap_account.name` | string | yes | no | — | — |
+| `payments[].revision.profile.ap_account.full_name` | string | yes | no | — | — |
+| `payments[].revision.profile.ap_account.number` | string \| null | yes | yes | — | — |
+| `payments[].revision.profile.ap_account.type` | string | yes | no | — | — |
+| `payments[].revision.profile.ap_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `payments[].revision.profile.funding_account` | object | yes | no | — | — |
+| `payments[].revision.profile.funding_account.id` | string | yes | no | — | — |
+| `payments[].revision.profile.funding_account.name` | string | yes | no | — | — |
+| `payments[].revision.profile.funding_account.full_name` | string | yes | no | — | — |
+| `payments[].revision.profile.funding_account.number` | string \| null | yes | yes | — | — |
+| `payments[].revision.profile.funding_account.type` | string | yes | no | — | — |
+| `payments[].revision.profile.funding_account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `payments[].revision.profile.funding_kind` | literal["bank_cash", "card_liability"] | yes | no | — | — |
+| `payments[].revision.profile.payment_method` | object | yes | no | — | — |
+| `payments[].revision.profile.payment_method.id` | string | yes | no | — | — |
+| `payments[].revision.profile.payment_method.label` | string | yes | no | — | — |
+| `payments[].revision.profile.payment_method.version` | integer | yes | no | — | — |
+| `payments[].revision.profile.payment_method.kind` | string | yes | no | — | — |
+| `payments[].revision.profile.check_number` | string \| null | no | yes | null | — |
+| `payments[].revision.profile.reference` | string \| null | no | yes | null | — |
+| `payments[].revision.profile.amount_minor_units` | integer | yes | no | — | — |
+| `payments[].revision.profile.currency` | string | yes | no | — | — |
+| `payments[].revision.profile.origins` | object[string, object] | no | no | {} | — |
+| `payments[].revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
+| `payments[].revision.lines` | array[object] | yes | no | — | — |
+| `payments[].revision.lines[].id` | string | yes | no | — | — |
+| `payments[].revision.lines[].created_at` | string | yes | no | — | — |
+| `payments[].revision.lines[].created_by` | string | yes | no | — | — |
+| `payments[].revision.lines[].created_via` | string | yes | no | — | — |
+| `payments[].revision.lines[].transaction_id` | string | yes | no | — | — |
+| `payments[].revision.lines[].revision_id` | string | yes | no | — | — |
+| `payments[].revision.lines[].line_id` | string | yes | no | — | — |
+| `payments[].revision.lines[].position` | integer | yes | no | — | — |
+| `payments[].revision.lines[].kind` | literal["bill_payment"] | yes | no | — | — |
+| `payments[].revision.lines[].bill_id` | string | yes | no | — | — |
+| `payments[].revision.lines[].bill_number` | string | yes | no | — | — |
+| `payments[].revision.lines[].source_component_id` | string | yes | no | — | — |
+| `payments[].revision.lines[].amount` | object | yes | no | — | — |
+| `payments[].revision.lines[].amount.amount` | string | yes | no | — | — |
+| `payments[].revision.lines[].amount.currency` | string | yes | no | — | — |
+| `payments[].revision.lines[].amount.minor_units` | integer | yes | no | — | — |
+| `payments[].revision.lines[].amount_minor_units` | integer | yes | no | — | — |
+| `payments[].revision.lines[].currency` | string | yes | no | — | — |
+| `payments[].revision.lines[].applied_minor_units` | integer | yes | no | — | — |
+| `payments[].revision.lines[].applied` | object | yes | no | — | — |
+| `payments[].revision.lines[].applied.amount` | string | yes | no | — | — |
+| `payments[].revision.lines[].applied.currency` | string | yes | no | — | — |
+| `payments[].revision.lines[].applied.minor_units` | integer | yes | no | — | — |
+| `payments[].revision.lines[].class_id` | string \| null | yes | yes | — | — |
+| `payments[].revision.lines[].class_name` | string \| null | yes | yes | — | — |
+| `payments[].revision.lines[].description` | string \| null | yes | yes | — | — |
+| `payments[].revision.batches` | array[object] | yes | no | — | — |
+| `payments[].revision.batches[].id` | string | yes | no | — | — |
+| `payments[].revision.batches[].created_at` | string | yes | no | — | — |
+| `payments[].revision.batches[].created_by` | string | yes | no | — | — |
+| `payments[].revision.batches[].created_via` | string | yes | no | — | — |
+| `payments[].revision.batches[].total` | object | yes | no | — | — |
+| `payments[].revision.batches[].total.amount` | string | yes | no | — | — |
+| `payments[].revision.batches[].total.currency` | string | yes | no | — | — |
+| `payments[].revision.batches[].total.minor_units` | integer | yes | no | — | — |
+| `payments[].revision.batches[].transaction_id` | string | yes | no | — | — |
+| `payments[].revision.batches[].revision_id` | string | yes | no | — | — |
+| `payments[].revision.batches[].kind` | literal["original", "replacement", "reversal"] | yes | no | — | — |
+| `payments[].revision.batches[].effective_date` | string | yes | no | — | — |
+| `payments[].revision.batches[].reverses_batch_id` | string \| null | yes | yes | — | — |
+| `payments[].revision.batches[].replaces_batch_id` | string \| null | yes | yes | — | — |
+| `payments[].revision.batches[].audit_event_id` | string | yes | no | — | — |
+| `payments[].revision.batches[].debit_total` | object | yes | no | — | — |
+| `payments[].revision.batches[].debit_total.amount` | string | yes | no | — | — |
+| `payments[].revision.batches[].debit_total.currency` | string | yes | no | — | — |
+| `payments[].revision.batches[].debit_total.minor_units` | integer | yes | no | — | — |
+| `payments[].revision.batches[].credit_total` | object | yes | no | — | — |
+| `payments[].revision.batches[].credit_total.amount` | string | yes | no | — | — |
+| `payments[].revision.batches[].credit_total.currency` | string | yes | no | — | — |
+| `payments[].revision.batches[].credit_total.minor_units` | integer | yes | no | — | — |
+| `payments[].revision.batches[].debit_minor_units` | integer | yes | no | — | — |
+| `payments[].revision.batches[].credit_minor_units` | integer | yes | no | — | — |
+| `payments[].revision.batches[].currency` | string | yes | no | — | — |
+| `payments[].revision.batches[].line_count` | integer | yes | no | — | — |
+| `payments[].applications` | array[object] | no | no | [] | — |
+| `payments[].applications[].id` | string | yes | no | — | — |
+| `payments[].applications[].created_at` | string | yes | no | — | — |
+| `payments[].applications[].created_by` | string | yes | no | — | — |
+| `payments[].applications[].created_via` | string | yes | no | — | — |
+| `payments[].applications[].kind` | literal["apply", "unapply"] | yes | no | — | — |
+| `payments[].applications[].source_transaction_id` | string | yes | no | — | — |
+| `payments[].applications[].source_key_id` | string | yes | no | — | — |
+| `payments[].applications[].source_component_id` | string | yes | no | — | — |
+| `payments[].applications[].obligation_transaction_id` | string | yes | no | — | — |
+| `payments[].applications[].obligation_key_id` | string | yes | no | — | — |
+| `payments[].applications[].bill_number` | string | yes | no | — | — |
+| `payments[].applications[].amount` | object | yes | no | — | — |
+| `payments[].applications[].amount.amount` | string | yes | no | — | — |
+| `payments[].applications[].amount.currency` | string | yes | no | — | — |
+| `payments[].applications[].amount.minor_units` | integer | yes | no | — | — |
+| `payments[].applications[].amount_minor_units` | integer | yes | no | — | — |
+| `payments[].applications[].currency` | string | yes | no | — | — |
+| `payments[].applications[].effective_date` | string | yes | no | — | — |
+| `payments[].applications[].reverses_application_id` | string \| null | yes | yes | — | — |
+| `payments[].applications[].audit_event_id` | string | yes | no | — | — |
+| `payments[].applications[].active` | boolean | yes | no | — | — |
+| `group_count` | integer | yes | no | — | — |
+| `paid_minor_units` | integer | yes | no | — | — |
+| `paid` | object | yes | no | — | — |
+| `paid.amount` | string | yes | no | — | — |
+| `paid.currency` | string | yes | no | — | — |
+| `paid.minor_units` | integer | yes | no | — | — |
+| `currency` | string | yes | no | — | — |
+| `bill_count` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "bill_count": 1,
+  "currency": "USD",
+  "dry_run": false,
+  "group_count": 1,
+  "paid": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
+  "paid_minor_units": 1,
+  "payments": [],
+  "warnings": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_APPLICATION_CAPACITY` | The requested application exceeds the owned source or invoice capacity. |
+| `E_APPLICATION_INACTIVE` | This application is already unapplied or its payment is voided. |
+| `E_APPLICATION_INCOMPATIBLE` | Application source and target must have the same party, receivable account and currency. |
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
 ## `bill post`
 
 Enter a vendor bill. Each expense line debits its own account and Accounts Payable is credited the total, so the bill stands open at that total until it is paid. `terms` defaults to the vendor’s own terms and fixes `due_date`; give `due_date` to override it outright. `ap_account` is the Accounts Payable account the bill is owed from and defaults to the only active one when the company has exactly one. `supplier_reference` is the vendor’s own document number, kept as typed; another bill from the same vendor carrying the same reference is reported in `duplicate_references` and never refused. `expenses` is one to 200 rows of account, amount, memo, optional customer or job, optional `billable` and optional class, saying what was bought; each row debits its own account and the bill's total is their sum. A row's own `class_id` is that row's class and a row without one takes the bill's `class_id`; set `class_mode` to `none` to leave one row unclassified even when the bill carries a class. `billable` marks a cost to pass on to the named customer later and requires one; naming a job without it simply attributes the cost. Item lines are not entered here yet.

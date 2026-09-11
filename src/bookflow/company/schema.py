@@ -1095,3 +1095,6 @@ globals().update(_define_deposit_draft_tables(metadata, _column, _table, _common
 
 from bookflow.company.purchase_schema import define_tables as _define_purchase_tables
 globals().update(_define_purchase_tables(metadata, _column, _table))
+
+from bookflow.company.ap_settlement_schema import define_tables as _define_ap_settlement_tables
+globals().update(_define_ap_settlement_tables(metadata, _column, _table))

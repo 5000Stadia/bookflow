@@ -457,3 +457,31 @@ EXAMPLES.update({
         f'bookflow bill history {ID} --limit 25 --company "Demo Plumbing Co" --json',
         {"bill": ID, "limit": 25}),
 })
+
+
+# Paying a bill is one verb across documents, so its example selects two bills and lets the
+# grouping decide how many payments that is; the reads are the payables mirror of the receipt's.
+EXAMPLES.update({
+    "bill pay": Example(
+        'bookflow bill pay --date 2026-04-15 --funding-account "Checking" --method "Check"'
+        ' --check-number 1041 --memo "April payables"'
+        ' --bills \'[{"bill":"BILL-104"},{"bill":"BILL-108","amount":"250.00"}]\''
+        ' --company "Demo Plumbing Co" --reason "Pay the April bills" --json',
+        {"date": "2026-04-15", "funding_account": "Checking", "method": "Check",
+         "check_number": "1041", "memo": "April payables",
+         "bills": [{"bill": "BILL-104"}, {"bill": "BILL-108", "amount": "250.00"}]}),
+    "bill payment show": Example(
+        f'bookflow bill payment show {ID} --company "Demo Plumbing Co" --json', {"payment": ID}),
+    "bill payment query": Example(
+        'bookflow bill payment query --vendor "Northside Supply" --date-from 2026-04-01'
+        ' --status posted --limit 25 --company "Demo Plumbing Co" --json',
+        {"vendor": "Northside Supply", "date_from": "2026-04-01", "status": "posted", "limit": 25}),
+    "bill payment unapply": Example(
+        f'bookflow bill payment unapply {ID} --expected-version 1 --company "Demo Plumbing Co"'
+        ' --reason "Applied to the wrong bill" --json',
+        {"payment": ID, "expected_version": 1}),
+    "bill payment void": Example(
+        f'bookflow bill payment void {ID} --expected-version 2 --company "Demo Plumbing Co"'
+        ' --reason "The check was never sent" --json',
+        {"payment": ID, "expected_version": 2}),
+})

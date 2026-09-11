@@ -54,7 +54,7 @@ def test_complete_unfiltered_registry_descriptors_and_action_owners():
 # The accepted descriptor's digest, pinned in exactly one place. A second copy of this
 # literal is how tests/test_identity_admin_catalog.py drifted to a value matching no
 # catalog at all, and stayed that way unnoticed while its fixture could not run.
-FROZEN_DESCRIPTOR_SHA256 = 'a09ff160d9351e27dc466b339757f87f78c9496a02ba39a21e3594727515e79a'
+FROZEN_DESCRIPTOR_SHA256 = 'f077947525834cfaf2d81078a4a10dae0e6eae910c56ea3c8ba7c801918a29a2'
 
 RESOURCE_PAIRS = {
     # Mirrored from permission_runtime.CURRENT_SOURCES, which already declared every owner

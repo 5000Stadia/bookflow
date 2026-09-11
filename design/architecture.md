@@ -590,8 +590,8 @@ an application bound to it survives every later revision. `ap_obligation_compone
 per-revision breakdown, one positive amount per entered line, each naming the exact
 `posting_line_sources` row that credited AP for it, which is what an allocation targets when a
 payment has to land on particular lines. `bills.applied_totals` is the one function that says how
-much has been settled against each payable; it answers zero for every bill today and is the only
-place an AP settlement owner has to replace. `bill show` and `bill query` project it as
+much has been settled against each payable; it is the only line in `bills.py` that knows a
+settlement exists, and it now forwards to `company/ap_settlement.py`. `bill show` and `bill query` project it as
 `settlement_current` with gross, applied, open and a status, the same shape `invoice settlement`
 uses.
 
@@ -636,9 +636,80 @@ per line, both asserted at 390px in `tests/test_bill_form_browser.py` as the ele
 `scrollWidth` against its own `clientWidth`. Bills are not printed: a bill is an internal
 document, so there is no print route beside the four customer-facing ones.
 
-Not built here: `bill pay` and any A/P settlement, so the detail page says plainly that a posted
-bill stands open; the Item tab; and a browser page for `bill history`, which is reachable only
-through the command surfaces.
+Not built here: the Item tab, and a browser page for `bill history`, which is reachable only
+through the command surfaces. The bill detail page still says a posted bill stands open; it
+does not yet read `settlement_current` back, and there is no Pay Bills form.
+
+### Paying a bill: the settlement side of the payable
+
+`bill pay` and `bill payment show/query/unapply/void` settle what a bill owes.
+`company/bill_payment_models.py` holds the inputs and outputs, `company/bill_payment_facts.py`
+what a revision captures, `company/bill_payments.py` the resolution, posting and reads,
+`company/bill_payment_validation.py` an independent check of the aggregate,
+`company/ap_settlement.py` the sums, and `company/ap_settlement_schema.py` the storage.
+
+**Two things happen, and they are separate.** The money is one debit to Accounts Payable and one
+credit to the account that funded it, posted once at the payment's date; that is the whole ledger
+effect. The answer is one `ap_applications` row per settled bill, which posts nothing. So a
+bill's open balance is its gross less its active applications, while the vendor's payable balance
+is the signed posting sum either way: unapplying a payment reopens the bill and moves no money,
+leaving the payment as an unapplied debit against that vendor rather than as missing cash. A
+company's Accounts Payable therefore equals the sum of open bill balances only when every payment
+is fully applied; the difference is exactly the unapplied payment debits, which is what an A/P
+aging report shows as its own line rather than folding into the bills.
+
+**The funding account decides the words, not the method.** A bank account is debit-normal, so
+crediting it lowers the balance; a credit card is credit-normal, so crediting it raises what the
+card is owed. `FUNDING_KIND` in `bill_payments.py` maps the account type to `bank_cash` or
+`card_liability`, which is why a debit card or an EFT out of the bank is bank cash rather than
+card debt -- the method is what the vendor was handed, the account is where the money is.
+`check_number` is accepted only when the payment method's own `kind` is `check` and the funding
+account is a bank; storage carries the second half of that rule as a CHECK, because what makes a
+method a check is a row in a list rather than a shape.
+
+**One payee per payment.** Selected bills are grouped by `(vendor, payable account, currency,
+funding account, method)`. The funding account and the method arrive on the command and the
+currency is the home currency, so what actually splits a selection is the vendor and the payable
+it is owed from, and `bill pay` writes one `bill_payment` document per group under one audit
+event. `group_count` on the output says how many that was. An explicit `number` is refused when
+the selection makes more than one payment, since a number names one document.
+
+**What an application binds.** `ap_source_keys` is one stable row per payment carrying the
+vendor, payable account and currency an application must match exactly -- the mirror of
+`ap_obligation_keys`. `ap_source_components` is that capacity in positive parts, one per selected
+bill, each naming the exact `posting_line_sources` row that debited AP for it. A component is
+capacity and not a bill: what binds it to a payable is the `ap_applications` row, so unapplying
+frees the component rather than destroying it, and re-applying it elsewhere needs no new storage.
+`ap_applications` carries the dated edge and its exact whole-edge inverse, so netting apply minus
+unapply per key is exact; a database trigger enforces that an `unapply` reverses a real `apply`
+cell for cell, and another enforces that source and target agree on vendor, payable and currency.
+
+**Amounts.** Omitting a bill's amount pays everything still open on it, which is what selecting a
+row on a Pay Bills screen means. Paying less leaves the remainder open; paying more is refused
+with `E_APPLICATION_CAPACITY` rather than becoming a credit, because a vendor credit is a
+document this command does not write. The over-settlement check runs again inside the writer's
+transaction against storage, so a concurrent payment that took the money first loses there rather
+than at the preview. A payment cannot be dated before a bill it settles, which is what keeps the
+payable tied to the open balances at every date.
+
+**Taking it back.** `bill payment unapply` writes inverses and nothing else -- no posting, no new
+revision -- and names `bills` to detach only some of them; unapplying what is already unapplied
+is a no-change result rather than an error. `bill payment void` reverses the posting batch at its
+own date and refuses with `E_HAS_APPLICATIONS` while anything is still applied, which is the
+customer receipt's discipline and keeps a void from silently reopening a bill. `bills.prepare`
+already refused correction and void of a bill with applications, so a bill that has been paid is
+corrected by unapplying first.
+
+Migration `co0026` widens the `transactions` type CHECK and the `document_lines` kind CHECK for
+`bill_payment` and reinstates `document_lines_type_insert` with its mapping, by the same
+table-rebuild `co0025` used, then creates the four settlement tables with their immutability,
+document-type, exact-inverse and exact-party triggers.
+
+Not built here: purchase discounts and vendor credits, which need their own documents and an
+adopted account-eligibility contract before a settlement can carry a third term; purchase tax;
+re-applying a freed component to a different bill; and any browser surface -- the Pay Bills tile
+on the Vendors panel is still grey, and `bill payment` registers no `ui_group`, so it has no
+navigation entry of its own.
 
 ### Transfers between the company's own accounts
 
