@@ -502,7 +502,7 @@ Example JSON output:
 
 ## `bill post`
 
-Enter a vendor bill. Each entered line debits its own account and Accounts Payable is credited the total, so the bill stands open at that total until it is paid. `terms` defaults to the vendor’s own terms and fixes `due_date`; give `due_date` to override it outright. `ap_account` is the Accounts Payable account the bill is owed from and defaults to the only active one when the company has exactly one. `supplier_reference` is the vendor’s own document number, kept as typed; another bill from the same vendor carrying the same reference is reported in `duplicate_references` and never refused. A bill has two grids and needs at least one row across them. `expenses` is up to 200 rows of account, amount, memo, optional customer or job, optional `billable` and optional class, saying what was bought against an account you name. `items` is up to 200 rows of item, optional `quantity` (default 1), optional `unit_cost` or `amount`, optional `description`, customer or job, `billable` and class, saying what was bought as a thing the company buys; an item row names no account because it debits the item’s own expense account. Give `unit_cost` and the amount is quantity times it; give `amount` and that is the amount; give neither and the item’s standard cost is used. Every row debits its own account and the bill's total is the sum of both grids. A row's own `class_id` is that row's class and a row without one takes the bill's `class_id`; set `class_mode` to `none` to leave one row unclassified even when the bill carries a class. `billable` marks a cost to pass on to the named customer later and requires one; naming a job without it simply attributes the cost. Only service, non-inventory part and other-charge items can be bought here: receiving an inventory part is not implemented and is refused by name.
+Enter a vendor bill. Each entered line debits its own account and Accounts Payable is credited the total, so the bill stands open at that total until it is paid. `purchase_order` enters this bill from an order: the order fills in the vendor, the terms, the class, the memo and one expense row per ordered line, and anything supplied here wins over it, so a delivery that came in at a different price is entered by supplying `expenses` and letting the rest carry. The order is then closed and permanently recorded as consumed by this bill, so it can never be billed twice; a withdrawn order is refused. Voiding the bill does not free the order again: enter the replacement bill outright. `terms` defaults to the vendor’s own terms and fixes `due_date`; give `due_date` to override it outright. `ap_account` is the Accounts Payable account the bill is owed from and defaults to the only active one when the company has exactly one. `supplier_reference` is the vendor’s own document number, kept as typed; another bill from the same vendor carrying the same reference is reported in `duplicate_references` and never refused. A bill has two grids and needs at least one row across them. `expenses` is up to 200 rows of account, amount, memo, optional customer or job, optional `billable` and optional class, saying what was bought against an account you name. `items` is up to 200 rows of item, optional `quantity` (default 1), optional `unit_cost` or `amount`, optional `description`, customer or job, `billable` and class, saying what was bought as a thing the company buys; an item row names no account because it debits the item’s own expense account. Give `unit_cost` and the amount is quantity times it; give `amount` and that is the amount; give neither and the item’s standard cost is used. Every row debits its own account and the bill's total is the sum of both grids. A row's own `class_id` is that row's class and a row without one takes the bill's `class_id`; set `class_mode` to `none` to leave one row unclassified even when the bill carries a class. `billable` marks a cost to pass on to the named customer later and requires one; naming a job without it simply attributes the cost. Only service, non-inventory part and other-charge items can be bought here: receiving an inventory part is not implemented and is refused by name.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -534,7 +534,8 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
-| `vendor` | `--vendor` | string | yes | no | — | minimum length 1 |
+| `vendor` | `--vendor` | string \| null | no | yes | null | — |
+| `purchase_order` | `--purchase-order` | string \| null | no | yes | null | — |
 | `expenses[].line_id` | inside `--expenses` JSON array | string \| null | no | yes | null | — |
 | `expenses[].account` | inside `--expenses` JSON array | string | yes | no | — | minimum length 1 |
 | `expenses[].amount` | inside `--expenses` JSON array | string \| object | yes | no | — | — |
@@ -660,6 +661,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.sources[].applied.currency` | string | yes | no | — | — |
 | `settlement_current.sources[].applied.minor_units` | integer | yes | no | — | — |
 | `settlement_current.sources[].applied_minor_units` | integer | yes | no | — | — |
+| `purchase_order_id` | string \| null | no | yes | null | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -949,6 +951,7 @@ Example JSON output:
   "item_total_minor_units": 1,
   "memo": null,
   "number": "value",
+  "purchase_order_id": null,
   "revision": {
     "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "batches": [],
@@ -1106,6 +1109,7 @@ Example JSON output:
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+| `E_WORK_DEPENDENCY` | The accepted or linked work prevents this change; inspect the related document. |
 
 ## `bill query`
 
@@ -1236,6 +1240,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].settlement_current.sources[].applied.currency` | string | yes | no | — | — |
 | `items[].settlement_current.sources[].applied.minor_units` | integer | yes | no | — | — |
 | `items[].settlement_current.sources[].applied_minor_units` | integer | yes | no | — | — |
+| `items[].purchase_order_id` | string \| null | no | yes | null | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
 | `next_cursor` | string \| null | yes | yes | — | — |
@@ -1401,6 +1406,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.sources[].applied.currency` | string | yes | no | — | — |
 | `settlement_current.sources[].applied.minor_units` | integer | yes | no | — | — |
 | `settlement_current.sources[].applied_minor_units` | integer | yes | no | — | — |
+| `purchase_order_id` | string \| null | no | yes | null | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -1685,6 +1691,7 @@ Example JSON output:
   "item_total_minor_units": 1,
   "memo": null,
   "number": "value",
+  "purchase_order_id": null,
   "revision": {
     "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "batches": [],
@@ -1997,6 +2004,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.sources[].applied.currency` | string | yes | no | — | — |
 | `settlement_current.sources[].applied.minor_units` | integer | yes | no | — | — |
 | `settlement_current.sources[].applied_minor_units` | integer | yes | no | — | — |
+| `purchase_order_id` | string \| null | no | yes | null | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -2286,6 +2294,7 @@ Example JSON output:
   "item_total_minor_units": 1,
   "memo": null,
   "number": "value",
+  "purchase_order_id": null,
   "revision": {
     "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "batches": [],
@@ -2579,6 +2588,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement_current.sources[].applied.currency` | string | yes | no | — | — |
 | `settlement_current.sources[].applied.minor_units` | integer | yes | no | — | — |
 | `settlement_current.sources[].applied_minor_units` | integer | yes | no | — | — |
+| `purchase_order_id` | string \| null | no | yes | null | — |
 | `revision` | object | yes | no | — | — |
 | `revision.id` | string | yes | no | — | — |
 | `revision.created_at` | string | yes | no | — | — |
@@ -2868,6 +2878,7 @@ Example JSON output:
   "item_total_minor_units": 1,
   "memo": null,
   "number": "value",
+  "purchase_order_id": null,
   "revision": {
     "audit_event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "batches": [],

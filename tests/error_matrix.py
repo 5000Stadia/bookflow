@@ -809,6 +809,7 @@ MATRIX["bill post"] = {
     "E_AMOUNT_PRECISION": "more decimals than the home currency has",
     "E_PERIOD_CLOSED": "bill date on or before the closing date",
     "E_DUPLICATE_NUMBER": "explicit --number already used by another bill",
+    "E_WORK_DEPENDENCY": "--purchase-order names an order another bill already consumed",
     "E_IDEMPOTENCY_MISMATCH": "same key, different input",
     "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
     "E_DIRECTIVE_INACTIVE": "deactivated --directive",
@@ -1114,6 +1115,20 @@ MATRIX["statement-charge post"] = {
     "E_PERIOD_CLOSED": "the charge date is on or before the closing date",
     "E_DUPLICATE_NUMBER": "another statement charge already holds that number",
     "E_PREVIEW_STALE": "expected_facts_fingerprint no longer matches the resolved facts",
+}
+
+
+# A purchase order posts nothing, so it has no closing-date gate and no payable to refuse for:
+# what is left is the bill's own list of unresolvable and ineligible references, plus the two
+# refusals that belong to an order alone -- a line that is neither an item nor an account, and
+# an order a bill has already been entered from.
+MATRIX["purchase-order post"] = {
+    "E_RECORD_NOT_FOUND": "unknown vendor, item, account, terms, class or job",
+    "E_INACTIVE_REFERENCE": "deactivated vendor, item, account, terms, class or job",
+    "E_VALIDATION": "a line naming both or neither of item and account, an item with no purchase account, an ineligible account, an amount that contradicts quantity times rate, or an expected date before the order date",
+    "E_VALUE_RANGE": "quantity or amount outside signed 64-bit scaled integers",
+    "E_AMOUNT_PRECISION": "more decimals than the home currency has",
+    "E_DUPLICATE_NUMBER": "explicit --number already used by another purchase order",
     "E_IDEMPOTENCY_MISMATCH": "same key, different input",
     "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
     "E_DIRECTIVE_INACTIVE": "deactivated --directive",
@@ -1124,6 +1139,19 @@ MATRIX["statement-charge void"] = {
     "E_VALIDATION": "a reason longer than 140 characters",
     "E_REASON_REQUIRED": "no reason given",
     "E_PERIOD_CLOSED": "the charge's own date is in a closed period",
+}
+MATRIX["purchase-order update"] = dict(MATRIX["purchase-order post"], **{
+    "E_RECORD_NOT_FOUND": "unknown purchase order, vendor, item, account, terms, class or job",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_WORK_DEPENDENCY": "a bill has already been entered from this purchase order",
+    "E_VALIDATION": "a withdrawn order, a retired line identity, a line naming both or neither of item and account, or an ineligible account",
+})
+MATRIX["purchase-order void"] = {
+    "E_RECORD_NOT_FOUND": "unknown purchase order",
+    "E_VERSION_CONFLICT": "stale expected_version",
+    "E_REASON_REQUIRED": "no --reason",
+    "E_VALIDATION": "--reason longer than 140 characters",
+    "E_WORK_DEPENDENCY": "a bill has already been entered from this purchase order",
     "E_IDEMPOTENCY_MISMATCH": "same key, different input",
     "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
     "E_DIRECTIVE_INACTIVE": "deactivated --directive",
@@ -1132,4 +1160,13 @@ MATRIX["statement-charge show"] = {"E_RECORD_NOT_FOUND": "unknown charge or revi
 MATRIX["statement-charge query"] = {
     "E_RECORD_NOT_FOUND": "unknown customer filter",
     "E_QUERY_STALE": "company audit changed between charge pages",
+}
+MATRIX["purchase-order show"] = {"E_RECORD_NOT_FOUND": "unknown purchase order or revision number"}
+MATRIX["purchase-order query"] = {
+    "E_RECORD_NOT_FOUND": "unknown vendor filter",
+    "E_QUERY_STALE": "company audit changed between purchase order pages",
+}
+MATRIX["purchase-order history"] = {
+    "E_RECORD_NOT_FOUND": "unknown purchase order",
+    "E_QUERY_STALE": "company audit changed between history pages",
 }

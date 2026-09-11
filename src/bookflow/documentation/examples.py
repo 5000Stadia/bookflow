@@ -722,3 +722,36 @@ EXAMPLES.update({
         ' --reason "Charged to the wrong client" --json',
         {"statement_charge": ID, "expected_version": 1}),
 })
+# A purchase order is the bill's form before anything is owed: the same vendor and the same
+# job and class columns, one ordered grid whose rows may name an item or an account, and no
+# accounting at all until a bill is entered from it.
+EXAMPLES.update({
+    "purchase-order post": Example(
+        'bookflow purchase-order post --vendor "Northside Supply" --date 2026-04-02'
+        ' --expected-date 2026-04-16 --reference QUOTE-88 --memo "April restock"'
+        ' --lines \'[{"item":"Copper Pipe","quantity":"40","rate":"12.50"},'
+        '{"account":"Office Supplies","description":"Fittings","amount":"75.00"}]\''
+        ' --company "Demo Plumbing Co" --reason "Order April stock" --json',
+        {"vendor": "Northside Supply", "date": "2026-04-02", "expected_date": "2026-04-16",
+         "reference": "QUOTE-88", "memo": "April restock",
+         "lines": [{"item": "Copper Pipe", "quantity": "40", "rate": "12.50"},
+                   {"account": "Office Supplies", "description": "Fittings", "amount": "75.00"}]}),
+    "purchase-order show": Example(
+        f'bookflow purchase-order show {ID} --company "Demo Plumbing Co" --json',
+        {"purchase_order": ID}),
+    "purchase-order update": Example(
+        f'bookflow purchase-order update {ID} --status partly_received --expected-version 1'
+        ' --company "Demo Plumbing Co" --reason "Half the order arrived" --json',
+        {"purchase_order": ID, "status": "partly_received", "expected_version": 1}),
+    "purchase-order void": Example(
+        f'bookflow purchase-order void {ID} --expected-version 1 --company "Demo Plumbing Co"'
+        ' --reason "The vendor cannot supply it" --json',
+        {"purchase_order": ID, "expected_version": 1}),
+    "purchase-order query": Example(
+        'bookflow purchase-order query --vendor "Northside Supply" --open-only --limit 25'
+        ' --company "Demo Plumbing Co" --json',
+        {"vendor": "Northside Supply", "open_only": True, "limit": 25}),
+    "purchase-order history": Example(
+        f'bookflow purchase-order history {ID} --limit 25 --company "Demo Plumbing Co" --json',
+        {"purchase_order": ID, "limit": 25}),
+})

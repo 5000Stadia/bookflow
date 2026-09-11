@@ -146,15 +146,32 @@ class _BillFields(_Input):
 
 
 class BillPostInput(_BillFields):
+    """A new bill, entered outright or made from a purchase order.
+
+    ``purchase_order`` names an order to enter this bill from. What the order says then fills
+    in what the caller did not: the vendor, the terms, the class, the memo, and one expense
+    row per ordered line. Anything supplied here wins over the order, so a bill that arrived
+    for a different amount is entered by supplying ``expenses`` and letting the rest carry.
+    The order is closed and permanently recorded as consumed by this bill.
+    """
+
     date: _Date
-    vendor: _Selector
+    vendor: _Selector | None = None
+    purchase_order: _Selector | None = None
     expenses: Expenses | None = None
     items: Items | None = None
 
     @model_validator(mode='after')
     def new_lines(self) -> Self:
-        if not (self.expenses or self.items):
-            raise ValueError('a bill needs at least one expense line or item line')
+        # A bill names its own vendor and carries its own lines, unless it is being entered
+        # from a purchase order -- which supplies both. Either grid satisfies the line
+        # requirement, because an order may have been placed entirely for items.
+        if self.purchase_order is None:
+            if self.vendor is None:
+                raise ValueError('vendor is required unless the bill names a purchase order')
+            if not (self.expenses or self.items):
+                raise ValueError('a bill needs at least one expense line or item line '
+                                 'unless it names a purchase order')
         if any(line.line_id is not None for line in (self.expenses or []) + (self.items or [])):
             raise ValueError('new lines cannot supply an existing line identity')
         return self
@@ -405,6 +422,8 @@ class BillSummaryOutput(CommonOut):
     total_minor_units: int
     currency: str
     settlement_current: BillSettlementOutput
+    # The purchase order this bill was entered from; null when it was entered outright.
+    purchase_order_id: str | None = None
 
 
 class BillOutput(BillSummaryOutput):

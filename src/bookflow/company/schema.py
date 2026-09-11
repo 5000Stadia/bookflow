@@ -1116,3 +1116,5 @@ globals().update(_define_vendor_credit_tables(metadata, _column, _table))
 
 from bookflow.company.inventory_schema import define_tables as _define_inventory_tables
 globals().update(_define_inventory_tables(metadata, _column, _table))
+from bookflow.company.purchase_order_schema import define_tables as _define_purchase_order_tables
+globals().update(_define_purchase_order_tables(metadata, _column, _table, _common))

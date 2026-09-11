@@ -3564,3 +3564,91 @@ and `payment_selection_items` both foreign-key `transactions.id` with no type co
 already writes the `sales_profiles` row `applications_exact_party` joins — so this is a widening
 of nine type filters and four triggers, not a data-model change. What it is not is small, and
 half-doing it is how a settled charge disappears from an aging that still balances.
+## Purchase orders, and the bill entered from one
+
+`purchase-order post/show/query/update/void/history` records what was ordered from a vendor.
+`company/purchase_order_models.py` holds the inputs and outputs,
+`company/purchase_order_facts.py` what a revision captures, `company/purchase_orders.py` the
+resolution, reads, lifecycle and conversion, `company/purchase_order_validation.py` an
+independent check of the aggregate, and `company/purchase_order_schema.py` the storage
+(`co0035`, five new tables, nothing existing rebuilt).
+
+**It posts nothing, structurally.** A purchase order is not a `transactions` row. It has no
+`posting_batches`, no `posting_lines` and no `ap_obligation_keys`, so the trial balance cannot
+move because an order was written — there is no code path that could move it, rather than a rule
+somebody has to keep. `purchase_order_validation` asserts the absence directly, and
+`tests/test_purchase_order.py` reads the trial balance through `report trial-balance` before and
+after and compares the rows and totals verbatim. The two metadata fields that always differ
+between any two report calls straddling a write — `generation_time` and `audit_watermark` — are
+cut before the comparison; everything else is the accounting.
+
+**Its own family, not the estimate's.** `work_documents` is the other non-posting document with
+lines, and its shape is copied here: stable document, immutable whole revisions, stable line
+identities across revisions, a permanent conversion link. Its *content* is not, because every
+column of `work_revisions` and `work_lines` is sell-side — a customer that must exist, an item
+that must exist, a price level, a pricing basis, quoted tax, a billing root a later invoice
+consumes in fractions. Reusing those tables would mean making `customer_id` and `item_id`
+nullable for every estimate already written, and teaching every customer-work read to filter a
+kind out; those reads are the quotes list a bookkeeper looks at, and one missed filter is a
+purchase order appearing in it. What is reused is the machinery that is genuinely shared:
+`document_effects`, `versioning`, `audit`, the `query` cursor, `sales_calculations.extension`,
+and `bills.py`'s own account, terms, class and party resolution rules.
+
+**One grid, two kinds of row.** `purchase_order_lines` holds item lines and expense-account lines
+in one ordered table, exactly one of `item_id` and `account_id` per row, because the order's two
+tabs are one grid: line 3 is line 3 whichever tab it was typed on. `quantity` and `rate` are
+stored together or not at all, and the amount is `sales_calculations.extension(quantity, rate)` —
+the same half-even rounding a sale's line extension uses. A stated `amount` that contradicts the
+product is refused rather than silently replaced. An item line captures the item's own purchase
+destination account (`expense_account_id`, else `cogs_account_id`, else `asset_account_id`), which
+is what the bill line later debits.
+
+**Where it stands, and closing.** `open`, `partly_received`, `closed`, `voided`. The first three
+move through `purchase-order update`, which appends a new immutable revision like any other
+correction, because closing is reversible and this codebase already puts reversible state changes
+on `update` — `estimate update` is where `accepted` and `declined` live. There is deliberately no
+`close` verb: a second door onto one of three values would be the only place in the product where
+a status has two. Closing is a person's decision because item receipts do not exist; nothing
+derives it. `void` is the exception, exactly as it is for an estimate: it needs a reason, it is
+terminal, and after it the order can never become a bill. An order posts nothing, so voiding one
+reverses nothing.
+
+**Becoming a bill.** `bill post` takes an optional `purchase_order`. `bills._from_order` resolves
+it, refuses a voided or already-consumed one, and merges the order's vendor, terms, class, memo
+and lines into a copy of the caller's input — anything the caller supplied wins, so a delivery
+that arrived short is entered by supplying `expenses` and letting the rest carry. The vendor is
+the one field that may not be overridden: a bill owed to somebody else is not this order's bill,
+and nothing downstream would notice, because the conversion row records which order became which
+bill and not who either was owed to. An already-consumed order refuses with `E_WORK_DEPENDENCY`,
+the estimate's own code, rather than `E_HAS_APPLICATIONS`, whose standing message tells the
+caller to unapply a settlement that does not exist. The copy is
+local to `prepare`; `plan.data['input']` stays the caller's own words, so `apply` re-derives from
+the order inside the writing transaction rather than trusting what the preview read.
+`purchase_orders.consume` then builds the order's side of the same write — a closing revision
+carrying the lines forward, and one `purchase_order_conversions` row — and
+`document_effects.persist` gained a `companion` parameter that joins those rows to the bill's own
+audit event and writes them after the bill's. One command, one event, both documents in it.
+`purchase_order_conversions` is UNIQUE on both `source_document_id` and
+`destination_transaction_id`, so an order becomes at most one bill and a bill comes from at most
+one order; "already billed" is a fact in storage, not a status that could be edited around.
+`bill show` and `bill query` report it as `purchase_order_id`.
+
+**The consumption is permanent, including through a void.** Voiding the bill does not free the
+order: the conversion row stands and `UNIQUE(source_document_id)` refuses a second one, so the
+replacement bill is entered outright and carries no `purchase_order_id`. That is deliberately
+stronger than the estimate's rule, where an allocation is released when the sale it sits on is
+voided, and it is the cost of making "already billed" a storage fact rather than a query. If
+partial or repeated conversion is ever wanted, this is the constraint to revisit first: drop
+`UNIQUE(source_document_id)` and gate on the destination bill's status instead.
+
+**What this does not do.** Item receipts, inventory valuation and purchase tax are the inventory
+owner's and none of it exists, so an order for an inventory part whose destination is Inventory
+Asset cannot be billed — `bills._posting_accounts_active` refuses a system-role account, which is
+the right refusal from the wrong owner. There is no hand-built browser page: the home-board tile
+stays grey waiting on one, and the *generated* workbench pages answer (the list page renders and
+shows the order) but land under "Hub" in the all-commands grid, because `pages._grouped_nouns`
+falls through to Hub for any noun without a `ui_group` and a `ui_group` with no page behind it
+would be a claim this cannot make. `vendor-credit` sits in exactly that seat already. Also not
+done: the demo seed, custom fields on an order (the snapshot column is there and empty, as a
+vendor credit's is), partial or repeated conversion, purchase discounts, a closing-date gate
+(nothing posts, so no period can be closed against it), and `report open-purchase-orders`.
