@@ -10,9 +10,9 @@ Database: `company`.
 |---|---|---|---|---|---|---|---|
 | `id` | VARCHAR(26) | no | — | primary key 1 | ix_applications_invoice, ix_applications_payment, ix_co17_applications_invoice, ix_co17_applications_payment | — | Immutable apply or unapply identity. |
 | `kind` | VARCHAR(16) | no | — | — | ix_co17_applications_invoice, ix_co17_applications_payment | — | apply or unapply. |
-| `paying_transaction_id` | VARCHAR(26) | no | — | — | ix_applications_payment, ix_co17_applications_payment, ix_co19_applications_targets | payment_component_keys.transaction_id | Payment providing capacity. |
+| `paying_transaction_id` | VARCHAR(26) | no | — | — | ix_applications_payment, ix_co17_applications_payment, ix_co19_applications_targets | credit_source_keys.transaction_id, payment_component_keys.transaction_id | Payment providing capacity. |
 | `paid_transaction_id` | VARCHAR(26) | no | — | — | ix_applications_invoice, ix_co17_applications_invoice, ix_co19_applications_targets | transactions.id | Invoice consuming capacity. |
-| `source_component_key_id` | VARCHAR(26) | no | — | — | — | payment_component_keys.id | Exact-party permanent source. |
+| `source_component_key_id` | VARCHAR(26) | yes | — | — | — | payment_component_keys.id | Exact-party permanent receipt source; null when a credit supplied the capacity. |
 | `amount_minor_units` | BIGINT | no | — | — | ix_co17_applications_invoice, ix_co17_applications_payment | — | Positive settlement amount. |
 | `currency` | VARCHAR(3) | no | — | — | — | — | Settlement currency. |
 | `effective_date` | VARCHAR(10) | no | — | — | ix_applications_invoice, ix_applications_payment | — | Settlement accounting date. |
@@ -21,3 +21,4 @@ Database: `company`.
 | `created_by` | VARCHAR(26) | no | — | — | — | — | Principal creating this record. |
 | `created_via` | VARCHAR(16) | no | — | — | — | — | Interface creating this record. |
 | `audit_event_id` | VARCHAR(26) | no | — | — | — | audit_events.id | Owned creation audit event. |
+| `credit_source_key_id` | VARCHAR(26) | yes | — | — | — | credit_source_keys.id | Exact-party permanent credit source; null when a receipt supplied the capacity. |

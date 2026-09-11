@@ -94,9 +94,11 @@ def graph(s, owner_type, owner_id, *, cutoff=None, write=False):
     unknown = sorted(ids - set(headers))
     payload = dict(owner_type=owner_type, owner_id=owner['id'],
         headers=[[identifier, value['version'], value['current_revision_id']] for identifier, value in sorted(headers.items())],
-        applications=[[row[k] for k in ('id', 'paying_transaction_id', 'paid_transaction_id', 'source_component_key_id', 'amount_minor_units', 'currency', 'effective_date')]
+        # Both source columns are in the payload: a credit settling this invoice has to move
+        # the digest, or a preview prepared before it would still look fresh after it.
+        applications=[[row[k] for k in ('id', 'paying_transaction_id', 'paid_transaction_id', 'source_component_key_id', 'credit_source_key_id', 'amount_minor_units', 'currency', 'effective_date')]
                       for row in sorted(active, key=lambda row: row['id'])],
-        allocations=[[row[k] for k in ('id', 'application_id', 'source_revision_id', 'target_revision_id', 'amount_minor_units', 'effective_date')]
+        allocations=[[row[k] for k in ('id', 'application_id', 'source_revision_id', 'credit_source_component_id', 'target_revision_id', 'amount_minor_units', 'effective_date')]
                      for row in sorted(live, key=lambda row: row['id'])])
     return dict(payload=payload, digest=query.digest(payload), headers=headers, unknown=unknown, applications=active, allocations=live)
 

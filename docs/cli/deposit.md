@@ -597,7 +597,7 @@ Example JSON output:
 | `E_DEPOSIT_TOTAL` | The deposit funding, subtotal or cash-back total is invalid. |
 | `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
-| `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
@@ -1727,7 +1727,7 @@ Example JSON output:
 | `E_DEPOSIT_TOTAL` | The deposit funding, subtotal or cash-back total is invalid. |
 | `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
-| `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
@@ -2005,7 +2005,7 @@ Example JSON output:
 | `E_DEPOSIT_TOTAL` | The deposit funding, subtotal or cash-back total is invalid. |
 | `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
-| `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |

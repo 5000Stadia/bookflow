@@ -149,7 +149,7 @@ class StatementTotals(StrictModel):
 class StatementRow(StrictModel):
     kind: Literal["opening", "activity", "closing"]
     entry: Literal["balance_forward", "invoice", "sales_receipt", "payment", "deposit",
-                   "journal_entry", "applied_credit", "balance_due"]
+                   "journal_entry", "credit_memo", "applied_credit", "balance_due"]
     customer_id: str | None
     current_customer_label: str | None
     current_customer_name: str | None
