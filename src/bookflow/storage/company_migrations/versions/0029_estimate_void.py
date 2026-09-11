@@ -52,13 +52,13 @@ def _rebuild(connection, table):
     _, parts, suffix = preserving._definitions(sql, table)
     columns = connection.exec_driver_sql(f'PRAGMA table_xinfo({quote(table)})').all()
     if any(row[1].lower() in ('rowid', '_rowid_', 'oid') for row in columns) or 'WITHOUT' in suffix.upper():
-        raise RuntimeError('co0027 cannot preserve custom row identity')
+        raise RuntimeError('co0029 cannot preserve custom row identity')
     old, new = REPLACEMENTS[table]
     found = [i for i, part in enumerate(parts) if old in part]
     if len(found) != 1 or parts[found[0]].count(old) != 1:
-        raise RuntimeError('co0027 unknown constraint: ' + table)
+        raise RuntimeError('co0029 unknown constraint: ' + table)
     parts[found[0]] = parts[found[0]].replace(old, new, 1)
-    create = 'CREATE TABLE ' + quote('_co0027_' + table) + ' (' + ','.join(parts) + suffix
+    create = 'CREATE TABLE ' + quote('_co0029_' + table) + ' (' + ','.join(parts) + suffix
     writable = ','.join(['rowid'] + [quote(row[1]) for row in columns if row[6] == 0])
     # Compared as (type, quoted literal, blob) so a rebuilt row that differs in storage class
     # or in a value SQLite would compare equal across affinities still fails the check.
@@ -71,10 +71,10 @@ def upgrade():
     connection = op.get_bind()
     preserving = importlib.import_module('bookflow.storage.company_migrations.versions.0012_progress_billing')
     quote = preserving._quote
-    reserved = {'_co0027_' + name for name in CHANGED}
+    reserved = {'_co0029_' + name for name in CHANGED}
     existing = connection.exec_driver_sql('SELECT name FROM sqlite_schema').scalars().all()
     if reserved.intersection(existing):
-        raise RuntimeError('co0027 reserved object already exists')
+        raise RuntimeError('co0029 reserved object already exists')
     plans = {table: _rebuild(connection, table) for table in CHANGED}
     # Every local view and trigger, plus the indexes the rebuilt table owns: a trigger may name
     # the table from anywhere, and an index on it disappears with it. All are recreated verbatim.
@@ -87,22 +87,22 @@ def upgrade():
             if object_kind == kind:
                 connection.exec_driver_sql(f'DROP {kind.upper()} main.{quote(name)}')
     for table, (create, writable, selected) in plans.items():
-        temporary = '_co0027_' + table
+        temporary = '_co0029_' + table
         connection.exec_driver_sql(create)
         connection.exec_driver_sql(f'INSERT INTO {quote(temporary)} ({writable}) SELECT {writable} FROM {quote(table)}')
         for left, right in ((table, temporary), (temporary, table)):
             if connection.exec_driver_sql(f'SELECT {selected} FROM {quote(left)} EXCEPT SELECT {selected} FROM {quote(right)}').fetchone() is not None:
-                raise RuntimeError('co0027 rebuilt values differ: ' + table)
+                raise RuntimeError('co0029 rebuilt values differ: ' + table)
         connection.exec_driver_sql(f'DROP TABLE {quote(table)}')
         connection.exec_driver_sql(f'ALTER TABLE {quote(temporary)} RENAME TO {quote(table)}')
     stored = {name: sql for kind, name, sql in retained if kind == 'trigger'}
     for name, (before, _) in TRIGGERS.items():
         if stored.get(name) != before:
-            raise RuntimeError('co0027 unknown work revision state guard: ' + name)
+            raise RuntimeError('co0029 unknown work revision state guard: ' + name)
     for _, name, statement in retained:
         connection.exec_driver_sql(TRIGGERS[name][1] if name in TRIGGERS else statement)
     if connection.exec_driver_sql('PRAGMA foreign_key_check').fetchone() is not None:
-        raise RuntimeError('co0027 foreign key check failed')
+        raise RuntimeError('co0029 foreign key check failed')
 
 
 def downgrade():

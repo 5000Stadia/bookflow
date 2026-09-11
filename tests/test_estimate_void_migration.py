@@ -1,10 +1,10 @@
-"""co0027 widens one CHECK and the guard that mirrors it, preserving everything else.
+"""co0029 widens one CHECK and the guard that mirrors it, preserving everything else.
 
 The DDL this migration edits is not its own: it reads the stored `work_documents` definition,
 respells one enumeration inside it, and rebuilds the table underneath whatever rows, indexes,
 views and triggers a real company already has. So the questions this file asks are: does the
 widened constraint end up in the shipped schema, does the revision guard move with it, and
-does a populated co0026 database come out the other side with every value and every local
+does a populated co0028 database come out the other side with every value and every local
 object exactly as it went in.
 """
 import importlib
@@ -15,7 +15,7 @@ from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, migrate_to_head
 from tests.payment_raw_evidence import table
 
-M = importlib.import_module('bookflow.storage.company_migrations.versions.0027_estimate_void')
+M = importlib.import_module('bookflow.storage.company_migrations.versions.0029_estimate_void')
 
 WIDENED = "status IN ('draft','open','accepted','declined','superseded','cancelled','voided')"
 
@@ -95,11 +95,11 @@ def test_the_widened_check_admits_a_voided_quote_and_still_refuses_anything_else
         raw.commit()
 
 
-def test_a_populated_co0026_database_keeps_every_value_and_every_local_object(tmp_path):
+def test_a_populated_co0028_database_keeps_every_value_and_every_local_object(tmp_path):
     path = tmp_path / 'company.db'
-    _at(path, 'co0026')
+    _at(path, 'co0028')
     with sqlite3.connect(path) as raw:
-        assert raw.execute('SELECT version_num FROM alembic_version').fetchone() == ('co0026',)
+        assert raw.execute('SELECT version_num FROM alembic_version').fetchone() == ('co0028',)
         raw.execute('PRAGMA foreign_keys=OFF')
         # Referentially whole rows in the rebuilt table, one of them carrying an embedded NUL
         # that a quote()-only copy would truncate, plus local objects of every kind.
@@ -151,7 +151,7 @@ def test_a_populated_co0026_database_keeps_every_value_and_every_local_object(tm
             " AND name NOT IN ('work_documents', 'work_revision_kind')").fetchall())
 
     with open_database(path, writable=True) as db:
-        assert migrate_to_head(db, 'company', tmp_path / 'backups') == ('co0026', HEADS['company'])
+        assert migrate_to_head(db, 'company', tmp_path / 'backups') == ('co0028', HEADS['company'])
         assert {name: table(db.raw, name) for name in names} == before
         after = set(db.raw.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
@@ -165,7 +165,7 @@ def test_a_populated_co0026_database_keeps_every_value_and_every_local_object(tm
 
 def test_an_unexpected_revision_state_guard_stops_the_migration(tmp_path):
     path = tmp_path / 'company.db'
-    _at(path, 'co0026')
+    _at(path, 'co0028')
     with sqlite3.connect(path) as raw:
         raw.execute('DROP TRIGGER work_revision_kind')
         raw.execute("CREATE TRIGGER work_revision_kind BEFORE INSERT ON work_revisions"
@@ -175,6 +175,6 @@ def test_an_unexpected_revision_state_guard_stops_the_migration(tmp_path):
         try:
             migrate_to_head(db, 'company', tmp_path / 'backups')
         except Exception as exc:  # the runner wraps whatever the migration raised
-            assert 'co0027' in str(exc) or 'co0027' in str(getattr(exc, '__cause__', ''))
+            assert 'co0029' in str(exc) or 'co0029' in str(getattr(exc, '__cause__', ''))
         else:
-            raise AssertionError('a rewritten revision state guard must stop co0027')
+            raise AssertionError('a rewritten revision state guard must stop co0029')
