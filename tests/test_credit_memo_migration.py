@@ -18,6 +18,7 @@ from bookflow.company.credit_schema import guard_statements, settlement_guard_st
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, migrate_to_head
 from tests.payment_raw_evidence import table
+from tests.test_bill_payment_migration import _rebuilt_since
 
 M = importlib.import_module('bookflow.storage.company_migrations.versions.0028_customer_credits')
 
@@ -172,11 +173,13 @@ def test_a_populated_co0027_database_keeps_every_value_and_every_local_object(tm
             "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'"
             " AND name <> 'alembic_version' ORDER BY name")]
         before = {name: table(raw, name) for name in names}
-        objects = set(raw.execute(
+        # This migration's own rebuilds, plus whatever the revisions after it rewrite -
+        # derived, because a hand-listed exclusion goes stale the moment another lands.
+        rebuilt = ({'transactions', 'document_lines', 'applications', 'application_allocations'}
+                   | set(M.REPLACED) | _rebuilt_since(M.revision))
+        objects = {row for row in raw.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
-            " AND name NOT IN ('transactions', 'document_lines', 'applications',"
-            " 'application_allocations') AND name NOT IN ({})".format(
-                ','.join(repr(name) for name in M.REPLACED))).fetchall())
+        ).fetchall() if row[1] not in rebuilt}
 
     with open_database(path, writable=True) as db:
         assert migrate_to_head(db, 'company', tmp_path / 'backups') == ('co0027', HEADS['company'])

@@ -9,15 +9,27 @@ object exactly as it went in.
 """
 import importlib
 import sqlite3
+from pathlib import Path
 
 from bookflow.company import schema as c
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, migrate_to_head
 from tests.payment_raw_evidence import table
+from tests.test_bill_payment_migration import _rebuilt_since
 
 M = importlib.import_module('bookflow.storage.company_migrations.versions.0029_estimate_void')
 
 WIDENED = "status IN ('draft','open','accepted','declined','superseded','cancelled','voided')"
+
+
+def _chain():
+    """Every company revision the shipped migrations declare, read from the files."""
+    versions = Path(__file__).resolve().parents[1] / 'src/bookflow/storage/company_migrations/versions'
+    out = set()
+    for path in sorted(versions.glob('[0-9]*.py')):
+        module = importlib.import_module('bookflow.storage.company_migrations.versions.' + path.stem)
+        out.add(module.revision)
+    return out
 
 
 def _at(path, revision):
@@ -47,7 +59,9 @@ def test_the_frozen_replacement_is_the_constraint_the_metadata_now_declares():
 def test_a_fresh_database_reaches_the_head_carrying_both_widened_objects(tmp_path):
     with open_database(tmp_path / 'fresh.db', writable=True, create=True) as db:
         assert migrate_to_head(db, 'company', None) == (None, HEADS['company'])
-        assert HEADS['company'] == M.revision
+        # This migration is in the chain, not necessarily its end - a later revision may
+        # follow it. Claiming to be the head is a pin that every new migration falsifies.
+        assert M.revision in _chain(), M.revision
         stored = db.raw.execute(
             "SELECT sql FROM sqlite_schema WHERE name='work_documents'").fetchone()[0]
         guard = db.raw.execute(
@@ -146,9 +160,12 @@ def test_a_populated_co0028_database_keeps_every_value_and_every_local_object(tm
             "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'"
             " AND name <> 'alembic_version' ORDER BY name")]
         before = {name: table(raw, name) for name in names}
-        objects = set(raw.execute(
+        # What this migration rewrites, plus whatever the migrations after it rebuild -
+        # derived, because a hand-listed exclusion goes stale the moment another revision lands.
+        rebuilt = {'work_documents', 'work_revision_kind'} | _rebuilt_since(M.revision)
+        objects = {row for row in raw.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
-            " AND name NOT IN ('work_documents', 'work_revision_kind')").fetchall())
+        ).fetchall() if row[1] not in rebuilt}
 
     with open_database(path, writable=True) as db:
         assert migrate_to_head(db, 'company', tmp_path / 'backups') == ('co0028', HEADS['company'])

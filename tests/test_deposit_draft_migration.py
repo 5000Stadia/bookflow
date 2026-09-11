@@ -81,6 +81,10 @@ def _rebuilt_since(revision):
         if module.revision>revision:
             names.update(getattr(module,'CHANGED',()))
             names.update(getattr(module,'REPLACED',()))
+            # TRIGGERS names a trigger a migration rewrites. It carries no guard contract,
+            # so it cannot be folded into CHANGED (which drives the migration's own table
+            # rebuild) or REPLACED (which must be a subset of GUARDS).
+            names.update(getattr(module,'TRIGGERS',()))
             names.update(guards&seen)
         seen.update(guards)
     return names
