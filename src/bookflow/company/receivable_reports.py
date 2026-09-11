@@ -273,6 +273,13 @@ _OPEN = _EFFECTS + f""", ledger_gross AS (
 # named under; parties with no customer record follow them all, by stable id.
 _CUSTOMER_ORDER = "full_name_key IS NULL, full_name_key, coalesce(party,'')"
 
+# The aging report's own rows and the open-invoice report's own rows, in their own
+# order. `ar_aging` and `open_invoices` page these; the collections report reads the
+# same two whole and filters them, so there is one aging arithmetic on this side of
+# the books rather than a second one that has to be kept in step.
+AGING_ROWS = _AGING + f"SELECT * FROM selected ORDER BY {_CUSTOMER_ORDER}"
+OPEN_INVOICE_ROWS = _OPEN + "SELECT * FROM selected ORDER BY aging_date, tx"
+
 
 # One statement row is one document's effect on one customer's receivable on one
 # date. `movement_rank` separates a posted document effect from a settlement
@@ -379,8 +386,7 @@ def ar_aging(inp: ArAgingInput, s, *, principal_id=None) -> ArAgingOutput:
                 totals[key] += money(int(value), currency).minor_units
         if sum(totals[name] for name in _COLUMNS[:-1]) != totals["total"]:
             raise BookflowError("E_INTERNAL", message="Aging columns do not sum to the aging total")
-        page = _rows(raw.execute(_AGING + f"""SELECT * FROM selected
-            ORDER BY {_CUSTOMER_ORDER} LIMIT :limit OFFSET :offset""",
+        page = _rows(raw.execute(AGING_ROWS + " LIMIT :limit OFFSET :offset",
             {**params, "limit": inp.limit + 1, "offset": offset}))
         rows = [ArAgingRow(customer_id=row["customer_id"], current_customer_label=row["full_name"],
             current_customer_name=row["name"], display_customer_label=_label(row["full_name"]),
@@ -413,8 +419,7 @@ def open_invoices(inp: OpenInvoicesInput, s, *, principal_id=None) -> OpenInvoic
         for gross, applied, net in raw.execute(_OPEN + "SELECT gross, applied, net FROM selected", params):
             for key, value in zip(("amount", "applied", "balance"), (gross, applied, net)):
                 totals[key] += money(int(value), currency).minor_units
-        page = _rows(raw.execute(_OPEN + """SELECT * FROM selected
-            ORDER BY aging_date, tx LIMIT :limit OFFSET :offset""",
+        page = _rows(raw.execute(OPEN_INVOICE_ROWS + " LIMIT :limit OFFSET :offset",
             {**params, "limit": inp.limit + 1, "offset": offset}))
         rows = [OpenInvoiceRow(transaction_id=row["tx"], number=row["document_number"],
             date=row["document_date"], due_date=row["aging_date"],

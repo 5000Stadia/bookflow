@@ -1,0 +1,44 @@
+{% macro label(text) %}<span class="document-cell-label" aria-hidden="true">{{ text }}</span>{% endmacro %}
+<section id="dimensional-report" class="document-detail dimensional-report" aria-label="Profit and loss by {{ statement.dimension }}">
+<p>{{ company_label }} · {{ statement.metadata.basis|capitalize }} · {{ statement.metadata.currency }} ·
+{{ statement.metadata.period.date_from }} through {{ statement.metadata.period.date_to }}</p>
+<p class="muted">One column per {{ statement.dimension_label|lower }}, one row per income or expense account. Every posting that names no {{ statement.dimension_label|lower }} is in the {{ 'Unassigned' if statement.dimension == 'job' else 'Unclassified' }} column rather than left out, so the columns always add across to Total, and Total is the profit and loss for these dates.</p>
+
+<h2>Net income by {{ statement.dimension_label|lower }} — all pages</h2>
+<dl class="report-totals" id="dimensional-column-summary">
+{% for column in statement.column_summary %}<div data-column-kind="{{ column.kind }}"><dt>{{ column.label }}</dt><dd>{{ column.net_income }}</dd></div>{% endfor %}
+<div data-column-kind="total" data-total="net_income"><dt>Total — net income</dt><dd>{{ statement.totals.net_income.amount }}</dd></div>
+</dl>
+
+<h2>Whole-statement totals — all pages</h2>
+<dl class="report-totals" id="dimensional-totals">
+{% for key, value in statement.totals.items() %}<div data-total="{{ key }}"><dt>{{ key.replace('_', ' ')|capitalize }}</dt><dd>{{ value.amount }} {{ value.currency }}</dd></div>{% endfor %}
+</dl>
+
+<p id="report-page-count">{{ statement.count }} account rows on this page{% if statement.next_cursor %}; more available{% endif %}. Each amount covers only that account; subaccounts appear separately. Select a Total to open that account's current general ledger.{% if statement.folded %} {{ statement.folded }} further {{ statement.dimension_label|lower }}{{ 's' if statement.folded != 1 }} are added together in the Other column; run the report again with more columns, or over a shorter period, to read them one by one.{% endif %}</p>
+
+<div class="table-wrap report-lines-wrap"><table class="ledger-table document-lines" id="dimensional-lines" role="table">
+<caption>Income and expense by {{ statement.dimension_label|lower }} · {{ statement.metadata.currency }}</caption>
+<thead role="rowgroup"><tr role="row">
+<th scope="col" role="columnheader" class="dimensional-account">Account</th>
+{% for column in statement.columns %}<th scope="col" role="columnheader" data-column-kind="{{ column.kind }}"{% if column.id %} data-column="{{ column.id }}"{% endif %}>{{ column.label }}{% if column.active is not none and not column.active %} (inactive){% endif %}</th>{% endfor %}
+<th scope="col" role="columnheader" class="dimensional-total">Total</th></tr></thead>
+<tbody role="rowgroup">
+{% for row in statement.rows %}<tr role="row" data-account="{{ row.account_id }}" data-section="{{ row.section }}">
+<th scope="row" role="rowheader" class="document-wide dimensional-account" title="{{ row.current_account_label }}">{{ label('Account') }}{{ row.display_account_label }}
+<span class="report-state">{{ row.section_label }}{% if not row.active %} · inactive{% endif %}</span></th>
+{% for column, amount in row.cells %}<td role="cell" data-column-kind="{{ column.kind }}"{% if column.id %} data-column="{{ column.id }}"{% endif %}>{{ label(column.label) }}{{ amount.amount }}</td>{% endfor %}
+<td role="cell" class="document-total dimensional-total" data-value="total">{{ label('Total') }}<a href="{{ row.ledger_url }}">{{ row.total.amount }}</a></td>
+</tr>{% else %}<tr role="row"><td role="cell" colspan="{{ statement.columns|length + 2 }}">No income or expense was posted in this period.</td></tr>{% endfor %}
+</tbody>
+<tfoot><tr role="row"><th scope="row" role="rowheader" class="document-wide dimensional-account">{{ label('Account') }}Net income — all accounts</th>
+{% for column in statement.columns %}<td role="cell" data-column-kind="{{ column.kind }}" data-column-net-income="{{ column.id or column.kind }}">{{ label(column.label) }}{{ column.totals.net_income.amount }}</td>{% endfor %}
+<td role="cell" class="document-total dimensional-total" data-column-net-income="total">{{ label('Total') }}{{ statement.totals.net_income.amount }}</td></tr></tfoot>
+</table></div>
+{% if statement.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="statement-next-page">
+{% for name, value in statement.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+{% if source_report_watermark is not none %}<input type="hidden" name="_source_report_watermark" value="{{ source_report_watermark }}">{% endif %}
+<button name="action" value="submit">Next account page</button></form>{% endif %}
+<p class="muted">Generated {{ statement.metadata.generation_time }} · Audit watermark {{ statement.metadata.audit_watermark }}. Any audited company change requires restarting the report. Change the filters below to start a new report.</p>
+<details class="report-structured"><summary>Structured report data</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
+</section>

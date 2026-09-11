@@ -274,11 +274,15 @@ register update
 report ap-aging
 report ar-aging
 report balance-sheet
+report collections
 report general-ledger
 report open-invoices
 report profit-and-loss
+report profit-and-loss-by-class
+report profit-and-loss-by-job
 report statement
 report trial-balance
+report unbilled-costs
 report unpaid-bills
 sales-receipt history
 sales-receipt post

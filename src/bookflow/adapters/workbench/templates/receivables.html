@@ -1,6 +1,36 @@
 <section id="receivables-report" aria-label="Receivables report">
 <p>{{ company_label }} · {{ receivables.metadata.basis|capitalize }} · {{ receivables.metadata.currency }} · As of {{ receivables.as_of }}</p>
-{% if verb == 'ar-aging' %}
+{% if verb == 'collections' %}
+<p class="muted">Every customer or job with something at or past the chosen aging column on this date, the overdue invoices beneath each one, and the people recorded against them to call. A customer whose balance is all current is not being chased and is not here. These totals are the overdue part of receivables; the A/R aging summary is the report that ties to Accounts Receivable.</p>
+<div class="table-wrap"><table id="receivables-totals"><caption>Whole-report totals — all pages</caption><thead><tr>{% for key in receivables.columns %}<th scope="col">{{ receivables.headings[key] }}</th>{% endfor %}<th scope="col">Total</th><th scope="col">Overdue</th></tr></thead><tbody>
+<tr>{% for key in receivables.columns %}<td data-total="{{ key }}">{{ receivables.totals[key].amount }}</td>{% endfor %}<td data-total="total">{{ receivables.totals.total.amount }}</td><td data-total="overdue">{{ receivables.totals.overdue.amount }}</td></tr>
+</tbody></table></div>
+<p>{{ receivables.customer_count }} customers to chase; {{ receivables.count }} rows on this page{% if receivables.next_cursor %}; more available{% endif %}.</p>
+<div class="table-wrap"><table id="receivables-collections" class="receivables-worklist"><thead><tr><th scope="col">Customer / invoice</th><th scope="col">Who to contact</th><th scope="col">Due</th><th scope="col">Days past due</th>{% for key in receivables.columns %}<th scope="col">{{ receivables.headings[key] }}</th>{% endfor %}<th scope="col">Total</th><th scope="col">Overdue</th></tr></thead><tbody>
+{% for row in receivables.rows %}<tr data-kind="{{ row.kind }}"{% if row.customer_id %} data-customer="{{ row.customer_id }}"{% endif %}>
+<th scope="row" title="{{ row.current_customer_label or '' }}">{% if row.kind == 'customer' %}{% if row.detail_url %}<a href="{{ row.detail_url }}">{{ row.display_customer_label }}</a>{% else %}{{ row.display_customer_label }}{% endif %}{% if row.billing_address %} <span class="report-state">{{ row.billing_address }}</span>{% endif %}{% else %}<a href="{{ row.detail_url }}">{{ row.number }}</a> <span class="report-state">{{ receivables.headings[row.aging_bucket] }}</span>{% endif %}</th>
+<td>{% if row.kind == 'customer' %}{% for person in row.people %}<span class="contact-person"><strong>{{ person.name }}</strong> — {{ person.role }}{% if person.job_title %}, {{ person.job_title }}{% endif %}{% if person.inherited %} (from the parent customer){% endif %}</span><ul class="contact-lines">{% for line in person.lines %}<li>{{ line.label }}: {% if line.href %}<a href="{{ line.href }}">{{ line.value }}</a>{% else %}{{ line.value }}{% endif %}</li>{% endfor %}</ul>{% else %}<span class="report-state">No contact is recorded for this customer.</span>{% endfor %}{% endif %}</td>
+<td>{{ row.due_date or '' }}</td><td>{{ row.days_past_due if row.days_past_due is not none else '' }}</td>
+{% for key in receivables.columns %}<td>{{ row[key].amount }}</td>{% endfor %}<td>{{ row.total.amount }}</td><td>{{ row.overdue.amount }}</td></tr>
+{% else %}<tr><td colspan="{{ receivables.columns|length + 6 }}">Nobody is overdue on this date.</td></tr>{% endfor %}
+</tbody></table></div>
+{% elif verb == 'unbilled-costs' %}
+<p class="muted">Billable work recorded against a customer or job on or before this date that has not been invoiced, under a subtotal for each customer or job. Fully billed lines, lines marked not billable, and work whose source cannot be billed today are not here. Select a line to open that document's billing window and make the invoice.</p>
+<div class="table-wrap"><table id="receivables-totals"><caption>Whole-report totals — all pages</caption><thead><tr><th scope="col">Already billed</th><th scope="col">To bill</th></tr></thead><tbody>
+<tr>{% for key in ('billed', 'remaining') %}<td data-total="{{ key }}">{{ receivables.totals[key].amount }}</td>{% endfor %}</tr>
+</tbody></table></div>
+<p>{{ receivables.count }} rows on this page{% if receivables.next_cursor %}; more available{% endif %}. A subtotal row is that customer's whole unbilled work, not just what this page shows.</p>
+<div class="table-wrap"><table id="receivables-unbilled" class="receivables-worklist"><thead><tr><th scope="col">Customer / work</th><th scope="col">Source</th><th scope="col">Date</th><th scope="col">Item and account</th><th scope="col">Description</th><th scope="col">State</th><th scope="col">Remaining quantity</th><th scope="col">Already billed</th><th scope="col">To bill</th></tr></thead><tbody>
+{% for row in receivables.rows %}<tr data-kind="{{ row.kind }}"{% if row.customer_id %} data-customer="{{ row.customer_id }}"{% endif %}>
+<th scope="row" title="{{ row.current_customer_label or '' }}">{{ row.display_customer_label }}{% if row.kind == 'subtotal' %} <span class="report-state">subtotal</span>{% endif %}</th>
+<td>{% if row.detail_url %}<a href="{{ row.detail_url }}">{{ row.source_number }}</a>{% else %}{{ row.source_number or '' }}{% endif %}</td>
+<td>{{ row.source_date or '' }}</td>
+<td>{{ row.item_label or '' }}{% if row.account_label %} <span class="report-state">{{ row.account_label }}</span>{% endif %}</td>
+<td>{{ row.description or '' }}</td><td>{{ row.state_label or '' }}</td><td>{{ row.remaining_quantity or '' }}</td>
+<td>{{ row.billed.amount }}</td><td>{{ row.remaining.amount }}</td></tr>
+{% else %}<tr><td colspan="9">Nothing is waiting to be billed on this date.</td></tr>{% endfor %}
+</tbody></table></div>
+{% elif verb == 'ar-aging' %}
 <p class="muted">Invoices are aged on their due date and carry what is still owed on them. An invoice due exactly 30 days before the as-of date is in 1-30. Unapplied customer credit and any receivable journal entry age on their own date, so the Total column equals Accounts Receivable on the balance sheet for the same date. A customer with nothing in any column is omitted.</p>
 <div class="table-wrap"><table id="receivables-totals"><caption>Whole-report totals — all pages</caption><thead><tr>{% for key in receivables.columns %}<th scope="col">{{ receivables.headings[key] }}</th>{% endfor %}<th scope="col">Total</th></tr></thead><tbody>
 <tr>{% for key in receivables.columns %}<td data-total="{{ key }}">{{ receivables.totals[key].amount }}</td>{% endfor %}<td data-total="total">{{ receivables.totals.total.amount }}</td></tr>

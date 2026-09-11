@@ -31,7 +31,11 @@ REPORTS = {
     'trial-balance': 'Trial balance',
     'general-ledger': 'General ledger',
     'profit-and-loss': 'Profit and loss',
+    'profit-and-loss-by-job': 'Profit and loss by job',
+    'profit-and-loss-by-class': 'Profit and loss by class',
     'balance-sheet': 'Balance sheet',
+    'unbilled-costs': 'Unbilled costs by job',
+    'collections': 'Collections',
 }
 
 # The verbs a page is opened by, phrased as the work rather than as the instruction.

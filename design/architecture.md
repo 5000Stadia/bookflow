@@ -1303,9 +1303,87 @@ filter form drops the `cursor` leaf like every other paged report --
 `pages.CURSOR_FREE_REPORTS` is the one set the workbench branches on and the one
 the host test reads, so a report added to one of the presentation modules is
 covered without being named again. Both pages are titled from `naming.REPORTS`,
-and the home window's Reports tile names both alongside the seven that were
-there before. A staled continuation on any report page now shows the restart
-note, not only on trial balance and general ledger.
+and the home window's Reports tile names every registered report. A staled
+continuation on any report page now shows the restart note, not only on trial
+balance and general ledger.
+
+## Dimensional profit and loss: by job and by class
+
+`company/dimensional_statements.py` supplies `report profit-and-loss-by-job` and
+`report profit-and-loss-by-class`. They are the profit and loss split sideways,
+not a second statement: the row set, the account order, the section arithmetic and
+the whole-statement totals come from `financial_statements` itself, through
+`_query`, `_net` and the extracted `profit_and_loss_totals`, so the Total column
+is `report profit-and-loss` for the same dates account by account.
+
+A column is one value of one posting-line dimension. The job report reads
+`name_id` only where `name_type` is `customer`, so a vendor, an employee or an
+other name on an expense line is not made into a job; the class report reads
+`class_id`. A line with no such value goes to an explicit Unassigned or
+Unclassified column, never nowhere, because a dropped cell would stop the columns
+adding across to the statement. Both invariants are enforced at run time: the
+columns must sum to each section total and a row's cells must sum to its own
+account total, or the report raises `E_INTERNAL` rather than printing a figure
+that does not tie.
+
+The row door is one predicate wider than the statement's. `financial_statements`
+prints an income or expense account whose period net is not zero
+(`PL_PRESENT`); a split prints any account that took a posting in the period
+(`PL_POSTED`), because an account netting to zero company-wide can be real money
+on one job and its opposite on another. The extra rows carry a zero total, which
+is what the statement itself shows with `include_zero`.
+
+Columns are bounded without being lost. They are the dimension values with
+activity, in hierarchy-name order; past the requested `columns` count the
+remainder is folded into one Other column that states how many values it holds
+and carries their summed section totals, and the Unassigned column is never
+folded. Continuations join the financial family in `ledger_reports`, whose
+watermark already includes the company audit sequence, so renaming the customer or
+class a column is headed with restarts the report.
+
+Workbench `statements.py` and `dimensional_statement.html` project the result.
+A column-per-job table is the one report here that is wider than a screen on
+purpose, so the table scrolls inside its own wrapper while the page never does,
+the account column and the Total column are pinned to the two edges at desktop
+width, and a net-income-per-column list sits above the table so the figure the
+reader came for needs no sideways scrolling at all. At phone width nothing is
+pinned: the shared `document-detail` rules turn each row into a labelled card, so
+every cell names its own column and no job can be scrolled past unseen.
+
+## Unbilled costs and collections
+
+`company/unbilled_costs.py` supplies `report unbilled-costs`: billable work
+recorded against a customer or job on or before `as_of` and not yet invoiced, one
+row per work line under a subtotal row per customer or job. The billing state of
+each line is not derived here. `billing_queries` now owns three extracted
+functions -- `free_amounts`, `line_state` and `scope_fractions` -- and the billing
+window, the tax forecast and this report all call them, so what "partly billed"
+means and how much scope is left cannot drift between the report and the command
+that acts on it. Which sources are listed comes from the same place:
+`billing_queries.billable_source` is the eligibility expression `billing` uses for
+its own `can_invoice`, and `current_owner` keeps an estimate whose work order has
+taken the work over from being counted twice. States are dispositioned against the
+declared `BillingLineState` rather than a retyped list, so a new state is listed
+rather than silently filed as nothing to do.
+
+`company/collection_reports.py` supplies `report collections`: the aging summary
+restricted to customers with something at or past `minimum_bucket`, each with the
+contacts recorded against them and their overdue invoices beneath. The aging
+arithmetic is `receivable_reports`' own -- `AGING_ROWS` and `OPEN_INVOICE_ROWS`
+are the expressions `ar_aging` and `open_invoices` page, read whole here -- so the
+two reports cannot disagree about what one customer owes on one date. A customer
+whose chased columns net to nothing owes nothing overdue and is not printed, which
+is what keeps an unapplied credit aged on its own date off a chase list. Contacts
+follow the customer's own contact rule through
+`party_cmds._customer_collection_owner`, so a job that inherits its contacts is
+chased through the customer it is named under. The totals here are the overdue
+part of receivables and are not Accounts Receivable, which `report ar-aging`
+reports in full.
+
+Both project through workbench `receivables.py` and the worklist tables in
+`receivables.html`: a collections row carries `tel:` and `mailto:` links for every
+recorded number and address, and an unbilled-cost line links to its source
+document's billing window, which is the page that turns the row into an invoice.
 
 ## Customer work documents
 

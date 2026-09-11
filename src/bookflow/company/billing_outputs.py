@@ -7,6 +7,12 @@ from bookflow.company.billing_facts import ExactFraction
 from bookflow.company.work_preferences import WorkBillingPreferences
 from bookflow.company.tax_forecasts import WorkTaxForecast
 
+# What a billing root is, in one word. Declared once here because the billing
+# command and every report that reads billing state must name the same set: a
+# state added here and hand-retyped elsewhere is how two surfaces come to
+# disagree about what "billed" means.
+BillingLineState = Literal['unbilled', 'partially_billed', 'billed', 'nonbillable', 'no_charge']
+
 
 class BillingLineOutput(StrictModel):
     requires_bounded_recovery: bool
@@ -18,7 +24,7 @@ class BillingLineOutput(StrictModel):
     item_id: str
     description: str | None
     billable: bool
-    state: Literal['unbilled', 'partially_billed', 'billed', 'nonbillable', 'no_charge']
+    state: BillingLineState
     quantity: str
     completed_quantity: str
     billed_quantity: str

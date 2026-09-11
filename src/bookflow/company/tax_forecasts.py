@@ -28,8 +28,7 @@ class WorkTaxForecast(StrictModel):
 def remaining(s,source,revision,*,pending=()):
     """Stream all free intervals; never build an over-limit selection descriptor."""
     import hashlib
-    import heapq
-    from bookflow.company import work,billing_allocations as alloc,billing_math as math,billing_queries as query
+    from bookflow.company import work,billing_queries as query
     from bookflow.company import tax_attribution as tax,tax_policy,work_preferences
     profile=work.facts(revision).profile;mode=tax_policy.effective(profile)
     identities=query.root_identities(s,source)
@@ -39,15 +38,7 @@ def remaining(s,source,revision,*,pending=()):
     for row in work.saved_lines(s,revision):
         facts=work.line_facts(row);identity=identities[row['line_id']]
         root=identity['root_document_id'],identity['root_line_id']
-        d=math.denominator(facts.quantity_microunits,facts.net_minor_units)
-        used=pending_by_root.get(root)
-        spans=()
-        if used:
-            proof=alloc.read_proof(used);spans=proof.intervals() if proof else ((0,d),)
-        occupied=heapq.merge(alloc.occupied_spans(s,root,facts,policy=mode),spans)
-        length=net=count=0
-        for a,b in math.free_spans(occupied,d):
-            length+=b-a;net+=math.portion(facts.net_minor_units,a,b,d);count+=1
+        length,net,count=query.free_amounts(s,root,facts,mode,pending_by_root.get(root))
         values[row['line_id']]=dict(length=length,net=net if facts.billable else 0,tax=0,count=count)
         free_facts.append((row['line_id'],length,net,count,facts.billable))
         if not facts.billable or length==0:continue

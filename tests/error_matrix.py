@@ -286,7 +286,7 @@ for _noun in ('invoice', 'sales-receipt'):
         'E_RECORD_NOT_FOUND': 'document of the requested type absent',
         'E_QUERY_STALE': 'company audit changed between immutable revision pages',
     }
-for _report in ('profit-and-loss', 'balance-sheet'):
+for _report in ('profit-and-loss', 'balance-sheet', 'profit-and-loss-by-job', 'profit-and-loss-by-class'):
     MATRIX['report ' + _report] = {
         'E_QUERY_STALE': 'posting or display facts changed between statement pages',
         'E_VALUE_RANGE': 'public account amount or statement total exceeds signed 64-bit range',
@@ -313,6 +313,15 @@ MATRIX['report unpaid-bills'] = {
     'E_QUERY_STALE': 'posting, settlement or vendor display facts changed between unpaid-bill pages',
     'E_VALUE_RANGE': 'public bill amount or unpaid-bill total exceeds signed 64-bit range',
     'E_RECORD_NOT_FOUND': 'vendor filter does not resolve',
+}
+MATRIX['report unbilled-costs'] = {
+    'E_QUERY_STALE': 'work, billing allocation or customer display facts changed between unbilled-cost pages',
+    'E_VALUE_RANGE': 'public remaining amount, subtotal or unbilled total exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'customer filter does not resolve',
+}
+MATRIX['report collections'] = {
+    'E_QUERY_STALE': 'posting, settlement or customer display facts changed between collection pages',
+    'E_VALUE_RANGE': 'public aging column, overdue balance or collection total exceeds signed 64-bit range',
 }
 
 for _verb in ('post', 'update'):

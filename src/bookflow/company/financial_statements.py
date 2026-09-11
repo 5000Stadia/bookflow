@@ -81,18 +81,31 @@ SECTION_SQL = """CASE
  ELSE a.type END"""
 
 
-def _query(profit_and_loss):
+# The income and expense account types are exactly the profit-and-loss sections, so
+# the predicate is derived from that one declaration rather than retyped beside it.
+PL_ACCOUNT_TYPES_SQL = "a.type IN (" + ",".join(f"'{name}'" for name in PL_SECTIONS) + ")"
+
+# What puts an income or expense account on the statement: a period net that is not
+# zero. A dimensional split of the same statement reads the same accounts through a
+# wider door -- an account whose company-wide net is zero can still be real money on
+# one job and its opposite on another -- so the door is a parameter rather than a
+# second copy of this query.
+PL_PRESENT = "coalesce(b.debits,'0')!=coalesce(b.credits,'0')"
+PL_POSTED = "coalesce(b.activity,0)>0"
+
+
+def _query(profit_and_loss, present=None):
     sections = PL_SECTIONS if profit_and_loss else BS_SECTIONS
     order = "CASE section " + " ".join(f"WHEN '{name}' THEN {i}" for i, name in enumerate(sections)) + " END"
-    types = "a.type IN ('income','cost_of_goods_sold','expense','other_income','other_expense')"
+    types = PL_ACCOUNT_TYPES_SQL
     if not profit_and_loss:
         types = f"NOT ({types}) AND a.type!='non_posting'"
-    nonzero = "coalesce(b.debits,'0')!=coalesce(b.credits,'0')" if profit_and_loss else "coalesce(b.closing,'0')!='0'"
+    nonzero = (present or PL_PRESENT) if profit_and_loss else "coalesce(b.closing,'0')!='0'"
     query = ledger._EFFECTS + f""", statement_accounts AS (
         SELECT a.id, a.full_name, a.name, a.number, a.type, a.parent_id, a.active,
             a.full_name_key, {SECTION_SQL} AS section,
             coalesce(b.closing,'0') AS closing, coalesce(b.debits,'0') AS debits,
-            coalesce(b.credits,'0') AS credits
+            coalesce(b.credits,'0') AS credits, coalesce(b.activity,0) AS activity
         FROM accounts a LEFT JOIN balances b ON b.account_id=a.id
         WHERE {types} AND (:zero OR {nonzero})) """
     return query, order
@@ -107,6 +120,21 @@ def _rows(cursor):
     columns = [column[0] for column in cursor.description]
     for row in cursor:
         yield dict(zip(columns, row))
+
+
+def profit_and_loss_totals(sections, currency) -> ProfitAndLossTotals:
+    """The derived statement lines, from the five section sums in minor units.
+
+    Gross profit, operating income and net income are arithmetic over sections and
+    nothing else, so the whole statement, one job's column and one class's column
+    are all totalled by this one function and cannot disagree about the shape of a
+    profit-and-loss.
+    """
+    totals = dict(sections)
+    totals["gross_profit"] = totals["income"] - totals["cost_of_goods_sold"]
+    totals["net_operating_income"] = totals["gross_profit"] - totals["expense"]
+    totals["net_income"] = totals["net_operating_income"] + totals["other_income"] - totals["other_expense"]
+    return ProfitAndLossTotals(**{key: ledger.money(value, currency) for key, value in totals.items()})
 
 
 def _statement(inp, s, *, profit_and_loss, principal_id):
@@ -129,10 +157,7 @@ def _statement(inp, s, *, profit_and_loss, principal_id):
             amount = ledger.money(_net(row, profit_and_loss), currency).minor_units
             totals[row["section"]] += amount
         if profit_and_loss:
-            totals["gross_profit"] = totals["income"] - totals["cost_of_goods_sold"]
-            totals["net_operating_income"] = totals["gross_profit"] - totals["expense"]
-            totals["net_income"] = totals["net_operating_income"] + totals["other_income"] - totals["other_expense"]
-            typed_totals = ProfitAndLossTotals(**{key: ledger.money(value, currency) for key, value in totals.items()})
+            typed_totals = profit_and_loss_totals(totals, currency)
         else:
             prior = current = 0
             for opening, closing in raw.execute(ledger._EFFECTS + """SELECT b.opening, b.closing
