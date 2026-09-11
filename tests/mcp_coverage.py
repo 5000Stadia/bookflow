@@ -299,6 +299,7 @@ report ap-aging
 report ar-aging
 report balance-sheet
 report cash-flows
+report collections
 report expenses-by-vendor
 report general-ledger
 report income-tax-summary
@@ -306,6 +307,8 @@ report inventory-valuation
 report missing-checks
 report open-invoices
 report profit-and-loss
+report profit-and-loss-by-class
+report profit-and-loss-by-job
 report sales-by-customer
 report sales-by-item
 report sales-by-rep
@@ -313,6 +316,7 @@ report statement
 report stock-status
 report transaction-detail
 report trial-balance
+report unbilled-costs
 report unpaid-bills
 sales-receipt history
 sales-receipt post

@@ -10,6 +10,72 @@ from bookflow.core.exact import format_quantity_micro_units as quantity
 from bookflow.hub.access import require_resource
 
 
+# The two work kinds a sale can be billed from. `billing_cmds` builds one command
+# pair per entry, and every reader of billing state derives the set from here
+# rather than retyping it, so a third kind arrives in one place.
+BILLING_KINDS = ('estimate', 'work_order')
+
+
+def billable_source(owner):
+    """Whether this current billing owner can be billed at all today.
+
+    One expression, read by `billing` for its own `can_invoice` and by the
+    unbilled-cost report for which sources it lists: an estimate is billable only
+    once accepted, other work until it is cancelled, and neither while inactive.
+    """
+    return bool(owner['active'] and (owner['status'] == 'accepted' if owner['kind'] == 'estimate'
+                                     else owner['status'] != 'cancelled'))
+
+
+def free_amounts(s, root, facts, policy, pending=None):
+    """Unallocated span length, raw net and span count for one billing root.
+
+    The single scan of the free intervals behind every remaining-work number:
+    the tax forecast reads it for what it is about to charge tax on, and the
+    unbilled-cost report reads it for what is still to bill. `net` here is the
+    raw free net, before the caller decides what a non-billable line is worth.
+    """
+    import heapq
+    from bookflow.company import billing_allocations as alloc, billing_math as math
+    denominator = math.denominator(facts.quantity_microunits, facts.net_minor_units)
+    spans = ()
+    if pending is not None:
+        proof = alloc.read_proof(pending)
+        spans = proof.intervals() if proof else ((0, denominator),)
+    occupied = heapq.merge(alloc.occupied_spans(s, root, facts, policy=policy), spans)
+    length = net = count = 0
+    for start, end in math.free_spans(occupied, denominator):
+        length += end - start
+        net += math.portion(facts.net_minor_units, start, end, denominator)
+        count += 1
+    return length, net, count
+
+
+def scope_fractions(facts, free_length):
+    """Billed scope, remaining scope and billed percentage of one root's original scope.
+
+    Exact fractions of the quantity originally quoted, never a rounded quantity:
+    the billing window and the unbilled-cost report print the same numbers because
+    they are these numbers.
+    """
+    from bookflow.company import billing_math as math
+    denominator = math.denominator(facts.quantity_microunits, facts.net_minor_units)
+    return (Fraction(facts.quantity_microunits * (denominator - free_length), denominator * 1_000_000),
+            Fraction(facts.quantity_microunits * free_length, denominator * 1_000_000),
+            Fraction(100 * (denominator - free_length), denominator))
+
+
+def line_state(free_length, allocation_count, billable, free_net):
+    """The one word for what has happened to a billing root so far.
+
+    `free_net` is what the caller counts as remaining charge -- zero on a line
+    that is not billable. Every surface that names a billing state calls this,
+    so the billing window and the unbilled-cost report cannot drift apart.
+    """
+    return ('billed' if not free_length else 'partially_billed' if allocation_count else
+            'nonbillable' if not billable else 'no_charge' if free_net == 0 else 'unbilled')
+
+
 def root_identities(s, header):
     current = sa.select(c.work_lines.c.line_id).where(c.work_lines.c.document_id == header['id'],
         c.work_lines.c.revision_id == header['current_revision_id'])
@@ -109,13 +175,9 @@ def billing(s, ctx, inp, kind):
     for line, root in zip(lines, roots):
         lf = work.line_facts(line)
         used = alloc.active_totals(s, root)
-        d = math.denominator(lf.quantity_microunits, lf.net_minor_units)
         free_length, free_net = forecast_values[line['line_id']]['length'],forecast_values[line['line_id']]['net']
-        billed_quantity = Fraction(lf.quantity_microunits*(d-free_length),d*1_000_000)
-        remaining_quantity = Fraction(lf.quantity_microunits*free_length,d*1_000_000)
-        percent = Fraction(100*(d-free_length),d)
-        state = ('billed' if not free_length else 'partially_billed' if used['count'] else
-                 'nonbillable' if not lf.billable else 'no_charge' if free_net == 0 else 'unbilled')
+        billed_quantity, remaining_quantity, percent = scope_fractions(lf, free_length)
+        state = line_state(free_length, used['count'], lf.billable, free_net)
         remaining_net = free_net if lf.billable else 0
         remaining_tax = forecast_values[line['line_id']]['tax']
         recovery, recommendation = policy.recovery(s, root, lf, rev['currency'],alloc.source_policy(s,line))

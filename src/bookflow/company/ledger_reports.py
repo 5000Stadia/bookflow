@@ -38,6 +38,29 @@ MANY_SPLITS = "-SPLIT-"
 REPORT_VERSION = "2"
 
 
+# Which continuation family a report belongs to. A family decides what a cursor is
+# labelled against and what stales it, so every report names itself here once: a
+# report left out of all three would silently take the general-ledger branch and
+# carry a watermark that cannot see its own rows change.
+#
+# `financial` is the profit-and-loss family and the balance sheet: rows are accounts,
+# and the watermark additionally covers the audit sequence, so any audited company
+# change -- including renaming the customer or class a dimensional column is headed
+# with -- restarts the report rather than paging into a different set of labels.
+FINANCIAL_REPORTS = frozenset({
+    "profit-and-loss", "balance-sheet", "cash-flows", "income-tax-summary",
+    "profit-and-loss-by-job", "profit-and-loss-by-class",
+})
+# Receivables rows are customers or jobs, labelled and ordered by hierarchy name.
+# Settlement and billing history post nothing, so these also carry the audit sequence.
+RECEIVABLE_REPORTS = frozenset({
+    "ar-aging", "open-invoices", "statement", "collections", "unbilled-costs",
+})
+# Payables rows are vendors, which are a flat list. The sales tax liability's rows are
+# agencies, which are vendors, so it labels and orders its rows exactly as the other two.
+PAYABLE_REPORTS = frozenset({"ap-aging", "unpaid-bills", "sales-tax-liability"})
+
+
 def account_order(prefix: str = "") -> str:
     """Presentation order for account rows: account number, then name.
 
@@ -408,11 +431,11 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True, acc
     # the balance sheet, the statement of cash flows and the income tax summary.
     # The customer statement is a receivables report and takes the receivable
     # branch, like its two neighbours.
-    financial = report in {"profit-and-loss", "balance-sheet", "cash-flows", "income-tax-summary"}
-    receivable = report in {"ar-aging", "open-invoices", "statement"}
+    financial = report in FINANCIAL_REPORTS
+    receivable = report in RECEIVABLE_REPORTS
     # The sales tax liability is a payables report whose rows are agencies, which are
     # vendors, so it labels and orders its rows exactly as the other two do.
-    payable = report in {"ap-aging", "unpaid-bills", "sales-tax-liability"}
+    payable = report in PAYABLE_REPORTS
     # A period summary groups posting effects by the party or the item the effect names,
     # so its rows are labelled and ordered off that master list exactly as a receivables
     # or payables row is. It takes no settlement state at all: applying a receipt moves

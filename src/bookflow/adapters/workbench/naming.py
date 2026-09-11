@@ -37,11 +37,17 @@ REPORTS = {
     'transaction-detail': 'Transaction detail by account',
     'missing-checks': 'Missing checks',
     'profit-and-loss': 'Profit and loss',
+    'profit-and-loss-by-job': 'Profit and loss by job',
+    'profit-and-loss-by-class': 'Profit and loss by class',
     'balance-sheet': 'Balance sheet',
     'cash-flows': 'Statement of cash flows',
     'income-tax-summary': 'Income tax summary',
     'inventory-valuation': 'Inventory valuation summary',
     'stock-status': 'Inventory stock status by item',
+    'profit-and-loss-by-job': 'Profit and loss by job',
+    'profit-and-loss-by-class': 'Profit and loss by class',
+    'unbilled-costs': 'Unbilled costs by job',
+    'collections': 'Collections',
 }
 
 # Pages whose title is neither the noun's own name nor a phrase the verb map knows. The

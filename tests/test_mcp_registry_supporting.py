@@ -23,7 +23,8 @@ FAMILIES = {
                 'report ar-aging', 'report open-invoices', 'report statement',
                 'report ap-aging', 'report unpaid-bills', 'report missing-checks',
                 'report sales-by-customer', 'report sales-by-item', 'report sales-by-rep',
-                'report expenses-by-vendor'),
+                'report expenses-by-vendor',
+                'report profit-and-loss-by-job', 'report profit-and-loss-by-class', 'report collections', 'report unbilled-costs'),
 }
 
 

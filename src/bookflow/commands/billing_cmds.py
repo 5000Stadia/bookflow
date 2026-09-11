@@ -34,5 +34,7 @@ def register(kind, prefix, verb):
     return cmd
 
 
-BILLING_COMMANDS = [register(kind, prefix, verb) for kind, prefix in (('estimate', 'Estimate'), ('work_order', 'WorkOrder'))
+# The kinds come from billing_queries, which is where what can be billed is declared.
+BILLING_COMMANDS = [register(kind, ''.join(word.title() for word in kind.split('_')), verb)
+    for kind in billing_queries.BILLING_KINDS
     for verb in ('invoice', 'sales-receipt', 'billing')]

@@ -852,6 +852,265 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report collections`
+
+Who to chase, with what to chase them: every customer or job carrying an overdue balance as of as_of, their aging columns, the people and phone numbers and email addresses recorded against them, and each overdue invoice listed beneath with its due date, days past due and remaining balance. A customer is included when anything sits at or past minimum_bucket; a customer whose balance is all current is not being chased and is omitted. The aging columns are report ar-aging's own columns for the same customer on the same date, so the two never disagree; the totals here are the overdue part of receivables and not Accounts Receivable, which report ar-aging reports in full. Rows are paged; totals cover every overdue customer.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.collections` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report collections --as-of 2026-12-31 --minimum-bucket days_1_30 --company "Demo Plumbing Co" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; receivables are aged against it.; minimum length 10; maximum length 10 |
+| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `minimum_bucket` | `--minimum-bucket` | literal["days_1_30", "days_31_60", "days_61_90", "over_90"] | no | no | "days_1_30" | The oldest-first aging column a customer must reach before it is chased; anything in that column or past it counts. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.collections`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.current` | object | yes | no | — | — |
+| `totals.current.amount` | string | yes | no | — | — |
+| `totals.current.currency` | string | yes | no | — | — |
+| `totals.current.minor_units` | integer | yes | no | — | — |
+| `totals.days_1_30` | object | yes | no | — | — |
+| `totals.days_1_30.amount` | string | yes | no | — | — |
+| `totals.days_1_30.currency` | string | yes | no | — | — |
+| `totals.days_1_30.minor_units` | integer | yes | no | — | — |
+| `totals.days_31_60` | object | yes | no | — | — |
+| `totals.days_31_60.amount` | string | yes | no | — | — |
+| `totals.days_31_60.currency` | string | yes | no | — | — |
+| `totals.days_31_60.minor_units` | integer | yes | no | — | — |
+| `totals.days_61_90` | object | yes | no | — | — |
+| `totals.days_61_90.amount` | string | yes | no | — | — |
+| `totals.days_61_90.currency` | string | yes | no | — | — |
+| `totals.days_61_90.minor_units` | integer | yes | no | — | — |
+| `totals.over_90` | object | yes | no | — | — |
+| `totals.over_90.amount` | string | yes | no | — | — |
+| `totals.over_90.currency` | string | yes | no | — | — |
+| `totals.over_90.minor_units` | integer | yes | no | — | — |
+| `totals.total` | object | yes | no | — | — |
+| `totals.total.amount` | string | yes | no | — | — |
+| `totals.total.currency` | string | yes | no | — | — |
+| `totals.total.minor_units` | integer | yes | no | — | — |
+| `totals.overdue` | object | yes | no | — | — |
+| `totals.overdue.amount` | string | yes | no | — | — |
+| `totals.overdue.currency` | string | yes | no | — | — |
+| `totals.overdue.minor_units` | integer | yes | no | — | — |
+| `customer_count` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].kind` | literal["customer", "invoice"] | yes | no | — | — |
+| `rows[].customer_id` | string \| null | yes | yes | — | — |
+| `rows[].current_customer_label` | string \| null | yes | yes | — | — |
+| `rows[].current_customer_name` | string \| null | yes | yes | — | — |
+| `rows[].display_customer_label` | string | yes | no | — | — |
+| `rows[].parent_id` | string \| null | yes | yes | — | — |
+| `rows[].active` | boolean \| null | yes | yes | — | — |
+| `rows[].current` | object | yes | no | — | — |
+| `rows[].current.amount` | string | yes | no | — | — |
+| `rows[].current.currency` | string | yes | no | — | — |
+| `rows[].current.minor_units` | integer | yes | no | — | — |
+| `rows[].days_1_30` | object | yes | no | — | — |
+| `rows[].days_1_30.amount` | string | yes | no | — | — |
+| `rows[].days_1_30.currency` | string | yes | no | — | — |
+| `rows[].days_1_30.minor_units` | integer | yes | no | — | — |
+| `rows[].days_31_60` | object | yes | no | — | — |
+| `rows[].days_31_60.amount` | string | yes | no | — | — |
+| `rows[].days_31_60.currency` | string | yes | no | — | — |
+| `rows[].days_31_60.minor_units` | integer | yes | no | — | — |
+| `rows[].days_61_90` | object | yes | no | — | — |
+| `rows[].days_61_90.amount` | string | yes | no | — | — |
+| `rows[].days_61_90.currency` | string | yes | no | — | — |
+| `rows[].days_61_90.minor_units` | integer | yes | no | — | — |
+| `rows[].over_90` | object | yes | no | — | — |
+| `rows[].over_90.amount` | string | yes | no | — | — |
+| `rows[].over_90.currency` | string | yes | no | — | — |
+| `rows[].over_90.minor_units` | integer | yes | no | — | — |
+| `rows[].total` | object | yes | no | — | — |
+| `rows[].total.amount` | string | yes | no | — | — |
+| `rows[].total.currency` | string | yes | no | — | — |
+| `rows[].total.minor_units` | integer | yes | no | — | — |
+| `rows[].overdue` | object | yes | no | — | — |
+| `rows[].overdue.amount` | string | yes | no | — | — |
+| `rows[].overdue.currency` | string | yes | no | — | — |
+| `rows[].overdue.minor_units` | integer | yes | no | — | — |
+| `rows[].contacts` | array[object] | no | no | [] | — |
+| `rows[].contacts[].contact_id` | string | yes | no | — | — |
+| `rows[].contacts[].owner_customer_id` | string | yes | no | — | — |
+| `rows[].contacts[].inherited` | boolean | yes | no | — | — |
+| `rows[].contacts[].role` | string | yes | no | — | — |
+| `rows[].contacts[].display_name` | string \| null | yes | yes | — | — |
+| `rows[].contacts[].salutation` | string \| null | yes | yes | — | — |
+| `rows[].contacts[].first_name` | string \| null | yes | yes | — | — |
+| `rows[].contacts[].last_name` | string \| null | yes | yes | — | — |
+| `rows[].contacts[].job_title` | string \| null | yes | yes | — | — |
+| `rows[].contacts[].work_phone` | string \| null | yes | yes | — | — |
+| `rows[].contacts[].home_phone` | string \| null | yes | yes | — | — |
+| `rows[].contacts[].mobile_phone` | string \| null | yes | yes | — | — |
+| `rows[].contacts[].other_phone` | string \| null | yes | yes | — | — |
+| `rows[].contacts[].work_fax` | string \| null | yes | yes | — | — |
+| `rows[].contacts[].home_fax` | string \| null | yes | yes | — | — |
+| `rows[].contacts[].primary_email` | string \| null | yes | yes | — | — |
+| `rows[].contacts[].secondary_email` | string \| null | yes | yes | — | — |
+| `rows[].contacts[].website` | string \| null | yes | yes | — | — |
+| `rows[].contacts[].points` | array[object] | yes | no | — | — |
+| `rows[].contacts[].points[].contact_point_id` | string | yes | no | — | — |
+| `rows[].contacts[].points[].kind` | string | yes | no | — | — |
+| `rows[].contacts[].points[].custom_label` | string \| null | yes | yes | — | — |
+| `rows[].contacts[].points[].value` | string | yes | no | — | — |
+| `rows[].billing_address` | string \| null | no | yes | null | — |
+| `rows[].transaction_id` | string \| null | no | yes | null | — |
+| `rows[].number` | string \| null | no | yes | null | — |
+| `rows[].date` | string \| null | no | yes | null | — |
+| `rows[].due_date` | string \| null | no | yes | null | — |
+| `rows[].days_past_due` | integer \| null | no | yes | null | — |
+| `rows[].aging_bucket` | literal["current", "days_1_30", "days_31_60", "days_61_90", "over_90"] \| null | no | yes | null | — |
+| `rows[].balance` | object \| null | no | yes | null | — |
+| `rows[].balance.amount` | string | yes | no | — | — |
+| `rows[].balance.currency` | string | yes | no | — | — |
+| `rows[].balance.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "customer_count": 1,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "current": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "days_1_30": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "days_31_60": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "days_61_90": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "over_90": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "overdue": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "total": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
 ## `report expenses-by-vendor`
 
 Expense between date_from and date_to grouped by vendor, with each vendor's share of the period as a percentage. Cost of goods sold, ordinary expense and other expense are all counted, which is what makes the total the same figure the profit and loss reports for those three sections over the same dates. Every document that reaches one of those accounts is included -- bills, cheques, credit card charges, vendor credits and expense journal entries -- because the report selects on the account rather than on a list of document types. A line that names its own vendor is that vendor's; a line that names none takes the one vendor named elsewhere on the same posting, which is how a cheque's payee reaches its expense lines. Expense that names no vendor at all, including money paid to a name from another list, is the one row called No name. A vendor credit is negative and reduces the vendor. Rows worth nothing are omitted; totals cover every vendor and rows are paged.
@@ -1990,6 +2249,524 @@ Example JSON output:
 ```json
 {
   "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "cost_of_goods_sold": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "expense": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "gross_profit": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "income": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "net_income": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "net_operating_income": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "other_expense": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "other_income": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `report profit-and-loss-by-class`
+
+The profit and loss for inclusive accounting dates with one column per class, one row per income or expense account, and a total column. Every posting line carries the class it was entered under, so a column is one class and a cell is that account's net within it. A line entered under no class is in the explicit Unclassified column; nothing is dropped, so the columns always add across to the total and the total column is report profit-and-loss for the same dates, account for account. Columns are the classes with posting activity in the period, in hierarchy order, so a subclass reads under its parent; past the requested number of columns the remainder is folded into one Other column that says how many it holds. Own-account rows are paged; column and statement totals cover every account.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.profit-and-loss-by-class` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report profit-and-loss-by-class --date-from 2026-01-01 --date-to 2026-12-31 --columns 50 --company "Demo Plumbing Co" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `include_zero` | `--include-zero` | boolean | no | no | false | Include zero period nets, including inactive and never-posted income and expense accounts. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `columns` | `--columns` | integer | no | no | 50 | How many named columns are shown before the remainder is folded into one Other column.; minimum 1; maximum 200 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.profit-and-loss-by-class`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `dimension` | literal["job", "class"] | yes | no | — | — |
+| `columns` | array[object] | yes | no | — | — |
+| `columns[].kind` | literal["value", "unassigned", "other"] | yes | no | — | — |
+| `columns[].id` | string \| null | yes | yes | — | — |
+| `columns[].label` | string | yes | no | — | — |
+| `columns[].current_label` | string \| null | yes | yes | — | — |
+| `columns[].parent_id` | string \| null | yes | yes | — | — |
+| `columns[].active` | boolean \| null | yes | yes | — | — |
+| `columns[].folded_count` | integer \| null | yes | yes | — | — |
+| `columns[].totals` | object | yes | no | — | — |
+| `columns[].totals.income` | object | yes | no | — | — |
+| `columns[].totals.income.amount` | string | yes | no | — | — |
+| `columns[].totals.income.currency` | string | yes | no | — | — |
+| `columns[].totals.income.minor_units` | integer | yes | no | — | — |
+| `columns[].totals.cost_of_goods_sold` | object | yes | no | — | — |
+| `columns[].totals.cost_of_goods_sold.amount` | string | yes | no | — | — |
+| `columns[].totals.cost_of_goods_sold.currency` | string | yes | no | — | — |
+| `columns[].totals.cost_of_goods_sold.minor_units` | integer | yes | no | — | — |
+| `columns[].totals.gross_profit` | object | yes | no | — | — |
+| `columns[].totals.gross_profit.amount` | string | yes | no | — | — |
+| `columns[].totals.gross_profit.currency` | string | yes | no | — | — |
+| `columns[].totals.gross_profit.minor_units` | integer | yes | no | — | — |
+| `columns[].totals.expense` | object | yes | no | — | — |
+| `columns[].totals.expense.amount` | string | yes | no | — | — |
+| `columns[].totals.expense.currency` | string | yes | no | — | — |
+| `columns[].totals.expense.minor_units` | integer | yes | no | — | — |
+| `columns[].totals.net_operating_income` | object | yes | no | — | — |
+| `columns[].totals.net_operating_income.amount` | string | yes | no | — | — |
+| `columns[].totals.net_operating_income.currency` | string | yes | no | — | — |
+| `columns[].totals.net_operating_income.minor_units` | integer | yes | no | — | — |
+| `columns[].totals.other_income` | object | yes | no | — | — |
+| `columns[].totals.other_income.amount` | string | yes | no | — | — |
+| `columns[].totals.other_income.currency` | string | yes | no | — | — |
+| `columns[].totals.other_income.minor_units` | integer | yes | no | — | — |
+| `columns[].totals.other_expense` | object | yes | no | — | — |
+| `columns[].totals.other_expense.amount` | string | yes | no | — | — |
+| `columns[].totals.other_expense.currency` | string | yes | no | — | — |
+| `columns[].totals.other_expense.minor_units` | integer | yes | no | — | — |
+| `columns[].totals.net_income` | object | yes | no | — | — |
+| `columns[].totals.net_income.amount` | string | yes | no | — | — |
+| `columns[].totals.net_income.currency` | string | yes | no | — | — |
+| `columns[].totals.net_income.minor_units` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].account_id` | string | yes | no | — | — |
+| `rows[].current_account_label` | string | yes | no | — | — |
+| `rows[].current_account_name` | string | yes | no | — | — |
+| `rows[].current_account_number` | string \| null | yes | yes | — | — |
+| `rows[].display_account_label` | string | yes | no | — | — |
+| `rows[].account_type` | string | yes | no | — | — |
+| `rows[].parent_id` | string \| null | yes | yes | — | — |
+| `rows[].active` | boolean | yes | no | — | — |
+| `rows[].section` | literal["income", "cost_of_goods_sold", "expense", "other_income", "other_expense"] | yes | no | — | — |
+| `rows[].amounts` | array[object] | yes | no | — | — |
+| `rows[].amounts[].amount` | string | yes | no | — | — |
+| `rows[].amounts[].currency` | string | yes | no | — | — |
+| `rows[].amounts[].minor_units` | integer | yes | no | — | — |
+| `rows[].total` | object | yes | no | — | — |
+| `rows[].total.amount` | string | yes | no | — | — |
+| `rows[].total.currency` | string | yes | no | — | — |
+| `rows[].total.minor_units` | integer | yes | no | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.income` | object | yes | no | — | — |
+| `totals.income.amount` | string | yes | no | — | — |
+| `totals.income.currency` | string | yes | no | — | — |
+| `totals.income.minor_units` | integer | yes | no | — | — |
+| `totals.cost_of_goods_sold` | object | yes | no | — | — |
+| `totals.cost_of_goods_sold.amount` | string | yes | no | — | — |
+| `totals.cost_of_goods_sold.currency` | string | yes | no | — | — |
+| `totals.cost_of_goods_sold.minor_units` | integer | yes | no | — | — |
+| `totals.gross_profit` | object | yes | no | — | — |
+| `totals.gross_profit.amount` | string | yes | no | — | — |
+| `totals.gross_profit.currency` | string | yes | no | — | — |
+| `totals.gross_profit.minor_units` | integer | yes | no | — | — |
+| `totals.expense` | object | yes | no | — | — |
+| `totals.expense.amount` | string | yes | no | — | — |
+| `totals.expense.currency` | string | yes | no | — | — |
+| `totals.expense.minor_units` | integer | yes | no | — | — |
+| `totals.net_operating_income` | object | yes | no | — | — |
+| `totals.net_operating_income.amount` | string | yes | no | — | — |
+| `totals.net_operating_income.currency` | string | yes | no | — | — |
+| `totals.net_operating_income.minor_units` | integer | yes | no | — | — |
+| `totals.other_income` | object | yes | no | — | — |
+| `totals.other_income.amount` | string | yes | no | — | — |
+| `totals.other_income.currency` | string | yes | no | — | — |
+| `totals.other_income.minor_units` | integer | yes | no | — | — |
+| `totals.other_expense` | object | yes | no | — | — |
+| `totals.other_expense.amount` | string | yes | no | — | — |
+| `totals.other_expense.currency` | string | yes | no | — | — |
+| `totals.other_expense.minor_units` | integer | yes | no | — | — |
+| `totals.net_income` | object | yes | no | — | — |
+| `totals.net_income.amount` | string | yes | no | — | — |
+| `totals.net_income.currency` | string | yes | no | — | — |
+| `totals.net_income.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "columns": [],
+  "count": 0,
+  "dimension": "job",
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "cost_of_goods_sold": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "expense": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "gross_profit": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "income": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "net_income": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "net_operating_income": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "other_expense": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "other_income": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `report profit-and-loss-by-job`
+
+The profit and loss for inclusive accounting dates with one column per customer or job, one row per income or expense account, and a total column. Every posting line carries the party it names, so a column is one customer or job and a cell is that account's net within it. A line that names no party, and a line whose party is a vendor, an employee or an other name rather than a customer, is in the explicit Unassigned column; nothing is dropped, so the columns always add across to the total and the total column is report profit-and-loss for the same dates, account for account. Columns are the customers and jobs with posting activity in the period, in hierarchy order, so a job reads under the customer it is named beneath; past the requested number of columns the remainder is folded into one Other column that says how many it holds. Own-account rows are paged; column and statement totals cover every account.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.profit-and-loss-by-job` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report profit-and-loss-by-job --date-from 2026-01-01 --date-to 2026-12-31 --columns 50 --company "Demo Plumbing Co" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `include_zero` | `--include-zero` | boolean | no | no | false | Include zero period nets, including inactive and never-posted income and expense accounts. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `columns` | `--columns` | integer | no | no | 50 | How many named columns are shown before the remainder is folded into one Other column.; minimum 1; maximum 200 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.profit-and-loss-by-job`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `dimension` | literal["job", "class"] | yes | no | — | — |
+| `columns` | array[object] | yes | no | — | — |
+| `columns[].kind` | literal["value", "unassigned", "other"] | yes | no | — | — |
+| `columns[].id` | string \| null | yes | yes | — | — |
+| `columns[].label` | string | yes | no | — | — |
+| `columns[].current_label` | string \| null | yes | yes | — | — |
+| `columns[].parent_id` | string \| null | yes | yes | — | — |
+| `columns[].active` | boolean \| null | yes | yes | — | — |
+| `columns[].folded_count` | integer \| null | yes | yes | — | — |
+| `columns[].totals` | object | yes | no | — | — |
+| `columns[].totals.income` | object | yes | no | — | — |
+| `columns[].totals.income.amount` | string | yes | no | — | — |
+| `columns[].totals.income.currency` | string | yes | no | — | — |
+| `columns[].totals.income.minor_units` | integer | yes | no | — | — |
+| `columns[].totals.cost_of_goods_sold` | object | yes | no | — | — |
+| `columns[].totals.cost_of_goods_sold.amount` | string | yes | no | — | — |
+| `columns[].totals.cost_of_goods_sold.currency` | string | yes | no | — | — |
+| `columns[].totals.cost_of_goods_sold.minor_units` | integer | yes | no | — | — |
+| `columns[].totals.gross_profit` | object | yes | no | — | — |
+| `columns[].totals.gross_profit.amount` | string | yes | no | — | — |
+| `columns[].totals.gross_profit.currency` | string | yes | no | — | — |
+| `columns[].totals.gross_profit.minor_units` | integer | yes | no | — | — |
+| `columns[].totals.expense` | object | yes | no | — | — |
+| `columns[].totals.expense.amount` | string | yes | no | — | — |
+| `columns[].totals.expense.currency` | string | yes | no | — | — |
+| `columns[].totals.expense.minor_units` | integer | yes | no | — | — |
+| `columns[].totals.net_operating_income` | object | yes | no | — | — |
+| `columns[].totals.net_operating_income.amount` | string | yes | no | — | — |
+| `columns[].totals.net_operating_income.currency` | string | yes | no | — | — |
+| `columns[].totals.net_operating_income.minor_units` | integer | yes | no | — | — |
+| `columns[].totals.other_income` | object | yes | no | — | — |
+| `columns[].totals.other_income.amount` | string | yes | no | — | — |
+| `columns[].totals.other_income.currency` | string | yes | no | — | — |
+| `columns[].totals.other_income.minor_units` | integer | yes | no | — | — |
+| `columns[].totals.other_expense` | object | yes | no | — | — |
+| `columns[].totals.other_expense.amount` | string | yes | no | — | — |
+| `columns[].totals.other_expense.currency` | string | yes | no | — | — |
+| `columns[].totals.other_expense.minor_units` | integer | yes | no | — | — |
+| `columns[].totals.net_income` | object | yes | no | — | — |
+| `columns[].totals.net_income.amount` | string | yes | no | — | — |
+| `columns[].totals.net_income.currency` | string | yes | no | — | — |
+| `columns[].totals.net_income.minor_units` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].account_id` | string | yes | no | — | — |
+| `rows[].current_account_label` | string | yes | no | — | — |
+| `rows[].current_account_name` | string | yes | no | — | — |
+| `rows[].current_account_number` | string \| null | yes | yes | — | — |
+| `rows[].display_account_label` | string | yes | no | — | — |
+| `rows[].account_type` | string | yes | no | — | — |
+| `rows[].parent_id` | string \| null | yes | yes | — | — |
+| `rows[].active` | boolean | yes | no | — | — |
+| `rows[].section` | literal["income", "cost_of_goods_sold", "expense", "other_income", "other_expense"] | yes | no | — | — |
+| `rows[].amounts` | array[object] | yes | no | — | — |
+| `rows[].amounts[].amount` | string | yes | no | — | — |
+| `rows[].amounts[].currency` | string | yes | no | — | — |
+| `rows[].amounts[].minor_units` | integer | yes | no | — | — |
+| `rows[].total` | object | yes | no | — | — |
+| `rows[].total.amount` | string | yes | no | — | — |
+| `rows[].total.currency` | string | yes | no | — | — |
+| `rows[].total.minor_units` | integer | yes | no | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.income` | object | yes | no | — | — |
+| `totals.income.amount` | string | yes | no | — | — |
+| `totals.income.currency` | string | yes | no | — | — |
+| `totals.income.minor_units` | integer | yes | no | — | — |
+| `totals.cost_of_goods_sold` | object | yes | no | — | — |
+| `totals.cost_of_goods_sold.amount` | string | yes | no | — | — |
+| `totals.cost_of_goods_sold.currency` | string | yes | no | — | — |
+| `totals.cost_of_goods_sold.minor_units` | integer | yes | no | — | — |
+| `totals.gross_profit` | object | yes | no | — | — |
+| `totals.gross_profit.amount` | string | yes | no | — | — |
+| `totals.gross_profit.currency` | string | yes | no | — | — |
+| `totals.gross_profit.minor_units` | integer | yes | no | — | — |
+| `totals.expense` | object | yes | no | — | — |
+| `totals.expense.amount` | string | yes | no | — | — |
+| `totals.expense.currency` | string | yes | no | — | — |
+| `totals.expense.minor_units` | integer | yes | no | — | — |
+| `totals.net_operating_income` | object | yes | no | — | — |
+| `totals.net_operating_income.amount` | string | yes | no | — | — |
+| `totals.net_operating_income.currency` | string | yes | no | — | — |
+| `totals.net_operating_income.minor_units` | integer | yes | no | — | — |
+| `totals.other_income` | object | yes | no | — | — |
+| `totals.other_income.amount` | string | yes | no | — | — |
+| `totals.other_income.currency` | string | yes | no | — | — |
+| `totals.other_income.minor_units` | integer | yes | no | — | — |
+| `totals.other_expense` | object | yes | no | — | — |
+| `totals.other_expense.amount` | string | yes | no | — | — |
+| `totals.other_expense.currency` | string | yes | no | — | — |
+| `totals.other_expense.minor_units` | integer | yes | no | — | — |
+| `totals.net_income` | object | yes | no | — | — |
+| `totals.net_income.amount` | string | yes | no | — | — |
+| `totals.net_income.currency` | string | yes | no | — | — |
+| `totals.net_income.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "columns": [],
+  "count": 0,
+  "dimension": "job",
   "metadata": {
     "audit_watermark": 1,
     "basis": "accrual",
@@ -3296,6 +4073,179 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `report unbilled-costs`
+
+Billable work recorded against a customer or job on or before as_of and not yet invoiced: what to bill before billing. One row per work line that still has scope free to bill, under a subtotal row for each customer or job, with the source work order or accepted estimate and its date, the item and the income account it sells to, the line description, what has already been billed and what is left. Fully billed lines and lines marked not billable are omitted, and so is any source that cannot be billed today: an estimate that has not been accepted, an estimate whose work order now owns the work, a cancelled document, and a deactivated one, which must be reactivated before it can be rebilled. The unbilled and partly billed states here are the states the same source's billing window shows, computed by the same code. Rows are paged; subtotals and totals cover the whole filter.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.unbilled-costs` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report unbilled-costs --as-of 2026-12-31 --company "Demo Plumbing Co" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; work dated after it is not yet recorded.; minimum length 10; maximum length 10 |
+| `customer` | `--customer` | string \| null | no | yes | null | Optional customer or job ID or canonical full name; a job is its own customer and is not included with its parent. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.unbilled-costs`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.billed` | object | yes | no | — | — |
+| `totals.billed.amount` | string | yes | no | — | — |
+| `totals.billed.currency` | string | yes | no | — | — |
+| `totals.billed.minor_units` | integer | yes | no | — | — |
+| `totals.remaining` | object | yes | no | — | — |
+| `totals.remaining.amount` | string | yes | no | — | — |
+| `totals.remaining.currency` | string | yes | no | — | — |
+| `totals.remaining.minor_units` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].kind` | literal["line", "subtotal"] | yes | no | — | — |
+| `rows[].customer_id` | string \| null | yes | yes | — | — |
+| `rows[].current_customer_label` | string \| null | yes | yes | — | — |
+| `rows[].current_customer_name` | string \| null | yes | yes | — | — |
+| `rows[].display_customer_label` | string | yes | no | — | — |
+| `rows[].parent_id` | string \| null | yes | yes | — | — |
+| `rows[].active` | boolean \| null | yes | yes | — | — |
+| `rows[].source_id` | string \| null | no | yes | null | — |
+| `rows[].source_kind` | string \| null | no | yes | null | — |
+| `rows[].source_number` | string \| null | no | yes | null | — |
+| `rows[].source_date` | string \| null | no | yes | null | — |
+| `rows[].line_id` | string \| null | no | yes | null | — |
+| `rows[].root_document_id` | string \| null | no | yes | null | — |
+| `rows[].root_line_id` | string \| null | no | yes | null | — |
+| `rows[].item_id` | string \| null | no | yes | null | — |
+| `rows[].item_label` | string \| null | no | yes | null | — |
+| `rows[].account_id` | string \| null | no | yes | null | — |
+| `rows[].account_label` | string \| null | no | yes | null | — |
+| `rows[].description` | string \| null | no | yes | null | — |
+| `rows[].state` | literal["unbilled", "partially_billed", "billed", "nonbillable", "no_charge"] \| null | no | yes | null | — |
+| `rows[].quantity` | string \| null | no | yes | null | — |
+| `rows[].billed_quantity` | string \| null | no | yes | null | — |
+| `rows[].remaining_quantity` | string \| null | no | yes | null | — |
+| `rows[].billed` | object | yes | no | — | — |
+| `rows[].billed.amount` | string | yes | no | — | — |
+| `rows[].billed.currency` | string | yes | no | — | — |
+| `rows[].billed.minor_units` | integer | yes | no | — | — |
+| `rows[].remaining` | object | yes | no | — | — |
+| `rows[].remaining.amount` | string | yes | no | — | — |
+| `rows[].remaining.currency` | string | yes | no | — | — |
+| `rows[].remaining.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "billed": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "remaining": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |

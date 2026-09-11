@@ -32,6 +32,16 @@ from bookflow.company.inventory_reports import (
     InventoryValuationInput, InventoryValuationOutput, StockStatusInput, StockStatusOutput,
     inventory_valuation, stock_status,
 )
+from bookflow.company.dimensional_statements import (
+    DimensionalProfitAndLossInput, DimensionalProfitAndLossOutput,
+    profit_and_loss_by_class, profit_and_loss_by_job,
+)
+from bookflow.company.unbilled_costs import (
+    UnbilledCostsInput, UnbilledCostsOutput, unbilled_costs,
+)
+from bookflow.company.collection_reports import (
+    CollectionsInput, CollectionsOutput, collections,
+)
 
 
 @command("report ap-aging", scope="company", required_role="member", capability="reports",
@@ -182,3 +192,33 @@ def plan_inventory_valuation(inp, ctx, s):
     error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
 def plan_stock_status(inp, ctx, s):
     return Plan(preview=stock_status(inp, s, principal_id=ctx.on_behalf_of))
+@command("report profit-and-loss-by-job", scope="company", required_role="member", capability="reports",
+    description="The profit and loss for inclusive accounting dates with one column per customer or job, one row per income or expense account, and a total column. Every posting line carries the party it names, so a column is one customer or job and a cell is that account's net within it. A line that names no party, and a line whose party is a vendor, an employee or an other name rather than a customer, is in the explicit Unassigned column; nothing is dropped, so the columns always add across to the total and the total column is report profit-and-loss for the same dates, account for account. Columns are the customers and jobs with posting activity in the period, in hierarchy order, so a job reads under the customer it is named beneath; past the requested number of columns the remainder is folded into one Other column that says how many it holds. Own-account rows are paged; column and statement totals cover every account.",
+    input_model=DimensionalProfitAndLossInput, output_model=DimensionalProfitAndLossOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_profit_and_loss_by_job(inp, ctx, s):
+    return Plan(preview=profit_and_loss_by_job(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report profit-and-loss-by-class", scope="company", required_role="member", capability="reports",
+    description="The profit and loss for inclusive accounting dates with one column per class, one row per income or expense account, and a total column. Every posting line carries the class it was entered under, so a column is one class and a cell is that account's net within it. A line entered under no class is in the explicit Unclassified column; nothing is dropped, so the columns always add across to the total and the total column is report profit-and-loss for the same dates, account for account. Columns are the classes with posting activity in the period, in hierarchy order, so a subclass reads under its parent; past the requested number of columns the remainder is folded into one Other column that says how many it holds. Own-account rows are paged; column and statement totals cover every account.",
+    input_model=DimensionalProfitAndLossInput, output_model=DimensionalProfitAndLossOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_profit_and_loss_by_class(inp, ctx, s):
+    return Plan(preview=profit_and_loss_by_class(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report unbilled-costs", scope="company", required_role="member", capability="reports",
+    description="Billable work recorded against a customer or job on or before as_of and not yet invoiced: what to bill before billing. One row per work line that still has scope free to bill, under a subtotal row for each customer or job, with the source work order or accepted estimate and its date, the item and the income account it sells to, the line description, what has already been billed and what is left. Fully billed lines and lines marked not billable are omitted, and so is any source that cannot be billed today: an estimate that has not been accepted, an estimate whose work order now owns the work, a cancelled document, and a deactivated one, which must be reactivated before it can be rebilled. The unbilled and partly billed states here are the states the same source's billing window shows, computed by the same code. Rows are paged; subtotals and totals cover the whole filter.",
+    input_model=UnbilledCostsInput, output_model=UnbilledCostsOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND"])
+def plan_unbilled_costs(inp, ctx, s):
+    return Plan(preview=unbilled_costs(inp, s, principal_id=ctx.on_behalf_of))
+
+
+@command("report collections", scope="company", required_role="member", capability="reports",
+    description="Who to chase, with what to chase them: every customer or job carrying an overdue balance as of as_of, their aging columns, the people and phone numbers and email addresses recorded against them, and each overdue invoice listed beneath with its due date, days past due and remaining balance. A customer is included when anything sits at or past minimum_bucket; a customer whose balance is all current is not being chased and is omitted. The aging columns are report ar-aging's own columns for the same customer on the same date, so the two never disagree; the totals here are the overdue part of receivables and not Accounts Receivable, which report ar-aging reports in full. Rows are paged; totals cover every overdue customer.",
+    input_model=CollectionsInput, output_model=CollectionsOutput,
+    error_codes=["E_QUERY_STALE", "E_VALUE_RANGE"])
+def plan_collections(inp, ctx, s):
+    return Plan(preview=collections(inp, s, principal_id=ctx.on_behalf_of))

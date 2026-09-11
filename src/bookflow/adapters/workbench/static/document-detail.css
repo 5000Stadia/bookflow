@@ -68,3 +68,63 @@
 .document-print { margin: .35rem 0 .6rem; }
 .customer-statement .statement-print { display: inline-block; margin-top: .25rem; font-size: .85rem; }
 @media print { .document-print, .customer-statement .statement-print { display: none; } }
+
+/* A profit and loss read across a dimension is the one report here that is wider
+   than a screen on purpose: a column per job or class, however many there are. Two
+   things follow. The table scrolls sideways inside its own wrapper and the page
+   never does, so nothing else on the page moves while the columns are read. And the
+   two columns that give a row its meaning -- which account, and what it came to
+   altogether -- are pinned to the two edges, so they stay readable at any scroll
+   position instead of being the first things to disappear. */
+.dimensional-report .report-lines-wrap { overflow-x: auto; }
+.dimensional-report .document-lines { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+.dimensional-report .document-lines th, .dimensional-report .document-lines td {
+  padding: .45rem .7rem; border-bottom: 1px solid #dbe3ea; white-space: nowrap;
+  font-variant-numeric: tabular-nums; text-align: right;
+}
+.dimensional-report .document-lines thead th { text-align: right; vertical-align: bottom; background: #f4f7fb; }
+.dimensional-report .document-lines .dimensional-account { text-align: left; white-space: normal; min-width: 14rem; }
+.dimensional-report .document-lines th.dimensional-account,
+.dimensional-report .document-lines td.dimensional-account { position: sticky; left: 0; z-index: 2; background: #fff; }
+.dimensional-report .document-lines thead th.dimensional-account { background: #f4f7fb; z-index: 3; }
+.dimensional-report .document-lines .dimensional-total { position: sticky; right: 0; z-index: 2; background: #f4f7fb; font-weight: 600; }
+.dimensional-report .document-lines thead th.dimensional-total { z-index: 3; }
+.dimensional-report .document-lines tfoot td, .dimensional-report .document-lines tfoot th {
+  background: #eef3f9; font-weight: 700; border-top: 2px solid #c3d0de;
+}
+.dimensional-report .document-lines td[data-column-kind="unassigned"],
+.dimensional-report .document-lines th[data-column-kind="unassigned"] { background: #fbf7ee; }
+.dimensional-report .report-totals { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,14rem),1fr)); gap: .6rem; }
+.dimensional-report .report-totals>div { border: 1px solid #c3d0de; padding: .6rem; background: #f4f7fb; }
+.dimensional-report .report-totals dt { font-size: .85rem; color: #3c4a5a; overflow-wrap: anywhere; }
+.dimensional-report .report-totals dd { margin: .15rem 0 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.dimensional-report .report-state { display: block; font-size: .8rem; color: #3c4a5a; font-weight: 400; }
+@media screen and (max-width: 700px) {
+  /* Nothing sticks on a phone: each row becomes its own labelled card, which is
+     what the shared document-detail rules already do, so every cell says which
+     column it is and no column can be scrolled off the side and missed. */
+  .dimensional-report .document-lines th.dimensional-account,
+  .dimensional-report .document-lines td.dimensional-account,
+  .dimensional-report .document-lines .dimensional-total { position: static; }
+  .dimensional-report .document-lines th, .dimensional-report .document-lines td { white-space: normal; text-align: left; }
+  .dimensional-report .document-lines caption { display: block; text-align: left; padding: .4rem 0; }
+  .dimensional-report .report-lines-wrap { overflow-x: visible; }
+}
+@media print {
+  .dimensional-report .report-lines-wrap { overflow: visible; }
+  .dimensional-report #statement-next-page, .dimensional-report .report-structured { display: none; }
+}
+
+/* Collections and unbilled costs are worklists rather than statements: a person
+   works down them, so the row they are on has to stay legible and the thing they
+   do next -- telephone this contact, bill this line -- has to be a link. */
+.receivables-worklist tbody tr[data-kind="customer"] td,
+.receivables-worklist tbody tr[data-kind="customer"] th,
+.receivables-worklist tbody tr[data-kind="subtotal"] td,
+.receivables-worklist tbody tr[data-kind="subtotal"] th { background: #f4f7fb; font-weight: 600; }
+.receivables-worklist tbody tr[data-kind="invoice"] th,
+.receivables-worklist tbody tr[data-kind="line"] th { padding-left: 1.5rem; font-weight: 400; }
+.receivables-worklist .contact-lines { margin: .2rem 0 0; font-weight: 400; font-size: .9rem; }
+.receivables-worklist .contact-lines li { list-style: none; }
+.receivables-worklist .contact-person { display: block; font-size: .9rem; }
+.receivables-worklist .report-state { display: block; font-size: .85rem; color: #3c4a5a; font-weight: 400; }
