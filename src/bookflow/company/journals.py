@@ -211,12 +211,18 @@ def allocate(s, explicit, own=None):
     return allocate_document(s, 'journal_entry', explicit, own)
 
 
-def prepare(s, ctx, inp, operation, *, owner=None):
+def prepare(s, ctx, inp, operation, *, owner=None, check_instrument=None):
     """``owner`` is the document module posting through this writer; the journal editor is None.
 
     It decides two things and nothing else: which control accounts these lines may name, and
     whether this transaction may be edited here at all. A document whose accounting and whose
     derived ledger are one fact cannot have half of it rewritten in the journal editor.
+
+    ``check_instrument`` is the account and number the check form is writing on the cheque,
+    supplied only by ``company/checks.py``. Every other writer leaves it None and the cheque
+    identity this entry already carries is copied forward onto the new revision untouched --
+    which bank account and which number are on the paper is not something the journal editor
+    or the register is editing, so neither may silently change them.
     """
     old_h = resolve(s, inp.journal) if operation != 'post' else None
     if old_h is not None and owner is None:
@@ -251,6 +257,10 @@ def prepare(s, ctx, inp, operation, *, owner=None):
         voided_at=None, voided_by=None, void_reason=None, void_posting_batch_id=None)
     sequence = None
     custom_plan = None
+    # The cheque identity this write leaves behind, settled once and read twice below.
+    from bookflow.company import check_numbers
+    held = check_numbers.current(s, h['id']) if old_h else None
+    settled = check_numbers.identity(s, requested=check_instrument, existing=held) if operation != 'void' else None
     old_lines = rows(s, c.document_lines, c.document_lines.c.revision_id == old_r['id'], order=c.document_lines.c.position) if old_r else []
     current_batch = rows(s, c.posting_batches, c.posting_batches.c.revision_id == old_r['id'], c.posting_batches.c.kind != 'reversal')[0] if old_r else None
     if operation != 'void':
@@ -282,7 +292,9 @@ def prepare(s, ctx, inp, operation, *, owner=None):
         issuer = json.dumps({k: v for k, v in company_info.items() if k in ('id', 'legal_name', 'display_name', 'home_currency') or k.startswith(('address_', 'legal_address_', 'ship_address_'))}, sort_keys=True)
         if old_r and not inp.refresh_defaults:
             issuer = old_r['issuer_snapshot']
-        unchanged = old_r and not custom_plan.changed and (date, number, memo, issuer) == (old_r['date'], old_r['number'], old_r['memo'], old_r['issuer_snapshot']) and len(values) == len(old_lines) and all(
+        # A correction that only renumbers a cheque changes no accounting at all: left out of
+        # `unchanged` the entry would read as untouched and the new number would be dropped.
+        unchanged = old_r and not custom_plan.changed and not check_numbers.changed(settled, held) and (date, number, memo, issuer) == (old_r['date'], old_r['number'], old_r['memo'], old_r['issuer_snapshot']) and len(values) == len(old_lines) and all(
             key == old['line_id'] and all(value[k] == old[k] for k in value) for (key, value), old in zip(values, old_lines))
         if unchanged:
             return Plan(JournalWriteOutput(**summary(old_h, old_r), revision=revision_output(s, old_r), changed=False, warnings=warnings), {'input': inp, 'operation': operation, 'changed': False})
@@ -306,7 +318,9 @@ def prepare(s, ctx, inp, operation, *, owner=None):
         inverse = reverse(s, h, old_r, current_batch, event, created, pending)
         if operation == 'void':
             h.update(status='voided', voided_at=at, voided_by=s.actor.id, void_reason=ctx.reason.strip(), void_posting_batch_id=inverse['id'])
+    instrument = None
     if operation != 'void':
+        instrument = check_numbers.rows(s, ctx, h, r, settled, held, at=at, event=event)
         batch = dict(**created(), transaction_id=h['id'], revision_id=r['id'], kind='replacement' if old_h else 'original',
             effective_date=r['date'], reverses_batch_id=None, replaces_batch_id=current_batch['id'] if current_batch else None, audit_event_id=event)
         pending['posting_batches'].append(batch)
@@ -323,7 +337,8 @@ def prepare(s, ctx, inp, operation, *, owner=None):
     output = JournalWriteOutput(**summary(h, r), revision=revision_output(s, r, view_pending), warnings=warnings,
         changed_fields=['journal'] if old_h else [])
     return Plan(output, dict(input=inp, operation=operation, changed=True, header=h, before=old_h,
-                            pending=pending, sequence=sequence, event=event, custom_plan=custom_plan))
+                            pending=pending, sequence=sequence, event=event, custom_plan=custom_plan,
+                            check_instrument=instrument))
 
 
 def validate_pending_aggregate(s, header, pending, custom_plan=None, *, custom_input=None, creating=None):
@@ -492,7 +507,7 @@ def apply(plan, ctx, s):
     return persist_prepared(fresh, ctx, s, command_name='journal ' + plan.data['operation'])
 
 
-def persist_prepared(fresh, ctx, s, *, command_name, extra=(), noun='journal'):
+def persist_prepared(fresh, ctx, s, *, command_name, extra=(), noun='journal', number=None):
     """Persist a writer-validated aggregate under its outer command's single audit event.
 
     ``extra`` is how a document that posts *as* a journal records the one thing the journal
@@ -500,8 +515,9 @@ def persist_prepared(fresh, ctx, s, *, command_name, extra=(), noun='journal'):
     the accounting. Each entry is ``(table, record_kind, key_column, rows)``; the rows are
     audited beside the ledger rows and written after the header they hang off.
 
-    ``noun`` is what the audit summary calls what was written. A person reading the audit page
-    is looking for the cheque they voided, not for the journal it posts as.
+    ``noun`` is what the audit summary calls what was written, and ``number`` is what that
+    person would call it by. A person reading the audit page is looking for the cheque they
+    voided, by the number on its face, not for the journal series reference it posts under.
     """
     if not fresh.data['changed']:
         return Applied(fresh.preview, [], 'no change')
@@ -518,7 +534,11 @@ def persist_prepared(fresh, ctx, s, *, command_name, extra=(), noun='journal'):
         touched.extend(Touched(kind, row[key], 'create', None, 1, decoded(row), db='company') for row in rows_)
     if custom_plan is not None:
         touched.extend(custom.touches(custom_plan))
-    summary_text = f"{d['operation']} {noun} {h['number']}"
+    from bookflow.company import check_numbers
+    instrument = d.get('check_instrument')
+    if instrument is not None:
+        touched.extend(check_numbers.touches(instrument))
+    summary_text = f"{d['operation']} {noun} {number or h['number']}"
     audit.write_event_to(s.company, ctx, command_name, summary_text, touched,
         actor_id=s.actor.id, actor_kind=s.actor.kind, directive_code=getattr(s, 'directive_code', None), event_id=d['event'])
     if old:
@@ -533,6 +553,8 @@ def persist_prepared(fresh, ctx, s, *, command_name, extra=(), noun='journal'):
             s.company.conn.execute(getattr(c, table).insert(), rows_)
     if custom_plan is not None:
         custom.apply(s.company, custom_plan)
+    if instrument is not None:
+        check_numbers.write(s, instrument)
     if d['sequence']:
         from sqlalchemy.dialects.sqlite import insert
         stmt = insert(c.sequences).values(**d['sequence'])

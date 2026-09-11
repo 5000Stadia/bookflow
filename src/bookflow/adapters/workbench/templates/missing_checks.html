@@ -6,9 +6,10 @@
 <dl class="report-totals">
 {% for key, heading in missing_checks.total_columns %}<div data-total="{{ key }}"><dt>{{ heading }}</dt><dd>{{ missing_checks.totals[key] }}</dd></div>{% endfor %}
 </dl>
-<p id="report-page-count">{{ missing_checks.count }} rows on this page{% if missing_checks.next_cursor %}; more available{% endif %}. A voided check still occupies its number, because the cheque it was written on is still gone. A check numbered some other way than by digits has no place in a sequence and is counted rather than placed.</p>
+<p id="report-page-count">{{ missing_checks.count }} rows on this page{% if missing_checks.next_cursor %}; more available{% endif %}. A voided check still occupies its number, because the cheque it was written on is still gone. A check numbered some other way than by digits has no place in a sequence and is counted rather than placed. A number a correction gave up is accounted for and is never handed out again, so it is listed rather than counted as missing.</p>
+{% if missing_checks.disclosure %}<p id="report-disclosure" class="report-state" role="note">{{ missing_checks.disclosure }}</p>{% endif %}
 <div class="table-wrap report-lines-wrap"><table class="ledger-table document-lines" id="report-lines" role="table">
-<caption>Gaps and repeats in each bank account's check numbers</caption>
+<caption>Gaps, repeats and given-up numbers in each bank account's check numbers</caption>
 <thead role="rowgroup"><tr role="row">
 <th scope="col" role="columnheader">Bank account</th>
 <th scope="col" role="columnheader">What is wrong</th>
@@ -19,19 +20,19 @@
 {% for row in missing_checks.rows %}<tr role="row" data-kind="{{ row.kind }}" data-account="{{ row.account_id }}">
 <td role="cell" class="document-wide">{{ label('Bank account') }}<a href="{{ row.account_url }}">{{ row.display_account_label }}</a>
 <details class="report-current"><summary>Current account details</summary><div>{{ row.current_account_label }}{% if row.current_account_number %} · {{ row.current_account_number }}{% endif %}</div></details></td>
-<td role="cell">{{ label('What is wrong') }}<strong data-value="kind">{{ 'Missing' if row.kind == 'gap' else 'Used twice' }}</strong></td>
+<td role="cell">{{ label('What is wrong') }}<strong data-value="kind">{{ row.kind_label }}</strong>{% if row.legacy_uncertain %}<div class="report-state" data-value="legacy">Cannot be confirmed: this number came from the shared document series</div>{% endif %}</td>
 <td role="cell" class="document-wide">{{ label('The checks around it') }}
 {% if row.kind == 'gap' %}<div>Before: {% if row.before %}{{ occupant(row.before) }}{% else %}—{% endif %}</div>
 <div>After: {% if row.after %}{{ occupant(row.after) }}{% else %}—{% endif %}</div>
 {% else %}{% for use in row.checks %}<div>{{ occupant(use) }}</div>{% endfor %}{% endif %}</td>
 <td role="cell" data-value="number">{{ label('Number') }}{{ row.range_label }}</td>
-<td role="cell" class="document-total" data-value="count">{{ label('How many') }}{% if row.kind == 'gap' %}{{ row.missing_count }} missing{% else %}{{ row.times_used }} checks{% endif %}</td>
+<td role="cell" class="document-total" data-value="count">{{ label('How many') }}{% if row.kind == 'gap' %}{{ row.missing_count }} missing{% elif row.kind == 'duplicate' %}{{ row.times_used }} checks{% else %}Accounted for{% endif %}</td>
 </tr>{% else %}<tr role="row"><td role="cell" colspan="5">No gaps and no repeated numbers. Every check number in sequence is accounted for.</td></tr>{% endfor %}
 </tbody></table></div>
 {% if missing_checks.next_cursor %}<form method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="body" hx-swap="outerHTML" id="statement-next-page">
 {% for name, value in missing_checks.next_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
 {% if source_report_watermark is not none %}<input type="hidden" name="_source_report_watermark" value="{{ source_report_watermark }}">{% endif %}
 <button name="action" value="submit">Next check page</button></form>{% endif %}
-<p class="muted">Generated {{ missing_checks.metadata.generation_time }} · Change the filters below to start a new report. A check is drawn on the bank account its first line credits, so a correction that moves it moves it here too.</p>
+<p class="muted">Generated {{ missing_checks.metadata.generation_time }} · Change the filters below to start a new report. A check number belongs to the bank account it was written from, so a correction that moves a check to another account moves it here too.</p>
 <details class="report-structured"><summary>Structured report data</summary><pre>{{ json.dumps(result, indent=1, default=str) }}</pre></details>
 </section>

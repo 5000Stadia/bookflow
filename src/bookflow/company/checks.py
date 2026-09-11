@@ -12,12 +12,20 @@ The things this module owns are the document's own words, its one refusal -- the
 lines have to add up to the amount on the face of the document, and when they do not the
 error says by how much -- and the derivation that reads a stored revision back as the
 document it was entered as.
+
+**The check number is not the journal's number.** What the register writes carries no number
+at all now: the journal takes its own reference from the shared document series, the way every
+other entry does, and the number on the face of the cheque is an account-scoped fact this
+module hands to ``company/check_numbers.py`` to allocate, refuse or carry forward. A card
+charge has no such number -- the card statement carries the reference -- so its request is
+simply absent rather than a validator saying so in prose.
 """
 from __future__ import annotations
 
 import sqlalchemy as sa
 
-from bookflow.company import accounts, journals, money_out, parties, registers, schema as c
+from bookflow.company import (
+    accounts, check_numbers, journals, money_out, parties, registers, schema as c)
 from bookflow.company.check_models import (
     CheckParty, DIRECTION, DOCUMENT_KIND, ExpenseLine, FUNDING_TYPE, MoneyOutHistoryOutput,
     MoneyOutOutput, MoneyOutPageOutput, MoneyOutRevisionSummaryOutput, MoneyOutSummary,
@@ -64,7 +72,7 @@ def _party(party):
 # ---------------------------------------------------------------- reading a stored document
 
 
-def document(noun, header, lines):
+def document(noun, header, lines, check_number=None):
     """The document's own footer, derived from the revision that is stored.
 
     The funding line is line one and the expense lines are the rest, which is how every one
@@ -94,7 +102,8 @@ def document(noun, header, lines):
     return MoneyOutSummary(
         kind=DOCUMENT_KIND[noun], account_id=funding['account_id'], funding=FUNDING_TYPE[noun],
         currency=currency, amount=Money(funding['amount_minor_units'], currency).to_dict(),
-        expense_total=Money(total, currency).to_dict(), expense_lines=len(expenses))
+        expense_total=Money(total, currency).to_dict(), expense_lines=len(expenses),
+        check_number=check_number)
 
 
 def _saved_expenses(lines):
@@ -133,7 +142,9 @@ def _facts(s, inp, noun, header):
         amount=(inp.amount if given('amount') else
                 MoneyInput(minor_units=funding['amount_minor_units'], currency=funding['currency'])),
         memo=inp.memo if given('memo') else revision['memo'],
-        number=inp.number if given('number') and getattr(inp, 'number', None) is not None else header['number'],
+        # A correction that does not name a number keeps the one on the paper; None here
+        # means "keep", and company/check_numbers.py is what knows what is already there.
+        number=getattr(inp, 'number', None),
         class_id=inp.class_id if given('class_id') else None,
         expenses=list(inp.expenses) if inp.expenses is not None else _saved_expenses(lines[1:]),
         selected_line_id=funding['line_id'])
@@ -159,8 +170,7 @@ def _register(facts, s, noun, inp, header):
         account=facts['account'], date=facts['date'], memo=facts['memo'], payee=_party(facts['pay_to']),
         direction=DIRECTION[FUNDING_TYPE[noun]], amount=facts['amount'], allocations=allocations,
         class_id=facts['class_id'], custom_fields=inp.custom_fields,
-        custom_field_kinds=inp.custom_field_kinds,
-        **({'number': facts['number']} if facts['number'] is not None else {}))
+        custom_field_kinds=inp.custom_field_kinds)
     if header is None:
         register = RegisterPostInput(**values)
     else:
@@ -175,7 +185,11 @@ def _register(facts, s, noun, inp, header):
         currency=currency, amount=amount.to_dict(),
         expense_total=Money(expense_total, currency).to_dict(),
         expense_lines=len(facts['expenses']))
-    return register, summary
+    # Only a cheque asks for one. A card charge never consumes a check number, so it sends
+    # no request at all and the journal it posts keeps its own document reference alone.
+    instrument = (check_numbers.request(account['id'], facts['number'])
+                  if noun == 'check' else None)
+    return register, summary, instrument
 
 
 def _mismatch(noun, currency, amount, expense_total):
@@ -211,9 +225,28 @@ def _output(journal_output, summary):
 def show(s, inp, noun):
     header = money_out.resolve(s, getattr(inp, SELECTOR[noun]), noun)
     requested = journals.revision(s, header, inp.revision_number)
+    # The number this revision was written with, not the one the cheque carries today: a
+    # correction that renumbered it must not rewrite what the earlier revision said.
+    numbers = money_out.check_numbers_of(s, noun, [requested['id']])
     return MoneyOutOutput(**journals.summary(header, requested),
                           revision=journals.revision_output(s, requested),
-                          document=document(noun, header, money_out.lines(s, requested)))
+                          document=document(noun, header, money_out.lines(s, requested),
+                                            numbers.get(requested['id'])))
+
+
+def _number_filter(noun, text):
+    """What `number` means to each noun: the cheque's own number, or the document reference.
+
+    A cheque is looked up by what is written on it, because that is the only number a person
+    reading a chequebook has. A card charge has no such number, so its filter is the document
+    reference it does carry.
+    """
+    t = c.transactions
+    if noun != 'check':
+        return t.c.number.contains(text, autoescape=True)
+    instruments = c.check_instruments
+    return t.c.id.in_(sa.select(instruments.c.transaction_id).where(
+        instruments.c.check_number.contains(text, autoescape=True)))
 
 
 def _shaped(noun, funding):
@@ -238,32 +271,36 @@ def page(s, ctx, inp, noun):
     if inp.status:
         query = query.where(t.c.status == inp.status)
     if inp.number:
-        query = query.where(t.c.number.contains(inp.number, autoescape=True))
+        query = query.where(_number_filter(noun, inp.number))
     if inp.account:
         query = query.where(funding.c.account_id == accounts.resolve_account(s.company, inp.account)['id'])
     if inp.payee:
         payee = parties.resolve_party(s.company, inp.payee_type.replace('_', '-'), inp.payee)
         query = query.where(funding.c.name_type == inp.payee_type, funding.c.name_id == payee['id'])
     if inp.query:
-        query = query.where(sa.or_(t.c.number.contains(inp.query, autoescape=True),
+        query = query.where(sa.or_(_number_filter(noun, inp.query),
                                    r.c.memo.contains(inp.query, autoescape=True)))
     found, shared = money_out.take(s, money_out.ordered(query, inp.direction), state, inp.limit)
     pairs = money_out.headers(s, [row['id'] for row in found])
     grouped = money_out.lines_by_revision(s, [revision['id'] for _, revision in pairs])
+    numbers = money_out.check_numbers_of(s, noun, [revision['id'] for _, revision in pairs])
     return MoneyOutPageOutput(items=[
         MoneyOutSummaryOutput(**journals.summary(header, revision),
-                              document=document(noun, header, grouped[revision['id']]))
+                              document=document(noun, header, grouped[revision['id']],
+                                                numbers.get(revision['id'])))
         for header, revision in pairs], **shared)
 
 
 def history(s, ctx, inp, noun):
     header = money_out.resolve(s, getattr(inp, SELECTOR[noun]), noun)
     found, shared, grouped = money_out.history_page(s, ctx, inp, noun, header)
+    numbers = money_out.check_numbers_of(s, noun, [revision['id'] for revision in found])
     items = []
     for revision in found:
         base = journals.revision_output(s, revision, summary_only=True)
         items.append(MoneyOutRevisionSummaryOutput(
-            **base.model_dump(), document=document(noun, header, grouped[revision['id']])))
+            **base.model_dump(), document=document(noun, header, grouped[revision['id']],
+                                                   numbers.get(revision['id']))))
     return MoneyOutHistoryOutput(
         **{key: header[key] for key in ('id', 'version', 'current_revision_id', 'number', 'status')},
         items=items, **shared)
@@ -273,38 +310,54 @@ def history(s, ctx, inp, noun):
 
 
 def _translate(s, ctx, inp, noun, operation):
-    """The journal this call posts, plus the document footer it will show."""
+    """The journal this call posts, the footer it will show, and what it asks of the chequebook."""
     header = money_out.resolve(s, getattr(inp, SELECTOR[noun]), noun) if operation != 'post' else None
     if operation == 'void':
-        lines = money_out.lines(s, journals.revision(s, header))
+        revision = journals.revision(s, header)
+        lines = money_out.lines(s, revision)
+        numbers = money_out.check_numbers_of(s, noun, [revision['id']])
+        # A voided cheque keeps its number: the paper it was written on is still gone, so
+        # nothing here asks the chequebook for anything.
         return (JournalVoidInput(journal=header['id'], expected_version=inp.expected_version),
-                document(noun, header, lines), header)
+                document(noun, header, lines, numbers.get(revision['id'])), header, None)
     facts = _facts(s, inp, noun, header)
-    register, summary = _register(facts, s, noun, inp, header)
+    register, summary, instrument = _register(facts, s, noun, inp, header)
     journal, _ = registers.translate(register, s, operation, moving=operation == 'update',
                                      expected_version=inp.expected_version if header else None)
-    return journal, summary, header
+    return journal, summary, header, instrument
+
+
+def _finish(summary, planned):
+    """Put the number the writer actually settled on into the footer this call returns."""
+    if planned is not None:
+        summary = summary.model_copy(update={'check_number': planned['instrument']['check_number']})
+    return summary
 
 
 def prepare(s, ctx, inp, noun, operation):
-    journal, summary, _ = _translate(s, ctx, inp, noun, operation)
-    fresh = journals.prepare(s, ctx, journal, operation)
-    return Plan(_output(fresh.preview, summary), {'input': inp, 'noun': noun, 'operation': operation})
+    journal, summary, _, instrument = _translate(s, ctx, inp, noun, operation)
+    fresh = journals.prepare(s, ctx, journal, operation, check_instrument=instrument)
+    return Plan(_output(fresh.preview, _finish(summary, fresh.data.get('check_instrument'))),
+                {'input': inp, 'noun': noun, 'operation': operation})
 
 
 def apply(plan, ctx, s):
     # Rebuilt inside the writer transaction, the same way the register does it: references,
-    # dates, versions and numbering are only decisive here.
+    # dates, versions and numbering -- the cheque's as well as the journal's -- are only
+    # decisive here. A retry under the same idempotency key never reaches this: dispatch
+    # replays the stored output, so the cheque keeps the number the first attempt gave it.
     inp, noun, operation = plan.data['input'], plan.data['noun'], plan.data['operation']
-    journal, summary, _ = _translate(s, ctx, inp, noun, operation)
-    fresh = journals.prepare(s, ctx, journal, operation)
+    journal, summary, _, instrument = _translate(s, ctx, inp, noun, operation)
+    fresh = journals.prepare(s, ctx, journal, operation, check_instrument=instrument)
     extra = ()
     if operation == 'post' and fresh.data['changed']:
         header = fresh.data['header']
         extra = (('money_out_documents', 'money_out_document', 'transaction_id', [money_out.marker(
             noun, header['id'], at=header['created_at'], actor_id=s.actor.id,
             interface=ctx.interface.value, event=fresh.data['event'])]),)
-    applied = journals.persist_prepared(fresh, ctx, s, command_name=f'{noun} {operation}',
-                                        extra=extra, noun=WORDS[noun][0])
-    applied.output = _output(applied.output, summary)
+    planned = fresh.data.get('check_instrument') if fresh.data['changed'] else None
+    applied = journals.persist_prepared(
+        fresh, ctx, s, command_name=f'{noun} {operation}', extra=extra, noun=WORDS[noun][0],
+        number=planned['instrument']['check_number'] if planned else None)
+    applied.output = _output(applied.output, _finish(summary, planned))
     return applied

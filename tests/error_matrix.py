@@ -235,6 +235,13 @@ _MONEY_OUT_READ_ERRORS = {
                     'to another query contract',
     'E_QUERY_STALE': 'the company audit log moved while the page was being walked',
 }
+# A cheque number belongs to one bank account, so its duplicate is a different fact from a
+# document number already taken in the shared series, and the refusal says which cheque holds
+# it. A card charge and a transfer have no cheque number and still raise only the document one.
+MATRIX['check post']['E_DUPLICATE_NUMBER'] = (
+    'the typed check number is already on another cheque drawn on the same bank account, '
+    'including a voided one; 1001 and 01001 are one number')
+
 for _noun, _face in (('check', 'check'), ('card-charge', 'card-charge'), ('transfer', 'transfer')):
     MATRIX[_noun + ' update'] = dict(MATRIX[_noun + ' post'])
     MATRIX[_noun + ' update']['E_VERSION_CONFLICT'] = (
@@ -255,6 +262,14 @@ for _noun, _face in (('check', 'check'), ('card-charge', 'card-charge'), ('trans
                                if code != 'E_QUERY_STALE'}
     MATRIX[_noun + ' query'] = dict(_MONEY_OUT_READ_ERRORS)
     MATRIX[_noun + ' history'] = dict(_MONEY_OUT_READ_ERRORS)
+
+# A cheque is addressed by the number on its face, which belongs to one bank account, so that
+# number can name a cheque on each of two accounts. Every command that takes the selector says
+# so rather than resolving one of them.
+for _verb in ('show', 'update', 'void', 'history'):
+    MATRIX['check ' + _verb]['E_VALIDATION'] = (
+        MATRIX['check ' + _verb]['E_VALIDATION']
+        + ', or the check number names a cheque on more than one bank account')
 
 for _verb in ('show', 'list', 'query', 'activate', 'deactivate'):
     MATRIX['customer ' + _verb]['E_VALUE_RANGE'] = 'exact own or family receivable balance exceeds signed 64-bit range'

@@ -117,7 +117,10 @@ def test_the_check_window_posts_the_check_the_command_posts(register_browser):
     _act(b, 'preview')
     assert not b.evaluate('document.querySelector(".error")?.textContent'), \
         b.evaluate('document.body.innerText')[:900]
-    assert _totals(b) == {'Expenses': f'{CHECK} USD', 'Amount of this check': f'{CHECK} USD'}
+    # The footer shows the number the server settled on for this bank account's chequebook,
+    # which is what the register and `report missing-checks` will show for the same cheque.
+    assert _totals(b) == {'Check number': f'{books["tag"]}-1042',
+                          'Expenses': f'{CHECK} USD', 'Amount of this check': f'{CHECK} USD'}
     assert 'add up' in b.evaluate('document.querySelector("[data-reconciliation]").textContent')
 
     written = books['run']('journal.show', {'journal': _save(b)})

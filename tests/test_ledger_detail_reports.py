@@ -94,7 +94,10 @@ def test_posting_rows_name_the_document_the_party_and_the_split_account(books):
         'limit': 50})['rows'] if row['kind'] == 'posting')
     assert line['date'] == '2026-02-01'
     assert line['transaction_type'] == 'journal_entry'
-    assert line['transaction_number'] == '1001'
+    # The detail report names the document, so it prints the document's own reference; the
+    # 1001 written on the cheque belongs to the bank account and is read in the register and
+    # in `report missing-checks`, which are the two places a chequebook is walked.
+    assert line['transaction_number'] and line['transaction_number'] != '1001'
     assert line['party_name'] == 'Northside Supply'
     assert line['memo'] == 'February materials'
     assert line['split_account_id'] == books['first']
@@ -105,19 +108,19 @@ def test_posting_rows_name_the_document_the_party_and_the_split_account(books):
 
 def test_split_is_the_other_side_of_two_lines_and_named_for_many(books):
     """A two-line entry names its one other account; a four-line entry cannot."""
-    check(books, number='1001', amount='40.00')
-    check(books, number='1002', amount='60.00', lines=[
+    simple = check(books, number='1001', amount='40.00')
+    split = check(books, number='1002', amount='60.00', lines=[
         dict(account=books['first'], amount='20.00'),
         dict(account=books['second'], amount='20.00'),
         dict(account=books['third'], amount='20.00')])
     rows = books['run']('report transaction-detail', {
         'date_from': '2026-01-01', 'date_to': '2026-12-31', 'accounts': [books['bank']],
         'limit': 50})['rows']
-    splits = {row['transaction_number']: (row['split_account_id'], row['split_account_label'])
+    splits = {row['transaction_id']: (row['split_account_id'], row['split_account_label'])
               for row in rows if row['kind'] == 'posting'}
-    assert splits['1001'][0] == books['first']
-    assert books['run']('account show', {'account': books['first']})['full_name'] in splits['1001'][1]
-    assert splits['1002'] == (None, '-SPLIT-')
+    assert splits[simple['id']][0] == books['first']
+    assert books['run']('account show', {'account': books['first']})['full_name'] in splits[simple['id']][1]
+    assert splits[split['id']] == (None, '-SPLIT-')
 
 
 def test_running_balance_survives_every_page_boundary(books):
@@ -228,18 +231,21 @@ def test_a_number_that_is_not_a_run_of_digits_is_counted_and_not_placed(books):
     assert (row['first_missing'], row['last_missing']) == (1002, 1002)
 
 
-def test_two_checks_on_one_number_are_reported_as_a_duplicate(books):
-    """A leading zero is a different stored number and the same place in the sequence."""
-    check(books, number='1001', amount='10.00', date='2026-02-01')
-    check(books, number='01001', amount='20.00', date='2026-02-02')
+def test_a_leading_zero_is_the_same_place_in_the_sequence_and_the_second_cheque_is_refused(books):
+    """The duplicate is refused where it is written, not reported after the fact.
+
+    `01001` and `1001` are one place in one chequebook, so the second is a same-account
+    collision. This is the chosen policy stated as a test: refuse it, rather than warn and
+    let two cheques share a number the way the anchor product does.
+    """
+    held = check(books, number='1001', amount='10.00', date='2026-02-01')
+    with pytest.raises(BookflowError) as raised:
+        check(books, number='01001', amount='20.00', date='2026-02-02')
+    assert raised.value.code == 'E_DUPLICATE_NUMBER'
+    assert raised.value.details['held_by'] == held['id']
     report = books['run']('report missing-checks', {'as_of': '2026-12-31', 'limit': 50})
-    assert report['totals']['duplicate_numbers'] == 1 and report['totals']['duplicate_checks'] == 2
-    assert report['totals']['gaps'] == 0
-    row, = report['rows']
-    assert (row['kind'], row['duplicate_number'], row['times_used']) == ('duplicate', 1001, 2)
-    assert [(use['number'], use['amount']['amount']) for use in row['checks']] == [
-        ('1001', '10.00'), ('01001', '20.00')]
-    assert row['first_missing'] is None and row['missing_count'] == 0
+    assert report['totals']['duplicate_numbers'] == 0 and report['totals']['gaps'] == 0
+    assert report['totals']['checks_examined'] == 1 and report['rows'] == []
 
 
 def test_a_correction_moves_a_check_into_the_other_account_sequence(books):
@@ -251,9 +257,15 @@ def test_a_correction_moves_a_check_into_the_other_account_sequence(books):
     books['run']('check update', {'check': moved['id'], 'expected_version': moved['version'],
                                   'account': books['savings']})
     after = books['run']('report missing-checks', {'as_of': '2026-12-31', 'limit': 50})
-    assert [(row['display_account_label'], row['first_missing']) for row in after['rows']] == [
-        ('1000 · Checking', 1002)]
+    # 1002 left Checking's chequebook carrying its number, so Checking has a number it gave
+    # up rather than a cheque that went missing -- and Savings, which had none, now starts at
+    # 1002 with nothing before it and so has no hole either.
+    assert [(row['display_account_label'], row['kind'], row['retired_number'],
+             row['first_missing']) for row in after['rows']] == [
+        ('1000 · Checking', 'retired', 1002, None)]
     assert after['totals']['checks_examined'] == 3
+    assert after['totals']['gaps'] == 0 and after['totals']['retired_numbers'] == 1
+    assert [use['transaction_id'] for use in after['rows'][0]['checks']] == [moved['id']]
 
 
 def test_a_check_dated_after_the_as_of_date_is_not_examined(books):

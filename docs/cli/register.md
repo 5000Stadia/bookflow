@@ -658,6 +658,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].memo` | string \| null | no | yes | null | — |
 | `rows[].category_label` | string \| null | no | yes | null | — |
 | `rows[].class_summary` | string \| null | no | yes | null | — |
+| `rows[].check_number` | string \| null | no | yes | null | — |
 
 Example JSON output:
 

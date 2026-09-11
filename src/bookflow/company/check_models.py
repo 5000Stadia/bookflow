@@ -102,7 +102,14 @@ class _MoneyOutPost(_MoneyOut):
 
 
 class CheckPostInput(_MoneyOutPost):
-    number: _Number | None = None
+    number: _Number | None = Field(default=None, description=(
+        'The number written on the face of the cheque, which belongs to this bank account '
+        'and not to the shared document series. Leave it out to take the next number from '
+        "the account's own next check number, skipping any it has already issued. A number "
+        'below that pointer is accepted and does not move it backwards; a number already on '
+        'another cheque drawn on the same account is refused. Leading zeros are kept as '
+        'typed, and 01001 and 1001 are one number. A number that is not a plain run of '
+        'digits is a real cheque number with no place in the sequence.'))
 
 
 class CardChargePostInput(_MoneyOutPost):
@@ -150,7 +157,11 @@ class _MoneyOutCorrection(_Input):
 
 class CheckUpdateInput(_MoneyOutCorrection):
     check: _Selector
-    number: _Number | None = None
+    number: _Number | None = Field(default=None, description=(
+        'A different number for this cheque. Leave it out to keep the one it has, including '
+        'when the cheque moves to another bank account. The number it had stays on the '
+        'revision that carried it, so history and printing keep reading what was issued, and '
+        'it is never handed out again automatically.'))
 
 
 class CardChargeUpdateInput(_MoneyOutCorrection):
@@ -186,7 +197,9 @@ class _MoneyOutQuery(MoneyOutPageInput):
     date_from: _Date | None = None
     date_to: _Date | None = None
     status: Literal['posted', 'voided'] | None = None
-    number: str | None = Field(default=None, max_length=64)
+    number: str | None = Field(default=None, max_length=64, description=(
+        "Match part of the cheque's own number for a check, or part of the document "
+        'reference for a card charge.'))
     account: _Selector | None = None
     payee: _Selector | None = None
     payee_type: Literal['vendor', 'customer', 'employee', 'other_name'] = 'vendor'
@@ -221,7 +234,14 @@ class CardChargeHistoryInput(MoneyOutPageInput):
 
 
 class MoneyOutSummary(_Input):
-    """What the server computed, for the document's own footer. Never recomputed anywhere else."""
+    """What the server computed, for the document's own footer. Never recomputed anywhere else.
+
+    ``check_number`` is the number written on the face of the cheque, which belongs to the
+    bank account it is drawn on rather than to the shared document series the journal's own
+    reference comes from. It is what the check window's footer, the bank register, ``check
+    query`` and ``report missing-checks`` all show, so the four agree on one number. A card
+    charge has none -- the card statement carries the reference -- so it is null there, always.
+    """
 
     kind: Literal['check', 'card_charge']
     account_id: str
@@ -230,6 +250,7 @@ class MoneyOutSummary(_Input):
     amount: JournalMoneyOutput
     expense_total: JournalMoneyOutput
     expense_lines: int
+    check_number: str | None = None
 
 
 class MoneyOutOutput(JournalOutput):

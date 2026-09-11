@@ -41,23 +41,65 @@ LABEL = {'check': 'check', 'card-charge': 'credit card charge', 'transfer': 'tra
 
 
 def resolve(s, selector, noun):
-    """The document this selector names, by stable id or by its own number.
+    """The document this selector names, by stable id or by the number a person reads off it.
 
     Only a transaction carrying this noun's marker answers. A journal entry, a check when the
     caller asked for a transfer, or a document that was never entered as one of the three is
     not found here -- it is not this noun's record, and reporting it would be worse than
     saying so.
+
+    **A check is named by the number on its face**, which belongs to one bank account's
+    chequebook, so two accounts can both have written a cheque ``1001``. This never picks one
+    of them: it names both and refuses. That is the whole point of the ambiguity -- returning
+    whichever row came back first would have shown, corrected or voided the wrong cheque
+    without saying a word. The document reference is still accepted for a cheque whose number
+    finds nothing, which is what makes a journal-series reference from the audit page work.
+
+    A card charge and a transfer have no cheque number, so the document reference is all they
+    are ever addressed by; that number is unique across journal entries, but more than one
+    row is refused here as well rather than silently resolved.
     """
     t, m = c.transactions, c.money_out_documents
     key = selector.upper() if is_ulid(selector) else selector
     base = sa.select(t).join(m, m.c.transaction_id == t.c.id).where(m.c.kind == KIND[noun])
     found = [dict(r) for r in s.company.conn.execute(base.where(t.c.id == key)).mappings()]
+    if not found and noun == 'check':
+        from bookflow.company import check_numbers
+        candidates = check_numbers.by_number(s, selector)
+        if len(candidates) > 1:
+            raise check_numbers.ambiguous(noun, selector, candidates)
+        if candidates:
+            found = [dict(r) for r in s.company.conn.execute(
+                base.where(t.c.id == candidates[0]['transaction_id'])).mappings()]
     if not found:
         found = [dict(r) for r in s.company.conn.execute(base.where(t.c.number == selector)).mappings()]
     if not found:
         raise BookflowError('E_RECORD_NOT_FOUND',
                             details={'record_type': KIND[noun], 'selector': selector})
+    if len(found) > 1:
+        raise BookflowError('E_VALIDATION', message=(
+            f'"{selector}" names {len(found)} {LABEL[noun]}s. Open the one you mean by its id.'),
+            details={'fields': [{'field': noun.replace('-', '_'),
+                                 'problem': 'names more than one document'}],
+                     'selector': selector,
+                     'candidates': [{'transaction_id': row['id'], 'number': row['number']}
+                                    for row in found]})
     return found[0]
+
+
+def check_numbers_of(s, noun, revision_ids):
+    """The number each of these revisions of a cheque was written with, keyed by revision.
+
+    Read from the immutable per-revision identity rather than from the cheque's current one,
+    so reading revision one back shows the number revision one had. A card charge and a
+    transfer have no such number and answer with nothing at all.
+    """
+    if noun != 'check' or not revision_ids:
+        return {}
+    t = c.check_instrument_revisions
+    return {row['revision_id']: row['check_number'] for row in s.company.conn.execute(
+        sa.select(t.c.revision_id, t.c.check_number).where(
+            t.c.revision_id.in_(list(revision_ids)))).mappings()}
 
 
 def marker(noun, transaction_id, *, at, actor_id, interface, event):

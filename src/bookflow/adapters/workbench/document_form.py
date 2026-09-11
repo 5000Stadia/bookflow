@@ -326,7 +326,8 @@ HELP = {
     'sales-receipt': 'A sales receipt records a sale that was paid at the time. It cannot settle an existing invoice.',
     'estimate': 'An estimate is not posted to the books. It records what the work will cost and what was agreed.',
     'check': 'A check records money leaving a bank account. Nothing is printed or sent: the number is the '
-             'one written on the check itself. The expense lines have to add up to the amount.',
+             'one written on the check itself, and it belongs to this bank account rather than to the '
+             'shared document series. The expense lines have to add up to the amount.',
     'card-charge': 'A credit card charge records a purchase put on a company card. What is owed on the card '
                    'goes up until the card is paid. The expense lines have to add up to the amount.',
     'transfer': 'A transfer moves money between two accounts the company already owns. It is neither income '
@@ -361,7 +362,10 @@ HELP = {
 # of them reading as the other.
 NOUN_LABELS = {
     'check': {'account': 'Bank Account', 'pay_to.name_type': 'Kind of name',
-              'pay_to.name_id': 'Pay to the Order of', 'amount': 'Amount of this check'},
+              'pay_to.name_id': 'Pay to the Order of', 'amount': 'Amount of this check',
+              # Never a second "Number" beside the document's own: what a person writes here
+              # is the number on the paper, and that is the only number this window shows.
+              'number': 'Check No.'},
     'card-charge': {'account': 'Credit Card', 'pay_to.name_type': 'Kind of name',
                     'pay_to.name_id': 'Purchased From', 'amount': 'Amount of this charge'},
     'transfer': {'from_account': 'Transfer Funds From', 'to_account': 'Transfer Funds To',
@@ -382,7 +386,9 @@ NOUN_DESCRIPTIONS = {
               'pay_to.name_type': 'Which list the name comes from. Choose this before searching.',
               'pay_to.name_id': 'Search by name, then choose the match.',
               'amount': 'The figure on the face of the check. The expense lines below have to add up to it.',
-              'number': 'The number written on the check. Leave it empty to take the next one.'},
+              'number': 'The number written on the check. Leave it empty to take the next one from '
+                        "this bank account's own next check number. A number below that is accepted "
+                        'and does not move it back; one already used on this account is refused.'},
     'card-charge': {'account': 'The credit card account this purchase was charged to.',
                     'pay_to.name_type': 'Which list the name comes from. Choose this before searching.',
                     'pay_to.name_id': 'Search by name, then choose the match.',
@@ -678,8 +684,12 @@ def money_out_totals(noun, result, error):
     document = result.get('document') if isinstance(result, dict) else None
     if isinstance(document, dict):
         currency = document['currency']
-        return ([_row('Expenses', f"{document['expense_total']['amount']} {currency}"),
-                 _row(face, f"{document['amount']['amount']} {currency}", True)],
+        # The number the writer actually settled on, which is not always the one that was
+        # typed: an unnumbered cheque takes the next one from its own bank account.
+        cheque = ([_row('Check number', document['check_number'])]
+                  if document.get('check_number') else [])
+        return (cheque + [_row('Expenses', f"{document['expense_total']['amount']} {currency}"),
+                          _row(face, f"{document['amount']['amount']} {currency}", True)],
                 'The expense lines add up to what this document is written for.', True)
     details = (error or {}).get('details') if isinstance(error, dict) else None
     if isinstance(details, dict) and isinstance(details.get('difference'), dict):

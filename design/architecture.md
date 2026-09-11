@@ -585,6 +585,81 @@ refusal's own figures after a refusal, so the reconciliation is visible on the p
 `pay_to` is a multi-target reference resolved by the `discriminator` declared on
 `ReferenceDefinition`, which generalises the mechanism the sales-rep picker already used.
 
+#### The check number, which is not the document number (co0040)
+
+A check number identifies a piece of paper in one bank account's chequebook.
+`transactions.number` identifies a document inside Bookflow and comes from the
+shared journal series every journal entry draws from. Conflating them made
+`report missing-checks` name false gaps on any real company file, and
+`accounts.next_check_number` sat unread while it did.
+
+`company/check_numbers.py` owns the cheque number and nothing else:
+`canonical()` (the literal as typed, the key uniqueness compares, the place it
+takes in a run), `identity()` (allocate, refuse or carry forward), `changed()`,
+`rows()` and `write()`. Two tables in `company/money_out_schema.py` hold what it
+decides. `check_instrument_revisions` is immutable, one row per revision,
+carrying the account and number that revision was written with -- which is why
+correcting either cannot rewrite what `check show --revision-number` or `check
+history` said before, and why a later print surface will read a cheque as it was
+issued. `check_instruments` is the current projection, one row per check,
+replaced on a correction.
+
+- **Allocation** happens inside the writer's transaction, never at preview. An
+  unnumbered cheque starts at `accounts.next_check_number`, walks past every
+  number that account has ever issued -- held now or retired by a correction --
+  and leaves the pointer one past what it handed out. An account with no pointer
+  starts one past the highest number its own cheques carry; an account whose
+  pointer names no place in a sequence -- `EFT`, or `0` -- refuses rather than
+  inventing one. The pointer moves with a plain `UPDATE` and does not bump the account's version, the same
+  treatment `sequences.next_number` gets in `journals.persist_prepared`: it is a
+  hint about where to start looking, and the audited record of what was issued is
+  the instrument revision. A stale pointer written back by a concurrent `account
+  update` costs a scan, not a duplicate, because occupancy is what decides.
+- **An explicit number below the pointer is accepted and does not move it back.**
+  Below the pointer is not the same thing as a duplicate. At or above it, the
+  pointer moves to one past what was typed. A number a correction carried forward
+  without naming moves no pointer at all -- correcting the memo on cheque 5000
+  must not jump a book that is only at 3000, and moving that cheque to another
+  account must not jump that account's book either.
+- **Duplicate policy: refuse, and say so.** `uq_check_instrument_number` is a
+  partial unique index over `(account_id, check_number_key)` where
+  `origin = 'issued'`, and `check_numbers` raises `E_DUPLICATE_NUMBER` naming the
+  cheque that holds the number before the constraint has to. `1001` and `01001`
+  are one number, because `check_number_key` strips leading zeros. **Parity
+  difference:** the anchor product warns and then lets a duplicate through;
+  Bookflow does not, because a hard constraint and warning-and-accept cannot both
+  be true, and because every finding the missing-checks report makes is ambiguous
+  the moment one number can mean two cheques. The index is partial so that a file
+  co0040 upgraded, which can already hold `1001` and `01001` on one account, still
+  opens -- and the report tells the person about it.
+- **A void keeps the number.** Voiding writes no new revision, so the instrument
+  is untouched.
+- **A correction retires the number it replaces.** The old account and number
+  stay on the superseded revision for ever; nothing holds them; automatic
+  allocation still refuses to hand them out; and the report prints them as
+  `retired` rather than as a hole. Typing one again explicitly is allowed.
+- **Card charges and transfers consume nothing.** `checks.py` sends a chequebook
+  request only for the `check` noun, so the card charge keeps the document
+  reference the card statement matches and the transfer keeps its own.
+
+`journals.prepare` gained one keyword, `check_instrument`. `company/checks.py` is
+the only caller that passes it; every other writer -- the journal editor, the
+register -- leaves it None and the cheque identity is copied forward onto the new
+revision untouched, because which chequebook and which number are on the paper is
+not what those editors are editing. The identity is settled before `unchanged` is
+computed, since a correction that only renumbers a cheque changes no accounting at
+all and would otherwise read as untouched.
+
+`money_out.resolve` looks a cheque up by the number on its face and **names every
+candidate rather than picking one** when two accounts both issued it
+(`check_numbers.ambiguous`, `E_VALIDATION` with the account of each). Its old
+`t.c.number == selector` fallback still serves the card charge, the transfer and a
+cheque addressed by its document reference, and it now refuses more than one row
+there too instead of returning `found[0]`. `RegisterRow.check_number` puts the
+cheque's number in the bank register's Number column beside the document
+reference, which is what makes the register, `check show`, the document window
+footer and `report missing-checks` all say one number.
+
 ### Vendor bills: the payable side of the invoice
 
 `bill post/update/void/show/query/history` is an accrual purchase document with its own
@@ -1581,21 +1656,39 @@ and an absent one normalize to the same request in the input validator, so a
 browser form that submits its empty repeated control does not invalidate its own
 continuation.
 
-**Missing checks reads documents, not effects.** `company/check_reports.py`
-starts from `money_out_documents`, the only row that says a journal entry was
-entered as a check, so a hand-typed entry that happens to credit a bank account
-is never listed. A check belongs to the account its current revision's first
-entered line credits -- the funding line `company/checks.py` reads -- so a
-correction that moves a check moves it between sequences here too, and a marked
-check that no longer has that shape is counted in the totals rather than
-dropped. A number is a position in a sequence only when it is one to eighteen
-ASCII digits; anything else is a real check number with no place between two
-others and is counted as `unnumbered_checks`. `lag()` over each account's used
-numbers produces the holes, and `count(*) > 1` per number produces the repeats:
-`uq_transaction_type_number` makes two checks with the identical stored number
-impossible, but `1001` and `01001` are two stored numbers occupying one place in
-the sequence, which is exactly the double entry the report exists to catch. A
-voided check keeps its number because the paper it was written on is still gone.
+**Missing checks reads the cheque's own number.** `company/check_reports.py`
+starts from `check_instruments` (co0040): one row per check, carrying the bank
+account whose chequebook the number came from and the number itself. It read
+`transactions.number` until co0040, and that is what made it name false gaps on
+any real company file -- a check posts as a journal entry, so a number the shared
+document series gave a transfer, a card charge or a hand-typed entry read here as
+a hole in somebody's chequebook. The marker still decides what is a check:
+`check_instruments` is only ever written for a transaction carrying the
+`money_out_documents` check kind, so a hand-typed entry that happens to credit a
+bank account is never listed. A number is a position in a sequence only when it
+is one to eighteen ASCII digits; anything else is a real check number with no
+place between two others and is counted as `unnumbered_checks`.
+
+Three kinds of finding. `lag()` over each account's *accounted* numbers -- the
+ones a cheque holds now plus the ones a correction gave up -- produces the holes;
+`count(*) > 1` per number produces the repeats; and a number that appears on a
+`check_instrument_revisions` row and on no current cheque is printed as
+`retired`, with the cheque that gave it up shown at the number it carries today.
+A retired number is accounted for and is never handed out again, so counting it
+as missing would send somebody hunting for a cheque that is sitting in the books
+under another number. A voided check keeps its number because the paper it was
+written on is still gone.
+
+**What the report says it cannot know.** Numbers co0040 carried over are marked
+`origin = 'migrated'`, and a gap at or below an account's highest migrated number
+is flagged `legacy_uncertain` and counted in `legacy_uncertain_gaps` rather than
+asserted as a missing cheque: those numbers came out of the shared series and
+what is stored cannot say which of them were ever cheques. `disclosure` carries
+that sentence whenever the file holds any. It carries a second when the file
+holds bill payments made by cheque on a bank account: those numbers live on
+`ap_payment_profiles.check_number`, are typed rather than allocated, and this
+report does not place them yet -- so a hole it prints may be one of them.
+
 Its continuation extends the shared HMAC state with the company audit watermark,
 because every check write is audited and nothing else this report reads can move
 without one.

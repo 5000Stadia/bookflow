@@ -9,10 +9,26 @@ from urllib.parse import urlencode
 COMMANDS = {"report missing-checks"}
 # The counts printed above the rows, in the order a person reads them.
 TOTALS = (("gaps", "Holes in the sequence"), ("missing_numbers", "Numbers missing"),
+          ("legacy_uncertain_gaps", "Holes that cannot be confirmed"),
+          ("retired_numbers", "Numbers a correction gave up"),
           ("duplicate_numbers", "Numbers used twice"), ("duplicate_checks", "Checks sharing a number"),
           ("checks_examined", "Checks examined"), ("numbered_checks", "In a numbered sequence"),
           ("unnumbered_checks", "Numbered some other way"),
-          ("checks_off_a_bank_account", "No longer drawn on a bank account"))
+          ("checks_off_a_bank_account", "No longer drawn on the account they were written from"),
+          ("checks_numbered_before_the_upgrade", "Numbered before the upgrade"))
+
+# What each kind of row is called where a person reads it, rather than by its stored spelling.
+KINDS = {"gap": "Missing", "duplicate": "Used twice", "retired": "Given up by a correction"}
+
+
+def _range(row):
+    """The number or the run of numbers this row is about, in the words of its own kind."""
+    if row["kind"] == "duplicate":
+        return str(row["duplicate_number"])
+    if row["kind"] == "retired":
+        return str(row["retired_number"])
+    return (str(row["first_missing"]) if row["missing_count"] == 1
+            else f"{row['first_missing']}–{row['last_missing']}")
 
 
 def _use(use, company_id):
@@ -31,9 +47,8 @@ def view(result, inputs, company_id):
             "before": _use(row["before"], company_id),
             "after": _use(row["after"], company_id),
             "checks": [_use(use, company_id) for use in row["checks"]],
-            "range_label": (str(row["first_missing"]) if row["missing_count"] == 1
-                            else f"{row['first_missing']}–{row['last_missing']}")
-                           if row["kind"] == "gap" else str(row["duplicate_number"]),
+            "range_label": _range(row),
+            "kind_label": KINDS[row["kind"]],
             "account_url": f"/c/{company_id}/report/missing-checks?" + urlencode(
                 {"f:as_of": as_of, "f:account": row["account_id"],
                  "source_report_watermark": watermark})})
