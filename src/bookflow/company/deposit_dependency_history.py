@@ -291,6 +291,14 @@ def _project(kind, value, fields=None):
             value = {**value, 'deposit_component_id': None}
         if kind == 'posting_line_source' and 'payment_component_id' not in value:
             value = {**value, 'payment_component_id': None}
+        # The same wire convention on the settlement pair: a receipt writes its application
+        # rows without the credit-source column at all, so history holds no key for it while
+        # the live row holds NULL. Normalising both to NULL is what keeps an old receipt's
+        # signed history equal to the row it describes after co0027 widened the table.
+        for kind_name, extension in (('application', 'credit_source_key_id'),
+                                     ('application_allocation', 'credit_source_component_id')):
+            if kind == kind_name and extension not in value:
+                value = {**value, extension: None}
         if kind in schemas:
             field, model = schemas[kind]
             decoded = model.model_validate_json(canonical(value[field]))

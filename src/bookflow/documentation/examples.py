@@ -213,6 +213,52 @@ EXAMPLES.update({
 })
 
 
+# The three money-out documents carry one lifecycle between them, so the examples that show it
+# are written once per verb rather than once per noun.
+for _noun, _selector, _account in (('check', 'check', 'Checking'),
+                                   ('card-charge', 'card_charge', '"Company Credit Card"')):
+    EXAMPLES[_noun + ' show'] = Example(
+        f'bookflow {_noun} show {ID} --company "Demo Plumbing Co" --json', {_selector: ID})
+    EXAMPLES[_noun + ' update'] = Example(
+        f'bookflow {_noun} update {ID} --expected-version 1 --amount 300.00 '
+        f'--expenses \'[{{"account":"Office Supplies","amount":"200.00","memo":"Parts"}},'
+        f'{{"account":"Professional Fees","amount":"100.00","memo":"Filing"}}]\' '
+        f'--company "Demo Plumbing Co" --reason "Parts line was understated" --json',
+        {_selector: ID, 'expected_version': 1, 'amount': '300.00',
+         'expenses': [{'account': 'Office Supplies', 'amount': '200.00', 'memo': 'Parts'},
+                      {'account': 'Professional Fees', 'amount': '100.00', 'memo': 'Filing'}]})
+    EXAMPLES[_noun + ' void'] = Example(
+        f'bookflow {_noun} void {ID} --expected-version 2 --company "Demo Plumbing Co" '
+        f'--reason "Never cashed" --json', {_selector: ID, 'expected_version': 2})
+    EXAMPLES[_noun + ' query'] = Example(
+        f'bookflow {_noun} query --account {_account} --date-from 2026-01-01 --date-to 2026-12-31 '
+        f'--limit 25 --company "Demo Plumbing Co" --json',
+        {'account': _account.strip('"'), 'date_from': '2026-01-01', 'date_to': '2026-12-31',
+         'limit': 25})
+    EXAMPLES[_noun + ' history'] = Example(
+        f'bookflow {_noun} history {ID} --limit 25 --company "Demo Plumbing Co" --json',
+        {_selector: ID, 'limit': 25})
+
+EXAMPLES.update({
+    'transfer show': Example(f'bookflow transfer show {ID} --company "Demo Plumbing Co" --json',
+                             {'transfer': ID}),
+    'transfer update': Example(
+        f'bookflow transfer update {ID} --expected-version 1 --to-account Savings --amount 400.00 '
+        f'--company "Demo Plumbing Co" --reason "Wrong destination account" --json',
+        {'transfer': ID, 'expected_version': 1, 'to_account': 'Savings', 'amount': '400.00'}),
+    'transfer void': Example(
+        f'bookflow transfer void {ID} --expected-version 2 --company "Demo Plumbing Co" '
+        f'--reason "The transfer was never made" --json', {'transfer': ID, 'expected_version': 2}),
+    'transfer query': Example(
+        'bookflow transfer query --account Checking --date-from 2026-01-01 --date-to 2026-12-31 '
+        '--limit 25 --company "Demo Plumbing Co" --json',
+        {'account': 'Checking', 'date_from': '2026-01-01', 'date_to': '2026-12-31', 'limit': 25}),
+    'transfer history': Example(
+        f'bookflow transfer history {ID} --limit 25 --company "Demo Plumbing Co" --json',
+        {'transfer': ID, 'limit': 25}),
+})
+
+
 EXAMPLES.update({
     "rate set": Example('bookflow rate set --date 2026-07-15 --from-currency JPY --rate 0.0068 --expected-version 0 --company "Demo Plumbing Co" --reason "Enter manual yen rate" --json', {"date":"2026-07-15","from_currency":"JPY","rate":"0.0068","expected_version":0}),
     "rate show": Example('bookflow rate show --date 2026-07-15 --from-currency JPY --company "Demo Plumbing Co" --json', {"date":"2026-07-15","from_currency":"JPY"}),
@@ -497,4 +543,23 @@ EXAMPLES.update({
     "bill payment history": Example(
         f'bookflow bill payment history {ID} --limit 25 --company "Demo Plumbing Co" --json',
         {"payment": ID, "limit": 25}),
+})
+
+
+# A credit memo is entered either way it can be entered: the goodwill credit names its own item
+# and price, the return names the invoice line coming back and lets the capture price it.
+EXAMPLES.update({
+    "credit-memo post": Example(
+        'bookflow credit-memo post --customer "Rivera Construction" --date 2026-04-08'
+        ' --memo "Goodwill credit for the late visit"'
+        ' --lines \'[{"item":"Site visit","quantity":"1","unit_price":"30.00"}]\''
+        ' --company "Demo Plumbing Co" --reason "Credit the customer" --json',
+        {"customer": "Rivera Construction", "date": "2026-04-08",
+         "memo": "Goodwill credit for the late visit",
+         "lines": [{"item": "Site visit", "quantity": "1", "unit_price": "30.00"}]}),
+    "credit-memo show": Example(
+        f'bookflow credit-memo show {ID} --company "Demo Plumbing Co" --json', {"credit_memo": ID}),
+    "credit-memo history": Example(
+        f'bookflow credit-memo history {ID} --limit 25 --company "Demo Plumbing Co" --json',
+        {"credit_memo": ID, "limit": 25}),
 })

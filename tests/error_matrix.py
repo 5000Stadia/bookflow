@@ -225,6 +225,37 @@ MATRIX['transfer post']['E_VALIDATION'] = (
     'an end of the transfer is not a balance-sheet account the company owns, the same account '
     'is named at both ends, or an account is kept in another currency')
 
+# The rest of each money-out document's lifecycle. A correction raises everything entering one
+# raises plus a stale version; a void reads no accounts, allocates no number and cannot be out
+# of balance, so it raises far less; the reads can only fail to find the document, refuse to
+# describe an entry that is no longer one, or be walked with an expired cursor.
+_MONEY_OUT_READ_ERRORS = {
+    'E_RECORD_NOT_FOUND': 'no document of this kind carries that id or number',
+    'E_VALIDATION': 'the stored entry no longer has this document shape, or the cursor belongs '
+                    'to another query contract',
+    'E_QUERY_STALE': 'the company audit log moved while the page was being walked',
+}
+for _noun, _face in (('check', 'check'), ('card-charge', 'card-charge'), ('transfer', 'transfer')):
+    MATRIX[_noun + ' update'] = dict(MATRIX[_noun + ' post'])
+    MATRIX[_noun + ' update']['E_VERSION_CONFLICT'] = (
+        'expected_version is stale: the document changed since it was read')
+    MATRIX[_noun + ' update']['E_RECORD_NOT_FOUND'] = (
+        'no document of this kind carries that id or number, or a named reference is absent')
+    MATRIX[_noun + ' void'] = {
+        'E_RECORD_NOT_FOUND': MATRIX[_noun + ' update']['E_RECORD_NOT_FOUND'],
+        'E_VERSION_CONFLICT': MATRIX[_noun + ' update']['E_VERSION_CONFLICT'],
+        'E_VALIDATION': 'the stored entry no longer has this document shape',
+        'E_REASON_REQUIRED': 'a void carries no reason, or an agent write carries no directive',
+        'E_PERIOD_CLOSED': "the document's own accounting date is closed",
+        'E_IDEMPOTENCY_MISMATCH': 'retry key reused with different original input',
+        'E_DIRECTIVE_NOT_FOUND': 'context directive absent',
+        'E_DIRECTIVE_INACTIVE': 'context directive inactive',
+    }
+    MATRIX[_noun + ' show'] = {code: text for code, text in _MONEY_OUT_READ_ERRORS.items()
+                               if code != 'E_QUERY_STALE'}
+    MATRIX[_noun + ' query'] = dict(_MONEY_OUT_READ_ERRORS)
+    MATRIX[_noun + ' history'] = dict(_MONEY_OUT_READ_ERRORS)
+
 for _verb in ('show', 'list', 'query', 'activate', 'deactivate'):
     MATRIX['customer ' + _verb]['E_VALUE_RANGE'] = 'exact own or family receivable balance exceeds signed 64-bit range'
 
@@ -797,5 +828,28 @@ MATRIX["bill payment query"] = {
 }
 MATRIX["bill payment history"] = {
     "E_RECORD_NOT_FOUND": "unknown payment",
+
+
+# A credit memo refuses for the invoice's reasons -- it is the same resolver on the same
+# accounts -- plus the two only a return can hit: asking for more of a line than is left, and
+# a source line the invoice has since corrected out from under the claim.
+MATRIX["credit-memo post"] = {
+    "E_RECORD_NOT_FOUND": "unknown customer, item, account, class, tax item, source invoice or source line",
+    "E_INACTIVE_REFERENCE": "deactivated customer, item, account, class or tax item",
+    "E_VALIDATION": "no single active Accounts Receivable account, an ineligible posting account, a source invoice for another customer, a priced return, a document mixing returns with named items, or a zero total",
+    "E_VALUE_RANGE": "amount outside signed 64-bit minor units",
+    "E_AMOUNT_PRECISION": "more decimals than the home currency has",
+    "E_PERIOD_CLOSED": "credit date on or before the closing date",
+    "E_DUPLICATE_NUMBER": "explicit --number already used by an invoice or another credit memo",
+    "E_PREVIEW_STALE": "expected_facts_fingerprint no longer matches the resolved facts",
+    "E_RETURN_EXHAUSTED": "more of the source line asked for than is still returnable",
+    "E_SOURCE_CORRECTION_CONFLICT": "the source line's quantity or net changed after it was claimed",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
+    "E_DIRECTIVE_INACTIVE": "deactivated --directive",
+}
+MATRIX["credit-memo show"] = {"E_RECORD_NOT_FOUND": "unknown credit memo or revision number"}
+MATRIX["credit-memo history"] = {
+    "E_RECORD_NOT_FOUND": "unknown credit memo",
     "E_QUERY_STALE": "company audit changed between history pages",
 }

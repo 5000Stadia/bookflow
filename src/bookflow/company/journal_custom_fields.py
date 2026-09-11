@@ -175,7 +175,7 @@ def _require(condition: bool) -> None:
 def _validate(connection: sa.Connection, plan: JournalCustomFieldPlan, record_id: str, snapshot: dict, *, record_type: str) -> None:
     owner = plan.owner_plan
     _require(type(owner.creating) is bool and type(plan.refresh) is bool)
-    _require(record_type in {"journal_entry", "invoice", "sales_receipt", "payment", "proposal", "estimate", "work_order", "deposit", "bill"})
+    _require(record_type in {"journal_entry", "invoice", "sales_receipt", "payment", "proposal", "estimate", "work_order", "deposit", "bill", "credit_memo"})
     _require(owner.record_type == record_type and owner.record_id == record_id)
     _require(is_ulid(record_id) and normalize_ulid(record_id) == record_id)
     previous = json.loads(plan.previous_json)

@@ -523,8 +523,35 @@ name the difference. The write output is `MoneyOutWriteOutput`: the journal writ
 total and the line count. That summary is what the footer displays; nothing is recomputed in the
 browser.
 
-Correction is `register update` and voiding is `journal void`, the same as every other register
-entry: the document is a journal, its reversal posts at the original date and the revisions stay.
+`check show`, `check query`, `check update`, `check void` and `check history` give the document
+the lifecycle every other document has, and `card-charge` carries the identical six verbs.
+`company/checks.py` derives what `show` and `query` report from the stored revision -- line one is
+the funding line and the rest are the expense lines -- so no figure is kept twice. A correction is
+the same translation with each surviving line identity retained and `operation='update'`, so the
+journal writer appends an exact reversal of the old accounting at its old date and a full
+replacement at the new one; a void is that writer's exact reversal at the document's own date.
+`check update` accepts a different bank account, which is why `registers.translate` takes
+`moving=True`: standing in a register an entry cannot leave the account you are scrolling, but the
+bank account is an ordinary field on the check's own form. A field left out of a correction keeps
+what was captured, and leaving `expenses` out keeps the saved rows verbatim rather than re-reading
+accounts that may have been renamed since.
+
+The same entry is still an ordinary register row, so `register update` and `journal void` keep
+working on it and leave it a check; `tests/test_money_out_lifecycle.py` holds both doors open.
+
+`money_out_documents` is what makes `check query` possible. A check, a card charge and a transfer
+post the rows `register post` posts, so nothing in the posting distinguishes them; the table is one
+immutable row per transaction saying which document a person entered, written inside the same audit
+event as the accounting through `journals.persist_prepared(extra=...)`. Inferring the document from
+the shape of its lines was the alternative and it is wrong: a hand-typed journal entry crediting a
+bank account has a check's shape exactly.
+
+**What the browser still needs.** The six verbs exist on every command surface; the workbench has
+only the entry window. `Document.is_document` covers `post` alone, so `check update` renders as a
+generated form rather than as the check; `Document.NO_LIST` still sends Cancel to the home board
+although the generic list and detail routes now resolve; `Nav.NOUNS` excludes these three, so the
+document navigation bar and a history page are absent; and no panel carries a "Checks",
+"Credit card charges" or "Transfers" list tile.
 
 **Where an Items tab attaches.** The line collection is named `expenses`, not `lines`. A second
 line kind arrives as a sibling collection `items` on the same input models, translated into
@@ -802,9 +829,16 @@ holding the amount and, for each end, the account id, its name, its type, its no
 side it took, and whether its own figure went up or down. That summary is what the footer
 displays; nothing is recomputed in the browser.
 
-Correction is `register update` and voiding is `journal void`, the same as every other register
-entry. There is no `transfer` list page yet, so the window's Cancel returns to the home board
-(`Document.NO_LIST`) and a successful save lands on the posted journal.
+`transfer show`, `transfer query`, `transfer update`, `transfer void` and `transfer history` carry
+the same six verbs the money-out documents carry, through the same marker table and the same
+translation. The correction worth naming is a changed `to_account`: the journal writer reverses the
+whole entry at the transfer's own date and replaces it, so the money leaves the account it went
+into and arrives in the new one on that one date rather than on two. `register update` and
+`journal void` keep working on a transfer as well.
+
+`transfer` is still in `Document.NO_LIST`, so the window's Cancel returns to the home board and a
+successful save lands on the posted journal, even though `transfer query` now gives the generic
+list route something to answer with.
 
 In `adapters/workbench/document_form.py` the transfer is the one document with no line grid:
 `layout` returns `lines: None`, which leaves the grid band out of the rendered page rather than
@@ -2832,3 +2866,68 @@ revision pin, with unchanged D11 identity/credential/company release checks. Pub
 writes and source discovery keep their existing execution path.
 
 The saved-deposit list at `/c/{company}/deposit` renders the registered public query page through the deposit workbench adapter. Filters and continuation tokens remain command inputs; all whole-match and revision/effective amounts come from the public projection, and the whole-match totals are labelled apart from the rows on this page because they are computed over the whole match and do not move with page size. A voided deposit keeps its revision amount in those totals and contributes no effective bank movement. A semantic table becomes screen-only phone cards using document-detail styles, keeping its explicit table/row/columnheader/cell roles at phone width. Detail, revision and composition links carry a validated same-company list return location and fall back to the plain list for anything else. Changed filters start a fresh result, previous and next retain them, and a staled or invalid continuation keeps the entered filters and offers an explicit restart. An explicit bank filter matching no account here refuses as `E_RECORD_NOT_FOUND` on field `deposit_to`: the list selector's own refusal carries open suggestions, which a closed public deposit failure cannot hold, so an unnarrowed refusal leaves the captured-outcome path and reaches the reader as a permission denial rather than a correctable filter mistake.
+
+## Customer credit memos, and the settlement edge they share
+
+**One receivable settlement edge, two kinds of source.** `applications` and
+`application_allocations` stay the single place an invoice's due falls, and each gained one
+nullable column — `applications.credit_source_key_id` and
+`application_allocations.credit_source_component_id` — so a credit settles an invoice through
+exactly the rows a receipt does: the same `settlement_line_keys` ordinals, the same recognition
+roles, the same exact-inverse rules, the same allocation function. The alternative, a parallel
+`credit_applications` pair, would have required a branch in twenty existing readers — every one
+a place a credit could be forgotten — and would have split the `applications.id` namespace that
+six other owners address a settlement row by. Nothing is backfilled: NULL is the true value of
+both new columns for every row ever written, and which kind of source a row carries is derived
+from which column is present rather than stored as a classification something else can
+contradict. `applications_one_source` is the fence that keeps exactly one of them present and
+owned by the paying document.
+
+`posting_line_sources` gained no column. Credit attribution points **outward**:
+`credit_components.posting_source_id` and `credit_tax_components.posting_source_id` name the
+attribution row, where a receipt's attribution row names the payment component. That is the
+same inversion `ap_obligation_components` established, and it is why the credit tables could be
+added without touching the posting schema at all.
+
+**What a credit memo is.** `credit_profiles`, `credit_line_profiles` and
+`credit_tax_components` mirror `sales_profiles`, `sales_line_profiles` and
+`sales_tax_components` cell for cell, because a credit memo is a sale read backwards. Its
+accounting is the invoice's, reversed: each line debits its captured income account for its net
+and its captured tax liabilities for their cells, and Accounts Receivable is credited the gross
+**once**, with one attribution row per line on that single credit. Those attribution rows are
+what `credit_components` name, which is how a later application can land on particular lines —
+the shape `bills.py` established for the payable. Saving a credit applies nothing.
+
+**Two documents in one noun, told apart by what a line claims.** A *standalone* line names its
+own item and is priced by `sales_defaults.resolve_line` and the same tax calculator an invoice
+uses. A *returned* line names a source invoice line and is priced by nothing at all: every net
+and tax cent is taken from what that invoice captured. A document is all of one kind, and mixing
+is refused — the tax calculator rounds across a whole document, so a document holding one
+calculated cell and one captured cell would carry a tax total that is neither.
+
+**The endpoint rule** (`credit_returns.py`) decides every cent a return carries. A captured
+source line of base quantity `Q` and net `N` gives a returned half-open interval `[a,b)`
+exactly `floor(N·b/Q) − floor(N·a/Q)` cents, and a captured tax cell `T` gives the net interval
+`[u,v)` exactly `floor(T·v/N) − floor(T·u/N)`. Both are differences of one cumulative function
+at two endpoints, so any disjoint set of intervals telescopes to exactly `N` and exactly each
+`T` whatever order they were claimed in, releasing an interval and claiming it again returns
+the identical cents, and no interval can be worth a cent another interval also claims. A
+running remainder has none of those properties, which is why none is used. `credit_source_claims`
+stores the intervals and not the money, because the money is a function of the interval and the
+capture, and two facts that can disagree are worse than one fact and a rule. The residue still
+returnable on a line is the complement of its active claims, lowest first; asking for more than
+that is `E_RETURN_EXHAUSTED` with nothing written.
+
+**One number series with invoices.** `document_effects.NUMBER_FAMILIES` maps a document type to
+the family it draws its numbers from, and an invoice and a credit memo share the invoice series:
+a credit memo takes the next invoice number, the way the anchor product issues one, so a
+customer reads one unbroken run across both documents. `uq_transaction_type_number` is per type
+and cannot say that, so the partial unique index `uq_transaction_receivable_number` refuses the
+same number on an invoice and a credit memo, for a generated number and an explicit one alike.
+
+**What this increment deliberately does not do.** There is no `credit-memo update`, `void` or
+`query`, no `customer-credit apply`/`unapply`, no refund, no recovery family, and no browser
+page — the home window's credit-memo tile stays planned, because a tile is live only when a
+command, a route and a page all exist. Price allowances against a source line, stocked returns
+and cost restoration, cross-party (parent↔job) credit, cash-basis treatment and print are
+outside the release entirely and are refused rather than approximated; the command help says so.

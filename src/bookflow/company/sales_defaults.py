@@ -177,12 +177,17 @@ def _tax_rules(db, selector, source=None):
     return _ref(row), rules
 
 
+# Document types whose control account is a receivable: an invoice puts money there and a
+# credit memo takes it back out, so both resolve the same account the same way.
+RECEIVABLE_TYPES = ('invoice', 'credit_memo')
+
+
 def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
                    old_date: str | None = None) -> tuple[SalesProfile, list[str]]:
     """Resolve a header without identities, audit, or database mutations."""
     nonposting = doc_type in ('proposal', 'estimate', 'work_order')
-    if doc_type not in ('invoice', 'sales_receipt') and not nonposting:
-        raise _invalid('type', 'expected invoice or sales_receipt')
+    if doc_type not in ('invoice', 'sales_receipt', 'credit_memo') and not nonposting:
+        raise _invalid('type', 'expected invoice, sales_receipt or credit_memo')
     db = s.company
     info = _info(db)
     refresh = inp.refresh_defaults
@@ -278,7 +283,7 @@ def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
     out['shipping_address_id'] = selected_id
 
     if not nonposting:
-        control_field = 'ar_account' if doc_type == 'invoice' else 'deposit_to'
+        control_field = 'ar_account' if doc_type in RECEIVABLE_TYPES else 'deposit_to'
         control_selector = getattr(inp, control_field, None)
         old_control = previous.control_account if previous else None
         if old_control and (control_field not in fields.supplied or _same(db, 'account', control_selector, old_control)) and not refresh:
@@ -286,13 +291,13 @@ def resolve_header(s, inp, doc_type, *, previous: SalesProfile | None = None,
         else:
             if control_selector is None and old_control:
                 control_selector = old_control.id
-            if control_selector is None and doc_type == 'invoice':
+            if control_selector is None and doc_type in RECEIVABLE_TYPES:
                 rows = db.conn.execute(sa.select(schema.accounts.c.id).where(
                     schema.accounts.c.type == 'accounts_receivable', schema.accounts.c.active.is_(True))).scalars().all()
                 if len(rows) != 1:
                     raise _invalid('ar_account', 'select an active AR account when there is not exactly one')
                 control_selector = rows[0]
-            if doc_type == 'invoice':
+            if doc_type in RECEIVABLE_TYPES:
                 control = _account(db, control_selector, control_field, {'accounts_receivable'})
             else:
                 control = _account(db, control_selector, control_field, {'bank', 'other_current_asset'})

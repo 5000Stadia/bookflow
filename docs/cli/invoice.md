@@ -1371,7 +1371,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
-| `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
@@ -1643,7 +1643,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `applications[].kind` | literal["apply", "unapply"] | yes | no | — | — |
 | `applications[].paying_transaction_id` | string | yes | no | — | — |
 | `applications[].paid_transaction_id` | string | yes | no | — | — |
-| `applications[].source_component_key_id` | string | yes | no | — | — |
+| `applications[].source_component_key_id` | string \| null | yes | yes | — | — |
+| `applications[].credit_source_key_id` | string \| null | no | yes | null | — |
 | `applications[].amount_minor_units` | integer | yes | no | — | — |
 | `applications[].currency` | string | yes | no | — | — |
 | `applications[].effective_date` | string | yes | no | — | — |
@@ -3575,7 +3576,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
-| `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
@@ -4699,7 +4700,7 @@ Example JSON output:
 | `E_DB_BUSY` | Another Bookflow command is running on this data root. |
 | `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
 | `E_DIRECTIVE_NOT_FOUND` | No such directive. |
-| `E_DUPLICATE_NUMBER` | That document number is already used by this type. |
+| `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
 | `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |

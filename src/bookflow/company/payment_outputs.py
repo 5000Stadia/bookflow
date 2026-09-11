@@ -292,7 +292,10 @@ class ApplicationRecordOutput(StrictModel):
     kind: Literal['apply', 'unapply']
     paying_transaction_id: str
     paid_transaction_id: str
-    source_component_key_id: str
+    # Exactly one of these two names the capacity: a receipt component key, or a credit memo's
+    # own source key. Both are optional on the wire because neither is present on every row.
+    source_component_key_id: str | None
+    credit_source_key_id: str | None = None
     amount_minor_units: int
     currency: str
     effective_date: str
@@ -322,7 +325,8 @@ class AllocationHistoryOutput(StrictModel):
     reverses_allocation_id: str | None
     source_transaction_id: str
     source_revision_id: str
-    source_component_id: str
+    source_component_id: str | None
+    credit_source_component_id: str | None = None
     source_posting_source_id: str
     target_transaction_id: str
     target_revision_id: str

@@ -8,6 +8,7 @@ rows, local tables, indexes, views and triggers that this migration has to rebui
 """
 import importlib
 import sqlite3
+from pathlib import Path
 
 from sqlalchemy.dialects.sqlite import dialect
 from sqlalchemy.schema import CreateIndex, CreateTable
@@ -16,10 +17,25 @@ from bookflow.company import schema as c
 from bookflow.company.ap_settlement_schema import guard_statements
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, migrate_to_head
-from tests.payment_raw_evidence import table
+from tests.payment_raw_evidence import preserved, table
 
 M = importlib.import_module('bookflow.storage.company_migrations.versions.0026_bill_payments')
 BILLS = importlib.import_module('bookflow.storage.company_migrations.versions.0025_bills')
+
+
+def _rebuilt_since(revision):
+    """Every table and trigger the migrations after `revision` rebuild or replace."""
+    versions = Path(__file__).resolve().parents[1] / 'src/bookflow/storage/company_migrations/versions'
+    seen, names = set(), set()
+    for path in sorted(versions.glob('[0-9]*.py')):
+        module = importlib.import_module('bookflow.storage.company_migrations.versions.' + path.stem)
+        guards = {statement.split()[2] for statement in getattr(module, 'GUARDS', ())}
+        if module.revision > revision:
+            names.update(getattr(module, 'CHANGED', ()))
+            names.update(getattr(module, 'REPLACED', ()))
+            names.update(guards & seen)
+        seen.update(guards)
+    return names
 
 
 def _at(path, revision):
@@ -60,7 +76,9 @@ def test_frozen_ddl_is_the_current_metadata_and_the_guards_are_the_schema_module
 def test_a_fresh_database_reaches_the_head_with_empty_settlement_storage(tmp_path):
     with open_database(tmp_path / 'fresh.db', writable=True, create=True) as db:
         assert migrate_to_head(db, 'company', None) == (None, HEADS['company'])
-        assert HEADS['company'] == M.revision
+        # This revision is a link in the chain, not its end: a later migration is expected to
+        # follow it, so asserting it is the head is what goes stale on the next one.
+        assert M.revision == 'co0026' and M.down_revision == 'co0025'
         assert all(db.raw.execute('SELECT count(*) FROM ' + name).fetchone() == (0,)
                    for name in M.NEW_TABLES)
         assert db.raw.execute('PRAGMA main.foreign_key_check').fetchall() == []
@@ -131,14 +149,17 @@ def test_a_populated_co0025_database_keeps_every_value_and_every_local_object(tm
             "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'"
             " AND name <> 'alembic_version' ORDER BY name")]
         before = {name: table(raw, name) for name in names}
-        objects = set(raw.execute(
+        # Everything a later migration rebuilds or reissues is read from the migration
+        # modules, not listed here: a hand-written set of three names is falsified by the very
+        # next revision that widens a table, and silently, because the set still looks right.
+        rebuilt = _rebuilt_since(M.down_revision)
+        objects = {row for row in raw.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
-            " AND name NOT IN ('transactions', 'document_lines', 'document_lines_type_insert')"
-        ).fetchall())
+        ).fetchall() if row[1] not in rebuilt}
 
     with open_database(path, writable=True) as db:
         assert migrate_to_head(db, 'company', tmp_path / 'backups') == ('co0025', HEADS['company'])
-        assert {name: table(db.raw, name) for name in names} == before
+        assert {name: preserved(db.raw, name, before[name]) for name in names} == before
         after = set(db.raw.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
         ).fetchall())

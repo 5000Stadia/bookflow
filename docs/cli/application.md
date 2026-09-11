@@ -64,7 +64,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].application.kind` | literal["apply", "unapply"] | yes | no | — | — |
 | `items[].application.paying_transaction_id` | string | yes | no | — | — |
 | `items[].application.paid_transaction_id` | string | yes | no | — | — |
-| `items[].application.source_component_key_id` | string | yes | no | — | — |
+| `items[].application.source_component_key_id` | string \| null | yes | yes | — | — |
+| `items[].application.credit_source_key_id` | string \| null | no | yes | null | — |
 | `items[].application.amount_minor_units` | integer | yes | no | — | — |
 | `items[].application.currency` | string | yes | no | — | — |
 | `items[].application.effective_date` | string | yes | no | — | — |
@@ -80,7 +81,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].allocation.reverses_allocation_id` | string \| null | yes | yes | — | — |
 | `items[].allocation.source_transaction_id` | string | yes | no | — | — |
 | `items[].allocation.source_revision_id` | string | yes | no | — | — |
-| `items[].allocation.source_component_id` | string | yes | no | — | — |
+| `items[].allocation.source_component_id` | string \| null | yes | yes | — | — |
+| `items[].allocation.credit_source_component_id` | string \| null | no | yes | null | — |
 | `items[].allocation.source_posting_source_id` | string | yes | no | — | — |
 | `items[].allocation.target_transaction_id` | string | yes | no | — | — |
 | `items[].allocation.target_revision_id` | string | yes | no | — | — |
@@ -250,7 +252,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `record.kind` | literal["apply", "unapply"] | yes | no | — | — |
 | `record.paying_transaction_id` | string | yes | no | — | — |
 | `record.paid_transaction_id` | string | yes | no | — | — |
-| `record.source_component_key_id` | string | yes | no | — | — |
+| `record.source_component_key_id` | string \| null | yes | yes | — | — |
+| `record.credit_source_key_id` | string \| null | no | yes | null | — |
 | `record.amount_minor_units` | integer | yes | no | — | — |
 | `record.currency` | string | yes | no | — | — |
 | `record.effective_date` | string | yes | no | — | — |
@@ -311,7 +314,8 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `current_allocations[].reverses_allocation_id` | string \| null | yes | yes | — | — |
 | `current_allocations[].source_transaction_id` | string | yes | no | — | — |
 | `current_allocations[].source_revision_id` | string | yes | no | — | — |
-| `current_allocations[].source_component_id` | string | yes | no | — | — |
+| `current_allocations[].source_component_id` | string \| null | yes | yes | — | — |
+| `current_allocations[].credit_source_component_id` | string \| null | no | yes | null | — |
 | `current_allocations[].source_posting_source_id` | string | yes | no | — | — |
 | `current_allocations[].target_transaction_id` | string | yes | no | — | — |
 | `current_allocations[].target_revision_id` | string | yes | no | — | — |
@@ -375,6 +379,7 @@ Example JSON output:
     "created_at": "2026-01-01T00:00:00Z",
     "created_by": "value",
     "created_via": "cli",
+    "credit_source_key_id": null,
     "currency": "USD",
     "effective_date": "2026-01-01",
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -382,7 +387,7 @@ Example JSON output:
     "paid_transaction_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "paying_transaction_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "reverses_application_id": null,
-    "source_component_key_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+    "source_component_key_id": null
   },
   "reverse_application_id": null
 }

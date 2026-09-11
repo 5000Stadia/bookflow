@@ -10,8 +10,8 @@ DDL below is frozen: this migration never imports current application metadata.
 import importlib
 from alembic import op
 
-revision = 'co0027'
-down_revision = 'co0026'
+revision = 'co0029'
+down_revision = 'co0028'
 branch_labels = None
 depends_on = None
 
