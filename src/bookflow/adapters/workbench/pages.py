@@ -23,6 +23,8 @@ from bookflow.adapters.workbench import statements as S
 from bookflow.adapters.workbench import receivables as Receivable
 from bookflow.adapters.workbench import payables as Payable
 from bookflow.adapters.workbench import customer_statement as Statement
+from bookflow.adapters.workbench import transaction_detail as Detail
+from bookflow.adapters.workbench import missing_checks as MissingChecks
 from bookflow.adapters.workbench import sales as Sales
 from bookflow.adapters.workbench import work as Work
 from bookflow.adapters.workbench import billing as Billing
@@ -52,7 +54,8 @@ env.filters["label"] = Naming.column_label
 # a filter starts a fresh report instead of submitting the previous page's
 # continuation against different inputs. A report joins this set by being listed
 # in its own presentation module; nothing names the commands a second time.
-CURSOR_FREE_REPORTS = S.COMMANDS | Statement.COMMANDS | Receivable.COMMANDS | Payable.COMMANDS
+CURSOR_FREE_REPORTS = (S.COMMANDS | Statement.COMMANDS | Receivable.COMMANDS | Payable.COMMANDS
+                       | Detail.COMMANDS | MissingChecks.COMMANDS)
 
 
 class _FlashStore:
@@ -1290,6 +1293,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 value = request.query_params.get("f:" + field, request.query_params.get(field))
                 if value is not None:
                     attempted["f:" + field] = value
+            # A repeated filter is handed over as the repeated control's own keys, because
+            # a scalar name cannot carry a list. Without this a report filtered to a set of
+            # accounts could be run but never linked to, which is how a drill-down works.
+            attempted.update({key: value for key, value in request.query_params.items()
+                              if key.startswith("c:") or key.startswith("collection:")})
         originals = None
         shown = None
         generic_selector_form = record_id == "self" and cmd.version_source and cmd.version_source[0] != "company show"
@@ -1678,6 +1686,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       receivables=Receivable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Receivable.COMMANDS else None,
                       payables=Payable.view(result, report_input, company_id, verb) if result and report_input is not None and cmd.name in Payable.COMMANDS else None,
                       customer_statement=Statement.view(result, report_input, company_id) if result and report_input is not None and cmd.name in Statement.COMMANDS else None,
+                      transaction_detail=Detail.view(result, report_input, company_id) if result and report_input is not None and cmd.name in Detail.COMMANDS else None,
+                      missing_checks=MissingChecks.view(result, report_input, company_id) if result and report_input is not None and cmd.name in MissingChecks.COMMANDS else None,
                       source_report_watermark=source_report_watermark,
                       preview=preview, get=F.get_path, form_value=F.form_value,
                       collection_attempt_key=F.collection_attempt_key,

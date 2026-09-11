@@ -61,11 +61,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     mapped=workbench_variant_map(rows)
     assert len(mapped)==len(variant_policies())==22
     # The census of material schema nodes. It moves whenever a routed command gains input
-    # shape. Two increments moved it from 2322: the bill's Items grid added eighteen paths
+    # shape. From 2322 at the wave's base: +19 for the bill's Items grid (eighteen paths
     # under `items` on `bill post` and `bill update`, plus one where `expenses` became
-    # optional beside it; the two cash-flow reports added two more. Recomputed on merge —
-    # neither side's number is right on its own.
-    assert sum(len(group["paths"]) for group in mapped)==2343
+    # optional), +2 for the cash-flow pair, +4 for transaction-detail and missing-checks.
+    # Recomputed on every merge — no branch's number is right once another has landed.
+    assert sum(len(group["paths"]) for group in mapped)==2347
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

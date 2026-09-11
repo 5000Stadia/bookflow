@@ -2,6 +2,20 @@
 
 import sqlalchemy as sa
 
+# Every business document type a transaction can be, and every state one can be in, each
+# written once. The CHECK constraints and the column descriptions below are built from
+# these tuples, and a report that needs "all document types" reads them rather than
+# retyping the set -- a second hand-listed copy is how a new document type goes missing
+# from a report nobody thought to update.
+TRANSACTION_TYPES = ('journal_entry', 'invoice', 'sales_receipt', 'payment', 'deposit', 'bill',
+                     'bill_payment', 'credit_memo', 'sales_tax_payment', 'customer_refund',
+                     'vendor_credit')
+POSTED, VOIDED = TRANSACTION_STATUSES = ('posted', 'voided')
+
+
+def _sql_list(values):
+    return ', '.join(f"'{value}'" for value in values)
+
 
 def define_tables(metadata, column, table, common):
     C, T = column, table
@@ -62,20 +76,22 @@ def define_tables(metadata, column, table, common):
             name='ck_ledger_party_pair')
 
     transactions = T('transactions', *common(),
-        text('type', 'Business document type: journal_entry, invoice, sales_receipt, payment, deposit, bill, bill_payment, credit_memo, sales_tax_payment, customer_refund or vendor_credit.', size=32),
+        text('type', 'Business document type: '
+             + ', '.join(TRANSACTION_TYPES[:-1]) + ' or ' + TRANSACTION_TYPES[-1] + '.', size=32),
         text('number', 'Unique editable number within the document type.', size=64),
         identifier('current_revision_id', 'Immutable revision currently displayed.'),
-        text('status', 'Current workflow state: posted or voided.', size=16),
+        text('status', 'Current workflow state: '
+             + ' or '.join(TRANSACTION_STATUSES) + '.', size=16),
         text('voided_at', 'UTC recorded time of the final void.', True, 32),
         identifier('voided_by', 'Principal that voided this document.', True),
         text('void_reason', 'Reason supplied for the final void.', True, 140),
         identifier('void_posting_batch_id', 'Final reversal batch; no separate business number.', True),
         sa.UniqueConstraint('type', 'number', name='uq_transaction_type_number'),
-        sa.CheckConstraint("type IN ('journal_entry', 'invoice', 'sales_receipt', 'payment', 'deposit', 'bill', 'bill_payment', 'credit_memo', 'sales_tax_payment', 'customer_refund', 'vendor_credit')", name='ck_transaction_type'),
+        sa.CheckConstraint(f'type IN ({_sql_list(TRANSACTION_TYPES)})', name='ck_transaction_type'),
         sa.UniqueConstraint('id', 'type', name='uq_transaction_id_type'),
         sa.CheckConstraint("length(trim(number)) BETWEEN 1 AND 64", name='ck_transaction_number'),
-        sa.CheckConstraint("(status = 'posted' AND voided_at IS NULL AND voided_by IS NULL AND void_reason IS NULL AND void_posting_batch_id IS NULL) OR "
-                           "(status = 'voided' AND voided_at IS NOT NULL AND voided_by IS NOT NULL AND length(trim(void_reason)) > 0 AND void_posting_batch_id IS NOT NULL)", name='ck_transaction_void'),
+        sa.CheckConstraint(f"(status = '{POSTED}' AND voided_at IS NULL AND voided_by IS NULL AND void_reason IS NULL AND void_posting_batch_id IS NULL) OR "
+                           f"(status = '{VOIDED}' AND voided_at IS NOT NULL AND voided_by IS NOT NULL AND length(trim(void_reason)) > 0 AND void_posting_batch_id IS NOT NULL)", name='ck_transaction_void'),
         fk(['id', 'current_revision_id'], ['transaction_revisions.transaction_id', 'transaction_revisions.id'], 'fk_transaction_current_revision', True),
         fk(['id', 'void_posting_batch_id'], ['posting_batches.transaction_id', 'posting_batches.id'], 'fk_transaction_void_batch', True),
         sa.Index('ix_transactions_status_number', 'status', 'number', 'id'),

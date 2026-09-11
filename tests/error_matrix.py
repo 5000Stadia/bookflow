@@ -322,6 +322,17 @@ MATRIX['report unpaid-bills'] = {
     'E_VALUE_RANGE': 'public bill amount or unpaid-bill total exceeds signed 64-bit range',
     'E_RECORD_NOT_FOUND': 'vendor filter does not resolve',
 }
+MATRIX['report transaction-detail'] = {
+    'E_QUERY_STALE': 'relevant posting or account display facts changed between pages',
+    'E_VALUE_RANGE': 'public running balance or report total exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'an account named in the accounts filter does not resolve',
+}
+MATRIX['report missing-checks'] = {
+    'E_QUERY_STALE': 'company audit changed between check-sequence pages',
+    'E_VALUE_RANGE': 'public check amount exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'account filter does not resolve',
+    'E_VALIDATION': 'account filter names an account that is not a bank account',
+}
 
 for _verb in ('post', 'update'):
     MATRIX['journal ' + _verb]['E_NO_EXCHANGE_RATE'] = 'no exact-date original-to-home rate and no manual override'

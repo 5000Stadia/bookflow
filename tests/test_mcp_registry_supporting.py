@@ -17,10 +17,11 @@ FAMILIES = {
     'annotations': ('directive add', 'directive show', 'directive list', 'directive deactivate',
                     'note add', 'note show', 'note list', 'note edit'),
     'links': ('customer link-vendor', 'customer unlink-vendor', 'other-name convert'),
-    'reports': ('report trial-balance', 'report general-ledger', 'report balance-sheet', 'report profit-and-loss',
+    'reports': ('report trial-balance', 'report general-ledger', 'report transaction-detail',
+                'report balance-sheet', 'report profit-and-loss',
                 'report cash-flows', 'report income-tax-summary',
                 'report ar-aging', 'report open-invoices', 'report statement',
-                'report ap-aging', 'report unpaid-bills'),
+                'report ap-aging', 'report unpaid-bills', 'report missing-checks'),
 }
 
 

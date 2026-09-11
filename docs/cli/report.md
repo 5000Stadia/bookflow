@@ -1216,6 +1216,193 @@ Example JSON output:
 | `E_VALIDATION` | Invalid input. |
 | `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
 
+## `report missing-checks`
+
+Holes and repeats in each bank account's check-number sequence as of as_of, so an unrecorded or twice-entered check can be found. One row per hole, naming the first and last missing number and the checks that occupy the numbers immediately below and above it, and one row per number two or more checks carry. A check counts as drawn on the bank account its first entered line credits, so a correction that moves it moves it here too, and a voided check still occupies its number because the paper it was written on is still gone. A check whose number is not a plain run of digits has no position in a sequence and is counted rather than placed; so is one no longer drawn on a bank account. account limits the report to one bank account. Totals cover every examined check and rows are paged.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.missing-checks` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report missing-checks --as-of 2026-12-31 --account Checking --company "Demo Plumbing Co" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `as_of` | `--as-of` | string | yes | no | — | Inclusive accounting as-of date, YYYY-MM-DD; a check dated after it is not examined, which can show a hole where a later-dated check sits.; minimum length 10; maximum length 10 |
+| `account` | `--account` | string \| null | no | yes | null | Optional bank account ID or canonical full name; includes inactive accounts. Omit for every bank account. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.missing-checks`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.checks_examined` | integer | yes | no | — | — |
+| `totals.numbered_checks` | integer | yes | no | — | — |
+| `totals.unnumbered_checks` | integer | yes | no | — | — |
+| `totals.checks_off_a_bank_account` | integer | yes | no | — | — |
+| `totals.gaps` | integer | yes | no | — | — |
+| `totals.missing_numbers` | integer | yes | no | — | — |
+| `totals.duplicate_numbers` | integer | yes | no | — | — |
+| `totals.duplicate_checks` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].kind` | literal["gap", "duplicate"] | yes | no | — | — |
+| `rows[].account_id` | string | yes | no | — | — |
+| `rows[].current_account_label` | string | yes | no | — | — |
+| `rows[].current_account_name` | string | yes | no | — | — |
+| `rows[].current_account_number` | string \| null | yes | yes | — | — |
+| `rows[].display_account_label` | string | yes | no | — | — |
+| `rows[].first_missing` | integer \| null | no | yes | null | — |
+| `rows[].last_missing` | integer \| null | no | yes | null | — |
+| `rows[].missing_count` | integer | no | no | 0 | — |
+| `rows[].duplicate_number` | integer \| null | no | yes | null | — |
+| `rows[].times_used` | integer \| null | no | yes | null | — |
+| `rows[].before` | object \| null | no | yes | null | — |
+| `rows[].before.transaction_id` | string | yes | no | — | — |
+| `rows[].before.number` | string | yes | no | — | — |
+| `rows[].before.sequence_number` | integer | yes | no | — | — |
+| `rows[].before.date` | string | yes | no | — | — |
+| `rows[].before.status` | literal["posted", "voided"] | yes | no | — | — |
+| `rows[].before.party_name` | string \| null | yes | yes | — | — |
+| `rows[].before.memo` | string \| null | yes | yes | — | — |
+| `rows[].before.amount` | object | yes | no | — | — |
+| `rows[].before.amount.amount` | string | yes | no | — | — |
+| `rows[].before.amount.currency` | string | yes | no | — | — |
+| `rows[].before.amount.minor_units` | integer | yes | no | — | — |
+| `rows[].after` | object \| null | no | yes | null | — |
+| `rows[].after.transaction_id` | string | yes | no | — | — |
+| `rows[].after.number` | string | yes | no | — | — |
+| `rows[].after.sequence_number` | integer | yes | no | — | — |
+| `rows[].after.date` | string | yes | no | — | — |
+| `rows[].after.status` | literal["posted", "voided"] | yes | no | — | — |
+| `rows[].after.party_name` | string \| null | yes | yes | — | — |
+| `rows[].after.memo` | string \| null | yes | yes | — | — |
+| `rows[].after.amount` | object | yes | no | — | — |
+| `rows[].after.amount.amount` | string | yes | no | — | — |
+| `rows[].after.amount.currency` | string | yes | no | — | — |
+| `rows[].after.amount.minor_units` | integer | yes | no | — | — |
+| `rows[].checks` | array[object] | no | no | [] | — |
+| `rows[].checks[].transaction_id` | string | yes | no | — | — |
+| `rows[].checks[].number` | string | yes | no | — | — |
+| `rows[].checks[].sequence_number` | integer | yes | no | — | — |
+| `rows[].checks[].date` | string | yes | no | — | — |
+| `rows[].checks[].status` | literal["posted", "voided"] | yes | no | — | — |
+| `rows[].checks[].party_name` | string \| null | yes | yes | — | — |
+| `rows[].checks[].memo` | string \| null | yes | yes | — | — |
+| `rows[].checks[].amount` | object | yes | no | — | — |
+| `rows[].checks[].amount.amount` | string | yes | no | — | — |
+| `rows[].checks[].amount.currency` | string | yes | no | — | — |
+| `rows[].checks[].amount.minor_units` | integer | yes | no | — | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "checks_examined": 1,
+    "checks_off_a_bank_account": 1,
+    "duplicate_checks": 1,
+    "duplicate_numbers": 1,
+    "gaps": 1,
+    "missing_numbers": 1,
+    "numbered_checks": 1,
+    "unnumbered_checks": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
 ## `report open-invoices`
 
 Unpaid and partly paid invoices as of as_of, oldest due date first, each with its due date, days past due, aging column, original amount, applied amount and remaining balance. Paid and voided invoices are omitted. This lists invoices only, so its total is receivables before unapplied customer credit; use report ar-aging for the balance that ties to Accounts Receivable. Totals cover the whole filter and rows are paged.
@@ -1806,6 +1993,203 @@ Example JSON output:
       "minor_units": 1
     },
     "opening": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    }
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
+| `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VALUE_RANGE` | The value is outside its allowed range or storage bounds. |
+
+## `report transaction-detail`
+
+Every posting line of every account between date_from and date_to, one section per account in chart-of-accounts order. A section opens with the account's opening balance, lists each line with its accounting date, document type and number, the party it names, the line's own description and the document's memo, the split account, and the debit or credit, and closes with the period's debits, credits and the closing balance. The running balance on each line is the account's balance after that line, computed over the whole account before the page is cut, so a page boundary never breaks it. The split account is the other side of the entry read off the posting batch itself: the one other account when the entry has exactly two lines, and -SPLIT- when it has more. Corrections and voids appear as the reversal and replacement effects they are, so the section reconciles to report trial-balance for the same date. accounts filters to a set of accounts by ID or canonical full name; omit it for every account with an opening balance or with activity in the period. Totals cover the whole filter and rows are paged.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | reports |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/report.transaction-detail` |
+| External binary body | none |
+
+### CLI
+
+`bookflow report transaction-detail --date-from 2026-01-01 --date-to 2026-12-31 --accounts '["Checking"]' --company "Demo Plumbing Co" --json`
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `date_from` | `--date-from` | string | yes | no | — | Inclusive first accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `date_to` | `--date-to` | string | yes | no | — | Inclusive last accounting date, YYYY-MM-DD.; minimum length 10; maximum length 10 |
+| `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
+| `accounts` | `--accounts` | array[string] \| null | no | yes | null | Optional account IDs or canonical full names; includes inactive accounts. Omit, or send an empty list, for every account with an opening balance or with activity in the period. |
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `cursor` | `--cursor` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/report.transaction-detail`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `metadata` | object | yes | no | — | — |
+| `metadata.company_id` | string | yes | no | — | — |
+| `metadata.period` | object | yes | no | — | — |
+| `metadata.period.date_from` | string \| null | yes | yes | — | — |
+| `metadata.period.date_to` | string | yes | no | — | — |
+| `metadata.basis` | literal["accrual"] | no | no | "accrual" | — |
+| `metadata.report_version` | string | yes | no | — | — |
+| `metadata.schema_revision` | string | yes | no | — | — |
+| `metadata.generation_time` | string | yes | no | — | — |
+| `metadata.audit_watermark` | integer | yes | no | — | — |
+| `metadata.currency` | string | yes | no | — | — |
+| `count` | integer | yes | no | — | Rows on this page only; summary rows also consume the limit. |
+| `next_cursor` | string \| null | yes | yes | — | — |
+| `totals` | object | yes | no | — | — |
+| `totals.opening` | object | yes | no | — | — |
+| `totals.opening.amount` | string | yes | no | — | — |
+| `totals.opening.currency` | string | yes | no | — | — |
+| `totals.opening.minor_units` | integer | yes | no | — | — |
+| `totals.period_debits` | object | yes | no | — | — |
+| `totals.period_debits.amount` | string | yes | no | — | — |
+| `totals.period_debits.currency` | string | yes | no | — | — |
+| `totals.period_debits.minor_units` | integer | yes | no | — | — |
+| `totals.period_credits` | object | yes | no | — | — |
+| `totals.period_credits.amount` | string | yes | no | — | — |
+| `totals.period_credits.currency` | string | yes | no | — | — |
+| `totals.period_credits.minor_units` | integer | yes | no | — | — |
+| `totals.closing` | object | yes | no | — | — |
+| `totals.closing.amount` | string | yes | no | — | — |
+| `totals.closing.currency` | string | yes | no | — | — |
+| `totals.closing.minor_units` | integer | yes | no | — | — |
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].kind` | literal["opening", "posting", "closing"] | yes | no | — | — |
+| `rows[].account_id` | string | yes | no | — | — |
+| `rows[].current_account_label` | string | yes | no | — | — |
+| `rows[].current_account_name` | string | yes | no | — | — |
+| `rows[].current_account_number` | string \| null | yes | yes | — | — |
+| `rows[].display_account_label` | string | yes | no | — | — |
+| `rows[].date` | string \| null | no | yes | null | — |
+| `rows[].transaction_type` | literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit"] \| null | no | yes | null | — |
+| `rows[].transaction_number` | string \| null | no | yes | null | — |
+| `rows[].party_name` | string \| null | no | yes | null | — |
+| `rows[].description` | string \| null | no | yes | null | — |
+| `rows[].memo` | string \| null | no | yes | null | — |
+| `rows[].class_name` | string \| null | no | yes | null | — |
+| `rows[].split_account_id` | string \| null | no | yes | null | — |
+| `rows[].split_account_label` | string \| null | no | yes | null | — |
+| `rows[].debit` | object | yes | no | — | — |
+| `rows[].debit.amount` | string | yes | no | — | — |
+| `rows[].debit.currency` | string | yes | no | — | — |
+| `rows[].debit.minor_units` | integer | yes | no | — | — |
+| `rows[].credit` | object | yes | no | — | — |
+| `rows[].credit.amount` | string | yes | no | — | — |
+| `rows[].credit.currency` | string | yes | no | — | — |
+| `rows[].credit.minor_units` | integer | yes | no | — | — |
+| `rows[].balance` | object | yes | no | — | — |
+| `rows[].balance.amount` | string | yes | no | — | — |
+| `rows[].balance.currency` | string | yes | no | — | — |
+| `rows[].balance.minor_units` | integer | yes | no | — | — |
+| `rows[].transaction_id` | string \| null | no | yes | null | — |
+| `rows[].revision_id` | string \| null | no | yes | null | — |
+| `rows[].batch_id` | string \| null | no | yes | null | — |
+| `rows[].batch_kind` | literal["original", "reversal", "replacement"] \| null | no | yes | null | — |
+| `rows[].posting_line_id` | string \| null | no | yes | null | — |
+| `rows[].line_no` | integer \| null | no | yes | null | — |
+| `rows[].recorded_at` | string \| null | no | yes | null | — |
+| `rows[].account_snapshot` | dict \| null | no | yes | null | — |
+
+Example JSON output:
+
+```json
+{
+  "count": 0,
+  "metadata": {
+    "audit_watermark": 1,
+    "basis": "accrual",
+    "company_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "currency": "USD",
+    "generation_time": "value",
+    "period": {
+      "date_from": null,
+      "date_to": "value"
+    },
+    "report_version": "value",
+    "schema_revision": "current"
+  },
+  "next_cursor": null,
+  "rows": [],
+  "totals": {
+    "closing": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "opening": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "period_credits": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "period_debits": {
       "amount": "value",
       "currency": "USD",
       "minor_units": 1

@@ -14,16 +14,23 @@ import hashlib
 import hmac
 import json
 import re
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from bookflow.core.errors import BookflowError
 from bookflow.core.money import Money
 from bookflow.core.session import now_iso
+from bookflow.company.ledger_schema import TRANSACTION_TYPES
 from bookflow.company.query import permission_fingerprint
 
 I64_MIN, I64_MAX = -(2**63), 2**63 - 1
+# Read off the schema rather than retyped: a report that closes this set by hand stops
+# validating the day a new document type posts, and does it silently.
+TransactionType = Literal[TRANSACTION_TYPES]
+# What a posting line's split column says when the entry has more than two lines and so
+# has no single other side. The bookkeeping convention every register prints.
+MANY_SPLITS = "-SPLIT-"
 # Bumped when the shape or the row order of a report page changes, so a
 # continuation minted by an earlier version restarts instead of paging into a
 # different order.  "2": rows read in account-number order and trial-balance
@@ -92,6 +99,30 @@ class GeneralLedgerInput(StrictModel):
     def ordered(self):
         if self.date_from > self.date_to:
             raise ValueError("date_from must be on or before date_to")
+        return self
+
+
+class TransactionDetailInput(StrictModel):
+    date_from: str = Field(min_length=10, max_length=10, description="Inclusive first accounting date, YYYY-MM-DD.")
+    date_to: str = Field(min_length=10, max_length=10, description="Inclusive last accounting date, YYYY-MM-DD.")
+    basis: Literal["accrual"] = "accrual"
+    accounts: list[Annotated[str, Field(min_length=1, max_length=1000)]] | None = Field(
+        default=None, max_length=500,
+        description="Optional account IDs or canonical full names; includes inactive accounts. Omit, or send an empty list, for every account with an opening balance or with activity in the period.")
+    limit: int = Field(default=50, ge=1, le=200)
+    cursor: str | None = Field(default=None, max_length=4096)
+
+    _dates = field_validator("date_from", "date_to")(iso_date)
+
+    @model_validator(mode="after")
+    def ordered(self):
+        if self.date_from > self.date_to:
+            raise ValueError("date_from must be on or before date_to")
+        # An empty list and an absent one are the same request -- every account -- so they
+        # have to fingerprint the same way, or a browser form that submits its empty
+        # repeated control would invalidate its own continuation.
+        if not self.accounts:
+            self.accounts = None
         return self
 
 
@@ -164,7 +195,7 @@ class GeneralLedgerRow(StrictModel):
     batch_id: str | None = None
     batch_kind: Literal["original", "reversal", "replacement"] | None = None
     transaction_id: str | None = None
-    transaction_type: Literal["journal_entry", "invoice", "sales_receipt", "payment", "deposit", "bill", "bill_payment", "credit_memo", "sales_tax_payment", "customer_refund", "vendor_credit"] | None = None
+    transaction_type: TransactionType | None = None
     transaction_number: str | None = None
     revision_id: str | None = None
     reverses_batch_id: str | None = None
@@ -174,6 +205,40 @@ class GeneralLedgerRow(StrictModel):
     party_name: str | None = None
     class_name: str | None = None
     description: str | None = None
+
+
+class TransactionDetailRow(StrictModel):
+    """One posting line of one account, or that account's own opening or closing row.
+
+    ``balance`` is the account's running balance after this line, computed over the whole
+    account before any page is cut, so the figure on page two continues page one.
+    """
+    kind: Literal["opening", "posting", "closing"]
+    account_id: str
+    current_account_label: str
+    current_account_name: str
+    current_account_number: str | None
+    display_account_label: str
+    date: str | None = None
+    transaction_type: TransactionType | None = None
+    transaction_number: str | None = None
+    party_name: str | None = None
+    description: str | None = None
+    memo: str | None = None
+    class_name: str | None = None
+    split_account_id: str | None = None
+    split_account_label: str | None = None
+    debit: MoneyOutput
+    credit: MoneyOutput
+    balance: MoneyOutput
+    transaction_id: str | None = None
+    revision_id: str | None = None
+    batch_id: str | None = None
+    batch_kind: Literal["original", "reversal", "replacement"] | None = None
+    posting_line_id: str | None = None
+    line_no: int | None = None
+    recorded_at: str | None = None
+    account_snapshot: dict | None = None
 
 
 class Page(StrictModel):
@@ -196,6 +261,13 @@ class TrialBalanceOutput(Page):
 class GeneralLedgerOutput(Page):
     totals: GeneralLedgerTotals
     rows: list[GeneralLedgerRow]
+
+
+class TransactionDetailOutput(Page):
+    # The same four figures the general ledger totals, because it is the same traversal:
+    # one report reads it by account and the other reads it line by line.
+    totals: GeneralLedgerTotals
+    rows: list[TransactionDetailRow]
 
 
 class IntegerSum:
@@ -270,6 +342,10 @@ class ReportCursor(StrictModel):
     version: Literal[1] = 1
     company: str
     account_id: str | None = None
+    # The stable IDs a report filtered to a *set* of accounts resolved on its first page.
+    # A cursor minted before this field existed decodes with none, which is what a report
+    # that filters by a single ID or by nothing at all carries anyway.
+    account_ids: list[str] | None = None
     query: str
     permissions: str
     watermark: str
@@ -306,17 +382,20 @@ def _decode_cursor(encoded_cursor, db):
         raise _invalid_cursor() from None
 
 
-def _state(s, inp, report, principal_id, account_id, *, account_scoped=True):
+def _state(s, inp, report, principal_id, account_id, *, account_scoped=True, account_ids=None):
     """Continuation state; account_id is the stable ID this cursor carries.
 
     A report that pages one account narrows its own effect and label scans to
     it. A report that carries a different stable ID in the same cursor slot --
     the customer a receivables report was filtered to -- passes
     account_scoped=False, so the ID identifies the continuation without
-    pretending to be a posting account.
+    pretending to be a posting account. A report filtered to a *set* of accounts
+    passes account_ids instead, which is what its own scans bind to; its effect
+    probe stays unnarrowed, which can only stale a continuation sooner.
     """
     raw = s.company.raw
     scope = account_id if account_scoped else None
+    selected_accounts = json.dumps(account_ids) if account_ids else None
     # Immutable rows can only append. Count plus maximal identities detect even
     # backdated additions whose accounting date precedes the previous page.
     effect = raw.execute("""SELECT count(*), max(l.id), max(b.id)
@@ -348,12 +427,24 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True):
         label_query = _EFFECTS + """SELECT a.id, a.full_name, a.name, a.number, a.active FROM accounts a
             LEFT JOIN balances b ON b.account_id=a.id
             WHERE :include_zero OR coalesce(b.closing,'0')!='0' ORDER BY a.id"""
+    elif report == "missing-checks":
+        # Rows are bank accounts, and the whole chart is scanned because a check moved to
+        # another account by a correction changes which section it prints under.
+        label_query = """SELECT id, full_name, full_name_key, name, number, active
+            FROM accounts WHERE type='bank' ORDER BY id"""
+    elif report == "transaction-detail":
+        # The same rows the general ledger prints, selected by a set of accounts instead
+        # of by one, so the two stale on exactly the same facts.
+        label_query = _DETAIL_EFFECTS + """SELECT a.id, a.full_name, a.number FROM accounts a
+            JOIN balances b ON b.account_id=a.id
+            WHERE b.opening!='0' OR b.activity>0 ORDER BY a.id"""
     else:
         label_query = _EFFECTS + """SELECT a.id, a.full_name, a.number FROM accounts a
             JOIN balances b ON b.account_id=a.id
             WHERE b.opening!='0' OR b.activity>0 ORDER BY a.id"""
     for row in raw.execute(label_query, {"date_to": inp.date_to,
             "date_from": getattr(inp, "date_from", "0001-01-01"), "account": scope,
+            "accounts": selected_accounts,
             "include_zero": getattr(inp, "include_zero", False)}):
         labels.update(json.dumps(tuple(row), separators=(",", ":")).encode())
     currency = raw.execute("SELECT home_currency FROM company_info").fetchone()[0]
@@ -362,7 +453,7 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True):
     # Trial balance, general ledger and the statements label rows through the company's
     # account-number and lowest-subaccount preferences, so a change to either
     # one has to stale a continuation the same way a renamed account does.
-    if financial or report in {"trial-balance", "general-ledger"}:
+    if financial or report in {"trial-balance", "general-ledger", "transaction-detail"}:
         extra_state = [tuple(raw.execute("""SELECT fiscal_year_start_month,
             use_account_numbers, show_lowest_subaccount_only FROM company_info""").fetchone())]
         if financial:
@@ -374,6 +465,10 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True):
             "SELECT count(*), max(id) FROM applications WHERE effective_date<=:date_to",
             {"date_to": inp.date_to}).fetchone()),
             raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]]
+    elif report == "missing-checks":
+        # A check number moves with a correction and stays occupied through a void, and
+        # both are audited; nothing this report reads can change without an audit event.
+        extra_state = [raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]]
     elif payable:
         # A payable row moves with settlement history, which posts nothing,
         # so the posting effect alone cannot see an apply or an unapply. The
@@ -399,7 +494,7 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True):
     audit = raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]
     metadata = ReportMetadata(company_id=company, period=ReportPeriod(date_from=getattr(inp, "date_from", None), date_to=inp.date_to),
         report_version=REPORT_VERSION, schema_revision=revision, generation_time=now_iso(), audit_watermark=audit, currency=currency)
-    return ReportCursor(company=company, account_id=account_id, query=query, permissions=permissions, watermark=watermark, offset=1, metadata=metadata), 0
+    return ReportCursor(company=company, account_id=account_id, account_ids=account_ids, query=query, permissions=permissions, watermark=watermark, offset=1, metadata=metadata), 0
 
 
 def _continuation(state, offset, count, more, db):
@@ -410,14 +505,29 @@ def _continuation(state, offset, count, more, db):
     return encode(payload) + "." + encode(_cursor_mac(db, payload))
 
 
+# One account, named by :account, or every account. The general ledger, the trial balance
+# and both financial statements read the ledger through this scope.
+ONE_ACCOUNT = "(:account IS NULL OR l.account_id=:account)"
+# A set of accounts, named by :accounts as a JSON array of stable IDs, or every account.
+# Transaction detail reads the ledger through this one.
+ACCOUNT_SET = "(:accounts IS NULL OR l.account_id IN (SELECT value FROM json_each(:accounts)))"
+
+
 # Never use SQL arithmetic on aggregate decimal text: SQLite would coerce it to
 # REAL. Only each one-sided stored line's subtraction occurs in SQLite.
-_EFFECTS = """
+def _effects(scope=ONE_ACCOUNT):
+    """Every posting effect on or before the as-of date, and each account's four figures.
+
+    The scope is the only thing that differs between the reports that read this, so it is
+    the only thing passed in: two copies of the balance arithmetic would be two places for
+    the opening balance to stop meaning the same thing.
+    """
+    return """
 WITH effects AS (
  SELECT l.*, b.effective_date, b.kind AS batch_kind, b.revision_id,
         b.reverses_batch_id, b.replaces_batch_id, b.created_at AS recorded_at
  FROM posting_lines l JOIN posting_batches b ON b.id=l.batch_id
- WHERE b.effective_date<=:date_to AND (:account IS NULL OR l.account_id=:account)
+ WHERE b.effective_date<=:date_to AND """ + scope + """
 ), balances AS (
  SELECT account_id,
    bookflow_sum_int(debit_minor_units-credit_minor_units) AS closing,
@@ -428,6 +538,10 @@ WITH effects AS (
  FROM effects GROUP BY account_id
 )
 """
+
+
+_EFFECTS = _effects()
+_DETAIL_EFFECTS = _effects(ACCOUNT_SET)
 
 
 def trial_balance(inp: TrialBalanceInput, s, *, principal_id=None) -> TrialBalanceOutput:
@@ -460,7 +574,16 @@ def trial_balance(inp: TrialBalanceInput, s, *, principal_id=None) -> TrialBalan
             next_cursor=_continuation(state, offset, len(rows), len(page)>inp.limit, s.company))
 
 
-_GL = _EFFECTS + """, selected AS (
+def _ledger(scope):
+    """The account-by-account walk both ledger reports page.
+
+    ``running`` is the whole account's balance, computed before anything is sliced, which
+    is what lets a page boundary fall anywhere without breaking the figure a reader
+    follows down the column. ``flat`` puts the opening balance in front of the postings
+    and the period activity and closing balance behind them, so a section reads as one
+    account's story whichever report is printing it.
+    """
+    return _effects(scope) + """, selected AS (
  SELECT * FROM balances WHERE opening!='0' OR activity>0
 ), running AS (
  SELECT e.*, bookflow_sum_int(debit_minor_units-credit_minor_units) OVER (
@@ -480,6 +603,25 @@ _GL = _EFFECTS + """, selected AS (
  SELECT f.*, a.number AS account_number, a.full_name_key AS account_full_name_key
  FROM flat f JOIN accounts a ON a.id=f.account_id
 )
+"""
+
+
+_GL = _ledger(ONE_ACCOUNT)
+_DETAIL = _ledger(ACCOUNT_SET)
+
+# The other side of an entry, read off the posting batch rather than off the document type:
+# the one other account when the batch has exactly two lines, and nothing nameable when it
+# has more. Counting the batch's own lines is what makes this true of a document family
+# nobody has written yet.
+_SPLITS = """
+WITH wanted AS (SELECT value AS id FROM json_each(:lines)),
+ leg AS (SELECT l.id, l.batch_id FROM posting_lines l JOIN wanted w ON w.id=l.id),
+ sized AS (SELECT b.batch_id, count(*) AS legs FROM posting_lines b
+           WHERE b.batch_id IN (SELECT batch_id FROM leg) GROUP BY b.batch_id)
+SELECT k.id, s.legs, o.account_id, a.full_name, a.name, a.number
+FROM leg k JOIN sized s ON s.batch_id=k.batch_id
+LEFT JOIN posting_lines o ON s.legs=2 AND o.batch_id=k.batch_id AND o.id<>k.id
+LEFT JOIN accounts a ON a.id=o.account_id
 """
 
 
@@ -538,3 +680,83 @@ def general_ledger(inp: GeneralLedgerInput, s, *, principal_id=None) -> GeneralL
             rows.append(GeneralLedgerRow(**row))
         return GeneralLedgerOutput(metadata=state.metadata, totals=totals, rows=rows, count=len(rows),
             next_cursor=_continuation(state, offset, len(rows), len(page)>inp.limit, s.company))
+
+
+def _split_labels(raw, posting_line_ids, numbers, lowest):
+    """The split account of each named posting line, by that line's own stable ID."""
+    if not posting_line_ids:
+        return {}
+    found = {}
+    for line_id, legs, account_id, full_name, name, number in raw.execute(
+            _SPLITS, {"lines": json.dumps(sorted(posting_line_ids))}):
+        if legs == 2 and account_id is not None:
+            found[line_id] = (account_id, _account_display(full_name, name, number, numbers, lowest))
+        else:
+            # Three or more lines, so no single account is the other side of this one.
+            found[line_id] = (None, MANY_SPLITS)
+    return found
+
+
+def transaction_detail(inp: TransactionDetailInput, s, *, principal_id=None) -> TransactionDetailOutput:
+    with _snapshot(s.company):
+        register_ledger_functions(s.company)
+        account_ids = None
+        if inp.cursor is not None:
+            # Retain the IDs the first page resolved: renaming a selected account must
+            # stale its continuation, not turn page two into a record-not-found.
+            account_ids = _decode_cursor(inp.cursor, s.company).account_ids
+        elif inp.accounts is not None:
+            from bookflow.company.accounts import resolve_account
+            account_ids = sorted({resolve_account(s.company, selector)["id"] for selector in inp.accounts})
+        state, offset = _state(s, inp, "transaction-detail", principal_id, None,
+                               account_scoped=False, account_ids=account_ids)
+        raw, currency = s.company.raw, state.metadata.currency
+        params = {"date_from": inp.date_from, "date_to": inp.date_to,
+                  "accounts": json.dumps(account_ids) if account_ids else None}
+        numbers, lowest = raw.execute(
+            "SELECT use_account_numbers, show_lowest_subaccount_only FROM company_info").fetchone()
+        values = raw.execute(_DETAIL + """SELECT bookflow_sum_int(opening), bookflow_sum_int(debits),
+            bookflow_sum_int(credits), bookflow_sum_int(closing) FROM selected""", params).fetchone()
+        totals = GeneralLedgerTotals(**{key: money(int(value or 0), currency) for key, value in zip(
+            ("opening", "period_debits", "period_credits", "closing"), values)})
+        # Window calculation is inside running, before this bounded page slice.
+        result = raw.execute(_DETAIL + f""", page AS (
+          SELECT account_id, phase, effective_date, batch_id, line_no, posting_line_id, kind, net, debit, credit
+          FROM ordered
+          ORDER BY {account_order("account_")}, phase, effective_date, batch_id, line_no, posting_line_id
+          LIMIT :limit OFFSET :offset)
+          SELECT p.*, a.full_name AS current_account_label, a.name AS current_account_name,
+            a.number AS current_account_number, e.batch_kind, e.transaction_id,
+            t.type AS transaction_type,
+            e.revision_id, r.number AS transaction_number, r.memo AS memo,
+            e.recorded_at, e.account_snapshot, e.party_name, e.class_name, e.description
+          FROM page p JOIN accounts a ON a.id=p.account_id
+          LEFT JOIN effects e ON e.id=p.posting_line_id
+          LEFT JOIN transaction_revisions r ON r.id=e.revision_id
+          LEFT JOIN transactions t ON t.id=e.transaction_id
+          ORDER BY {account_order("a.")}, p.phase, p.effective_date, p.batch_id, p.line_no, p.posting_line_id
+        """, {**params, "limit": inp.limit + 1, "offset": offset})
+        columns = [d[0] for d in result.description]
+        page = [dict(zip(columns, row)) for row in result.fetchall()]
+        shown = page[:inp.limit]
+        splits = _split_labels(raw, [row["posting_line_id"] for row in shown
+                                     if row["kind"] == "posting"], numbers, lowest)
+        rows = []
+        for row in shown:
+            row.pop("phase")
+            row["display_account_label"] = _account_display(
+                row["current_account_label"], row["current_account_name"],
+                row["current_account_number"], numbers, lowest)
+            row["balance"] = money(int(row.pop("net")), currency)
+            row["debit"], row["credit"] = money(int(row["debit"]), currency), money(int(row["credit"]), currency)
+            row["date"] = row.pop("effective_date")
+            if row["kind"] == "posting":
+                row["split_account_id"], row["split_account_label"] = splits[row["posting_line_id"]]
+            else:
+                for key in ("date", "batch_id", "line_no", "posting_line_id"):
+                    row[key] = None
+            if row["account_snapshot"] is not None:
+                row["account_snapshot"] = json.loads(row["account_snapshot"])
+            rows.append(TransactionDetailRow(**row))
+        return TransactionDetailOutput(metadata=state.metadata, totals=totals, rows=rows, count=len(rows),
+            next_cursor=_continuation(state, offset, len(rows), len(page) > inp.limit, s.company))

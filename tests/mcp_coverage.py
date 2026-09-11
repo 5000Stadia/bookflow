@@ -277,9 +277,11 @@ report balance-sheet
 report cash-flows
 report general-ledger
 report income-tax-summary
+report missing-checks
 report open-invoices
 report profit-and-loss
 report statement
+report transaction-detail
 report trial-balance
 report unpaid-bills
 sales-receipt history

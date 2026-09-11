@@ -176,6 +176,8 @@ EXAMPLES.update({
     "report income-tax-summary": Example('bookflow report income-tax-summary --date-from 2026-01-01 --date-to 2026-12-31 --company "Reference Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31"}),
     "report trial-balance": Example('bookflow report trial-balance --date-to 2026-12-31 --company "Demo Plumbing Co" --json', {"date_to": "2026-12-31"}),
     "report general-ledger": Example('bookflow report general-ledger --date-from 2026-01-01 --date-to 2026-12-31 --account Checking --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31", "account": "Checking"}),
+    "report transaction-detail": Example('bookflow report transaction-detail --date-from 2026-01-01 --date-to 2026-12-31 --accounts \'["Checking"]\' --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31", "accounts": ["Checking"]}),
+    "report missing-checks": Example('bookflow report missing-checks --as-of 2026-12-31 --account Checking --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31", "account": "Checking"}),
     "report statement": Example('bookflow report statement --date-from 2026-01-01 --date-to 2026-12-31 --customer "Adams Plumbing" --company "Demo Plumbing Co" --json', {"date_from": "2026-01-01", "date_to": "2026-12-31", "customer": "Adams Plumbing"}),
     "report ar-aging": Example('bookflow report ar-aging --as-of 2026-12-31 --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31"}),
     "report open-invoices": Example('bookflow report open-invoices --as-of 2026-12-31 --past-due-only --company "Demo Plumbing Co" --json', {"as_of": "2026-12-31", "past_due_only": True}),
