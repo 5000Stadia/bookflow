@@ -5,7 +5,7 @@ from pydantic import ConfigDict, Field, JsonValue, TypeAdapter, model_validator
 from bookflow.company.sales_models import StrictModel, Fingerprint
 from bookflow.company.payment_models import OperationKey
 from bookflow.company.reconciliation_storage_validation import Header, Evidence, Preferences, ProposalInput, Display, Population
-from bookflow.company.reconciliation_models import MovementKey
+from bookflow.company.reconciliation_models import MovementKey, PRODUCER_ROLES
 
 ID = Annotated[str, Field(pattern=r'^[0-9A-HJKMNP-TV-Z]{26}$')]
 Version = Annotated[int, Field(strict=True, ge=1)]
@@ -97,7 +97,10 @@ class CandidateFilter(Dated):
     from_date: str|None=None
     to_date: str|None=None
     side: Literal['positive','negative']|None=None
-    producer: Literal['journal_entry','invoice','sales_receipt','payment','deposit']|None=None
+    # Every producer a statement effect can come from, read from the one declaration rather
+    # than retyped: this list shipped naming five while the adapters covered eight, so a
+    # bookkeeper could not filter for the bill payments sitting in their own candidate list.
+    producer: Literal[tuple(PRODUCER_ROLES)]|None=None
     number: str|None=None
     payee: str|None=None
     memo: str|None=None

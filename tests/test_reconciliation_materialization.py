@@ -166,6 +166,13 @@ def test_storage_admits_exactly_the_producers_the_adapters_can_derive():
     declared = {role for roles in models.PRODUCER_ROLES.values() for role in roles}
     assert declared == set(models.Role.__args__), 'a role no producer can name, or one with no role'
     assert not adapters.UNCOVERED_PRODUCERS
+    # The same set, once more, where a person meets it: the candidate list's producer filter.
+    # It shipped naming five, so the bill payments already sitting in a bookkeeper's candidate
+    # list could not be filtered for by the only name they have.
+    from bookflow.company import reconciliation_commands_models as commands
+    import typing
+    offered = typing.get_args(typing.get_args(commands.CandidateFilter.model_fields['producer'].annotation)[0])
+    assert set(offered) == set(models.PRODUCER_ROLES)
 
 
 def test_every_posting_family_is_materialized_by_its_own_command(books):
