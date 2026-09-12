@@ -35,11 +35,35 @@ CO0040 = importlib.import_module('bookflow.storage.company_migrations.versions.0
 BEFORE_CHEQUES = CO0040.down_revision
 
 
+def _chain_after(revision):
+    """Every revision reachable from `revision` by following down_revision links forward."""
+    import re
+    from pathlib import Path
+    versions = Path(__file__).resolve().parents[1] / 'src/bookflow/storage/company_migrations/versions'
+    links = {}
+    for path in sorted(versions.glob('0*.py')):
+        text = path.read_text()
+        rev = re.search(r"^revision = '([^']+)'", text, re.M)
+        down = re.search(r"^down_revision = (?:'([^']+)'|None)", text, re.M)
+        if rev:
+            links[rev.group(1)] = down.group(1) if down else None
+    forward, current = set(), revision
+    successors = {down: rev for rev, down in links.items() if down}
+    while current in successors:
+        current = successors[current]
+        forward.add(current)
+    return forward
+
+
 def test_the_migration_sits_on_the_chain_and_follows_the_one_it_amends():
     """Derived from the files, never a second copy of the number."""
     assert M.revision in known_revisions('company')
     assert M.down_revision == CO0040.revision
-    assert HEADS['company'] == M.revision
+    # Deliberately NOT `HEADS['company'] == M.revision`. Being the newest migration is something
+    # every migration can claim exactly until the next one lands -- this one stopped being head
+    # the moment co0043 was repointed onto it. What matters permanently is that it is on the chain
+    # and that it follows the migration it amends, which the two assertions above pin.
+    assert M.revision in _chain_after(CO0040.revision)
 
 
 def test_the_substitution_lands_on_the_shape_the_application_declares():
