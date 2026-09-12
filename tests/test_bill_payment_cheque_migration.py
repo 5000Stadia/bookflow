@@ -196,8 +196,9 @@ def test_the_rebuilt_table_is_the_one_a_fresh_company_gets(tmp_path):
     with sqlite3.connect(upgraded) as raw:
         rebuilt = raw.execute(
             "SELECT sql FROM sqlite_schema WHERE type='table' AND name='check_instruments'").fetchone()[0]
-    # The rename a rebuild ends with is what quotes the name; nothing else may differ.
-    assert rebuilt.replace('"check_instruments"', 'check_instruments', 1) == fresh
+    # Fresh setup traverses the same migration, including SQLite's quoting on rename.
+    # Compare both stored definitions verbatim; changing only one invents a difference.
+    assert rebuilt == fresh
 
 
 def test_the_rebuild_keeps_the_indexes_the_triggers_and_the_duplicate_refusal(tmp_path):
