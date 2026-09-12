@@ -2090,3 +2090,62 @@ reason = "Correct the allowance to forty dollars while retaining its application
 [[commands]]
 command = "credit-memo history"
 input = { credit_memo = "${credit_demo_corrected.id}" }
+
+# ---------------------------------------------------------------------------
+# The buying half of the month. Until these existed the demo company sold work,
+# invoiced it and took payment, and never bought a thing: no order, no bill, no
+# cheque, no card, nothing banked. Half the product was dark in the first file
+# anyone opens.
+
+[[commands]]
+command = "purchase-order post"
+capture = "demo_order"
+input = { vendor = "${vendor.id}", date = "2026-11-05", expected_date = "2026-11-12", number = "PO-2026-11", memo = "Valves and fittings for the Oak Street run", reference = "QUOTE-4471", lines = [{ item = "${inventory_item.id}", quantity = "24", rate = "10.95" }, { account = "${expense_account.id}", description = "Delivery", amount = "38.00" }] }
+reason = "Order the month's materials"
+
+[[commands]]
+command = "bill post"
+capture = "demo_order_bill"
+input = { date = "2026-11-12", purchase_order = "${demo_order.id}", supplier_reference = "CS-88213" }
+reason = "Enter the bill the order became when the materials arrived"
+
+[[commands]]
+command = "bill pay"
+capture = "demo_bill_payment"
+input = { date = "2026-11-20", bills = [{ bill = "${demo_order_bill.id}" }], funding_account = "${pay_bank.id}", method = "check", memo = "Materials for the Oak Street run" }
+reason = "Pay the materials bill by cheque"
+
+[[commands]]
+command = "check post"
+capture = "demo_check"
+input = { account = "${pay_bank.id}", date = "2026-11-22", pay_to = { name_type = "vendor", name_id = "${backup_vendor.id}" }, amount = "184.00", memo = "Emergency fittings, bought off the shelf", expenses = [{ account = "${expense_account.id}", amount = "184.00", memo = "Fittings" }] }
+reason = "Write a cheque for parts bought without a bill"
+
+[[commands]]
+command = "card-charge post"
+capture = "demo_card_charge"
+input = { account = "${register_card.id}", date = "2026-11-24", pay_to = { name_type = "vendor", name_id = "${backup_vendor.id}" }, amount = "96.40", memo = "Fuel and small tools", expenses = [{ account = "${expense_account.id}", amount = "96.40", memo = "Fuel" }] }
+reason = "Put a small purchase on the company card"
+
+[[commands]]
+command = "transfer post"
+capture = "demo_transfer"
+input = { from_account = "${pay_bank.id}", to_account = "${register_card.id}", date = "2026-11-28", amount = "96.40", memo = "Pay the card balance from checking" }
+reason = "Pay down the company card from checking"
+
+[[commands]]
+command = "vendor-credit post"
+capture = "demo_vendor_credit"
+input = { date = "2026-11-26", vendor = "${vendor.id}", supplier_reference = "CS-88213-RET", memo = "Two valves returned unopened", expenses = [{ account = "${expense_account.id}", amount = "21.90", memo = "Returned valves" }] }
+reason = "Record the credit for materials sent back"
+
+[[commands]]
+command = "inventory adjust"
+capture = "demo_inventory_adjust"
+input = { item = "${inventory_item.id}", date = "2026-11-30", adjustment_account = "${expense_account.id}", number = "DEMO-COUNT", quantity_change = "-2", memo = "Year-end count: two valves damaged on site" }
+reason = "Write off the valves the count could not find"
+
+# Two money paths are still missing here and are their own row, not an oversight:
+# `statement-charge post` is refused by input validation with this shape and wants a proper
+# look, and `deposit post` takes an operation_key and an inline document that the seed's
+# ${capture.field} substitution cannot build. Both are worth having; neither is a one-liner.

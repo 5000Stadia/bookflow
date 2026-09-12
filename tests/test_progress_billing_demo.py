@@ -181,7 +181,15 @@ def test_progress_chain_exact_installments_rebill_correction_and_lineage(referen
 @pytest.mark.parametrize("company,prefix", COMPANIES)
 def test_voided_progress_demos_leave_every_old_balance_and_zero_net_effect(reference_client, company, prefix):
     client, _ = reference_client
-    checking, trial, journals, profit, equity = ((624895, 708234, 10, 151130, 651130) if prefix == "DEMO"
+    # DEMO's aggregates moved when the seed gained the buying half of its month -- an order
+    # billed and paid, a cheque, a card charge, a card payment, a return credit and a count
+    # adjustment. Recomputed from the report rather than nudged to fit, and each one checked
+    # against what the arc should do: the books still balance (debit == credit), the balance
+    # sheet's difference is still zero, Checking is untouched because that arc funds itself
+    # from the demo's other bank account, A/P settles to the 21.90 return credit still open,
+    # and stock ends at 22 valves valued 240.90 -- 24 ordered less the 2 the count wrote off,
+    # at the order's actual 10.95 rather than the item's standard cost.
+    checking, trial, journals, profit, equity = ((624895, 749354, 14, 119290, 619290) if prefix == "DEMO"
                                                  else (7267800, 8048639, 36, 6457035, 7457035))
     assert client.account.show(account="Checking", company=company)["balance"]["minor_units"] == checking
     assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == 13839
