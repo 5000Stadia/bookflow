@@ -121,9 +121,13 @@ def _documents(raw):
             actor_kind='user', interface='cli', client_name='x', client_version='1',
             client_host='h', session_id='S1', request_id='Q1', summary='x')
     for identifier, kind in (('T_INV', 'invoice'), ('T_SC', 'statement_charge'),
-                             ('T_SR', 'sales_receipt')):
+                             ('T_SR', 'sales_receipt'), ('T_PAY', 'payment')):
         _insert(raw, 'transactions', id=identifier, version=1, type=kind, number=identifier,
-                current_revision_id=None, status='posted')
+                current_revision_id='REV_' + identifier, status='posted')
+        _insert(raw, 'transaction_revisions', id='REV_' + identifier,
+                transaction_id=identifier, revision_number=1, date='2026-06-01',
+                number=identifier, total_minor_units=100, currency='USD',
+                issuer_snapshot='{}', custom_fields_snapshot='{}', audit_event_id='E1')
 
 
 @pytest.mark.parametrize('target,accepted', [('T_SC', True), ('T_INV', True), ('T_SR', False)])
@@ -174,7 +178,8 @@ def test_a_populated_previous_database_keeps_every_value_and_every_local_object(
         _insert(raw, 'payment_selections', id='S1', version=1, state='open',
                 current_revision_id='V1')
         _insert(raw, 'payment_selection_revisions', id='V1', selection_id='S1', version=1,
-                context_snapshot='{}', manifest_hash='x', audit_event_id='E1')
+                context_snapshot='{}', amount_origin='unresolved', currency='USD',
+                manifest_hash='0' * 64, item_count=0, audit_event_id='E1')
         _insert(raw, 'payment_selection_recoveries', id='Y1', version=1, selection_id='S1',
                 recovery_key='K1', request_schema_version=1,
                 attempt_generation='00000000-0000-0000-0000-000000000000',
@@ -182,6 +187,8 @@ def test_a_populated_previous_database_keeps_every_value_and_every_local_object(
                 anchor_selection_version=1, header_intent='{}', declared_entry_count=1,
                 intent_hash='0' * 64, state='uploading', begin_request_snapshot='{}',
                 begin_receipt_snapshot='{}', begin_request_hash='0' * 64, audit_event_id='E1')
+        _insert(raw, 'payment_selection_recovery_active', selection_id='S1', recovery_id='Y1',
+                audit_event_id='E1')
         # The rebuilt table's own row, with an embedded NUL a quote()-only copy would truncate.
         raw.execute("INSERT INTO payment_selection_recovery_items (id, selection_id, recovery_id,"
                     " entry_index, invoice_id, invoice_type, action, observed_invoice_version,"
@@ -197,6 +204,8 @@ def test_a_populated_previous_database_keeps_every_value_and_every_local_object(
         raw.execute('CREATE TRIGGER local_ss_trigger AFTER INSERT ON local_ss_bytes'
                     ' BEGIN SELECT 1; END')
         raw.commit()
+        assert raw.execute('PRAGMA foreign_key_check').fetchall() == []
+        assert raw.execute('PRAGMA integrity_check').fetchall() == [('ok',)]
         names = [row[0] for row in raw.execute(
             "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'"
             " AND name <> 'alembic_version' ORDER BY name")]
