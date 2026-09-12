@@ -2,6 +2,7 @@
 {% set r = credit.revision %}{% set p = credit.profile %}{% set s = credit.source %}
 <section class="workspace-card document-detail sales-document" aria-label="Credit memo">
 <h2>Credit memo {{ r.number }}</h2>
+{% if credit.print_url %}<p class="actions document-print"><a class="primary-action" href="{{ credit.print_url }}" target="_blank" rel="noopener">Print / save PDF</a></p>{% endif %}
 <p><strong>{{ 'Preview — nothing written' if credit.preview else credit.record.status|capitalize }}</strong> · {{ r.date }} · Revision {{ r.revision_number }} · {{ r.currency }}</p>
 {% if credit.record.void_reason %}<p class="warn">Voided: {{ credit.record.void_reason }}. Historical amounts remain visible; the reversal is in accounting history, and every source invoice quantity this credit claimed has been released.</p>{% endif %}
 {% for warning in credit.record.warnings or [] %}<p class="warn">{{ warning }}</p>{% endfor %}

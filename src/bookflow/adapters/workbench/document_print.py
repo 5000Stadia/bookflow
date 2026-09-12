@@ -18,7 +18,11 @@ from fastapi.responses import Response
 
 from bookflow.adapters.workbench import routing as Routing
 from bookflow.core.errors import BookflowError
-from bookflow.documents import render
+from bookflow.documents import KINDS, render
+
+# A statement is not identified by a record id but by whose account it is and over what period,
+# so it keeps its own route. Anything else the renderer learns is reachable the day it is added.
+IDENTIFIED_OTHERWISE = frozenset({"statement"})
 
 STATEMENT_PATH = "/report/statement/print"
 
@@ -58,17 +62,16 @@ def install(app: FastAPI, *, run, page_error) -> None:
             return page_error(request, err, company_id=company_id)
         return _pdf(rendered)
 
-    @app.get("/c/{company_id}/invoice/{record_id}/print")
-    def invoice_print(company_id: str, record_id: str, request: Request):
-        return serve(request, company_id, "invoice", {"document": record_id})
-
-    @app.get("/c/{company_id}/sales-receipt/{record_id}/print")
-    def sales_receipt_print(company_id: str, record_id: str, request: Request):
-        return serve(request, company_id, "sales-receipt", {"document": record_id})
-
-    @app.get("/c/{company_id}/estimate/{record_id}/print")
-    def estimate_print(company_id: str, record_id: str, request: Request):
-        return serve(request, company_id, "estimate", {"document": record_id})
+    # Every kind a record identifies gets the same route, generated from the renderer's own
+    # set. Three hand-written copies is how a kind arrives with a builder, a KINDS entry and
+    # no way to reach it -- the failure the availability contract exists to catch.
+    for printable in (kind for kind in KINDS if kind not in IDENTIFIED_OTHERWISE):
+        def make(kind: str):
+            @app.get(f"/c/{{company_id}}/{kind}/{{record_id}}/print", name=f"{kind}-print")
+            def record_print(company_id: str, record_id: str, request: Request):
+                return serve(request, company_id, kind, {"document": record_id})
+            return record_print
+        make(printable)
 
     @app.get("/c/{company_id}" + STATEMENT_PATH)
     def statement_print(company_id: str, request: Request):
