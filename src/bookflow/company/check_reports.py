@@ -26,11 +26,19 @@ named, with the number it carries now.
 
 **Which account a check belongs to is the chequebook it was written from.** That is the
 instrument's account, which ``check update`` moves when a correction moves the cheque to
-another bank account. A marked check whose lines were later rearranged in the journal editor
-until they no longer credit that account keeps its number and is counted in
-``checks_off_a_bank_account`` rather than being dropped without a word. The
-``money_out_documents`` marker is still joined, so what the report reads is a cheque by both
-facts: somebody entered it as one, and it carries a chequebook number.
+another bank account. A check whose lines were later rearranged in the journal editor until
+they no longer credit that account keeps its number and is counted in
+``checks_off_a_bank_account`` rather than being dropped without a word.
+
+**Every cheque the company wrote, whichever form wrote it.** A cheque written from Pay Bills
+is the same piece of paper as one written from Write Checks, and since it allocates from the
+same chequebook it carries the same ``check_instruments`` row and is counted here beside the
+others. That row is the whole test of whether something is a cheque -- nothing else is given
+one -- so the account each cheque credits is read from the document that has it: the entered
+funding line of a check, and the funding account of a bill payment, whose entered lines are
+bills rather than accounts. Until that number was allocated it was free text typed on the
+payment, which this report could not place, and which was the last thing making it name holes
+that were not holes.
 
 **A check number is a place in a sequence only when it is a plain run of digits.** A
 check numbered ``EFT`` or ``1001-A`` is a real check with a real number and no position
@@ -38,17 +46,14 @@ between two others, so it is counted as entered and left out of the arithmetic; 
 totals say how many there were. ``1001`` and ``01001`` are one place and not two, and on a
 number Bookflow issued they are refused as a duplicate before they can be written.
 
-**What the report cannot know about history.** Before check numbering existed a check's
-number came from the shared document series, so a hole below the highest number co0040
-carried over may be a number that series gave to something that was never a cheque. Those
-gaps are marked ``legacy_uncertain`` and counted separately, and the report says so in
+**What the report cannot know about history.** A number carried into the chequebook by an
+upgrade was not allocated from it. Before check numbering existed a check took its number
+from the shared document series, so a hole among those may be a number that series gave to
+something that was never a cheque; and a cheque written to pay a bill carried a number a
+person typed, which nothing stopped from repeating. Gaps below the highest carried-over
+number are marked ``legacy_uncertain`` and counted separately, and the report says so in
 ``disclosure``. Naming them confidently as missing cheques would be worse than admitting the
 evidence does not reach that far.
-
-**And what it cannot yet see at all.** A cheque written to pay a bill carries its number on
-the bill payment, typed by the person rather than drawn from a chequebook sequence, and this
-report does not place those numbers. When the file holds any, ``disclosure`` says how many,
-because a hole this report prints may be one of them sitting unaccounted for.
 """
 from __future__ import annotations
 
@@ -62,42 +67,22 @@ from bookflow.company.ledger_reports import (
     MoneyOutput, StrictModel, _account_display, account_order, iso_date, money,
 )
 from bookflow.company.ledger_schema import TRANSACTION_STATUSES
-from bookflow.company.money_out import KIND
 from bookflow.core.errors import BookflowError
 
-# The stored spelling of the document this report reads, taken from the one place that
-# maps a noun to its marker rather than retyped as a literal.
-CHECK_KIND = KIND["check"]
-
-# What a carried-over number is marked as. A gap among these cannot be told apart from a
-# number the shared document series gave to something that was never a cheque.
+# What a carried-over number is marked as: one an upgrade copied in rather than one this
+# chequebook handed out. A gap among these cannot be told apart from a number the shared
+# document series gave to something that was never a cheque.
 LEGACY_ORIGIN = "migrated"
 
 LEGACY_DISCLOSURE = (
-    "Check numbers written before this company file was upgraded came from the shared "
-    "document series every journal entry draws from, so a hole among them may be a number "
-    "that series gave to a transfer, a card charge or a hand-typed entry rather than a "
-    "cheque that was never entered. Rows marked legacy_uncertain are those, and what is "
+    "Check numbers carried into this chequebook when the company file was upgraded were not "
+    "allocated from it: a check written before check numbering existed took its number from "
+    "the shared document series every journal entry draws from, and a cheque written to pay "
+    "a bill carried a number that was typed on the payment. So a hole among them may be a "
+    "number that series gave to a transfer, a card charge or a hand-typed entry rather than "
+    "a cheque that was never entered. Rows marked legacy_uncertain are those, and what is "
     "stored cannot confirm them as missing cheques."
 )
-
-BILL_PAYMENT_DISCLOSURE = (
-    "Cheques written to pay bills carry their number on the bill payment rather than in a "
-    "chequebook sequence, and this company has {count} of them drawn on a bank account. "
-    "Their numbers are not counted here, so a hole this report shows may be one of them."
-)
-
-# Cheques that were written but whose numbers this report cannot yet place in a sequence.
-# Counting them is a later increment; saying nothing about them would let the report name a
-# number as missing when a bill payment is sitting on it.
-_BILL_PAYMENT_CHEQUES = """
-SELECT count(*) FROM ap_payment_profiles p
-JOIN transactions t ON t.id=p.transaction_id AND t.current_revision_id=p.revision_id
-JOIN transaction_revisions r ON r.id=t.current_revision_id
-JOIN accounts a ON a.id=p.funding_account_id
-WHERE p.check_number IS NOT NULL AND a.type=:bank AND r.date<=:as_of
-  AND (:account IS NULL OR p.funding_account_id=:account)
-"""
 
 
 def _bank_type():
@@ -172,25 +157,31 @@ class MissingChecksOutput(ledger.Page):
     rows: list[MissingChecksRow]
 
 
-# Every entered check, the chequebook its number came out of, and where it stands now.
-# ``check_instruments`` is the only place a cheque number lives, so a hand-typed journal
-# entry that happens to credit a bank account never appears here and a number the document
-# series gave to something else is never mistaken for one.
+# Every entered cheque, the chequebook its number came out of, and where it stands now.
+# ``check_instruments`` is the only place a cheque number lives and the only thing that makes
+# something a cheque here, so a hand-typed journal entry that happens to credit a bank account
+# never appears and a number the document series gave to something else is never mistaken for
+# one. Both documents that print a cheque are in it, which is why the funding facts below come
+# from two places: a check says where its money went on its own entered line, and a bill
+# payment says it on its profile, because its entered lines are bills and carry no account.
 _CHECKS = f"""
 WITH dated AS (
  SELECT i.transaction_id AS tx, i.account_id AS account_id, i.check_number AS number,
         i.check_sequence AS seq, i.origin AS origin, t.status AS status,
         r.id AS revision_id, r.date AS date, r.memo AS memo
  FROM check_instruments i
- JOIN money_out_documents m ON m.transaction_id=i.transaction_id AND m.type=i.type
-                           AND m.kind=:kind
  JOIN transactions t ON t.id=i.transaction_id AND t.type=i.type
  JOIN transaction_revisions r ON r.id=t.current_revision_id
  WHERE r.date<=:as_of
 ), funded AS (
- SELECT e.*, d.account_id AS funding_account_id, d.side AS side, d.party_name AS party_name,
-        d.amount_minor_units AS amount_minor_units, d.currency AS currency
- FROM dated e LEFT JOIN document_lines d ON d.revision_id=e.revision_id AND d.position=1
+ SELECT e.*, coalesce(p.funding_account_id, d.account_id) AS funding_account_id,
+        CASE WHEN p.revision_id IS NOT NULL THEN 'credit' ELSE d.side END AS side,
+        d.party_name AS party_name,
+        coalesce(p.amount_minor_units, d.amount_minor_units) AS amount_minor_units,
+        d.currency AS currency
+ FROM dated e
+ LEFT JOIN document_lines d ON d.revision_id=e.revision_id AND d.position=1
+ LEFT JOIN ap_payment_profiles p ON p.revision_id=e.revision_id
 ), examined AS (
  SELECT * FROM funded WHERE (:account IS NULL OR account_id=:account)
 ), drawn AS (
@@ -316,7 +307,7 @@ def missing_checks(inp: MissingChecksInput, s, *, principal_id=None) -> MissingC
             account_id = account["id"]
         state, offset = ledger._state(s, inp, "missing-checks", principal_id, account_id)
         raw = s.company.raw
-        params = {"as_of": inp.as_of, "account": account_id, "kind": CHECK_KIND, "bank": _bank_type()}
+        params = {"as_of": inp.as_of, "account": account_id}
         numbers, lowest = raw.execute(
             "SELECT use_account_numbers, show_lowest_subaccount_only FROM company_info").fetchone()
         examined, numbered, drawn, carried = raw.execute(_CHECKS + f"""SELECT
@@ -379,9 +370,6 @@ def missing_checks(inp: MissingChecksInput, s, *, principal_id=None) -> MissingC
                 legacy_uncertain=bool(row["legacy_uncertain"]),
                 before=before[-1] if before else None, after=after[0] if after else None,
                 checks=found(row["duplicate_number"]) + carried_by))
-        elsewhere = raw.execute(_BILL_PAYMENT_CHEQUES, params).fetchone()[0]
-        disclosed = ([LEGACY_DISCLOSURE] if carried else []) + (
-            [BILL_PAYMENT_DISCLOSURE.format(count=elsewhere)] if elsewhere else [])
         return MissingChecksOutput(metadata=state.metadata, totals=totals, rows=rows, count=len(rows),
-            disclosure=" ".join(disclosed) or None,
+            disclosure=LEGACY_DISCLOSURE if carried else None,
             next_cursor=ledger._continuation(state, offset, len(rows), len(page) > inp.limit, s.company))

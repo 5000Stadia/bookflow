@@ -2,7 +2,7 @@
 
 # `company.check_instrument_revisions`
 
-Immutable funding account and check number of each revision of a check.
+Immutable funding account and check number of each revision of a cheque.
 
 Database: `company`.
 

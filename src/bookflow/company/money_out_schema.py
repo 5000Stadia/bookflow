@@ -24,12 +24,20 @@ They answer different questions, and the two tables below keep them apart:
 ``check_instrument_revisions`` is immutable and carries the funding account and the number
 each revision of a check was written with, so correcting either one cannot rewrite what an
 earlier revision said. ``check_instruments`` is the current projection of that -- one row per
-check, replaced when a correction gives the cheque a different account or number -- and it
+cheque, replaced when a correction gives the cheque a different account or number -- and it
 carries the one constraint the revisions cannot: ``uq_check_instrument_number`` over
 ``(account_id, check_number_key)``, which is where two cheques claiming one number on one
-bank account are refused. That index covers the numbers Bookflow issued and not the ones
-co0040 carried over, because a file upgraded from the shared journal series can already hold
-one number written twice and has to open so that the report can say so.
+bank account are refused. That index covers the numbers Bookflow issued and not the ones a
+migration carried over, because a file upgraded from the shared journal series, or from the
+free-text number a bill payment used to hold, can already hold one number written twice and
+has to open so that the report can say so.
+
+**Both documents that print a cheque keep their number here.** A cheque written from Pay
+Bills is the same piece of paper as one written from Write Checks, so a bill payment carries
+a ``check_instruments`` row exactly as a check does and draws its number from the same
+chequebook. ``ap_payment_profiles.check_number`` still records what that payment was written
+with, but it is now what the allocator handed out rather than free text nothing could place.
+Which document types may carry a cheque is ``CHEQUE_DOCUMENT_TYPES``, declared below.
 
 ``check_number_key`` is the canonical form that uniqueness compares: a run of digits with
 leading zeros removed, so ``1001`` and ``01001`` are one cheque and not two; anything that is
@@ -42,6 +50,18 @@ import sqlalchemy as sa
 
 # The three documents this marker distinguishes, in their stored spelling.
 KINDS = ('check', 'card_charge', 'transfer')
+
+# Every document that can carry a cheque, in the transaction type it posts as: the journal
+# entry ``check post`` writes, and the bill payment ``bill pay`` writes. Declared once and
+# read by ``ck_check_instrument_type`` below, by ``company/check_numbers.py`` -- which refuses
+# to hand a number to anything else -- and by ``company/check_reports.py``, so whatever prints
+# a cheque next joins the chequebook by adding itself here and nowhere else.
+CHEQUE_DOCUMENT_TYPES = ('journal_entry', 'bill_payment')
+
+
+def _one_of(column, values):
+    """A CHECK over a set that is declared once, spelled the way the dialect compiles it."""
+    return f'{column} IN (' + ', '.join(f"'{value}'" for value in values) + ')'
 
 
 def define_tables(metadata, column, table):
@@ -118,16 +138,16 @@ def define_tables(metadata, column, table):
                                 name='fk_check_instrument_revision'),
         sa.UniqueConstraint('transaction_id', 'revision_id', name='uq_check_instrument_revision_owner'),
         sa.Index('ix_check_instrument_revisions_number', 'account_id', 'check_number_key'),
-        description='Immutable funding account and check number of each revision of a check.')
+        description='Immutable funding account and check number of each revision of a cheque.')
 
     check_instruments = T('check_instruments',
         C('transaction_id', sa.String(26), 'The check this cheque identity currently belongs to.',
           primary_key=True),
-        C('type', sa.String(32), 'Transaction type of the check; always journal_entry.', nullable=False),
+        C('type', sa.String(32), 'Transaction type of the document this cheque was written on: the journal entry a check posts as, or the bill payment Pay Bills writes.', nullable=False),
         C('revision_id', sa.String(26), 'Revision whose cheque identity this projects.', nullable=False),
         *identity(immutable=False),
         *shape('check_instrument'),
-        sa.CheckConstraint("type = 'journal_entry'", name='ck_check_instrument_type'),
+        sa.CheckConstraint(_one_of('type', CHEQUE_DOCUMENT_TYPES), name='ck_check_instrument_type'),
         sa.ForeignKeyConstraint(['transaction_id', 'type'], ['transactions.id', 'transactions.type'],
                                 name='fk_check_instrument_document_type'),
         sa.ForeignKeyConstraint(['transaction_id', 'revision_id'],
@@ -142,7 +162,7 @@ def define_tables(metadata, column, table):
         sa.Index('uq_check_instrument_number', 'account_id', 'check_number_key', unique=True,
                  sqlite_where=sa.text("origin = 'issued'")),
         sa.Index('ix_check_instruments_sequence', 'account_id', 'check_sequence'),
-        description='Current funding account and check number of each check, unique within a bank account.')
+        description='Current funding account and check number of each cheque, unique within a bank account.')
 
     return {'money_out_documents': money_out_documents,
             'check_instrument_revisions': check_instrument_revisions,

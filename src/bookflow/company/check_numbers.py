@@ -7,6 +7,17 @@ the first of those, which is why ``report missing-checks`` called every number t
 series handed a journal entry, a transfer or a card charge a missing cheque. Card charges and
 transfers still keep their document reference and still consume no cheque number.
 
+**Everything that prints a cheque comes here, and there is nowhere else to go.** A cheque
+written from Pay Bills is the same piece of paper as one written from Write Checks, so
+``bill pay`` allocates through this module exactly as ``check post`` does whenever the money
+leaves a bank account and the method is a cheque -- it does not have an allocator of its own.
+``ap_payment_profiles.check_number`` used to hold a number a person typed and nothing could
+place, which was the last thing making ``report missing-checks`` name holes that were not
+holes; it now records what this module handed out. The documents allowed to carry a number
+are ``money_out_schema.CHEQUE_DOCUMENT_TYPES``, and a caller writing several cheques in one
+command passes the keys it has already claimed as ``taken``, because the database it reads
+cannot yet see them.
+
 **Where a number comes from.** ``accounts.next_check_number`` is the pointer a person sets on
 the bank account, and it is what an unnumbered check draws from. Allocation happens at
 successful posting inside the writer's own transaction -- never at preview, where it would be
@@ -66,6 +77,7 @@ from __future__ import annotations
 import sqlalchemy as sa
 
 from bookflow.company import schema as c
+from bookflow.company.money_out_schema import CHEQUE_DOCUMENT_TYPES
 from bookflow.core.errors import BookflowError
 
 # How wide a run of digits still reads back from SQLite's CAST as the integer it spells. A
@@ -185,8 +197,13 @@ def _formatted(value, width):
     return f'{value:0{width}d}' if width else str(value)
 
 
-def _allocate(s, account):
-    """The next free number on this account's chequebook, and where the pointer moves to."""
+def _allocate(s, account, taken=()):
+    """The next free number on this account's chequebook, and where the pointer moves to.
+
+    ``taken`` is every key this same command has already handed out and not yet written.
+    One ``bill pay`` can write a cheque to each of several payees out of one chequebook, and
+    the database it reads cannot see the numbers the call before it in that loop just took.
+    """
     start, width, state = pointer(account)
     if state == 'opaque':
         raise _invalid('number', (
@@ -202,7 +219,7 @@ def _allocate(s, account):
                                                           'account_id': account['id']})
         literal = _formatted(value, width)
         _, key, sequence = canonical(literal)
-        if not _ever_issued(s, account['id'], {key}):
+        if key not in taken and not _ever_issued(s, account['id'], {key}):
             return literal, key, sequence, _formatted(value + 1, width)
         value += 1
 
@@ -238,13 +255,16 @@ def request(account_id, number):
 IDENTITY = ('account_id', 'check_number', 'check_number_key', 'check_sequence', 'origin')
 
 
-def identity(s, *, requested, existing):
+def identity(s, *, requested, existing, taken=()):
     """Which chequebook and which number this write leaves the cheque carrying.
 
     ``requested`` is the account and number the check commands supply; ``None`` means a
     writer that is not the check form -- the journal editor or the register -- is rewriting
     the entry, and the cheque identity is carried forward untouched rather than being
     re-derived from lines that writer was free to rearrange.
+
+    ``taken`` is the set of canonical keys a caller writing several cheques in one command
+    has already claimed; see ``_allocate``.
 
     Allocation, the refusal of a same-account collision and the pointer move all happen
     here, which is inside the writer's own transaction; nothing about a cheque number is
@@ -255,7 +275,7 @@ def identity(s, *, requested, existing):
             return None
         return {key: existing[key] for key in IDENTITY} | {'pointer': None}
     account_id = requested['account_id']
-    literal, key, sequence, origin, moves_to = _requested(s, requested, existing, account_id)
+    literal, key, sequence, origin, moves_to = _requested(s, requested, existing, account_id, taken)
     return dict(account_id=account_id, check_number=literal, check_number_key=key,
                 check_sequence=sequence, origin=origin, pointer=moves_to)
 
@@ -278,6 +298,11 @@ def rows(s, ctx, header, revision, settled, existing, *, at, event):
     """The immutable revision row, the replaced projection, and the pointer move."""
     if settled is None:
         return None
+    if header['type'] not in CHEQUE_DOCUMENT_TYPES:
+        # The projection's own CHECK says the same thing; saying it here names the caller
+        # rather than leaving a new document family to discover it as an integrity error.
+        raise BookflowError('E_INTERNAL', message=(
+            f'A {header["type"]} carries no cheque number.'))
     shared = {key: settled[key] for key in IDENTITY}
     written = dict(revision_id=revision['id'], transaction_id=header['id'], **shared,
                    created_at=at, created_by=s.actor.id, created_via=ctx.interface.value,
@@ -289,7 +314,7 @@ def rows(s, ctx, header, revision, settled, existing, *, at, event):
                 pointer=(settled['account_id'], settled['pointer']) if settled['pointer'] else None)
 
 
-def _requested(s, requested, existing, account_id):
+def _requested(s, requested, existing, account_id, taken=()):
     from bookflow.company import accounts as account_service
     account = account_service.resolve_account(s.company, account_id)
     supplied = requested['number']
@@ -306,7 +331,7 @@ def _requested(s, requested, existing, account_id):
             raise duplicate(account, literal, holder)
         return literal, key, sequence, existing['origin'], None
     if supplied is None:
-        literal, key, sequence, moves_to = _allocate(s, account)
+        literal, key, sequence, moves_to = _allocate(s, account, taken)
         return literal, key, sequence, 'issued', moves_to
     literal, key, sequence = canonical(supplied)
     holder = _held(s, account_id, key, excluding=existing['transaction_id'] if existing else None)
