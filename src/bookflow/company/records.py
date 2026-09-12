@@ -24,6 +24,7 @@ _TARGETS.update({
     "customer_vendor_link": ("customer_vendor_links", "id"),
     "note": ("notes", "id"),
     "work_document": ("work_documents", "id"),
+    "purchase_order": ("purchase_orders", "id"),
     "work_revision": ("work_revisions", "id"),
     "work_line": ("work_lines", "id"),
     "transaction": ("transactions", "id"),
