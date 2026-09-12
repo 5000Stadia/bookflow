@@ -1,7 +1,34 @@
-"""Empty private reconciliation storage (N); no feature activation or source writer."""
+"""Private reconciliation storage: tables, ownership and transition guards.
+
+Every posting write reaches these tables through `reconciliation_materialization`; nothing
+else writes them.
+"""
 import sqlalchemy as sa
 
+from bookflow.company.reconciliation_models import (
+    PRODUCER_ROLES, COMMERCIAL_PRODUCERS, DEPOSIT_PRODUCERS, FUNDING_PRODUCERS)
+
 PREFIX = 'reconciliation_'
+
+
+def _in(names):
+    return '(' + ','.join(repr(name) for name in names) + ')'
+
+
+# The producer/role and key-shape rules, written from the one declaration in
+# `reconciliation_models` instead of retyped here.
+PRODUCER_ROLE_RULE = ' OR '.join(
+    "(producer=%r AND role IN %s)" % (producer, _in(roles)) for producer, roles in PRODUCER_ROLES.items())
+KEY_SHAPE_RULE = (
+    "(producer IN %s AND deposit_key_id IS NOT NULL AND commercial_line_id IS NULL) OR "
+    "(producer IN %s AND deposit_key_id IS NULL AND commercial_line_id IS NULL) OR "
+    "(producer IN %s AND deposit_key_id IS NULL AND commercial_line_id IS NOT NULL)"
+    % (_in(DEPOSIT_PRODUCERS), _in(FUNDING_PRODUCERS), _in(COMMERCIAL_PRODUCERS)))
+VERSION_SHAPE_RULE = (
+    "(producer IN %s AND deposit_link_id=id AND commercial_link_id IS NULL) OR "
+    "(producer IN %s AND deposit_link_id IS NULL AND commercial_link_id IS NULL) OR "
+    "(producer IN %s AND commercial_link_id=id AND deposit_link_id IS NULL)"
+    % (_in(DEPOSIT_PRODUCERS), _in(FUNDING_PRODUCERS), _in(COMMERCIAL_PRODUCERS)))
 COMMANDS = tuple('reconcile '+name for name in (
     'opening start','start','draft update','mark','mark-all','accept-current','proposal set','proposal remove',
     'finish','opening finish','leave','resume','cancel','amendment start','amendment apply','undo',
@@ -53,20 +80,22 @@ def define_tables(metadata, C, T, common):
     table('keys',ids('id')+[txt('producer'),*ids('transaction_id'),txt('role'),*ids('commercial_line_id?','deposit_key_id?')],
         uq('id','transaction_id','producer'),fk('transaction_id producer','transactions','id type'),
         fk('transaction_id commercial_line_id','document_line_identities','transaction_id id'),fk('transaction_id deposit_key_id','bank_effect_keys','transaction_id id'),
-        ck("(producer='journal_entry' AND role='entered') OR (producer='payment' AND role='cash') OR (producer='sales_receipt' AND role IN ('control','net')) OR (producer='invoice' AND role='net') OR (producer='deposit' AND role IN ('main_bank','cash_back','additional'))"),
-        ck("(producer='deposit' AND deposit_key_id IS NOT NULL AND commercial_line_id IS NULL) OR (producer<>'deposit' AND deposit_key_id IS NULL AND commercial_line_id IS NOT NULL)"))
+        ck(PRODUCER_ROLE_RULE), ck(KEY_SHAPE_RULE))
     sa.Index('uq_reconciliation_commercial_key',made[PREFIX+'keys'].c.producer,made[PREFIX+'keys'].c.transaction_id,made[PREFIX+'keys'].c.role,made[PREFIX+'keys'].c.commercial_line_id,unique=True,sqlite_where=sa.text('commercial_line_id IS NOT NULL'))
     sa.Index('uq_reconciliation_deposit_key',made[PREFIX+'keys'].c.deposit_key_id,unique=True,sqlite_where=sa.text('deposit_key_id IS NOT NULL'))
+    # A funding document is its own component, so the pair the commercial index guards does not
+    # exist for it; what must be unique is the document and the role it funds.
+    sa.Index('uq_reconciliation_funding_key',made[PREFIX+'keys'].c.producer,made[PREFIX+'keys'].c.transaction_id,made[PREFIX+'keys'].c.role,unique=True,sqlite_where=sa.text('commercial_line_id IS NULL AND deposit_key_id IS NULL'))
     table('effect_versions',ids('id','key_id','transaction_id')+[txt('producer'),txt('source_version'),*ids('revision_id','business_batch_id','transition_batch_id?','source_audit_event_id','account_id'),txt('account_type'),txt('currency'),col('effective_date','date'),num('signed_debit','int'),num('active','bool'),obj('movement_snapshot'),obj('display_snapshot'),obj('provenance_snapshot'),num('format_version'),*ids('commercial_link_id?','deposit_link_id?')],
         uq('key_id','source_version'),uq('key_id','id'),uq('id','key_id','account_id'),uq('id','transaction_id'),uq('id','transaction_id','producer'),
         own('key_id transaction_id producer','keys','id transaction_id producer'),fk('transaction_id revision_id','transaction_revisions','transaction_id id'),
         fk('transaction_id business_batch_id','posting_batches','transaction_id id'),fk('transaction_id transition_batch_id','posting_batches','transaction_id id'),
         fk('source_audit_event_id','audit_events','id'),fk('account_id','accounts','id'),enum('account_type','bank|credit_card'),ck('format_version=1'),
         ck('(active=1 AND signed_debit<>0) OR (active=0 AND signed_debit=0)'),
-        ck("(producer='deposit' AND deposit_link_id=id AND commercial_link_id IS NULL) OR (producer<>'deposit' AND commercial_link_id=id AND deposit_link_id IS NULL)"),
+        ck(VERSION_SHAPE_RULE),
         own('commercial_link_id','commercial_versions','id',True),own('deposit_link_id','deposit_versions','id',True))
     table('commercial_versions',ids('id','transaction_id')+[txt('producer'),*ids('line_id')],
-        enum('producer','journal_entry|payment|sales_receipt|invoice'),own('id transaction_id producer','effect_versions','id transaction_id producer',True),fk('transaction_id line_id','document_line_identities','transaction_id id'))
+        enum('producer','|'.join(COMMERCIAL_PRODUCERS)),own('id transaction_id producer','effect_versions','id transaction_id producer',True),fk('transaction_id line_id','document_line_identities','transaction_id id'))
     table('deposit_versions',ids('id','transaction_id')+[txt('producer'),*ids('bank_key_id','bank_version_id')],
         ck("producer='deposit'"),own('id transaction_id producer','effect_versions','id transaction_id producer',True),
         fk('transaction_id bank_key_id','bank_effect_keys','transaction_id id'),fk('bank_key_id bank_version_id','bank_effect_versions','key_id id'),uq('bank_version_id'))
@@ -146,7 +175,7 @@ def define_tables(metadata, C, T, common):
 
 
 def guards(names):
-    """Only new-table triggers. No source writer is fenced in storage increment N."""
+    """Only new-table triggers; the ledger's own tables keep theirs."""
     result = []
     def trigger(table, suffix, event, invalid):
         result.append(f"CREATE TRIGGER reconciliation_{table}_{suffix} BEFORE {event} ON reconciliation_{table} WHEN {invalid} BEGIN SELECT RAISE(ABORT, 'invalid reconciliation storage transition'); END")
@@ -164,6 +193,10 @@ def guards(names):
     trigger('effect_heads','current_update','UPDATE','NEW.key_id<>OLD.key_id OR '+head)
     trigger('commercial_versions','owner','INSERT',"NOT EXISTS (SELECT 1 FROM reconciliation_effect_versions v JOIN reconciliation_keys k ON k.id=v.key_id WHERE v.id=NEW.id AND k.commercial_line_id=NEW.line_id AND v.producer=NEW.producer AND v.source_version=COALESCE(v.transition_batch_id,v.business_batch_id)||':'||k.role||':'||k.commercial_line_id)")
     trigger('deposit_versions','owner','INSERT',"NOT EXISTS (SELECT 1 FROM reconciliation_effect_versions v JOIN reconciliation_keys k ON k.id=v.key_id JOIN bank_effect_versions b ON b.id=NEW.bank_version_id JOIN bank_effect_keys bk ON bk.id=b.key_id WHERE v.id=NEW.id AND k.deposit_key_id=NEW.bank_key_id AND bk.role=k.role AND v.source_version=b.id AND v.revision_id=b.revision_id AND v.business_batch_id=b.batch_id AND v.account_id=b.account_id AND v.signed_debit=b.signed_debit AND v.active=b.active AND v.currency=b.currency AND v.effective_date=b.effective_date AND v.source_audit_event_id=b.audit_event_id)")
+    # A funding version has no subtype row to own it, so the version itself carries the proof
+    # that its source identity names the document and the role, exactly as the commercial owner
+    # trigger proves the line.
+    trigger('effect_versions','funding_anchor','INSERT',"NEW.producer IN "+_in(FUNDING_PRODUCERS)+" AND NOT EXISTS (SELECT 1 FROM reconciliation_keys k WHERE k.id=NEW.key_id AND k.commercial_line_id IS NULL AND k.deposit_key_id IS NULL AND NEW.source_version=COALESCE(NEW.transition_batch_id,NEW.business_batch_id)||':'||k.role||':'||NEW.transaction_id)")
     trigger('effect_versions','business_anchor','INSERT',"NOT EXISTS (SELECT 1 FROM posting_batches b WHERE b.id=NEW.business_batch_id AND b.transaction_id=NEW.transaction_id AND b.revision_id=NEW.revision_id AND b.kind IN ('original','replacement')) OR (NEW.transition_batch_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM posting_batches b WHERE b.id=NEW.transition_batch_id AND b.transaction_id=NEW.transaction_id AND b.kind='reversal' AND b.audit_event_id=NEW.source_audit_event_id))")
     trigger('effect_legs','owner','INSERT',"NOT EXISTS (SELECT 1 FROM reconciliation_effect_versions v JOIN posting_lines l ON l.id=NEW.posting_line_id WHERE v.id=NEW.version_id AND v.active=1 AND v.business_batch_id=l.batch_id AND v.transaction_id=l.transaction_id AND v.account_id=l.account_id AND v.currency=l.currency)")
     trigger('effect_sources','owner','INSERT',"NOT EXISTS (SELECT 1 FROM posting_line_sources s JOIN reconciliation_effect_legs l ON l.posting_line_id=s.posting_line_id AND l.version_id=NEW.version_id WHERE s.id=NEW.source_id AND s.transaction_id=NEW.transaction_id)")

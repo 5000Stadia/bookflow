@@ -1,4 +1,9 @@
-"""Review regressions over ordinary producer worlds and real owner Plans."""
+"""Review regressions over ordinary producer worlds and real owner Plans.
+
+A private reconciliation reason is its own public code: all thirteen `E_RECONCILIATION_*`
+codes are registered in `core.errors`, so `ReconciliationError` raises the reason itself and
+carries no `details`. The assertions below read the code, not a wrapped reason.
+"""
 import copy
 from dataclasses import replace
 import pytest
@@ -9,6 +14,7 @@ from bookflow.core.ids import new_id
 from bookflow.company import reconciliation_preparation as p,reconciliation_proposals as fees,reconciliation_drafts as d,reconciliation_queries as q,reconciliation_reports as reports,reconciliation_attempts as attempts,reconciliation_operations as operations,reconciliation_amendments as am,reconciliation_commands_models as m,reconciliation_adapters as adapters
 from bookflow.company.reconciliation_storage_validation import digest
 from tests.test_reconciliation_successor_models import certificate_world,draft,select
+from tests.test_reconciliation_storage_validation import owned_storage  # noqa: F401  (autouse)
 from tests.test_deposit_lifecycle import driver
 from tests.test_reconciliation_insertion_targets import attempt,owned
 
@@ -38,8 +44,7 @@ def test_preview_exact_saved_set_before_arithmetic_omission_extra_substitution(d
         monkeypatch.setattr(fees,'statement',arithmetic)
         for proposals,plans in (((),()),((proposal,extra),(original,extra_plan)),((substitution,),(original,))):
             with pytest.raises(BookflowError) as rejected:fees.preview(session,ctx,s,dr,proposals,plans)
-            assert rejected.value.code=='E_VALIDATION'
-            assert rejected.value.details=={'reason':'E_RECONCILIATION_MANIFEST'}
+            assert rejected.value.code=='E_RECONCILIATION_MANIFEST'
     assert driver.dump()==before
 
 
@@ -101,10 +106,10 @@ def test_support_gate_precedes_query_filters_and_report_totals(certificate_world
     group=next(iter(p.groups(s.current.values()).values()));movement=m.MovementKey.model_validate_json(group[0]['movement_snapshot'])
     for name,call in readers(unsupported,dr,s.rows['certificates'][0],attempt(s,dr,()),receipt(s,doc,bank),movement,p.group_fingerprint(group),s.authority_transactions).items():
         with pytest.raises(BookflowError) as error:call()
-        assert error.value.details=={'reason':'E_RECONCILIATION_UNSUPPORTED'},name
+        assert error.value.code=='E_RECONCILIATION_UNSUPPORTED',name
     # Even an empty result filter must not bypass admission.
     with pytest.raises(BookflowError) as error:q.certificates(unsupported,m.CertificateQuery(account=new_id()),authority_transactions=s.authority_transactions)
-    assert error.value.details=={'reason':'E_RECONCILIATION_UNSUPPORTED'}
+    assert error.value.code=='E_RECONCILIATION_UNSUPPORTED'
 
 
 def test_adapter_errors_are_typed_and_operational_failures_unchanged(certificate_world,monkeypatch):
@@ -118,7 +123,7 @@ def test_adapter_errors_are_typed_and_operational_failures_unchanged(certificate
         monkeypatch.setattr(adapters,'enumerate_graph',fail)
         for call in (lambda:p.account_population(s,bank,'2026-12-31'),lambda:am.derive(s,(),before_source=s.source,authority_transactions=s.authority_transactions)):
             with pytest.raises(BookflowError) as error:call()
-            assert error.value.details=={'reason':reason}
+            assert error.value.code==reason
             assert 'hidden' not in str(error.value.to_dict())
     operational=OSError('owned IO failed')
     def fail(*args):raise operational
@@ -139,7 +144,7 @@ def test_seal_explicit_other_barrier_and_missing_suffix_403(certificate_world):
     empty=attempts.Attempt(**{key:header[key] for key in attempts.Attempt.model_fields if key!='chunks'})
     other=empty.model_copy(update={'id':new_id()})
     with pytest.raises(BookflowError) as error:attempts.seal(durable,saved,other,expected_version=other.version)
-    assert error.value.details=={'reason':'E_RECONCILIATION_ATTEMPT_STATE'}
+    assert error.value.code=='E_RECONCILIATION_ATTEMPT_STATE'
     assert attempts.seal(durable,saved,empty,expected_version=empty.version).state=='sealed'
     from datetime import date,timedelta
     entries=tuple(m.SeedItem(kind='seed',payload=m.SeedTarget(account_id=bank,kind='insert',date=(date(2027,1,1)+timedelta(days=i)).isoformat())) for i in range(403))
@@ -156,7 +161,7 @@ def test_seal_explicit_other_barrier_and_missing_suffix_403(certificate_world):
     assert len(attempts.items(s,staged,authority_transactions=s.authority_transactions,limit=200,offset=400).items)==3
     broken=staged.model_copy(update={'chunks':staged.chunks[1:]})
     with pytest.raises(BookflowError) as error:attempts.missing_ranges(s,broken,authority_transactions=s.authority_transactions)
-    assert error.value.details=={'reason':'E_RECONCILIATION_SOURCE_INVALID'}
+    assert error.value.code=='E_RECONCILIATION_SOURCE_INVALID'
 
 
 def test_proposal_removal_and_cancel_terminality_derived_from_saved_revisions(certificate_world):
@@ -169,7 +174,7 @@ def test_proposal_removal_and_cancel_terminality_derived_from_saved_revisions(ce
     assert canceled.state=='canceled' and canceled.proposal_revision_ids==(proposal.revision_id,)
     inp=m.ProposalSet(operation_key='edit',draft=dr.id,expected_version=canceled.version,proposal_id=proposal.id,expected_proposal_version=1,role='charge',input=proposal.input)
     with pytest.raises(BookflowError) as error:d.proposal(s,canceled,inp,identity=new_id(),revision_id=new_id(),previous=proposal)
-    assert error.value.details=={'reason':'E_RECONCILIATION_DRAFT_STATE'}
+    assert error.value.code=='E_RECONCILIATION_DRAFT_STATE'
 
 
 def test_real_graph_corruption_and_returned_unsupported_prospective_are_typed(driver,certificate_world,monkeypatch):
@@ -179,7 +184,7 @@ def test_real_graph_corruption_and_returned_unsupported_prospective_are_typed(dr
     line['debit_minor_units']+=1
     broken=replace(s,source=graph)
     with pytest.raises(BookflowError) as corrupt:p.account_population(broken,bank,'2026-12-31')
-    assert corrupt.value.code=='E_INTERNAL' and corrupt.value.details=={'reason':'E_RECONCILIATION_SOURCE_INVALID'}
+    assert corrupt.value.code=='E_RECONCILIATION_SOURCE_INVALID'
     dr,proposal=fee_world(s,bank,equity)
     with driver.session() as session:
         ctx=Context.new(Interface.python,'known adapter outcome',reason='fee')
@@ -187,5 +192,5 @@ def test_real_graph_corruption_and_returned_unsupported_prospective_are_typed(dr
         unsupported=adapters.UnsupportedPopulation(kind='population_unsupported',account_id=bank,account_currency='USD',home_currency='USD',reason='known unsupported producer')
         monkeypatch.setattr(adapters,'prepare_prospective',lambda *args:adapters.PreparedProjection(unsupported,plan))
         with pytest.raises(BookflowError) as error:fees.preview(session,ctx,s,dr,(proposal,),(plan,))
-        assert error.value.details=={'reason':'E_RECONCILIATION_UNSUPPORTED'}
+        assert error.value.code=='E_RECONCILIATION_UNSUPPORTED'
         assert 'known unsupported producer' not in str(error.value.to_dict())

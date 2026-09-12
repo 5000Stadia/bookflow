@@ -13,7 +13,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from bookflow.company.reconciliation_models import MovementKey
+from bookflow.company.reconciliation_models import (
+    MovementKey, PRODUCER_ROLES, COMMERCIAL_PRODUCERS, DEPOSIT_PRODUCERS, FUNDING_PRODUCERS)
 from bookflow.company.reconciliation_schema import PREFIX
 
 
@@ -259,12 +260,18 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
     for v in r['effect_versions']:
         require(v['format_version']==1 and v['active']==int(v['signed_debit']!=0),'effect_format')
         require(v['account_type'] in ('bank','credit_card'),'effect_account_type')
-        field='deposit_link_id' if v['producer']=='deposit' else 'commercial_link_id'
-        other='commercial_link_id' if v['producer']=='deposit' else 'deposit_link_id'
-        require(v[field]==v['id'] and v[other] is None,'effect_subtype_pointer')
-    for table,kind in [('commercial_versions',False),('deposit_versions',True)]:
+        # Three shapes, one declaration: a deposit points at its bank subtype row, a funding
+        # document has no subtype row because its component is the document itself, and every
+        # other producer points at the commercial line the movement was entered on.
+        if v['producer'] in DEPOSIT_PRODUCERS:
+            require(v['deposit_link_id']==v['id'] and v['commercial_link_id'] is None,'effect_subtype_pointer')
+        elif v['producer'] in FUNDING_PRODUCERS:
+            require(v['deposit_link_id'] is None and v['commercial_link_id'] is None,'effect_subtype_pointer')
+        else:
+            require(v['commercial_link_id']==v['id'] and v['deposit_link_id'] is None,'effect_subtype_pointer')
+    for table,allowed in [('commercial_versions',COMMERCIAL_PRODUCERS),('deposit_versions',DEPOSIT_PRODUCERS)]:
         for v in r[table]:
-            require((get('effect_versions',v['id'])['producer']=='deposit')==kind,'extra_effect_subtype')
+            require(get('effect_versions',v['id'])['producer'] in allowed,'extra_effect_subtype')
     for v in r['attempt_items']:
         require(v['kind'] in ('member','seed','certificate','proposal'),'attempt_kind')
         for kind in ('member','seed','certificate','proposal'):
@@ -275,9 +282,9 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
     for c in r['claims']:
         require((c['opening_id'] is None)!=(c['certificate_id'] is None),'claim_owner_shape')
     for key in r['keys']:
-        choices={'journal_entry':('entered',),'payment':('cash',),'sales_receipt':('control','net'),'invoice':('net',),'deposit':('main_bank','cash_back','additional')}
-        require(key['producer'] in choices and key['role'] in choices[key['producer']],'producer_role')
-        require((key['deposit_key_id'] is not None)==(key['producer']=='deposit') and (key['commercial_line_id'] is not None)==(key['producer']!='deposit'),'key_subtype')
+        require(key['producer'] in PRODUCER_ROLES and key['role'] in PRODUCER_ROLES[key['producer']],'producer_role')
+        require((key['deposit_key_id'] is not None)==(key['producer'] in DEPOSIT_PRODUCERS),'key_subtype')
+        require((key['commercial_line_id'] is not None)==(key['producer'] in COMMERCIAL_PRODUCERS),'key_subtype')
     for event in r['events']:
         require(event['schema_version']==1 and event['kind'] in ('draft_change','opening_certify','finish','amend','invalidate','undo','proposal_change','bulk_stage','bulk_terminal','report_preset_change'),'event_format')
         op=get('operations',event['operation_id'])
@@ -302,6 +309,11 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
                         and v['record_id']==evidence['transaction_id']
                         for v in referenced_rows['attachment_links']), 'attachment_owner')
     keys=by('keys'); versions=by('effect_versions')
+    def component(key):
+        """What a stored key names: a bank effect key, the document itself, or a line."""
+        if key['producer'] in DEPOSIT_PRODUCERS: return key['deposit_key_id']
+        if key['producer'] in FUNDING_PRODUCERS: return key['transaction_id']
+        return key['commercial_line_id']
     transitions = {}
     if versions:
         require(source is not None,'source_proof_required')
@@ -313,7 +325,7 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
         actual={}
         for v in versions.values():
             k=keys[v['key_id']]
-            ref=(k['producer'],k['transaction_id'],k['role'],k['deposit_key_id'] or k['commercial_line_id'],v['source_version'])
+            ref=(k['producer'],k['transaction_id'],k['role'],component(k),v['source_version'])
             require(ref not in actual,'duplicate_source_version'); actual[ref]=v
             require(ref in expected,'unknown_source_version'); e=expected[ref]
             for field,attr in [('revision_id','revision_id'),('business_batch_id','business_batch_id'),('transition_batch_id','transition_batch_id'),('source_audit_event_id','audit_event_id'),('account_id','account_id'),('account_type','account_type'),('currency','currency'),('effective_date','effective_date'),('signed_debit','signed_debit'),('active','active')]:
@@ -324,8 +336,12 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
             require(v['provenance_snapshot']==dict(format=1,document_line_ids=list(e.document_line_ids),rows=list(e.provenance)),'provenance_facts')
             for name,field,expected_ids in [('effect_legs','posting_line_id',e.posting_line_ids),('effect_sources','source_id',e.source_ids)]:
                 require(Counter(x[field] for x in matching(name,'version_id',v['id']))==Counter(expected_ids),'physical_coverage')
-            if e.ref.producer=='deposit':
+            if e.ref.producer in DEPOSIT_PRODUCERS:
                 link=get('deposit_versions',v['id']); require((link['bank_key_id'],link['bank_version_id'])==(e.ref.component_id,e.version_id),'deposit_link')
+            elif e.ref.producer in FUNDING_PRODUCERS:
+                # The component is the document, already carried by the key and the version.
+                require(k['transaction_id']==e.ref.component_id,'funding_link')
+                require(not matching('commercial_versions','id',v['id']) and not matching('deposit_versions','id',v['id']),'funding_link')
             else: require(get('commercial_versions',v['id'])['line_id']==e.ref.component_id,'commercial_link')
         require(set(actual)==set(expected),'source_history_coverage')
         # R0 enumeration orders each stable key's immutable business versions;
@@ -340,7 +356,7 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
             previous[key]=stored['id']
 
         heads={v['key_id']:v['version_id'] for v in r['effect_heads']}
-        expected_heads={next(k['id'] for k in keys.values() if (k['producer'],k['transaction_id'],k['role'],k['deposit_key_id'] or k['commercial_line_id'])==(v.ref.producer,v.ref.transaction_id,v.ref.role,v.ref.component_id)): actual[v.ref.producer,v.ref.transaction_id,v.ref.role,v.ref.component_id,v.version_id]['id'] for v in current}
+        expected_heads={next(k['id'] for k in keys.values() if (k['producer'],k['transaction_id'],k['role'],component(k))==(v.ref.producer,v.ref.transaction_id,v.ref.role,v.ref.component_id)): actual[v.ref.producer,v.ref.transaction_id,v.ref.role,v.ref.component_id,v.version_id]['id'] for v in current}
         require(heads==expected_heads,'source_heads')
     else:
         require(not keys and not r['effect_heads'],'empty_source_links')
@@ -368,7 +384,7 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
         history,current=enumerate_graph(graph)
         total,gl=prove(graph,history,current,owner['account_id'],pop['cutoff'])
         values=[v for v in current if v.account_id==owner['account_id'] and (not opening or v.active and v.effective_date<=pop['cutoff'])]
-        identity={ (keys[v['key_id']]['producer'],keys[v['key_id']]['transaction_id'],keys[v['key_id']]['role'],keys[v['key_id']]['deposit_key_id'] or keys[v['key_id']]['commercial_line_id'],v['source_version']):v['id'] for v in versions.values() }
+        identity={ (keys[v['key_id']]['producer'],keys[v['key_id']]['transaction_id'],keys[v['key_id']]['role'],component(keys[v['key_id']]),v['source_version']):v['id'] for v in versions.values() }
         expected=[identity.get((v.ref.producer,v.ref.transaction_id,v.ref.role,v.ref.component_id,v.version_id)) for v in values]
         require(None not in expected and Counter(expected)==Counter(pop['version_ids']),'capture_population_completeness')
         require(pop['signed_gl_total']==total==gl,'capture_gl')

@@ -18,7 +18,7 @@ from bookflow.core.durability import sync_directory, sync_file
 from bookflow.storage.engine import Database, io_error, sqlite_uri
 
 # Head revisions as constants: checked before Alembic is imported on the read path.
-HEADS = {"hub": "hub0013", "company": "co0043"}
+HEADS = {"hub": "hub0013", "company": "co0044"}
 _PKG = Path(__file__).parent
 
 
@@ -222,6 +222,12 @@ def migrate_company(s, ctx, db: Database, folder: Path, row: dict | None) -> tup
         before, after = migrate_to_head(db, "company", folder / "backups", commits=s.commits)
         if before == after:
             return before, after
+        # co0044 enqueues every posted document; this is the backfill that empties that queue,
+        # performed by the same code every posting write uses so there is one derivation of a
+        # statement effect and not two. An interrupted drain leaves the queue, and the next
+        # command finishes it.
+        from bookflow.company.reconciliation_materialization import drain_in_command
+        drain_in_command(db, commits=s.commits, owner="migration.company")
         system = None
         if s.hub is not None:
             from bookflow.hub.users import find_user

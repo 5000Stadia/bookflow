@@ -8,7 +8,7 @@ from bookflow.core.ids import new_id
 from bookflow.company import reconciliation_commands_models as m
 from bookflow.company import reconciliation_preparation as p,reconciliation_drafts as d,reconciliation_queries as q,reconciliation_attempts as a,reconciliation_reports as r,reconciliation_amendments as am,reconciliation_operations as op
 from bookflow.company.reconciliation_storage_validation import Header,Evidence,canonical,digest
-from tests.test_reconciliation_storage_validation import captured,aggregate,references,blank
+from tests.test_reconciliation_storage_validation import captured,aggregate,references,blank,owned_storage  # noqa: F401  (autouse)
 from tests.test_reconciliation_adapters import account,journal,pair,run
 from tests.test_deposit_lifecycle import driver
 from tests.test_service_sales_lifecycle import sale,COMPANY

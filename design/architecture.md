@@ -2843,8 +2843,9 @@ by refusing one rather than by returning nothing. `Producer` in
 partial result: `enumerate_graph` refuses the whole graph, so one of them makes
 every account it touches unreconcilable, and
 `tests/test_reconciliation_adapters.py` fails the moment the ledger admits a type
-the registry does not name. These modules register no command, write no
-database, and do not activate `deposit_dependencies.RECONCILIATION`.
+the registry does not name. These modules register no command and write no
+database; `reconciliation_materialization` is the only thing that stores what
+they derive, and `deposit_dependencies.RECONCILIATION` remains inactive.
 
 References use their producer's stable commercial line plus role, or the
 existing deposit bank key, or -- for a funded document -- the document itself,
@@ -2953,11 +2954,11 @@ source transaction. No contextless impact or free-text cause is stored. Event
 before/after account/cutoff deltas and certificate-to-current selected impacts
 are different projections over these immutable facts; neither is a cached value.
 
-`deposit_dependencies.RECONCILIATION` remains None. A separately reserved future
-activation revision must rebuild/backfill authoritative history, install the real
-resolver and all five source-writer fences coherently, and meet its old-binary,
-full-C, public contract and interface gates. This increment supplies none of those
-behaviors. The accepted source has no public `company verify` command; private
+`deposit_dependencies.RECONCILIATION` remains None: no reconciliation command is
+registered, and no public capability, snapshot loader or row persister for drafts
+and certificates exists yet. Authoritative history is no longer absent, though --
+see *Statement effect materialization* below. The accepted source has no public
+`company verify` command; private
 validation and SQLite integrity/FK checks do not claim to implement that command.
 
 Opening evidence has closed `transaction` and `transaction_attachment` kinds.
@@ -2990,6 +2991,57 @@ hub name-changing/create anchor, coherent with that pin. Deposit correction issu
 stay immutable. Aggregate persistence, permanent coordinate recovery, preserving
 operation-schema extension, Delete/drafts, public workflows and full-C publication
 remain separate prerequisites.
+
+### Statement effect materialization (co0044)
+
+Storage is written in exactly one place. `company/reconciliation_materialization.py`
+derives a document's statement effects with the same adapters every read uses and
+inserts the keys, versions, subtype rows, legs, sources and heads they imply; the
+only thing it invents is identity, because identity is the one thing the adapters
+do not supply. It is idempotent: a version already stored under its `(key,
+source_version)` pair is left alone, so re-running it over a whole company adds
+nothing.
+
+What triggers it is the table, not the writer. More than fifty modules under
+`company/` write `posting_batches`, each with its own persist loop, so a SQLite
+trigger on that table records the owning document in `statement_effect_pending`
+(`company/reconciliation_materialization_schema.py`), and a second does the same
+for `bank_effect_versions`. `core.dispatch._apply` drains that queue once before a
+company-writing command applies -- outside the business savepoint, so a command
+that changes nothing does not undo work it inherited -- and once after, inside the
+command's own transaction. A writer added later is covered without being listed:
+what makes something a posting write is that it inserts a posting batch. A queue
+row that outlives a command is a posting write that skipped the drain, which
+`assert_materialized` refuses to read past.
+
+A document the adapters cannot represent is skipped, not stored and not fatal:
+`population` already reports an account holding one as unsupported, derived from
+the source, so refusing the posting would remove a posting the books are entitled
+to and give nothing back. `enumerate_graph` is all-or-nothing over the graph it is
+given, so a refused batch is bisected until the refusal is isolated to the single
+document that owns it, rather than costing its neighbours their storage.
+
+co0044 installs that queue and its triggers, and enqueues every document that has
+ever posted; `migrate_company` drains it as soon as the chain finishes, so the
+backfill of an existing company file is performed by the same code that will
+materialize its next posting rather than by a frozen copy of the adapters. An
+interrupted upgrade costs nothing -- the queue survives and the next command
+finishes it. Every document is enqueued rather than only those with a leg on a
+statement account: the narrower query would be a claim about which producers can
+carry a statement effect, and the drain already knows, because it asks.
+
+co0044 also rebuilds `reconciliation_keys` and `reconciliation_effect_versions`,
+which co0022 froze admitting five producers each naming an entered commercial
+line. The statement adapters that landed afterwards gave the money-out family a
+statement effect whose component is the *document*, so those effects could be
+derived and not stored, and every bank account that had ever paid a bill would
+have failed the general-ledger equality below. Both tables are empty in every
+shipped file, which the migration checks rather than assumes, so the rebuild is a
+drop and recreate. A key now takes one of three shapes -- a bank effect key, a
+commercial line, or the document itself -- and `reconciliation_models.PRODUCER_ROLES`
+is the single declaration the storage CHECK constraints and the private validator
+both read. `tests/test_reconciliation_materialization.py` fails when a producer
+gains an adapter without gaining a key shape.
 
 ### Private reconciliation successor models and preparation
 

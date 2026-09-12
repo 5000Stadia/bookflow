@@ -9,7 +9,7 @@ from bookflow.company.reconciliation_storage_validation import validate, Invalid
 from tests.test_deposit_lifecycle import driver, additional_document, replacement
 from tests.test_service_sales_lifecycle import sale
 from tests.test_reconciliation_adapters import account, journal, pair, run
-from tests.test_reconciliation_storage_validation import captured, references, insert
+from tests.test_reconciliation_storage_validation import captured, references, insert, owned_storage  # noqa: F401  (autouse)
 
 
 def event_rows(rows,g):
@@ -88,7 +88,9 @@ def test_complete_real_creation_account_date_metadata_removal_void_and_contexts(
         for name in ('keys','effect_versions','commercial_versions','effect_legs','effect_sources','effect_heads','operations','events','operation_items','operation_transactions','operation_accounts','event_effects'):insert(s.company.raw,name,rows[name])
         assert s.company.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
         assert adapters.graph(s,[values[0]['transaction_id']]).rows==g.rows
-        cursor=s.company.raw.execute('SELECT * FROM reconciliation_effect_versions ORDER BY rowid')
+        # Scoped to this document: the company's other postings materialized when they were
+        # posted, and their rows are simply other documents' rows.
+        cursor=s.company.raw.execute('SELECT * FROM reconciliation_effect_versions WHERE transaction_id=? ORDER BY rowid',(values[0]['transaction_id'],))
         stored=[dict(zip([c[0] for c in cursor.description],v)) for v in cursor.fetchall()]
         assert stored==values
         persisted={v['id']:v for v in stored}

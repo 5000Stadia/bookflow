@@ -1,4 +1,11 @@
-"""N is empty, additive and off; these are not activation/backfill tests."""
+"""co0022 was additive and left its tables empty; these are its own preservation tests.
+
+The `step` fixture stops the chain at co0022 wherever the head has moved to, so what is
+asserted here stays what that one migration does to an existing company file. Storage stops
+being empty at co0044, which installs the materializer's work list and backfills; that
+revision is covered by `tests/test_reconciliation_materialization.py`, and only the
+fresh-database test below runs the chain far enough to see it.
+"""
 import importlib
 import io
 import json
@@ -24,6 +31,13 @@ from tests.payment_raw_evidence import table, attachments
 
 BASE='a041caa2b98365649112eac55d600c586ca22b08'
 M=importlib.import_module('bookflow.storage.company_migrations.versions.0022_reconciliation_storage')
+M44=importlib.import_module('bookflow.storage.company_migrations.versions.0044_reconciliation_materialization')
+
+
+def owner(statement):
+    """The table a CREATE TABLE, CREATE INDEX or CREATE TRIGGER statement belongs to."""
+    words=statement.split()
+    return words[2] if words[1]=='TABLE' else words[words.index('ON')+1].split('(')[0]
 
 
 @pytest.fixture
@@ -59,9 +73,20 @@ def test_exact_metadata_fresh_current_empty_off_and_composite_fk_targets(tmp_pat
             targets=[tuple(c.name for c in remote.primary_key)]
             targets += [tuple(c.name for c in x.columns) for x in remote.constraints if x.__class__.__name__=='UniqueConstraint']
             assert columns in targets,(name,columns,remote.name)
-    assert M.DDL==ddl and M.GUARDS==guards(M.NEW_TABLES)
+    # Every table co0022 froze and co0044 did not rebuild is still byte-for-byte what the
+    # metadata declares. The two it did rebuild are checked below against the database the
+    # whole chain actually produces, which is what the frozen comparison was protecting and
+    # is the thing that cannot go stale when a later revision amends one of these tables.
+    rebuilt=set(M44.REBUILT)
+    assert rebuilt<=set(M.NEW_TABLES)
+    assert [s for s in M.DDL if owner(s) not in rebuilt]==[s for s in ddl if owner(s) not in rebuilt]
+    assert [s for s in M.GUARDS if owner(s) not in rebuilt]==[s for s in guards(M.NEW_TABLES) if owner(s) not in rebuilt]
+    declared={' '.join(s.split()) for s in (*ddl,*guards(M.NEW_TABLES))}
     with open_database(tmp_path/'fresh.db',writable=True,create=True) as db:
         assert migrate_to_head(db,'company',None)==(None,HEADS['company'])
+        shipped={' '.join(r[0].split()) for r in db.raw.execute(
+            "SELECT sql FROM sqlite_schema WHERE sql IS NOT NULL AND tbl_name LIKE 'reconciliation!_%' ESCAPE '!'")}
+        assert declared==shipped
         empty(db.raw)
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
         assert db.raw.execute('PRAGMA integrity_check').fetchall()==[('ok',)]

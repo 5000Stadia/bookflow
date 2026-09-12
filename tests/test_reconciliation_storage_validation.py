@@ -1,4 +1,11 @@
-"""N private constraints against ordinary source graphs; no activated resolver."""
+"""Private storage constraints against ordinary source graphs, checked row by row.
+
+Production materializes a document's statement effects inside the command that posts it. What
+this file checks is the constraints themselves, against aggregates it builds by hand -- so the
+documents it posts have to arrive unmaterialized and leave it the sole writer of their rows.
+`owned_storage` is what arranges that, and every module that builds an aggregate the same way
+imports it.
+"""
 import copy
 import json
 import sqlite3
@@ -12,21 +19,39 @@ from tests.test_service_sales_lifecycle import sale, COMPANY
 from tests.test_reconciliation_adapters import account, journal, pair, run
 
 
+@pytest.fixture(autouse=True)
+def owned_storage(monkeypatch):
+    """Leave this file the writer of the reconciliation rows for the documents it posts.
+
+    Every posting command materializes its own statement effects. These tests assert what the
+    storage refuses, by inserting hand-built aggregates, so a production row for the same
+    document would collide on the very uniqueness the assertion is about. Disabling the drain
+    for the documents this file posts is what keeps the two writers off each other; documents
+    posted before the test (the seeded demo) keep their rows and are simply other documents.
+    """
+    from bookflow.company import reconciliation_materialization as materialization
+    monkeypatch.setattr(materialization, 'drain_in_command', lambda *a, **k: 0)
+
+
 def blank():
     return {n.removeprefix('reconciliation_'):[] for n in schema.metadata.tables if n.startswith('reconciliation_')}
 
 
 def references(session):
     import sqlalchemy as sa
-    for name in blank():
-        assert session.company.raw.execute('SELECT count(*) FROM reconciliation_'+name).fetchone()==(0,)
     names={fk.column.table.name for n,t in schema.metadata.tables.items() if n.startswith('reconciliation_') for fk in t.foreign_keys if not fk.column.table.name.startswith('reconciliation_')}
     names.add('company_info')
     return {n:[dict(v) for v in session.company.conn.execute(sa.select(schema.metadata.tables[n])).mappings()] for n in names}
 
 
 def captured(g):
-    """Test-only materialization. Production N has no materializer/backfill."""
+    """A hand-built expectation, deliberately independent of the production materializer.
+
+    `reconciliation_materialization` writes these same rows from the same adapters. Building
+    them a second way here is the point: an expectation produced by the code under test proves
+    only that it agrees with itself, and what the mutations below check is that `validate`
+    catches a row the production writer could never produce.
+    """
     out=blank(); history,current=adapters.enumerate_graph(g); keys={}; versions={}
     for v in history:
         k=keys.setdefault(v.ref,new_id());identity=new_id();versions[v.ref,v.version_id]=identity

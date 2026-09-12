@@ -657,6 +657,7 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
     with s.commits.operation("dispatch.apply", s.hub, s.company):
         from bookflow.core import idempotency
         from bookflow.core.audit import write_event_to
+        from bookflow.company import reconciliation_materialization as materialization
         assert cmd.apply is not None
         key_db, ihash = key
         hub_tx = bool(cmd.writes & {"hub", "config"}) or cmd.kind == "advisory"
@@ -666,6 +667,11 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
             s.hub.raw.execute("BEGIN IMMEDIATE")
         if co_tx:
             s.company.raw.execute("BEGIN IMMEDIATE")
+            # Statement effects still owed -- by a file this session just backfilled, or by a
+            # posting batch that reached the database outside this path -- are settled before
+            # the command reads anything, and outside the business savepoint so that a command
+            # which turns out to change nothing does not roll the settlement back with itself.
+            materialization.drain_in_command(s.company, commits=s.commits, owner="dispatch.apply")
             if business_savepoint:
                 s.company.raw.execute("SAVEPOINT bookflow_business")
         try:
@@ -673,6 +679,12 @@ def _apply(cmd: Command, plan: Plan, ctx: Context, s: Session, key=(None, None))
                 _upsert_principals(s, ctx)
             with performance.span("command.apply", command=cmd.name):
                 applied = cmd.apply(plan, ctx, s)
+            # Everything this command posted becomes stored statement effects inside the
+            # command's own transaction. The work list is filled by a trigger on
+            # `posting_batches`, so a writer added tomorrow is covered without being listed
+            # here: what makes something a posting write is that it inserts a posting batch.
+            if co_tx:
+                materialization.drain_in_command(s.company, commits=s.commits, owner="dispatch.apply")
             if applied.finalized:
                 if any(db is not None and db.write_transaction for db in (s.company, s.hub)):
                     raise BookflowError("E_INTERNAL", message="A finalized command left an unfinished transaction.")

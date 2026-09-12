@@ -1095,6 +1095,10 @@ globals().update(_define_deposit_tables(metadata, _column, _table, _common))
 from bookflow.company.reconciliation_schema import define_tables as _define_reconciliation_tables
 globals().update(_define_reconciliation_tables(metadata, _column, _table, _common))
 
+from bookflow.company.reconciliation_materialization_schema import define_tables as _define_materialization_tables
+
+globals().update(_define_materialization_tables(metadata, _column, _table))
+
 from bookflow.company.deposit_draft_schema import define_tables as _define_deposit_draft_tables
 globals().update(_define_deposit_draft_tables(metadata, _column, _table, _common))
 

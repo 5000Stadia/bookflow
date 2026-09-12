@@ -10,7 +10,7 @@ import pytest
 from bookflow.company.reconciliation_storage_validation import InvalidStorage, validate
 from tests.test_deposit_lifecycle import driver
 from tests.test_reconciliation_storage_validation import (
-    account, journal, pair, adapters, references, aggregate, captured, insert, COMPANY,
+    account, journal, pair, adapters, references, aggregate, captured, insert, COMPANY, owned_storage,  # noqa: F401
 )
 
 
