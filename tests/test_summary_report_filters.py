@@ -262,8 +262,18 @@ def test_a_filtered_summary_pages_without_moving_its_totals_or_its_scope(books):
         assert seen == whole["rows"], verb
 
 
+def _second_filter_row(client, fixture, *, commercial=False):
+    """Two groups are needed to exercise a one-row page continuation."""
+    client.run("invoice post", {
+        "number": "FIL-PAGE", "date": "2027-03-19", "customer": fixture["cafe"],
+        "lines": [{"item": fixture["valve"], "quantity": "1", "unit_price": "25.00",
+                   "class_id": fixture["commercial" if commercial else "residential"]}],
+    }, company=COMPANY)
+
+
 def test_renaming_the_filtered_class_refuses_the_next_page_rather_than_relabelling_it(books):
     client, fixture = books
+    _second_filter_row(client, fixture)
     filters = {"class_id": fixture["residential"]}
     first = client.run("report sales-by-item", {"date_from": FROM, "date_to": TO_DATE,
                                                 "limit": 1, **filters}, company=COMPANY)
@@ -281,13 +291,23 @@ def test_renaming_the_filtered_class_refuses_the_next_page_rather_than_relabelli
     # Restarting reads the new name; nothing about the money moved.
     restarted = report(client, "sales-by-item", **filters)
     assert restarted["scope"]["selected"][0]["label"] == "Filter Residential Renamed"
-    assert restarted["totals"]["income"]["minor_units"] == RESIDENTIAL_INCOME
+    assert restarted["totals"]["income"]["minor_units"] == RESIDENTIAL_INCOME + 2500
 
 
 def test_a_continuation_carries_its_filter_and_refuses_a_different_one(books):
     client, fixture = books
+    _second_filter_row(client, fixture)
     first = client.run("report sales-by-item", {"date_from": FROM, "date_to": TO_DATE,
         "limit": 1, "class_id": fixture["residential"]}, company=COMPANY)
+    assert first["next_cursor"] is not None
+    second = client.run("report sales-by-item", {"date_from": FROM, "date_to": TO_DATE,
+        "limit": 1, "class_id": fixture["residential"], "cursor": first["next_cursor"]},
+        company=COMPANY)
+    whole = report(client, "sales-by-item", class_id=fixture["residential"])
+    assert first["rows"] + second["rows"] == whole["rows"]
+    assert second["totals"] == first["totals"] == whole["totals"]
+    assert second["scope"] == first["scope"] == whole["scope"]
+    assert second["next_cursor"] is None
     for changed in ({"class_id": fixture["commercial"]}, {}, {"class_id": fixture["residential"],
                                                               "customer": fixture["cafe"]}):
         with pytest.raises(BookflowError) as raised:
@@ -306,8 +326,10 @@ def test_page_two_reads_the_renamed_class_off_the_cursor_and_never_the_typed_nam
     missing record.
     """
     client, fixture = books
+    _second_filter_row(client, fixture, commercial=True)
     first = client.run("report sales-by-customer", {"date_from": FROM, "date_to": TO_DATE,
         "limit": 1, "class_id": "Filter Commercial"}, company=COMPANY)
+    assert first["next_cursor"] is not None
     shown = client.run("class show", {"class": fixture["commercial"]}, company=COMPANY)
     client.run("class update", {"class": fixture["commercial"],
                                 "expected_version": shown["version"],
@@ -333,7 +355,7 @@ def test_an_inactive_class_is_still_reportable_and_says_so(books):
     client, fixture = books
     shown = client.run("class show", {"class": fixture["residential"]}, company=COMPANY)
     client.run("class deactivate", {"class": fixture["residential"],
-                                    "expected_version": shown["version"]}, company=COMPANY)
+                                    "expected_version": shown["version"], "cascade": True}, company=COMPANY)
     result = report(client, "sales-by-customer", class_id=fixture["residential"])
     assert result["totals"]["income"]["minor_units"] == RESIDENTIAL_INCOME
     assert result["scope"]["selected"][0]["active"] is False
