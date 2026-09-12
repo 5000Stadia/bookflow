@@ -35,6 +35,9 @@ def digest(value):
     return sha256(canonical(value).encode()).hexdigest()
 
 
+FINGERPRINT_FORMAT = 'reconciliation.population/1'
+
+
 def population_fingerprint(values):
     """What a captured population fingerprints: the stored rows, never the present ledger.
 
@@ -43,16 +46,23 @@ def population_fingerprint(values):
     it again would only ever re-answer a different question. One definition, imported by the
     writer that stores a capture and by the validation that reads one back, because two
     spellings of a fingerprint are two fingerprints.
+
+    The format is named inside the hash rather than left implicit. This is not the adapter-value
+    digest an earlier draft of the storage used, and a fingerprint that does not say which
+    definition produced it cannot be told apart from one that disagrees; naming it is what lets
+    a later format be added without any stored capture becoming unreadable. Inactive and
+    future-dated members are included -- they are part of the population even though they are
+    not part of the general-ledger total.
     """
     # A snapshot column is text in the database and a decoded dict once `validate` has read it,
     # and this is called from both sides, so the one shape it works in is the decoded one.
     def movement(v):
         found=v['movement_snapshot']
         return found if type(found) is dict else json.loads(found)
-    return digest(sorted((dict(key_id=v['key_id'],version_id=v['id'],source_version=v['source_version'],
+    return digest(dict(format=FINGERPRINT_FORMAT,values=sorted((dict(key_id=v['key_id'],version_id=v['id'],source_version=v['source_version'],
                                account_id=v['account_id'],effective_date=v['effective_date'],
                                signed_debit=v['signed_debit'],active=v['active'],
-                               movement=movement(v)) for v in values),key=canonical))
+                               movement=movement(v)) for v in values),key=canonical)))
 
 
 class Strict(BaseModel):
@@ -400,9 +410,13 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
     # still the heads, which is expected to answer no after any ordinary correction and is the
     # very state `reconciliation_reports.project` exists to report. So a graph is optional here
     # and every capture whose graph is supplied is proven; the stored-row ties below run either
-    # way. What keeps the write honest is that the rows cannot be edited afterwards:
-    # `reconciliation_effect_versions` and `reconciliation_keys` carry no-update and no-delete
-    # triggers from co0044, so there is no tampering for a later re-proof to catch.
+    # way.
+    #
+    # Those ties are consistency, never completeness. A capture that simply left a movement out,
+    # with its members, population, total and fingerprint all agreeing about the smaller world,
+    # satisfies every one of them -- so head coverage has to be derived independently, from the
+    # graph, at the moment the capture is written, which is what `capture_population_completeness`
+    # below does and why a writer must supply the graph.
     captured_graphs = captured_graphs or {}
     expected_captures={v['id'] for name in ('openings','certificates') for v in r[name]}
     require(set(captured_graphs)<=expected_captures,'capture_proof_inventory')

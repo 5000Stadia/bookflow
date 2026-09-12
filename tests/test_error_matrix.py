@@ -26,11 +26,11 @@ def test_matrix_matches_registry():
 def test_every_reconciliation_reason_is_a_declared_described_code():
     """The reasons the reconciliation modules raise, the codes, and the matrix are one set.
 
-    These have no command row yet, so `test_matrix_matches_registry` cannot see them: it walks
-    the registry, and nothing registers `reconcile ...`. Without this, a new `require(...,
-    'E_RECONCILIATION_SOMETHING')` would raise ValueError at the moment it fired -- inside the
-    failure it was meant to name -- and no test would have said so beforehand. So the set is
-    read from the modules that raise it rather than from any list anyone maintains.
+    `test_matrix_matches_registry` walks the registry, so it sees only what a `reconcile ...`
+    command declares. Without this, a reason raised by a module no command declares -- a new
+    `require(..., 'E_RECONCILIATION_SOMETHING')` -- would raise ValueError at the moment it
+    fired, inside the failure it was meant to name, and no test would have said so beforehand.
+    So the set is read from the modules that raise it rather than from any list anyone maintains.
     """
     company = Path(__file__).resolve().parents[1] / "src" / "bookflow" / "company"
     raised = set()

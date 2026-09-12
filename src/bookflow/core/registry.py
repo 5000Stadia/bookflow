@@ -255,6 +255,9 @@ NOUN_MODULES: dict[str, list[str]] = {
     "bookflow.commands.note_cmds": ["note"],
     "bookflow.commands.attachment_cmds": ["attachment"],
     "bookflow.commands.journal_cmds": ["journal"],
+    # `reconcile opening start` splits into the noun `reconcile opening`, the way `bill payment`
+    # and `payment recovery` do; the command name itself is frozen by co0022's command enum.
+    "bookflow.commands.reconcile_cmds": ["reconcile", "reconcile opening"],
     "bookflow.commands.sales_cmds": ["invoice", "sales-receipt"],
     "bookflow.commands.statement_charge_cmds": ["statement-charge"],
     "bookflow.commands.deposit_cmds": ["deposit"],

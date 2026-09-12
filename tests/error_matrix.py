@@ -166,10 +166,9 @@ STANDALONE_MATRIX = {
     "docs generate": {"E_DOCS_STALE": "--check found missing, extra, or changed generated documentation"},
 }
 
-# Bank reconciliation raises these before any `reconcile ...` command is registered, so
-# they have no command row yet. What produces each is recorded here so the row that
-# registers those commands copies meanings rather than inventing them; the set itself is
-# read from `core.errors.RECONCILIATION_CODES`, never retyped.
+# Bank reconciliation's own reasons, described once. The `reconcile ...` rows at the end of this
+# file copy these rather than restating them; the set itself is read from
+# `core.errors.RECONCILIATION_CODES`, never retyped.
 RECONCILIATION_MATRIX = {
     "E_RECONCILIATION_ATTEMPT_STATE": "a second attempt on one draft, a chunk out of order, or seal/apply on an attempt that is not uploading/sealed",
     "E_RECONCILIATION_CHAIN_STALE": "a draft whose base chain version, opening or head certificate is no longer the account's",
@@ -1373,3 +1372,15 @@ MATRIX["memorized-group enter"] = {
 }
 MATRIX["memorized-group show"] = {"E_RECORD_NOT_FOUND": "unknown group", "E_VALIDATION": "empty selector"}
 MATRIX["memorized-group list"] = {"E_VALIDATION": "a bad cursor or limit"}
+
+# All four verbs load, prepare and re-prove the same account aggregate, so any of them can answer
+# with any of the family's reasons; which step raises first is what differs between them.
+_RECONCILE_ERRORS = {
+    **RECONCILIATION_MATRIX,
+    "E_RECORD_NOT_FOUND": "unknown account, draft or certificate in the selected company",
+    "E_VERSION_CONFLICT": "stale expected draft or proposal version",
+    "E_IDEMPOTENCY_MISMATCH": "same key, different input",
+    "E_DIRECTIVE_NOT_FOUND": "unknown directive", "E_DIRECTIVE_INACTIVE": "inactive directive",
+}
+for _verb in ("opening start", "start", "mark", "finish"):
+    MATRIX["reconcile " + _verb] = dict(_RECONCILE_ERRORS)

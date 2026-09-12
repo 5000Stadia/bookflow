@@ -875,3 +875,42 @@ EXAMPLES.update({
         ' --company "Demo Plumbing Co" --reason "Close the month" --json',
         {"memorized_group": "Month-end closing", "date": "2026-05-31"}),
 })
+
+# Bank reconciliation: adopt an opening balance, open a statement, tick it, certify it. The
+# invocation is derived from the payload so the shown command and the shown input cannot drift.
+_RECONCILE_FINGERPRINT = 'c' * 64
+_RECONCILE_EXAMPLES = {
+    'reconcile opening start': dict(
+        account=ID, opening_date='2026-01-31', entered_balance=125000,
+        evidence=dict(format=1, statement_reference='Jan 2026 checking statement', entered_text=None),
+        operation_key='example-opening-1'),
+    'reconcile start': dict(
+        account=ID, statement_date='2026-02-28', ending_balance=148250, opening_id=ID,
+        operation_key='example-statement-1'),
+    'reconcile mark': dict(
+        draft=ID, expected_version=1, operation_key='example-mark-1',
+        entries=[dict(movement=dict(producer='journal_entry', transaction_id=ID, revision_id=ID,
+                                    account_id=ID, role='entered', component_id=ID),
+                      group_fingerprint=_RECONCILE_FINGERPRINT, action='mark')]),
+    'reconcile finish': dict(
+        draft=ID, expected_version=2, operation_key='example-finish-1',
+        expected_facts_fingerprint=_RECONCILE_FINGERPRINT, dependency_guard=_RECONCILE_FINGERPRINT),
+}
+_RECONCILE_REASONS = {
+    'reconcile opening start': 'Adopt the checking account opening balance',
+    'reconcile start': 'Reconcile the February checking statement',
+    'reconcile mark': 'Clear the movements the statement shows',
+    'reconcile finish': 'Certify the February checking statement',
+}
+for _name, _payload in _RECONCILE_EXAMPLES.items():
+    _args = ['bookflow', *_name.split()]
+    _positional = 'draft' if _name in ('reconcile mark', 'reconcile finish') else None
+    if _positional:
+        _args.append(str(_payload[_positional]))
+    for _field, _value in _payload.items():
+        if _field == _positional:
+            continue
+        _args.extend(['--' + _field.replace('_', '-'),
+                      _payment_json.dumps(_value, separators=(',', ':')) if isinstance(_value, (dict, list)) else str(_value)])
+    _args.extend(['--company', 'Demo Plumbing Co', '--reason', _RECONCILE_REASONS[_name], '--json'])
+    EXAMPLES[_name] = Example(' '.join(_payment_shell.quote(value) for value in _args), _payload)

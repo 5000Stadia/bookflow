@@ -251,7 +251,15 @@ class Draft(Model):
     current_revision_id: ID
     state: Literal['open','consumed','canceled']
     terminal_operation_id: ID|None=None
-    header: Header
+    # A generated sample fills a Literal with its first member and every nullable with None,
+    # which for this model is a contradiction it refuses: an opening draft with no opening date.
+    # The documented sample is an opening draft, matching the `reconcile opening start` example
+    # so the generated pages read as one walkthrough rather than four unrelated fragments.
+    header: Header=Field(json_schema_extra={'sample':{
+        'format':1,'opening_date':'2026-01-31','statement_date':None,'entered_balance':125000,
+        'evidence':{'format':1,'statement_reference':'Jan 2026 checking statement','entered_text':None},
+        'preferences':{'format':1,'columns':['date','number','payee','amount'],'sort':'date',
+                       'descending':False,'hide_after_date':True,'view':'as_certified'}}})
     base_chain_version: Count
     base_opening_id: ID|None=None
     base_head_id: ID|None=None
@@ -561,3 +569,16 @@ class OperationPage(Model):
     count: Count
     next_offset: Count|None
     fingerprint: Fingerprint
+
+
+class DraftOutput(Model):
+    contract: Literal['reconciliation.private.v1']='reconciliation.private.v1'
+    draft: Draft
+
+class FinishOutput(Model):
+    contract: Literal['reconciliation.private.v1']='reconciliation.private.v1'
+    draft: Draft
+    account_id: ID
+    opening_id: ID
+    certificate_id: ID
+    totals: Totals

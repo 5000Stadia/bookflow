@@ -33,13 +33,17 @@ ORDER = ('operations', 'events', 'event_effects', 'draft_revisions', 'drafts', '
          'operation_certificates')
 
 
-def owned(session, transaction):
-    """The stored reconciliation rows the production materializer wrote for one document."""
+def owned(session, transaction, *, account=None):
+    """The stored reconciliation rows the production materializer wrote, for one document or account."""
     out = blank()
     for name in out:
         out[name] = [dict(v) for v in session.company.conn.execute(
             sa.select(sch.metadata.tables['reconciliation_' + name])).mappings()]
-    keys = {v['id'] for v in out['keys'] if v['transaction_id'] == transaction}
+    if account is not None:
+        owners = {v['key_id'] for v in out['effect_versions'] if v['account_id'] == account}
+        keys = {v['id'] for v in out['keys'] if v['id'] in owners}
+    else:
+        keys = {v['id'] for v in out['keys'] if v['transaction_id'] == transaction}
     out['keys'] = [v for v in out['keys'] if v['id'] in keys]
     out['effect_versions'] = [v for v in out['effect_versions'] if v['key_id'] in keys]
     versions = {v['id'] for v in out['effect_versions']}
@@ -147,3 +151,57 @@ def test_a_population_the_stored_members_do_not_spell_is_refused_without_a_graph
     with pytest.raises(InvalidStorage, match='capture_fingerprint'):
         validate(doctored(stored, source_fingerprint=population_fingerprint([])),
                  source=graph, captured_graphs={}, referenced_rows=refs)
+
+
+def test_the_prover_is_the_only_thing_that_can_produce_a_capture(client, driver):
+    """A blob assembled any other way is not a proven capture, so nothing else assembles one."""
+    from bookflow.company import reconciliation_capture as capture
+    bank, doc, stored, _, _, _ = certified(client, driver, 'Proven')
+    with driver.session() as s:
+        snapshot = loading.load(s, bank)
+        produced = capture.population(snapshot, bank, '2026-01-31', opening=False)
+    hand_built = json.loads(stored['certificates'][0]['captured_source_snapshot'])
+    assert produced == hand_built, 'the prover and the hand-built expectation describe one population'
+
+
+def test_a_capture_that_leaves_a_movement_out_is_rejected_even_though_it_adds_up(client, driver):
+    """Consistency is not completeness, and this is the difference between them.
+
+    Both movements are stored; the certificate simply does not mention the second. Its members,
+    population, total and fingerprint all agree about the smaller world, so every stored-row tie
+    is satisfied. Only deriving the heads from the graph catches it -- which is why the write
+    supplies the graph and the read does not have to, and why hash plus sum is never evidence
+    that a capture is whole.
+    """
+    bank = account(client, 'Partial bank')
+    equity = account(client, 'Partial equity', 'equity')
+    journal(client, pair(bank, equity, '10'), date='2026-01-10')
+    journal(client, pair(bank, equity, '4'), date='2026-01-12')
+    with driver.session() as s:
+        identifiers = sorted(loading.statement_transactions(s.company, bank))
+        rows = owned(s, None, account=bank)
+        graph = adapters.graph(s, identifiers)
+        refs = references(s)
+    stored = aggregate(rows, graph, bank)
+    assert len(stored['effect_versions']) == 2 and len(stored['certificate_members']) == 1, \
+        'both movements are stored; only the capture describes a smaller world'
+    validate(stored, source=graph, captured_graphs={}, referenced_rows=refs)
+    captures = {v['id']: graph for n in ('openings', 'certificates') for v in stored[n]}
+    with pytest.raises(InvalidStorage, match='capture_population_completeness'):
+        validate(stored, source=graph, captured_graphs=captures, referenced_rows=refs)
+
+
+def test_a_future_dated_movement_stays_in_the_population_and_out_of_the_general_ledger(client, driver):
+    """A certificate keeps what it cannot yet clear, and does not count it."""
+    from bookflow.company import reconciliation_capture as capture
+    bank = account(client, 'Future bank')
+    equity = account(client, 'Future equity', 'equity')
+    journal(client, pair(bank, equity, '1'), date='2026-01-10')
+    journal(client, pair(bank, equity, '0.50'), date='2026-03-15')
+    with driver.session() as s:
+        snapshot = loading.load(s, bank)
+        produced = capture.population(snapshot, bank, '2026-01-31', opening=False)
+        members = capture.members(snapshot, bank, '2026-01-31', opening=False)
+    assert len(members) == 2, 'the later movement belongs to the population'
+    assert len(produced['version_ids']) == 2
+    assert produced['signed_gl_total'] == 100, 'and no part of the general ledger at this cutoff'

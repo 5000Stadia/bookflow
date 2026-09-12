@@ -272,9 +272,16 @@ def test_a_tile_flips_with_registry_state_and_no_template_edit(hosted):
 
     page = browser.get(f"/c/{hosted.company_id}/").text
     assert _tiles(page)["Invoice"][0] == "a"
-    # Reconcile is the planned half of this pair: its commands do not exist yet, so the same
-    # map and the same template render it as an inert div rather than a link.
-    assert _tiles(page)["Reconcile"][0] == "div"
+    # The other half of the pair is whichever tile is still planned, taken from the board rather
+    # than named here: naming one meant this test had to be edited the day that tile went live,
+    # which is the one moment its assertion was worth reading.
+    planned = [item for panel in home.resolve(hosted.company_id) for item in panel.steps
+               if not item.live and item.reason]
+    assert planned, (
+        "Every tile on the board is live, so this half of the flip has no example left. That is "
+        "good news and not a test to patch: retire the assertion deliberately and record that "
+        "the board filled up, rather than reintroducing a planned tile to keep it meaningful.")
+    assert _tiles(page)[planned[0].step.title][0] == "div"
 
 
 def test_registration_and_routing_alone_do_not_deliver_a_live_tile(hosted):

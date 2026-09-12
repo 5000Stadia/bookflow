@@ -2936,8 +2936,8 @@ have explicit transition guards. An attempt's `audit_event_id` identifies its
 latest admitted state event; its `created_*` fields retain original attribution.
 
 `reconciliation_storage_validation.validate` accepts complete explicit new-table
-rows, referenced old-table rows, an already authorized source Graph, and explicit
-historical capture Graphs for openings/certificates. It performs no database read,
+rows, referenced old-table rows, an already authorized source Graph, and -- only
+where a capture is being written -- the live Graph it is proven against. It performs no database read,
 backfill, repair or authorization. It checks ownership even when a migration has
 FKs disabled, proves physical source history/current heads, and checks captured
 populations, whole movements, arithmetic, lineage, claims, receipt tails/hashes,
@@ -2954,10 +2954,12 @@ source transaction. No contextless impact or free-text cause is stored. Event
 before/after account/cutoff deltas and certificate-to-current selected impacts
 are different projections over these immutable facts; neither is a cached value.
 
-`deposit_dependencies.RECONCILIATION` remains None: no reconciliation command is
-registered, and no public capability, snapshot loader or row persister for drafts
-and certificates exists yet. Authoritative history is no longer absent, though --
-see *Statement effect materialization* below. The accepted source has no public
+`deposit_dependencies.RECONCILIATION` remains None. That is now the only switch
+still off: the loader, the persister and four registered commands exist -- see
+*Reconciling an account* below -- and what the feature revision still gates is the
+deposit family's own dependency on reconciliation, which nothing yet supplies a
+resolver for. Authoritative history is no longer absent either; see *Statement
+effect materialization* below. The accepted source has no public
 `company verify` command; private
 validation and SQLite integrity/FK checks do not claim to implement that command.
 
@@ -3042,6 +3044,57 @@ commercial line, or the document itself -- and `reconciliation_models.PRODUCER_R
 is the single declaration the storage CHECK constraints and the private validator
 both read. `tests/test_reconciliation_materialization.py` fails when a producer
 gains an adapter without gaining a key shape.
+
+### Reconciling an account
+
+`company/reconciliation_loading.py` is the only thing that builds a `Snapshot` from
+a database, and every reconciliation read and command goes through it. It is scoped
+to one account rather than a company on purpose: `prove` requires every statement
+leg in the graph it is handed to be represented, so a company-wide graph would let
+one document the adapters cannot represent refuse every account in the file instead
+of its own. It widens to a fixed point, so an operation spanning two accounts pulls
+both populations in rather than being silently mis-scoped, and its row closure
+follows the foreign keys the schema declares rather than a hand-kept table list.
+
+A capture is proven against the live graph where it is written and against the rows
+it stored where it is read. A stored opening or certificate states what was true at
+its cutoff; re-deriving that later asks instead whether those are still the heads,
+which is expected to answer no after any ordinary correction and is exactly the
+state `reconciliation_reports.project` reports as a nonzero `local_replacement_impact`.
+So `validate` runs its graph proof only for captures whose graph the caller supplies,
+and `certificate_gl` and a `population_fingerprint` recomputed from the stored member
+rows carry the tie-out otherwise. `certificate_gl` sums `signed_debit` over members
+that are active and dated on or before the cutoff, not over every member: a
+certificate keeps its future-dated and voided movements in the population, because
+they are part of what it says, and they are no part of the general-ledger total.
+
+Those stored ties are consistency, never completeness. A capture that simply left a
+movement out -- members, population, total and fingerprint all agreeing about the
+smaller world -- satisfies every one of them. Complete head coverage is therefore
+derived from the graph independently, at the moment a capture is written, which is
+what `capture_population_completeness` does and why the write must supply the graph.
+The separate block that checks each stored effect version field by field against the
+source stays on both paths: it reads the graph's append-only history, which still
+holds the revisions those rows name, rather than its current heads, which move.
+
+`reconciliation_capture.population` is the only function that produces a capture
+blob, and it runs the proof to do so -- the same shape as the posting-batch trigger,
+where what makes something proven is that it went through the prover. After writing,
+a command calls `reconciliation_loading.prove_written`, which reloads the account and
+proves every capture named by the operation's own target rows; `validate` separately
+requires those targets to be complete, so a writer cannot store a capture and leave
+it unproven by forgetting to name it.
+
+`commands/reconcile_cmds.py` registers four: `reconcile opening start` adopts an
+account, `reconcile start` opens a statement draft against an adopted opening or the
+opening draft about to become one, `reconcile mark` ticks whole movements, and
+`reconcile finish` certifies a zero-difference statement, writing the opening and the
+certificate together on an account's first reconciliation. `reconcile opening start`
+splits into the noun `reconcile opening`, the way `bill payment` does; the command
+names themselves are frozen by co0022's command enum. Consuming a draft is a new
+revision of it rather than a flag, because the storage will not accept a draft whose
+version moves without one. The home window's Reconcile tile is live against these,
+and `tests/test_reconciliation_browser.py` is the navigation witness that makes it so.
 
 ### Private reconciliation successor models and preparation
 

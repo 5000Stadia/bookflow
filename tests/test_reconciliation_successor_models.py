@@ -468,7 +468,7 @@ def test_card_fee_force_mirror_and_current_period_owner(client,driver):
     assert driver.dump()==before
 
 
-def test_real_shared_input_validation_accepts_json_arrays_without_public_registration():
+def test_real_shared_input_validation_accepts_json_arrays_into_domain_tuples():
     from types import SimpleNamespace
     from bookflow.core import registry,dispatch
     inputs=dict(operation_key='upload',attempt=new_id(),chunk_index=0,items=[dict(kind='seed',payload=dict(account_id=new_id(),kind='insert',date='2026-01-01'))])
@@ -476,7 +476,13 @@ def test_real_shared_input_validation_accepts_json_arrays_without_public_registr
     parsed=dispatch.validate_input(SimpleNamespace(input_model=m.AttemptUpload),inputs)
     assert len(parsed.items)==1 and isinstance(parsed.items[0],m.SeedItem)
     with pytest.raises(Exception):dispatch.validate_input(SimpleNamespace(input_model=m.AttemptUpload),dict(inputs,chunk_index=True))
-    assert not any(c.name.startswith('reconcile ') for c in registry.all_commands())
+    # Four of this family's commands are registered and the rest are not. The names come from
+    # the module that registers them, so the day a fifth lands this reads the new set rather
+    # than failing on a number; what it holds is that the models alone never register anything.
+    from bookflow.commands.reconcile_cmds import reconcile_finish  # noqa: F401  (forces the import)
+    registry.load_all()
+    registered={c.name for c in registry.all_commands() if c.name.startswith('reconcile ')}
+    assert registered and registered<set(m.INPUTS), 'a registered command with no declared input model'
     from bookflow.company.deposit_dependencies import RECONCILIATION
     assert RECONCILIATION.revision is None
 

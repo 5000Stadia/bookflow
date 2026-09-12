@@ -124,7 +124,7 @@ def referenced_rows(db):
             for n in sorted(names)}
 
 
-def load(s, account_id):
+def load(s, account_id, *, prove_captures=()):
     """The Snapshot for one account, as the stored rows have it.
 
     Widens to a fixed point rather than assuming one account is self-contained: if the closure
@@ -145,6 +145,23 @@ def load(s, account_id):
         accounts = found
     authorized = adapters.authority(s, identifiers)
     source = adapters.graph(SimpleNamespace(company=db), identifiers)
-    return preparation.snapshot(rows, source=source, captured_graphs={},
+    return preparation.snapshot(rows, source=source,
+                                captured_graphs={identity: source for identity in prove_captures},
                                 referenced_rows=referenced_rows(db),
                                 authority_transactions=authorized)
+
+
+def prove_written(s, account_id, operation_id):
+    """Reload the account and prove every capture this operation stored against the live ledger.
+
+    The captures are taken from the operation's own target rows rather than from what the caller
+    remembers writing, and `validate` separately requires those targets to be the complete set --
+    so a writer cannot store a capture and leave it unproven by forgetting to name it.
+    """
+    written = set()
+    for name, field in (('operation_openings', 'opening_id'),
+                        ('operation_certificates', 'certificate_id')):
+        table = c.metadata.tables[PREFIX + name]
+        written.update(s.company.conn.execute(
+            sa.select(table.c[field]).where(table.c.operation_id == operation_id)).scalars())
+    return load(s, account_id, prove_captures=written)
