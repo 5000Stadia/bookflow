@@ -151,3 +151,20 @@ def test_demo_reset_recreates_the_complete_seed(client):
     }
     assert reset["trashed_path"] is not None
     assert before == after
+
+
+def test_the_demo_banks_its_takings_so_the_deposit_window_opens_on_something(client):
+    """Deposit is the one noun with a home-window tile, and the demo used to bank nothing.
+
+    Every other seeded receipt goes straight to Checking, which is not what happens when the
+    money is in the till: it sits in Undeposited Funds until somebody takes it to the bank. So
+    a person opening the demo and following the Make deposit tile met an empty list, and the
+    one command with a tile of its own was the one the demo never exercised.
+    """
+    deposits = client.run("deposit query", {}, company=COMPANY)["items"]
+    assert deposits, "the demo banks nothing, so the deposit window opens on an empty list"
+    banked = deposits[0]
+    assert banked["totals"]["bank_total"]["minor_units"] > 0
+    assert banked["current"]["status"] == "posted"
+    assert banked["current"]["active_source_count"] >= 2, (
+        "one trip to the bank with more than one receipt in it")
