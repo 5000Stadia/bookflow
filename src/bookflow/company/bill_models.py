@@ -149,10 +149,17 @@ class BillPostInput(_BillFields):
     """A new bill, entered outright or made from a purchase order.
 
     ``purchase_order`` names an order to enter this bill from. What the order says then fills
-    in what the caller did not: the vendor, the terms, the class, the memo, and one expense
-    row per ordered line. Anything supplied here wins over the order, so a bill that arrived
-    for a different amount is entered by supplying ``expenses`` and letting the rest carry.
-    The order is closed and permanently recorded as consumed by this bill.
+    in what the caller did not: the vendor, the terms, the class, the memo, and its lines --
+    an ordered item becomes an item row, an ordered account line becomes an expense row. A
+    header field supplied here wins over the order on its own.
+
+    The two line grids are one answer, not two fields. Write either ``expenses`` or ``items``,
+    an empty one included, and the bill is exactly the lines written here: a caller who writes
+    a line is saying what arrived, and filling the other grid in from the order would bill for
+    goods nobody said came. To change one grid and keep the other, send both.
+
+    The order is closed and permanently recorded as consumed by this bill -- in full, even when
+    this bill covers only part of what was ordered. There is no remaining quantity.
     """
 
     date: _Date

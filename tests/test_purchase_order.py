@@ -390,6 +390,45 @@ def test_what_the_caller_supplies_wins_over_what_the_order_says(books):
     assert books['run']('purchase-order show', {'purchase_order': order['id']})['consumed'] is True
 
 
+def test_a_short_delivery_takes_no_stock_the_vendor_never_sent(books):
+    """The money half of this is covered above; this is the half that moves goods.
+
+    The other short-delivery test orders a ``non_inventory_part``, so it proves the payable and
+    not the stock -- ``_stock_entries`` filters to ``inventory.TRACKED_TYPES`` and never saw that
+    line. An ordered item that IS tracked is the case that matters: carrying the order's item
+    grid in behind the caller's own lines would take delivery of goods nobody received, and the
+    books would carry stock that does not exist on a shelf anywhere.
+    """
+    client, company = books['client'], books['company']
+    accounts = client.account.query(company=company, limit=200)['items']
+    stock = client.item.create(
+        company=company, name='Copper Elbow', type='inventory_part', price='4.50',
+        description='3/4in copper elbow',
+        purchase_description='3/4in copper elbow', cost='1.80',
+        cogs_account_id=next(a['id'] for a in accounts if a['type'] == 'cost_of_goods_sold'),
+        income_account_id=next(a['id'] for a in accounts if a['type'] == 'income'))['id']
+    order = books['run']('purchase-order post', dict(
+        vendor=books['vendor'], date='2026-06-01', number='PO-STOCK',
+        lines=[{'item': stock, 'quantity': '40', 'rate': '1.80'}]), reason='Order 40 elbows')
+
+    # The freight arrived and the goods did not. The caller says so by writing the one line.
+    bill = books['run']('bill post', dict(
+        date='2026-06-16', purchase_order=order['id'], memo='Freight only; goods to follow',
+        expenses=[{'account': books['freight'], 'amount': '25.00', 'memo': 'Delivery'}]),
+        reason='Enter the freight that did arrive')
+
+    # Stock first, deliberately. The line grid is the mechanism and the shelf is the claim, so
+    # the shelf is asserted before anything that would fail earlier and hide it.
+    held = books['run']('report stock-status', {'as_of': '2026-06-16', 'limit': 20})
+    rows = [row for row in held['rows'] if row['item_id'] == stock]
+    on_hand = rows[0]['quantity_on_hand'] if rows else '0'
+    assert on_hand == '0', (
+        f'{on_hand} elbows were received against a bill that never claimed them')
+    assert rows[0]['asset_value']['amount'] == '0.00' if rows else True
+    assert bill['revision']['items'] == []
+    assert bill['total_minor_units'] == 2500
+
+
 def test_the_bill_cannot_be_owed_to_a_different_vendor_than_the_order(books):
     order = _order(books)
     with pytest.raises(bookflow.BookflowError) as caught:

@@ -23,8 +23,9 @@ _LINES = (
     " row's class and a row without one takes the bill's `class_id`; set `class_mode` to `none`"
     ' to leave one row unclassified even when the bill carries a class. `billable` marks a cost'
     ' to pass on to the named customer later and requires one; naming a job without it simply'
-    ' attributes the cost. Only service, non-inventory part and other-charge items can be'
-    ' bought here: receiving an inventory part is not implemented and is refused by name.'
+    ' attributes the cost. Every item kind the company buys can be bought here, and an'
+    ' inventory part also moves its quantity on hand and its cost -- an item row is the only'
+    ' row that can, because an expense row names no item.'
 )
 _HEADER = (
     ' `terms` defaults to the vendor’s own terms and fixes `due_date`; give `due_date` to override'
@@ -51,11 +52,16 @@ DESCRIPTIONS = {
     'post': ('Enter a vendor bill. Each entered line debits its own account and Accounts Payable is'
              ' credited the total, so the bill stands open at that total until it is paid.'
              ' `purchase_order` enters this bill from an order: the order fills in the vendor,'
-             ' the terms, the class, the memo and one expense row per ordered line, and anything'
-             ' supplied here wins over it, so a delivery that came in at a different price is'
-             ' entered by supplying `expenses` and letting the rest carry. The order is then'
+             ' the terms, the class, the memo and its own lines -- an ordered item becomes an'
+             ' item row and an ordered account line becomes an expense row. A header field'
+             ' supplied here wins over the order on its own. The two line grids are one answer:'
+             ' write either `expenses` or `items`, an empty one included, and the bill is'
+             ' exactly the lines written here, because a caller who writes a line is saying'
+             ' what arrived. To change one grid and keep the other, send both. The order is then'
              ' closed and permanently recorded as consumed by this bill, so it can never be'
-             ' billed twice; a withdrawn order is refused. Voiding the bill does not free the'
+             ' billed twice -- in full, even when this bill covers only part of what was'
+             ' ordered; there is no remaining quantity and no backorder. A withdrawn order is'
+             ' refused. Voiding the bill does not free the'
              ' order again: enter the replacement bill outright.'
              + _HEADER + _LINES),
     'update': ('Correct a bill. The old accounting is reversed at its original date and replaced in'
