@@ -529,6 +529,8 @@ FIELDS: dict[str, dict[str, tuple]] = {
         'item': (_P, (), 'Sales line profile; explicitly excluded by the owning plan.'),
         'item_type': (_P, (), 'Sales line profile; explicitly excluded by the owning plan.'),
         'income_account': (_P, (), 'Sales line profile; explicitly excluded by the owning plan.'),
+        'cogs_account': (_P, (), 'Sales line profile; explicitly excluded by the owning plan.'),
+        'asset_account': (_P, (), 'Sales line profile; explicitly excluded by the owning plan.'),
         'unit': (_P, (), 'Sales line profile; explicitly excluded by the owning plan.'),
         'class_id': (_P, (), 'Sales line profile; explicitly excluded by the owning plan.'),
         'tax_code': (_P, (), 'Sales line profile; explicitly excluded by the owning plan.'),
