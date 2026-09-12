@@ -35,6 +35,26 @@ def digest(value):
     return sha256(canonical(value).encode()).hexdigest()
 
 
+def population_fingerprint(values):
+    """What a captured population fingerprints: the stored rows, never the present ledger.
+
+    A capture says what was true at a cutoff, so the number that later proves it has to come
+    from the rows the capture stored -- the ledger underneath is expected to move, and asking
+    it again would only ever re-answer a different question. One definition, imported by the
+    writer that stores a capture and by the validation that reads one back, because two
+    spellings of a fingerprint are two fingerprints.
+    """
+    # A snapshot column is text in the database and a decoded dict once `validate` has read it,
+    # and this is called from both sides, so the one shape it works in is the decoded one.
+    def movement(v):
+        found=v['movement_snapshot']
+        return found if type(found) is dict else json.loads(found)
+    return digest(sorted((dict(key_id=v['key_id'],version_id=v['id'],source_version=v['source_version'],
+                               account_id=v['account_id'],effective_date=v['effective_date'],
+                               signed_debit=v['signed_debit'],active=v['active'],
+                               movement=movement(v)) for v in values),key=canonical))
+
+
 class Strict(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True, frozen=True)
 
@@ -374,10 +394,21 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
             whole={e['id'] for e in versions.values() if e['active'] and e['movement_snapshot']==v['movement_snapshot']}
             require(whole<=selected,'incomplete_movement')
         return values
+    # A capture is proven against the live graph where it is written and validated against the
+    # rows it stored where it is read. Re-deriving it later does not test what it says -- "at
+    # this cutoff these were the heads and the signed total was X" -- it asks whether they are
+    # still the heads, which is expected to answer no after any ordinary correction and is the
+    # very state `reconciliation_reports.project` exists to report. So a graph is optional here
+    # and every capture whose graph is supplied is proven; the stored-row ties below run either
+    # way. What keeps the write honest is that the rows cannot be edited afterwards:
+    # `reconciliation_effect_versions` and `reconciliation_keys` carry no-update and no-delete
+    # triggers from co0044, so there is no tampering for a later re-proof to catch.
     captured_graphs = captured_graphs or {}
     expected_captures={v['id'] for name in ('openings','certificates') for v in r[name]}
-    require(set(captured_graphs)==expected_captures,'capture_proof_inventory')
+    require(set(captured_graphs)<=expected_captures,'capture_proof_inventory')
     def capture(owner,pop,opening=False):
+        """The write-time proof. Absent a graph the stored-row ties below stand alone."""
+        if owner['id'] not in captured_graphs:return
         from bookflow.company.reconciliation_adapters import enumerate_graph
         from bookflow.company.reconciliation_proof import prove
         graph=captured_graphs[owner['id']]
@@ -388,7 +419,6 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
         expected=[identity.get((v.ref.producer,v.ref.transaction_id,v.ref.role,v.ref.component_id,v.version_id)) for v in values]
         require(None not in expected and Counter(expected)==Counter(pop['version_ids']),'capture_population_completeness')
         require(pop['signed_gl_total']==total==gl,'capture_gl')
-        require(pop['source_fingerprint']==digest(sorted((v.model_dump(mode='json') for v in values),key=canonical)),'capture_fingerprint')
     def amount(m):
         v=versions[m['version_id']]; return -v['signed_debit'] if v['account_type']=='credit_card' else v['signed_debit']
     for o in r['openings']:
@@ -400,6 +430,7 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
         require(all(versions[m['version_id']]['active'] and versions[m['version_id']]['effective_date']<=o['opening_date'] for m in ms),'opening_eligibility')
         require(sum(amount(m) for m in ms if m['classification']=='covered')==o['balance'],'opening_balance')
         require(sum(versions[m['version_id']]['signed_debit'] for m in ms)==pop['signed_gl_total'],'opening_gl')
+        require(pop['source_fingerprint']==population_fingerprint(versions[m['version_id']] for m in ms),'capture_fingerprint')
     for c in r['certificates']:
         ms=members('certificate_members','certificate_id',c['id']); pop=c['captured_source_snapshot']
         capture(c,pop)
@@ -429,6 +460,11 @@ def validate(rows, *, source=None, captured_graphs=None, referenced_rows=None):
         require(c['beginning_balance']==previous.get('ending_balance',previous.get('balance')),'chain_adjacency')
         require(c['statement_date']>previous.get('statement_date',previous.get('opening_date')),'chain_dates')
         require(c['currency']==previous['currency'],'chain_currency')
+        # The certificate counterpart of `opening_gl`. Without it, dropping the graph re-proof
+        # would leave a certificate with no tie at all between its captured total and the rows
+        # it captured -- `certificate_balance` only ties the selected subset to the statement.
+        require(sum(versions[m['version_id']]['signed_debit'] for m in ms if m['eligible_at_cutoff'])==pop['signed_gl_total'],'certificate_gl')
+        require(pop['source_fingerprint']==population_fingerprint(versions[m['version_id']] for m in ms),'capture_fingerprint')
     for name,parent in [('draft_revisions','draft_id'),('proposal_revisions','proposal_id')]:
         for v in r[name]:
             previous=v['previous_revision_id']

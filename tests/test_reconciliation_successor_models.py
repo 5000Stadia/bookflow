@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from bookflow.core.ids import new_id
 from bookflow.company import reconciliation_commands_models as m
 from bookflow.company import reconciliation_preparation as p,reconciliation_drafts as d,reconciliation_queries as q,reconciliation_attempts as a,reconciliation_reports as r,reconciliation_amendments as am,reconciliation_operations as op
-from bookflow.company.reconciliation_storage_validation import Header,Evidence,canonical,digest
+from bookflow.company.reconciliation_storage_validation import Header,Evidence,canonical,digest,population_fingerprint
 from tests.test_reconciliation_storage_validation import captured,aggregate,references,blank,owned_storage  # noqa: F401  (autouse)
 from tests.test_reconciliation_adapters import account,journal,pair,run
 from tests.test_deposit_lifecycle import driver
@@ -204,7 +204,7 @@ def two_statements(client,driver,prefix="F3"):
     rows['certificate_members']=[];rows['claims']=[];rows['current_members']=[]
     _,current=adapters.enumerate_graph(g)
     for cert in rows['certificates']:
-        pop=json.loads(cert['captured_source_snapshot']);pop.update(cutoff=cert['statement_date'],version_ids=[v['id'] for v in rows['effect_versions']],signed_gl_total=6000 if cert is first else 8000,source_fingerprint=digest(sorted((v.model_dump(mode='json') for v in current),key=canonical)))
+        pop=json.loads(cert['captured_source_snapshot']);pop.update(cutoff=cert['statement_date'],version_ids=[v['id'] for v in rows['effect_versions']],signed_gl_total=6000 if cert is first else 8000,source_fingerprint=population_fingerprint(rows['effect_versions']))
         cert['captured_source_snapshot']=canonical(pop)
         for i,v in enumerate(rows['effect_versions']):
             jan=v['effective_date']<='2026-01-31'

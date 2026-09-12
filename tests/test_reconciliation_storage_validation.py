@@ -12,7 +12,7 @@ import sqlite3
 
 import pytest
 from bookflow.company import schema, reconciliation_adapters as adapters
-from bookflow.company.reconciliation_storage_validation import validate, InvalidStorage, canonical, digest
+from bookflow.company.reconciliation_storage_validation import validate, InvalidStorage, canonical, digest, population_fingerprint
 from bookflow.core.ids import new_id
 from tests.test_deposit_lifecycle import driver, additional_document, replacement
 from tests.test_service_sales_lifecycle import sale, COMPANY
@@ -131,7 +131,7 @@ def aggregate(rows,g,bank):
     rows['draft_revisions']=[dict(id=dr,draft_id=draft,account_id=bank,revision_number=1,previous_revision_id=None,header_snapshot=canonical(dict(format=1,opening_date=None,statement_date='2026-01-31',entered_balance=1000,evidence=evidence,preferences=prefs)),base_chain_version=0,base_opening_id=None,base_head_id=None,repair_of_opening_id=None,repair_of_certificate_id=None,**created)]
     pop=dict(format=1,account_id=bank,currency='USD',cutoff='2026-01-01',version_ids=[],signed_gl_total=0,source_fingerprint=digest([]))
     rows['openings']=[dict(id=opening,account_id=bank,generation=1,opening_date='2026-01-01',balance=0,currency='USD',predecessor_opening_id=None,origin_draft_revision_id=dr,evidence_snapshot=canonical(evidence),authorized_source_snapshot=canonical(pop),**created)]
-    pop.update(cutoff='2026-01-31',version_ids=[v['id']],signed_gl_total=1000,source_fingerprint=digest(sorted((e.model_dump(mode='json') for e in adapters.enumerate_graph(g)[1] if e.account_id==bank),key=canonical)))
+    pop.update(cutoff='2026-01-31',version_ids=[v['id']],signed_gl_total=1000,source_fingerprint=population_fingerprint([v]))
     rows['certificates']=[dict(id=certificate,account_id=bank,generation=1,statement_date='2026-01-31',opening_id=opening,previous_certificate_id=None,supersedes_certificate_id=None,origin_draft_revision_id=dr,beginning_balance=0,ending_balance=1000,selected_sum=1000,original_difference=0,final_difference=0,positive_sum=1000,negative_sum=0,positive_count=1,negative_count=0,currency='USD',convention='bank',captured_source_snapshot=canonical(pop),issuer_snapshot=rev['issuer_snapshot'],**created)]
     rows['certificate_members']=[dict(certificate_id=certificate,account_id=bank,key_id=v['key_id'],version_id=v['id'],classification='selected',eligible_at_cutoff=1,ordinal=0)]
     opening_draft,opening_revision=new_id(),new_id()
