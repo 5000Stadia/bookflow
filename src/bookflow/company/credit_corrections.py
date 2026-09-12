@@ -1,13 +1,10 @@
-"""Credit corrections over immutable captures and one writer transaction.
-
-Consumed-credit corrections and source-dimension changes remain unimplemented pending the
-owning contract decision. This module implements the independent, unconsumed path.
-"""
+"""Credit corrections over immutable captures and one writer transaction."""
 from bookflow.company import credits, document_effects as effects, journals, schema as c
 from bookflow.company.credit_models import CreditMemoWriteOutput
 from bookflow.company.sales_facts import SalesLineProfile
 from bookflow.company.sales_models import _invalid
 from bookflow.core.ids import new_id
+from bookflow.company.credit_restatement import dependencies
 from bookflow.core.registry import Plan
 
 

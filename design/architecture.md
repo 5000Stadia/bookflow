@@ -3524,7 +3524,7 @@ memo as readily as a receipt, and a credit reports its current settlement throug
 `credit_source_keys` carries the same party/receivable/currency triple `payment_component_keys`
 does.
 
-**Credit correction.** `credit-memo update` implements the unconsumed correction path through
+**Credit correction.** `credit-memo update` implements correction through
 `credit_corrections`, the shared credit commercial resolver and document persistence. Omitted
 lines copy their exact captured quantities, item facts, tax cells and source intervals; supplied
 lines replace the grid with retained permanent line identities where supplied. Claims are
@@ -3534,13 +3534,24 @@ checks exact claim inverses and verifies replacement arithmetic separately. Expe
 preview fingerprints, idempotent retries and both accounting dates remain guarded. Exact no-op
 patches create no history and work independently of active applications/refunds.
 
-**Unresolved correction scope.** Actual changes to applied/refunded credits remain unimplemented
-pending the settlement/refund correction contract. Customer/AR changes also remain unimplemented:
-the model accepts them and storage permits different immutable source keys for distinct
-customer/AR/currency dimensions, but the current readers select the first key for a transaction.
-Changing the revision alone cannot change settlement ownership; selecting and reading the
-current dimension key consistently remains unimplemented. This is a partial increment,
-not completion of the credit update lifecycle.
+`credit_restatement` retains applications and refund consumptions when their combined use
+fits the corrected capacity. Used credits keep exact customer/AR/currency ownership and cannot
+move later than their earliest use. Each active allocation is exactly cancelled and replaced
+against current revision components, preserving target captures and amounts. An application
+retains its ID when one replacement component covers it; otherwise exact unapply/replacement
+edges keep one source component per application. Refund consumptions receive exact releases
+and replacement consumes against the same refund revision, date and key. The validator checks
+cancellation coverage, conserved target attribution and refund amounts, and combined capacity
+per component. Related invoice/refund headers advance once in the same audited transaction.
+Fingerprints include live uses, allocations, related headers and the closing date; the writer
+rebuild compares them before persistence. Existing idempotency keys govern retries.
+
+Unconsumed standalone corrections may change customer or AR. Immutable source keys are unique
+by transaction/customer/AR/currency and reused when returning to earlier dimensions. Current
+reads select the key named by current revision components, including paged worth reads; explicit
+historical key joins in refund labels and receivable reports retain their historical meaning.
+Linked returns continue to enforce exact invoice source dimensions. Credit void still refuses
+active applications or refunds.
 
 `customer-refund` has no update either, and for
 the settled reason: a refund is one customer, one amount, one date and one account, so changing

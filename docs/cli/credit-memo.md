@@ -1889,7 +1889,7 @@ Example JSON output:
 
 ## `credit-memo update`
 
-Correct an unconsumed credit memo with an immutable revision and exact reversal/replacement postings. Omitted lines retain their captured amounts and source intervals; supplied lines replace the grid, retaining named line_id values. Return claims are released and retaken atomically. Applied/refunded corrections and changes of customer or receivable account are not implemented in this increment.
+Correct a credit memo with an immutable revision and exact reversal/replacement postings. Omitted lines retain their captured amounts and source intervals; supplied lines replace the grid, retaining named line_id values. Return claims are released and retaken atomically. Existing applications and refunds are retained with replacement attribution when their combined use fits the corrected total. A used credit requires a reason, unchanged customer/receivable/currency, and a date no later than its earliest use; all affected dates must be open. Related invoice and refund versions advance. If a use spans replacement lines, its application is cancelled and replaced by one application per line; invoice settlement exposes the current application IDs for later unapply. An unused standalone credit may change customer or receivable account; linked returns keep exact source ownership. Preview with expected_version, then save with expected_facts_fingerprint and an idempotency key reused for retries.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -2633,6 +2633,8 @@ Example JSON output:
 | Code | Meaning |
 |---|---|
 | `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_APPLICATION_INCOMPATIBLE` | Application source and target must have the same party, receivable account and currency. |
+| `E_APPLIED_EXCEEDS_TOTAL` | The corrected total is below active settlement capacity. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -2643,6 +2645,7 @@ Example JSON output:
 | `E_DUPLICATE_NUMBER` | That document number is already used in this document's number series. |
 | `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
 | `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_HAS_APPLICATIONS` | Unapply the active settlements before this change. |
 | `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
 | `E_INACTIVE_REFERENCE` | A new or changed reference must name an active record. |
 | `E_INTERNAL` | Internal failure. |

@@ -451,17 +451,29 @@ def test_the_same_credit_memo_through_python_cli_http_and_mcp(root, tmp_path):
                 assert replay['id'] == credit['id'] and replay['idempotent_replay']
                 assert credit['total']['amount'] == '40.00'
 
+                bank = (await matrix.call(surface, 'account create', dict(name='Credit refund bank', type='bank')))['id']
+                method = next(row['id'] for row in (await matrix.call(surface, 'payment-method list', {}))['items']
+                              if row['kind'] == 'check')
+                target = await matrix.call(surface, 'invoice show', dict(invoice='PARITY-INV-1'))
+                await matrix.call(surface, 'customer-credit apply', dict(
+                    credit_memo=credit['id'], expected_version=credit['version'], date='2026-03-10',
+                    applications=[dict(invoice=target['id'], expected_version=target['version'], amount='10.00')]))
+                await matrix.call(surface, 'customer-refund post', dict(
+                    date='2026-03-12', funding_account=bank, method=method,
+                    sources=[dict(credit_memo=credit['id'], amount='5.00')]))
+                credit = await call('credit-memo show', dict(credit_memo=credit['id']))
                 correction = dict(credit_memo=credit['id'], expected_version=credit['version'],
                     memo='Corrected through the same command', lines=[dict(
                         line_id=credit['revision']['lines'][0]['line_id'], item=item, quantity='0.5')])
                 preview = await call('credit-memo update', correction, dry_run=True)
                 assert preview['total']['amount'] == '20.00' and preview['dry_run']
-                assert (await call('credit-memo show', {'credit_memo': credit['id']}))['version'] == 1
+                assert (await call('credit-memo show', {'credit_memo': credit['id']}))['version'] == 2
                 corrected = await call('credit-memo update', correction, idempotency_key='credit-update-1')
-                assert corrected['id'] == credit['id'] and corrected['version'] == 2
+                assert corrected['id'] == credit['id'] and corrected['version'] == 3
                 assert corrected['total']['amount'] == '20.00'
+                assert corrected['source_current']['available_minor_units'] == 500
                 retried = await call('credit-memo update', correction, idempotency_key='credit-update-1')
-                assert retried['idempotent_replay'] and retried['version'] == 2
+                assert retried['idempotent_replay'] and retried['version'] == 3
 
                 await call('credit-memo show', {'credit_memo': credit['id']})
                 await call('credit-memo history', {'credit_memo': credit['id'], 'limit': 10})

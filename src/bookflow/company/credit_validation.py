@@ -268,7 +268,8 @@ def validate_update(plan, s, ctx):
              and revision['revision_number'] == previous['revision']['revision_number'] + 1,
              'correction revision chain')
     _require(header['current_revision_id'] == revision['id'], 'current revision pointer')
-    _require(not pending['credit_source_keys'], 'correction keeps its permanent source identity')
+    key = credits.current_key(s, pending['credit_components'], pending)
+    _require(len(pending['credit_source_keys']) <= 1, 'one current dimension key')
     batches = pending['posting_batches']
     inverses = [row for row in batches if row['kind'] == 'reversal']
     replacements = [row for row in batches if row['kind'] == 'replacement']
@@ -320,11 +321,11 @@ def validate_update(plan, s, ctx):
     business['posting_lines'] = [row for row in pending['posting_lines'] if row['batch_id'] == replacement['id']]
     ids = {row['id'] for row in business['posting_lines']}
     business['posting_line_sources'] = [row for row in pending['posting_line_sources'] if row['posting_line_id'] in ids]
-    business['credit_source_keys'] = [previous['key']]
+    business['credit_source_keys'] = [key]
     validate(Plan(plan.preview, dict(data, pending=business)), s, ctx, batch_kind='replacement')
-    _require(not credits.active_applications(s, header['id'])
-             and not credits.active_consumptions(s, key_id=previous['key']['id']),
-             'consumed-credit correction remains unimplemented')
+    from bookflow.company.credit_restatement import compatible, validate as validate_uses
+    compatible(s, ctx, previous, data['resolved'])
+    validate_uses(s, data)
 
 
 def _posting_attribution(pending, lines, profile):

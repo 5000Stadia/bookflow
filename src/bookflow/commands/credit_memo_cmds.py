@@ -137,16 +137,25 @@ def _update(inp, ctx, s):
 
 credit_memo_update = command(
     'credit-memo update', scope='company',
-    description=('Correct an unconsumed credit memo with an immutable revision and exact reversal/'
-                 'replacement postings. Omitted lines retain their captured amounts and source intervals;'
-                 ' supplied lines replace the grid, retaining named line_id values. Return claims are'
-                 ' released and retaken atomically. Applied/refunded corrections and changes of customer'
-                 ' or receivable account are not implemented in this increment.'),
+    description=('Correct a credit memo with an immutable revision and exact reversal/replacement'
+                 ' postings. Omitted lines retain their captured amounts and source intervals; supplied'
+                 ' lines replace the grid, retaining named line_id values. Return claims are released'
+                 ' and retaken atomically. Existing applications and refunds are retained with'
+                 ' replacement attribution when their combined use fits the corrected total. A used'
+                 ' credit requires a reason, unchanged customer/receivable/currency, and a date no later'
+                 ' than its earliest use; all affected dates must be open. Related invoice and refund'
+                 ' versions advance. If a use spans replacement lines, its application is cancelled'
+                 ' and replaced by one application per line; invoice settlement exposes the current'
+                 ' application IDs for later unapply. An unused standalone credit may change customer'
+                 ' or receivable account; linked returns keep exact source ownership. Preview with'
+                 ' expected_version, then save with expected_facts_fingerprint and an idempotency key'
+                 ' reused for retries.'),
     input_model=CreditMemoUpdateInput, output_model=CreditMemoWriteOutput, writes={'company'},
     required_role='standard', capability='ledger.post', accepts_idempotency_key=True,
     positional=['credit_memo'], clearable=True,
     version_source=('credit-memo show', 'credit_memo', 'version'),
-    error_codes=POST_ERRORS + ['E_VERSION_CONFLICT'])(_update)
+    error_codes=POST_ERRORS + ['E_VERSION_CONFLICT', 'E_REASON_REQUIRED',
+        'E_APPLICATION_INCOMPATIBLE', 'E_APPLIED_EXCEEDS_TOTAL', 'E_HAS_APPLICATIONS'])(_update)
 credit_memo_update.ledger = True
 credit_memo_update.applier(credits.apply)
 CREDIT_MEMO_COMMANDS.append(credit_memo_update)

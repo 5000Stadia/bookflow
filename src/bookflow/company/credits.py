@@ -64,6 +64,9 @@ TABLE_KINDS = (
     ('credit_source_keys', 'credit_source_key', 'id'),
     ('credit_components', 'credit_component', 'id'),
     ('credit_source_claims', 'credit_source_claim', 'id'),
+    ('applications', 'application', 'id'),
+    ('application_allocations', 'application_allocation', 'id'),
+    ('customer_refund_consumptions', 'customer_refund_consumption', 'id'),
 )
 MONEY_COLUMNS = ('unit_price_minor_units', 'net_minor_units', 'tax_minor_units', 'gross_minor_units')
 
@@ -198,8 +201,7 @@ def commercial(s, inp, *, document_id, pending, previous=None):
         if profile_row(s, old_revision)['origin'] == 'return':
             raise _invalid('source_invoice', 'return a line of an invoice for this exact customer, '
                                              'receivable account and currency')
-        field = 'customer' if profile.customer.id != previous['key']['party_id'] else 'ar_account'
-        raise _invalid(field, 'Changing the immutable credit source ownership is not implemented.')
+
     number, sequence = effects.allocate(s, DOCUMENT_TYPE,
         inp.number if 'number' in inp.model_fields_set or not previous else old_revision['number'], document_id)
     info = dict(s.company.conn.execute(sa.select(c.company_info)).mappings().one())
@@ -287,7 +289,9 @@ def commercial(s, inp, *, document_id, pending, previous=None):
                                    for key, field in custom_plan.snapshot.items()})
     fingerprint = hashlib.sha256(json_text(dict(
         company_id=info['id'], type=DOCUMENT_TYPE, version=previous['header']['version'] if previous else 0, content=semantic,
-        tax_attribution=attribution.model_dump(mode='json') if attribution else None)).encode()).hexdigest()
+        tax_attribution=attribution.model_dump(mode='json') if attribution else None,
+        dependencies=correction.dependencies(s, previous) if previous else None,
+        closing_date=info['closing_date'])).encode()).hexdigest()
     if inp.expected_facts_fingerprint is not None and inp.expected_facts_fingerprint != fingerprint:
         raise BookflowError('E_PREVIEW_STALE', details={'facts_fingerprint': fingerprint})
     return dict(profile=profile, origin=origin, date=date, number=number, sequence=sequence,
@@ -365,8 +369,10 @@ def prepare(s, ctx, inp, *, previous=None):
         from bookflow.company.credit_corrections import unchanged, unchanged_plan
         if unchanged(s, previous, resolved):
             return unchanged_plan(s, inp, previous, resolved['fingerprint'])
-        if previous['applications'] or previous['consumptions']:
-            raise _invalid('credit_memo', 'Correction of an applied or refunded credit memo is not implemented.')
+        from bookflow.company.credit_restatement import compatible
+        compatible(s, ctx, previous, resolved)
+    if header['version'] > 9223372036854775807:
+        raise BookflowError('E_VALUE_RANGE')
     journals.open_dates(s, [resolved['date']] + ([previous['revision']['date']] if previous else []))
     _posting_accounts_active(s, resolved)
     profile, currency = resolved['profile'], resolved['currency']
@@ -417,13 +423,22 @@ def prepare(s, ctx, inp, *, previous=None):
             raise _invalid('credit_memo', 'credit memo has ambiguous current posting evidence')
         old_batch = batches[0]
         effects.reverse(s, header, previous['revision'], old_batch, event, created, pending)
-        resolved['source_key'] = previous['key']
+        candidates = effects.rows(s, c.credit_source_keys,
+            c.credit_source_keys.c.transaction_id == header['id'],
+            c.credit_source_keys.c.party_id == profile.customer.id,
+            c.credit_source_keys.c.ar_account_id == profile.control_account.id,
+            c.credit_source_keys.c.currency == currency)
+        resolved['source_key'] = candidates[0] if candidates else None
     batch = dict(**created(), transaction_id=header['id'], revision_id=revision['id'],
                  kind='replacement' if previous else 'original',
                  effective_date=revision['date'], reverses_batch_id=None, replaces_batch_id=old_batch['id'] if old_batch else None,
                  audit_event_id=event)
     pending['posting_batches'].append(batch)
     _business_postings(header, revision, batch, resolved, pending, created, audited)
+    restatement = None
+    if previous:
+        from bookflow.company.credit_restatement import prepare as restate
+        restatement = restate(s, previous, pending, created, event)
     output = CreditMemoWriteOutput(**summary(header, revision, pending['credit_profiles'][0]),
                                    revision=revision_output(s, revision, pending),
                                    source_current=_source_current(s, header['id'], pending),
@@ -431,7 +446,7 @@ def prepare(s, ctx, inp, *, previous=None):
     plan = Plan(output, dict(input=inp, operation='update' if previous else 'post', changed=True, header=header,
                              before=previous['header'] if previous else None, previous=previous,
                              pending=pending, sequence=resolved['sequence'], event=event,
-                             custom_plan=resolved['custom_plan'], resolved=resolved))
+                             custom_plan=resolved['custom_plan'], resolved=resolved, restatement=restatement))
     from bookflow.company.credit_validation import validate, validate_update
     (validate_update if previous else validate)(plan, s, ctx)
     return plan
@@ -619,8 +634,12 @@ def apply(plan, ctx, s):
     fresh = planners[operation](s, ctx, plan.data['input'])
     from bookflow.company.credit_validation import validate, validate_void, validate_update
     {'post': validate, 'void': validate_void, 'update': validate_update}[operation](fresh, s, ctx)
+    from bookflow.company.credit_restatement import Companion
+    if fresh.preview.facts_fingerprint != plan.preview.facts_fingerprint:
+        raise BookflowError('E_PREVIEW_STALE', details={'reason': 'credit_facts'})
     return effects.persist(fresh, ctx, s, command_name='credit-memo ' + operation,
-                           table_kinds=TABLE_KINDS)
+                           table_kinds=TABLE_KINDS,
+                           companion=Companion(fresh.data.get('restatement') or {}))
 
 
 # ------------------------------------------------------------------ reading it back
@@ -764,6 +783,16 @@ def _component_use(s, transaction_id, key_id):
     return used
 
 
+def current_key(s, components, pending=None):
+    """The current revision's positive components select its permanent dimension key."""
+    identifiers = {row['key_id'] for row in components}
+    if len(identifiers) != 1:
+        raise BookflowError('E_INTERNAL', message='Ambiguous current credit source ownership.')
+    identifier = next(iter(identifiers))
+    rows = [row for row in (pending or {}).get('credit_source_keys', []) if row['id'] == identifier]
+    return (rows or effects.rows(s, c.credit_source_keys, c.credit_source_keys.c.id == identifier))[0]
+
+
 def facts(s, selector, *, write=False):
     """The one place a credit's remaining worth is computed, for every caller.
 
@@ -777,12 +806,11 @@ def facts(s, selector, *, write=False):
     authorize(s, [header['id']], write=write)
     revision = effects.rows(s, c.transaction_revisions,
                             c.transaction_revisions.c.id == header['current_revision_id'])[0]
-    key = effects.rows(s, c.credit_source_keys,
-                       c.credit_source_keys.c.transaction_id == header['id'])[0]
     components = effects.rows(s, c.credit_components,
                               c.credit_components.c.transaction_id == header['id'],
                               c.credit_components.c.revision_id == revision['id'],
                               order=c.credit_components.c.id)
+    key = current_key(s, components)
     posted = header['status'] == 'posted'
     applications = active_applications(s, header['id'])
     consumptions = active_consumptions(s, key_id=key['id'])
@@ -805,11 +833,6 @@ def _source_current(s, transaction_id, pending=None):
     empty is what keeps this true once `customer-credit apply` and `customer-refund post`
     start writing rows against these keys.
     """
-    keys = [row for row in (pending or {}).get('credit_source_keys', [])
-            if row['transaction_id'] == transaction_id]
-    if not keys:
-        keys = effects.rows(s, c.credit_source_keys, c.credit_source_keys.c.transaction_id == transaction_id)
-    key = keys[0]
     header = effects.rows(s, c.transactions, c.transactions.c.id == transaction_id)
     components = [row for row in (pending or {}).get('credit_components', [])
                   if row['transaction_id'] == transaction_id]
@@ -818,6 +841,7 @@ def _source_current(s, transaction_id, pending=None):
         components = effects.rows(s, c.credit_components,
                                   c.credit_components.c.transaction_id == transaction_id,
                                   c.credit_components.c.revision_id == revision)
+    key = current_key(s, components, pending)
     capacity = sum(row['amount_minor_units'] for row in components) if (not header or header[0]['status'] == 'posted') else 0
     applied = sum(row['amount_minor_units'] for row in active_applications(s, transaction_id))
     refunded = sum(row['amount_minor_units'] for row in active_consumptions(s, key_id=key['id']))
@@ -871,8 +895,11 @@ def _page_worth(s, headers):
     identifiers = [header['id'] for header in headers]
     if not identifiers:
         return {}
-    keys = {row['transaction_id']: row for row in effects.rows(
-        s, c.credit_source_keys, c.credit_source_keys.c.transaction_id.in_(identifiers))}
+    keys = {row['transaction_id']: dict(row) for row in s.company.conn.execute(
+        sa.select(c.credit_source_keys).distinct().join(c.credit_components,
+            c.credit_components.c.key_id == c.credit_source_keys.c.id).join(c.transactions,
+            c.transactions.c.current_revision_id == c.credit_components.c.revision_id).where(
+            c.credit_source_keys.c.transaction_id.in_(identifiers))).mappings()}
     capacity = {}
     component = c.credit_components
     for transaction_id, total in s.company.conn.execute(sa.select(

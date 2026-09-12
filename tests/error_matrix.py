@@ -1003,6 +1003,14 @@ MATRIX["credit-memo post"] = {
     "E_DIRECTIVE_NOT_FOUND": "unknown --directive",
     "E_DIRECTIVE_INACTIVE": "deactivated --directive",
 }
+MATRIX["credit-memo update"] = {
+    **MATRIX["credit-memo post"],
+    "E_VERSION_CONFLICT": "expected_version does not match the current credit header",
+    "E_REASON_REQUIRED": "a used credit correction has no reason",
+    "E_APPLICATION_INCOMPATIBLE": "a used credit changes customer, receivable or currency",
+    "E_APPLIED_EXCEEDS_TOTAL": "corrected capacity is less than applications plus refunds",
+    "E_HAS_APPLICATIONS": "corrected credit date is later than its earliest use",
+}
 MATRIX["credit-memo show"] = {"E_RECORD_NOT_FOUND": "unknown credit memo or revision number"}
 MATRIX["credit-memo history"] = {
     "E_RECORD_NOT_FOUND": "unknown credit memo",
