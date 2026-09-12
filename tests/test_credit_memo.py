@@ -405,7 +405,7 @@ def test_every_write_is_attributed_in_the_company_audit(books):
 
 # ---------------------------------------------------------------- every surface, same result
 
-COMMANDS = frozenset(('credit-memo post', 'credit-memo show', 'credit-memo history'))
+COMMANDS = frozenset(('credit-memo post', 'credit-memo update', 'credit-memo show', 'credit-memo history'))
 
 
 @pytest.mark.timeout(300)
@@ -450,6 +450,18 @@ def test_the_same_credit_memo_through_python_cli_http_and_mcp(root, tmp_path):
                 replay = await call('credit-memo post', request, idempotency_key='credit-1')
                 assert replay['id'] == credit['id'] and replay['idempotent_replay']
                 assert credit['total']['amount'] == '40.00'
+
+                correction = dict(credit_memo=credit['id'], expected_version=credit['version'],
+                    memo='Corrected through the same command', lines=[dict(
+                        line_id=credit['revision']['lines'][0]['line_id'], item=item, quantity='0.5')])
+                preview = await call('credit-memo update', correction, dry_run=True)
+                assert preview['total']['amount'] == '20.00' and preview['dry_run']
+                assert (await call('credit-memo show', {'credit_memo': credit['id']}))['version'] == 1
+                corrected = await call('credit-memo update', correction, idempotency_key='credit-update-1')
+                assert corrected['id'] == credit['id'] and corrected['version'] == 2
+                assert corrected['total']['amount'] == '20.00'
+                retried = await call('credit-memo update', correction, idempotency_key='credit-update-1')
+                assert retried['idempotent_replay'] and retried['version'] == 2
 
                 await call('credit-memo show', {'credit_memo': credit['id']})
                 await call('credit-memo history', {'credit_memo': credit['id'], 'limit': 10})
