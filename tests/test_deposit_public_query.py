@@ -1,4 +1,5 @@
 """Public query correctness over actual saved deposits, without browser activation."""
+import json
 import pytest
 
 from tests.test_deposit_command import books, COMPANY  # noqa: F401
@@ -184,3 +185,52 @@ def test_full_revision_and_effective_totals_with_fee_cashback_and_zero_bank(book
         negative_additional_total=-600,subtotal=19400,cash_back=10400,bank_total=9000)
     assert result['effective_bank_total']['minor_units']==9000
     assert query(books,sort='bank_total',direction='asc')['items'][0]['totals']['bank_total']['minor_units']==0
+
+
+def test_execution_failing_before_its_proof_is_denied_without_leaking_why(books,tmp_path,monkeypatch,caplog):
+    """An unexpected internal failure inside a public deposit read, before its proof exists.
+
+    `publication_deposit.CAPTURED_CODES` does not include `E_INTERNAL`, so capture re-raises
+    before the proof is built. The permit at that point is the placeholder
+    `adapters/http/execution.py` constructs with an empty membership frozenset and no proof, so
+    `permit.check` falls through to the generic membership comparison and denies. That denial is
+    an UNFINISHED CERTIFICATE, not a proven revocation -- but the caller must still learn nothing
+    beyond stage and outcome, because a denial may not describe what it could not verify.
+
+    What this pins: the public response stays redacted, and the internal diagnostic carries the
+    causal chain the response deliberately drops.
+    """
+    import logging
+    from tests.test_row3_host import Hosted
+    from bookflow.commands.host_cmds import start_serving
+    from bookflow.core.context import client_version
+    from bookflow.company import deposit_public_reads
+    client=books['client'];root=tmp_path/'root'
+    post(books,'denied-before-proof')
+    cid=client.company.list()['items'][0]['company_id']
+    token=client.token.issue(label='Denied before proof')
+
+    def explode(*a,**k):
+        raise BookflowError('E_INTERNAL',details={'reason':'field set differs for sales_facts.Example',
+                                                  'detail':['secret_field']})
+    monkeypatch.setattr(deposit_public_reads,'query',explode)
+    handle=start_serving(root,client_version(),bind='127.0.0.1:8765',secure_cookies=False)
+    try:
+        hosted=Hosted(handle,root,'',cid,token,'',{})
+        with caplog.at_level(logging.INFO,logger='bookflow.http'):
+            response=hosted.call('deposit.query',{},company=cid)
+        body=response.json()
+        # The caller learns the category and nothing else -- never the internal reason, never the
+        # field names it named, never the original code.
+        assert body['details']=={'stage':'publication','outcome':'unknown'}
+        serialized=json.dumps(body)
+        assert 'field set differs' not in serialized and 'secret_field' not in serialized
+        assert 'E_INTERNAL' not in serialized
+        # The diagnostic keeps the chain the response drops: original category, publication
+        # category, and whether a proof existed. No credential, input or company data.
+        diagnostic=[r.getMessage() for r in caplog.records if 'publication denied' in r.getMessage()]
+        assert diagnostic, 'no diagnostic recorded for a denial after failed execution'
+        assert 'original=E_INTERNAL' in diagnostic[0]
+        assert 'proof=absent' in diagnostic[0]
+        assert token['secret'] not in diagnostic[0]
+    finally:handle.stop()

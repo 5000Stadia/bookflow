@@ -1,10 +1,13 @@
 """Shared hosted command executor and publication boundary."""
 
+import logging
 from bookflow.core.context_options import normalize_options
 from bookflow.core.dispatch import _close, execute, guard
 from bookflow.core.errors import BookflowError
 from bookflow.core.publication import PublicationPermit
 
+
+log = logging.getLogger("bookflow.http")
 
 class PublishedDocument(dict):
     """A plain JSON document carrying only internal, non-serialized authority state."""
@@ -113,6 +116,17 @@ def run_hosted(host, cmd, raw, ctx, cred, selector, source, dry_run, *, before_e
             try:
                 permit.check(host, cred, original_response=True)
             except BookflowError as denied:
+                # The caller is told only stage and outcome, deliberately: a denial must not
+                # describe what it could not verify. But the causal chain is then lost to us too,
+                # and a public-deposit execution that fails before its proof exists takes the
+                # generic membership comparison against a permit built with an empty frozenset --
+                # an unfinished certificate, not a proven revocation. Record the categories and
+                # nothing else: no credential, no input, no company data, and never the protected
+                # error's own details.
+                log.info("publication denied after failed execution: original=%s publication=%s "
+                         "proof=%s request=%s", exc.code, denied.code,
+                         "present" if permit.deposit_proof is not None else "absent",
+                         getattr(ctx, "request_id", None))
                 raise BookflowError(denied.code, details={"stage": "publication", "outcome": "unknown"}) from None
             exc.publication_document = rejected
         raise
