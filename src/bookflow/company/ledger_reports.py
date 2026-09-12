@@ -60,6 +60,14 @@ RECEIVABLE_REPORTS = frozenset({
 # agencies, which are vendors, so it labels and orders its rows exactly as the other two.
 PAYABLE_REPORTS = frozenset({"ap-aging", "unpaid-bills", "sales-tax-liability"})
 
+# Which list a reference-valued report filter names, by the input field that names it. A
+# filter declared here is one a report resolves to stable IDs on its first page and carries
+# in `ReportCursor.filter_ids`; the table is where those IDs are labelled from, which is
+# what lets a rename of the selected record stale the continuation. Every filter goes
+# through one map rather than each report knowing its own, so a report that grows a second
+# filter carries it exactly as the first.
+FILTER_LISTS = {"accounts": "accounts", "class_id": "classes", "customer": "customers"}
+
 
 def account_order(prefix: str = "") -> str:
     """Presentation order for account rows: account number, then name.
@@ -365,10 +373,13 @@ class ReportCursor(StrictModel):
     version: Literal[1] = 1
     company: str
     account_id: str | None = None
-    # The stable IDs a report filtered to a *set* of accounts resolved on its first page.
-    # A cursor minted before this field existed decodes with none, which is what a report
-    # that filters by a single ID or by nothing at all carries anyway.
-    account_ids: list[str] | None = None
+    # The stable IDs every reference-valued filter resolved on its first page, keyed by the
+    # input field that named them. A filter naming one record carries a one-element list, so
+    # a report with two filters needs no second mechanism, and no filter re-resolves a typed
+    # name on page two: renaming the selected record stales the continuation rather than
+    # turning it into a record-not-found. `account_id` is the older, separate slot for the
+    # one account a report *scopes* its ledger scans to, which is not a filter selector.
+    filter_ids: dict[str, list[str]] | None = None
     query: str
     permissions: str
     watermark: str
@@ -405,20 +416,40 @@ def _decode_cursor(encoded_cursor, db):
         raise _invalid_cursor() from None
 
 
-def _state(s, inp, report, principal_id, account_id, *, account_scoped=True, account_ids=None):
+def selected_records(raw, field: str, ids) -> list[dict]:
+    """The records one filter selected, as its own list names them now.
+
+    One home for both things a resolved filter is needed for: the labels a filtered
+    report prints to say what it is showing, and the watermark component that restarts
+    the report when one of those labels moves. The table comes from `FILTER_LISTS` and
+    never from the request.
+    """
+    return [{"id": row[0], "label": str(row[1]), "active": bool(row[2])}
+            for row in raw.execute(
+                f"SELECT id, full_name, active FROM {FILTER_LISTS[field]} "
+                "WHERE id IN (SELECT value FROM json_each(:ids)) ORDER BY id",
+                {"ids": json.dumps(sorted(ids))})]
+
+
+def _state(s, inp, report, principal_id, account_id, *, account_scoped=True, filter_ids=None):
     """Continuation state; account_id is the stable ID this cursor carries.
 
     A report that pages one account narrows its own effect and label scans to
     it. A report that carries a different stable ID in the same cursor slot --
     the customer a receivables report was filtered to -- passes
     account_scoped=False, so the ID identifies the continuation without
-    pretending to be a posting account. A report filtered to a *set* of accounts
-    passes account_ids instead, which is what its own scans bind to; its effect
-    probe stays unnarrowed, which can only stale a continuation sooner.
+    pretending to be a posting account. A report with reference-valued filters of
+    its own passes filter_ids, a map from the input field that named them to the
+    stable IDs it resolved; those are what its own scans bind to, and its effect
+    probe stays unnarrowed, which can only stale a continuation sooner. Every
+    selected record's current label joins the watermark, so renaming or retiring
+    the thing a report is filtered to restarts it rather than relabelling a
+    printed cell between one page and the next.
     """
     raw = s.company.raw
     scope = account_id if account_scoped else None
-    selected_accounts = json.dumps(account_ids) if account_ids else None
+    selected_accounts = (json.dumps(filter_ids["accounts"])
+                         if filter_ids and filter_ids.get("accounts") else None)
     # Immutable rows can only append. Count plus maximal identities detect even
     # backdated additions whose accounting date precedes the previous page.
     effect = raw.execute("""SELECT count(*), max(l.id), max(b.id)
@@ -538,7 +569,16 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True, acc
         # audit event, so any settlement stales a continuation minted before it
         # instead of letting it page into a different set of rows.
         extra_state = [raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]]
-    watermark = _hash([tuple(effect), labels.hexdigest(), currency, revision, extra_state]) if extra_state is not None else _hash([tuple(effect), labels.hexdigest(), currency, revision])
+    parts = [tuple(effect), labels.hexdigest(), currency, revision]
+    if extra_state is not None:
+        parts.append(extra_state)
+    # What the filter selected, as those records read now. A report with no filter hashes
+    # exactly what it hashed before this existed; a filtered one restarts when the record
+    # it names is renamed or retired, because that label is printed on the report.
+    if filter_ids:
+        parts.append([[field, [tuple(record.values()) for record in selected_records(raw, field, ids)]]
+                      for field, ids in sorted(filter_ids.items())])
+    watermark = _hash(parts)
     permissions = _hash([permission_fingerprint(s, principal_id), s.memberships])
     query = _hash([report, inp.model_dump(exclude={"cursor"})])
     company = str(s.company_row["id"])
@@ -556,7 +596,7 @@ def _state(s, inp, report, principal_id, account_id, *, account_scoped=True, acc
     audit = raw.execute("SELECT coalesce(max(seq),0) FROM audit_events").fetchone()[0]
     metadata = ReportMetadata(company_id=company, period=ReportPeriod(date_from=getattr(inp, "date_from", None), date_to=inp.date_to),
         report_version=REPORT_VERSION, schema_revision=revision, generation_time=now_iso(), audit_watermark=audit, currency=currency)
-    return ReportCursor(company=company, account_id=account_id, account_ids=account_ids, query=query, permissions=permissions, watermark=watermark, offset=1, metadata=metadata), 0
+    return ReportCursor(company=company, account_id=account_id, filter_ids=filter_ids, query=query, permissions=permissions, watermark=watermark, offset=1, metadata=metadata), 0
 
 
 def _continuation(state, offset, count, more, db):
@@ -766,12 +806,13 @@ def transaction_detail(inp: TransactionDetailInput, s, *, principal_id=None) -> 
         if inp.cursor is not None:
             # Retain the IDs the first page resolved: renaming a selected account must
             # stale its continuation, not turn page two into a record-not-found.
-            account_ids = _decode_cursor(inp.cursor, s.company).account_ids
+            account_ids = (_decode_cursor(inp.cursor, s.company).filter_ids or {}).get("accounts")
         elif inp.accounts is not None:
             from bookflow.company.accounts import resolve_account
             account_ids = sorted({resolve_account(s.company, selector)["id"] for selector in inp.accounts})
         state, offset = _state(s, inp, "transaction-detail", principal_id, None,
-                               account_scoped=False, account_ids=account_ids)
+                               account_scoped=False,
+                               filter_ids={"accounts": account_ids} if account_ids else None)
         raw, currency = s.company.raw, state.metadata.currency
         params = {"date_from": inp.date_from, "date_to": inp.date_to,
                   "accounts": json.dumps(account_ids) if account_ids else None}
