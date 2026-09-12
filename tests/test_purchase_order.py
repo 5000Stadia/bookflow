@@ -323,13 +323,18 @@ def test_a_bill_entered_from_an_order_carries_its_lines_and_raises_the_payable_b
     assert bill['vendor_id'] == books['vendor']
     assert bill['total_minor_units'] == ORDERED_UNITS and bill['total']['amount'] == ORDERED
     assert bill['memo'] == 'June restock'
+    # An ordered item becomes an item line, which is the only line that can name the item whose
+    # quantity has to move; an ordered account line is still an expense. The two grids together
+    # are the order, which is why the total above is the ordered total.
     expenses = bill['revision']['expenses']
-    assert [line['amount_minor_units'] for line in expenses] == [
-        PIPE_UNITS, FITTINGS_UNITS, FREIGHT_UNITS]
-    # The item line becomes an expense line on the item's own purchase account.
-    assert [line['account_id'] for line in expenses] == [
-        books['supplies'], books['supplies'], books['freight']]
-    assert [line['memo'] for line in expenses] == ['3/4 inch copper pipe', 'Fittings', 'Delivery']
+    assert [line['amount_minor_units'] for line in expenses] == [FITTINGS_UNITS, FREIGHT_UNITS]
+    assert [line['account_id'] for line in expenses] == [books['supplies'], books['freight']]
+    assert [line['memo'] for line in expenses] == ['Fittings', 'Delivery']
+    items = bill['revision']['items']
+    assert [line['amount_minor_units'] for line in items] == [PIPE_UNITS]
+    assert [line['account_id'] for line in items] == [books['supplies']]
+    assert [line['description'] for line in items] == ['3/4 inch copper pipe']
+    assert items[0]['quantity'] == '40'
 
     # Accounts Payable rose by exactly the bill total and by nothing else.
     assert _net(books) == {books['payable']: -ORDERED_UNITS,
@@ -373,6 +378,11 @@ def test_what_the_caller_supplies_wins_over_what_the_order_says(books):
         reason='Enter what actually arrived')
     assert bill['total_minor_units'] == 40000 and bill['memo'] == 'Short delivery'
     assert len(bill['revision']['expenses']) == 1
+    # The ordered item is not received. Writing any line says what arrived, so the order's own
+    # item grid is not filled in behind it: a short delivery that carried the item line would
+    # owe the vendor for goods that did not come and take 40 lengths of pipe into stock as
+    # well. The empty grid is the proof -- a stock entry exists only for an item line.
+    assert bill['revision']['items'] == []
     assert bill['vendor_id'] == books['vendor']  # still the order's vendor
     assert bill['purchase_order_id'] == order['id']
     assert _net(books) == {books['payable']: -40000, books['supplies']: 40000}

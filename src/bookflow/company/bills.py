@@ -1029,12 +1029,20 @@ def _has_applications(s, header):
     return bool(applied_totals(s, [obligation['id']]).get(obligation['id']))
 
 
+_LINE_GRIDS = ('expenses', 'items')
+
+
 def _from_order(s, inp, operation):
     """The purchase order this bill is being entered from, and the entry it fills in.
 
     What the caller supplied wins; the order fills in the rest. Returning a copy rather than
     mutating keeps ``plan.data['input']`` the caller's own words, so ``apply`` re-derives from
     the order inside the writing transaction instead of trusting what the preview read.
+
+    The two line grids are one answer, not two fields. A caller who writes any line is saying
+    what arrived, so neither grid is carried -- filling the other one in from the order would
+    bill for goods the caller did not say came and, for a stock item, receive them into
+    inventory as well. Short deliveries are the ordinary case that reaches this path.
     """
     if operation != 'post' or getattr(inp, 'purchase_order', None) is None:
         return None, inp
@@ -1048,8 +1056,12 @@ def _from_order(s, inp, operation):
         # which order became which bill, not who either was owed to.
         raise _invalid('vendor', 'the bill is owed to the vendor the purchase order was placed with; '
                                  'omit vendor, or enter this bill without naming the order')
-    return source, inp.model_copy(update={key: value for key, value in carried.items()
-                                          if key not in supplied or getattr(inp, key) is None})
+    wrote_lines = any(field in supplied and getattr(inp, field) is not None
+                      for field in _LINE_GRIDS)
+    return source, inp.model_copy(update={
+        key: value for key, value in carried.items()
+        if not (wrote_lines and key in _LINE_GRIDS)
+        and (key not in supplied or getattr(inp, key) is None)})
 
 
 def _stock_entries(pending, profile):
