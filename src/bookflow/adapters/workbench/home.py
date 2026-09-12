@@ -279,8 +279,19 @@ PANELS: tuple[Panel, ...] = (
                 summary="Match the register against a bank statement and clear what matches.",
                 action=Action("Reconcile an account", WRITE,
                               ("reconcile opening start", "reconcile start", "reconcile mark",
-                               "reconcile finish"),
-                              "/reconcile-opening/start"),
+                               "reconcile finish")),
+                # The four commands are registered, routed and proven, and an agent can drive a
+                # reconciliation to a certificate with them today. A person cannot, and the tile
+                # must not say otherwise: `reconcile mark` takes a MovementKey and a group
+                # fingerprint that only `reconciliation_queries.candidates` and
+                # `preparation.fingerprint` produce, and neither is registered. Pointing this
+                # tile at the opening form would meet the letter of the availability contract
+                # and break its purpose -- the first click is a write, so a bookkeeper would
+                # adopt an opening balance, reach for the statement, and find no way to tick a
+                # line or finish. A dead end that leaves a draft open is worse than a tile that
+                # honestly says "not yet".
+                waits_on="a way to see and tick what cleared; the commands behind this exist and "
+                         "an agent can already use them",
             ),
         ),
     ),

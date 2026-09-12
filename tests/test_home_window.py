@@ -145,14 +145,26 @@ def test_the_home_window_runs_no_business_command_while_rendering(hosted, monkey
 
 # ---------------------------------------------------------------- the placeholder half
 
-def test_a_step_with_no_registered_command_renders_an_inert_placeholder(hosted):
+def test_a_step_that_is_not_offered_renders_an_inert_placeholder(hosted):
+    """A planned tile is inert, says why, and never hides a mismatch between map and registry.
+
+    A tile is planned for one of two honest reasons: its commands do not exist yet, or it
+    declares no destination because the errand cannot be finished by a person even though the
+    commands work. `reconcile` is the second kind -- four registered, routed, proven commands an
+    agent can drive to a certificate, with no way yet for a bookkeeper to see and tick what
+    cleared. What must never happen is the third case: registered commands AND a declared
+    destination, still rendering planned, which would mean the map and the registry disagree.
+    """
     page = _browser(hosted).get(f"/c/{hosted.company_id}/")
     tiles = _tiles(page.text)
     planned = [item for panel in resolved(hosted.company_id) for item in panel.steps if not item.live]
     assert planned, "the map declares nothing planned; the placeholder half is untested"
     for item in planned:
         for name in item.step.action.commands:
-            assert registry.get(name) is None, (item.step.id, name, "declared live but rendered planned")
+            assert registry.get(name) is None or item.step.action.destination is None, (
+                item.step.id, name,
+                "registered, routed and pointed somewhere, yet rendered planned: the map and the "
+                "registry disagree")
         element, markup = tiles[item.step.title]
         assert element == "div", (item.step.id, "a placeholder must not be an anchor")
         assert 'aria-disabled="true"' in markup, item.step.id
