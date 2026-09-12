@@ -443,3 +443,37 @@ def mount(app, *, render, run, credential, page_error, role_allows):
         form = await _form(request)
         return await run_in_threadpool(_settle, request, company_id, credit_id, form,
                                        verb='unapply')
+
+
+def editable_values(record):
+    """Project credit correction controls from captured facts, without resolving them."""
+    from bookflow.adapters.workbench import sales
+    from bookflow.company.credit_models import CreditMemoUpdateInput
+    baseline = sales.editable_values(record)
+    result = {key: value for key, value in baseline.items()
+              if key in CreditMemoUpdateInput.model_fields}
+    result['ar_account'] = record['revision']['profile']['control_account']['id']
+    result['lines'] = []
+    for line, ordinary in zip(record['revision']['lines'], baseline['lines'], strict=True):
+        if line['source_transaction_id']:
+            result['lines'].append(dict(
+                line_id=line['line_id'], source_invoice=line['source_transaction_id'],
+                source_line=line['source_line_id'], quantity=line['quantity'],
+                description=line['description']))
+        else:
+            from bookflow.company.credit_models import CreditLineInput
+            result['lines'].append({key: value for key, value in ordinary.items()
+                                    if key in CreditLineInput.model_fields})
+    return result
+
+
+def preserve_line_origins(raw, originals):
+    from bookflow.adapters.workbench import sales
+    result = deepcopy(raw)
+    ordinary = [row for row in result.get('lines', []) if not row.get('source_invoice')]
+    if ordinary:
+        cleaned = sales.preserve_line_origins({'lines': ordinary}, originals)['lines']
+        iterator = iter(cleaned)
+        result['lines'] = [row if row.get('source_invoice') else next(iterator)
+                           for row in result['lines']]
+    return result

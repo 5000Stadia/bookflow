@@ -131,6 +131,9 @@ def _active_claims(s, source_transaction_id, source_line_id, pending=None):
     rows = effects.rows(s, claims, claims.c.source_transaction_id == source_transaction_id,
                         claims.c.source_line_id == source_line_id, claims.c.kind == 'claim',
                         claims.c.id.notin_(released), order=claims.c.id)
+    releases = {row['reverses_claim_id'] for row in (pending or {}).get('credit_source_claims', [])
+                if row['kind'] == 'release'}
+    rows = [row for row in rows if row['id'] not in releases]
     rows += [row for row in (pending or {}).get('credit_source_claims', [])
              if row['kind'] == 'claim' and row['source_transaction_id'] == source_transaction_id
              and row['source_line_id'] == source_line_id]
@@ -181,18 +184,40 @@ def _returned(s, entered, source, pending):
 # ------------------------------------------------------------------ resolving the whole document
 
 
-def commercial(s, inp, *, document_id, pending):
+def commercial(s, inp, *, document_id, pending, previous=None):
     """Resolve original intent without allocating any persisted effect identity."""
     from bookflow.company import sales_defaults
-    profile, warnings = sales_defaults.resolve_header(s, inp, DOCUMENT_TYPE)
-    number, sequence = effects.allocate(s, DOCUMENT_TYPE, inp.number, document_id)
+    from bookflow.company import credit_corrections as correction
+    old_revision = previous['revision'] if previous else None
+    old_profile = SalesProfile.model_validate_json(profile_row(s, old_revision)['profile_snapshot']) if previous else None
+    saved = correction.saved_lines(s, old_revision) if previous else {}
+    profile, warnings = sales_defaults.resolve_header(
+        s, inp, DOCUMENT_TYPE, previous=old_profile, old_date=old_revision['date'] if previous else None)
+    if previous and (profile.customer.id, profile.control_account.id) != (
+            previous['key']['party_id'], previous['key']['ar_account_id']):
+        if profile_row(s, old_revision)['origin'] == 'return':
+            raise _invalid('source_invoice', 'return a line of an invoice for this exact customer, '
+                                             'receivable account and currency')
+        field = 'customer' if profile.customer.id != previous['key']['party_id'] else 'ar_account'
+        raise _invalid(field, 'Changing the immutable credit source ownership is not implemented.')
+    number, sequence = effects.allocate(s, DOCUMENT_TYPE,
+        inp.number if 'number' in inp.model_fields_set or not previous else old_revision['number'], document_id)
     info = dict(s.company.conn.execute(sa.select(c.company_info)).mappings().one())
     issuer = {k: v for k, v in info.items() if k in ('id', 'legal_name', 'display_name', 'home_currency')
               or k.startswith(('address_', 'legal_address_', 'ship_address_'))}
     issuer['display_name'] = s.company_row['display_name']
-    origin = 'return' if inp.lines[0].source_invoice is not None else 'standalone'
-    lines, sources = [], {}
-    for entered in inp.lines:
+    retained = previous is not None and inp.lines is None
+    origin = profile_row(s, old_revision)['origin'] if retained else (
+        'return' if inp.lines[0].source_invoice is not None else 'standalone')
+    lines, sources, identities = [], {}, set()
+    if retained:
+        lines = correction.retained_lines(s, saved, pending)
+    for entered in inp.lines or []:
+        line_id = entered.line_id.upper() if entered.line_id else None
+        if line_id and (line_id not in saved or line_id in identities):
+            raise _invalid('lines.line_id', 'use each current credit memo line identity at most once')
+        if line_id:
+            identities.add(line_id)
         if origin == 'return':
             if entered.source_invoice not in sources:
                 sources[entered.source_invoice] = {}
@@ -211,22 +236,30 @@ def commercial(s, inp, *, document_id, pending):
             # claims as taken; a second line of one credit cannot return the same unit twice.
             pending['credit_source_claims'].extend(resolved['claim_rows'])
             resolved['tax_ordinal'] = None
+            resolved['line_id'] = line_id
             lines.append(resolved)
         else:
             supplied = {name: getattr(entered, name) for name in entered.model_fields_set
                         if name in SalesLineInput.model_fields}
             supplied.setdefault('item', entered.item)
-            supplied.setdefault('quantity', entered.quantity)
+            if not line_id or 'quantity' in entered.model_fields_set:
+                supplied.setdefault('quantity', entered.quantity)
             resolved, line_warnings = sales_defaults.resolve_line(
-                s, SalesLineInput(**supplied), profile, defer_tax=True)
+                s, SalesLineInput(**supplied), profile, defer_tax=True,
+                previous=saved.get(line_id), previous_header=old_profile, refresh=inp.refresh_defaults)
+            resolved['line_id'] = line_id
             resolved['source'] = None
             resolved['intervals'] = ()
             resolved['claim_rows'] = []
             lines.append(resolved)
             warnings.extend(line_warnings)
     attribution = None
-    ordinals, tax_keys = tax_facts.prospective(s.company, document_id, [None] * len(lines))
-    if origin == 'standalone':
+    ordinals, tax_keys = tax_facts.prospective(s.company, document_id, [line.get('line_id') for line in lines])
+    if retained:
+        from bookflow.company.tax_attribution import TaxAttribution
+        captured = profile_row(s, old_revision)['tax_attribution_snapshot']
+        attribution = TaxAttribution.model_validate_json(captured) if captured else None
+    elif origin == 'standalone':
         attribution = tax_facts.calculate(lines, profile, info['home_currency'], ordinals)
         tax_facts.apply(lines, attribution, ordinals)
     else:
@@ -235,24 +268,30 @@ def commercial(s, inp, *, document_id, pending):
             line.update(tax_ordinal=ordinal, tax_minor_units=tax,
                         gross_minor_units=calc.total((line['net_minor_units'], tax), 'line.gross'))
     custom.validate_kinds(s.company, inp.custom_fields, inp.custom_field_kinds, record_type=DOCUMENT_TYPE)
-    custom_plan = custom.prepare(s.company, document_id, inp.custom_fields, {}, creating=True,
+    custom_plan = custom.prepare(s.company, document_id, inp.custom_fields,
+                                json.loads(old_revision['custom_fields_snapshot']) if previous else {},
+                                creating=not previous,
                                 refresh=inp.refresh_defaults, record_type=DOCUMENT_TYPE)
     subtotal = calc.total((line['net_minor_units'] for line in lines), 'subtotal')
     tax = calc.total((line['tax_minor_units'] for line in lines), 'tax')
     total = calc.total((subtotal, tax))
     if total <= 0:
         raise _invalid('total', 'a posted credit memo must have a positive total')
-    semantic = dict(date=inp.date, number=number, memo=inp.memo, issuer=issuer, origin=origin,
+    date = inp.date or old_revision['date'] if previous else inp.date
+    memo = inp.memo if 'memo' in inp.model_fields_set or not previous else old_revision['memo']
+    if previous:
+        issuer = json.loads(old_revision['issuer_snapshot'])
+    semantic = dict(date=date, number=number, memo=memo, issuer=issuer, origin=origin,
                     profile=tax_facts.semantic_profile(profile), lines=[_line_semantic(line) for line in lines],
                     custom_fields={key: {k: v for k, v in field.items() if k != 'value_id'}
                                    for key, field in custom_plan.snapshot.items()})
     fingerprint = hashlib.sha256(json_text(dict(
-        company_id=info['id'], type=DOCUMENT_TYPE, version=0, content=semantic,
+        company_id=info['id'], type=DOCUMENT_TYPE, version=previous['header']['version'] if previous else 0, content=semantic,
         tax_attribution=attribution.model_dump(mode='json') if attribution else None)).encode()).hexdigest()
     if inp.expected_facts_fingerprint is not None and inp.expected_facts_fingerprint != fingerprint:
         raise BookflowError('E_PREVIEW_STALE', details={'facts_fingerprint': fingerprint})
-    return dict(profile=profile, origin=origin, date=inp.date, number=number, sequence=sequence,
-                memo=inp.memo, issuer=issuer, lines=lines, ordinals=ordinals, tax_keys=tax_keys,
+    return dict(profile=profile, origin=origin, date=date, number=number, sequence=sequence,
+                memo=memo, issuer=issuer, lines=lines, ordinals=ordinals, tax_keys=tax_keys,
                 custom_plan=custom_plan, warnings=warnings, semantic=semantic, fingerprint=fingerprint,
                 subtotal=subtotal, tax=tax, total=total, currency=info['home_currency'],
                 tax_attribution=attribution)
@@ -308,7 +347,7 @@ def _captured(cell):
 # ------------------------------------------------------------------ preparing the write
 
 
-def prepare(s, ctx, inp):
+def prepare(s, ctx, inp, *, previous=None):
     at, event = clock.now_iso(), new_id()
     created = lambda: dict(id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
     provenance = dict(created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
@@ -316,11 +355,24 @@ def prepare(s, ctx, inp):
     header = dict(id=new_id(), **common(s.actor.id, ctx.interface.value, at), type=DOCUMENT_TYPE,
                   status='posted', voided_at=None, voided_by=None, void_reason=None, void_posting_batch_id=None)
     pending = {table: [] for table, _, _ in TABLE_KINDS}
-    resolved = commercial(s, inp, document_id=header['id'], pending=pending)
-    journals.open_dates(s, [resolved['date']])
+    if previous:
+        header = dict(previous['header'], version=previous['header']['version'] + 1,
+                      updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
+        from bookflow.company.credit_corrections import release_claims
+        release_claims(s, header['id'], pending, created, event)
+    resolved = commercial(s, inp, document_id=header['id'], pending=pending, previous=previous)
+    if previous:
+        from bookflow.company.credit_corrections import unchanged, unchanged_plan
+        if unchanged(s, previous, resolved):
+            return unchanged_plan(s, inp, previous, resolved['fingerprint'])
+        if previous['applications'] or previous['consumptions']:
+            raise _invalid('credit_memo', 'Correction of an applied or refunded credit memo is not implemented.')
+    journals.open_dates(s, [resolved['date']] + ([previous['revision']['date']] if previous else []))
     _posting_accounts_active(s, resolved)
     profile, currency = resolved['profile'], resolved['currency']
-    revision = dict(**created(), transaction_id=header['id'], revision_number=1, supersedes_revision_id=None,
+    revision = dict(**created(), transaction_id=header['id'],
+                    revision_number=previous['revision']['revision_number'] + 1 if previous else 1,
+                    supersedes_revision_id=previous['revision']['id'] if previous else None,
                     date=resolved['date'], number=resolved['number'], name_type='customer',
                     name_id=profile.customer.id, memo=resolved['memo'], total_minor_units=resolved['total'],
                     currency=currency, issuer_snapshot=json_text(resolved['issuer']),
@@ -335,8 +387,9 @@ def prepare(s, ctx, inp):
         tax_attribution_snapshot=json_text(resolved['tax_attribution'].model_dump(mode='json'))
         if resolved['tax_attribution'] is not None else None))
     for position, line in enumerate(resolved['lines'], 1):
-        identity = dict(**created(), transaction_id=header['id'])
-        pending['document_line_identities'].append(identity)
+        identity = dict(id=line['line_id']) if line.get('line_id') else dict(**created(), transaction_id=header['id'])
+        if not line.get('line_id'):
+            pending['document_line_identities'].append(identity)
         facts = line['profile']
         envelope = dict(**created(), transaction_id=header['id'], revision_id=revision['id'],
                         line_id=identity['id'], position=position, kind='credit', account_id=None, side=None,
@@ -346,8 +399,9 @@ def prepare(s, ctx, inp):
                         class_name=facts.class_id.label if facts.class_id else None,
                         description=line['description'], **dict.fromkeys(journals.FACTS))
         pending['document_lines'].append(envelope)
-        pending['sales_tax_line_keys'].append(dict(transaction_id=header['id'], line_id=identity['id'],
-                                                   tax_ordinal=line['tax_ordinal'], **provenance))
+        if not line.get('line_id'):
+            pending['sales_tax_line_keys'].append(dict(transaction_id=header['id'], line_id=identity['id'],
+                                                       tax_ordinal=line['tax_ordinal'], **provenance))
         line['envelope'] = envelope
         for claim in line['claim_rows']:
             claim.update(credit_transaction_id=header['id'], credit_revision_id=revision['id'],
@@ -355,8 +409,18 @@ def prepare(s, ctx, inp):
                          source_revision_id=line['source']['revision_id'],
                          source_document_line_id=line['source']['document_line_id'],
                          reverses_claim_id=None, effective_date=resolved['date'], **audited)
-    batch = dict(**created(), transaction_id=header['id'], revision_id=revision['id'], kind='original',
-                 effective_date=revision['date'], reverses_batch_id=None, replaces_batch_id=None,
+    old_batch = None
+    if previous:
+        batches = effects.rows(s, c.posting_batches,
+            c.posting_batches.c.revision_id == previous['revision']['id'], c.posting_batches.c.kind != 'reversal')
+        if len(batches) != 1:
+            raise _invalid('credit_memo', 'credit memo has ambiguous current posting evidence')
+        old_batch = batches[0]
+        effects.reverse(s, header, previous['revision'], old_batch, event, created, pending)
+        resolved['source_key'] = previous['key']
+    batch = dict(**created(), transaction_id=header['id'], revision_id=revision['id'],
+                 kind='replacement' if previous else 'original',
+                 effective_date=revision['date'], reverses_batch_id=None, replaces_batch_id=old_batch['id'] if old_batch else None,
                  audit_event_id=event)
     pending['posting_batches'].append(batch)
     _business_postings(header, revision, batch, resolved, pending, created, audited)
@@ -364,11 +428,12 @@ def prepare(s, ctx, inp):
                                    revision=revision_output(s, revision, pending),
                                    source_current=_source_current(s, header['id'], pending),
                                    facts_fingerprint=resolved['fingerprint'], warnings=resolved['warnings'])
-    plan = Plan(output, dict(input=inp, operation='post', changed=True, header=header, before=None,
+    plan = Plan(output, dict(input=inp, operation='update' if previous else 'post', changed=True, header=header,
+                             before=previous['header'] if previous else None, previous=previous,
                              pending=pending, sequence=resolved['sequence'], event=event,
                              custom_plan=resolved['custom_plan'], resolved=resolved))
-    from bookflow.company.credit_validation import validate
-    validate(plan, s, ctx)
+    from bookflow.company.credit_validation import validate, validate_update
+    (validate_update if previous else validate)(plan, s, ctx)
     return plan
 
 
@@ -433,7 +498,7 @@ def _business_postings(header, revision, batch, resolved, pending, created, audi
                 taxable_minor_units=_cell_taxable(cell), tax_minor_units=amount,
                 component_snapshot=json_text(captured['snapshot'].model_dump()),
                 posting_source_id=source['id'] if source else None,
-                source_tax_component_id=cell['source']['id'] if cell['rule'] is None else None))
+                source_tax_component_id=cell.get('source_tax_component_id', cell['source']['id'] if cell['rule'] is None else None)))
     receivable = leg(profile.control_account, resolved['total'], False,
                      dict(class_id=profile.class_id.id if profile.class_id else None,
                           class_name=profile.class_id.label if profile.class_id else None),
@@ -441,7 +506,10 @@ def _business_postings(header, revision, batch, resolved, pending, created, audi
     key = dict(**created(), transaction_id=header['id'], party_id=profile.customer.id,
                ar_account_id=profile.control_account.id, currency=currency,
                audit_event_id=audited['audit_event_id'])
-    pending['credit_source_keys'].append(key)
+    if resolved.get('source_key'):
+        key = resolved['source_key']
+    else:
+        pending['credit_source_keys'].append(key)
     for line in resolved['lines']:
         if not line['gross_minor_units']:
             continue
@@ -546,9 +614,11 @@ def apply(plan, ctx, s):
     # Rebuilt inside the writer transaction: the residue on a source line, the number and the
     # open period are only decisive here, and the preview read them before anyone held the lock.
     operation = plan.data['operation']
-    fresh = prepare_void(s, ctx, plan.data['input']) if operation == 'void' else prepare(s, ctx, plan.data['input'])
-    from bookflow.company.credit_validation import validate, validate_void
-    (validate_void if operation == 'void' else validate)(fresh, s, ctx)
+    from bookflow.company.credit_corrections import prepare_update
+    planners = {'post': prepare, 'void': prepare_void, 'update': prepare_update}
+    fresh = planners[operation](s, ctx, plan.data['input'])
+    from bookflow.company.credit_validation import validate, validate_void, validate_update
+    {'post': validate, 'void': validate_void, 'update': validate_update}[operation](fresh, s, ctx)
     return effects.persist(fresh, ctx, s, command_name='credit-memo ' + operation,
                            table_kinds=TABLE_KINDS)
 

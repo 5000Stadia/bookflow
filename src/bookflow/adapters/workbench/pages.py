@@ -256,6 +256,8 @@ def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
         return Sales.editable_values(shown)
     if noun == 'bill':
         return Bills.editable_values(shown)
+    if noun == 'credit-memo':
+        return Credits.editable_values(shown)
     if noun == "journal":
         revision = shown.get("revision", {})
         return {
@@ -1951,8 +1953,12 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             raw, headers, preview = F.translate(cmd, translated_form, comparison if comparison else None)
             if Billing.is_conversion(noun, verb):
                 raw = Billing.selection(raw, form)
-            if noun == 'credit-memo' and verb == 'post':
+            if noun == 'credit-memo' and verb in ('post', 'update'):
+                if verb == 'update':
+                    raw = Credits.preserve_line_origins(raw, comparison)
                 raw = Credits.untouched_return_defaults(raw)
+                if preview:
+                    raw.pop('expected_facts_fingerprint', None)
             if (noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')) or (noun in Work.NOUNS and cmd.is_write) or (noun == 'deposit' and verb == 'post'):
                 if noun == 'invoice' and verb == 'update' and form.get('action') == 'review-settlement':
                     current = run(request, 'invoice settlement', {'invoice': record_id}, company_id)

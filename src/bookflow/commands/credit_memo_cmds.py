@@ -8,7 +8,7 @@ from bookflow.company import credits
 from bookflow.company.credit_models import (
     CreditMemoHistoryInput, CreditMemoHistoryOutput, CreditMemoOutput, CreditMemoPageOutput,
     CreditMemoPostInput, CreditMemoQueryInput, CreditMemoShowInput, CreditMemoVoidInput,
-    CreditMemoWriteOutput,
+    CreditMemoWriteOutput, CreditMemoUpdateInput,
 )
 
 _LINES = (
@@ -128,3 +128,25 @@ credit_memo_history = command(
 
 CREDIT_MEMO_COMMANDS = [credit_memo_post, credit_memo_show, credit_memo_query,
                         credit_memo_history, credit_memo_void]
+
+
+def _update(inp, ctx, s):
+    from bookflow.company.credit_corrections import prepare_update
+    return prepare_update(s, ctx, inp)
+
+
+credit_memo_update = command(
+    'credit-memo update', scope='company',
+    description=('Correct an unconsumed credit memo with an immutable revision and exact reversal/'
+                 'replacement postings. Omitted lines retain their captured amounts and source intervals;'
+                 ' supplied lines replace the grid, retaining named line_id values. Return claims are'
+                 ' released and retaken atomically. Applied/refunded corrections and changes of customer'
+                 ' or receivable account are not implemented in this increment.'),
+    input_model=CreditMemoUpdateInput, output_model=CreditMemoWriteOutput, writes={'company'},
+    required_role='standard', capability='ledger.post', accepts_idempotency_key=True,
+    positional=['credit_memo'], clearable=True,
+    version_source=('credit-memo show', 'credit_memo', 'version'),
+    error_codes=POST_ERRORS + ['E_VERSION_CONFLICT'])(_update)
+credit_memo_update.ledger = True
+credit_memo_update.applier(credits.apply)
+CREDIT_MEMO_COMMANDS.append(credit_memo_update)

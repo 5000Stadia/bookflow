@@ -3524,10 +3524,25 @@ memo as readily as a receipt, and a credit reports its current settlement throug
 `credit_source_keys` carries the same party/receivable/currency triple `payment_component_keys`
 does.
 
-**What this increment deliberately does not do.** There is no `credit-memo update`: a credit's
-correction has to release and re-take the source intervals its returned lines claimed, within
-one operation, and that is a distinct piece of work from the rest of its lifecycle — a wrong
-credit is voided and written again meanwhile. `customer-refund` has no update either, and for
+**Credit correction.** `credit-memo update` implements the unconsumed correction path through
+`credit_corrections`, the shared credit commercial resolver and document persistence. Omitted
+lines copy their exact captured quantities, item facts, tax cells and source intervals; supplied
+lines replace the grid with retained permanent line identities where supplied. Claims are
+released and retaken in the same writer transaction as the immutable revision and exact
+reversal/replacement postings. The validator compares reversal legs and attribution to storage,
+checks exact claim inverses and verifies replacement arithmetic separately. Expected versions,
+preview fingerprints, idempotent retries and both accounting dates remain guarded. Exact no-op
+patches create no history and work independently of active applications/refunds.
+
+**Unresolved correction scope.** Actual changes to applied/refunded credits remain unimplemented
+pending the settlement/refund correction contract. Customer/AR changes also remain unimplemented:
+the model accepts them and storage permits different immutable source keys for distinct
+customer/AR/currency dimensions, but the current readers select the first key for a transaction.
+Changing the revision alone cannot change settlement ownership; selecting and reading the
+current dimension key consistently remains unimplemented. This is a partial increment,
+not completion of the credit update lifecycle.
+
+`customer-refund` has no update either, and for
 the settled reason: a refund is one customer, one amount, one date and one account, so changing
 any of them makes it a different refund and the document carries one revision for life. A
 refund's source is a credit memo only; refunding unapplied payment overage needs

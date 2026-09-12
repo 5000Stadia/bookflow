@@ -18,7 +18,7 @@ def _require(condition, detail):
         raise BookflowError('E_INTERNAL', message='Prepared credit memo is inconsistent: ' + detail)
 
 
-def validate(plan, s, ctx):
+def validate(plan, s, ctx, *, batch_kind='original'):
     data = plan.data
     if not data['changed']:
         return
@@ -56,15 +56,16 @@ def validate(plan, s, ctx):
              'header totals are the sum of the lines')
     _require(revision['total_minor_units'] == gross == subtotal + tax and gross > 0, 'document total')
 
-    _balanced(pending, header, profile, revision, gross)
+    _balanced(pending, header, profile, revision, gross, batch_kind)
+    _posting_attribution(pending, lines, profile)
     _capacity(pending, header, revision, lines, profile)
     _returns(s, pending, lines, profile)
 
 
-def _balanced(pending, header, profile, revision, gross):
+def _balanced(pending, header, profile, revision, gross, batch_kind):
     batches = pending['posting_batches']
-    _require(len(batches) == 1 and batches[0]['kind'] == 'original'
-             and batches[0]['effective_date'] == revision['date'], 'one original batch at the document date')
+    _require(len(batches) == 1 and batches[0]['kind'] == batch_kind
+             and batches[0]['effective_date'] == revision['date'], 'one business batch at the document date')
     legs = pending['posting_lines']
     debits = sum(leg['debit_minor_units'] for leg in legs)
     credits = sum(leg['credit_minor_units'] for leg in legs)
@@ -107,7 +108,8 @@ def _capacity(pending, header, revision, lines, profile):
 
 
 def _returns(s, pending, lines, profile):
-    claims = pending['credit_source_claims']
+    releases = {row['reverses_claim_id'] for row in pending['credit_source_claims'] if row['kind'] == 'release'}
+    claims = [row for row in pending['credit_source_claims'] if row['kind'] == 'claim']
     linked = {identifier: line for identifier, line in lines.items() if line['source_transaction_id']}
     _require(bool(linked) == (profile['origin'] == 'return'), 'origin matches what the lines claim')
     _require(not linked or len(linked) == len(lines), 'a document is all returns or no returns')
@@ -116,6 +118,12 @@ def _returns(s, pending, lines, profile):
     for identifier, line in linked.items():
         own = [claim for claim in claims if claim['credit_document_line_id'] == identifier]
         _require(own, 'a returned line claims at least one interval')
+        returns.merged([(row['start_microunits'], row['end_microunits']) for row in own])
+        _require(all(row['source_transaction_id'] == line['source_transaction_id']
+                     and row['source_revision_id'] == line['source_revision_id']
+                     and row['source_document_line_id'] == line['source_document_line_id']
+                     and row['source_line_id'] == line['source_line_id'] for row in own),
+                 'claim names its credited source capture')
         source = _source(s, line)
         _require(source['profile']['customer_id'] == profile['customer_id']
                  and source['profile']['control_account_id'] == profile['ar_account_id'],
@@ -127,7 +135,10 @@ def _returns(s, pending, lines, profile):
         _require(sum(claim['end_microunits'] - claim['start_microunits'] for claim in own)
                  == line['base_quantity_microunits'], 'claimed quantity is the credited quantity')
         live = _live_claims(s, claim_source=line['source_transaction_id'], line_id=line['source_line_id'],
-                            excluding={claim['id'] for claim in claims})
+                            excluding=releases)
+        live += [row for row in claims if row['credit_document_line_id'] != identifier
+                 and row['source_transaction_id'] == line['source_transaction_id']
+                 and row['source_line_id'] == line['source_line_id']]
         # Recomputed here from the intervals alone, never taken from the preparer.
         priced = returns.priced([(claim['start_microunits'], claim['end_microunits']) for claim in own],
                                 quantity, net, source['taxes'])
@@ -239,3 +250,111 @@ def _claims_made_by(s, transaction_id):
     released = sa.select(claims.c.reverses_claim_id).where(claims.c.kind == 'release')
     return effects.rows(s, claims, claims.c.credit_transaction_id == transaction_id,
                         claims.c.kind == 'claim', claims.c.id.notin_(released), order=claims.c.id)
+
+
+def validate_update(plan, s, ctx):
+    """Check both batches against their own facts, and the release against stored claims."""
+    from bookflow.company import credits, document_effects as effects
+    from bookflow.core.registry import Plan
+
+    data = plan.data
+    if not data['changed']:
+        return
+    pending, header, before = data['pending'], data['header'], data['before']
+    previous = data['previous']
+    _require(header['version'] == before['version'] + 1, 'correction version')
+    revision = pending['transaction_revisions'][0]
+    _require(revision['supersedes_revision_id'] == previous['revision']['id']
+             and revision['revision_number'] == previous['revision']['revision_number'] + 1,
+             'correction revision chain')
+    _require(header['current_revision_id'] == revision['id'], 'current revision pointer')
+    _require(not pending['credit_source_keys'], 'correction keeps its permanent source identity')
+    batches = pending['posting_batches']
+    inverses = [row for row in batches if row['kind'] == 'reversal']
+    replacements = [row for row in batches if row['kind'] == 'replacement']
+    _require(len(batches) == 2 and len(inverses) == len(replacements) == 1,
+             'one reversal and one replacement')
+    inverse, replacement = inverses[0], replacements[0]
+    original = effects.rows(s, c.posting_batches, c.posting_batches.c.id == inverse['reverses_batch_id'])[0]
+    _require(original['revision_id'] == previous['revision']['id']
+             and inverse['revision_id'] == original['revision_id']
+             and inverse['effective_date'] == original['effective_date']
+             and replacement['replaces_batch_id'] == original['id']
+             and replacement['effective_date'] == revision['date'],
+             'correction dates and batch linkage')
+    old_legs = {row['id']: row for row in effects.rows(s, c.posting_lines, c.posting_lines.c.batch_id == original['id'])}
+    legs = [row for row in pending['posting_lines'] if row['batch_id'] == inverse['id']]
+    _require(len(legs) == len(old_legs) and {row['reversed_line_id'] for row in legs} == set(old_legs),
+             'exact reversal leg coverage')
+    metadata = {'id', 'created_at', 'created_by', 'created_via', 'batch_id',
+                'debit_minor_units', 'credit_minor_units', 'reversed_line_id'}
+    for leg in legs:
+        old = old_legs[leg['reversed_line_id']]
+        _require({k: v for k, v in leg.items() if k not in metadata}
+                 == {k: v for k, v in old.items() if k not in metadata}
+                 and leg['debit_minor_units'] == old['credit_minor_units']
+                 and leg['credit_minor_units'] == old['debit_minor_units'], 'exact reversal leg')
+        old_sources = {row['id']: row for row in effects.rows(
+            s, c.posting_line_sources, c.posting_line_sources.c.posting_line_id == old['id'])}
+        sources = [row for row in pending['posting_line_sources'] if row['posting_line_id'] == leg['id']]
+        _require(len(sources) == len(old_sources)
+                 and {row['reversed_source_id'] for row in sources} == set(old_sources), 'reversal attribution coverage')
+        ignored = {'id', 'created_at', 'created_by', 'created_via', 'posting_line_id', 'reversed_source_id'}
+        for row in sources:
+            _require({k: v for k, v in row.items() if k not in ignored}
+                     == {k: v for k, v in old_sources[row['reversed_source_id']].items() if k not in ignored},
+                     'exact reversal attribution')
+    live = {row['id']: row for row in _claims_made_by(s, header['id'])}
+    releases = [row for row in pending['credit_source_claims'] if row['kind'] == 'release']
+    _require(len(releases) == len(live) and {row['reverses_claim_id'] for row in releases} == set(live),
+             'release every old claim exactly once')
+    ignored = {'id', 'created_at', 'created_by', 'created_via', 'audit_event_id', 'kind', 'reverses_claim_id'}
+    for row in releases:
+        _require({k: v for k, v in row.items() if k not in ignored}
+                 == {k: v for k, v in live[row['reverses_claim_id']].items() if k not in ignored},
+                 'exact claim release')
+    # Validate the replacement using the same independently reconstructed commercial arithmetic
+    # as an original. Batch topology and all reversed facts have been checked above.
+    business = dict(pending)
+    business['posting_batches'] = [replacement]
+    business['posting_lines'] = [row for row in pending['posting_lines'] if row['batch_id'] == replacement['id']]
+    ids = {row['id'] for row in business['posting_lines']}
+    business['posting_line_sources'] = [row for row in pending['posting_line_sources'] if row['posting_line_id'] in ids]
+    business['credit_source_keys'] = [previous['key']]
+    validate(Plan(plan.preview, dict(data, pending=business)), s, ctx, batch_kind='replacement')
+    _require(not credits.active_applications(s, header['id'])
+             and not credits.active_consumptions(s, key_id=previous['key']['id']),
+             'consumed-credit correction remains unimplemented')
+
+
+def _posting_attribution(pending, lines, profile):
+    """Each business leg must post the captured account and amount of its own component."""
+    import json
+    sources = {row['id']: row for row in pending['posting_line_sources']}
+    legs = {row['id']: row for row in pending['posting_lines']}
+    expected = {}
+
+    def add(identifier, account, amount, document_line, debit):
+        if not amount:
+            _require(identifier is None, 'zero component has no posting')
+            return
+        _require(identifier in sources, 'commercial component has a posting attribution')
+        row = sources[identifier]
+        _require(row['amount_minor_units'] == amount and row['document_line_id'] == document_line,
+                 'commercial component amount and attribution')
+        leg = legs[row['posting_line_id']]
+        _require(leg['account_id'] == account and leg['name_id'] == profile['customer_id'],
+                 'commercial component captured account and party')
+        _require((leg['debit_minor_units'] > 0) == debit, 'commercial component posting direction')
+        expected[identifier] = amount
+
+    for identifier, line in lines.items():
+        account = json.loads(line['item_snapshot'])['income_account']['id']
+        add(line['posting_source_id'], account, line['net_minor_units'], identifier, True)
+    for cell in pending['credit_tax_components']:
+        add(cell['posting_source_id'], cell['liability_account_id'], cell['tax_minor_units'],
+            cell['document_line_id'], True)
+    for component in pending['credit_components']:
+        add(component['posting_source_id'], profile['ar_account_id'], component['amount_minor_units'],
+            component['document_line_id'], False)
+    _require(set(expected) == set(sources), 'every business attribution has exactly one commercial owner')
