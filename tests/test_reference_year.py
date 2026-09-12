@@ -223,6 +223,12 @@ def test_gross_paged_ledger_every_source_and_running_balance(reference_client, a
                 assert row['debit'] == source['credit'] and row['credit'] == source['debit']
 
 
+# Ten journal entries the demo writes outright, plus the four journal-family documents its
+# buying month adds: a cheque, a card charge, a card payment and the count adjustment. Named
+# once so the next document that lands in this family moves one number, not three assertions.
+DEMO_JOURNALS = 10 + 4
+
+
 def assert_balances(c):
     companies = c.company.list()['items']
     assert {r['display_name'] for r in companies} == {DEMO,REFERENCE}
@@ -240,9 +246,13 @@ def assert_balances(c):
         assert shown['balance']['currency'] == 'USD'
         assert shown['id'] != c.account.show(company=DEMO,account='Checking')['id']
     assert c.report.trial_balance(company=REFERENCE,date_to='2026-12-31')['totals']['debit']['minor_units'] == 8048639
-    assert c.report.trial_balance(company=DEMO,date_to='2026-12-31')['totals']['debit']['minor_units'] == 708234
+    # DEMO grew the buying half of its month: an order billed and paid, a cheque, a card charge,
+    # a card payment, a return credit and a count adjustment. The trial total carries their net
+    # effect, and Checking does not move at all because that arc funds itself from the demo's
+    # other bank account -- which is the assertion below still standing unchanged.
+    assert c.report.trial_balance(company=DEMO,date_to='2026-12-31')['totals']['debit']['minor_units'] == 708234 + 41120
     assert c.account.show(company=DEMO,account='Checking')['balance']['minor_units'] == 624895
-    assert c.journal.query(company=DEMO)['count'] == 10
+    assert c.journal.query(company=DEMO)['count'] == DEMO_JOURNALS
 
 
 def test_the_reference_depreciation_add_back_is_reported_in_operating(reference_client):
@@ -417,7 +427,7 @@ def test_public_boolean_schema_defaults_and_first_default_reset(tmp_path, monkey
     result = c.demo.reset()
     assert result['trashed_path'] is result['reference_company_id'] is result['reference_display_name'] is None
     assert [r['display_name'] for r in c.company.list()['items']] == [DEMO]
-    assert c.journal.query(company=DEMO)['count'] == 10
+    assert c.journal.query(company=DEMO)['count'] == DEMO_JOURNALS
     help_result = subprocess.run([sys.executable,'-m','bookflow.adapters.cli.app','demo','reset','--help'],
         capture_output=True,text=True,env={**os.environ,'NO_COLOR':'1'})
     assert help_result.returncode == 0 and '--include-reference' in help_result.stdout

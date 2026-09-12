@@ -323,13 +323,18 @@ def test_a_bill_entered_from_an_order_carries_its_lines_and_raises_the_payable_b
     assert bill['vendor_id'] == books['vendor']
     assert bill['total_minor_units'] == ORDERED_UNITS and bill['total']['amount'] == ORDERED
     assert bill['memo'] == 'June restock'
+    # An ordered item becomes an item line, which is the only line that can name the item whose
+    # quantity has to move; an ordered account line is still an expense. The two grids together
+    # are the order, which is why the total above is the ordered total.
     expenses = bill['revision']['expenses']
-    assert [line['amount_minor_units'] for line in expenses] == [
-        PIPE_UNITS, FITTINGS_UNITS, FREIGHT_UNITS]
-    # The item line becomes an expense line on the item's own purchase account.
-    assert [line['account_id'] for line in expenses] == [
-        books['supplies'], books['supplies'], books['freight']]
-    assert [line['memo'] for line in expenses] == ['3/4 inch copper pipe', 'Fittings', 'Delivery']
+    assert [line['amount_minor_units'] for line in expenses] == [FITTINGS_UNITS, FREIGHT_UNITS]
+    assert [line['account_id'] for line in expenses] == [books['supplies'], books['freight']]
+    assert [line['memo'] for line in expenses] == ['Fittings', 'Delivery']
+    items = bill['revision']['items']
+    assert [line['amount_minor_units'] for line in items] == [PIPE_UNITS]
+    assert [line['account_id'] for line in items] == [books['supplies']]
+    assert [line['description'] for line in items] == ['3/4 inch copper pipe']
+    assert items[0]['quantity'] == '40'
 
     # Accounts Payable rose by exactly the bill total and by nothing else.
     assert _net(books) == {books['payable']: -ORDERED_UNITS,
@@ -373,11 +378,55 @@ def test_what_the_caller_supplies_wins_over_what_the_order_says(books):
         reason='Enter what actually arrived')
     assert bill['total_minor_units'] == 40000 and bill['memo'] == 'Short delivery'
     assert len(bill['revision']['expenses']) == 1
+    # The ordered item is not received. Writing any line says what arrived, so the order's own
+    # item grid is not filled in behind it: a short delivery that carried the item line would
+    # owe the vendor for goods that did not come and take 40 lengths of pipe into stock as
+    # well. The empty grid is the proof -- a stock entry exists only for an item line.
+    assert bill['revision']['items'] == []
     assert bill['vendor_id'] == books['vendor']  # still the order's vendor
     assert bill['purchase_order_id'] == order['id']
     assert _net(books) == {books['payable']: -40000, books['supplies']: 40000}
     # The order is consumed all the same: there is one bill for it and it is this one.
     assert books['run']('purchase-order show', {'purchase_order': order['id']})['consumed'] is True
+
+
+def test_a_short_delivery_takes_no_stock_the_vendor_never_sent(books):
+    """The money half of this is covered above; this is the half that moves goods.
+
+    The other short-delivery test orders a ``non_inventory_part``, so it proves the payable and
+    not the stock -- ``_stock_entries`` filters to ``inventory.TRACKED_TYPES`` and never saw that
+    line. An ordered item that IS tracked is the case that matters: carrying the order's item
+    grid in behind the caller's own lines would take delivery of goods nobody received, and the
+    books would carry stock that does not exist on a shelf anywhere.
+    """
+    client, company = books['client'], books['company']
+    accounts = client.account.query(company=company, limit=200)['items']
+    stock = client.item.create(
+        company=company, name='Copper Elbow', type='inventory_part', price='4.50',
+        description='3/4in copper elbow',
+        purchase_description='3/4in copper elbow', cost='1.80',
+        cogs_account_id=next(a['id'] for a in accounts if a['type'] == 'cost_of_goods_sold'),
+        income_account_id=next(a['id'] for a in accounts if a['type'] == 'income'))['id']
+    order = books['run']('purchase-order post', dict(
+        vendor=books['vendor'], date='2026-06-01', number='PO-STOCK',
+        lines=[{'item': stock, 'quantity': '40', 'rate': '1.80'}]), reason='Order 40 elbows')
+
+    # The freight arrived and the goods did not. The caller says so by writing the one line.
+    bill = books['run']('bill post', dict(
+        date='2026-06-16', purchase_order=order['id'], memo='Freight only; goods to follow',
+        expenses=[{'account': books['freight'], 'amount': '25.00', 'memo': 'Delivery'}]),
+        reason='Enter the freight that did arrive')
+
+    # Stock first, deliberately. The line grid is the mechanism and the shelf is the claim, so
+    # the shelf is asserted before anything that would fail earlier and hide it.
+    held = books['run']('report stock-status', {'as_of': '2026-06-16', 'limit': 20})
+    rows = [row for row in held['rows'] if row['item_id'] == stock]
+    on_hand = rows[0]['quantity_on_hand'] if rows else '0'
+    assert on_hand == '0', (
+        f'{on_hand} elbows were received against a bill that never claimed them')
+    assert rows[0]['asset_value']['amount'] == '0.00' if rows else True
+    assert bill['revision']['items'] == []
+    assert bill['total_minor_units'] == 2500
 
 
 def test_the_bill_cannot_be_owed_to_a_different_vendor_than_the_order(books):
