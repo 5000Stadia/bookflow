@@ -15,10 +15,15 @@ def test_credit_example_appends_seven_commands_without_changing_old_seed():
     before = tomllib.loads(old.decode())['commands']
     after = tomllib.loads(new.decode())['commands']
     assert after[:len(before)] == before
-    assert len(after) == len(before) + 7
-    assert [row['command'] for row in after[len(before):]] == [
+    # This oracle owns its own append and nothing after it. Asserting the file ends here would
+    # make every later example this demo gains look like a regression in the credit correction,
+    # which is a different claim from the one this test exists to make: that the seven commands
+    # it added are still those seven, still in that order, still on top of an unchanged base.
+    mine = after[len(before):len(before) + 7]
+    assert [row['command'] for row in mine] == [
         'customer create', 'invoice post', 'credit-memo post', 'customer-credit apply',
         'credit-memo show', 'credit-memo update', 'credit-memo history']
+    assert len(after) >= len(before) + 7
 
 
 def test_seeded_credit_correction_keeps_invoice_paid_and_history_visible(client):
