@@ -3524,10 +3524,36 @@ memo as readily as a receipt, and a credit reports its current settlement throug
 `credit_source_keys` carries the same party/receivable/currency triple `payment_component_keys`
 does.
 
-**What this increment deliberately does not do.** There is no `credit-memo update`: a credit's
-correction has to release and re-take the source intervals its returned lines claimed, within
-one operation, and that is a distinct piece of work from the rest of its lifecycle — a wrong
-credit is voided and written again meanwhile. `customer-refund` has no update either, and for
+**Credit correction.** `credit-memo update` implements correction through
+`credit_corrections`, the shared credit commercial resolver and document persistence. Omitted
+lines copy their exact captured quantities, item facts, tax cells and source intervals; supplied
+lines replace the grid with retained permanent line identities where supplied. Claims are
+released and retaken in the same writer transaction as the immutable revision and exact
+reversal/replacement postings. The validator compares reversal legs and attribution to storage,
+checks exact claim inverses and verifies replacement arithmetic separately. Expected versions,
+preview fingerprints, idempotent retries and both accounting dates remain guarded. Exact no-op
+patches create no history and work independently of active applications/refunds.
+
+`credit_restatement` retains applications and refund consumptions when their combined use
+fits the corrected capacity. Used credits keep exact customer/AR/currency ownership and cannot
+move later than their earliest use. Each active allocation is exactly cancelled and replaced
+against current revision components, preserving target captures and amounts. An application
+retains its ID when one replacement component covers it; otherwise exact unapply/replacement
+edges keep one source component per application. Refund consumptions receive exact releases
+and replacement consumes against the same refund revision, date and key. The validator checks
+cancellation coverage, conserved target attribution and refund amounts, and combined capacity
+per component. Related invoice/refund headers advance once in the same audited transaction.
+Fingerprints include live uses, allocations, related headers and the closing date; the writer
+rebuild compares them before persistence. Existing idempotency keys govern retries.
+
+Unconsumed standalone corrections may change customer or AR. Immutable source keys are unique
+by transaction/customer/AR/currency and reused when returning to earlier dimensions. Current
+reads select the key named by current revision components, including paged worth reads; explicit
+historical key joins in refund labels and receivable reports retain their historical meaning.
+Linked returns continue to enforce exact invoice source dimensions. Credit void still refuses
+active applications or refunds.
+
+`customer-refund` has no update either, and for
 the settled reason: a refund is one customer, one amount, one date and one account, so changing
 any of them makes it a different refund and the document carries one revision for life. A
 refund's source is a credit memo only; refunding unapplied payment overage needs

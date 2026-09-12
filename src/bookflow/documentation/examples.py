@@ -620,6 +620,10 @@ EXAMPLES.update({
         {"customer": "Rivera Construction", "date": "2026-04-08",
          "memo": "Goodwill credit for the late visit",
          "lines": [{"item": "Site visit", "quantity": "1", "unit_price": "30.00"}]}),
+    "credit-memo update": Example(
+        f'bookflow credit-memo update {ID} --expected-version 1 --memo "Corrected credit note"'
+        ' --company "Demo Plumbing Co" --reason "Correct the note" --json',
+        {"credit_memo": ID, "expected_version": 1, "memo": "Corrected credit note"}),
     "credit-memo show": Example(
         f'bookflow credit-memo show {ID} --company "Demo Plumbing Co" --json', {"credit_memo": ID}),
     "credit-memo history": Example(

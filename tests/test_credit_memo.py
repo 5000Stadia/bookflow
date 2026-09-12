@@ -405,11 +405,12 @@ def test_every_write_is_attributed_in_the_company_audit(books):
 
 # ---------------------------------------------------------------- every surface, same result
 
-COMMANDS = frozenset(('credit-memo post', 'credit-memo show', 'credit-memo history'))
+COMMANDS = frozenset(('credit-memo post', 'credit-memo update', 'credit-memo show', 'credit-memo history'))
 
 
 @pytest.mark.timeout(300)
 def test_the_same_credit_memo_through_python_cli_http_and_mcp(root, tmp_path):
+    """Mixed-use item corrections and returned-line claim release/retake on every adapter."""
     pytest.importorskip('mcp')
     import anyio
 
@@ -451,8 +452,64 @@ def test_the_same_credit_memo_through_python_cli_http_and_mcp(root, tmp_path):
                 assert replay['id'] == credit['id'] and replay['idempotent_replay']
                 assert credit['total']['amount'] == '40.00'
 
+                bank = (await matrix.call(surface, 'account create', dict(name='Credit refund bank', type='bank')))['id']
+                method = next(row['id'] for row in (await matrix.call(surface, 'payment-method list', {}))['items']
+                              if row['kind'] == 'check')
+                target = await matrix.call(surface, 'invoice show', dict(invoice='PARITY-INV-1'))
+                await matrix.call(surface, 'customer-credit apply', dict(
+                    credit_memo=credit['id'], expected_version=credit['version'], date='2026-03-10',
+                    applications=[dict(invoice=target['id'], expected_version=target['version'], amount='10.00')]))
+                await matrix.call(surface, 'customer-refund post', dict(
+                    date='2026-03-12', funding_account=bank, method=method,
+                    sources=[dict(credit_memo=credit['id'], amount='5.00')]))
+                credit = await call('credit-memo show', dict(credit_memo=credit['id']))
+                correction = dict(credit_memo=credit['id'], expected_version=credit['version'],
+                    memo='Corrected through the same command', lines=[dict(
+                        line_id=credit['revision']['lines'][0]['line_id'], item=item, quantity='0.5')])
+                preview = await call('credit-memo update', correction, dry_run=True)
+                assert preview['total']['amount'] == '20.00' and preview['dry_run']
+                assert (await call('credit-memo show', {'credit_memo': credit['id']}))['version'] == 2
+                corrected = await call('credit-memo update', correction, idempotency_key='credit-update-1')
+                assert corrected['id'] == credit['id'] and corrected['version'] == 3
+                assert corrected['total']['amount'] == '20.00'
+                assert len(corrected['revision']['lines']) == 1
+                assert corrected['revision']['lines'][0]['line_id'] == credit['revision']['lines'][0]['line_id']
+                assert corrected['source_current']['available_minor_units'] == 500
+                retried = await call('credit-memo update', correction, idempotency_key='credit-update-1')
+                assert retried['idempotent_replay'] and retried['version'] == 3
+
                 await call('credit-memo show', {'credit_memo': credit['id']})
                 await call('credit-memo history', {'credit_memo': credit['id'], 'limit': 10})
+
+                source_line = target['revision']['lines'][0]['line_id']
+                returned_request = dict(customer=customer, date='2026-03-06', lines=[dict(
+                    source_invoice=target['id'], source_line=source_line, quantity='1')])
+                returned = await call('credit-memo post', returned_request)
+                neighbor = await call('credit-memo post', returned_request)
+                assert [(c['start_microunits'], c['end_microunits'])
+                        for c in neighbor['revision']['lines'][0]['claims']] == [(1_000_000, 2_000_000)]
+                returned_line = returned['revision']['lines'][0]['line_id']
+                shrink = dict(credit_memo=returned['id'], expected_version=returned['version'],
+                    lines=[dict(line_id=returned_line, source_invoice=target['id'],
+                                source_line=source_line, quantity='0.5')])
+                shrunk = await call('credit-memo update', shrink)
+                assert shrunk['total']['amount'] == '20.00'
+                assert shrunk['source_current']['capacity_minor_units'] == 2000
+                assert shrunk['source_current']['available_minor_units'] == 2000
+                assert len(shrunk['revision']['lines']) == 1
+                assert shrunk['revision']['lines'][0]['line_id'] == returned_line
+                assert [(c['start_microunits'], c['end_microunits'])
+                        for c in shrunk['revision']['lines'][0]['claims']] == [(0, 500_000)]
+                released = await call('credit-memo post', dict(customer=customer, date='2026-03-06',
+                    lines=[dict(source_invoice=target['id'], source_line=source_line, quantity='0.5')]))
+                assert [(c['start_microunits'], c['end_microunits'])
+                        for c in released['revision']['lines'][0]['claims']] == [(500_000, 1_000_000)]
+                assert (await call('credit-memo show', dict(credit_memo=neighbor['id'])))['revision']['lines'] == neighbor['revision']['lines']
+                exhausted = await call('credit-memo update', dict(shrink,
+                    expected_version=shrunk['version'], lines=[dict(line_id=returned_line,
+                    source_invoice=target['id'], source_line=source_line, quantity='1')]), rejected=True)
+                assert exhausted['code'] == 'E_RETURN_EXHAUSTED'
+                assert (await call('credit-memo show', dict(credit_memo=returned['id'])))['version'] == shrunk['version']
 
                 refused = await call('credit-memo post', {
                     **request, 'number': 'PARITY-INV-1'}, rejected=True)

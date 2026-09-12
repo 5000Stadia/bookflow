@@ -2051,3 +2051,42 @@ capture = "rec_discovery"
 command = "payment selection query"
 input = { "state" = "recovering" }
 capture = "rec_pending"
+
+# Credit correction: keep a $40 invoice settled while reducing a $60 credit to $40.
+# Final postings net to zero; the original credit and correction remain inspectable.
+[[commands]]
+command = "customer create"
+capture = "credit_demo_customer"
+input = { name = "Credit Correction Example Customer" }
+
+[[commands]]
+command = "invoice post"
+capture = "credit_demo_invoice"
+input = { customer = "${credit_demo_customer.id}", date = "2026-11-01", number = "DEMO-CREDIT-INVOICE", customer_tax_code = "${sale_exempt.id}", lines = [{ item = "${pay_item.id}", quantity = "40" }] }
+reason = "Show completed work before a customer credit"
+
+[[commands]]
+command = "credit-memo post"
+capture = "credit_demo_original"
+input = { customer = "${credit_demo_customer.id}", date = "2026-11-01", number = "DEMO-CREDIT-CORRECTED", lines = [{ item = "${pay_item.id}", quantity = "60" }] }
+reason = "Record the original customer credit"
+
+[[commands]]
+command = "customer-credit apply"
+input = { credit_memo = "${credit_demo_original.id}", expected_version = "${credit_demo_original.version}", date = "2026-11-02", applications = [{ invoice = "${credit_demo_invoice.id}", expected_version = "${credit_demo_invoice.version}", amount = "40.00" }] }
+reason = "Settle the example invoice with the credit"
+
+[[commands]]
+command = "credit-memo show"
+capture = "credit_demo_used"
+input = { credit_memo = "${credit_demo_original.id}" }
+
+[[commands]]
+command = "credit-memo update"
+capture = "credit_demo_corrected"
+input = { credit_memo = "${credit_demo_used.id}", expected_version = "${credit_demo_used.version}", memo = "Corrected allowance; invoice remains paid", lines = [{ item = "${pay_item.id}", quantity = "40" }] }
+reason = "Correct the allowance to forty dollars while retaining its application"
+
+[[commands]]
+command = "credit-memo history"
+input = { credit_memo = "${credit_demo_corrected.id}" }
