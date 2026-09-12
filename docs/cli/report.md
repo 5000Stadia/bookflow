@@ -1113,7 +1113,7 @@ Example JSON output:
 
 ## `report expenses-by-vendor`
 
-Expense between date_from and date_to grouped by vendor, with each vendor's share of the period as a percentage. Cost of goods sold, ordinary expense and other expense are all counted, which is what makes the total the same figure the profit and loss reports for those three sections over the same dates. Every document that reaches one of those accounts is included -- bills, cheques, credit card charges, vendor credits and expense journal entries -- because the report selects on the account rather than on a list of document types. A line that names its own vendor is that vendor's; a line that names none takes the one vendor named elsewhere on the same posting, which is how a cheque's payee reaches its expense lines. Expense that names no vendor at all, including money paid to a name from another list, is the one row called No name. A vendor credit is negative and reduces the vendor. Rows worth nothing are omitted; totals cover every vendor and rows are paged.
+Expense between date_from and date_to grouped by vendor, with each vendor's share of the period as a percentage. Cost of goods sold, ordinary expense and other expense are all counted, which is what makes the total the same figure the profit and loss reports for those three sections over the same dates. Every document that reaches one of those accounts is included -- bills, cheques, credit card charges, vendor credits and expense journal entries -- because the report selects on the account rather than on a list of document types. A line that names its own vendor is that vendor's; a line that names none takes the one vendor named elsewhere on the same posting, which is how a cheque's payee reaches its expense lines. Expense that names no vendor at all, including money paid to a name from another list, is the one row called No name. A vendor credit is negative and reduces the vendor. class_id narrows the report to what was entered under one class; a subclass is its own class and is not included with its parent, and omitting it reports every class together with the lines entered under none. There is deliberately no customer or job filter: a bill posts its vendor onto every leg including the expense ones, so the customer typed in a bill's Customer:Job column never reaches the posting line and a job-filtered expense report would silently omit every bill. Under a filter the total is the expense the filter admits, and scope states the whole period and what was kept out of it, so the total plus scope.excluded is scope.period. Rows worth nothing are omitted; totals cover every vendor the filter admits and rows are paged.
 
 | Contract | Value |
 |---|---|
@@ -1138,6 +1138,7 @@ Expense between date_from and date_to grouped by vendor, with each vendor's shar
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `class_id` | `--class-id` | string \| null | no | yes | null | Optional class ID or canonical full name, inactive classes included; a subclass is its own class and is not included with its parent. Omit for every class together with the lines entered under none. |
 
 ### Command and context options
 
@@ -1183,6 +1184,21 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `totals.expense.amount` | string | yes | no | — | — |
 | `totals.expense.currency` | string | yes | no | — | — |
 | `totals.expense.minor_units` | integer | yes | no | — | — |
+| `scope` | object | yes | no | — | — |
+| `scope.filtered` | boolean | yes | no | — | — |
+| `scope.selected` | array[object] | yes | no | — | — |
+| `scope.selected[].filter` | literal["class_id", "customer"] | yes | no | — | — |
+| `scope.selected[].id` | string | yes | no | — | — |
+| `scope.selected[].label` | string | yes | no | — | — |
+| `scope.selected[].active` | boolean | yes | no | — | — |
+| `scope.period` | object | yes | no | — | — |
+| `scope.period.amount` | string | yes | no | — | — |
+| `scope.period.currency` | string | yes | no | — | — |
+| `scope.period.minor_units` | integer | yes | no | — | — |
+| `scope.excluded` | object | yes | no | — | — |
+| `scope.excluded.amount` | string | yes | no | — | — |
+| `scope.excluded.currency` | string | yes | no | — | — |
+| `scope.excluded.minor_units` | integer | yes | no | — | — |
 | `rows` | array[object] | yes | no | — | — |
 | `rows[].vendor_id` | string \| null | yes | yes | — | — |
 | `rows[].current_vendor_name` | string \| null | yes | yes | — | — |
@@ -1215,6 +1231,20 @@ Example JSON output:
   },
   "next_cursor": null,
   "rows": [],
+  "scope": {
+    "excluded": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "filtered": false,
+    "period": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "selected": []
+  },
   "totals": {
     "expense": {
       "amount": "value",
@@ -1247,6 +1277,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -2869,7 +2900,7 @@ Example JSON output:
 
 ## `report sales-by-customer`
 
-Income between date_from and date_to grouped by the customer or job each sale was made to, in hierarchy-name order so a job reads directly under the customer it belongs to, with what that customer's share of the period came to as a percentage. A job's income is its own and is never rolled into its parent's figure; every row names its parent so the two can be added deliberately. Every income effect is counted whatever document posted it, including an income journal entry, and income posted against no customer -- or against a name from another list -- is the one row called No name rather than something dropped. The total is the income total report profit-and-loss shows for the same dates. Rows worth nothing on the period are omitted because they are worth nothing, not because a status was filtered; totals cover every customer and rows are paged.
+Income between date_from and date_to grouped by the customer or job each sale was made to, in hierarchy-name order so a job reads directly under the customer it belongs to, with what that customer's share of the period came to as a percentage. A job's income is its own and is never rolled into its parent's figure; every row names its parent so the two can be added deliberately. Every income effect is counted whatever document posted it, including an income journal entry, and income posted against no customer -- or against a name from another list -- is the one row called No name rather than something dropped. class_id narrows the report to what was entered under one class; a subclass is its own class and is not included with its parent, and omitting it reports every class together with the lines entered under none. There is deliberately no customer filter, because these rows already are the customer cut and one would only hide rows a reader can see anyway. The total is the income total report profit-and-loss shows for the same dates; under a filter it is the income the filter admits, and scope states the whole period and what was kept out of it, so the report's own total plus scope.excluded is scope.period and a filtered report still reconciles with the statement instead of quietly showing a smaller number. Rows worth nothing on the period are omitted because they are worth nothing, not because a status was filtered; totals cover every customer the filter admits and rows are paged.
 
 | Contract | Value |
 |---|---|
@@ -2894,6 +2925,7 @@ Income between date_from and date_to grouped by the customer or job each sale wa
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `class_id` | `--class-id` | string \| null | no | yes | null | Optional class ID or canonical full name, inactive classes included; a subclass is its own class and is not included with its parent. Omit for every class together with the lines entered under none. |
 
 ### Command and context options
 
@@ -2939,6 +2971,21 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `totals.income.amount` | string | yes | no | — | — |
 | `totals.income.currency` | string | yes | no | — | — |
 | `totals.income.minor_units` | integer | yes | no | — | — |
+| `scope` | object | yes | no | — | — |
+| `scope.filtered` | boolean | yes | no | — | — |
+| `scope.selected` | array[object] | yes | no | — | — |
+| `scope.selected[].filter` | literal["class_id", "customer"] | yes | no | — | — |
+| `scope.selected[].id` | string | yes | no | — | — |
+| `scope.selected[].label` | string | yes | no | — | — |
+| `scope.selected[].active` | boolean | yes | no | — | — |
+| `scope.period` | object | yes | no | — | — |
+| `scope.period.amount` | string | yes | no | — | — |
+| `scope.period.currency` | string | yes | no | — | — |
+| `scope.period.minor_units` | integer | yes | no | — | — |
+| `scope.excluded` | object | yes | no | — | — |
+| `scope.excluded.amount` | string | yes | no | — | — |
+| `scope.excluded.currency` | string | yes | no | — | — |
+| `scope.excluded.minor_units` | integer | yes | no | — | — |
 | `rows` | array[object] | yes | no | — | — |
 | `rows[].customer_id` | string \| null | yes | yes | — | — |
 | `rows[].current_customer_label` | string \| null | yes | yes | — | — |
@@ -2976,6 +3023,20 @@ Example JSON output:
   },
   "next_cursor": null,
   "rows": [],
+  "scope": {
+    "excluded": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "filtered": false,
+    "period": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "selected": []
+  },
   "totals": {
     "income": {
       "amount": "value",
@@ -3008,6 +3069,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -3017,7 +3079,7 @@ Example JSON output:
 
 ## `report sales-by-item`
 
-The same period's income grouped by the item sold, each row with the quantity in the item's own base unit, the income, the average price that quantity fetched and the item's share of the period as a percentage. Quantity and income both come from the posting the sale made, so a correction, a void and a credit memo take the units and the money back off the row they were added to. Every sales line names an item, so income with no item is income no sale line posted -- an income journal entry, or a deposit taken straight to an income account: that is the row called No item, and no_item_income on the totals says what it came to, so item income plus no-item income is the income total report profit-and-loss shows for the same dates. Average price is income divided by quantity rounded to the cent for reading, and is omitted for a row whose quantity is unknown because a line was priced by allocation. Rows worth nothing are omitted; totals cover every item and rows are paged.
+The same period's income grouped by the item sold, each row with the quantity in the item's own base unit, the income, the average price that quantity fetched and the item's share of the period as a percentage. Quantity and income both come from the posting the sale made, so a correction, a void and a credit memo take the units and the money back off the row they were added to. Every sales line names an item, so income with no item is income no sale line posted -- an income journal entry, or a deposit taken straight to an income account: that is the row called No item, and no_item_income on the totals says what it came to, so item income plus no-item income is the income total report profit-and-loss shows for the same dates. Average price is income divided by quantity rounded to the cent for reading, and is omitted for a row whose quantity is unknown because a line was priced by allocation. class_id narrows the report to what was entered under one class; a subclass is its own class and is not included with its parent, and omitting it reports every class together with the lines entered under none. customer narrows it to one customer or job; a job is its own customer and is not included with its parent. Under a filter the totals are what the filter admits, and scope states the whole period and what was kept out of it, so the report's own total plus scope.excluded is scope.period. Rows worth nothing are omitted; totals cover every item the filter admits and rows are paged.
 
 | Contract | Value |
 |---|---|
@@ -3042,6 +3104,8 @@ The same period's income grouped by the item sold, each row with the quantity in
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `class_id` | `--class-id` | string \| null | no | yes | null | Optional class ID or canonical full name, inactive classes included; a subclass is its own class and is not included with its parent. Omit for every class together with the lines entered under none. |
+| `customer` | `--customer` | string \| null | no | yes | null | Optional customer or job ID or canonical full name; a job is its own customer and is not included with its parent. Omit for every customer together with the income no customer was named on. |
 
 ### Command and context options
 
@@ -3095,6 +3159,21 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `totals.no_item_income.amount` | string | yes | no | — | — |
 | `totals.no_item_income.currency` | string | yes | no | — | — |
 | `totals.no_item_income.minor_units` | integer | yes | no | — | — |
+| `scope` | object | yes | no | — | — |
+| `scope.filtered` | boolean | yes | no | — | — |
+| `scope.selected` | array[object] | yes | no | — | — |
+| `scope.selected[].filter` | literal["class_id", "customer"] | yes | no | — | — |
+| `scope.selected[].id` | string | yes | no | — | — |
+| `scope.selected[].label` | string | yes | no | — | — |
+| `scope.selected[].active` | boolean | yes | no | — | — |
+| `scope.period` | object | yes | no | — | — |
+| `scope.period.amount` | string | yes | no | — | — |
+| `scope.period.currency` | string | yes | no | — | — |
+| `scope.period.minor_units` | integer | yes | no | — | — |
+| `scope.excluded` | object | yes | no | — | — |
+| `scope.excluded.amount` | string | yes | no | — | — |
+| `scope.excluded.currency` | string | yes | no | — | — |
+| `scope.excluded.minor_units` | integer | yes | no | — | — |
 | `rows` | array[object] | yes | no | — | — |
 | `rows[].item_id` | string \| null | yes | yes | — | — |
 | `rows[].current_item_label` | string \| null | yes | yes | — | — |
@@ -3137,6 +3216,20 @@ Example JSON output:
   },
   "next_cursor": null,
   "rows": [],
+  "scope": {
+    "excluded": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "filtered": false,
+    "period": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "selected": []
+  },
   "totals": {
     "income": {
       "amount": "value",
@@ -3179,6 +3272,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
@@ -3188,7 +3282,7 @@ Example JSON output:
 
 ## `report sales-by-rep`
 
-The same period's income grouped by the sales representative the sale itself captured, with each representative's share of the period as a percentage. The rep is read from the exact document revision that posted the effect, never from the customer's current sales representative, so reassigning a customer today does not move last year's sales and a correction that changes the rep moves only what it reposted. Income from a document that captured no representative, and income no sales document posted at all, is the one row called Unassigned. The total is the income total report profit-and-loss shows for the same dates. Rows worth nothing are omitted; totals cover every representative and rows are paged.
+The same period's income grouped by the sales representative the sale itself captured, with each representative's share of the period as a percentage. The rep is read from the exact document revision that posted the effect, never from the customer's current sales representative, so reassigning a customer today does not move last year's sales and a correction that changes the rep moves only what it reposted. Income from a document that captured no representative, and income no sales document posted at all, is the one row called Unassigned. class_id narrows the report to what was entered under one class; a subclass is its own class and is not included with its parent, and omitting it reports every class together with the lines entered under none. customer narrows it to one customer or job; a job is its own customer and is not included with its parent. The total is the income total report profit-and-loss shows for the same dates; under a filter it is the income the filter admits, and scope states the whole period and what was kept out of it, so the report's own total plus scope.excluded is scope.period and a filtered report still reconciles with the statement instead of quietly showing a smaller number. Rows worth nothing are omitted; totals cover every representative the filter admits and rows are paged.
 
 | Contract | Value |
 |---|---|
@@ -3213,6 +3307,8 @@ The same period's income grouped by the sales representative the sale itself cap
 | `basis` | `--basis` | literal["accrual"] | no | no | "accrual" | — |
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `class_id` | `--class-id` | string \| null | no | yes | null | Optional class ID or canonical full name, inactive classes included; a subclass is its own class and is not included with its parent. Omit for every class together with the lines entered under none. |
+| `customer` | `--customer` | string \| null | no | yes | null | Optional customer or job ID or canonical full name; a job is its own customer and is not included with its parent. Omit for every customer together with the income no customer was named on. |
 
 ### Command and context options
 
@@ -3258,6 +3354,21 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `totals.income.amount` | string | yes | no | — | — |
 | `totals.income.currency` | string | yes | no | — | — |
 | `totals.income.minor_units` | integer | yes | no | — | — |
+| `scope` | object | yes | no | — | — |
+| `scope.filtered` | boolean | yes | no | — | — |
+| `scope.selected` | array[object] | yes | no | — | — |
+| `scope.selected[].filter` | literal["class_id", "customer"] | yes | no | — | — |
+| `scope.selected[].id` | string | yes | no | — | — |
+| `scope.selected[].label` | string | yes | no | — | — |
+| `scope.selected[].active` | boolean | yes | no | — | — |
+| `scope.period` | object | yes | no | — | — |
+| `scope.period.amount` | string | yes | no | — | — |
+| `scope.period.currency` | string | yes | no | — | — |
+| `scope.period.minor_units` | integer | yes | no | — | — |
+| `scope.excluded` | object | yes | no | — | — |
+| `scope.excluded.amount` | string | yes | no | — | — |
+| `scope.excluded.currency` | string | yes | no | — | — |
+| `scope.excluded.minor_units` | integer | yes | no | — | — |
 | `rows` | array[object] | yes | no | — | — |
 | `rows[].sales_rep_id` | string \| null | yes | yes | — | — |
 | `rows[].current_sales_rep_name` | string \| null | yes | yes | — | — |
@@ -3291,6 +3402,20 @@ Example JSON output:
   },
   "next_cursor": null,
   "rows": [],
+  "scope": {
+    "excluded": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "filtered": false,
+    "period": {
+      "amount": "value",
+      "currency": "USD",
+      "minor_units": 1
+    },
+    "selected": []
+  },
   "totals": {
     "income": {
       "amount": "value",
@@ -3323,6 +3448,7 @@ Example JSON output:
 | `E_PERMISSION` | The acting user may not run this command here. |
 | `E_QUERY_STALE` | The company changed since this query began; restart without a cursor. |
 | `E_REASON_REQUIRED` | Writes by an agent need --reason or --directive. |
+| `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |

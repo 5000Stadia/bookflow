@@ -101,6 +101,7 @@ credit-memo history
 credit-memo post
 credit-memo query
 credit-memo show
+credit-memo update
 credit-memo void
 custom-field activate
 custom-field create

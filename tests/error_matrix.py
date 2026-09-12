@@ -341,18 +341,22 @@ MATRIX['report ar-aging'] = {
 MATRIX['report sales-by-customer'] = {
     'E_QUERY_STALE': 'posting or customer display facts changed between summary pages',
     'E_VALUE_RANGE': 'public income for a customer or the summary total exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'a class or customer filter that names nothing',
 }
 MATRIX['report sales-by-item'] = {
     'E_QUERY_STALE': 'posting, sales-line or item display facts changed between summary pages',
     'E_VALUE_RANGE': 'public income, quantity or average price for an item exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'a class or customer filter that names nothing',
 }
 MATRIX['report sales-by-rep'] = {
     'E_QUERY_STALE': 'posting or sales-representative display facts changed between summary pages',
     'E_VALUE_RANGE': 'public income for a representative or the summary total exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'a class or customer filter that names nothing',
 }
 MATRIX['report expenses-by-vendor'] = {
     'E_QUERY_STALE': 'posting or vendor display facts changed between summary pages',
     'E_VALUE_RANGE': 'public expense for a vendor or the summary total exceeds signed 64-bit range',
+    'E_RECORD_NOT_FOUND': 'a class filter that names nothing',
 }
 MATRIX['report statement'] = {
     'E_QUERY_STALE': 'posting, settlement or customer display facts changed between statement pages',
