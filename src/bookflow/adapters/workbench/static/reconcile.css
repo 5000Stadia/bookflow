@@ -1,0 +1,44 @@
+/* The reconciliation window. Every rule is fluid: nothing here is given a fixed pixel width,
+   so a 390px phone and a 1280px desktop lay the same markup out with nothing to scroll
+   sideways. The movement list is the one place that could push the page wide, so its rows wrap
+   rather than sitting in columns that cannot shrink. */
+
+.reconcile-lede{margin:.2rem 0 .8rem;overflow-wrap:anywhere}
+
+.reconcile-summary{border:1px solid #d0d9e4;border-radius:.35rem;background:#fff;
+  margin:.75rem 0;padding:.8rem;min-width:0;overflow-wrap:anywhere}
+.reconcile-summary h2{font-size:1.05rem;margin:0 0 .5rem}
+
+/* Two columns where there is room, one below about 640px. minmax with min(100%, ...) is what
+   keeps a track from ever exceeding the viewport on a narrow screen. */
+.reconcile-figures{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr));
+  gap:.4rem .9rem;margin:0}
+.reconcile-figures>div{min-width:0}
+.reconcile-figures dt{font-size:.82rem;color:#42546b;margin:0}
+.reconcile-figures dd{margin:0 0 .3rem;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+
+.reconcile-difference{font-weight:600;font-size:1.1rem}
+.reconcile-difference[data-balanced="true"]{color:#16643b}
+.reconcile-difference[data-balanced="false"]{color:#8a2f1d}
+
+.reconcile-controls{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.6rem 0}
+.reconcile-controls input[type=search]{flex:1 1 12rem;min-width:0}
+
+.reconcile-list{display:grid;gap:.4rem;margin:.6rem 0;min-width:0}
+
+/* A movement row: the tick, then the facts, wrapping onto as many lines as the width needs.
+   Nothing is a table, because a table of five columns is exactly what cannot fit on a phone. */
+.reconcile-movement{display:flex;gap:.6rem;align-items:flex-start;border:1px solid #d7dee7;
+  border-radius:.3rem;background:#fff;padding:.55rem .6rem;min-width:0;overflow-wrap:anywhere}
+.reconcile-movement input[type=checkbox]{margin:.25rem 0 0;flex:0 0 auto}
+.reconcile-movement>div{min-width:0;flex:1 1 auto}
+.reconcile-movement .reconcile-who{font-weight:600}
+.reconcile-movement .reconcile-facts{display:flex;flex-wrap:wrap;gap:.15rem .7rem;
+  font-size:.86rem;color:#42546b}
+.reconcile-movement .reconcile-amount{font-variant-numeric:tabular-nums;white-space:nowrap}
+.reconcile-movement[data-stale="true"]{background:#fbf6e7}
+.reconcile-movement[data-claimed="true"]{opacity:.65}
+
+.reconcile-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin:.7rem 0 0}
+.reconcile-certificate{border:1px solid #bcd8c6;background:#f2f9f4;border-radius:.35rem;
+  padding:.7rem;margin:.7rem 0;overflow-wrap:anywhere}

@@ -64,8 +64,10 @@ def test_the_reconcile_tile_is_live_and_lands_on_a_usable_page(workbench):
     assert item.live, item.reason
     assert item.href == f'/c/{workbench.company_id}/reconcile-opening/start'
     navigate_witness(workbench.browser, item, 'reconcile')
-    # A write-labelled tile has to be backed by a command that writes.
-    assert all(registry.get(name).is_write for name in item.step.action.commands)
+    # A write-labelled tile has to be backed by a command that writes -- at least one, since
+    # seeing what can be cleared is as much a part of this errand as clearing it.
+    assert any(registry.get(name).is_write for name in item.step.action.commands)
+    assert all(registry.get(name) is not None for name in item.step.action.commands)
 
 
 def test_the_page_asks_for_what_the_command_takes(workbench):

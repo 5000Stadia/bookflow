@@ -66,14 +66,17 @@ class PreparedChange(DraftChange):
 class OpeningStart(Mutation,Dated):
     account: ID
     opening_date: str
-    entered_balance: Units
+    # Minor units, like every other amount this system stores. Said out loud because this is one
+    # of the two amounts a person types by hand, and a form that silently wanted cents would take
+    # 290.00 as an error and 29000 as two hundred and ninety dollars without ever saying so.
+    entered_balance: Units=Field(description='Statement balance on the opening date, in minor units (2900 is 29.00).')
     evidence: Evidence
     references: tuple[EvidenceRef,...]=Field(default=(),max_length=200)
 
 class Start(Mutation,Dated):
     account: ID
     statement_date: str
-    ending_balance: Units
+    ending_balance: Units=Field(description='Closing balance printed on the statement, in minor units (29000 is 290.00).')
     opening_id: ID|None=None
     opening_draft_id: ID|None=None
     @model_validator(mode='after')
@@ -582,3 +585,40 @@ class FinishOutput(Model):
     opening_id: ID
     certificate_id: ID
     totals: Totals
+
+
+# A generated documentation sample fills an unconstrained string with "value", which a
+# pattern-constrained field then refuses. These four are the first top-level ID/Fingerprint
+# fields in any output model, so they carry their own samples rather than teaching the sampler
+# about field names -- that would silently change the generated JSON of 32 unrelated commands.
+DRAFT_SAMPLE=Field(json_schema_extra={'sample':'01ARZ3NDEKTSV4RRFFQ69G5FAV'})
+FINGERPRINT_SAMPLE=Field(json_schema_extra={'sample':'0'*64})
+
+class CandidatesOutput(Model):
+    contract: Literal['reconciliation.private.v1']='reconciliation.private.v1'
+    draft: ID=DRAFT_SAMPLE
+    account_id: ID
+    currency: Currency
+    cutoff: str
+    items: tuple[Movement,...]
+    count: Count
+    component_count: Count
+    positive_sum: Units
+    negative_sum: Units
+    # The freshness token the private core computes, returned so a client can prove it acted on
+    # the page it was shown; `next_cursor` is the signed continuation the private offset is not.
+    fingerprint: Fingerprint=FINGERPRINT_SAMPLE
+    next_cursor: str|None=None
+
+class PreviewOutput(Model):
+    contract: Literal['reconciliation.private.v1']='reconciliation.private.v1'
+    draft: ID=DRAFT_SAMPLE
+    account_id: ID
+    currency: Currency
+    kind: Literal['opening','statement','amendment']
+    version: Version
+    totals: Totals
+    # Everything `reconcile finish` demands, so a caller never has to compute either of them.
+    expected_facts_fingerprint: Fingerprint=FINGERPRINT_SAMPLE
+    dependency_guard: str
+    balanced: bool

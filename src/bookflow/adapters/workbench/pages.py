@@ -482,6 +482,18 @@ def _success_target(cmd: registry.Command, company_id: str | None, noun: str, re
     if company_id and cmd.name in ("register post", "register update", "check post",
                                    "card-charge post", "transfer post") and output.get("id"):
         return f"/c/{company_id}/journal/{output['id']}"
+    if company_id and cmd.name in ('reconcile opening start', 'reconcile start', 'reconcile mark') \
+            and output.get('draft'):
+        # A reconciliation is three pages and the draft is what carries a person between them.
+        # Landing them on the next step with it already filled in is the difference between a
+        # flow and three forms that happen to exist; saving marks returns to the same page at
+        # the version that save produced, which is what the finish is checked against.
+        draft = output['draft']
+        if cmd.name == 'reconcile opening start':
+            return f"/c/{company_id}/reconcile/start?" + urlencode(
+                {'f:account': draft['account_id'], 'f:opening_draft_id': draft['id']})
+        return f"/c/{company_id}/reconcile/mark?" + urlencode(
+            {'f:draft': draft['id'], 'f:expected_version': draft['version']})
     if Billing.is_conversion(noun, cmd.verb) and output.get('id'):
         return f"/c/{company_id}/{output['type'].replace('_', '-')}/{output['id']}"
     if noun in Work.NOUNS and output.get('kind') and output.get('id'):
@@ -514,7 +526,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css")
+        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -1393,6 +1405,16 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         originals = originals or {}
         if noun == 'deposit' and verb == 'post' and not attempted:
             attempted.update({'f:operation_key': 'WB-' + secrets.token_urlsafe(24), 'f:document.mode': 'inline'})
+        if noun in ('reconcile', 'reconcile opening') and not attempted:
+            # A reconciliation is three pages, and the draft is what carries a person from one to
+            # the next. Seeding it from the link they followed is what makes the chain a chain;
+            # they still have to submit, and every other field is theirs to fill.
+            if cmd.is_write:
+                attempted['f:operation_key'] = 'WB-' + secrets.token_urlsafe(24)
+            for field in ('draft', 'account', 'opening_draft_id', 'expected_version'):
+                value = request.query_params.get('f:' + field, request.query_params.get(field))
+                if value is not None and field in cmd.input_model.model_fields:
+                    attempted['f:' + field] = value
         if noun in Document.MONEY_OUT and verb == 'post':
             # Open the payee picker on the list a check usually pays, and keep it honest when
             # nobody is entered: a leaf equal to its original is not submitted, so seeding the
@@ -1569,6 +1591,11 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         described = F.describe_fields(noun, verb, cmd.input_model, originals, attempted)
         if noun == 'invoice' and verb == 'update':
             described = [leaf for leaf in described if leaf['path'] not in ('operation_key', 'settlement_guard', 'settlement_versions')]
+        if noun in ('reconcile', 'reconcile opening'):
+            # A schema version is not a question. Rendering `evidence.format` asks a bookkeeper to
+            # choose "1" from a dropdown to describe their bank statement, and choosing it submits
+            # the string where the model wants the number, so the only answer on offer is wrong.
+            described = [leaf for leaf in described if not leaf['path'].endswith('.format')]
         sales_form = (noun in ('invoice', 'sales-receipt') and verb in ('post', 'update')) or (noun in Work.NOUNS and cmd.is_write) or (noun == 'deposit' and verb == 'post')
         if noun in Work.NOUNS:
             described = Work.describe(described, noun)
@@ -2046,7 +2073,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 and Document.is_document(noun, verb) and verb in ("post", "create")):
             target = f"{Routing.base(company_id, noun)}/{verb}"
         flash_id = flashes.put(session_token, {"command": cmd.name, "is_write": cmd.is_write, "result": out})
-        location = f"{target}?flash={flash_id}"
+        location = target + ("&" if "?" in target else "?") + "flash=" + flash_id
         if request.headers.get("hx-request", "").lower() == "true":
             # A 303 is followed inside the XHR and leaves the address bar on
             # the submitted form. HX-Redirect performs the same GET as a

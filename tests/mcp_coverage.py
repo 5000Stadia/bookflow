@@ -292,9 +292,11 @@ proposal update
 rate query
 rate set
 rate show
+reconcile candidates
 reconcile finish
 reconcile mark
 reconcile opening start
+reconcile preview
 reconcile start
 register calculate
 register post
@@ -497,7 +499,7 @@ def execution_map():
                    'tests/test_mcp_registry_payment_preparation.py::test_payment_preparation_four_surface_documents_context_and_rejections' if any(cmd.name in names for names in PAYMENT_FAMILIES.values()) else
                    'tests/test_mcp_registry_payments.py::test_payment_financial_lifecycle_full_documents_and_exact_ledger' if cmd.name in PAYMENT_FINANCIAL else
                    'tests/test_mcp_registry_deposits.py::test_deposit_lifecycle_full_documents_and_exact_ledger' if cmd.name in DEPOSIT_COMMANDS else
-                   'tests/test_reconciliation_commands.py::test_the_four_commands_certify_a_statement_that_ties_to_the_ledger' if cmd.name in RECONCILE_COMMANDS else
+                   'tests/test_reconciliation_commands.py::test_the_commands_certify_a_statement_that_ties_to_the_ledger' if cmd.name in RECONCILE_COMMANDS else
                    'tests/test_mcp_registry_identity.py::test_identity_lifecycle_full_documents_owned_password_and_rejected_state' if cmd.name in IDENTITY_COMMANDS else
                    'tests/test_money_out_documents.py::test_the_same_check_and_card_charge_through_python_cli_http_and_mcp' if cmd.name in MONEY_OUT_COMMANDS else
                    'tests/test_bill_entry.py::test_the_same_bill_through_python_cli_http_and_mcp' if cmd.name in BILL_COMMANDS else
@@ -615,12 +617,12 @@ def variant_policies():
         ('oneOf', ('InlineCalculation', 'SelectionReference')): ([payment, 'tests/test_mcp_calculation_variant_browser.py::test_calculation_inline_null_origin_rejections_and_saved_selection'], ['parent-owned payment-selection workspace/navigation and combined-base acceptance']),
         ('oneOf', ('ApplyPreviewRequest', 'InvoiceUpdatePreviewRequest', 'ReceivePreviewRequest', 'UnapplyPreviewRequest', 'UpdatePreviewRequest', 'VoidPreviewRequest')): (['tests/test_mcp_nested_payment_request_browser.py::test_all_six_nested_preview_request_branches_exact_input_results_and_inactive_controls'], []),
         ('anyOf', ('Adjustment', 'null')): ([
-            'tests/test_reconciliation_commands.py::test_the_four_commands_certify_a_statement_that_ties_to_the_ledger',
+            'tests/test_reconciliation_commands.py::test_the_commands_certify_a_statement_that_ties_to_the_ledger',
             'tests/test_reconciliation_browser.py::test_every_reconcile_command_has_a_page_that_answers'],
             ['the certification witnesses finish on a difference of zero and omit the adjustment; '
              'the branch that writes an adjusting entry has no executed case on any surface yet']),
         ('oneOf', ('AttachmentEvidence', 'TransactionEvidence')): ([
-            'tests/test_reconciliation_commands.py::test_the_four_commands_certify_a_statement_that_ties_to_the_ledger',
+            'tests/test_reconciliation_commands.py::test_the_commands_certify_a_statement_that_ties_to_the_ledger',
             'tests/test_reconciliation_browser.py::test_every_reconcile_command_has_a_page_that_answers'],
             ['the opening witnesses pass an empty reference list, so neither evidence branch is '
              'entered by any executed case']),

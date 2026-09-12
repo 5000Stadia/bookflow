@@ -1373,7 +1373,7 @@ MATRIX["memorized-group enter"] = {
 MATRIX["memorized-group show"] = {"E_RECORD_NOT_FOUND": "unknown group", "E_VALIDATION": "empty selector"}
 MATRIX["memorized-group list"] = {"E_VALIDATION": "a bad cursor or limit"}
 
-# All four verbs load, prepare and re-prove the same account aggregate, so any of them can answer
+# All four writes load, prepare and re-prove the same account aggregate, so any of them can answer
 # with any of the family's reasons; which step raises first is what differs between them.
 _RECONCILE_ERRORS = {
     **RECONCILIATION_MATRIX,
@@ -1384,3 +1384,16 @@ _RECONCILE_ERRORS = {
 }
 for _verb in ("opening start", "start", "mark", "finish"):
     MATRIX["reconcile " + _verb] = dict(_RECONCILE_ERRORS)
+
+# The two reads walk that same aggregate, so they carry the family's reasons too -- but neither
+# takes an idempotency key or a directive, and each has one page-level reason the other cannot give.
+_RECONCILE_READ_ERRORS = {_code: _RECONCILE_ERRORS[_code]
+                          for _code in (*RECONCILIATION_MATRIX, "E_RECORD_NOT_FOUND")}
+MATRIX["reconcile candidates"] = {
+    **_RECONCILE_READ_ERRORS,
+    "E_QUERY_STALE": "a continuation whose fingerprint no longer matches the candidate population, or an offset past its end",
+}
+MATRIX["reconcile preview"] = {
+    **_RECONCILE_READ_ERRORS,
+    "E_VERSION_CONFLICT": _RECONCILE_ERRORS["E_VERSION_CONFLICT"],
+}

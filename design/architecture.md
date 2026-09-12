@@ -3085,7 +3085,30 @@ proves every capture named by the operation's own target rows; `validate` separa
 requires those targets to be complete, so a writer cannot store a capture and leave
 it unproven by forgetting to name it.
 
-`commands/reconcile_cmds.py` registers four: `reconcile opening start` adopts an
+`commands/reconcile_cmds.py` registers six. `reconcile candidates` pages what a
+draft can clear and `reconcile preview` says what it currently comes to, handing
+back the exact `expected_facts_fingerprint` and `dependency_guard` that
+`reconcile finish` demands -- neither is computable by a caller, so a command has
+to produce them or the write commands are reachable only by a program that can
+import the library. `dependency_guard`'s own docstring defines what it holds and
+what breaks when it is wrong, because nothing else can be inferred from a digest.
+The candidates cursor is the private offset plus the page's freshness token,
+signed with the company cursor key, so a continuation is only ever handed back to
+the query that issued it.
+
+The workbench turns those into one page. `static/reconcile-picker.js` takes over
+the generated `reconcile mark` form the way `deposit-picker.js` takes over the
+deposit form -- a bookkeeper should not learn two idioms for the same gesture --
+and loads the candidates, ticks whole movements, keeps a running difference from
+the integer minor units the rows already carry, and finishes through
+`reconcile preview` once the saved marks balance. A save lands on the next step
+with the draft already filled in, which is what `_success_target` does for the
+three reconcile writes; without it the pages exist but the errand does not.
+`tests/test_reconciliation_window_browser.py` is the acceptance: follow the tile,
+adopt, tick, watch the difference reach zero, hold a certificate, at 1280px and
+390px with nothing to scroll sideways.
+
+The remaining four are the writes: `reconcile opening start` adopts an
 account, `reconcile start` opens a statement draft against an adopted opening or the
 opening draft about to become one, `reconcile mark` ticks whole movements, and
 `reconcile finish` certifies a zero-difference statement, writing the opening and the

@@ -10,7 +10,13 @@ Identifiers are minted in the planner so a preview and the run that follows it n
 records, and every planner is pure enough to run twice: apply re-derives under its own write
 transaction rather than trusting what the preview saw.
 """
+import base64
+import hmac
+import json
+
 from bookflow.company import reconciliation_commands_models as m
+from bookflow.company import reconciliation_queries as queries
+from bookflow.core.errors import BookflowError
 from bookflow.company import reconciliation_drafts as drafts
 from bookflow.company import reconciliation_loading as loading
 from bookflow.company import reconciliation_persistence as persistence
@@ -34,11 +40,24 @@ ERRORS = ['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_RECONCILIATION_ATTEMPT_
 
 
 def dependency_guard(draft):
-    """What a prepared change asserts it depends on: the chain the draft was started against.
+    """The chain a prepared change believes it is finishing against.
 
-    The stored state is checked against the draft regardless; this is the client saying which
-    world it believes it is finishing in, so a draft prepared against a chain that has since
-    moved is refused with the reason rather than quietly certified against the new one.
+    `PreparedChange` requires this field and nothing defined what it holds, so this is the
+    definition, chosen here rather than inferred later from a digest: the draft's own
+    `base_chain_version`, `base_opening_id` and `base_head_id` -- the three facts that say which
+    opening and which head certificate the draft was started against.
+
+    What it guards: a client that read a draft, went away, and came back to finish it after
+    someone else certified a statement on the same account. The stored chain is checked against
+    the draft regardless, so a wrong guard never lets a bad certificate through; what the guard
+    adds is that the client states the world it believes it is in, so the refusal says
+    E_RECONCILIATION_CHAIN_STALE instead of the client silently certifying against a chain it
+    never saw. Get it wrong and a legitimate finish is refused until the client re-previews --
+    inconvenient, never unsafe.
+
+    `reconcile preview` returns it, and is the only thing a caller should get it from. If a real
+    requirement later needs a different set of facts in here, this docstring is the contract to
+    change; nothing else infers meaning from the digest.
     """
     return digest(dict(chain_version=draft.base_chain_version, opening=draft.base_opening_id,
                        head=draft.base_head_id))
@@ -202,6 +221,22 @@ def _mark_apply(plan, ctx, s):
                    audited=True)
 
 
+def _adopting(snapshot, draft):
+    """The open opening draft a first statement adopts, or None once the account has one."""
+    if draft.base_opening_id is not None:
+        return None
+    found = [d for d in snapshot.rows['drafts'] if d['account_id'] == draft.account_id
+             and d['kind'] == 'opening' and d['state'] == 'open']
+    preparation.require(len(found) == 1, 'E_RECONCILIATION_DEPENDENCY')
+    return _draft(snapshot, found[0]['id'])
+
+
+def _totals(snapshot, draft):
+    """What the statement comes to, whether or not it balances. Preview and finish share it."""
+    opening_draft = _adopting(snapshot, draft)
+    return opening_draft, preparation.statement(snapshot, draft, opening_draft=opening_draft)
+
+
 def _finish_prepare(inp, ctx, s, ids):
     """Certify a statement, and the opening it adopts when this is the account's first one."""
     _reuse(s, inp.operation_key)
@@ -211,14 +246,8 @@ def _finish_prepare(inp, ctx, s, ids):
     preparation.require(inp.dependency_guard == dependency_guard(value), 'E_RECONCILIATION_CHAIN_STALE')
     preparation.require(inp.expected_facts_fingerprint == preparation.fingerprint(snapshot, value),
                         'E_RECONCILIATION_SELECTION_STALE')
-    opening_draft = None
-    if value.base_opening_id is None:
-        found = [d for d in snapshot.rows['drafts']
-                 if d['account_id'] == account_id and d['kind'] == 'opening' and d['state'] == 'open']
-        preparation.require(len(found) == 1, 'E_RECONCILIATION_DEPENDENCY')
-        opening_draft = _draft(snapshot, found[0]['id'])
-    totals = preparation.certify(preparation.statement(snapshot, value, opening_draft=opening_draft))
-    return snapshot, value, opening_draft, totals
+    opening_draft, totals = _totals(snapshot, value)
+    return snapshot, value, opening_draft, preparation.certify(totals)
 
 
 reconcile_finish = command(
@@ -308,3 +337,93 @@ def _finish_apply(plan, ctx, s):
     return Applied(m.FinishOutput(draft=value, account_id=account_id, opening_id=opening_id,
                                   certificate_id=certificate_id, totals=totals), [],
                    'certified a reconciliation to ' + value.header.statement_date, audited=True)
+
+
+# ------------------------------------------------------------------ reading a draft
+
+# `reconciliation_queries` pages on a private integer offset and says so: an offset a client
+# could edit would let it ask for a slice of a population it never saw. The public continuation
+# is that offset and the page's own freshness token, signed with the company's cursor key, so a
+# cursor is only ever handed back to the query that issued it.
+CURSOR = b'bookflow.company.reconcile.candidates.v1\0'
+
+
+def _cursor_mac(db, payload):
+    from bookflow.company.ledger_reports import _cursor_key
+    return hmac.digest(_cursor_key(db), CURSOR + payload, 'sha256')
+
+
+def _encode_cursor(db, offset, fingerprint):
+    payload = json.dumps(dict(offset=offset, fingerprint=fingerprint),
+                         sort_keys=True, separators=(',', ':')).encode()
+    encode = lambda value: base64.urlsafe_b64encode(value).decode().rstrip('=')
+    return encode(payload) + '.' + encode(_cursor_mac(db, payload))
+
+
+def _decode_cursor(db, value):
+    invalid = BookflowError('E_VALIDATION', details={'fields': [
+        {'field': 'cursor', 'problem': 'invalid or mismatched continuation; restart without cursor'}]})
+    try:
+        if type(value) is not str or not 1 <= len(value) <= 2048:
+            raise ValueError
+        body, mac = value.encode('ascii').split(b'.')
+        decode = lambda x: base64.b64decode(x + b'=' * (-len(x) % 4), altchars=b'-_', validate=True)
+        payload = decode(body)
+        if not hmac.compare_digest(decode(mac), _cursor_mac(db, payload)):
+            raise ValueError
+        found = json.loads(payload)
+        return int(found['offset']), str(found['fingerprint'])
+    except (ValueError, UnicodeError, KeyError, TypeError) as exc:
+        raise invalid from exc
+
+
+def _candidates(inp, ctx, s):
+    account_id = _account_of(s, inp.draft)
+    snapshot = _loaded(s, account_id)
+    value = _draft(snapshot, inp.draft)
+    offset, expected = (0, None) if inp.cursor is None else _decode_cursor(s.company, inp.cursor)
+    page = queries.candidates(snapshot, value, inp.filters,
+                              authority_transactions=snapshot.authority_transactions,
+                              limit=inp.limit, offset=offset, expected_fingerprint=expected)
+    return Plan(m.CandidatesOutput(
+        draft=value.id, account_id=account_id,
+        currency=snapshot.source.accounts[account_id]['currency'],
+        cutoff=value.header.statement_date or value.header.opening_date,
+        items=page.items, count=page.count, component_count=page.component_count,
+        positive_sum=page.positive_sum, negative_sum=page.negative_sum, fingerprint=page.fingerprint,
+        next_cursor=None if page.next_offset is None
+        else _encode_cursor(s.company, page.next_offset, page.fingerprint)))
+
+
+reconcile_candidates = command(
+    'reconcile candidates', scope='company',
+    description='Page the movements a reconciliation draft can clear, newest filters first; each '
+                'row is a whole movement with the fingerprint `reconcile mark` needs to tick it.',
+    input_model=m.Candidates, output_model=m.CandidatesOutput, required_role='member',
+    capability='ledger.read', positional=['draft'],
+    error_codes=['E_RECORD_NOT_FOUND', 'E_QUERY_STALE', *ERRORS[2:]])(_candidates)
+
+
+def _preview(inp, ctx, s):
+    account_id = _account_of(s, inp.draft)
+    snapshot = _loaded(s, account_id)
+    value = _draft(snapshot, inp.draft)
+    preparation.require(value.version == inp.expected_version, 'E_VERSION_CONFLICT')
+    if value.kind == 'opening':
+        totals = preparation.opening(snapshot, value)
+    else:
+        _, totals = _totals(snapshot, value)
+    return Plan(m.PreviewOutput(
+        draft=value.id, account_id=account_id,
+        currency=snapshot.source.accounts[account_id]['currency'],
+        kind=value.kind, version=value.version,
+        totals=totals, expected_facts_fingerprint=preparation.fingerprint(snapshot, value),
+        dependency_guard=dependency_guard(value), balanced=totals.difference == 0))
+
+
+reconcile_preview = command(
+    'reconcile preview', scope='company',
+    description='Show what a reconciliation draft currently comes to, and hand back the exact '
+                'facts fingerprint and dependency guard `reconcile finish` requires.',
+    input_model=m.Preview, output_model=m.PreviewOutput, required_role='member',
+    capability='ledger.read', positional=['draft'], error_codes=list(ERRORS))(_preview)

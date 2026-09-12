@@ -895,7 +895,12 @@ _RECONCILE_EXAMPLES = {
     'reconcile finish': dict(
         draft=ID, expected_version=2, operation_key='example-finish-1',
         expected_facts_fingerprint=_RECONCILE_FINGERPRINT, dependency_guard=_RECONCILE_FINGERPRINT),
+    'reconcile candidates': dict(
+        draft=ID, limit=50,
+        filters=dict(from_date='2026-02-01', to_date='2026-02-28', sort='date')),
+    'reconcile preview': dict(draft=ID, expected_version=2),
 }
+# Only the writes carry a reason; the two reads change nothing and are not asked for one.
 _RECONCILE_REASONS = {
     'reconcile opening start': 'Adopt the checking account opening balance',
     'reconcile start': 'Reconcile the February checking statement',
@@ -904,7 +909,7 @@ _RECONCILE_REASONS = {
 }
 for _name, _payload in _RECONCILE_EXAMPLES.items():
     _args = ['bookflow', *_name.split()]
-    _positional = 'draft' if _name in ('reconcile mark', 'reconcile finish') else None
+    _positional = 'draft' if 'draft' in _payload else None
     if _positional:
         _args.append(str(_payload[_positional]))
     for _field, _value in _payload.items():
@@ -912,5 +917,8 @@ for _name, _payload in _RECONCILE_EXAMPLES.items():
             continue
         _args.extend(['--' + _field.replace('_', '-'),
                       _payment_json.dumps(_value, separators=(',', ':')) if isinstance(_value, (dict, list)) else str(_value)])
-    _args.extend(['--company', 'Demo Plumbing Co', '--reason', _RECONCILE_REASONS[_name], '--json'])
+    _args.extend(['--company', 'Demo Plumbing Co'])
+    if _name in _RECONCILE_REASONS:
+        _args.extend(['--reason', _RECONCILE_REASONS[_name]])
+    _args.append('--json')
     EXAMPLES[_name] = Example(' '.join(_payment_shell.quote(value) for value in _args), _payload)

@@ -105,9 +105,12 @@ class Population(Strict):
 
 
 class Evidence(Strict):
-    format: Literal[1]
-    statement_reference: str | None
-    entered_text: str | None
+    # The schema version of this blob, and the only field here a person is never asked for: a
+    # form that renders it makes a bookkeeper choose "1" from a dropdown to describe a statement.
+    # Stored snapshots still carry it explicitly, which `snapshot_format` checks on the way in.
+    format: Literal[1] = 1
+    statement_reference: str | None = None
+    entered_text: str | None = None
 
 
 class Preferences(Strict):
