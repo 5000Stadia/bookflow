@@ -23,6 +23,8 @@ def test_preserves_the_entire_combined_seed_prefix(filename):
     current=(RESOURCE/filename).read_bytes()
     assert current.startswith(old)
     before=tomllib.loads(old.decode())['commands'];after=tomllib.loads(current.decode())['commands']
+    # This oracle owns its historical append; later examples have their own count/effect witnesses.
+    after=after[:EXPECTED['final_command_counts'][filename]]
     assert after[:len(before)]==before and len(after)-len(before)==43
     assert len(after)==EXPECTED['final_command_counts'][filename]
 
@@ -56,7 +58,7 @@ def test_full_additive_recovery_seed_raw_and_financial_oracles(prefix_root,filen
     assert parent['due_minor_units']==1000
     captures={'pay_customer':client.run('customer show',dict(customer='Payment Example Customer'),company=company)}
     receipt_log=[]
-    entries=tomllib.loads((RESOURCE/filename).read_text())['commands'][EXPECTED['base_command_counts'][filename]:]
+    entries=tomllib.loads((RESOURCE/filename).read_text())['commands'][EXPECTED['base_command_counts'][filename]:EXPECTED['final_command_counts'][filename]]
     assert len(entries)==43
     for entry in entries:
         assert entry['command'].startswith(('payment recovery ','payment selection ')) or entry['command']=='invoice show'

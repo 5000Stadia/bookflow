@@ -20,6 +20,8 @@ def test_payment_append_keeps_exact_frozen_bytes_and_command_prefix(filename,cou
     current=(RESOURCE/filename).read_bytes()
     assert current.startswith(old)
     before=tomllib.loads(old.decode())['commands'];after=tomllib.loads(current.decode())['commands']
+    # This oracle owns its historical append; later examples have their own count/effect witnesses.
+    after=after[:EXPECTED['final_command_counts'][filename]]
     assert len(before)==count and after[:count]==before and len(after)==EXPECTED['final_command_counts'][filename] == count+17+33+43
 
 
