@@ -112,3 +112,29 @@ def test_documented_metadata_matches_fresh_migrated_database(tmp_path: Path, sco
         migrate_to_head(db, scope, None)
         database_shape = _database_shape(sa.inspect(db.engine), db.conn)
     assert _metadata_shape(metadata) == database_shape
+
+
+def test_both_deposit_manifests_still_conform_to_the_shipped_models():
+    """A schema or model change that the deposit manifests have not been told about.
+
+    `deposit_read_manifest.conform()` pins the exact column set, types, nullability and foreign-key
+    edges of every table it names, plus SHA-256 hashes of six models' JSON schemas.
+    `deposit_public_manifest.conform()` separately requires an explicit disposition for every field
+    of every model it publishes. Either can be broken from a long way away, and has been three
+    times: a widened `Literal` on `reconciliation_models.Producer`, an added column on `accounts`,
+    and two added fields on `sales_facts.SalesLineProfile`.
+
+    Each time the failure surfaced as HTTP 400 on every deposit page, discovered by an unrelated
+    browser test -- and the third also arrived disguised as `E_PERMISSION`, because the pre-proof
+    publication fallback presents an internal error as a permission refusal.
+
+    The guards existed; they lived only in deposit test files, which nobody editing `sales_facts`
+    or `ledger_schema` has reason to run. This test puts them where a schema change already runs,
+    so the break is named at its cause instead of three layers downstream. It costs about two
+    seconds.
+    """
+    from bookflow.company.deposit_public_manifest import conform as public_conform
+    from bookflow.company.deposit_read_manifest import conform as private_conform
+
+    private_conform()
+    public_conform()
