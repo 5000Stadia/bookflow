@@ -340,6 +340,8 @@ def test_mixed_use_refusals_are_named_and_atomic(books, patch, code, reason):
     with pytest.raises(BookflowError) as error:
         update(books, current(books, credit), **patch)
     assert (error.value.code, error.value.details['reason']) == (code, reason)
+    if reason == 'credit_date_after_use':
+        assert error.value.details['earliest_use_date'] == '2026-03-15'
     assert snapshot(books) == before
 
 

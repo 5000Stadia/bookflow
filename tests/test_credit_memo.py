@@ -486,12 +486,16 @@ def test_the_same_credit_memo_through_python_cli_http_and_mcp(root, tmp_path):
                     source_invoice=target['id'], source_line=source_line, quantity='1')])
                 returned = await call('credit-memo post', returned_request)
                 neighbor = await call('credit-memo post', returned_request)
+                assert [(c['start_microunits'], c['end_microunits'])
+                        for c in neighbor['revision']['lines'][0]['claims']] == [(1_000_000, 2_000_000)]
                 returned_line = returned['revision']['lines'][0]['line_id']
                 shrink = dict(credit_memo=returned['id'], expected_version=returned['version'],
                     lines=[dict(line_id=returned_line, source_invoice=target['id'],
                                 source_line=source_line, quantity='0.5')])
                 shrunk = await call('credit-memo update', shrink)
                 assert shrunk['total']['amount'] == '20.00'
+                assert shrunk['source_current']['capacity_minor_units'] == 2000
+                assert shrunk['source_current']['available_minor_units'] == 2000
                 assert len(shrunk['revision']['lines']) == 1
                 assert shrunk['revision']['lines'][0]['line_id'] == returned_line
                 assert [(c['start_microunits'], c['end_microunits'])

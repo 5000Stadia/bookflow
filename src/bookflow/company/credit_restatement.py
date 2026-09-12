@@ -39,7 +39,7 @@ def compatible(s, ctx, previous, resolved):
     earliest = min(row['effective_date'] for row in uses)
     if resolved['date'] > earliest:
         raise BookflowError('E_HAS_APPLICATIONS', details={
-            'reason': 'credit_date_after_use', 'field': 'date', 'latest_date': earliest})
+            'reason': 'credit_date_after_use', 'field': 'date', 'earliest_use_date': earliest})
     journals.open_dates(s, [row['effective_date'] for row in uses])
 
 
