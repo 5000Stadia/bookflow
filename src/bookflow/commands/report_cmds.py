@@ -69,7 +69,7 @@ def plan_ar_aging(inp, ctx, s):
 
 
 @command("report open-invoices", scope="company", required_role="member", capability="reports",
-    description="Unpaid and partly paid invoices as of as_of, oldest due date first, each with its due date, days past due, aging column, original amount, applied amount and remaining balance. Paid and voided invoices are omitted. This lists invoices only, so its total is receivables before unapplied customer credit; use report ar-aging for the balance that ties to Accounts Receivable. Totals cover the whole filter and rows are paged.",
+    description="Unpaid and partly paid invoices and statement charges as of as_of, oldest due date first, each with its document type, due date, days past due, aging column, original amount, applied amount and remaining balance. A statement charge has no terms, so its own date is its due date. Paid and voided documents are omitted. This lists what a customer still owes on a document, so its total is receivables before unapplied customer credit; use report ar-aging for the balance that ties to Accounts Receivable. Totals cover the whole filter and rows are paged.",
     input_model=OpenInvoicesInput, output_model=OpenInvoicesOutput,
     error_codes=["E_QUERY_STALE", "E_VALUE_RANGE", "E_RECORD_NOT_FOUND"])
 def plan_open_invoices(inp, ctx, s):

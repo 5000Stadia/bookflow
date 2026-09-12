@@ -5,6 +5,7 @@ import sqlalchemy as sa
 
 from bookflow.company import schema as c, sales_defaults as defaults, sales, document_effects as effects
 from bookflow.company import payment_calculations as calc, payment_queries as query
+from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES
 from bookflow.company.payment_authority import authorize
 from bookflow.company.payment_outputs import SelectionOutput, SelectionWriteOutput
 from bookflow.company.sales_models import money, _invalid
@@ -181,7 +182,7 @@ def compatible(s, context_, facts):
     if profile['control_account_id'] != context_['ar_account_id'] or revision['currency'] != context_['currency']:
         raise BookflowError('E_APPLICATION_INCOMPATIBLE', details={'invoice_id': header['id']})
     if header['status'] != 'posted' or revision['date'] > context_['date']:
-        raise _invalid('invoice', 'select a posted invoice dated on or before the payment')
+        raise _invalid('invoice', 'select a posted invoice or statement charge dated on or before the payment')
     if context_['mode'] == 'existing_credit':
         funding = query.payment_facts(s, context_['payment_id'])
         if not any(key['party_id'] == profile['customer_id'] and key['ar_account_id'] == context_['ar_account_id']
@@ -230,7 +231,7 @@ def prepare(s, ctx, inp, operation):
         items = []
     elif operation == 'update':
         by_id = dict(prior_items)
-        removes = [sales.resolve(s, selector, 'invoice')['id'] for selector in inp.remove_invoices]
+        removes = [sales.resolve(s, selector, SETTLEABLE_RECEIVABLE_TYPES)['id'] for selector in inp.remove_invoices]
         sets = [(entry, query.invoice_facts(s, entry.invoice, write=True)) for entry in inp.set_items]
         if len({facts['header']['id'] for _, facts in sets}) != len(sets) or len(set(removes)) != len(removes) or set(removes) & {f['header']['id'] for _, f in sets}:
             raise _invalid('set_items', 'invoice aliases must resolve to distinct disjoint targets')
@@ -338,9 +339,9 @@ def authorize_input(inp, ctx, s):
         context_ = context(s, inp)
         authorize(s, [context_['payment_id']] if context_['payment_id'] else [], write=True)
     for entry in getattr(inp, 'set_items', []):
-        authorize(s, [sales.resolve(s, entry.invoice, 'invoice')['id']], write=True)
+        authorize(s, [sales.resolve(s, entry.invoice, SETTLEABLE_RECEIVABLE_TYPES)['id']], write=True)
     for identifier in getattr(inp, 'remove_invoices', []):
-        authorize(s, [sales.resolve(s, identifier, 'invoice')['id']], write=True)
+        authorize(s, [sales.resolve(s, identifier, SETTLEABLE_RECEIVABLE_TYPES)['id']], write=True)
 
 
 def replay(inp, ctx, s, hit):

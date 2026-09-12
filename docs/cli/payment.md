@@ -783,11 +783,12 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].original_revision_id` | string | yes | no | — | First immutable commercial revision, distinct from the current correction. |
 | `items[].original_gross_minor_units` | integer | yes | no | — | Original gross in currency minor units, before any commercial corrections. |
 | `items[].invoice_id` | string | yes | no | — | — |
+| `items[].document_type` | literal["invoice", "statement_charge"] | yes | no | — | Which receivable this row is: an invoice, or a statement charge entered straight onto the account. Both are settled the same way and both are named in `invoice` fields. |
 | `items[].expected_version` | integer | yes | no | — | — |
 | `items[].number` | string | yes | no | — | — |
 | `items[].customer_id` | string | yes | no | — | — |
 | `items[].date` | string | yes | no | — | — |
-| `items[].due_date` | string | yes | no | — | — |
+| `items[].due_date` | string \| null | yes | yes | — | When this document falls due. Null on a statement charge, which has no terms and ages by its own date. |
 | `items[].currency` | string | yes | no | — | — |
 | `items[].gross_minor_units` | integer | yes | no | — | — |
 | `items[].applied_minor_units` | integer | yes | no | — | — |

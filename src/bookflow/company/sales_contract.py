@@ -23,7 +23,17 @@ _COMMON = tuple(ReferenceDefinition(field, target) for field, target in (
 )) + (ReferenceDefinition('lines.unit', 'unit-of-measure', child_units=True),
       OwnedAddressReference('shipping_address_id', 'customer'))
 
+# A statement charge is one invoice line with no invoice around it, so its line fields sit on
+# the header where a person entering a charge looks for them. Its selectors are therefore the
+# flat spellings of the line's own paths, not `lines.*`.
+_CHARGE = tuple(ReferenceDefinition(field, target) for field, target in (
+    ('customer', 'customer'), ('item', 'item'), ('class_id', 'class'),
+    ('tax_code', 'sales-tax-code'), ('customer_tax_code', 'sales-tax-code'),
+    ('sales_tax_item', 'item'), ('ar_account', 'account'),
+)) + (ReferenceDefinition('unit', 'unit-of-measure', child_units=True),)
+
 FORM_DEFINITIONS = {
     'invoice': SalesFormDefinition(_COMMON + (ReferenceDefinition('terms', 'term'), ReferenceDefinition('ar_account', 'account'))),
     'sales-receipt': SalesFormDefinition(_COMMON + (ReferenceDefinition('deposit_to', 'account'), ReferenceDefinition('payment_method', 'payment-method'))),
+    'statement-charge': SalesFormDefinition(_CHARGE),
 }

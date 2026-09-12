@@ -46,13 +46,31 @@ def json_text(value):
 
 
 def resolve(s, selector, document_type):
+    """The one document a selector names, by stable id or by the number written on it.
+
+    ``document_type`` is one type, or several where a caller genuinely accepts more than one --
+    a customer's payment settles an invoice or a statement charge, and which of the two a
+    selector names is the document's own business, not the payer's.
+
+    A stable id is unique across every type, so it resolves on its own. A number is unique only
+    inside its own series, and a statement charge takes a series separate from the invoices', so
+    the same number really can name one of each. Where it does, this refuses instead of choosing:
+    the request is ambiguous, and taking whichever row the database returned first would settle
+    the wrong document and balance perfectly while doing it.
+    """
+    types = (document_type,) if isinstance(document_type, str) else tuple(document_type)
     t = c.transactions
     key = selector.upper() if is_ulid(selector) else selector
-    found = effects.rows(s, t, t.c.type == document_type, t.c.id == key)
+    found = effects.rows(s, t, t.c.type.in_(types), t.c.id == key)
     if not found:
-        found = effects.rows(s, t, t.c.type == document_type, t.c.number == selector)
+        found = effects.rows(s, t, t.c.type.in_(types), t.c.number == selector)
+        kinds = sorted({row['type'] for row in found})
+        if len(kinds) > 1:
+            raise _invalid(types[0], 'number ' + selector + ' names ' + ' and '.join(
+                kind.replace('_', ' ') + ' ' + selector for kind in kinds) +
+                '; name the one you mean by its id')
     if not found:
-        raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': document_type, 'selector': selector})
+        raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': types[0], 'selector': selector})
     return found[0]
 
 

@@ -7,12 +7,18 @@ import sqlalchemy as sa
 
 from bookflow.company import schema as c, sales, document_effects as effects
 from bookflow.company import payment_queries as query
+from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_TYPES
 from bookflow.company.payment_authority import authorize
 from bookflow.company.ledger_reports import _cursor_key
 from bookflow.core import audit, clock
 from bookflow.core.errors import BookflowError
 
 DOMAIN = b'payment-settlement-guard-v1\0'
+
+# Both ends of a settlement edge own a graph: the receipt that supplied the money, and the
+# receivable it settled. Which receivables those are is the settlement contract's own answer,
+# not a second list kept here.
+OWNER_TYPES = ('payment', *SETTLEABLE_RECEIVABLE_TYPES)
 
 
 def watermark(s):
@@ -46,7 +52,7 @@ def _headers_at(s, identifiers, cutoff):
             try:
                 row = entries[0]
                 value = audit.decode_snapshot(row['after'])
-                if (isinstance(value, dict) and value.get('id') == identifier and value.get('type') in ('payment', 'invoice')
+                if (isinstance(value, dict) and value.get('id') == identifier and value.get('type') in OWNER_TYPES
                     and type(value.get('version')) is int and value['version'] == row['version_after']
                     and isinstance(value.get('current_revision_id'), str)):
                     headers[identifier] = value
@@ -72,7 +78,7 @@ def _header_at(s, identifier, cutoff):
 
 
 def graph(s, owner_type, owner_id, *, cutoff=None, write=False):
-    if owner_type not in ('payment', 'invoice'):
+    if owner_type not in OWNER_TYPES:
         raise BookflowError('E_VALIDATION')
     owner = sales.resolve(s, owner_id, owner_type)
     authorize(s, [owner['id']], write=write)
@@ -101,6 +107,11 @@ def graph(s, owner_type, owner_id, *, cutoff=None, write=False):
         allocations=[[row[k] for k in ('id', 'application_id', 'source_revision_id', 'credit_source_component_id', 'target_revision_id', 'amount_minor_units', 'effective_date')]
                      for row in sorted(live, key=lambda row: row['id'])])
     return dict(payload=payload, digest=query.digest(payload), headers=headers, unknown=unknown, applications=active, allocations=live)
+
+
+def receivable_owner_type(s, identifier):
+    """Which settleable receivable an identifier names, so a guard is issued for what it is."""
+    return sales.resolve(s, identifier, SETTLEABLE_RECEIVABLE_TYPES)['type']
 
 
 def issue(s, owner_type, owner_id):
@@ -169,7 +180,7 @@ def decode(s, token):
         value = json.loads(raw)
         required = {'v', 'company_id', 'owner_type', 'owner_id', 'owner_version', 'baseline_audit_seq', 'issued_at', 'graph_digest'}
         if (not isinstance(value, dict) or set(value) != required or type(value['v']) is not int or value['v'] != 1 or
-            value['company_id'] != s.company_row['id'] or value['owner_type'] not in ('payment', 'invoice') or
+            value['company_id'] != s.company_row['id'] or value['owner_type'] not in OWNER_TYPES or
             type(value['baseline_audit_seq']) is not int or not 0 <= value['baseline_audit_seq'] <= watermark(s) or
             type(value['owner_version']) is not int or value['owner_version'] < 1 or
             not all(isinstance(value[k], str) for k in ('owner_id', 'issued_at', 'graph_digest'))):
@@ -188,7 +199,7 @@ def _commercial_snapshot(s, header, event_seq, cache):
                 c.transaction_revisions.c.id == key[2], c.transaction_revisions.c.transaction_id == key[0])).mappings().one_or_none()
         if revision is None:
             raise ValueError('unowned commercial revision')
-        if header['type'] == 'invoice':
+        if header['type'] in SETTLEABLE_RECEIVABLE_TYPES:
             semantic = sales._saved_semantic(s, revision)
         elif header['type'] == 'payment':
             profile = s.company.conn.execute(sa.select(c.payment_profiles).where(

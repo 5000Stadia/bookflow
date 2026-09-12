@@ -4,6 +4,7 @@ from collections import namedtuple
 import sqlalchemy as sa
 from bookflow.company import schema as c, document_effects as effects, sales_defaults as defaults
 from bookflow.company import payment_selection as selection, payment_queries as query, payment_calculations as calc, sales
+from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_SQL
 from bookflow.company.sales_models import money, _invalid
 from bookflow.core.errors import BookflowError
 from bookflow.core.money import Money
@@ -82,7 +83,9 @@ def _candidate_query(s, inp, *, page_ids=None, resolved=None, projection='identi
         source = """transactions AS t
             CROSS JOIN transaction_revisions AS r INDEXED BY ix_co17_revisions_read ON r.id=t.current_revision_id
             CROSS JOIN sales_profiles AS p INDEXED BY ix_co17_sales_revision ON p.revision_id=r.id"""
-    conditions = ["t.type='invoice'", "t.status='posted'", 'r.date<=?', 'r.currency=?',
+    # Every receivable document this customer's money can settle, not the invoice alone:
+    # what `payment invoices` omits here is what a person cannot pay in the browser.
+    conditions = ['t.type IN ' + SETTLEABLE_RECEIVABLE_SQL, "t.status='posted'", 'r.date<=?', 'r.currency=?',
         'p.control_account_id=?', '(' + predicate + ')', party_filter]
     values.extend([context['date'], context['currency'], context['ar_account_id'], *authority_values, *parties])
     if page_ids is not None:
@@ -106,7 +109,7 @@ def _candidate_query(s, inp, *, page_ids=None, resolved=None, projection='identi
         columns = identity + ',r.date,r.currency,r.id AS revision_id,r.total_minor_units AS gross_minor_units,r.total_minor_units-(' + used + ') AS due_minor_units'
     else:
         assert projection == 'display'
-        columns = identity + ',t.number,r.date,p.due_date,r.currency,r.total_minor_units AS gross_minor_units,r.id AS revision_id,' + used + ' AS applied_minor_units,r.total_minor_units-(' + used + ') AS due_minor_units,original.id AS original_revision_id,original.total_minor_units AS original_gross_minor_units'
+        columns = identity + ',t.type AS document_type,t.number,r.date,p.due_date,r.currency,r.total_minor_units AS gross_minor_units,r.id AS revision_id,' + used + ' AS applied_minor_units,r.total_minor_units-(' + used + ') AS due_minor_units,original.id AS original_revision_id,original.total_minor_units AS original_gross_minor_units'
         source += ' JOIN transaction_revisions AS original ON original.transaction_id=t.id AND original.revision_number=1'
     sql = 'SELECT ' + columns + ' FROM ' + source + ' WHERE ' + ' AND '.join(conditions)
     if projection == 'money':

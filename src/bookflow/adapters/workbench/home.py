@@ -123,6 +123,22 @@ PANELS: tuple[Panel, ...] = (
                 aside=True,
             ),
             Step(
+                id="statement-charge",
+                title="Statement charge",
+                summary="Charge a customer's account directly for one thing, with no invoice; it ages and settles like one.",
+                action=Action("Enter a statement charge", WRITE, ("statement-charge post",),
+                              "/statement-charge/post"),
+                aside=True,
+            ),
+            Step(
+                id="statement-charges",
+                title="Statement charges",
+                summary="Every charge entered straight onto an account, newest first.",
+                action=Action("Open the statement charges", READ, ("statement-charge query",),
+                              "/statement-charge"),
+                aside=True,
+            ),
+            Step(
                 id="statement",
                 title="Statement",
                 summary="A customer's whole account over a period: what they owed, what changed, what is left.",

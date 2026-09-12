@@ -1,6 +1,8 @@
 """Additive durable preparation evidence. No financial tables are altered."""
 import sqlalchemy as sa
 
+from bookflow.company.ledger_schema import SETTLEABLE_RECEIVABLE_SQL
+
 
 def define_tables(metadata, C, T, common):
     def text(name, nullable=False, size=None):
@@ -63,7 +65,7 @@ def define_tables(metadata, C, T, common):
         text('amount_origin', True, 24), ident('retained_calculation_revision_id', True),
         integer('attempted_calculated_minor_units', True), *created(), num('entry_index', 1),
         num('observed_invoice_version', 1), num('amount_minor_units', nullable=True), num('attempted_calculated_minor_units', nullable=True),
-        ck("invoice_type = 'invoice'", 'invoice_type'),
+        ck('invoice_type IN ' + SETTLEABLE_RECEIVABLE_SQL, 'invoice_type'),
         ck("(action = 'remove' AND amount_minor_units IS NULL AND currency IS NULL AND amount_origin IS NULL AND retained_calculation_revision_id IS NULL AND attempted_calculated_minor_units IS NULL) OR (action = 'calculate' AND amount_minor_units IS NULL AND currency IS NULL AND amount_origin IS NULL AND retained_calculation_revision_id IS NULL) OR (action = 'set' AND currency IS NOT NULL AND attempted_calculated_minor_units IS NULL AND ((amount_origin = 'entered' AND amount_minor_units IS NOT NULL AND retained_calculation_revision_id IS NULL) OR (amount_origin = 'unresolved' AND amount_minor_units IS NULL AND retained_calculation_revision_id IS NULL) OR (amount_origin = 'calculated' AND amount_minor_units IS NOT NULL AND retained_calculation_revision_id IS NOT NULL)))", 'entry_shape'),
         sa.UniqueConstraint('recovery_id', 'entry_index'), sa.UniqueConstraint('recovery_id', 'invoice_id'),
         recovery_owner(), revision_owner('retained_calculation_revision_id'),

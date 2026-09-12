@@ -182,10 +182,12 @@ def payment_settlement(inp, ctx, s):
     input_model=InvoiceSettlementInput, output_model=InvoiceSettlementReadOutput, required_role='member', capability='ledger.read',
     positional=['invoice'], error_codes=['E_RECORD_NOT_FOUND', 'E_QUERY_STALE'])
 def invoice_settlement(inp, ctx, s):
-    from bookflow.company.payment_dependencies import issue
+    from bookflow.company.payment_dependencies import issue, receivable_owner_type
     from bookflow.company.payment_history import invoice
     output = InvoiceSettlementReadOutput(**invoice(s, inp))
-    output.settlement_guard = issue(s, 'invoice', output.invoice_id)
+    # The guard belongs to the document it was issued over: a statement charge settles the
+    # same way an invoice does and is read through this same command.
+    output.settlement_guard = issue(s, receivable_owner_type(s, output.invoice_id), output.invoice_id)
     return Plan(output)
 
 

@@ -200,14 +200,18 @@
     const body=$('invoices');body.replaceChildren();
     for (const row of candidates) {
       const chosen=selected.get(row.invoice_id), tr=el('tr');tr.dataset.invoice=row.invoice_id;
-      const check=el('input');check.type='checkbox';check.checked=!!chosen;check.setAttribute('aria-label','Select invoice '+row.number);
+      // A statement charge is settled exactly like an invoice and arrives in the same rows, so
+      // it is named and linked as what it is rather than described to the reader as an invoice.
+      const kind=row.document_type==='statement_charge'?'statement charge':'invoice';
+      const noun=row.document_type==='statement_charge'?'statement-charge':'invoice';
+      const check=el('input');check.type='checkbox';check.checked=!!chosen;check.setAttribute('aria-label','Select '+kind+' '+row.number);
       check.addEventListener('change',()=>{const checked=check.checked;return perform(async()=>{
         if (!draft) await makeDraft();
         await changeDraft(checked?{set_items:[{invoice:row.invoice_id,expected_version:row.expected_version,amount_origin:'unresolved'}]}:{remove_invoices:[row.invoice_id]});
       });});
-      const description=el('span');description.append(el('span',row.customer_label+' · '),link(row.number,`/c/${config.company}/invoice/${row.invoice_id}`));
+      const description=el('span');description.append(el('span',row.customer_label+' · '),link(row.number,`/c/${config.company}/${noun}/${row.invoice_id}`));
       const input=el('input');input.type='text';input.inputMode='decimal';input.dataset.mathCurrency=config.currency;input.value=chosen?.amount_minor_units!=null?units(chosen.amount_minor_units):'';
-      input.setAttribute('aria-label','Payment for invoice '+row.number);
+      input.setAttribute('aria-label','Payment for '+kind+' '+row.number);
       input.addEventListener('change',()=>{const value=input.value;return perform(async()=>{
         if (!draft) await makeDraft();
         await changeDraft({set_items:[{invoice:row.invoice_id,expected_version:row.expected_version,
@@ -215,7 +219,7 @@
       });});
       const entry=el('span');entry.append(input,el('small',chosen?' '+chosen.amount_origin:' Not selected'));
       const cells=[check,el('span',row.date),description,el('span',units(row.original_gross_minor_units)),el('span',units(row.gross_minor_units)),el('span',units(row.applied_minor_units)),el('span',units(row.due_minor_units)),entry];
-      const labels=['Select','Date','Job / invoice','Original','Current','Applied','Due','Payment'];
+      const labels=['Select','Date','Job / document','Original','Current','Applied','Due','Payment'];
       cells.forEach((node,index)=>{const td=el('td');td.dataset.label=labels[index];td.append(node);tr.append(td);});body.append(tr);
     }
   }

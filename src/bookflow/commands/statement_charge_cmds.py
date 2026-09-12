@@ -30,8 +30,8 @@ DESCRIPTIONS = {
         ' `customer`. `class_id` classes the charge. `ar_account` defaults to the only'
         ' active Accounts Receivable account when the company has exactly one. Statement'
         ' charges take their own number series; they do not share the invoice series.'
-        ' A charge cannot be settled by `payment receive` or `payment apply` yet -- it'
-        ' stands, ages and shows on the statement, and nothing can pay it off.'
+        ' A charge is settled exactly as an invoice is: it appears in `payment invoices`,'
+        ' and `payment receive` or `payment apply` take it wherever an `invoice` is named.'
     ),
     'void': (
         'Void a statement charge with a required reason. Its accounting is reversed at its'

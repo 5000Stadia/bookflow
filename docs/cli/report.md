@@ -1963,7 +1963,7 @@ Example JSON output:
 
 ## `report open-invoices`
 
-Unpaid and partly paid invoices as of as_of, oldest due date first, each with its due date, days past due, aging column, original amount, applied amount and remaining balance. Paid and voided invoices are omitted. This lists invoices only, so its total is receivables before unapplied customer credit; use report ar-aging for the balance that ties to Accounts Receivable. Totals cover the whole filter and rows are paged.
+Unpaid and partly paid invoices and statement charges as of as_of, oldest due date first, each with its document type, due date, days past due, aging column, original amount, applied amount and remaining balance. A statement charge has no terms, so its own date is its due date. Paid and voided documents are omitted. This lists what a customer still owes on a document, so its total is receivables before unapplied customer credit; use report ar-aging for the balance that ties to Accounts Receivable. Totals cover the whole filter and rows are paged.
 
 | Contract | Value |
 |---|---|
@@ -2044,6 +2044,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `totals.balance.minor_units` | integer | yes | no | — | — |
 | `rows` | array[object] | yes | no | — | — |
 | `rows[].transaction_id` | string | yes | no | — | — |
+| `rows[].document_type` | literal["invoice", "statement_charge"] | yes | no | — | — |
 | `rows[].number` | string | yes | no | — | — |
 | `rows[].date` | string | yes | no | — | — |
 | `rows[].due_date` | string | yes | no | — | — |
