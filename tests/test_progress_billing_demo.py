@@ -9,7 +9,7 @@ from math import lcm
 import pytest
 
 from bookflow import BookflowError
-from tests.test_reference_year import page_rows, reference_client, reference_template  # noqa: F401
+from tests.test_reference_year import demo_runner, page_rows, reference_client, reference_template  # noqa: F401
 from tests.test_service_sales_demo import COMPANIES
 
 
@@ -73,7 +73,7 @@ def test_manifests_append_progress_examples_after_the_old_entries(resource):
 def test_progress_chain_exact_installments_rebill_correction_and_lineage(reference_client, company, prefix):
     client, _ = reference_client
     p = prefix + "-PROG-"
-    run = lambda name, **data: client.run(name, data, company=company, reason="Progress billing demo test")  # noqa: E731
+    run = demo_runner(client, company, "Progress billing demo test")
     customer = client.customer.show(customer="Progress Example Customer", company=company)
     assert customer["current_balance"]["minor_units"] == 0
     invoices = {r["number"]: r for r in run("invoice query", customer=customer["id"])["items"]}

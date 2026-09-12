@@ -13,6 +13,28 @@ import sys
 import bookflow
 import pytest
 
+
+def demo_runner(client, company, why, *, dry_run=False):
+    """A caller that reasons only when it writes, because `reason` is a write-only option.
+
+    A lambda that hands `reason` to everything dies on its first query with E_USAGE, and it
+    dies there -- before a single lineage or installment assertion has run, so the test looks
+    like an arithmetic failure and is really a caller that asked a read to justify itself.
+    Ask the registry which it is rather than keeping a list of the reads.
+    """
+    from bookflow.core import registry
+
+    def run(name, **data):
+        command = registry.get(name)
+        options = {}
+        if command is not None and command.is_write:
+            options["reason"] = why
+            if dry_run:
+                options["dry_run"] = True
+        return client.run(name, data, company=company, **options)
+
+    return run
+
 from bookflow.core.errors import BookflowError
 from tests.conftest import as_user, make_actor
 
