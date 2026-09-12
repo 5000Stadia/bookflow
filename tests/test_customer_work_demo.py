@@ -227,9 +227,15 @@ def test_work_seeds_post_nothing_and_previews_change_nothing(reference_client, c
     # failed as though the work seeds had posted money. Written as the old figure plus the named
     # contribution rather than as the number the report happens to print today.
     TAX_TRIAL, TAX_INCOME = 39, 35
-    checking, trial, journals, profit = ((624895, 708195 + TAX_TRIAL, 10, 151095 + TAX_INCOME)
-                                         if prefix == "DEMO"
-                                         else (7267800, 8048600 + TAX_TRIAL, 36, 6457000 + TAX_INCOME))
+    # DEMO alone also gained the buying half of its month -- an order billed and paid, a cheque,
+    # a card charge, a card payment, a return credit and a count adjustment. Four of those are
+    # journal-family documents. REFERENCE has no such arc, which is why only one column moves.
+    BUYING_TRIAL, BUYING_INCOME, BUYING_JOURNALS = 41120, -31840, 4
+    checking, trial, journals, profit = (
+        (624895, 708195 + TAX_TRIAL + BUYING_TRIAL, 10 + BUYING_JOURNALS,
+         151095 + TAX_INCOME + BUYING_INCOME)
+        if prefix == "DEMO"
+        else (7267800, 8048600 + TAX_TRIAL, 36, 6457000 + TAX_INCOME))
     assert client.account.show(account="Checking", company=company)["balance"]["minor_units"] == checking
     # Accounts Receivable is the sum of what its customers owe, named rather than pinned to one
     # opaque total: 128.00 commercial, 20.00 and -10.00 on the two payment jobs, and 0.33 + 0.06
@@ -247,8 +253,13 @@ def test_work_seeds_post_nothing_and_previews_change_nothing(reference_client, c
     assert customer["current_balance"]["minor_units"] == 12800
     before = work_counts(client, company, prefix)
     assert before["transactions"] == journals + 4
+    # This oracle counts journal_entry-type transactions, so of DEMO's eight new buying
+    # documents exactly four land here -- the cheque, the card charge, the card payment and the
+    # count adjustment; the order, bill, bill payment and vendor credit carry their own types.
+    # Each of the four is a simple two-sided entry, which is why lines move by twice as much.
     assert (before["transaction_revisions"], before["posting_batches"], before["posting_lines"]) == (
-        (22, 33, 99) if prefix == "DEMO" else (45, 53, 132))
+        (22 + BUYING_JOURNALS, 33 + BUYING_JOURNALS, 99 + 2 * BUYING_JOURNALS) if prefix == "DEMO"
+        else (45, 53, 132))
     # Nine documents: PROP-1 (4 revisions), PROP-2, EST-1A, EST-1B (3), EST-2, EST-3, WO-1 (4), WO-2, WO-3.
     assert before["work_documents"] == 9
     assert before["work_revisions"] == 4 + 1 + 1 + 3 + 1 + 1 + 4 + 1 + 1
