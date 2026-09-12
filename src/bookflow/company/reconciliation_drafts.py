@@ -6,6 +6,16 @@ from bookflow.company.reconciliation_preparation import (
     require,read_admission,groups,group_fingerprint,whole_selection,account_population,claimed,fingerprint,
 )
 
+def balance(s,value,field):
+    """A typed statement balance in the company's own currency, as exact minor units.
+
+    Storage keeps minor units, so this is the one place the money a person typed becomes the
+    integer everything downstream compares against; the currency is the account's, which
+    `account_population` has already refused to let differ from the company's.
+    """
+    return m.statement_balance(value,s.referenced_rows['company_info'][0]['home_currency'],field)
+
+
 DEFAULT_PREFERENCES=Preferences(format=1,columns=['date','number','payee','amount','status'],sort='date',descending=False,hide_after_date=True,view='as_certified')
 
 def load(s,identity, *, authority_transactions):
@@ -37,7 +47,8 @@ def start(s,inp, *, identity,revision_id,opening_draft=None):
         else:
             require(opening_draft is not None and opening_draft.id==inp.opening_draft_id and opening_draft.account_id==inp.account and opening_draft.kind=='opening' and opening_draft.state=='open','E_RECONCILIATION_DRAFT_STATE')
     header=Header(format=1,opening_date=cutoff if opening else None,statement_date=None if opening else cutoff,
-        entered_balance=inp.entered_balance if opening else inp.ending_balance,
+        entered_balance=balance(s,inp.entered_balance if opening else inp.ending_balance,
+                                'entered_balance' if opening else 'ending_balance'),
         evidence=inp.evidence if opening else Evidence(format=1,statement_reference=None,entered_text=None),preferences=DEFAULT_PREFERENCES)
     return m.Draft(id=identity,account_id=inp.account,kind='opening' if opening else 'statement',version=1,current_revision_id=revision_id,state='open',header=header,
         evidence_references=inp.references if opening else (),base_chain_version=state['version'] if state else 0,base_opening_id=state['opening_id'] if state else None,base_head_id=state['head_certificate_id'] if state else None)
@@ -56,6 +67,7 @@ def update(s,draft,inp, *, revision_id):
     fields=inp.model_fields_set-{'operation_key','draft','expected_version'}
     require(not (draft.kind=='opening' and 'statement_date' in fields) and not (draft.kind!='opening' and 'opening_date' in fields),'E_RECONCILIATION_DATE')
     patch={k:getattr(inp,k) for k in fields}
+    if 'entered_balance' in patch:patch['entered_balance']=balance(s,patch['entered_balance'],'entered_balance')
     header=Header.model_validate(dict(draft.header.model_dump(),**patch))
     if header==draft.header:return draft
     # Date/header changes deliberately retain saved versions and marks.

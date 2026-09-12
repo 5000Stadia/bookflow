@@ -55,11 +55,11 @@ def reconciled(client, driver):
     journal(client, pair(bank, equity, '10'), date='2026-01-10')
     journal(client, pair(bank, equity, '2.50'), date='2026-01-20')
     opening = run(client, 'reconcile opening start', dict(
-        operation_key=new_id(), account=bank, opening_date='2026-01-01', entered_balance=0,
+        operation_key=new_id(), account=bank, opening_date='2026-01-01', entered_balance='0.00',
         evidence=dict(format=1, statement_reference=None, entered_text='Adopted at zero'),
         references=[]))
     statement = run(client, 'reconcile start', dict(
-        operation_key=new_id(), account=bank, statement_date='2026-01-31', ending_balance=1250,
+        operation_key=new_id(), account=bank, statement_date='2026-01-31', ending_balance='12.50',
         opening_draft_id=opening['draft']['id']))
     marked = run(client, 'reconcile mark', dict(
         operation_key=new_id(), draft=statement['draft']['id'], expected_version=1,
@@ -107,11 +107,11 @@ def test_a_statement_whose_difference_is_not_zero_is_refused(client, driver):
     equity = account(client, 'Unbalanced equity', 'equity')
     journal(client, pair(bank, equity, '10'), date='2026-01-10')
     opening = run(client, 'reconcile opening start', dict(
-        operation_key=new_id(), account=bank, opening_date='2026-01-01', entered_balance=0,
+        operation_key=new_id(), account=bank, opening_date='2026-01-01', entered_balance='0.00',
         evidence=dict(format=1, statement_reference=None, entered_text='Adopted at zero'),
         references=[]))
     statement = run(client, 'reconcile start', dict(
-        operation_key=new_id(), account=bank, statement_date='2026-01-31', ending_balance=9999,
+        operation_key=new_id(), account=bank, statement_date='2026-01-31', ending_balance='99.99',
         opening_draft_id=opening['draft']['id']))
     run(client, 'reconcile mark', dict(operation_key=new_id(), draft=statement['draft']['id'],
                                        expected_version=1,
@@ -131,11 +131,11 @@ def test_a_source_that_moves_after_preparation_is_refused_at_the_write(client, d
     equity = account(client, 'Moving equity', 'equity')
     journal(client, pair(bank, equity, '10'), date='2026-01-10')
     opening = run(client, 'reconcile opening start', dict(
-        operation_key=new_id(), account=bank, opening_date='2026-01-01', entered_balance=0,
+        operation_key=new_id(), account=bank, opening_date='2026-01-01', entered_balance='0.00',
         evidence=dict(format=1, statement_reference=None, entered_text='Adopted at zero'),
         references=[]))
     statement = run(client, 'reconcile start', dict(
-        operation_key=new_id(), account=bank, statement_date='2026-01-31', ending_balance=1000,
+        operation_key=new_id(), account=bank, statement_date='2026-01-31', ending_balance='10.00',
         opening_draft_id=opening['draft']['id']))
     run(client, 'reconcile mark', dict(operation_key=new_id(), draft=statement['draft']['id'],
                                        expected_version=1,
@@ -161,11 +161,11 @@ def test_the_write_cannot_get_past_a_prover_that_refuses(client, driver, monkeyp
     equity = account(client, 'Bypass equity', 'equity')
     journal(client, pair(bank, equity, '10'), date='2026-01-10')
     opening = run(client, 'reconcile opening start', dict(
-        operation_key=new_id(), account=bank, opening_date='2026-01-01', entered_balance=0,
+        operation_key=new_id(), account=bank, opening_date='2026-01-01', entered_balance='0.00',
         evidence=dict(format=1, statement_reference=None, entered_text='Adopted at zero'),
         references=[]))
     statement = run(client, 'reconcile start', dict(
-        operation_key=new_id(), account=bank, statement_date='2026-01-31', ending_balance=1000,
+        operation_key=new_id(), account=bank, statement_date='2026-01-31', ending_balance='10.00',
         opening_draft_id=opening['draft']['id']))
     run(client, 'reconcile mark', dict(operation_key=new_id(), draft=statement['draft']['id'],
                                        expected_version=1,
@@ -183,3 +183,60 @@ def test_the_write_cannot_get_past_a_prover_that_refuses(client, driver, monkeyp
         snapshot = loading.load(s, bank)
     assert not snapshot.rows['certificates'] and not snapshot.rows['openings']
     assert {d['state'] for d in snapshot.rows['drafts']} == {'open'}
+
+
+def test_a_statement_balance_is_money_and_may_be_zero_or_negative():
+    """The three shapes a caller may send, and the three a balance may take."""
+    from bookflow.company import reconciliation_commands_models as models
+    from bookflow.core.errors import BookflowError
+    assert models.statement_balance('290.00', 'USD') == 29000
+    assert models.statement_balance('0.00', 'USD') == 0
+    assert models.statement_balance('-15.00', 'USD') == -1500
+    assert models.statement_balance('290.00 USD', 'USD') == 29000
+    assert models.statement_balance(models.StatementMoney(minor_units=-1500, currency='USD'), 'USD') == -1500
+    for value, code in (('290.00 EUR', 'E_VALIDATION'), ('290.001', 'E_AMOUNT_PRECISION'),
+                        (29000, 'E_VALIDATION'), ('two hundred', 'E_VALIDATION')):
+        with pytest.raises(BookflowError) as raised:
+            models.statement_balance(value, 'USD')
+        assert raised.value.code == code, (value, raised.value.code)
+    # An object whose own decimal disagrees with its units is refused rather than picked between.
+    with pytest.raises(BookflowError):
+        models.statement_balance(models.StatementMoney(minor_units=100, currency='USD', amount='2.00'), 'USD')
+
+
+def test_one_declaration_carries_every_balance_a_person_types():
+    """Three fields, one type. The last time they were written out per field, two took cents."""
+    from bookflow.company import reconciliation_commands_models as models
+    typed = {(model.__name__, name)
+             for model in (models.OpeningStart, models.Start, models.DraftUpdate)
+             for name, field in model.model_fields.items()
+             if name in models.STATEMENT_AMOUNT_FIELDS}
+    assert typed == {('OpeningStart', 'entered_balance'), ('Start', 'ending_balance'),
+                     ('DraftUpdate', 'entered_balance')}
+    for model, name in ((models.OpeningStart, 'entered_balance'), (models.Start, 'ending_balance')):
+        assert model.model_fields[name].annotation is models.StatementAmount
+        assert model.model_fields[name].json_schema_extra == {'math': {'currency': 'company'}}
+
+
+def test_an_overdrawn_statement_reconciles(client, driver):
+    """The case the signed type exists for: the account is less than nothing on the statement."""
+    bank = account(client, 'Overdrawn bank')
+    equity = account(client, 'Overdrawn equity', 'equity')
+    journal(client, [dict(account=equity, side='debit', amount='15'),
+                     dict(account=bank, side='credit', amount='15')], date='2026-01-10')
+    opening = run(client, 'reconcile opening start', dict(
+        operation_key=new_id(), account=bank, opening_date='2026-01-01', entered_balance='0.00',
+        evidence=dict(statement_reference=None, entered_text='Adopted at zero'), references=[]))
+    statement = run(client, 'reconcile start', dict(
+        operation_key=new_id(), account=bank, statement_date='2026-01-31',
+        ending_balance='-15.00', opening_draft_id=opening['draft']['id']))
+    assert statement['draft']['header']['entered_balance'] == -1500
+    marked = run(client, 'reconcile mark', dict(
+        operation_key=new_id(), draft=statement['draft']['id'], expected_version=1,
+        entries=marks(client, statement['draft']['id'])))
+    guards, preview = prepared(client, statement['draft']['id'], marked['draft']['version'])
+    assert preview['balanced'] is True
+    done = run(client, 'reconcile finish', dict(
+        operation_key=new_id(), draft=statement['draft']['id'],
+        expected_version=marked['draft']['version'], **guards))
+    assert done['totals']['cleared_balance'] == -1500 and done['totals']['difference'] == 0

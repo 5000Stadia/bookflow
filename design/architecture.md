@@ -3096,6 +3096,20 @@ The candidates cursor is the private offset plus the page's freshness token,
 signed with the company cursor key, so a continuation is only ever handed back to
 the query that issued it.
 
+The two amounts a person types -- the opening balance they adopt and the closing
+balance printed on the statement -- are money, not minor units. `StatementAmount`
+and `statement_balance` in `reconciliation_commands_models` own that for all three
+input fields (`OpeningStart.entered_balance`, `Start.ending_balance` and
+`DraftUpdate.entered_balance`); `StatementMoney` is `journal_models.MoneyInput`
+without the strictly-positive pin, because an overdrawn account, a credit card and
+an account adopted at nothing are all ordinary and none of them is positive.
+Storage did not change with it: the header snapshot keeps exact minor units, like
+every amount this system stores, and the currency stays where it already lives on
+the opening and certificate rows, pinned by `validate` to the account's and the
+company's. So there is no migration and no stored row changes meaning -- the
+conversion happens once, in `reconciliation_drafts.balance`, where the draft is
+built.
+
 The workbench turns those into one page. `static/reconcile-picker.js` takes over
 the generated `reconcile mark` form the way `deposit-picker.js` takes over the
 deposit form -- a bookkeeper should not learn two idioms for the same gesture --

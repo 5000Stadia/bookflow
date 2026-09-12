@@ -621,6 +621,11 @@ def variant_policies():
             'tests/test_reconciliation_browser.py::test_every_reconcile_command_has_a_page_that_answers'],
             ['the certification witnesses finish on a difference of zero and omit the adjustment; '
              'the branch that writes an adjusting entry has no executed case on any surface yet']),
+        ('anyOf', ('StatementMoney', 'string')): ([
+            'tests/test_reconciliation_commands.py::test_a_statement_balance_is_money_and_may_be_zero_or_negative',
+            'tests/test_reconciliation_commands.py::test_an_overdrawn_statement_reconciles',
+            'tests/test_reconciliation_window_browser.py::test_a_person_follows_the_tile_and_ends_holding_a_certificate'],
+            []),
         ('oneOf', ('AttachmentEvidence', 'TransactionEvidence')): ([
             'tests/test_reconciliation_commands.py::test_the_commands_certify_a_statement_that_ties_to_the_ledger',
             'tests/test_reconciliation_browser.py::test_every_reconcile_command_has_a_page_that_answers'],

@@ -5,6 +5,7 @@ from pydantic import ConfigDict, Field, JsonValue, TypeAdapter, model_validator
 from bookflow.company.sales_models import StrictModel, Fingerprint
 from bookflow.company.payment_models import OperationKey
 from bookflow.company.reconciliation_storage_validation import Header, Evidence, Preferences, ProposalInput, Display, Population
+from bookflow.core.exact import INT64_MAX
 from bookflow.company.reconciliation_models import MovementKey, PRODUCER_ROLES
 
 ID = Annotated[str, Field(pattern=r'^[0-9A-HJKMNP-TV-Z]{26}$')]
@@ -46,6 +47,57 @@ class AttachmentEvidence(Model):
 
 EvidenceRef=Annotated[TransactionEvidence|AttachmentEvidence,Field(discriminator='kind')]
 
+class StatementMoney(Model):
+    """Integer money that may be zero or negative, which a statement balance often is.
+
+    `journal_models.MoneyInput` is the same shape pinned strictly positive, which is right for
+    an amount somebody is paying and wrong for a balance: an overdrawn account, a credit card,
+    and an account adopted at nothing are all ordinary, and none of them is a positive number.
+    """
+    minor_units: int=Field(strict=True,ge=-INT64_MAX,le=INT64_MAX)
+    currency: Currency
+    amount: str|None=None
+
+
+# The amounts a person types with their own hands, and the only ones in this family that are
+# not derived from the ledger. One declaration owns all three, because a statement balance is a
+# statement balance whichever end of the reconciliation it sits at, and because the last time
+# this was written out per field the product asked a bookkeeper for cents.
+StatementAmount = str|StatementMoney
+STATEMENT_BALANCE = Field(description='A statement balance, as money: "290.00", or "-15.00" when '
+                                      'the account is overdrawn.',
+                          json_schema_extra={'math':{'currency':'company'}})
+STATEMENT_AMOUNT_FIELDS = ('entered_balance','ending_balance')
+
+
+def statement_balance(value, currency, field='entered_balance'):
+    """Parse one of those into exact minor units of the company's own currency.
+
+    Signed and zero are allowed; foreign currency is not, which is the same refusal every other
+    amount in the product makes and the same one `account_population` makes about the account.
+    """
+    from bookflow.core.exact import _parse_scaled_decimal
+    from bookflow.core.money import CURRENCIES, is_currency
+    from bookflow.core.errors import BookflowError
+    def invalid(problem):
+        return BookflowError('E_VALIDATION',details={'fields':[{'field':field,'problem':problem}]})
+    if not is_currency(currency):raise invalid('unknown home currency code')
+    if isinstance(value,StatementMoney):
+        if value.currency!=currency:raise invalid('foreign currency amounts are not supported; use home currency')
+        if value.amount is not None and statement_balance(value.amount,currency,field)!=value.minor_units:
+            raise invalid('amount contradicts minor_units')
+        return value.minor_units
+    if not isinstance(value,str):raise invalid('must be a decimal string or integer money object')
+    text,_,given=value.strip().partition(' ')
+    if given and given.strip()!=currency:raise invalid('foreign currency amounts are not supported; use home currency')
+    places=CURRENCIES[currency][0]
+    fraction=text.partition('.')[2]
+    if len(fraction)>places:
+        raise BookflowError('E_AMOUNT_PRECISION',details={'field':field,'currency':currency,
+                                                          'allowed_places':places,'given_places':len(fraction)})
+    return _parse_scaled_decimal(text,scale=places,field=field)
+
+
 class Page(Model):
     limit: int=Field(default=50,ge=1,le=200)
     cursor: str|None=Field(default=None,max_length=2048)
@@ -69,14 +121,14 @@ class OpeningStart(Mutation,Dated):
     # Minor units, like every other amount this system stores. Said out loud because this is one
     # of the two amounts a person types by hand, and a form that silently wanted cents would take
     # 290.00 as an error and 29000 as two hundred and ninety dollars without ever saying so.
-    entered_balance: Units=Field(description='Statement balance on the opening date, in minor units (2900 is 29.00).')
+    entered_balance: StatementAmount=STATEMENT_BALANCE
     evidence: Evidence
     references: tuple[EvidenceRef,...]=Field(default=(),max_length=200)
 
 class Start(Mutation,Dated):
     account: ID
     statement_date: str
-    ending_balance: Units=Field(description='Closing balance printed on the statement, in minor units (29000 is 290.00).')
+    ending_balance: StatementAmount=STATEMENT_BALANCE
     opening_id: ID|None=None
     opening_draft_id: ID|None=None
     @model_validator(mode='after')
@@ -87,7 +139,7 @@ class Start(Mutation,Dated):
 class DraftUpdate(DraftChange,Dated):
     opening_date: str|None=None
     statement_date: str|None=None
-    entered_balance: Units|None=None
+    entered_balance: StatementAmount|None=None
     preferences: Preferences|None=None
     evidence: Evidence|None=None
     @model_validator(mode='after')

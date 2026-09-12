@@ -59,11 +59,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     rows=[{'command':cmd.name,'url':'inventory-only','schema_variants':schema_variants(cmd.input_model.model_json_schema())}
           for cmd in registry.routed_commands()]
     mapped=workbench_variant_map(rows)
-    assert len(mapped)==len(variant_policies())==24
+    assert len(mapped)==len(variant_policies())==25
     # The census of material schema nodes. It moves whenever a routed command gains input
     # shape. Measured from the merged tree on every merge -- no branch's number survives
     # another branch landing.
-    assert sum(len(group["paths"]) for group in mapped)==2561
+    assert sum(len(group["paths"]) for group in mapped)==2565
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

@@ -881,11 +881,11 @@ EXAMPLES.update({
 _RECONCILE_FINGERPRINT = 'c' * 64
 _RECONCILE_EXAMPLES = {
     'reconcile opening start': dict(
-        account=ID, opening_date='2026-01-31', entered_balance=125000,
+        account=ID, opening_date='2026-01-31', entered_balance='1250.00',
         evidence=dict(format=1, statement_reference='Jan 2026 checking statement', entered_text=None),
         operation_key='example-opening-1'),
     'reconcile start': dict(
-        account=ID, statement_date='2026-02-28', ending_balance=148250, opening_id=ID,
+        account=ID, statement_date='2026-02-28', ending_balance='1482.50', opening_id=ID,
         operation_key='example-statement-1'),
     'reconcile mark': dict(
         draft=ID, expected_version=1, operation_key='example-mark-1',

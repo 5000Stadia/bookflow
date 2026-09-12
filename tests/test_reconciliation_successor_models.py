@@ -65,10 +65,10 @@ def test_contract_inventory_strict_shapes_and_storage_payloads():
     for model in set(m.INPUTS.values()):assert model.model_json_schema()['additionalProperties'] is False
     with pytest.raises(ValidationError):m.Page(limit=True)
     with pytest.raises(ValidationError):m.Page(limit=201)
-    with pytest.raises(ValidationError):m.OpeningStart(operation_key='o',account=new_id(),opening_date='20260101',entered_balance=0,evidence=Evidence(format=1,statement_reference=None,entered_text=None))
+    with pytest.raises(ValidationError):m.OpeningStart(operation_key='o',account=new_id(),opening_date='20260101',entered_balance='0.00',evidence=Evidence(format=1,statement_reference=None,entered_text=None))
     with pytest.raises(ValidationError):m.SeedTarget(account_id=new_id(),kind='opening',opening_id=new_id(),date='2026-01-01')
     with pytest.raises(ValidationError):m.MemberTarget(draft_id=new_id(),account_id=new_id(),key_id=new_id(),saved_version_id=new_id(),current_version_id=new_id(),action='mark')
-    with pytest.raises(ValidationError):m.Start(operation_key='x',account=new_id(),statement_date='2026-01-01',ending_balance=0)
+    with pytest.raises(ValidationError):m.Start(operation_key='x',account=new_id(),statement_date='2026-01-01',ending_balance='0.00')
     for cls in (m.TransactionEvidence,m.AttachmentEvidence):
         with pytest.raises(ValidationError):cls(kind='opening_attachment',transaction_id=new_id())
     with pytest.raises(ValidationError):m.Totals(positive_count=0,positive_sum=2**63,negative_count=0,negative_sum=0,selected_sum=0,beginning_balance=0,ending_balance=0,cleared_balance=0,difference=0,decimal_units={})
@@ -260,7 +260,7 @@ def test_draft_noop_header_proposal_consumption_and_real_ordinary_plan(client,dr
     from bookflow.core.context import Context,Interface
     s,bank,equity,_=certificate_world
     dr=draft(bank,ending=1000,cutoff='2026-02-28',state=s.rows['accounts'][0])
-    noop=m.DraftUpdate(operation_key='same',draft=dr.id,expected_version=1,entered_balance=1000)
+    noop=m.DraftUpdate(operation_key='same',draft=dr.id,expected_version=1,entered_balance='10.00')
     assert d.update(s,dr,noop,revision_id=new_id())==dr
     changed=d.update(s,dr,m.DraftUpdate(operation_key='date',draft=dr.id,expected_version=1,statement_date='2026-03-31'),revision_id=new_id())
     assert changed.version==2 and changed.selections==dr.selections
@@ -418,7 +418,7 @@ def test_opening_start_retains_ordinary_typed_attachment_identity(client,driver)
     doc=journal(client,pair(bank,equity,'10'))
     attachment=client.attachment.add(record_type='transaction',record_id=doc['id'],original_filename='ii.bin',input_stream=io.BytesIO(b'private opening evidence'),company=COMPANY)
     s=context(driver,[doc['id']]);ref=m.AttachmentEvidence(kind='transaction_attachment',transaction_id=doc['id'],attachment_id=attachment['attachment']['id'],attachment_link_id=attachment['link']['id'])
-    inp=m.OpeningStart(operation_key='opening',account=bank,opening_date='2026-01-31',entered_balance=1000,evidence=Evidence(format=1,statement_reference='statement',entered_text=None),references=(ref,))
+    inp=m.OpeningStart(operation_key='opening',account=bank,opening_date='2026-01-31',entered_balance='10.00',evidence=Evidence(format=1,statement_reference='statement',entered_text=None),references=(ref,))
     opened=d.start(s,inp,identity=new_id(),revision_id=new_id());assert opened.evidence_references==(ref,)
     group=next(iter(p.groups(s.current.values()).values()))
     marked=d.mark(s,opened,m.Mark(operation_key='cover',draft=opened.id,expected_version=1,entries=(m.MarkEntry(movement=m.MovementKey.model_validate_json(group[0]['movement_snapshot']),group_fingerprint=p.group_fingerprint(group),action='covered'),)),revision_id=new_id())

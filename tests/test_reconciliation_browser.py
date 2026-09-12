@@ -77,6 +77,11 @@ def test_the_page_asks_for_what_the_command_takes(workbench):
     for field in ('f:account', 'f:opening_date', 'f:entered_balance'):
         assert f'name="{field}"' in page.text, field
     assert '<form' in page.text and 'method="post"' in page.text.lower()
+    # The balance is money, and carries the same arithmetic entry every other amount does --
+    # a person types 290.00 and it means what they wrote.
+    assert 'data-math-currency="company"' in page.text
+    balance = page.text[page.text.index('name="f:entered_balance"') - 400:]
+    assert 'data-math-currency' in balance[:600], 'the opening balance is not an amount field'
 
 
 def test_every_reconcile_command_has_a_page_that_answers(workbench):

@@ -19,8 +19,6 @@ pytestmark = pytest.mark.skipif(not CHROME.exists(), reason='Chrome unavailable'
 
 FIRST = '250.00'
 SECOND = '40.00'
-# The command takes minor units; the form says so on the field.
-STATEMENT_UNITS = '29000'
 STATEMENT = '290.00'
 
 
@@ -68,7 +66,7 @@ def test_a_person_follows_the_tile_and_ends_holding_a_certificate(register_brows
     # Adopt the account at a zero opening balance.
     _set(b, 'f:account', bank)
     _set(b, 'f:opening_date', '2026-01-01')
-    _set(b, 'f:entered_balance', '0')
+    _set(b, 'f:entered_balance', '0.00')
     _set(b, 'f:evidence.statement_reference', 'January statement')
     _set(b, 'f:evidence.entered_text', 'Adopted at zero')
     _set(b, 'ctx:reason', 'Adopt the checking account')
@@ -78,7 +76,7 @@ def test_a_person_follows_the_tile_and_ends_holding_a_certificate(register_brows
     # Saving lands on the next step with the draft already filled in; nobody types an address.
     b.wait_for('!!document.getElementsByName("f:statement_date")[0]')
     _set(b, 'f:statement_date', '2026-01-31')
-    _set(b, 'f:ending_balance', STATEMENT_UNITS)
+    _set(b, 'f:ending_balance', STATEMENT)
     _set(b, 'ctx:reason', 'January statement')
     _contained(b, width)
     _submit(b)
