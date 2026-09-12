@@ -21,12 +21,12 @@ input = { name = "Insurance Expense", type = "expense" }
 [[commands]]
 command = "account create"
 reason = "Create reference account: Depreciation Expense"
-input = { name = "Depreciation Expense", type = "expense", cash_flow_section = "operating" }
+input = { name = "Depreciation Expense", type = "expense" }
 
 [[commands]]
 command = "account create"
 reason = "Create reference account: Accumulated Depreciation"
-input = { name = "Accumulated Depreciation", type = "fixed_asset", cash_flow_section = "operating" }
+input = { name = "Accumulated Depreciation", type = "fixed_asset" }
 
 [[commands]]
 command = "account create"
@@ -1558,3 +1558,18 @@ capture = "rec_discovery"
 command = "payment selection query"
 input = { "state" = "recovering" }
 capture = "rec_pending"
+
+# These two classifications were originally edited into the account-create rows above, which
+# broke the byte-preservation contract the recovery oracle enforces: a seed file's prefix is
+# frozen history, and rewriting an old row rewrites what already happened. The classification
+# is real and stays; it arrives the way a later decision actually arrives, as an update.
+
+[[commands]]
+command = "account update"
+reason = "Classify depreciation as an operating cash-flow item"
+input = { account = "Depreciation Expense", cash_flow_section = "operating" }
+
+[[commands]]
+command = "account update"
+reason = "Classify accumulated depreciation as an operating cash-flow item"
+input = { account = "Accumulated Depreciation", cash_flow_section = "operating" }

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from bookflow import BookflowError
-from tests.test_reference_year import reference_client, reference_template  # noqa: F401
+from tests.test_reference_year import demo_runner, reference_client, reference_template  # noqa: F401
 from tests.test_service_sales_demo import COMPANIES
 
 
@@ -83,7 +83,7 @@ def work_counts(client, company, prefix):
 def test_seeded_work_chain_lineage_arithmetic_and_history(reference_client, company, prefix):
     client, _ = reference_client
     customer = client.customer.show(customer="Commercial Example Customer", company=company)
-    run = lambda name, **data: client.run(name, data, company=company, reason="Customer work demo test")  # noqa: E731
+    run = demo_runner(client, company, "Customer work demo test")
     numbers = {}
     for noun in NOUNS:
         page = run(noun + " query", customer=customer["id"], active=None)
@@ -221,10 +221,24 @@ def test_seeded_work_chain_lineage_arithmetic_and_history(reference_client, comp
 @pytest.mark.parametrize("company,prefix", COMPANIES)
 def test_work_seeds_post_nothing_and_previews_change_nothing(reference_client, company, prefix):
     client, _ = reference_client
-    checking, trial, journals, profit = ((624895, 708195, 10, 151095) if prefix == "DEMO"
-                                         else (7267800, 8048600, 36, 6457000))
+    # The two tax-rounding examples a later integration added contribute 0.39 to receivables in
+    # both companies, of which 0.35 is income and 0.04 is sales tax payable. These oracles kept
+    # the pre-integration totals while the sibling progress-billing test was updated, so they
+    # failed as though the work seeds had posted money. Written as the old figure plus the named
+    # contribution rather than as the number the report happens to print today.
+    TAX_TRIAL, TAX_INCOME = 39, 35
+    checking, trial, journals, profit = ((624895, 708195 + TAX_TRIAL, 10, 151095 + TAX_INCOME)
+                                         if prefix == "DEMO"
+                                         else (7267800, 8048600 + TAX_TRIAL, 36, 6457000 + TAX_INCOME))
     assert client.account.show(account="Checking", company=company)["balance"]["minor_units"] == checking
-    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == 13800
+    # Accounts Receivable is the sum of what its customers owe, named rather than pinned to one
+    # opaque total: 128.00 commercial, 20.00 and -10.00 on the two payment jobs, and 0.33 + 0.06
+    # from the two tax-rounding examples. A later integration added those last two and this
+    # oracle kept the old 13800, so it failed as though the work documents had posted money --
+    # which is exactly the confusion a bare total invites. Both companies carry the same figure.
+    receivable = 12800 + 2000 - 1000 + 33 + 6
+    assert client.account.show(
+        account="Accounts Receivable", company=company)["balance"]["minor_units"] == receivable
     totals = client.report.trial_balance(company=company, date_to="2026-12-31", limit=200)["totals"]
     assert totals["debit"]["minor_units"] == totals["credit"]["minor_units"] == trial
     statement = client.report.profit_and_loss(company=company, date_from="2026-01-01", date_to="2026-12-31")
@@ -241,7 +255,7 @@ def test_work_seeds_post_nothing_and_previews_change_nothing(reference_client, c
     assert before["work_lines"] == 5 * (4 + 1 + 1 + 3 + 1 + 4 + 1) + 1 + 1
     assert before["work_line_identities"] == 5 * 7 + 1 + 1
     assert before["work_links"] == 6
-    run = lambda name, **data: client.run(name, data, company=company, reason="Customer work demo test", dry_run=True)  # noqa: E731
+    run = demo_runner(client, company, "Customer work demo test", dry_run=True)
     p = prefix + "-WORK-"
     order = client.run("work-order query", {"number": p + "WO-1"}, company=company)["items"][0]
     preview = run("work-order complete", work_order=order["id"], expected_version=4, actual_end="2026-09-14T16:30:00Z")
