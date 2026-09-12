@@ -81,7 +81,13 @@ def seed(run):
         "number": "RCT-900", "operation_key": "document-print-1", "payment_method": method,
         "applications": {"mode": "inline", "items": [
             {"invoice": invoice["id"], "expected_version": 1, "amount": "100.00"}]}})
-    return dict(run=run, customer=customer, invoice=invoice, receipt=receipt,
+    # A credit for one of the two invoice lines: the customer gets a copy of this for the same
+    # reason they get the invoice -- so the credit can be checked against the sale it came from.
+    credit = run("credit-memo post", {"number": "DOC-350", "date": "2026-06-10",
+                                      "customer": customer,
+                                      "lines": [{"item": parts, "quantity": "1"}]})
+
+    return dict(credit=credit, run=run, customer=customer, invoice=invoice, receipt=receipt,
                 estimate=estimate, labour=labour, income=income)
 
 
@@ -161,6 +167,56 @@ def test_an_estimate_prints_as_a_quote_with_no_amount_owed(books, hosted):  # no
     assert "750.00" in body
     assert "Valid for thirty days" in body
     assert "Balance due" not in body
+
+
+def test_a_credit_memo_prints_as_the_customer_copy_of_what_was_taken_back(books, hosted):  # noqa: F811
+    """The customer's copy of a credit, checkable line by line against the sale it came from."""
+    reader = browser(hosted)
+    page = reader.get(f"/c/{hosted.company_id}/credit-memo/{books['credit']['id']}", headers=WB)
+    assert page.status_code == 200
+    href = affordance(page.text)
+    assert href == f"/c/{hosted.company_id}/credit-memo/{books['credit']['id']}/print"
+
+    printed = reader.get(href, headers=WB, follow_redirects=False)
+    assert 'filename="credit-memo-DOC-350.pdf"' in printed.headers["content-disposition"]
+    body = text_of(printed)
+    assert "Demo Plumbing Co" in body and "Harbour Mills" in body
+    assert "CREDIT MEMO" in body and "DOC-350" in body and "2026-06-10" in body
+    # The line being credited, priced as the invoice priced it.
+    # One elbow back off an invoice that sold four: the unit price, not the invoice's line total.
+    assert "Copper elbow" in body and "15.00" in body
+    assert "Total credit" in body
+    # A credit owes nothing and settles nothing by itself, so it must not print a balance due.
+    assert "Balance due" not in body and "Due date" not in body
+
+
+def test_every_printable_kind_is_reachable_and_none_is_declared_twice(books, hosted):  # noqa: F811
+    """Every kind with a builder answers a PDF, fetched rather than asserted to exist.
+
+    These were three hand-kept lists -- the builders, KINDS, and one route per kind written
+    out. Three copies of a set agree exactly until someone adds a member, which is the moment
+    a document becomes printable in the renderer and unreachable in the browser. The set is
+    derived now, so this asks the question the derivation cannot answer for itself: does the
+    route actually serve the document, for every kind, with a real record behind it.
+    """
+    from bookflow.adapters.workbench.document_print import IDENTIFIED_OTHERWISE
+    from bookflow.documents import KINDS
+    from bookflow.documents.model import BUILDERS
+
+    assert set(KINDS) == set(BUILDERS), "KINDS and the builders have drifted apart"
+    reader = browser(hosted)
+    records = {"invoice": books["invoice"], "sales-receipt": books["receipt"],
+               "estimate": books["estimate"], "credit-memo": books["credit"]}
+    expected = set(KINDS) - IDENTIFIED_OTHERWISE
+    assert set(records) == expected, (
+        "a printable kind has no record here, so this witness would skip it: "
+        f"{expected ^ set(records)}")
+    for kind, record in records.items():
+        printed = reader.get(f"/c/{hosted.company_id}/{kind}/{record['id']}/print",
+                             headers=WB, follow_redirects=False)
+        assert printed.status_code == 200, (kind, printed.status_code, printed.text[:200])
+        assert printed.headers["content-type"].startswith("application/pdf"), kind
+        assert text_of(printed).strip(), (kind, "answered an empty document")
 
 
 def test_a_customer_statement_prints_the_account_it_shows(books, hosted):  # noqa: F811

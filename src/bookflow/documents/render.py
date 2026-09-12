@@ -20,9 +20,11 @@ import re
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from bookflow.documents.model import Read, build
+from bookflow.documents.model import BUILDERS, Read, build
 
-KINDS = ("invoice", "sales-receipt", "estimate", "statement")
+# The kinds are whatever has a builder. Written out a second time they agreed for as long as
+# nobody added one, which is the only interval in which two copies of a set ever agree.
+KINDS = tuple(BUILDERS)
 MEDIA_TYPE = "application/pdf"
 UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
 

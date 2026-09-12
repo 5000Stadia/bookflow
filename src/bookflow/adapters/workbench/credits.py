@@ -29,6 +29,9 @@ reads them and carries them in its own hidden fields -- and a stale one is answe
 command with ``E_VERSION_CONFLICT`` rather than being reconciled here.
 """
 from copy import deepcopy
+
+from bookflow.adapters.workbench.document_print import document_url
+from bookflow.documents import KINDS
 from urllib.parse import quote, urlencode
 
 from bookflow.core.money import Money
@@ -107,9 +110,14 @@ def detail_context(noun, record, company_id, *, preview=False):
     record = deepcopy(record)
     revision = record['revision']
     issuer, issuer_address = _issuer(revision)
+    # A credit memo is a document the customer receives, so it is printable for the same reason
+    # an invoice is: they have to be able to check the credit against the sale it came from. A
+    # preview has not been written, so there is nothing to hand anyone yet.
+    printable = not preview and noun in KINDS
     view = dict(record=record, revision=revision, profile=revision['profile'], preview=preview,
                 links=_links(company_id, noun, record, preview), issuer=issuer,
                 issuer_address=issuer_address, noun=noun,
+                print_url=document_url(company_id, noun, record['id']) if printable else None,
                 template=TEMPLATES[noun])
     if noun == 'credit-memo':
         source = record.get('source_current') or {}

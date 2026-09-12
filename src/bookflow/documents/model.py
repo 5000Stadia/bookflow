@@ -381,10 +381,43 @@ def _statement(read: Read, company_id: str, identity: Mapping[str, Any]) -> Prin
         name=f"Statement as of {period['date_to']}", contact=_contact(info))
 
 
+def _credit_memo(read: Read, company_id: str, document_id: str) -> PrintedDocument:
+    """A credit memo: what is being taken back off the account, and what it comes to.
+
+    The customer's copy of a credit is the sale's own layout read the other way -- the same
+    lines, the same tax, the same total -- because a credit for three valves has to be
+    checkable against the invoice that sold them. What it does not carry is anything about
+    money owed: a credit memo creates no due date and settles nothing by itself, so a
+    balance-due line would be an answer to a question it does not ask.
+    """
+    record = read("credit-memo show", {"credit_memo": document_id}, company_id)
+    info = _company(read, company_id)
+    revision = record["revision"]
+    profile = revision["profile"]
+    columns = _sales_columns(revision)
+    facts = [("Date", revision["date"]), ("Rep", _label(profile.get("sales_rep")))]
+    totals = [Total("Subtotal", revision["subtotal"]["amount"]),
+              Total("Sales tax", revision["tax"]["amount"]),
+              Total("Total credit", revision["total"]["amount"], emphasis=True)]
+    alerts = []
+    if record.get("status") == "voided":
+        alerts.append("VOIDED" + (f" \u2014 {record['void_reason']}" if record.get("void_reason") else ""))
+    title = "Credit Memo"
+    return PrintedDocument(
+        kind="credit-memo", title=title, number=revision["number"],
+        issuer=_issuer_party(revision.get("issuer_snapshot") or {}, info),
+        parties=(_customer_party(profile),),
+        facts=_facts(facts), columns=columns, rows=_sales_rows(revision, columns),
+        totals=tuple(totals), notes=_notes(profile, revision), alerts=tuple(alerts),
+        footer=f"{title} {revision['number']} \u00b7 {revision['currency']}",
+        name=f"{title} {revision['number']}", contact=_contact(info))
+
+
 BUILDERS = {
     "invoice": lambda read, company_id, identity: _sale(read, company_id, "invoice", identity["document"]),
     "sales-receipt": lambda read, company_id, identity: _sale(read, company_id, "sales-receipt", identity["document"]),
     "estimate": lambda read, company_id, identity: _estimate(read, company_id, identity["document"]),
+    "credit-memo": lambda read, company_id, identity: _credit_memo(read, company_id, identity["document"]),
     "statement": _statement,
 }
 
