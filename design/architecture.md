@@ -2839,6 +2839,25 @@ recognition, persisted deposit bank keys, the funded leg of a bill payment,
 customer refund or sales tax remittance, and the settled documents -- bill,
 credit memo and vendor credit -- which post no statement leg at all and prove it
 by refusing one rather than by returning nothing. `Producer` in
+`reconciliation_adapters.SETTLEMENT_EDGES` is the one declaration of which tables
+record one document settling another, and `authority` follows all of them. It
+previously spelled two out inline and never gained the money-out family's: a bill
+payment's closure stopped at the payment while a customer payment's reached the
+invoice, and a customer refund never reached the credit memo it paid out. The
+second of those points at the credit memo through a key rather than a transaction
+column, which is how it stayed invisible to the obvious search; the third money-out
+producer, a sales tax remittance, settles nothing, and `sales_tax_payments` says so
+itself. `tests/test_reconciliation_authority.py` scans the schema for both shapes
+and fails on a table that is neither followed nor excused by name.
+
+The cost of the omission was a refused citation rather than a wrong reconciliation:
+`validate_evidence` admits a reference only when the closure authorized it, so a
+bookkeeper could cite the invoice behind a customer payment and not the bill behind
+a bill payment. It was not a permission escalation, and the test says why -- the
+only requirement a closure can add is `customer-work`, which hangs off a sale, and
+an AP obligation is a bill. That test fails the day a vendor-side capability makes
+it untrue.
+
 `reconciliation_models.py` is that same tuple. An unadapted producer is not a
 partial result: `enumerate_graph` refuses the whole graph, so one of them makes
 every account it touches unreconcilable, and

@@ -84,6 +84,25 @@ def graph(s, identifiers, *, pending=None, headers=()):
     return Graph(rows, accounts)
 
 
+# Every table that records one document settling another, and the two columns that name them.
+# Written here once because `authority` used to spell two of them out inline and the third --
+# `ap_applications`, the whole money-out side -- was simply never added, so a bill payment's
+# closure stopped at the payment while a customer payment's reached the invoice.
+# `tests/test_reconciliation_authority.py` fails when a table of this shape appears and is
+# neither listed here nor excused by name, which is the part that stops the next one being
+# forgotten the same way.
+# The fourth element names a key table to resolve through, for a settlement that points at the
+# other document's key rather than at the document. That is not a different kind of link and it
+# must not be a different kind of omission: `customer_refund_consumptions` reaches its credit
+# memo that way, which is how it stayed invisible to a search for two transaction columns.
+SETTLEMENT_EDGES = (
+    ('applications', 'paying_transaction_id', 'paid_transaction_id', None),
+    ('ap_applications', 'source_transaction_id', 'obligation_transaction_id', None),
+    ('deposit_memberships', 'transaction_id', 'source_transaction_id', None),
+    ('customer_refund_consumptions', 'transaction_id', 'credit_source_key_id', 'credit_source_keys'),
+)
+
+
 def authority(s, identifiers):
     """Whole historical closure, delegated to the existing permission owners."""
     access.require_resource(s, 'ledger.read', 'member')
@@ -97,8 +116,15 @@ def authority(s, identifiers):
         edges.append(payment_authority.record_transactions(s.company, 'payment_selection', row['id']))
     for row in s.company.conn.execute(sa.select(c.deposit_operations.c.id)).mappings():
         edges.append(payment_authority.record_transactions(s.company, 'deposit_operation', row['id']))
-    edges.extend({r[0], r[1]} for r in s.company.conn.execute(sa.select(c.applications.c.paying_transaction_id, c.applications.c.paid_transaction_id)))
-    edges.extend({r[0], r[1]} for r in s.company.conn.execute(sa.select(c.deposit_memberships.c.transaction_id, c.deposit_memberships.c.source_transaction_id)))
+    for name, settling, settled, through in SETTLEMENT_EDGES:
+        table = c.metadata.tables[name]
+        if through is None:
+            query = sa.select(table.c[settling], table.c[settled])
+        else:
+            key = c.metadata.tables[through]
+            query = sa.select(table.c[settling], key.c.transaction_id).join(
+                key, key.c.id == table.c[settled])
+        edges.extend({r[0], r[1]} for r in s.company.conn.execute(query))
     while True:
         following = ids | set().union(*(edge for edge in edges if edge & ids))
         if following == ids:
