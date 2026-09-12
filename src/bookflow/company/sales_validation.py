@@ -28,6 +28,77 @@ def validate(plan, s, ctx):
         raise BookflowError('E_INTERNAL', message='Invalid sales aggregate: malformed captured facts') from exc
 
 
+def _stock(s, data, indexed, require):
+    """What this sale did to the stock ledger, read back off the rows it is about to write.
+
+    The tie is the point: every posting to an inventory control account is claimed by exactly
+    one movement and carries exactly that movement's value, which is what makes the inventory
+    asset on the balance sheet and the total on the stock reports the same number. Beyond
+    that, the issued value is checked against the weighted average independently -- replaying
+    the item's stored history together with what this write adds must leave this document's
+    own movements owing no correction, because a movement that still owes one is a movement
+    posted at the wrong cost.
+    """
+    from bookflow.company import inventory
+    from bookflow.company.inventory_costing import replay
+
+    header, pending = data['header'], data['pending']
+    movements = [movement.values for movement in data['stock'].movements]
+    legs, batches = indexed['posting_lines'], indexed['posting_batches']
+    control = {row['id'] for row in effects.rows(
+        s, c.accounts, c.accounts.c.system_role == inventory.ASSET_ROLE)}
+    claimed = [row['posting_line_id'] for row in movements]
+    require(len(claimed) == len(set(claimed)), 'two stock movements claim one posting line')
+    require(set(claimed) == {leg['id'] for leg in legs.values() if leg['account_id'] in control},
+            'an inventory-asset posting is not attributed to exactly one item')
+
+    lines = {row['document_line_id']: row for row in pending['sales_line_profiles']}
+    prior = {row['id']: row for row in effects.rows(
+        s, c.inventory_movements, c.inventory_movements.c.transaction_id == header['id'])}
+    for row in movements:
+        leg = legs[row['posting_line_id']]
+        require(leg['batch_id'] == row['posting_batch_id']
+                and leg['account_id'] == row['asset_account_id']
+                and leg['debit_minor_units'] - leg['credit_minor_units'] == row['value_minor_units']
+                and batches[leg['batch_id']]['effective_date'] == row['effective_date'],
+                'a stock movement does not match the posting line that carries its value')
+        require(row['kind'] in ('issue', 'reversal'), 'a sale moves stock only out or back in')
+        if row['kind'] == 'reversal':
+            original = prior.get(row['reverses_movement_id'])
+            require(original is not None
+                    and leg['reversed_line_id'] == original['posting_line_id']
+                    and row['quantity_microunits'] == -original['quantity_microunits']
+                    and row['value_minor_units'] == -original['value_minor_units']
+                    and row['item_id'] == original['item_id']
+                    and row['document_line_id'] == original['document_line_id']
+                    and row['revision_id'] == original['revision_id'],
+                    'a stock reversal is not the exact inverse of the movement it retires')
+            continue
+        line = lines.get(row['document_line_id'])
+        require(line is not None and line['item_id'] == row['item_id']
+                and row['quantity_microunits'] == -line['base_quantity_microunits']
+                and row['revision_id'] == line['revision_id'] and row['value_minor_units'] < 0,
+                'a stock issue does not match the entered line that sold it')
+        facts = SalesLineProfile.model_validate_json(line['item_snapshot'])
+        require(facts.item_type in inventory.TRACKED_TYPES
+                and facts.asset_account is not None and facts.cogs_account is not None
+                and facts.asset_account.id == row['asset_account_id']
+                and facts.cogs_account.id == row['offset_account_id'],
+                'a stock issue was written for a line that carries no stock')
+    for envelope_id, line in lines.items():
+        facts = SalesLineProfile.model_validate_json(line['item_snapshot'])
+        if facts.item_type in inventory.TRACKED_TYPES:
+            require(any(row['document_line_id'] == envelope_id and row['kind'] == 'issue'
+                        for row in movements), 'an entered line sold stock that no movement issued')
+
+    own = {row['id'] for row in movements}
+    for item_id in {row['item_id'] for row in movements}:
+        stored = inventory.movements(s, item_id=item_id)
+        state = replay(stored + [row for row in movements if row['item_id'] == item_id])
+        require(not any(correction.target_movement['id'] in own for correction in state.corrections),
+                'a stock issue is posted at a cost the weighted average does not agree with')
+
+
 def _validate(plan, s, ctx):
     from bookflow.company import sales
     data = plan.data
@@ -115,6 +186,7 @@ def _validate(plan, s, ctx):
                 expected_source = dict(source, id=new['id'], posting_line_id=actual['id'], reversed_source_id=source['id'],
                     created_at=new['created_at'], created_by=new['created_by'], created_via=new['created_via'])
                 require(new == expected_source, 'reversal changed its source')
+    _stock(s, data, indexed, require)
     from bookflow.company.billing_validation import validate_sale_allocations
     validate_sale_allocations(plan, s)
     if operation == 'void':
@@ -235,6 +307,14 @@ def _validate(plan, s, ctx):
         for component in own_taxes:
             captured = SalesTaxComponent.model_validate_json(component['component_snapshot'])
             expect(captured.liability_account, 0, component['tax_minor_units'], [(envelope['id'], component['id'], component['tax_minor_units'])])
+        # What the quantity leaving is worth moves from the inventory control account to cost
+        # of goods sold, and touches nothing the customer was charged.
+        cost = -data['stock'].costs.get(envelope['id'], 0)
+        if cost:
+            require(facts.cogs_account is not None and facts.asset_account is not None,
+                    'a stock line carries no cost accounts')
+            expect(facts.cogs_account, cost, 0, [(envelope['id'], None, cost)])
+            expect(facts.asset_account, 0, cost, [(envelope['id'], None, cost)])
         semantic_lines.append(sales._line_semantic(dict(envelope, **{k: v for k, v in line.items() if k not in envelope},
             line_id=None if envelope['line_id'] in new_ids else envelope['line_id'], profile=facts)))
     actual_legs = []

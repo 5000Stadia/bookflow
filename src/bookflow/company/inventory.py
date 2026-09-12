@@ -77,9 +77,7 @@ OWNER = 'inventory'
 # The item types that carry stock, derived from the item master's own profile registry rather
 # than written out again: a later stock-carrying type is one that requires both an asset and a
 # cost-of-goods account, and it must not be silently left out of the ledger that values it.
-TRACKED_TYPES = tuple(sorted(
-    name for name, profile in item_service.ITEM_PROFILES.items()
-    if {'asset_account_id', 'cogs_account_id'} <= profile.required))
+TRACKED_TYPES = item_service.TRACKED_TYPES
 
 
 def invalid(field_name, problem, **details):
@@ -165,7 +163,7 @@ def _home(s):
     return s.company.conn.execute(sa.select(c.company_info.c.home_currency)).scalar_one()
 
 
-def _next_sequence(s):
+def next_sequence(s):
     return int(s.company.conn.execute(
         sa.select(sa.func.coalesce(sa.func.max(c.inventory_movements.c.sequence), 0))).scalar_one()) + 1
 
@@ -211,7 +209,7 @@ def _class_row(s, class_id):
         s.company, c.classes, get_list_definition('class'), class_id), 'class')
 
 
-def _pair(asset_id, offset_id, amount_minor_units, currency, class_id, description):
+def pair(asset_id, offset_id, amount_minor_units, currency, class_id, description):
     """The two entered lines one signed asset movement is: asset first, offset second.
 
     A positive amount means the asset went up. Position one is always the asset line, which
@@ -227,7 +225,13 @@ def _pair(asset_id, offset_id, amount_minor_units, currency, class_id, descripti
     ]
 
 
-def _refuse_stock(refusal, item):
+def refuse_stock(refusal, item, *, quantity_field='quantity_change', value_field='value_change'):
+    """The refusal a person reads, naming the item, the date and the field they can change.
+
+    The two field names are the caller's, because the grid a person is looking at is what they
+    can act on: an adjustment has a quantity change, a bill has an Items grid and a sale has
+    lines, and pointing at a field the form does not have is worse than pointing at nothing.
+    """
     details = {'item_id': item['id'], 'item_name': item['full_name'], **refusal.details}
     if refusal.movement is not None:
         details['effective_date'] = refusal.movement['effective_date']
@@ -236,11 +240,11 @@ def _refuse_stock(refusal, item):
     if refusal.reason == 'negative_stock':
         return BookflowError('E_VALIDATION', message=(
             f'This change would take "{item["full_name"]}" below zero on {when}: {problem}. '
-            'Bookflow refuses negative stock; receive the quantity first, or adjust by less.'),
-            details={'fields': [{'field': 'quantity_change', 'problem': problem}], **details})
+            'Bookflow refuses negative stock; receive the quantity first, or take out less.'),
+            details={'fields': [{'field': quantity_field, 'problem': problem}], **details})
     return BookflowError('E_VALIDATION', message=(
         f'This change cannot stand for "{item["full_name"]}" on {when}: {problem}.'),
-        details={'fields': [{'field': 'value_change', 'problem': problem}], **details})
+        details={'fields': [{'field': value_field, 'problem': problem}], **details})
 
 
 def _adjustment_change(s, ctx, inp, currency, sequence):
@@ -269,7 +273,7 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
         try:
             proposed['value_minor_units'] = replay(history + [proposed]).targets[identity]
         except StockRefusal as refusal:
-            raise _refuse_stock(refusal, item) from None
+            raise refuse_stock(refusal, item) from None
     if proposed['value_minor_units'] == 0:
         raise invalid('quantity_change' if kind == 'issue' else 'value_change',
                       'this adjustment is worth nothing at the current average cost, and '
@@ -277,7 +281,7 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
     try:
         state = replay(history + [proposed])
     except StockRefusal as refusal:
-        raise _refuse_stock(refusal, item) from None
+        raise refuse_stock(refusal, item) from None
     values = dict(proposed, item_id=item['id'], currency=currency,
                   asset_account_id=asset['id'], offset_account_id=offset['id'],
                   class_id=klass['id'] if klass else None)
@@ -285,7 +289,7 @@ def _adjustment_change(s, ctx, inp, currency, sequence):
     journal = JournalPostInput(
         date=inp.date, memo=inp.memo, custom_fields=inp.custom_fields,
         custom_field_kinds=inp.custom_field_kinds,
-        lines=_pair(asset['id'], offset['id'], values['value_minor_units'], currency,
+        lines=pair(asset['id'], offset['id'], values['value_minor_units'], currency,
                     values['class_id'], description),
         **({'number': inp.number} if inp.number is not None else {}))
     document = _Document(journal, 'post', 'adjustment', [_Movement(values, 1)])
@@ -322,7 +326,7 @@ def _void_change(s, inp, currency, sequence):
     try:
         state = replay(movements(s, item_id=item['id']) + [m.values for m in reversals])
     except StockRefusal as refusal:
-        raise _refuse_stock(refusal, item) from None
+        raise refuse_stock(refusal, item) from None
     journal = JournalVoidInput(journal=header['id'], expected_version=inp.expected_version)
     first = reversals[0].values
     change = _Change([_Document(journal, 'void', 'adjustment', reversals)], item, state, currency,
@@ -341,7 +345,7 @@ def _correction_documents(s, change, sequence):
         lines, pending = [], []
         for correction in by_date[date]:
             target = correction.target_movement
-            lines.extend(_pair(
+            lines.extend(pair(
                 target['asset_account_id'], target['offset_account_id'],
                 correction.delta_minor_units, change.currency, target['class_id'],
                 f'Weighted-average cost correction for movement {target["id"]} '
@@ -364,7 +368,7 @@ def _correction_documents(s, change, sequence):
 def _build(s, ctx, inp, operation):
     """Every document this change writes, decided in full before any of it is built."""
     currency = _home(s)
-    sequence = _next_sequence(s)
+    sequence = next_sequence(s)
     change = (_adjustment_change(s, ctx, inp, currency, sequence) if operation == 'post'
               else _void_change(s, inp, currency, sequence))
     if not change.documents:
@@ -403,23 +407,24 @@ def _attach(document, fresh):
                                document_line_id=line['id'])
 
 
-def _check_attribution(document, fresh, asset_account_ids):
-    """Every inventory-asset posting this document makes is attributed to exactly one item.
+def check_attribution(claimed, posting_lines, control_account_ids):
+    """Every inventory-asset posting a document makes is attributed to exactly one item.
 
     This is the invariant the stock reports and the balance sheet share. A posting line on a
     control account that no movement claims would be a balance nothing could explain, and a
-    second movement on one line would double it.
+    second movement on one line would double it. ``claimed`` is the posting line every planned
+    movement names; ``posting_lines`` is every leg the document is about to write.
     """
-    claimed = [movement.values['posting_line_id'] for movement in document.movements]
-    control = {line['id'] for line in fresh.data['pending']['posting_lines']
-               if line['account_id'] in asset_account_ids}
+    claimed = list(claimed)
+    control = {line['id'] for line in posting_lines
+               if line['account_id'] in control_account_ids}
     if len(claimed) != len(set(claimed)) or control != set(claimed):
         raise BookflowError('E_INTERNAL', message=(
             'An inventory-asset posting is not attributed to exactly one item; refusing to '
             'write a balance the stock reports could not explain.'))
 
 
-def _asset_account_ids(s):
+def asset_account_ids(s):
     return set(s.company.conn.execute(sa.select(c.accounts.c.id).where(
         c.accounts.c.system_role == ASSET_ROLE)).scalars())
 
@@ -479,7 +484,7 @@ def _run(s, ctx, inp, operation, *, persist):
         return InventoryWriteOutput(**fresh.preview.model_dump(), adjustment=summary), [], False
 
     at = clock.now_iso()
-    asset_accounts = _asset_account_ids(s)
+    asset_accounts = asset_account_ids(s)
     reserved, touched, primary = [], [], None
     for document in change.documents:
         if document.kind == 'recost':
@@ -497,7 +502,8 @@ def _run(s, ctx, inp, operation, *, persist):
             raise BookflowError('E_INTERNAL', message='An inventory document produced no accounting.')
         reserved.append(fresh.data['header']['number'])
         _attach(document, fresh)
-        _check_attribution(document, fresh, asset_accounts)
+        check_attribution([movement.values['posting_line_id'] for movement in document.movements],
+                          fresh.data['pending']['posting_lines'], asset_accounts)
         for movement in document.movements:
             movement.values['number'] = fresh.data['header']['number']
         marker = dict(transaction_id=document.movements[0].values['transaction_id'],

@@ -38,7 +38,8 @@ from sqlalchemy.dialects.sqlite import insert
 
 from bookflow.company import accounts, list_service, schema as c
 from bookflow.company import document_effects as effects
-from bookflow.company.bill_models import BillExpenseInput
+from bookflow.company.bill_models import BillExpenseInput, BillItemInput
+from bookflow.company.items import TRACKED_TYPES
 from bookflow.company.journal_models import checked_sum, parse_domestic_amount
 from bookflow.company.lists import get_list_definition
 from bookflow.company.parties import resolve_party
@@ -250,8 +251,14 @@ def resolve_header(s, inp, date, previous):
 
 
 def _item_destination(s, row, field):
-    """The account an item's purchase cost is destined for, captured with the item."""
-    for column in ITEM_ACCOUNTS:
+    """The account an item's purchase cost is destined for, captured with the item.
+
+    A stock-carrying item is destined for its Inventory Asset account, because buying it puts
+    it on the shelf rather than spending it, and that is where the bill this order becomes
+    will debit it. Every other family keeps the anchor's own resolution order.
+    """
+    columns = ('asset_account_id', *ITEM_ACCOUNTS) if row['type'] in TRACKED_TYPES else ITEM_ACCOUNTS
+    for column in columns:
         if row.get(column):
             return _account_facts(_account_row(s, row[column], field))
     raise _invalid(field, f'"{row["name"]}" has no purchase account; set an expense, cost of goods '
@@ -805,6 +812,14 @@ def bill_source(s, selector):
 def bill_entry(rev, lines):
     """The order's facts in the shape ``bill post`` takes them.
 
+    An ordered **item** becomes a row of the bill's Items grid, which is what it always was:
+    the order says what was bought and how many, and a bill's item line is the grid that
+    records exactly that. It landed on the Expenses grid when this conversion was written only
+    because there was no Items grid to put it on, and that had a consequence -- an order for a
+    stock item could not be billed at all, because an expense line cannot name the item whose
+    quantity has to move. An ordered **account** line is still an expense line; nothing about
+    it was ever an item.
+
     Validated rows rather than raw dictionaries, because the caller merges these into its own
     input with ``model_copy`` and a copy does not re-validate: an unvalidated row would reach
     the bill writer as a dictionary and fail there instead of here.
@@ -814,19 +829,26 @@ def bill_entry(rev, lines):
     does not silently pick up the bill's class.
     """
     profile = PurchaseOrderProfile.model_validate_json(rev['profile_snapshot'])
-    expenses = []
+    expenses, items = [], []
     for line in lines:
         facts = PurchaseOrderLineProfile.model_validate_json(line['line_snapshot'])
-        account = facts.item.account if facts.item else facts.account
-        expenses.append(BillExpenseInput(
-            account=account.id,
-            amount={'minor_units': line['amount_minor_units'], 'currency': rev['currency']},
-            memo=line['description'],
-            customer=facts.customer.id if facts.customer else None,
-            billable=bool(line['billable']),
-            class_id=facts.class_id.id if facts.class_id else None,
-            class_mode='value' if facts.class_id else 'none'))
-    return dict(vendor=profile.vendor.id, expenses=expenses, memo=rev['memo'],
+        money = {'minor_units': line['amount_minor_units'], 'currency': rev['currency']}
+        shared = dict(customer=facts.customer.id if facts.customer else None,
+                      billable=bool(line['billable']),
+                      class_id=facts.class_id.id if facts.class_id else None,
+                      class_mode='value' if facts.class_id else 'none')
+        if facts.item is None:
+            expenses.append(BillExpenseInput(account=facts.account.id, amount=money,
+                                             memo=line['description'], **shared))
+            continue
+        # Quantity times rate where the order gave both, so the bill line says what was
+        # ordered rather than one opaque amount; an amount-only line stays an amount.
+        basis = (dict(quantity=format_quantity_micro_units(line['quantity_microunits']),
+                      unit_cost={'minor_units': line['rate_minor_units'], 'currency': rev['currency']})
+                 if line['quantity_microunits'] is not None else dict(amount=money))
+        items.append(BillItemInput(item=facts.item.id, description=line['description'],
+                                   **basis, **shared))
+    return dict(vendor=profile.vendor.id, expenses=expenses, items=items, memo=rev['memo'],
                 terms=profile.terms.id if profile.terms else None,
                 class_id=profile.class_id.id if profile.class_id else None)
 

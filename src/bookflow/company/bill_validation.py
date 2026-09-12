@@ -72,6 +72,67 @@ def _item(line, facts):
                 'an entered amount carries a unit cost it was not derived from')
 
 
+def _stock(s, data, indexed, require):
+    """What this bill did to the stock ledger, read back off the rows it is about to write.
+
+    The one invariant worth checking independently is the tie: every posting to an inventory
+    control account is claimed by exactly one movement and carries exactly that movement's
+    value, because that is what makes the inventory asset on the balance sheet and the total
+    on the stock reports the same number. Everything else here is that statement's parts --
+    the movement belongs to a leg of this bill, at that leg's own date, for the quantity the
+    entered line actually bought.
+    """
+    from bookflow.company import bills, inventory
+
+    header, pending = data['header'], data['pending']
+    movements = [movement.values for movement in data['stock'].movements]
+    legs, batches = indexed['posting_lines'], indexed['posting_batches']
+    control = {row['id'] for row in effects.rows(
+        s, c.accounts, c.accounts.c.system_role == inventory.ASSET_ROLE)}
+    claimed = [row['posting_line_id'] for row in movements]
+    require(len(claimed) == len(set(claimed)), 'two stock movements claim one posting line')
+    require(set(claimed) == {leg['id'] for leg in legs.values() if leg['account_id'] in control},
+            'an inventory-asset posting is not attributed to exactly one item')
+
+    items = {row['document_line_id']: row for row in pending['purchase_item_lines']}
+    prior = {row['id']: row for row in effects.rows(
+        s, c.inventory_movements, c.inventory_movements.c.transaction_id == header['id'])}
+    for row in movements:
+        leg = legs[row['posting_line_id']]
+        require(leg['batch_id'] == row['posting_batch_id']
+                and leg['account_id'] == row['asset_account_id']
+                and leg['debit_minor_units'] - leg['credit_minor_units'] == row['value_minor_units']
+                and batches[leg['batch_id']]['effective_date'] == row['effective_date'],
+                'a stock movement does not match the posting line that carries its value')
+        require(row['kind'] in ('receipt', 'reversal'), 'a bill moves stock only in or back out')
+        if row['kind'] == 'reversal':
+            original = prior.get(row['reverses_movement_id'])
+            require(original is not None
+                    and leg['reversed_line_id'] == original['posting_line_id']
+                    and row['quantity_microunits'] == -original['quantity_microunits']
+                    and row['value_minor_units'] == -original['value_minor_units']
+                    and row['item_id'] == original['item_id']
+                    and row['document_line_id'] == original['document_line_id']
+                    and row['revision_id'] == original['revision_id'],
+                    'a stock reversal is not the exact inverse of the movement it retires')
+            continue
+        line = items.get(row['document_line_id'])
+        require(line is not None and line['item_id'] == row['item_id']
+                and row['quantity_microunits'] == line['quantity_microunits']
+                and row['value_minor_units'] == line['amount_minor_units']
+                and row['revision_id'] == line['revision_id'],
+                'a stock receipt does not match the item line that bought it')
+        facts = bills.BillItemProfile.model_validate_json(line['line_snapshot'])
+        require(facts.item_type in inventory.TRACKED_TYPES and facts.account_basis == 'asset',
+                'a stock receipt was written for a line that carries no stock')
+    for envelope_id, line in items.items():
+        facts = bills.BillItemProfile.model_validate_json(line['line_snapshot'])
+        if facts.item_type in inventory.TRACKED_TYPES:
+            require(any(row['document_line_id'] == envelope_id and row['kind'] == 'receipt'
+                        for row in movements),
+                    'an item line bought stock that no movement received')
+
+
 def _validate(plan, s, ctx):
     from bookflow.company import bills
 
@@ -218,12 +279,12 @@ def _validate(plan, s, ctx):
         family, line = found
         facts = bills.LINE_FACTS[family].model_validate_json(line['line_snapshot'])
         require(facts.account.id == line['account_id'], 'captured line facts disagree with columns')
-        # An item with no purchase side debits the income account it is sold out of; every
-        # other line debits a cost account. The captured basis says which this line is, so
-        # the check reads the eligible set off the line rather than off one fixed list.
-        require(facts.account.type in (bills.ITEM_INCOME_ACCOUNTS
-                                       if getattr(facts, 'account_basis', 'purchase') == 'income'
-                                       else bills.EXPENSE_ACCOUNTS),
+        # An item with no purchase side debits the income account it is sold out of, a
+        # stock-carrying item debits its own inventory control account, and every other line
+        # debits a cost account. The captured basis says which this line is, so the check reads
+        # the eligible set off the line rather than off one fixed list.
+        basis = getattr(facts, 'account_basis', 'purchase')
+        require(basis in bills.ACCOUNT_BASES and facts.account.type in bills.ACCOUNT_BASES[basis][0],
                 'a bill line names an ineligible account')
         require(bool(line['billable']) is facts.billable, 'billable disagrees with captured facts')
         require(not line['billable'] or line['customer_id'] is not None,
@@ -285,6 +346,8 @@ def _validate(plan, s, ctx):
                 'an obligation component does not name its own payable attribution')
         owed += amount(component['amount_minor_units'], positive=True)
     require(owed == total, 'the payable components do not add up to what the bill owes')
+
+    _stock(s, data, indexed, require)
 
     plan_custom = data.get('custom_plan')
     require(plan_custom is not None, 'a revision without a custom-field plan')

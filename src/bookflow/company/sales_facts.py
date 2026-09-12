@@ -4,10 +4,17 @@ from __future__ import annotations
 from typing import Literal
 from pydantic import field_validator, Field, model_serializer, model_validator
 
+from bookflow.company.items import TRACKED_TYPES
 from bookflow.company.tax_policy import Policy, TaxOrigin
 from bookflow.company.sales_models import Address, StrictModel
 from bookflow.company.billing_facts import AllocationProof, TaxAllocationProof
 from bookflow.core.exact import INT64_MAX
+
+# The item families a sale may carry: the three that post one income account and nothing else,
+# plus the stock-carrying families, which additionally take their cost out of the inventory
+# ledger. The stock half is read off the item master's own profile registry rather than written
+# out again, so a later stock-carrying type is not silently left out of the grid that sells it.
+SELLABLE_ITEM_TYPES = ("service", "non_inventory_part", "other_charge") + TRACKED_TYPES
 
 
 class Reference(StrictModel):
@@ -173,8 +180,13 @@ class SalesLineProfile(StrictModel):
 
     schema_version: Literal[1, 2, 3] = 1
     item: Reference
-    item_type: Literal["service", "non_inventory_part", "other_charge"]
+    item_type: Literal[SELLABLE_ITEM_TYPES]
     income_account: Account
+    # The two accounts a stock-carrying item's cost moves between, captured beside the income
+    # account so a correction years later posts the cost where the original posted it. Null on
+    # every other family, which has no cost of its own to recognise on a sale.
+    cogs_account: Account | None = None
+    asset_account: Account | None = None
     unit: Unit | None = None
     class_id: Reference | None = None
     tax_code: TaxCode | None = None

@@ -12,6 +12,9 @@ import sqlalchemy as sa
 
 from bookflow.company import list_service, schema
 from bookflow.company.accounts import NORMAL_BALANCE
+from bookflow.company.charts import SYSTEM_ROLE_TYPES
+from bookflow.company.inventory import ASSET_ROLE as INVENTORY_ASSET_ROLE
+from bookflow.company.items import TRACKED_TYPES
 from bookflow.company.lists import get_list_definition
 from bookflow.company.list_service import normalize_lookup_key
 from bookflow.company.parties import project_party_record
@@ -20,6 +23,7 @@ from bookflow.company.sales_calculations import (
     adjusted_price, base_quantity, extension, nonnegative, selected_price, tax, total,
 )
 from bookflow.company.sales_facts import (
+    SELLABLE_ITEM_TYPES,
     Account, CommercialProfile, Customer, Origin, Preferences, PriceRule, Reference, SalesLineProfile,
     SalesProfile, TaxCode, TaxRule, Term, Unit,
 )
@@ -523,8 +527,15 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
     item_changed = old is None or not _same(db, 'item', inp.item, old.item)
     item = _row(db, 'item', inp.item, active=item_changed or refresh)
     if item_changed or refresh:
-        if item['type'] not in ('service', 'non_inventory_part', 'other_charge'):
-            raise _invalid('item', 'this sale supports service, nonstock, and fixed-charge items only')
+        # A stock-carrying item sells out of the inventory ledger, and that ledger is written
+        # by the document that posts, so only a real sale may name one. A quote or a work
+        # order is descriptive history with no posting behind it: promising stock it cannot
+        # issue would be a reservation nothing honours, so the older three families stand.
+        allowed = ('service', 'non_inventory_part', 'other_charge') if nonposting else SELLABLE_ITEM_TYPES
+        if item['type'] not in allowed:
+            raise _invalid('item', 'this sale supports service, nonstock, and fixed-charge items only'
+                           if nonposting else
+                           'this sale supports service, nonstock, fixed-charge and stock items only')
         if not item['sales_enabled']:
             raise _invalid('item', 'item is not enabled for sales')
         if item['type'] == 'other_charge' and item['other_charge_percent_millionths'] is not None:
@@ -533,7 +544,18 @@ def resolve_line(s, inp: SalesLineInput, header: SalesProfile, *, previous: dict
         for name in ('price', 'cost'):
             if item[name + '_minor_units'] is not None and item[name + '_currency'] != currency:
                 raise _invalid('item.' + name, 'item amounts must use home currency')
+        stock = {}
+        if item['type'] in TRACKED_TYPES:
+            # Captured beside the income account for the same reason it is: what this sale
+            # charged the cost to is what a correction of it must charge the cost to, whatever
+            # the item record has been repointed at since.
+            stock = dict(
+                cogs_account=_account(db, item['cogs_account_id'], 'item.cogs_account',
+                                      {'cost_of_goods_sold'}),
+                asset_account=_account(db, item['asset_account_id'], 'item.asset_account',
+                                       {SYSTEM_ROLE_TYPES[INVENTORY_ASSET_ROLE]}))
         profile = SalesLineProfile(item=_ref(item), item_type=item['type'], income_account=income,
+                                   **stock,
                                    standard_price_minor_units=item['price_minor_units'], cost_minor_units=item['cost_minor_units'])
     else:
         profile = old.model_copy(deep=True)

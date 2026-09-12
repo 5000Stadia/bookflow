@@ -260,41 +260,56 @@ def test_voiding_returns_every_account_to_the_pre_post_snapshot(books):
     assert len(books['run']('bill show', {'bill': posted['id']})['revision']['items']) == 2
 
 
-def test_an_inventory_part_is_refused_by_name_and_nothing_is_written(books):
+def _inventory_asset(books):
+    return next(row['id'] for row in books['client'].account.query(
+        company=books['company'], limit=200)['items'] if row['full_name'] == 'Inventory Asset')
+
+
+def test_an_inventory_part_debits_the_asset_account_and_puts_the_quantity_on_hand(books):
     stock = _inventory_part(books)
+    asset = _inventory_asset(books)
 
-    with pytest.raises(BookflowError) as raised:
-        books['run']('bill post', dict(vendor=books['vendor'], date='2017-03-20',
-                                       items=[{'item': stock, 'quantity': '50'}]),
-                     reason='Receive stock')
+    posted = books['run']('bill post', dict(vendor=books['vendor'], date='2017-03-20',
+                                            items=[{'item': stock, 'quantity': '50'}]),
+                          reason='Receive stock')
 
-    error = raised.value
-    assert error.code == 'E_VALIDATION'
-    assert error.details['reason'] == 'inventory_receipt_not_implemented'
-    assert error.details['item_type'] == 'inventory_part'
-    assert error.details['record_id'] == stock
-    assert error.details['supported_item_types'] == ['service', 'non_inventory_part', 'other_charge']
-    problem = error.details['fields'][0]
-    assert problem['field'] == 'items.0.item'
-    assert 'inventory part' in problem['problem'] and 'not implemented' in problem['problem']
-    # Refused, not silently posted somewhere else: the books did not move.
+    # 50 at the item's own 1.80 standard cost is 90.00, debited to Inventory Asset and
+    # credited to the payable -- not to an expense account.
+    assert posted['item_total']['amount'] == '90.00'
+    assert _net(books) == {asset: 9000, books['payable']: -9000}
+    line = posted['revision']['items'][0]
+    assert line['account_id'] == asset
+    assert line['line_snapshot']['account_basis'] == 'asset'
+    held = books['run']('report stock-status', {'as_of': '2017-03-20', 'limit': 10})
+    row = next(item for item in held['rows'] if item['item_id'] == stock)
+    assert row['quantity_on_hand'] == '50' and row['asset_value']['amount'] == '90.00'
+    assert row['average_cost']['amount'] == '1.80'
+
+
+def test_a_correction_moves_the_stock_it_bought_and_a_void_takes_it_all_back(books):
+    stock = _inventory_part(books)
+    asset = _inventory_asset(books)
+    posted = books['run']('bill post', dict(vendor=books['vendor'], date='2017-03-20',
+                                            items=[{'item': stock, 'quantity': '50'}]),
+                          reason='Receive stock')
+
+    corrected = books['run']('bill update', dict(
+        bill=posted['id'], expected_version=posted['version'],
+        items=[{'item': stock, 'quantity': '60'}]), reason='Ten more arrived')
+
+    assert corrected['item_total']['amount'] == '108.00'   # 60 at 1.80
+    assert _net(books) == {asset: 10800, books['payable']: -10800}
+    held = books['run']('report stock-status', {'as_of': '2017-03-20', 'limit': 10})
+    assert next(item for item in held['rows']
+                if item['item_id'] == stock)['quantity_on_hand'] == '60'
+
+    books['run']('bill void', dict(bill=posted['id'], expected_version=corrected['version']),
+                 reason='Never delivered')
+
     assert _net(books) == {}
-    assert books['run']('bill query', {'limit': 10})['count'] == 0
-
-
-def test_an_inventory_part_is_refused_on_a_correction_too(books):
-    posted = books['run']('bill post', _bill(books), reason='Enter the March bill')
-    stock = _inventory_part(books)
-    before = _net(books)
-
-    with pytest.raises(BookflowError) as raised:
-        books['run']('bill update', dict(
-            bill=posted['id'], expected_version=posted['version'],
-            items=[{'item': stock, 'quantity': '50'}]), reason='Receive stock')
-
-    assert raised.value.details['reason'] == 'inventory_receipt_not_implemented'
-    assert _net(books) == before
-    assert books['run']('bill show', {'bill': posted['id']})['total']['amount'] == BILL
+    held = books['run']('report stock-status', {'as_of': '2017-12-31', 'limit': 10})
+    row = next(item for item in held['rows'] if item['item_id'] == stock)
+    assert row['quantity_on_hand'] == '0' and row['asset_value']['amount'] == '0.00'
 
 
 def _sold_only(books, name='Design Review'):

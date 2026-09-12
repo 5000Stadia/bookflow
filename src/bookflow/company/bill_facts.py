@@ -15,18 +15,19 @@ from __future__ import annotations
 
 from typing import Literal
 
+from bookflow.company.items import TRACKED_TYPES
 from bookflow.company.sales_facts import Account, Origin, Reference, Term
 from bookflow.company.sales_models import StrictModel
 
 __all__ = ['Account', 'Origin', 'Reference', 'Term', 'Vendor', 'BillProfile',
            'BillExpenseProfile', 'BillItemProfile', 'PURCHASABLE_ITEM_TYPES']
 
-# The item families a bill may receive today: exactly the three an invoice already sells, and
-# for the same reason -- each one's purchase accounting is a single account named on the item
-# itself. An inventory part is deliberately absent: receiving stock debits Inventory Asset and
-# moves quantity on hand, which needs an owner this product does not have yet, and a debit to
-# the wrong account is worse than a refusal.
-PURCHASABLE_ITEM_TYPES = ('service', 'non_inventory_part', 'other_charge')
+# The item families a bill may buy: the three an invoice already sells, each of which posts to
+# one account named on the item itself, plus the stock-carrying families, which post to the
+# item's Inventory Asset account and move quantity on hand. The stock half is read off the item
+# master's own profile registry rather than written out again, so a later stock-carrying type
+# cannot be silently left out of the grid that buys it.
+PURCHASABLE_ITEM_TYPES = ('service', 'non_inventory_part', 'other_charge') + TRACKED_TYPES
 
 
 class Vendor(Reference):
@@ -60,16 +61,18 @@ class BillItemProfile(StrictModel):
 
     ``account_basis`` says which of the item's accounts that was. An item sold but never
     bought has one account rather than none -- the income account it is sold out of -- and a
-    bill line naming it debits that, which reduces the income. A reader years later must be
-    able to tell that from an ordinary purchase without re-reading the item, and a correction
-    must know which account types are still eligible for this line, so the choice is a
-    captured fact rather than something inferred from the account's type today.
+    bill line naming it debits that, which reduces the income. A stock-carrying item has a
+    third: its Inventory Asset account, which the line debits because the quantity is still on
+    the shelf rather than consumed. A reader years later must be able to tell the three apart
+    without re-reading the item, and a correction must know which account types are still
+    eligible for this line, so the choice is a captured fact rather than something inferred
+    from the account's type today.
     """
 
     item: Reference
-    item_type: Literal['service', 'non_inventory_part', 'other_charge']
+    item_type: Literal[PURCHASABLE_ITEM_TYPES]
     account: Account
-    account_basis: Literal['purchase', 'income'] = 'purchase'
+    account_basis: Literal['purchase', 'income', 'asset'] = 'purchase'
     quantity_microunits: int
     unit_cost_minor_units: int | None = None
     amount_basis: Literal['unit_cost', 'amount'] = 'unit_cost'
