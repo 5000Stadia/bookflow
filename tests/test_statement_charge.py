@@ -436,3 +436,49 @@ def test_the_same_statement_charge_through_python_cli_http_and_mcp(root, tmp_pat
             await matrix.close()
 
     anyio.run(witness)
+
+
+def test_the_shapes_a_charge_is_entered_in_and_the_four_it_is_refused_in(books):
+    """What a charge accepts and what it will not, in the words it answers with.
+
+    Written after a seed attempt read as a gap between the model and dispatch and was neither:
+    every refusal below is an ordinary rule this command has always had, and each one names the
+    field and the reason. The one that reads like a bug from a distance is `quantity` -- an
+    exact decimal is a string here, so a TOML or JSON *number* is refused, which is exactly what
+    an unquoted `0.25` in a seed row produces while the same row typed as "0.25" posts.
+    """
+    accepted = {
+        'the six fields a charge reads as': dict(
+            item=books['consultation'], quantity='0.25', rate=RATE,
+            description='Quarter hour on the Acme matter'),
+        'names instead of identifiers': dict(
+            customer='Acme Holdings', item='Consultation', quantity='0.25', rate=RATE),
+        'a flat sum instead of a rate': dict(item=books['filing'], quantity='1', amount='40.00'),
+        "the item's own price": dict(item=books['consultation'], quantity='1'),
+    }
+    for label, extra in accepted.items():
+        shape = dict(date='2026-02-01', **extra)
+        shape.setdefault('customer', books['customer'])
+        posted = books['run']('statement-charge post', shape, reason='Charge the client')
+        assert posted['status'] == 'posted' and posted['total_minor_units'] > 0, label
+
+    refused = {
+        'rate and amount together': (
+            dict(item=books['consultation'], quantity='0.25', rate=RATE, amount='15.00'),
+            'input', 'give rate or amount, not both'),
+        'no item': (dict(quantity='0.25', rate=RATE), 'item', 'Field required'),
+        'a number where an exact decimal belongs': (
+            dict(item=books['consultation'], quantity=0.25, rate=RATE),
+            'quantity', 'must be a decimal string, never a number or boolean'),
+        'a field this document does not have': (
+            dict(item=books['consultation'], quantity='1', sales_tax_code_id='x'),
+            'sales_tax_code_id', 'Extra inputs are not permitted'),
+    }
+    for label, (extra, field, problem) in refused.items():
+        with pytest.raises(BookflowError) as raised:
+            books['run']('statement-charge post',
+                         dict(date='2026-02-02', customer=books['customer'], **extra),
+                         reason='Charge the client')
+        assert raised.value.code == 'E_VALIDATION', (label, raised.value.code)
+        fields = raised.value.details['fields']
+        assert any(f['field'] == field and problem in f['problem'] for f in fields), (label, fields)

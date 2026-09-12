@@ -132,7 +132,7 @@ def test_n1_actual_mixed_sources_claim_fences_and_n4_void(client,sale,driver):
         # A rejected public command may run standard maintenance; financial,
         # membership and permanent operation rows must remain untouched.
         with driver.session() as s:
-            assert s.company.raw.execute('SELECT count(*) FROM deposit_current_memberships').fetchone()==(2,)
+            assert s.company.raw.execute('SELECT count(*) FROM deposit_current_memberships WHERE transaction_id=?',(result.current.id,)).fetchone()==(2,)
             assert s.company.raw.execute('SELECT count(*) FROM deposit_operations WHERE transaction_id=?',(result.current.id,)).fetchone()==(1,)
     with driver.session() as s:
         assert s.company.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
@@ -142,7 +142,7 @@ def test_n1_actual_mixed_sources_claim_fences_and_n4_void(client,sale,driver):
     canceled=driver.run('void',dict(deposit=result.current.id,expected_version=1,operation_key='g2-n1-void'),reason='Retain original receipts')
     assert len(canceled.effect.memberships)==2
     with driver.session() as s:
-        assert s.company.raw.execute('SELECT count(*) FROM deposit_current_memberships').fetchone()==(0,)
+        assert s.company.raw.execute('SELECT count(*) FROM deposit_current_memberships WHERE transaction_id=?',(result.current.id,)).fetchone()==(0,)
         assert s.company.raw.execute('SELECT kind,amount_minor_units FROM deposit_memberships WHERE transaction_id=? ORDER BY rowid',(result.current.id,)).fetchall()==[('claim',10000),('claim',6000),('release',10000),('release',6000)]
         assert s.company.raw.execute('SELECT status,version FROM transactions WHERE id=?',(receipt['id'],)).fetchone()==('posted',receipt['version']+2)
     fresh=copy.deepcopy(request);fresh['operation_key']='g2-redeposit'
@@ -292,8 +292,12 @@ def test_simultaneous_writers_have_one_complete_claim(client,sale,driver):
     winners=[v for v in values if isinstance(v,LifecycleOutput)]
     assert len(winners)==1 and [v for v in values if isinstance(v,str)]==['E_DEPOSIT_SOURCE_CLAIMED']
     with driver.session() as s:
-        assert s.company.raw.execute('SELECT count(*) FROM deposit_current_memberships').fetchone()==(1,)
-        assert s.company.raw.execute('SELECT count(*) FROM deposit_operations').fetchone()==(1,)
+        # Scoped to this deposit. Counting every membership in the company was the same number
+        # only while the demo seed banked nothing, which is no longer true of the file a person
+        # opens first -- and a count that broad was never what "one complete claim" meant.
+        banked=winners[0].current.id
+        assert s.company.raw.execute('SELECT count(*) FROM deposit_current_memberships WHERE transaction_id=?',(banked,)).fetchone()==(1,)
+        assert s.company.raw.execute('SELECT count(*) FROM deposit_operations WHERE transaction_id=?',(banked,)).fetchone()==(1,)
         assert s.company.raw.execute('SELECT sum(debit_minor_units-credit_minor_units) FROM posting_lines WHERE account_id=?',(document['deposit_to'],)).fetchone()==(700,)
 
 

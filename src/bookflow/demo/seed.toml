@@ -2145,7 +2145,31 @@ capture = "demo_inventory_adjust"
 input = { item = "${inventory_item.id}", date = "2026-11-30", adjustment_account = "${expense_account.id}", number = "DEMO-COUNT", quantity_change = "-2", memo = "Year-end count: two valves damaged on site" }
 reason = "Write off the valves the count could not find"
 
-# Two money paths are still missing here and are their own row, not an oversight:
-# `statement-charge post` is refused by input validation with this shape and wants a proper
-# look, and `deposit post` takes an operation_key and an inline document that the seed's
-# ${capture.field} substitution cannot build. Both are worth having; neither is a one-liner.
+# `deposit post` is seeded below, and both of my reasons for thinking it could not be were
+# wrong: a literal operation_key is the established idiom here, and the inline document is an
+# ordinary nested table. `statement-charge post` is still absent, but not because it is refused
+# -- it posts with this exact shape. What refused it was an unquoted `0.25` in a seed row,
+# which TOML reads as a float where the command wants a decimal string. Worth adding.
+
+# Banking a day's takings. Two counter sales are paid into Undeposited Funds rather than
+# straight to Checking -- which is what actually happens when the money is in the till and not
+# yet at the bank -- and one deposit takes both out of it in a single trip. Nothing else in this
+# file leaves anything undeposited, so before this the deposit window opened on an empty list.
+[[commands]]
+command = "sales-receipt post"
+capture = "bank_receipt_first"
+reason = "Ring up a counter sale paid in cash"
+input = { "date" = "2026-10-09", "number" = "DEMO-BANK-SR-1", "customer" = "${sale_customer.id}", "sales_tax_item" = "${sale_tax.id}", "customer_tax_code" = "${sale_taxable.id}", "lines" = [{ "item" = "${sale_service.id}", "quantity" = "1" }], "deposit_to" = "Undeposited Funds", "payment_method" = "Cash" }
+
+[[commands]]
+command = "sales-receipt post"
+capture = "bank_receipt_second"
+reason = "Ring up a second counter sale the same day"
+input = { "date" = "2026-10-09", "number" = "DEMO-BANK-SR-2", "customer" = "${sale_customer.id}", "sales_tax_item" = "${sale_tax.id}", "customer_tax_code" = "${sale_taxable.id}", "lines" = [{ "item" = "${sale_service.id}", "quantity" = "2" }], "deposit_to" = "Undeposited Funds", "payment_method" = "Cash" }
+
+[[commands]]
+command = "deposit post"
+capture = "bank_deposit"
+reason = "Take the day's takings to the bank"
+input = { "operation_key" = "DEMO-BANK-DEPOSIT-1", "document" = { "mode" = "inline", "deposit_to" = "Checking", "date" = "2026-10-10", "memo" = "Friday takings", "sources" = [{ "source_type" = "sales_receipt", "source" = "${bank_receipt_first.id}", "expected_version" = "${bank_receipt_first.version}" }, { "source_type" = "sales_receipt", "source" = "${bank_receipt_second.id}", "expected_version" = "${bank_receipt_second.version}" }] } }
+
