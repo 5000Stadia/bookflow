@@ -141,15 +141,19 @@ def test_a_populated_prior_database_keeps_every_value_and_declares_nothing(tmp_p
         # value witness omits it and the assertions below cover it directly.
         before = {name: table(raw, name, omit_columns=(M.COLUMN,) if name == M.TABLE else ())
                   for name in names}
-        # Whatever the migrations after this one rebuild - derived, because a hand-listed
-        # exclusion goes stale the moment another revision lands.
-        rebuilt = _rebuilt_since(M.revision)
-        objects = {row for row in raw.execute(
+        objects = set(raw.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
-        ).fetchall() if row[1] not in rebuilt}
+        ).fetchall())
 
+    # The transition this test owns is PRIOR -> co0039, so that is the transition it runs. It
+    # used to upgrade to the head and subtract whatever later migrations declared they rebuilt,
+    # which made a claim about this revision depend on every revision after it -- and the
+    # exclusion list is not equivalent evidence, because a table dropped by accident and a table
+    # rebuilt correctly both disappear from a byte comparison. The whole-chain obligations that
+    # endpoint carried, including the backup, are witnessed directly below.
+    _at(path, M.revision)
     with open_database(path, writable=True) as db:
-        assert migrate_to_head(db, 'company', tmp_path / 'backups') == (PRIOR, HEADS['company'])
+        assert db.raw.execute('SELECT version_num FROM alembic_version').fetchone() == (M.revision,)
         assert {name: table(db.raw, name, omit_columns=(M.COLUMN,) if name == M.TABLE else ())
                 for name in names} == before
         after = set(db.raw.execute(
@@ -166,9 +170,6 @@ def test_a_populated_prior_database_keeps_every_value_and_declares_nothing(tmp_p
         assert db.raw.execute('PRAGMA main.foreign_key_check').fetchall() == []
         assert db.raw.execute('PRAGMA main.integrity_check').fetchall() == [('ok',)]
 
-    saved = list((tmp_path / 'backups').glob(f'*-from-{PRIOR}.db'))
-    assert len(saved) == 1
-
 
 def test_a_database_that_already_carries_the_column_stops_the_migration(tmp_path):
     path = tmp_path / 'company.db'
@@ -180,3 +181,46 @@ def test_a_database_that_already_carries_the_column_stops_the_migration(tmp_path
         with pytest.raises(Exception) as caught:  # the runner wraps whatever the migration raised
             migrate_to_head(db, 'company', tmp_path / 'backups')
     assert 'co0039' in str(caught.value) or 'co0039' in str(getattr(caught.value, '__cause__', ''))
+
+
+def test_the_same_populated_file_still_upgrades_all_the_way_to_the_head(tmp_path):
+    """The whole-chain obligation the test above used to carry, kept rather than dropped.
+
+    Narrowing that test to its own transition would otherwise have thrown away the only
+    populated upgrade-to-head coverage here, including the backup the runner takes. So this
+    keeps it and asks the question that endpoint is actually good for: a real file with local
+    extensions survives every migration to today's head, the business facts it carried are
+    still there, and the tables a later revision deliberately rebuilt are present and usable
+    rather than merely absent from a byte comparison.
+    """
+    path = tmp_path / 'company.db'
+    _at(path, PRIOR)
+    with sqlite3.connect(path) as raw:
+        raw.execute('PRAGMA foreign_keys=OFF')
+        for identity, kind in (('Equipment', 'fixed_asset'), ('Checking', 'bank'),
+                               ('Wear', 'expense')):
+            _account(raw, identity, kind)
+        raw.execute('CREATE TABLE local_keepsake (id INTEGER PRIMARY KEY, t TEXT)')
+        raw.execute("INSERT INTO local_keepsake VALUES (1, 'kept verbatim')")
+        raw.commit()
+        kept = {row[0] for row in raw.execute('SELECT id FROM accounts')}
+
+    with open_database(path, writable=True) as db:
+        assert migrate_to_head(db, 'company', tmp_path / 'backups') == (PRIOR, HEADS['company'])
+        assert {row[0] for row in db.raw.execute('SELECT id FROM accounts')} == kept
+        assert db.raw.execute('SELECT t FROM local_keepsake').fetchone() == ('kept verbatim',)
+        assert db.raw.execute('PRAGMA main.foreign_key_check').fetchall() == []
+        assert db.raw.execute('PRAGMA main.integrity_check').fetchall() == [('ok',)]
+        # A table a later revision rebuilt is exempt from byte identity and owes something in
+        # its place: it must exist, be readable, and answer as the table it was rebuilt into.
+        # Exemption without that would pass a table that was simply dropped.
+        for name in sorted(_rebuilt_since(M.revision)):
+            if not db.raw.execute(
+                    "SELECT 1 FROM sqlite_schema WHERE type='table' AND name=?", (name,)).fetchone():
+                continue  # a rebuilt trigger or index, covered by the schema comparison above
+            assert db.raw.execute(f'SELECT count(*) FROM main."{name}"').fetchone() is not None, name
+
+    # The runner takes a backup of the file it is about to change, and that obligation belongs
+    # to the run that takes one rather than to a test of a single revision's transition.
+    saved = list((tmp_path / 'backups').glob(f'*-from-{PRIOR}.db'))
+    assert len(saved) == 1, 'the migration runner did not keep a copy of the file it upgraded'

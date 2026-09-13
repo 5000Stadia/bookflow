@@ -55,9 +55,16 @@ def _objects(conn):
 def test_the_number_this_migration_claims_is_the_one_the_chain_gives_it():
     chain = _chain()
     assert M.revision == "co0037" and chain[M.revision] == PREVIOUS
-    heads = set(chain) - {down for down in chain.values() if down}
-    assert heads == {M.revision}, sorted(heads)
-    assert HEADS["company"] == M.revision
+    # This migration's number is a position in the chain, not the end of it. Asserting it is
+    # the head was true on the day it landed and false from the next migration onward, which is
+    # a fact about the calendar rather than about this file.
+    assert M.revision in chain and chain[M.revision] == PREVIOUS
+    reachable, cursor = set(), HEADS["company"]
+    while cursor:
+        reachable.add(cursor)
+        cursor = chain.get(cursor)
+    assert M.revision in reachable, (
+        M.revision, "the head no longer reaches this migration, so the chain has forked")
     # A revision number is a name in several places inside its own file -- the assignment,
     # the down link and every refusal message -- and a half-finished renumber shows up as one
     # of them naming a revision that is not this one.
@@ -101,8 +108,10 @@ def test_a_populated_previous_revision_upgrades_with_everything_else_untouched(t
         conn.commit()
         before = _objects(conn)
         rows = conn.execute("SELECT count(*) FROM transactions").fetchone()[0]
-    with open_database(path, writable=True) as db:
-        assert migrate_to_head(db, "company", None) == (PREVIOUS, HEADS["company"])
+    # Upgrade to THIS migration, not to the head. "Additive" is a claim about what this file
+    # does to its predecessor; running the whole chain measures every later migration too, and
+    # a later one legitimately replaced a trigger when statement charges became settleable.
+    _at(path, M.revision)
     with sqlite3.connect(path) as conn:
         after = _objects(conn)
         assert conn.execute("SELECT count(*) FROM transactions").fetchone()[0] == rows

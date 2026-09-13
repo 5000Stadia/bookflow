@@ -23,14 +23,41 @@ M = importlib.import_module('bookflow.storage.company_migrations.versions.0026_b
 BILLS = importlib.import_module('bookflow.storage.company_migrations.versions.0025_bills')
 
 
+def _revisions_after(revision, chain='company'):
+    """Every revision the chain runs after `revision`, from Alembic's own ancestry.
+
+    A revision number is a merge order, not a chain position: 0035_purchase_orders declares
+    `down_revision = 'co0037'`, so co0035 RUNS AFTER co0037 while sorting before it. Comparing
+    revision names therefore answers a different question than "did this run later", and gets it
+    wrong for exactly the migrations that landed out of numeric order.
+
+    The ancestry is Alembic's, not a second graph kept here: `storage/migrate.py` already walks
+    it the same way, and a parallel implementation would have to model merges, multiple roots and
+    duplicate ids correctly to stay right.
+    """
+    from alembic.script import ScriptDirectory
+
+    from bookflow.storage.migrate import _config
+    script = ScriptDirectory.from_config(_config(chain, None))
+    heads = script.get_heads()
+    assert len(heads) == 1, ('the chain has more than one head', heads)
+    return [entry.revision for entry in script.iterate_revisions(heads[0], revision)
+            if entry.revision != revision]
+
+
 def _rebuilt_since(revision):
     """Every table and trigger the migrations after `revision` rebuild or replace."""
     versions = Path(__file__).resolve().parents[1] / 'src/bookflow/storage/company_migrations/versions'
-    seen, names = set(), set()
+    modules = {}
     for path in sorted(versions.glob('[0-9]*.py')):
         module = importlib.import_module('bookflow.storage.company_migrations.versions.' + path.stem)
+        modules[module.revision] = module
+    later = set(_revisions_after(revision))
+    seen, names = set(), set()
+    for name in sorted(modules):
+        module = modules[name]
         guards = {statement.split()[2] for statement in getattr(module, 'GUARDS', ())}
-        if module.revision > revision:
+        if name in later:
             names.update(getattr(module, 'CHANGED', ()))
             names.update(getattr(module, 'REPLACED', ()))
             # A migration that rewrites a trigger names it in TRIGGERS, which carries no
@@ -38,7 +65,6 @@ def _rebuilt_since(revision):
             # drives the migration's own table rebuild, and REPLACED must be a subset of
             # its GUARDS. A rewrite this cannot see reads as an object that vanished.
             names.update(getattr(module, 'TRIGGERS', ()))
-            names.update(guards & seen)
         seen.update(guards)
     return names
 
@@ -185,8 +211,13 @@ def test_a_populated_co0025_database_keeps_every_value_and_every_local_object(tm
             "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
         ).fetchall() if row[1] not in rebuilt}
 
+    # Upgrade to THIS migration, not to the head. What this test proves is that co0026 keeps
+    # every value and every local object of a populated co0025 file; running the whole chain
+    # proves that about every later migration too, and a later one legitimately rebuilds the
+    # accounts table. That the head is reachable at all is asserted separately above.
+    _at(path, M.revision)
     with open_database(path, writable=True) as db:
-        assert migrate_to_head(db, 'company', tmp_path / 'backups') == ('co0025', HEADS['company'])
+        assert db.raw.execute('SELECT version_num FROM alembic_version').fetchone() == (M.revision,)
         assert {name: preserved(db.raw, name, before[name]) for name in names} == before
         after = set(db.raw.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
