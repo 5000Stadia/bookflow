@@ -64,6 +64,27 @@ def raw(db):
     return {name:table(db,name) for name in names}
 
 
+def _upgrade_to(db, revision):
+    """Run an existing populated file forward to exactly `revision`.
+
+    migrate_to_head runs the whole chain, which is the right thing for an upgrade witness and
+    the wrong thing for a claim about one transition: every later migration's legitimate
+    rewrite then reads as this migration failing to preserve something.
+    """
+    from alembic import command
+
+    from bookflow.storage.migrate import _config
+    # The runner turns foreign keys off for the duration -- a rebuild recreates tables whose
+    # references do not exist yet -- and co0023 refuses to run without that, by name. Setting
+    # the same precondition here is reproducing the runner's contract, not evading it.
+    db.raw.execute('PRAGMA foreign_keys=OFF')
+    try:
+        command.upgrade(_config('company', db.conn), revision)
+        db.raw.commit()
+    finally:
+        db.raw.execute('PRAGMA foreign_keys=ON')
+
+
 def test_populated_preservation_and_old_binary_refusal(old_co22,tmp_path):
     _,original,source=old_co22
     root=tmp_path/'root';shutil.copytree(original,root)
@@ -72,7 +93,12 @@ def test_populated_preservation_and_old_binary_refusal(old_co22,tmp_path):
         before=raw(db.raw)
         ddl=db.raw.execute('SELECT type,name,tbl_name,sql FROM main.sqlite_schema ORDER BY type,name').fetchall()
         files=attachments(root)
-        assert migrate_to_head(db,'company',tmp_path/'backups')==('co0022','co0023')
+        # co0022 -> co0023, the transition this test owns. It used to run the whole chain and
+        # assert the head was co0023, which stopped being true the day co0024 landed -- and
+        # because that assertion is first, everything below it stopped running with it,
+        # including the foreign-key and integrity checks on a real upgraded customer file.
+        _upgrade_to(db, 'co0023')
+        assert db.raw.execute('SELECT version_num FROM alembic_version').fetchone()==('co0023',)
         assert raw(db.raw)==before
         changed={name:sql for kind,name,owner,sql in db.raw.execute('SELECT type,name,tbl_name,sql FROM main.sqlite_schema') if kind=='table'}
         stored={(kind,name):(owner,sql) for kind,name,owner,sql in db.raw.execute('SELECT type,name,tbl_name,sql FROM main.sqlite_schema')}
@@ -88,7 +114,9 @@ def test_populated_preservation_and_old_binary_refusal(old_co22,tmp_path):
             else:assert stored[kind,name]==(owner,sql),(kind,name)
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall()==[]
         assert db.raw.execute('PRAGMA integrity_check').fetchall()==[('ok',)]
-        assert migrate_to_head(db,'company',tmp_path/'backups')==('co0023','co0023')
+        # Re-running this migration is a no-op, asked of this revision rather than of the head.
+        _upgrade_to(db, 'co0023')
+        assert db.raw.execute('SELECT version_num FROM alembic_version').fetchone()==('co0023',)
     assert attachments(root)==files
     co21=tmp_path/'co21-source';co21.mkdir()
     archive=subprocess.check_output(['git','archive','162193259399f0554db07840e26c93444051664b','src'],cwd=Path(__file__).parents[1])
@@ -173,7 +201,11 @@ def test_only_dependency_closure_ddl_and_external_reference_inspection(old_co22,
         def observe(sql,*args,**kw):commands.append(sql);return execute(sql,*args,**kw)
         with monkeypatch.context() as patch:
             patch.setattr(db.conn,'exec_driver_sql',observe)
-            migrate_to_head(db,'company',tmp_path/'backups')
+            # co0023's own DDL is what this test reads, so co0023 is what it runs. Through the
+            # whole chain the DROPs below are still issued and the values still preserved, but
+            # every later migration's legitimate rewrite lands in `before` too and the
+            # preservation assertion fails on work this test is not about.
+            _upgrade_to(db,'co0023')
         assert raw(db.raw)==before
         drops=[s for s in commands if s.startswith('DROP ')]
         assert 'DROP VIEW main."local_transitive"' in drops
