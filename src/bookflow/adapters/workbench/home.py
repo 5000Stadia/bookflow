@@ -367,10 +367,9 @@ PANELS: tuple[Panel, ...] = (
             Step(
                 id="time-tracking",
                 title="Time tracking",
-                summary="Time against a job, carried through to what you bill and what you pay.",
+                summary="Record time against a job and carry billable hours through to customer billing.",
                 action=Action("Track time", WRITE),
-                waits_on="a later roadmap decision: time tracking and payroll sit outside the "
-                         "goal that is being built now",
+                waits_on="implementation of job time entry and billing; payroll processing is excluded",
                 aside=True,
             ),
         ),
