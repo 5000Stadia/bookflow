@@ -311,7 +311,7 @@ def test_runtime_custom_fields_render_by_stable_id_and_preserve_attempt(hosted):
     for kind, definition in definitions.items():
         assert f'name="cf:{definition["id"]}"' in page.text
         assert f"Workbench {kind} field" in page.text
-    assert 'type="date"' in page.text
+    assert 'data-date' in page.text
     assert 'inputmode="decimal"' in page.text
     assert '<option value="North" selected>North</option>' in page.text
 

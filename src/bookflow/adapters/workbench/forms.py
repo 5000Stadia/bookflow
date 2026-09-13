@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from bookflow.core import registry
 from bookflow.core.errors import BookflowError
+from bookflow.adapters.workbench.date_metadata import is_date
 from bookflow.adapters.workbench.numeric_metadata import metadata as numeric_metadata
 
 
@@ -74,6 +75,8 @@ def _scalar_descriptor(
     description: str = "",
     required: bool = False,
     extra: Any = None,
+    field=None,
+    model=None,
 ) -> dict[str, Any]:
     base, nullable = _base(annotation)
     kind, choices = "text", None
@@ -89,6 +92,7 @@ def _scalar_descriptor(
         kind = "json"
     return {
         "name": name,
+        "date": is_date(annotation, field=field, model=model, name=name),
         "kind": kind,
         "json_shape": "object" if kind == "json" else None,
         "structured_schema": _structured_schema(annotation),
@@ -133,7 +137,7 @@ def collection_schema(annotation: Any) -> dict[str, Any] | None:
                     name=name,
                     description=field.description or "",
                     required=field.is_required(),
-                    extra=field.json_schema_extra,
+                    extra=field.json_schema_extra, field=field, model=item_base,
                 ))
         item = {"kind": "object", "model": item_base, "fields": fields}
     else:
@@ -250,6 +254,7 @@ def leaves(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
                     "any_json": base is Any,
                     "description": f.description or "", "default": default,
                     "required": f.is_required(), "nullable": nullable,
+                    "date": is_date(f.annotation, field=f, model=model, name=name),
                     "annotation": f.annotation, "math": numeric_metadata(name, base, extra)})
     return out
 

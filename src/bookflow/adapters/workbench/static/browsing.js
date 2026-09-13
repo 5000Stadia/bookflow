@@ -78,7 +78,7 @@
     if (discrete) control.append(node('option','Choose a value',{value:''}));
     if (d.kind === 'bool') {option(control,{key:'true',label:'Yes'});option(control,{key:'false',label:'No'});}
     else if (d.kind === 'choice' && !d.definition) d.choices.forEach(value => option(control,{key:value,label:value.replaceAll('_',' ')}));
-    else if (!discrete) {control.type = d.kind === 'date' ? 'date' : 'text';if(['number','integer','money'].includes(d.kind)) control.inputMode='decimal';}
+    else if (!discrete) {control.type = 'text';if(d.kind === 'date') control.dataset.date='';if(['number','integer','money'].includes(d.kind)) control.inputMode='decimal';}
     label.append(control); $('filter-editor').append(label);
     if ((d.kind === 'choice' && d.definition) || (d.kind === 'reference' && d.reference_noun)) {
       const searchLabel=node('label','Find a value'), search=node('input','',{type:'search'});searchLabel.append(search);

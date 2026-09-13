@@ -2,7 +2,7 @@
 <link rel="stylesheet" href="{{ static_urls['payments.css'] }}">
 <h1>Invoice {{ invoice.number }} — settlement</h1>
 <p class="payment-actions"><a href="/c/{{ company_id }}/invoice/{{ invoice.id }}">Invoice and commercial history</a><a href="/c/{{ company_id }}/receive-payments?invoice={{ invoice.id }}">Receive payment</a></p>
-<form method="get"><label>Effective-date cutoff (blank for current)<input type="date" name="as_of" value="{{ settlement.as_of or '' }}"></label><button>View settlement</button></form>
+<form method="get"><label>Effective-date cutoff (blank for current)<input type="text" data-date name="as_of" value="{{ settlement.as_of or '' }}"></label><button>View settlement</button></form>
 <section aria-label="Dated invoice settlement"><h2>{{ 'As of ' ~ settlement.as_of if settlement.as_of else 'Current settlement' }}</h2>
 <p>{{ settlement.status.replace('_',' ')|capitalize }} · Gross {{ settlement.gross.amount }} · Applied {{ settlement.applied.amount }} · Due {{ settlement.due.amount }} {{ settlement.currency }}</p>
 <p>All currently recorded corrections and their effective dates. This is not a reconstruction of what was known at an earlier time.</p><p class="muted">Generated {{ settlement.generated_at }} · audit watermark {{ settlement.audit_watermark }}</p></section>

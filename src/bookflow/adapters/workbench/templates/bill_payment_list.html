@@ -6,8 +6,8 @@
 <label>Vendor (ID or exact name)<input name="vendor" value="{{ filters.get('vendor','') }}"></label>
 <label>Payment number contains<input name="number" value="{{ filters.get('number','') }}"></label>
 <label>Check number<input name="check_number" value="{{ filters.get('check_number','') }}"></label>
-<label>From date<input type="date" name="date_from" value="{{ filters.get('date_from','') }}"></label>
-<label>Through date<input type="date" name="date_to" value="{{ filters.get('date_to','') }}"></label>
+<label>From date<input type="text" data-date name="date_from" value="{{ filters.get('date_from','') }}"></label>
+<label>Through date<input type="text" data-date name="date_to" value="{{ filters.get('date_to','') }}"></label>
 <label>Status<select name="status"><option value="">All</option>{% for value in ('posted','voided') %}<option value="{{ value }}"{% if filters.get('status')==value %} selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
 <button>Find payments</button>
 </form>

@@ -20,9 +20,9 @@
 <form id="register-form" novalidate data-math-company-currency="{{ config.currency }}">
 <fieldset id="register-fields">
 <div class="register-entry-grid">
-<label>Date <input id="register-date" name="date" type="text" inputmode="numeric" placeholder="YYYY-MM-DD" required aria-describedby="register-date-help"></label>
+<label>Date <input data-date data-date-picker="register-calendar" id="register-date" name="date" type="text" inputmode="numeric" placeholder="YYYY-MM-DD" required aria-describedby="register-date-help"></label>
 <button id="register-calendar-open" type="button">Calendar</button>
-<label id="register-calendar-label" hidden>Choose date<input id="register-calendar" type="date"></label>
+<label id="register-calendar-label" hidden>Choose date<input id="register-calendar" type="date" data-date-native></label>
 <label>Journal number <input name="number" maxlength="64" placeholder="Automatic"></label>
 <div id="register-payee"></div>
 <label>Movement <select name="direction">{% for value, label in config.directions %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
@@ -50,7 +50,7 @@
 {% if config.supported %}
 <section aria-label="Account movements">
 <h2>Account movements</h2>
-<form id="register-period" class="register-period"><label>From <input type="date" name="date_from" value="{{ config.date_from }}"></label><label>Through <input type="date" name="date_to" value="{{ config.date_to }}"></label><button type="submit">Refresh</button></form>
+<form id="register-period" class="register-period"><label>From <input type="text" data-date required name="date_from" value="{{ config.date_from }}"></label><label>Through <input type="text" data-date required name="date_to" value="{{ config.date_to }}"></label><button type="submit">Refresh</button></form>
 <p id="register-current">All entries: loading…</p><p id="register-current-metadata" class="muted"></p>
 <p id="register-period-totals"></p><p id="register-metadata" class="muted"></p><p id="register-query-error" role="status"></p>
 <div class="table-wrap" role="region" aria-label="Scrollable account history" tabindex="0"><table id="register-history"><thead><tr><th>Date / recorded</th><th>Number / type / effect</th><th>Payee</th><th>Category</th><th>Memo / line description</th><th>Class</th><th>Increase</th><th>Decrease</th><th>Running balance</th><th>Journal</th></tr></thead><tbody></tbody></table></div>

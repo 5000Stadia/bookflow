@@ -95,3 +95,11 @@ a.flow-tile:focus-visible{outline:2px solid #416da1;outline-offset:2px}
 .flow-planned .flow-tile-note{color:#6e6e6e}
 .flow-tile-wait{font-size:.75rem;color:#6e6e6e;margin-top:.15rem}
 @media (max-width:700px){.flow-steps,.flow-asides{flex-direction:column}.flow-step,.flow-asides>li{flex:1 1 auto}.flow-arrow svg{transform:rotate(90deg)}.group-menu{padding:.35rem .65rem}}
+
+/* Date text stays editable; calendars and range choices remain explicit actions. */
+.date-tools { display:inline-flex; flex-wrap:wrap; gap:.35rem; align-items:center; max-width:100%; }
+.date-calendar { min-height:44px; min-width:44px; }
+.date-tools input[type=date] { min-width:0; max-width:100%; }
+.date-range-presets { display:flex; flex-wrap:wrap; align-items:center; gap:.35rem; margin:.35rem 0; font-size:.9rem; }
+.date-range-presets select { min-height:44px; min-width:0; max-width:100%; }
+input[data-date] { min-width:0; max-width:100%; }

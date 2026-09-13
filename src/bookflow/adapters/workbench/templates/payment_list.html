@@ -4,7 +4,7 @@
 <form method="get" class="payment-grid" aria-label="Find customer payments">
 <label>Number, reference, memo or captured customer<input name="q" value="{{ filters.get('q','') }}"></label>
 <label>Payment method<select name="payment_method"><option value="">All methods</option>{% for method in methods %}<option value="{{ method.id }}"{% if filters.get('payment_method') == method.id %} selected{% endif %}>{{ method.name }}{{ ' (inactive)' if not method.active else '' }}</option>{% endfor %}</select></label>
-<label>From date<input type="date" name="date_from" value="{{ filters.get('date_from','') }}"></label><label>Through date<input type="date" name="date_to" value="{{ filters.get('date_to','') }}"></label>
+<label>From date<input type="text" data-date name="date_from" value="{{ filters.get('date_from','') }}"></label><label>Through date<input type="text" data-date name="date_to" value="{{ filters.get('date_to','') }}"></label>
 <label>Status<select name="status"><option value="">All</option>{% for value in ('posted','voided') %}<option value="{{ value }}"{% if filters.get('status')==value %} selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
 <label><input type="checkbox" name="available" value="1"{% if filters.get('available') %} checked{% endif %}> Available payment credit only</label><button>Find payments</button>
 </form><p>{{ payments.total_count }} matching payments</p>

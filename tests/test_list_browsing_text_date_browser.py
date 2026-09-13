@@ -34,7 +34,9 @@ def _choose(browser, definition, label, operator, value, kind):
     browser.wait_for(f"[...document.querySelector('#available-filters').options].some(o => o.value === {json.dumps(key)})")
     browser.evaluate(f"document.querySelector('#available-filters').value={json.dumps(key)};document.querySelector('#available-filters').dispatchEvent(new Event('change'))")
     browser.wait_for("!!document.querySelector('#filter-value')")
-    assert browser.evaluate("document.querySelector('#filter-value').type") == kind
+    assert browser.evaluate("document.querySelector('#filter-value').type") == 'text'
+    if kind == 'date':
+        browser.wait_for("!!document.querySelector('#filter-value + .date-tools .date-calendar')")
     browser.evaluate(f"document.querySelector('#filter-operator').value={json.dumps(operator)};document.querySelector('#filter-operator').dispatchEvent(new Event('change'))")
     if operator == 'is_missing':
         assert not browser.evaluate("!!document.querySelector('#filter-value')")

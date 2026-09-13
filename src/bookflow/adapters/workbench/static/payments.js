@@ -377,7 +377,7 @@
         input=el('select');input.append(new Option('Choose a value',''));
         if(definition.kind==='bool') {input.append(new Option('Yes','true'),new Option('No','false'));}
         else for(const choice of definition.choices||[]) if(choice.active!==false) input.append(new Option(choice.value,choice.value));
-      } else {input=el('input');input.type=definition.kind==='date'?'date':'text'; if(definition.kind==='number') {input.inputMode='decimal';input.dataset.mathScale='9';}}
+      } else {input=el('input');input.type='text';if(definition.kind==='date')input.dataset.date=''; if(definition.kind==='number') {input.inputMode='decimal';input.dataset.mathScale='9';}}
       input.dataset.definition=definition.id;
       const value=snapshot?.value ?? definition.default ?? '';
       if(definition.kind==='choice'&&value!==''&&![...input.options].some(option=>option.value===String(value))) input.append(new Option(String(value)+' (captured)',String(value)));
@@ -701,7 +701,7 @@
     $('reason-label').hidden=['receive','apply'].includes(mode);$('reason').required=!$('reason-label').hidden;$('save-new').hidden=mode!=='receive';
     for(const id of ['number','method','destination','memo','reference']) $(id).disabled=!edit;
     $('customer').disabled=mode!=='receive';$('find-customer').hidden=mode!=='receive';$('ar').disabled=mode!=='receive';
-    $('date').value=payment?.revision.date||new Date().toISOString().slice(0,10);
+    $('date').value=payment?.revision.date||BookflowDates.range('today')[0];
     if(payment) {
       await chooseCustomer(payment.revision.profile.payer.id);
       for(const [id,fact] of [['method',payment.revision.profile.payment_method],['destination',payment.revision.profile.deposit_account]]) {
@@ -717,7 +717,7 @@
     if(mode==='void') note('Unapply every recorded application first. Voiding reverses receipt cash and AR at its original dates.');
   }
   async function initialize() {
-    $('date').value=new Date().toISOString().slice(0,10);
+    $('date').value=BookflowDates.range('today')[0];
     $('amount').dataset.mathCurrency=config.currency;
     const methods=await command('payment-method list',{}),accounts=await command('account list',{}),defs=await command('custom-field list',{filter:['target_type=payment']});
     for(const row of methods.items) $('method').append(new Option(row.name,row.id));

@@ -13,7 +13,7 @@
 {% elif not a.spendable %}<p class="warn">Nothing is left on this credit: every cent has been applied to an invoice or refunded.</p>
 {% else %}
 <form id="credit-apply-form" hx-post="{{ a.apply_url }}" hx-target="body" hx-swap="outerHTML">
-<div class="row form-field"><label for="credit-apply-date">Settlement date<small>Leave empty to use the credit memo's own date. It may be later, never earlier than the credit or than an invoice it settles.</small></label><div class="control-stack"><input id="credit-apply-date" type="date" name="date" value=""></div><span></span></div>
+<div class="row form-field"><label for="credit-apply-date">Settlement date<small>Leave empty to use the credit memo's own date. It may be later, never earlier than the credit or than an invoice it settles.</small></label><div class="control-stack"><input id="credit-apply-date" type="text" data-date name="date" value=""></div><span></span></div>
 <section class="workspace-card document-detail" aria-label="Open invoices for this customer">
 <h2>Open invoices</h2>
 {% if a.rows %}

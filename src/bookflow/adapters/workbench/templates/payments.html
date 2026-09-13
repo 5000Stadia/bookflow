@@ -16,7 +16,7 @@
 <div class="payment-grid">
 <label>Customer or job<input id="payment-customer" autocomplete="off" placeholder="Search customer or job"><button type="button" id="payment-find-customer">Find customer</button></label>
 <div id="payment-customer-results" aria-live="polite"></div>
-<label>Received date<input id="payment-date" type="date" required></label>
+<label>Received date<input id="payment-date" type="text" data-date required></label>
 <label>Payment number (automatic when blank)<input id="payment-number" maxlength="64"></label>
 <label><span id="payment-amount-label">Amount received</span><input id="payment-amount" type="text" inputmode="decimal" data-math-kind="money" autocomplete="off"><span id="payment-amount-origin" class="muted"></span></label>
 <label>Payment method<select id="payment-method"><option value="">Customer default</option></select></label>

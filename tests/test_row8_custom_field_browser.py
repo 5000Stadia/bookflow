@@ -62,9 +62,9 @@ def test_keyboard_all_kinds_48_fields_splits_restore_clear(register_browser, wid
     _key(b, "ArrowDown"); _key(b, "ArrowDown")
     _tab(b, f'[data-custom-field="{fields["number"]["id"]}"]'); _type(b, "0")
     _tab(b, f'[data-custom-field="{fields["choice"]["id"]}"]'); _key(b, "ArrowDown")
-    # Date's native date control is checked separately from CDP text insertion.
+    # Editable date text has a separate native calendar affordance.
     b.evaluate(f"""(() => {{const e=document.querySelector('[data-custom-field="{fields['date']['id']}"]');
-      if(e.type !== 'date') throw Error('date control missing'); e.value='2026-02-12'; e.dispatchEvent(new Event('input',{{bubbles:true}}));}})()""")
+      if(e.type !== 'text' || !e.hasAttribute('data-date') || !e.nextElementSibling?.querySelector('.date-calendar')) throw Error('date control missing'); e.value='2026-02-12'; e.dispatchEvent(new Event('input',{{bubbles:true}}));}})()""")
     _tab(b, f'[data-custom-field="{fields["extra-42"]["id"]}"]'); _type(b, "last reachable")
     assert b.evaluate("document.documentElement.scrollWidth <= innerWidth")
     journal = _save(b)

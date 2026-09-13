@@ -12,7 +12,7 @@
     const mode=field('f:document.mode'), date=field('f:document.date');
     const sources=form.querySelector('[data-collection-path="document.sources"]');
     if(!sources)return;
-    date.type='date';
+    date.type='text';date.dataset.date='';
     const advanced=node('details');advanced.append(node('summary','Advanced deposit options'));
     for(const name of ['f:operation_key','f:dependency_guard','f:document.mode','f:document.draft','f:document.expected_version']){
       const row=field(name)?.closest('.form-field');if(row){advanced.append(row);if(['f:operation_key','f:dependency_guard'].includes(name))row.hidden=true;}

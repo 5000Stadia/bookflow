@@ -184,9 +184,8 @@
         input.value = text(value);
         state.choice_id = input.selectedOptions[0]?.dataset.choiceId || state.choice_id;
       } else {
-        const date = new Date(text(value) + 'T12:00:00Z');
-        const validDate = value == null || value === '' || (!Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value);
-        input.type = kind === 'date' && validDate ? 'date' : 'text';
+        input.type = 'text';
+        if (kind === 'date') input.dataset.date = '';
         if (kind === 'number') {
           input.inputMode = 'decimal'; input.dataset.mathScale = '9';
           input.dataset.mathActive = JSON.stringify([{name: 'register-custom-action:' + id, values: ['set']}]);
@@ -476,8 +475,6 @@
     field('date').addEventListener('beforeinput', e => {
       if (!e.isComposing && e.inputType === 'insertText' && dateShortcut(e.data)) e.preventDefault();
     });
-    $('register-calendar-open').addEventListener('click', () => { $('register-calendar-label').hidden = false; $('register-calendar').value = field('date').value; $('register-calendar').focus(); $('register-calendar').showPicker?.(); });
-    $('register-calendar').addEventListener('change', () => { field('date').value = $('register-calendar').value; $('register-calendar-label').hidden = true; dirty = true; dateFocus(); });
     $('register-splits-open').addEventListener('click', () => {
       if (!splitMode) { splitMode = true; const value = {}; try { value.account = category.value(); } catch (_) {} value.amount = field('amount').value; value.memo = field('memo').value === (edit?.memo ?? '') ? (edit?.memo ?? null) : (field('memo').value || null); try { value.party = payee.value(); } catch (_) {} if (edit?.category_line_id) value.line_id = edit.category_line_id;
         addSplit(value, {account: category.label(), party: payee.label()}); dirty = true; }
