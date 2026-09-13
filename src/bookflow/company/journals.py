@@ -211,7 +211,7 @@ def allocate(s, explicit, own=None):
     return allocate_document(s, 'journal_entry', explicit, own)
 
 
-def prepare(s, ctx, inp, operation, *, owner=None, check_instrument=None):
+def prepare(s, ctx, inp, operation, *, owner=None, check_instrument=None, force_revision=False):
     """``owner`` is the document module posting through this writer; the journal editor is None.
 
     It decides two things and nothing else: which control accounts these lines may name, and
@@ -225,6 +225,10 @@ def prepare(s, ctx, inp, operation, *, owner=None, check_instrument=None):
     or the register is editing, so neither may silently change them.
     """
     old_h = resolve(s, inp.journal) if operation != 'post' else None
+    if old_h is not None and owner != 'inventory':
+        if s.company.conn.execute(sa.select(c.money_out_item_lines.c.document_line_id).where(
+                c.money_out_item_lines.c.transaction_id == old_h['id']).limit(1)).first():
+            raise invalid('journal', 'This purchase carries items; use check or card-charge update/void so stock and money change together.')
     if old_h is not None and owner is None:
         from bookflow.company.inventory import owning_document_kind
         held = owning_document_kind(s, old_h['id'])
@@ -294,7 +298,7 @@ def prepare(s, ctx, inp, operation, *, owner=None, check_instrument=None):
             issuer = old_r['issuer_snapshot']
         # A correction that only renumbers a cheque changes no accounting at all: left out of
         # `unchanged` the entry would read as untouched and the new number would be dropped.
-        unchanged = old_r and not custom_plan.changed and not check_numbers.changed(settled, held) and (date, number, memo, issuer) == (old_r['date'], old_r['number'], old_r['memo'], old_r['issuer_snapshot']) and len(values) == len(old_lines) and all(
+        unchanged = old_r and not force_revision and not custom_plan.changed and not check_numbers.changed(settled, held) and (date, number, memo, issuer) == (old_r['date'], old_r['number'], old_r['memo'], old_r['issuer_snapshot']) and len(values) == len(old_lines) and all(
             key == old['line_id'] and all(value[k] == old[k] for k in value) for (key, value), old in zip(values, old_lines))
         if unchanged:
             return Plan(JournalWriteOutput(**summary(old_h, old_r), revision=revision_output(s, old_r), changed=False, warnings=warnings), {'input': inp, 'operation': operation, 'changed': False})

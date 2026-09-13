@@ -327,9 +327,9 @@ HELP = {
     'estimate': 'An estimate is not posted to the books. It records what the work will cost and what was agreed.',
     'check': 'A check records money leaving a bank account. Nothing is printed or sent: the number is the '
              'one written on the check itself, and it belongs to this bank account rather than to the '
-             'shared document series. The expense lines have to add up to the amount.',
+             'shared document series. The item and expense lines together must equal the entered amount.',
     'card-charge': 'A credit card charge records a purchase put on a company card. What is owed on the card '
-                   'goes up until the card is paid. The expense lines have to add up to the amount.',
+                   'goes up until the card is paid. The item and expense lines together must equal the entered amount.',
     'transfer': 'A transfer moves money between two accounts the company already owns. It is neither income '
                 'nor expense, so it changes no profit. Both accounts have to be balance-sheet accounts: a '
                 'bank, a credit card, another asset, a loan, or equity.',
@@ -385,14 +385,14 @@ NOUN_DESCRIPTIONS = {
     'check': {'account': 'The bank account this check is written on.',
               'pay_to.name_type': 'Which list the name comes from. Choose this before searching.',
               'pay_to.name_id': 'Search by name, then choose the match.',
-              'amount': 'The figure on the face of the check. The expense lines below have to add up to it.',
+              'amount': 'The figure on the face of the check. The item and expense lines below together must equal it.',
               'number': 'The number written on the check. Leave it empty to take the next one from '
                         "this bank account's own next check number. A number below that is accepted "
                         'and does not move it back; one already used on this account is refused.'},
     'card-charge': {'account': 'The credit card account this purchase was charged to.',
                     'pay_to.name_type': 'Which list the name comes from. Choose this before searching.',
                     'pay_to.name_id': 'Search by name, then choose the match.',
-                    'amount': 'What was charged. The expense lines below have to add up to it.'},
+                    'amount': 'What was charged. The item and expense lines below together must equal it.'},
     'transfer': {'from_account': 'The account the money comes out of. It is credited, so a bank '
                                  'balance falls and what is owed on a card rises.',
                  'to_account': 'The account the money goes into. It is debited, so a bank balance '
@@ -597,7 +597,7 @@ def layout(noun, leaves):
         primary_lines = by_path.get(primary_path)
         if primary_lines is not None:
             grids.append(_grid(primary_path, lines_title, primary_lines, grid, {}))
-        if bill:
+        if bill or money_out:
             item_lines = by_path.get('items')
             if item_lines is not None:
                 grids.append(_grid('items', 'Items', item_lines, BILL_ITEM_GRID, BILL_ITEM_HINTS))
@@ -689,17 +689,19 @@ def money_out_totals(noun, result, error):
         cheque = ([_row('Check number', document['check_number'])]
                   if document.get('check_number') else [])
         return (cheque + [_row('Expenses', f"{document['expense_total']['amount']} {currency}"),
+                          *([_row('Items', f"{document['item_total']['amount']} {currency}")] if document.get('items') else []),
                           _row(face, f"{document['amount']['amount']} {currency}", True)],
-                'The expense lines add up to what this document is written for.', True)
+                'The expense and item lines add up to what this document is written for.', True)
     details = (error or {}).get('details') if isinstance(error, dict) else None
     if isinstance(details, dict) and isinstance(details.get('difference'), dict):
         currency = details['currency']
         over = details['difference_minor_units'] > 0
         return ([_row('Expenses', f"{details['expense_total']['amount']} {currency}"),
+                 *([_row('Items', f"{details['item_total']['amount']} {currency}")] if (details.get('item_total') or {}).get('minor_units') else []),
                  _row(face, f"{details['amount']['amount']} {currency}"),
                  _row('Over' if over else 'Short by',
                       f"{details['difference']['amount']} {currency}", True)],
-                'The expense lines do not add up to what this document is written for. '
+                'The expense and item lines do not add up to what this document is written for. '
                 'Nothing was written.', False)
     return [], None, None
 
@@ -841,7 +843,7 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
                  'make this bill due.')
     elif money_out:
         totals, reconciliation, reconciled = money_out_totals(noun, result, error)
-        empty = ('Preview to see what the expense lines add up to and whether it agrees '
+        empty = ('Preview to see what the expense and item lines add up to and whether it agrees '
                  'with the amount above.')
     else:
         totals = sale_totals(figures, noun == 'invoice')

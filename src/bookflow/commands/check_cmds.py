@@ -16,8 +16,10 @@ from bookflow.company.check_models import (
 )
 
 _SHARED = (
-    ' `expenses` is one to 199 lines of account, amount, memo and class saying what the money'
-    ' was spent on; they must add up to `amount` exactly, and a total that does not is refused'
+    ' `items` accepts purchased items with fractional quantity, unit_cost or amount, description, '
+    'customer/job, billable and class. Tracked items receive stock once against the bank/card; '
+    'these are new goods, not payment for an existing bill. `expenses` is zero to 199 lines of account, amount, memo and class saying what the money'
+    ' was spent on; items plus expenses must add up to `amount` exactly, and a total that does not is refused'
     " with the difference. A line's own `class_id` is that line's class and a line without one"
     " takes the document's `class_id`; set `class_mode` to `none` to leave one line unclassified"
     ' even when the document carries a class. `pay_to` names who the money went to, from the'
@@ -27,7 +29,8 @@ _SHARED = (
 _CORRECTION = (
     ' Every field is optional and a field left out keeps what was captured. Supply `expenses`'
     ' to replace the whole grid, carrying each surviving row’s `line_id` and omitting it on a'
-    ' new row; leave `expenses` out to correct the header alone and keep the rows exactly as'
+    ' new row. The same replacement rule applies independently to `items`; an omitted grid '
+    'retains its captured facts. Leave `expenses` out to correct the header alone and keep the rows exactly as'
     ' they were captured. A replaced grid resolves `class_mode: inherit` against the'
     ' `class_id` supplied on this call, so send the document’s class again with the rows if it'
     ' still applies. The old accounting is reversed at its original date and replaced in full'

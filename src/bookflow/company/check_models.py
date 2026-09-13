@@ -13,15 +13,15 @@ and in every word on the form. One noun with a payment-type flag would have had 
 saying it in the shape, and would have put a discriminator in front of a bookkeeper who
 already knows which document they are writing.
 
-**Room for an Items tab.** The line collection is named ``expenses``, not ``lines``, so the
-second line kind this document is going to grow — items received on a purchase — arrives as
-a sibling collection beside it rather than as a rewrite of this one. See
-``design/architecture.md`` for what attaches where.
+Items and expenses share the entered amount. Purchased item facts remain captured beside
+immutable journal lines; tracked items receive stock through the inventory owner.
 """
 from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_serializer, model_validator
 
+from bookflow.company.bill_models import BillItemInput
+from bookflow.company.bill_facts import BillItemProfile
 from bookflow.company.custom_fields import CustomFieldKindExpectations, CustomFieldValuePatch
 from bookflow.company.journal_models import (
     MoneyInput, _Date, _Input, _Number, _Selector, _Version,
@@ -76,7 +76,7 @@ class ExpenseLine(_Input):
 
 
 # One to 199 rows, the same bound the register puts on a split, because these are that split.
-Expenses = Annotated[list[ExpenseLine], Field(min_length=1, max_length=199)]
+Expenses = Annotated[list[ExpenseLine], Field(min_length=0, max_length=199)]
 
 
 class _MoneyOut(_Input):
@@ -86,7 +86,8 @@ class _MoneyOut(_Input):
     amount: str | MoneyInput
     memo: str | None = Field(default=None, max_length=2000)
     class_id: _Selector | None = None
-    expenses: Expenses
+    expenses: Expenses = Field(default_factory=list)
+    items: Annotated[list[BillItemInput], Field(max_length=199)] = Field(default_factory=list)
     custom_field_kinds: CustomFieldKindExpectations = Field(
         default_factory=lambda: CustomFieldKindExpectations({}))
     custom_fields: CustomFieldValuePatch = Field(
@@ -96,7 +97,11 @@ class _MoneyOut(_Input):
 class _MoneyOutPost(_MoneyOut):
     @model_validator(mode='after')
     def new_lines(self) -> Self:
-        if any(line.line_id is not None for line in self.expenses):
+        if not self.expenses and not self.items:
+            raise ValueError("at least one expense or item is required")
+        if len(self.expenses) + len(self.items) > 199:
+            raise ValueError("at most 199 allocations are allowed")
+        if any(line.line_id is not None for line in [*self.expenses, *self.items]):
             raise ValueError('a new expense line cannot claim an existing line identity')
         return self
 
@@ -134,6 +139,7 @@ class _MoneyOutCorrection(_Input):
     memo: str | None = Field(default=None, max_length=2000)
     class_id: _Selector | None = None
     expenses: Expenses | None = None
+    items: Annotated[list[BillItemInput], Field(max_length=199)] | None = None
     custom_field_kinds: CustomFieldKindExpectations = Field(
         default_factory=lambda: CustomFieldKindExpectations({}))
     custom_fields: CustomFieldValuePatch = Field(
@@ -141,7 +147,7 @@ class _MoneyOutCorrection(_Input):
 
     @model_validator(mode='after')
     def required_values(self) -> Self:
-        for field in ('account', 'date', 'amount', 'expenses', 'number'):
+        for field in ('account', 'date', 'amount', 'expenses', 'items', 'number'):
             if field in self.model_fields_set and getattr(self, field, None) is None:
                 raise ValueError(f'{field} cannot be cleared')
         return self
@@ -233,6 +239,14 @@ class CardChargeHistoryInput(MoneyOutPageInput):
     card_charge: _Selector
 
 
+class MoneyOutItemOutput(_Input):
+    line_id: str
+    quantity: str
+    description: str | None = None
+    amount: JournalMoneyOutput
+    profile: BillItemProfile
+
+
 class MoneyOutSummary(_Input):
     """What the server computed, for the document's own footer. Never recomputed anywhere else.
 
@@ -250,6 +264,8 @@ class MoneyOutSummary(_Input):
     amount: JournalMoneyOutput
     expense_total: JournalMoneyOutput
     expense_lines: int
+    item_total: JournalMoneyOutput | None = None
+    items: list[MoneyOutItemOutput] = Field(default_factory=list)
     check_number: str | None = None
 
 

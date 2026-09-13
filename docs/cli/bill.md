@@ -502,7 +502,7 @@ Example JSON output:
 
 ## `bill post`
 
-Enter a vendor bill. Each entered line debits its own account and Accounts Payable is credited the total, so the bill stands open at that total until it is paid. `purchase_order` enters this bill from an order: the order fills in the vendor, the terms, the class, the memo and one expense row per ordered line, and anything supplied here wins over it, so a delivery that came in at a different price is entered by supplying `expenses` and letting the rest carry. The order is then closed and permanently recorded as consumed by this bill, so it can never be billed twice; a withdrawn order is refused. Voiding the bill does not free the order again: enter the replacement bill outright. `terms` defaults to the vendor’s own terms and fixes `due_date`; give `due_date` to override it outright. `ap_account` is the Accounts Payable account the bill is owed from and defaults to the only active one when the company has exactly one. `supplier_reference` is the vendor’s own document number, kept as typed; another bill from the same vendor carrying the same reference is reported in `duplicate_references` and never refused. A bill has two grids and needs at least one row across them. `expenses` is up to 200 rows of account, amount, memo, optional customer or job, optional `billable` and optional class, saying what was bought against an account you name. `items` is up to 200 rows of item, optional `quantity` (default 1), optional `unit_cost` or `amount`, optional `description`, customer or job, `billable` and class, saying what was bought as a thing the company buys; an item row names no account because it debits the item’s own expense account. Give `unit_cost` and the amount is quantity times it; give `amount` and that is the amount; give neither and the item’s standard cost is used. Every row debits its own account and the bill's total is the sum of both grids. A row's own `class_id` is that row's class and a row without one takes the bill's `class_id`; set `class_mode` to `none` to leave one row unclassified even when the bill carries a class. `billable` marks a cost to pass on to the named customer later and requires one; naming a job without it simply attributes the cost. Only service, non-inventory part and other-charge items can be bought here: receiving an inventory part is not implemented and is refused by name.
+Enter a vendor bill. Each entered line debits its own account and Accounts Payable is credited the total, so the bill stands open at that total until it is paid. `purchase_order` enters this bill from an order: the order fills in the vendor, the terms, the class, the memo and its own lines -- an ordered item becomes an item row and an ordered account line becomes an expense row. A header field supplied here wins over the order on its own. The two line grids are one answer: write either `expenses` or `items`, an empty one included, and the bill is exactly the lines written here, because a caller who writes a line is saying what arrived. To change one grid and keep the other, send both. The order is then closed and permanently recorded as consumed by this bill, so it can never be billed twice -- in full, even when this bill covers only part of what was ordered; there is no remaining quantity and no backorder. A withdrawn order is refused. Voiding the bill does not free the order again: enter the replacement bill outright. `terms` defaults to the vendor’s own terms and fixes `due_date`; give `due_date` to override it outright. `ap_account` is the Accounts Payable account the bill is owed from and defaults to the only active one when the company has exactly one. `supplier_reference` is the vendor’s own document number, kept as typed; another bill from the same vendor carrying the same reference is reported in `duplicate_references` and never refused. A bill has two grids and needs at least one row across them. `expenses` is up to 200 rows of account, amount, memo, optional customer or job, optional `billable` and optional class, saying what was bought against an account you name. `items` is up to 200 rows of item, optional `quantity` (default 1), optional `unit_cost` or `amount`, optional `description`, customer or job, `billable` and class, saying what was bought as a thing the company buys; an item row names no account because it debits the item’s own expense account. Give `unit_cost` and the amount is quantity times it; give `amount` and that is the amount; give neither and the item’s standard cost is used. Every row debits its own account and the bill's total is the sum of both grids. A row's own `class_id` is that row's class and a row without one takes the bill's `class_id`; set `class_mode` to `none` to leave one row unclassified even when the bill carries a class. `billable` marks a cost to pass on to the named customer later and requires one; naming a job without it simply attributes the cost. Every item kind the company buys can be bought here, and an inventory part also moves its quantity on hand and its cost -- an item row is the only row that can, because an expense row names no item.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -855,7 +855,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.item.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.item.label` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.item.version` | integer | yes | no | — | — |
-| `revision.items[].line_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge"] | yes | no | — | — |
+| `revision.items[].line_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
 | `revision.items[].line_snapshot.account` | object | yes | no | — | — |
 | `revision.items[].line_snapshot.account.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.account.name` | string | yes | no | — | — |
@@ -863,7 +863,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.account.number` | string \| null | yes | yes | — | — |
 | `revision.items[].line_snapshot.account.type` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
-| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income"] | no | no | "purchase" | — |
+| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income", "asset"] | no | no | "purchase" | — |
 | `revision.items[].line_snapshot.quantity_microunits` | integer | yes | no | — | — |
 | `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
@@ -1601,7 +1601,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.item.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.item.label` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.item.version` | integer | yes | no | — | — |
-| `revision.items[].line_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge"] | yes | no | — | — |
+| `revision.items[].line_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
 | `revision.items[].line_snapshot.account` | object | yes | no | — | — |
 | `revision.items[].line_snapshot.account.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.account.name` | string | yes | no | — | — |
@@ -1609,7 +1609,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.account.number` | string \| null | yes | yes | — | — |
 | `revision.items[].line_snapshot.account.type` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
-| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income"] | no | no | "purchase" | — |
+| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income", "asset"] | no | no | "purchase" | — |
 | `revision.items[].line_snapshot.quantity_microunits` | integer | yes | no | — | — |
 | `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
@@ -2200,7 +2200,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.item.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.item.label` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.item.version` | integer | yes | no | — | — |
-| `revision.items[].line_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge"] | yes | no | — | — |
+| `revision.items[].line_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
 | `revision.items[].line_snapshot.account` | object | yes | no | — | — |
 | `revision.items[].line_snapshot.account.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.account.name` | string | yes | no | — | — |
@@ -2208,7 +2208,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.account.number` | string \| null | yes | yes | — | — |
 | `revision.items[].line_snapshot.account.type` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
-| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income"] | no | no | "purchase" | — |
+| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income", "asset"] | no | no | "purchase" | — |
 | `revision.items[].line_snapshot.quantity_microunits` | integer | yes | no | — | — |
 | `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
@@ -2785,7 +2785,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.item.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.item.label` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.item.version` | integer | yes | no | — | — |
-| `revision.items[].line_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge"] | yes | no | — | — |
+| `revision.items[].line_snapshot.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
 | `revision.items[].line_snapshot.account` | object | yes | no | — | — |
 | `revision.items[].line_snapshot.account.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.account.name` | string | yes | no | — | — |
@@ -2793,7 +2793,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.account.number` | string \| null | yes | yes | — | — |
 | `revision.items[].line_snapshot.account.type` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
-| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income"] | no | no | "purchase" | — |
+| `revision.items[].line_snapshot.account_basis` | literal["purchase", "income", "asset"] | no | no | "purchase" | — |
 | `revision.items[].line_snapshot.quantity_microunits` | integer | yes | no | — | — |
 | `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |

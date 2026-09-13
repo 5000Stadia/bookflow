@@ -58,7 +58,7 @@ def _line(account, side, amount, party, memo, class_id, line_id=None):
     return JournalLineInput(**values)
 
 
-def _offsets(inp, s, selected, currency):
+def _offsets(inp, s, selected, currency, *, owner=None):
     lines, signed = [], []
     normal = accounts.NORMAL_BALANCE[selected['type']]
     for index, allocation in enumerate(inp.allocations):
@@ -69,7 +69,7 @@ def _offsets(inp, s, selected, currency):
         line = _line(allocation.account, _opposite(_side(normal, direction)),
                      allocation.amount, allocation.party, allocation.memo, class_id,
                      allocation.line_id)
-        values = journals.line_values(s, line, currency)
+        values = journals.line_values(s, line, currency, owner=owner)
         if values['account_id'] == selected['id']:
             raise journals.invalid(f'allocations.{index}.account', 'offset cannot be the selected register account')
         lines.append(line)
@@ -132,7 +132,7 @@ def _compatible(s, inp, header, selected, moving):
 _FROM_INPUT = object()
 
 
-def translate(inp, s, operation, *, moving=False, expected_version=_FROM_INPUT):
+def translate(inp, s, operation, *, moving=False, expected_version=_FROM_INPUT, owner=None):
     """Turn register intent into the journal that posts it.
 
     ``expected_version`` exists because ``RegisterUpdateInput`` requires one and a document
@@ -164,7 +164,7 @@ def translate(inp, s, operation, *, moving=False, expected_version=_FROM_INPUT):
             raise journals.invalid('category', 'offset cannot be the selected register account')
         offsets = [offset]
     else:
-        offsets, total = _offsets(inp, s, selected, currency)
+        offsets, total = _offsets(inp, s, selected, currency, owner=owner)
         if total != amount.minor_units:
             raise BookflowError('E_UNBALANCED_ENTRY', details={
                 'amount_minor_units': amount.minor_units,

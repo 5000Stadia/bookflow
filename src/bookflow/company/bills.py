@@ -1078,13 +1078,11 @@ def _stock_entries(pending, profile):
         if line is None:
             continue
         facts = BillItemProfile.model_validate_json(line['line_snapshot'])
-        if facts.item_type not in inventory.TRACKED_TYPES:
-            continue
-        entries.append(inventory_effects.Entry(
-            key=envelope['id'], item_id=facts.item.id, item_name=facts.item.label,
-            kind='receipt', quantity_microunits=facts.quantity_microunits,
-            asset_account_id=facts.account.id, offset_account_id=profile.ap_account.id,
-            class_id=envelope['class_id'], value_minor_units=line['amount_minor_units']))
+        entry = inventory_effects.purchase_entry(
+            facts, key=envelope['id'], amount=line['amount_minor_units'],
+            offset_account_id=profile.ap_account.id, class_id=envelope['class_id'])
+        if entry is not None:
+            entries.append(entry)
     return entries
 
 

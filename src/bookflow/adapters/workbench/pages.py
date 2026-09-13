@@ -526,7 +526,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
     flashes = _FlashStore()
     static_urls = {
         name: f"/static/{name}?v={hashlib.sha256((HERE / 'static' / name).read_bytes()).hexdigest()[:16]}"
-        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css")
+        for name in ("style.css", "htmx.min.js", "numeric-context.js", "numeric-entry.js", "dates.js", "workflow.js", "annotations.js", "register.js", "register.css", "sales.js", "purchase-allocation.js", "sales.css", "document-detail.css", "payments.js", "payments.css", "pay-bills.js", "pay-bills.css", "deposit-picker.js", "deposit.css", "reconcile-picker.js", "reconcile.css", "invoice-settlement.js", "exact-json.js", "browsing.js", "browsing.css")
     }
 
     def render(name: str, request: Request, status_code: int = 200, **ctx: Any) -> HTMLResponse:
@@ -1217,6 +1217,19 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     else:
                         audit_undo = {"eligible": True, "event_id": out["id"]}
         visible_record = {key: value for key, value in out.items() if key != "editing_by"}
+        if command_noun == 'journal' and company_id:
+            for purchase_noun, selector in (('check', 'check'), ('card-charge', 'card_charge')):
+                try:
+                    purchase = run(request, purchase_noun + ' show', {
+                        selector: out['id'], 'revision_number': out['revision']['revision_number']}, company_id)
+                except BookflowError as error:
+                    if error.code != 'E_RECORD_NOT_FOUND':
+                        raise
+                else:
+                    visible_record['purchase_items'] = purchase['document']['items']
+                    visible_record['purchase_noun'] = purchase_noun
+                    break
+
         definition = meta.get("definition")
         display_field = definition.display_field if definition is not None else meta.get("display_field")
         record_title = next(

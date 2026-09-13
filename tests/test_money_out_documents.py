@@ -89,7 +89,8 @@ def test_a_check_puts_the_bank_down_and_each_expense_account_up_its_own_line(boo
         'kind': 'check', 'account_id': books['bank'], 'funding': 'bank', 'currency': 'USD',
         'amount': {'amount': CHECK, 'currency': 'USD', 'minor_units': 28460},
         'expense_total': {'amount': CHECK, 'currency': 'USD', 'minor_units': 28460},
-        'expense_lines': 2, 'check_number': '1042'}
+        'expense_lines': 2, 'check_number': '1042',
+        'item_total': {'amount': '0.00', 'currency': 'USD', 'minor_units': 0}, 'items': []}
 
     # The payee is carried on the document, not invented per line.
     assert posted['revision']['lines'][0]['name_id'] == books['vendor']

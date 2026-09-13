@@ -25,6 +25,9 @@ _COMMON = (
     ReferenceDefinition('class_id', 'class'),
     ReferenceDefinition('expenses.account', 'account'),
     ReferenceDefinition('expenses.class_id', 'class'),
+    ReferenceDefinition('items.item', 'item'),
+    ReferenceDefinition('items.customer', 'customer'),
+    ReferenceDefinition('items.class_id', 'class'),
 )
 
 FORM_DEFINITIONS = {

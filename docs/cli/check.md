@@ -132,6 +132,46 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.expense_total.currency` | string | yes | no | — | — |
 | `items[].document.expense_total.minor_units` | integer | yes | no | — | — |
 | `items[].document.expense_lines` | integer | yes | no | — | — |
+| `items[].document.item_total` | object \| null | no | yes | null | — |
+| `items[].document.item_total.amount` | string | yes | no | — | — |
+| `items[].document.item_total.currency` | string | yes | no | — | — |
+| `items[].document.item_total.minor_units` | integer | yes | no | — | — |
+| `items[].document.items` | array[object] | no | no | [] | — |
+| `items[].document.items[].line_id` | string | yes | no | — | — |
+| `items[].document.items[].quantity` | string | yes | no | — | — |
+| `items[].document.items[].description` | string \| null | no | yes | null | — |
+| `items[].document.items[].amount` | object | yes | no | — | — |
+| `items[].document.items[].amount.amount` | string | yes | no | — | — |
+| `items[].document.items[].amount.currency` | string | yes | no | — | — |
+| `items[].document.items[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].document.items[].profile` | object | yes | no | — | — |
+| `items[].document.items[].profile.item` | object | yes | no | — | — |
+| `items[].document.items[].profile.item.id` | string | yes | no | — | — |
+| `items[].document.items[].profile.item.label` | string | yes | no | — | — |
+| `items[].document.items[].profile.item.version` | integer | yes | no | — | — |
+| `items[].document.items[].profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
+| `items[].document.items[].profile.account` | object | yes | no | — | — |
+| `items[].document.items[].profile.account.id` | string | yes | no | — | — |
+| `items[].document.items[].profile.account.name` | string | yes | no | — | — |
+| `items[].document.items[].profile.account.full_name` | string | yes | no | — | — |
+| `items[].document.items[].profile.account.number` | string \| null | yes | yes | — | — |
+| `items[].document.items[].profile.account.type` | string | yes | no | — | — |
+| `items[].document.items[].profile.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `items[].document.items[].profile.account_basis` | literal["purchase", "income", "asset"] | no | no | "purchase" | — |
+| `items[].document.items[].profile.quantity_microunits` | integer | yes | no | — | — |
+| `items[].document.items[].profile.unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
+| `items[].document.items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.class_id` | object \| null | no | yes | null | — |
+| `items[].document.items[].profile.class_id.id` | string | yes | no | — | — |
+| `items[].document.items[].profile.class_id.label` | string | yes | no | — | — |
+| `items[].document.items[].profile.class_id.version` | integer | yes | no | — | — |
+| `items[].document.items[].profile.customer` | object \| null | no | yes | null | — |
+| `items[].document.items[].profile.customer.id` | string | yes | no | — | — |
+| `items[].document.items[].profile.customer.label` | string | yes | no | — | — |
+| `items[].document.items[].profile.customer.version` | integer | yes | no | — | — |
+| `items[].document.items[].profile.billable` | boolean | no | no | false | — |
+| `items[].document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `items[].document.check_number` | string \| null | no | yes | null | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
@@ -186,7 +226,7 @@ Example JSON output:
 
 ## `check post`
 
-Write a check on a bank account. The bank balance goes down by `amount` and the expense accounts go up by their own line amounts. `account` must be a bank account. `number` is the number written on the face of the cheque; it belongs to this bank account, so two bank accounts can each have a cheque 1001 and a number already used on this one is refused. Leave it out to take the next number from the account’s own next check number, skipping any it has already issued. The journal this posts as keeps its own document reference from the shared series, which is not the check number. `expenses` is one to 199 lines of account, amount, memo and class saying what the money was spent on; they must add up to `amount` exactly, and a total that does not is refused with the difference. A line's own `class_id` is that line's class and a line without one takes the document's `class_id`; set `class_mode` to `none` to leave one line unclassified even when the document carries a class. `pay_to` names who the money went to, from the vendor, customer, employee or other-name lists.
+Write a check on a bank account. The bank balance goes down by `amount` and the expense accounts go up by their own line amounts. `account` must be a bank account. `number` is the number written on the face of the cheque; it belongs to this bank account, so two bank accounts can each have a cheque 1001 and a number already used on this one is refused. Leave it out to take the next number from the account’s own next check number, skipping any it has already issued. The journal this posts as keeps its own document reference from the shared series, which is not the check number. `items` accepts purchased items with fractional quantity, unit_cost or amount, description, customer/job, billable and class. Tracked items receive stock once against the bank/card; these are new goods, not payment for an existing bill. `expenses` is zero to 199 lines of account, amount, memo and class saying what the money was spent on; items plus expenses must add up to `amount` exactly, and a total that does not is refused with the difference. A line's own `class_id` is that line's class and a line without one takes the document's `class_id`; set `class_mode` to `none` to leave one line unclassified even when the document carries a class. `pay_to` names who the money went to, from the vendor, customer, employee or other-name lists.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -223,6 +263,16 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `expenses[].class_mode` | inside `--expenses` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
 | `expenses[].party.name_type` | inside `--expenses` JSON array | literal["vendor", "customer", "employee", "other_name"] | no | no | "vendor" | — |
 | `expenses[].party.name_id` | inside `--expenses` JSON array | string | yes | no | — | minimum length 1 |
+| `items[].line_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].item` | inside `--items` JSON array | string | yes | no | — | minimum length 1 |
+| `items[].description` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].quantity` | inside `--items` JSON array | string | no | no | "1" | — |
+| `items[].unit_cost` | inside `--items` JSON array | string \| object \| null | no | yes | null | — |
+| `items[].amount` | inside `--items` JSON array | string \| object \| null | no | yes | null | — |
+| `items[].customer` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].billable` | inside `--items` JSON array | boolean | no | no | false | — |
+| `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `number` | `--number` | string \| null | no | yes | null | The number written on the face of the cheque, which belongs to this bank account and not to the shared document series. Leave it out to take the next number from the account's own next check number, skipping any it has already issued. A number below that pointer is accepted and does not move it backwards; a number already on another cheque drawn on the same account is refused. Leading zeros are kept as typed, and 01001 and 1001 are one number. A number that is not a plain run of digits is a real cheque number with no place in the sequence. |
@@ -422,6 +472,46 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.expense_total.currency` | string | yes | no | — | — |
 | `document.expense_total.minor_units` | integer | yes | no | — | — |
 | `document.expense_lines` | integer | yes | no | — | — |
+| `document.item_total` | object \| null | no | yes | null | — |
+| `document.item_total.amount` | string | yes | no | — | — |
+| `document.item_total.currency` | string | yes | no | — | — |
+| `document.item_total.minor_units` | integer | yes | no | — | — |
+| `document.items` | array[object] | no | no | [] | — |
+| `document.items[].line_id` | string | yes | no | — | — |
+| `document.items[].quantity` | string | yes | no | — | — |
+| `document.items[].description` | string \| null | no | yes | null | — |
+| `document.items[].amount` | object | yes | no | — | — |
+| `document.items[].amount.amount` | string | yes | no | — | — |
+| `document.items[].amount.currency` | string | yes | no | — | — |
+| `document.items[].amount.minor_units` | integer | yes | no | — | — |
+| `document.items[].profile` | object | yes | no | — | — |
+| `document.items[].profile.item` | object | yes | no | — | — |
+| `document.items[].profile.item.id` | string | yes | no | — | — |
+| `document.items[].profile.item.label` | string | yes | no | — | — |
+| `document.items[].profile.item.version` | integer | yes | no | — | — |
+| `document.items[].profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
+| `document.items[].profile.account` | object | yes | no | — | — |
+| `document.items[].profile.account.id` | string | yes | no | — | — |
+| `document.items[].profile.account.name` | string | yes | no | — | — |
+| `document.items[].profile.account.full_name` | string | yes | no | — | — |
+| `document.items[].profile.account.number` | string \| null | yes | yes | — | — |
+| `document.items[].profile.account.type` | string | yes | no | — | — |
+| `document.items[].profile.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `document.items[].profile.account_basis` | literal["purchase", "income", "asset"] | no | no | "purchase" | — |
+| `document.items[].profile.quantity_microunits` | integer | yes | no | — | — |
+| `document.items[].profile.unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
+| `document.items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.class_id` | object \| null | no | yes | null | — |
+| `document.items[].profile.class_id.id` | string | yes | no | — | — |
+| `document.items[].profile.class_id.label` | string | yes | no | — | — |
+| `document.items[].profile.class_id.version` | integer | yes | no | — | — |
+| `document.items[].profile.customer` | object \| null | no | yes | null | — |
+| `document.items[].profile.customer.id` | string | yes | no | — | — |
+| `document.items[].profile.customer.label` | string | yes | no | — | — |
+| `document.items[].profile.customer.version` | integer | yes | no | — | — |
+| `document.items[].profile.billable` | boolean | no | no | false | — |
+| `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
 
 Example JSON output:
@@ -464,6 +554,8 @@ Example JSON output:
       "minor_units": 1
     },
     "funding": "bank",
+    "item_total": null,
+    "items": [],
     "kind": "check"
   },
   "dry_run": false,
@@ -678,6 +770,46 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].document.expense_total.currency` | string | yes | no | — | — |
 | `items[].document.expense_total.minor_units` | integer | yes | no | — | — |
 | `items[].document.expense_lines` | integer | yes | no | — | — |
+| `items[].document.item_total` | object \| null | no | yes | null | — |
+| `items[].document.item_total.amount` | string | yes | no | — | — |
+| `items[].document.item_total.currency` | string | yes | no | — | — |
+| `items[].document.item_total.minor_units` | integer | yes | no | — | — |
+| `items[].document.items` | array[object] | no | no | [] | — |
+| `items[].document.items[].line_id` | string | yes | no | — | — |
+| `items[].document.items[].quantity` | string | yes | no | — | — |
+| `items[].document.items[].description` | string \| null | no | yes | null | — |
+| `items[].document.items[].amount` | object | yes | no | — | — |
+| `items[].document.items[].amount.amount` | string | yes | no | — | — |
+| `items[].document.items[].amount.currency` | string | yes | no | — | — |
+| `items[].document.items[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].document.items[].profile` | object | yes | no | — | — |
+| `items[].document.items[].profile.item` | object | yes | no | — | — |
+| `items[].document.items[].profile.item.id` | string | yes | no | — | — |
+| `items[].document.items[].profile.item.label` | string | yes | no | — | — |
+| `items[].document.items[].profile.item.version` | integer | yes | no | — | — |
+| `items[].document.items[].profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
+| `items[].document.items[].profile.account` | object | yes | no | — | — |
+| `items[].document.items[].profile.account.id` | string | yes | no | — | — |
+| `items[].document.items[].profile.account.name` | string | yes | no | — | — |
+| `items[].document.items[].profile.account.full_name` | string | yes | no | — | — |
+| `items[].document.items[].profile.account.number` | string \| null | yes | yes | — | — |
+| `items[].document.items[].profile.account.type` | string | yes | no | — | — |
+| `items[].document.items[].profile.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `items[].document.items[].profile.account_basis` | literal["purchase", "income", "asset"] | no | no | "purchase" | — |
+| `items[].document.items[].profile.quantity_microunits` | integer | yes | no | — | — |
+| `items[].document.items[].profile.unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
+| `items[].document.items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].document.items[].profile.class_id` | object \| null | no | yes | null | — |
+| `items[].document.items[].profile.class_id.id` | string | yes | no | — | — |
+| `items[].document.items[].profile.class_id.label` | string | yes | no | — | — |
+| `items[].document.items[].profile.class_id.version` | integer | yes | no | — | — |
+| `items[].document.items[].profile.customer` | object \| null | no | yes | null | — |
+| `items[].document.items[].profile.customer.id` | string | yes | no | — | — |
+| `items[].document.items[].profile.customer.label` | string | yes | no | — | — |
+| `items[].document.items[].profile.customer.version` | integer | yes | no | — | — |
+| `items[].document.items[].profile.billable` | boolean | no | no | false | — |
+| `items[].document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `items[].document.check_number` | string \| null | no | yes | null | — |
 | `count` | integer | yes | no | — | — |
 | `has_more` | boolean | yes | no | — | — |
@@ -929,6 +1061,46 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.expense_total.currency` | string | yes | no | — | — |
 | `document.expense_total.minor_units` | integer | yes | no | — | — |
 | `document.expense_lines` | integer | yes | no | — | — |
+| `document.item_total` | object \| null | no | yes | null | — |
+| `document.item_total.amount` | string | yes | no | — | — |
+| `document.item_total.currency` | string | yes | no | — | — |
+| `document.item_total.minor_units` | integer | yes | no | — | — |
+| `document.items` | array[object] | no | no | [] | — |
+| `document.items[].line_id` | string | yes | no | — | — |
+| `document.items[].quantity` | string | yes | no | — | — |
+| `document.items[].description` | string \| null | no | yes | null | — |
+| `document.items[].amount` | object | yes | no | — | — |
+| `document.items[].amount.amount` | string | yes | no | — | — |
+| `document.items[].amount.currency` | string | yes | no | — | — |
+| `document.items[].amount.minor_units` | integer | yes | no | — | — |
+| `document.items[].profile` | object | yes | no | — | — |
+| `document.items[].profile.item` | object | yes | no | — | — |
+| `document.items[].profile.item.id` | string | yes | no | — | — |
+| `document.items[].profile.item.label` | string | yes | no | — | — |
+| `document.items[].profile.item.version` | integer | yes | no | — | — |
+| `document.items[].profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
+| `document.items[].profile.account` | object | yes | no | — | — |
+| `document.items[].profile.account.id` | string | yes | no | — | — |
+| `document.items[].profile.account.name` | string | yes | no | — | — |
+| `document.items[].profile.account.full_name` | string | yes | no | — | — |
+| `document.items[].profile.account.number` | string \| null | yes | yes | — | — |
+| `document.items[].profile.account.type` | string | yes | no | — | — |
+| `document.items[].profile.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `document.items[].profile.account_basis` | literal["purchase", "income", "asset"] | no | no | "purchase" | — |
+| `document.items[].profile.quantity_microunits` | integer | yes | no | — | — |
+| `document.items[].profile.unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
+| `document.items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.class_id` | object \| null | no | yes | null | — |
+| `document.items[].profile.class_id.id` | string | yes | no | — | — |
+| `document.items[].profile.class_id.label` | string | yes | no | — | — |
+| `document.items[].profile.class_id.version` | integer | yes | no | — | — |
+| `document.items[].profile.customer` | object \| null | no | yes | null | — |
+| `document.items[].profile.customer.id` | string | yes | no | — | — |
+| `document.items[].profile.customer.label` | string | yes | no | — | — |
+| `document.items[].profile.customer.version` | integer | yes | no | — | — |
+| `document.items[].profile.billable` | boolean | no | no | false | — |
+| `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
 
 Example JSON output:
@@ -969,6 +1141,8 @@ Example JSON output:
       "minor_units": 1
     },
     "funding": "bank",
+    "item_total": null,
+    "items": [],
     "kind": "check"
   },
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -1063,7 +1237,7 @@ Example JSON output:
 
 ## `check update`
 
-Correct a check, including moving it to another bank account or giving it a different number. A cheque that moves keeps its number unless a new one is supplied; the number it had stays on the revision that carried it and is never handed out automatically again. Every field is optional and a field left out keeps what was captured. Supply `expenses` to replace the whole grid, carrying each surviving row’s `line_id` and omitting it on a new row; leave `expenses` out to correct the header alone and keep the rows exactly as they were captured. A replaced grid resolves `class_mode: inherit` against the `class_id` supplied on this call, so send the document’s class again with the rows if it still applies. The old accounting is reversed at its original date and replaced in full at the new one; every earlier revision stays readable.
+Correct a check, including moving it to another bank account or giving it a different number. A cheque that moves keeps its number unless a new one is supplied; the number it had stays on the revision that carried it and is never handed out automatically again. Every field is optional and a field left out keeps what was captured. Supply `expenses` to replace the whole grid, carrying each surviving row’s `line_id` and omitting it on a new row. The same replacement rule applies independently to `items`; an omitted grid retains its captured facts. Leave `expenses` out to correct the header alone and keep the rows exactly as they were captured. A replaced grid resolves `class_mode: inherit` against the `class_id` supplied on this call, so send the document’s class again with the rows if it still applies. The old accounting is reversed at its original date and replaced in full at the new one; every earlier revision stays readable.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1101,6 +1275,16 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `expenses[].class_mode` | inside `--expenses` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
 | `expenses[].party.name_type` | inside `--expenses` JSON array | literal["vendor", "customer", "employee", "other_name"] | no | no | "vendor" | — |
 | `expenses[].party.name_id` | inside `--expenses` JSON array | string | yes | no | — | minimum length 1 |
+| `items[].line_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].item` | inside `--items` JSON array | string | yes | no | — | minimum length 1 |
+| `items[].description` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].quantity` | inside `--items` JSON array | string | no | no | "1" | — |
+| `items[].unit_cost` | inside `--items` JSON array | string \| object \| null | no | yes | null | — |
+| `items[].amount` | inside `--items` JSON array | string \| object \| null | no | yes | null | — |
+| `items[].customer` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].billable` | inside `--items` JSON array | boolean | no | no | false | — |
+| `items[].class_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
+| `items[].class_mode` | inside `--items` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `check` | `CHECK` | string | yes | no | — | minimum length 1 |
@@ -1302,6 +1486,46 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.expense_total.currency` | string | yes | no | — | — |
 | `document.expense_total.minor_units` | integer | yes | no | — | — |
 | `document.expense_lines` | integer | yes | no | — | — |
+| `document.item_total` | object \| null | no | yes | null | — |
+| `document.item_total.amount` | string | yes | no | — | — |
+| `document.item_total.currency` | string | yes | no | — | — |
+| `document.item_total.minor_units` | integer | yes | no | — | — |
+| `document.items` | array[object] | no | no | [] | — |
+| `document.items[].line_id` | string | yes | no | — | — |
+| `document.items[].quantity` | string | yes | no | — | — |
+| `document.items[].description` | string \| null | no | yes | null | — |
+| `document.items[].amount` | object | yes | no | — | — |
+| `document.items[].amount.amount` | string | yes | no | — | — |
+| `document.items[].amount.currency` | string | yes | no | — | — |
+| `document.items[].amount.minor_units` | integer | yes | no | — | — |
+| `document.items[].profile` | object | yes | no | — | — |
+| `document.items[].profile.item` | object | yes | no | — | — |
+| `document.items[].profile.item.id` | string | yes | no | — | — |
+| `document.items[].profile.item.label` | string | yes | no | — | — |
+| `document.items[].profile.item.version` | integer | yes | no | — | — |
+| `document.items[].profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
+| `document.items[].profile.account` | object | yes | no | — | — |
+| `document.items[].profile.account.id` | string | yes | no | — | — |
+| `document.items[].profile.account.name` | string | yes | no | — | — |
+| `document.items[].profile.account.full_name` | string | yes | no | — | — |
+| `document.items[].profile.account.number` | string \| null | yes | yes | — | — |
+| `document.items[].profile.account.type` | string | yes | no | — | — |
+| `document.items[].profile.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `document.items[].profile.account_basis` | literal["purchase", "income", "asset"] | no | no | "purchase" | — |
+| `document.items[].profile.quantity_microunits` | integer | yes | no | — | — |
+| `document.items[].profile.unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
+| `document.items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.class_id` | object \| null | no | yes | null | — |
+| `document.items[].profile.class_id.id` | string | yes | no | — | — |
+| `document.items[].profile.class_id.label` | string | yes | no | — | — |
+| `document.items[].profile.class_id.version` | integer | yes | no | — | — |
+| `document.items[].profile.customer` | object \| null | no | yes | null | — |
+| `document.items[].profile.customer.id` | string | yes | no | — | — |
+| `document.items[].profile.customer.label` | string | yes | no | — | — |
+| `document.items[].profile.customer.version` | integer | yes | no | — | — |
+| `document.items[].profile.billable` | boolean | no | no | false | — |
+| `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
 
 Example JSON output:
@@ -1344,6 +1568,8 @@ Example JSON output:
       "minor_units": 1
     },
     "funding": "bank",
+    "item_total": null,
+    "items": [],
     "kind": "check"
   },
   "dry_run": false,
@@ -1672,6 +1898,46 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `document.expense_total.currency` | string | yes | no | — | — |
 | `document.expense_total.minor_units` | integer | yes | no | — | — |
 | `document.expense_lines` | integer | yes | no | — | — |
+| `document.item_total` | object \| null | no | yes | null | — |
+| `document.item_total.amount` | string | yes | no | — | — |
+| `document.item_total.currency` | string | yes | no | — | — |
+| `document.item_total.minor_units` | integer | yes | no | — | — |
+| `document.items` | array[object] | no | no | [] | — |
+| `document.items[].line_id` | string | yes | no | — | — |
+| `document.items[].quantity` | string | yes | no | — | — |
+| `document.items[].description` | string \| null | no | yes | null | — |
+| `document.items[].amount` | object | yes | no | — | — |
+| `document.items[].amount.amount` | string | yes | no | — | — |
+| `document.items[].amount.currency` | string | yes | no | — | — |
+| `document.items[].amount.minor_units` | integer | yes | no | — | — |
+| `document.items[].profile` | object | yes | no | — | — |
+| `document.items[].profile.item` | object | yes | no | — | — |
+| `document.items[].profile.item.id` | string | yes | no | — | — |
+| `document.items[].profile.item.label` | string | yes | no | — | — |
+| `document.items[].profile.item.version` | integer | yes | no | — | — |
+| `document.items[].profile.item_type` | literal["service", "non_inventory_part", "other_charge", "inventory_assembly", "inventory_part"] | yes | no | — | — |
+| `document.items[].profile.account` | object | yes | no | — | — |
+| `document.items[].profile.account.id` | string | yes | no | — | — |
+| `document.items[].profile.account.name` | string | yes | no | — | — |
+| `document.items[].profile.account.full_name` | string | yes | no | — | — |
+| `document.items[].profile.account.number` | string \| null | yes | yes | — | — |
+| `document.items[].profile.account.type` | string | yes | no | — | — |
+| `document.items[].profile.account.normal_balance` | literal["debit", "credit"] | yes | no | — | — |
+| `document.items[].profile.account_basis` | literal["purchase", "income", "asset"] | no | no | "purchase" | — |
+| `document.items[].profile.quantity_microunits` | integer | yes | no | — | — |
+| `document.items[].profile.unit_cost_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
+| `document.items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `document.items[].profile.class_id` | object \| null | no | yes | null | — |
+| `document.items[].profile.class_id.id` | string | yes | no | — | — |
+| `document.items[].profile.class_id.label` | string | yes | no | — | — |
+| `document.items[].profile.class_id.version` | integer | yes | no | — | — |
+| `document.items[].profile.customer` | object \| null | no | yes | null | — |
+| `document.items[].profile.customer.id` | string | yes | no | — | — |
+| `document.items[].profile.customer.label` | string | yes | no | — | — |
+| `document.items[].profile.customer.version` | integer | yes | no | — | — |
+| `document.items[].profile.billable` | boolean | no | no | false | — |
+| `document.items[].profile.origins` | object[string, object] | no | no | {} | — |
 | `document.check_number` | string \| null | no | yes | null | — |
 
 Example JSON output:
@@ -1714,6 +1980,8 @@ Example JSON output:
       "minor_units": 1
     },
     "funding": "bank",
+    "item_total": null,
+    "items": [],
     "kind": "check"
   },
   "dry_run": false,

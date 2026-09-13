@@ -106,7 +106,8 @@ def test_a_check_is_found_read_corrected_and_voided_and_the_ledger_follows_it(bo
         'kind': 'check', 'account_id': books['bank'], 'funding': 'bank', 'currency': 'USD',
         'amount': {'amount': CHECK, 'currency': 'USD', 'minor_units': 28460},
         'expense_total': {'amount': CHECK, 'currency': 'USD', 'minor_units': 28460},
-        'expense_lines': 2, 'check_number': '1042'}
+        'expense_lines': 2, 'check_number': '1042',
+        'item_total': {'amount': '0.00', 'currency': 'USD', 'minor_units': 0}, 'items': []}
     assert shown['revision']['lines'][0]['party_name'] == 'Northside Supply'
     assert [line['description'] for line in shown['revision']['lines']] == \
            ['March supplies', 'Parts', 'Fuel']

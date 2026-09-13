@@ -1131,3 +1131,6 @@ from bookflow.company.batch_invoicing_schema import define_tables as _define_bat
 globals().update(_define_batch_invoicing_tables(metadata, _column, _table, _common))
 from bookflow.company.memorized_schema import define_tables as _define_memorized_tables
 globals().update(_define_memorized_tables(metadata, _column, _table, _common))
+
+from bookflow.company.check_item_schema import define_tables as _define_check_item_tables
+globals().update(_define_check_item_tables(metadata, _column, _table))

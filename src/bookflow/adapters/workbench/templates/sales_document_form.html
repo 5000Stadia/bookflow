@@ -69,6 +69,10 @@
 {% if d.scope %}<section class="document-band" aria-label="Scope"><h2 class="band-title">Scope</h2>
 <div class="document-row document-row-wide">{% for l in d.scope %}{{ field(l, l.index) }}{% endfor %}</div></section>{% endif %}
 
+{% if d.noun in ('check', 'card-charge') %}
+<p>Items record a new purchase received now. To pay an existing bill, use Pay Bills.</p>
+<div data-purchase-allocation role="status" aria-live="polite">Enter an amount and allocate it to items or expenses.</div>
+{% endif %}
 {% if d.grids %}
 {# One band, one tab per grid. A document with a single grid renders exactly what it always
    did: no tab strip, no panel wrapper that changes anything a person sees. The hidden panel

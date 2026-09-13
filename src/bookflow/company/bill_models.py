@@ -89,10 +89,9 @@ class BillItemInput(_Input):
     """One row of the Items grid: what was bought, how much of it, and at what cost.
 
     The item decides the account this line debits -- its own purchase account, captured at the
-    moment the bill is written -- so nothing here names an account. Only the three item
-    families an invoice already sells are admitted; an inventory part is refused, because
-    receiving stock debits Inventory Asset and moves quantity on hand, and no owner of that
-    exists yet.
+    moment the purchase is written -- so nothing here names an account. Tracked items
+    debit Inventory Asset and receive stock through the inventory owner; supported
+    nonstock items use their captured purchase account.
 
     ``quantity`` defaults to one. The amount is either derived or entered, never both: give
     ``unit_cost`` and the amount is quantity times it, give ``amount`` and that is the amount

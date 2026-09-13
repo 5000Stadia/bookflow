@@ -97,6 +97,16 @@ class Entry:
     value_minor_units: int | None = None   # a receipt states it; an issue asks the average
 
 
+def purchase_entry(facts, *, key, amount, offset_account_id, class_id):
+    """Declare one receipt from captured purchase facts, with its actual funding offset."""
+    if facts.item_type not in inventory.TRACKED_TYPES:
+        return None
+    return Entry(key=key, item_id=facts.item.id, item_name=facts.item.label,
+                 kind='receipt', quantity_microunits=facts.quantity_microunits,
+                 asset_account_id=facts.account.id, offset_account_id=offset_account_id,
+                 class_id=class_id, value_minor_units=amount)
+
+
 @dataclass
 class Movement:
     """A movement waiting for the posting-line identities its document has not minted yet."""

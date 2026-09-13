@@ -4091,3 +4091,22 @@ would be a claim this cannot make. `vendor-credit` sits in exactly that seat alr
 done: the demo seed, custom fields on an order (the snapshot column is there and empty, as a
 vendor credit's is), partial or repeated conversion, purchase discounts, a closing-date gate
 (nothing posts, so no period can be closed against it), and `report open-purchase-orders`.
+
+## Direct check/card purchase items
+
+`check` and `card-charge` accept independent `expenses` and `items` grids. Their sum
+must equal the entered header amount. `check_items` resolves purchase-item facts using
+the bill item parser and captures them in immutable `money_out_item_lines`, keyed to
+that revision's journal line. Omitted grids on update retain captured facts. Item
+fact changes force a revision even when their journal amounts are unchanged.
+
+`inventory_effects.purchase_entry` declares receipts from captured facts for both
+bills and direct purchases. Its explicit offset is AP for a bill and the funding
+bank/card for a direct purchase. The money-out coordinator binds movements to journal
+legs and settles stock/dated recosts atomically. Generic journal/register edits refuse
+item-owning purchases; their check/card commands coordinate correction and void.
+`co0045` adds only the captured-item table, index and immutability guards.
+
+Generated forms provide Items/Expenses grids and advisory live allocation using the
+shared exact numeric parser; the server enforces equality. Direct item entry means
+new goods received now, not settlement of existing bills or unbilled receipts.
