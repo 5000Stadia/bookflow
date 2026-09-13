@@ -17,7 +17,7 @@ from bookflow.company import schema as c
 from bookflow.company.credit_schema import guard_statements, settlement_guard_statements
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS, migrate_to_head
-from tests.payment_raw_evidence import table
+from tests.payment_raw_evidence import upgrade_to, table
 from tests.test_bill_payment_migration import _rebuilt_since, _superseded_after
 
 M = importlib.import_module('bookflow.storage.company_migrations.versions.0028_customer_credits')
@@ -172,7 +172,12 @@ def test_a_populated_co0027_database_keeps_every_value_and_every_local_object(tm
         ).fetchall() if row[1] not in rebuilt}
 
     with open_database(path, writable=True) as db:
-        assert migrate_to_head(db, 'company', tmp_path / 'backups') == ('co0027', HEADS['company'])
+        # This asserts what THIS migration adds and preserves, so this migration is what it
+        # runs. Through the whole chain a later revision's new column reads as an unexpected
+        # addition -- and because that assertion comes first, the foreign-key, integrity and
+        # rebuilt-table checks below it stopped running. No backup evidence is lost: this test
+        # passed a backups directory and never asserted anything about its contents.
+        assert upgrade_to(db, M.revision) == M.revision
         after = {name: table(db.raw, name) for name in names}
         # The four rebuilt tables keep every stored value; two of them also gain a column,
         # which is exactly the difference the columns list is allowed to show.
