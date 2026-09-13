@@ -37,7 +37,7 @@ def demo_runner(client, company, why, *, dry_run=False):
 
 from bookflow.core.errors import BookflowError
 from tests.conftest import as_user, make_actor
-from tests.demo_oracle import DEMO_ARCS, DEMO_POSITION, trial_total, undeclared_documents
+from tests.demo_oracle import (DEMO_ARCS, DEMO_POSITION, trial_total, undeclared_documents, unseen_arcs)
 
 REFERENCE = 'Reference Plumbing Co'
 DEMO = 'Demo Plumbing Co'
@@ -292,6 +292,20 @@ def test_every_demo_posting_document_belongs_to_a_declared_arc(reference_client)
     assert not undeclared_documents(c, DEMO, DEMO_ARCS), (
         'these posting documents belong to no declared arc; add the prefix to DEMO_ARCS in the '
         'change that seeds them: ' + ', '.join(undeclared_documents(c, DEMO, DEMO_ARCS)))
+
+
+def test_every_declared_arc_still_posts_something(reference_client):
+    """The half the manifest was missing: an arc that stops being seeded must fail loudly.
+
+    Rejecting unknown documents cannot notice a seeded arc that quietly stopped posting, and a
+    missing arc takes its money out of the company while leaving every remaining assertion
+    internally consistent -- the totals agree with each other and with nothing real.
+    """
+    c, _ = reference_client
+    missing = unseen_arcs(c, DEMO, DEMO_ARCS)
+    assert not missing, (
+        'these arcs are declared in DEMO_ARCS and no document matches them, so either the seed '
+        'stopped writing them or the declaration outlived its arc: ' + ', '.join(missing))
 
 
 def assert_balances(c):

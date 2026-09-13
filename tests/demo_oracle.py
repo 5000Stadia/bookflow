@@ -117,6 +117,19 @@ def document_numbers(client, company):
         return {number for number, in _rows(db, 'transactions', ('number',)) if number}
 
 
+def posting_documents(client, company):
+    """Every posting document as (number, type), keeping multiplicity and kind.
+
+    `document_numbers` returns a set, which answers "was anything unexpected written" and
+    cannot answer "is what we expected still here": two invoices collapse to one entry, and a
+    journal that became an invoice looks identical. A manifest that claims to cover the company
+    needs the count and the kind, not just the names.
+    """
+    with company_database(client, company) as db:
+        return [(number, kind) for number, kind in _rows(db, 'transactions', ('number', 'type'))
+                if number]
+
+
 # ---------------------------------------------------------------- the full-company oracle
 
 # One home for what the whole demo company comes to, so a seed addition updates one place
@@ -157,16 +170,48 @@ DEMO_ARCS = {
     'DEMO-JPY': 'a foreign-tagged entry posting in home currency',
     'DEMO-COUNT': 'the inventory count adjustment',
     'REG-': 'register-entry examples: split, payment, card, card payment and deposit',
-    # The deposit takes the next number in the deposit series rather than a DEMO- prefix, which
-    # is the series behaving as designed; naming the bare numbers is how this manifest stays
-    # honest about what it has seen rather than quietly widening to match.
-    '1': 'deposit number series',
-    '2': 'deposit number series',
-    '3': 'deposit number series',
+    # Four documents take a bare series number rather than a DEMO- prefix, and they are NOT all
+    # one series: each document type numbers from 1 independently, so these are a deposit and
+    # three journal-family documents that the buying month writes without naming -- the cheque,
+    # the card charge and the card payment. The manifest used to call all of them "the deposit
+    # number series" and match them by prefix, which is how `1` also claimed `10` and `123` and
+    # how a whole arc could go missing without anything noticing. They are matched exactly now.
+    '1': 'a deposit, and the first of the unnamed journal-family documents',
+    '2': 'unnamed journal-family document from the buying month',
+    '3': 'unnamed journal-family document from the buying month',
 }
+
+# Arcs that deliberately post nothing. They are declared because they exist and are seeded, and
+# exempted from `unseen_arcs` because absence from the posting ledger is precisely their claim --
+# `test_work_seeds_post_nothing_and_previews_change_nothing` is what proves it, and demanding a
+# posting document here would contradict that test rather than reinforce it.
+NONPOSTING_ARCS = frozenset({'DEMO-WORK-'})
+
+
+def _claims(number, prefix):
+    """Whether `prefix` claims `number`, exactly for a bare series number.
+
+    A prefix ending in `-` is a family and matches by prefix. A bare number like `1` is one
+    document in the deposit series, and matching it by prefix would also claim `10` and `123` --
+    quietly widening the manifest to cover documents nobody declared.
+    """
+    return number.startswith(prefix) if prefix.endswith('-') else number == prefix
 
 
 def undeclared_documents(client, company, arcs):
     """Posting documents whose number no arc claims. Empty is the only passing answer."""
-    return sorted(number for number in document_numbers(client, company)
-                  if not any(number.startswith(prefix) for prefix in arcs))
+    return sorted({number for number, _kind in posting_documents(client, company)
+                   if not any(_claims(number, prefix) for prefix in arcs)})
+
+
+def unseen_arcs(client, company, arcs):
+    """Declared arcs that no document matches. Empty is the only passing answer.
+
+    The complement of `undeclared_documents`, and the half that was missing: rejecting unknown
+    documents cannot notice a seeded arc that stopped being seeded. An arc that silently stops
+    posting takes its money out of the company and leaves every remaining assertion consistent.
+    """
+    documents = posting_documents(client, company)
+    return sorted(prefix for prefix in arcs
+                  if prefix not in NONPOSTING_ARCS
+                  and not any(_claims(number, prefix) for number, _kind in documents))

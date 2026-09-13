@@ -2106,13 +2106,13 @@ reason = "Order the month's materials"
 [[commands]]
 command = "bill post"
 capture = "demo_order_bill"
-input = { date = "2026-11-12", purchase_order = "${demo_order.id}", supplier_reference = "CS-88213" }
+input = { number = "DEMO-BUY-BILL-1", date = "2026-11-12", purchase_order = "${demo_order.id}", supplier_reference = "CS-88213" }
 reason = "Enter the bill the order became when the materials arrived"
 
 [[commands]]
 command = "bill pay"
 capture = "demo_bill_payment"
-input = { date = "2026-11-20", bills = [{ bill = "${demo_order_bill.id}" }], funding_account = "${pay_bank.id}", method = "check", memo = "Materials for the Oak Street run" }
+input = { number = "DEMO-BUY-PAY-1", date = "2026-11-20", bills = [{ bill = "${demo_order_bill.id}" }], funding_account = "${pay_bank.id}", method = "check", memo = "Materials for the Oak Street run" }
 reason = "Pay the materials bill by cheque"
 
 [[commands]]
@@ -2136,7 +2136,7 @@ reason = "Pay down the company card from checking"
 [[commands]]
 command = "vendor-credit post"
 capture = "demo_vendor_credit"
-input = { date = "2026-11-26", vendor = "${vendor.id}", supplier_reference = "CS-88213-RET", memo = "Two valves returned unopened", expenses = [{ account = "${expense_account.id}", amount = "21.90", memo = "Returned valves" }] }
+input = { number = "DEMO-BUY-CREDIT-1", date = "2026-11-26", vendor = "${vendor.id}", supplier_reference = "CS-88213-RET", memo = "Two valves returned unopened", expenses = [{ account = "${expense_account.id}", amount = "21.90", memo = "Returned valves" }] }
 reason = "Record the credit for materials sent back"
 
 [[commands]]
