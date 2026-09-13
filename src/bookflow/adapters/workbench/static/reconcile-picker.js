@@ -65,12 +65,12 @@
 
     const rows=entries.querySelector('[data-collection-items]');
     const chosen=new Map();
-    let currency='', server=null, busy=false;
+    let currency='', server=null, busy=false, finished=false;
     // A disabled button says "not yet"; a button that looks ready and does nothing when pressed
     // says the page is broken. So everything that makes the page unready goes through here.
     function working(value){
-      busy=value;load.disabled=value;
-      finish.disabled=value || !server || !server.balanced;
+      busy=value;load.disabled=value || finished;
+      finish.disabled=value || finished || !server || !server.balanced;
     }
 
     async function command(name,input){
@@ -160,7 +160,7 @@
     }
 
     finish.addEventListener('click',async()=>{
-      if(busy||!server)return;working(true);error.textContent='';
+      if(busy||finished||!server)return;working(true);error.textContent='';
       try{
         const fresh=await command('reconcile preview',{draft:draftField.value,
           expected_version:Number(versionField.value||1)});
@@ -172,6 +172,8 @@
           expected_version:fresh.version,
           expected_facts_fingerprint:fresh.expected_facts_fingerprint,
           dependency_guard:fresh.dependency_guard});
+        finished=true;
+        finish.textContent='Statement certified';
         certificate.hidden=false;
         certificate.replaceChildren(node('h2','Statement certified'),
           node('p','Certificate '+done.certificate_id+' · cleared balance '

@@ -113,4 +113,6 @@ def test_a_person_follows_the_tile_and_ends_holding_a_certificate(register_brows
     assert 'Statement certified' in certified
     # The cleared balance a person is shown is the statement they entered.
     assert STATEMENT in certified, certified
+    assert b.evaluate('document.querySelector("[data-reconcile-finish]").disabled'), \
+        'a certified statement must not offer another finish action'
     _contained(b, width)
