@@ -8,6 +8,30 @@ import struct
 def quote(name):return '"'+name.replace('"','""')+'"'
 
 
+def upgrade_to(db, revision, chain='company'):
+    """Run an open populated database forward to exactly `revision`.
+
+    `migrate_to_head` runs the whole chain, which is right for an upgrade witness and wrong for
+    a claim about one transition: every later migration's legitimate rewrite then reads as this
+    migration failing to preserve something, and because such assertions usually come first, the
+    real checks behind them stop running too.
+
+    The preserving runner turns foreign keys off for the duration -- a rebuild recreates tables
+    whose references do not exist yet -- and some migrations refuse to run without that, by name.
+    Setting the same precondition here reproduces the runner's contract rather than evading it.
+    """
+    from alembic import command
+
+    from bookflow.storage.migrate import _config
+    db.raw.execute('PRAGMA foreign_keys=OFF')
+    try:
+        command.upgrade(_config(chain, db.conn), revision)
+        db.raw.commit()
+    finally:
+        db.raw.execute('PRAGMA foreign_keys=ON')
+    return db.raw.execute('SELECT version_num FROM alembic_version').fetchone()[0]
+
+
 def table(raw,name,*,through_rowid=None,omit_columns=()):
     columns=[r[1] for r in raw.execute('PRAGMA table_xinfo('+quote(name)+')') if r[1] not in omit_columns]
     expressions=['rowid']
