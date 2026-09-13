@@ -59,6 +59,8 @@ def _rebuilt_since(revision):
         guards = {statement.split()[2] for statement in getattr(module, 'GUARDS', ())}
         if name in later:
             names.update(getattr(module, 'CHANGED', ()))
+            # co0044 drives its rebuild directly from this existing declaration.
+            names.update(getattr(module, 'REBUILT', ()))
             names.update(getattr(module, 'REPLACED', ()))
             # A migration that rewrites a trigger names it in TRIGGERS, which carries no
             # guard contract and so cannot be folded into CHANGED or REPLACED: CHANGED
@@ -74,9 +76,10 @@ def _superseded_after(revision):
     import pkgutil
     from bookflow.storage.company_migrations import versions
     names = set()
+    later = set(_revisions_after(revision))
     for info in pkgutil.iter_modules(versions.__path__):
         module = importlib.import_module(versions.__name__ + '.' + info.name)
-        if getattr(module, 'revision', '') > revision:
+        if getattr(module, 'revision', '') in later:
             names.update(getattr(module, 'REPLACED', ()))
     return names
 
