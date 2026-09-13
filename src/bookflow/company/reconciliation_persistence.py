@@ -140,7 +140,7 @@ def certificate(identity, snapshot, value, totals, *, opening_id, covered, prior
         final_difference=0, positive_sum=totals.positive_sum, negative_sum=totals.negative_sum,
         positive_count=totals.positive_count, negative_count=totals.negative_count,
         currency=pop['currency'],
-        convention='card_debt' if members and members[0]['account_type'] == 'credit_card' else 'bank',
+        convention='card_debt' if snapshot.source.accounts[account_id]['type'] == 'credit_card' else 'bank',
         captured_source_snapshot=canonical(pop), issuer_snapshot=issuer, **made)]}
 
     def classification(row):

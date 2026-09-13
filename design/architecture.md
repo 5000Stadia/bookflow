@@ -3152,6 +3152,17 @@ revision of it rather than a flag, because the storage will not accept a draft w
 version moves without one. The home window's Reconcile tile is live against these,
 and `tests/test_reconciliation_browser.py` is the navigation witness that makes it so.
 
+Ordinary subsequent statements append a new certificate generation linked to the
+previous head and update the existing account chain through its next event. Already
+cleared movements retain their claims and are classified as prior-cleared in the
+new capture; only newly selected movements gain claims. Finish requires the saved
+draft version in both preparation and application, as well as its facts and chain
+guards. Empty bank/card accounts derive their convention from account metadata.
+At write time, captures authored by the operation's audit event are proved against
+the live graph; referenced historical openings remain validated against their
+immutable stored populations. `tests/test_reconciliation_public_successors.py`
+covers sequential statements, retry, stale-version nonmutation and an empty card.
+
 ### Private reconciliation successor models and preparation
 
 The private `reconciliation_commands_models` module describes strict inputs,

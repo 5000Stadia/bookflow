@@ -243,6 +243,7 @@ def _finish_prepare(inp, ctx, s, ids):
     account_id = _account_of(s, inp.draft)
     snapshot = _loaded(s, account_id)
     value = _draft(snapshot, inp.draft)
+    preparation.require(value.version == inp.expected_version, 'E_VERSION_CONFLICT')
     preparation.require(inp.dependency_guard == dependency_guard(value), 'E_RECONCILIATION_CHAIN_STALE')
     preparation.require(inp.expected_facts_fingerprint == preparation.fingerprint(snapshot, value),
                         'E_RECONCILIATION_SELECTION_STALE')
@@ -283,6 +284,32 @@ def _finish_apply(plan, ctx, s):
     from bookflow.company.reconciliation_storage_validation import canonical
     issuer = canonical(persistence.issuer(snapshot.referenced_rows['company_info'][0]))
     consumed = [d.id for d in (value, opening_draft) if d is not None]
+    state = next((row for row in snapshot.rows['accounts']
+                  if row['account_id'] == account_id), None)
+    certificates = snapshot.by('certificates')
+    generation = 1 + max((row['generation'] for row in certificates.values()
+                          if row['account_id'] == account_id), default=0)
+    prior = set()
+    previous = value.base_head_id
+    while previous is not None:
+        prior.update(row['key_id'] for row in snapshot.rows['certificate_members']
+                     if row['certificate_id'] == previous and row['classification'] == 'selected')
+        previous = certificates[previous]['previous_certificate_id']
+    account = snapshot.source.accounts[account_id]
+    chain_rows = persistence.chain(
+        account_id=account_id, currency=account['currency'],
+        convention='card_debt' if account['type'] == 'credit_card' else 'bank',
+        opening_id=opening_id, certificate_id=certificate_id, event_id=ids['event'],
+        statement_date=value.header.statement_date,
+        before_version=state['version'] if state else 0,
+        before_opening=state['opening_id'] if state else None,
+        before_head=state['head_certificate_id'] if state else None)
+    chain_updates = []
+    if state is not None:
+        after = chain_rows.pop('accounts')[0]
+        chain_updates.append(c.reconciliation_accounts.update()
+                             .where(c.reconciliation_accounts.c.account_id == account_id)
+                             .values(**after))
 
     def rows(made):
         built = []
@@ -297,13 +324,10 @@ def _finish_apply(plan, ctx, s):
                        if v['opening_id'] == opening_id and v['classification'] == 'covered'}
         certificate_rows, _ = persistence.certificate(
             certificate_id, snapshot, value, totals, opening_id=opening_id, covered=covered,
-            prior=set(), issuer=issuer, made=made)
+            prior=prior, issuer=issuer, made=made, generation=generation,
+            previous=value.base_head_id)
         built.append(certificate_rows)
-        built.append(persistence.chain(
-            account_id=account_id, currency=certificate_rows['certificates'][0]['currency'],
-            convention=certificate_rows['certificates'][0]['convention'], opening_id=opening_id,
-            certificate_id=certificate_id, event_id=ids['event'],
-            statement_date=value.header.statement_date))
+        built.append(chain_rows)
         built.append(persistence.claims(persistence.merge(*built), account_id=account_id,
                                         event_id=ids['event'], opening_id=opening_id,
                                         certificate_id=certificate_id))
@@ -328,7 +352,7 @@ def _finish_apply(plan, ctx, s):
                     d, made=made, previous_revision_id=before.current_revision_id).items()
                  if k != 'drafts'}
                 for d, before in zip(consumed_values, [value, opening_draft]))),
-            updates=[table.update().where(table.c.id == d.id).values(
+            updates=chain_updates + [table.update().where(table.c.id == d.id).values(
                 state='consumed', terminal_operation_id=ids['operation'], version=d.version,
                 current_revision_id=d.current_revision_id) for d in consumed_values],
             touched=[Touched('reconciliation_certificate', certificate_id, 'create', None, 1,

@@ -154,14 +154,21 @@ def load(s, account_id, *, prove_captures=()):
 def prove_written(s, account_id, operation_id):
     """Reload the account and prove every capture this operation stored against the live ledger.
 
-    The captures are taken from the operation's own target rows rather than from what the caller
-    remembers writing, and `validate` separately requires those targets to be the complete set --
+    New captures are the operation targets authored by its audit event. Referenced historical
+    openings remain validated against their stored rows, not today's changed ledger.
+    `validate` separately requires the targets to be the complete set --
     so a writer cannot store a capture and leave it unproven by forgetting to name it.
     """
     written = set()
+    operation = c.reconciliation_operations
+    audit_event_id = s.company.conn.execute(
+        sa.select(operation.c.audit_event_id).where(operation.c.id == operation_id)).scalar_one()
     for name, field in (('operation_openings', 'opening_id'),
                         ('operation_certificates', 'certificate_id')):
         table = c.metadata.tables[PREFIX + name]
+        capture = c.metadata.tables[PREFIX + name.removeprefix('operation_')]
         written.update(s.company.conn.execute(
-            sa.select(table.c[field]).where(table.c.operation_id == operation_id)).scalars())
+            sa.select(table.c[field]).join(capture, capture.c.id == table.c[field])
+            .where(table.c.operation_id == operation_id,
+                   capture.c.audit_event_id == audit_event_id)).scalars())
     return load(s, account_id, prove_captures=written)
