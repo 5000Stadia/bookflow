@@ -7,9 +7,11 @@ from importlib.resources import files
 from math import lcm
 
 import pytest
+import bookflow
 
 from bookflow import BookflowError
 from tests.demo_oracle import financial_snapshot
+from tests.progress_seed_oracle import snapshot, assert_progress_inventory
 from tests.test_reference_year import demo_runner, page_rows, reference_client, reference_template  # noqa: F401
 from tests.test_service_sales_demo import COMPANIES
 
@@ -179,16 +181,65 @@ def test_progress_chain_exact_installments_rebill_correction_and_lineage(referen
     assert run("invoice query", customer=billing["id"])["count"] == 4
 
 
+def test_progress_seed_blocks_preserve_old_rows_and_add_only_expected_financial_history(tmp_path, monkeypatch):
+    """Observe the entire progress seed effect, including rows with unrelated attribution."""
+    from bookflow.commands import hub_cmds
+
+    root = tmp_path / "progress-seed-root"
+    monkeypatch.setenv("BOOKFLOW_DATA_ROOT", str(root))
+    monkeypatch.delenv("BOOKFLOW_COMPANY", raising=False)
+    load_seed = hub_cmds._load_seed
+    apply_seed = hub_cmds._apply_seed_history
+    boundaries, observed = {}, set()
+
+    def load_prefix(resource="seed.toml"):
+        seed = load_seed(resource)
+        start = OLD_COUNTS[resource]
+        commands = seed["commands"][:start + 41]
+        assert len(commands) == start + 41
+        assert commands[start]["capture"] == "prog_customer"
+        assert commands[-1]["command"] == "invoice query"
+        boundaries[seed["company"]["display_name"]] = start
+        return dict(seed, commands=commands)
+
+    def observe_block(session, context, seed, row):
+        database = session.abs_path(row["path"]) / "company.db"
+        prefix = dict(COMPANIES)[row["display_name"]] + "-PROG-"
+        # Eight explicit business documents. INV-4 alone has a correcting revision.
+        expected = [
+            (prefix + "INV-1", "invoice", "2026-09-23", [[INV1]]),
+            (prefix + "INV-2", "invoice", "2026-09-24", [[INV2]]),
+            (prefix + "INV-3", "invoice", "2026-09-25", [[INV3]]),
+            (prefix + "INV-4", "invoice", "2026-09-26", [INV4, INV4 + [EXTRA]]),
+            (prefix + "INV-5", "invoice", "2026-09-28", [INV5]),
+            (prefix + "INV-6", "invoice", "2026-09-27", [[INV1]]),
+            (prefix + "INV-7", "invoice", "2026-09-29", [[INV7]]),
+            (prefix + "SR-1", "sales_receipt", "2026-09-24", [[SR1]]),
+        ]
+
+        def commands():
+            for index, entry in enumerate(seed["commands"]):
+                if index == boundaries[row["display_name"]]:
+                    before = snapshot(database)
+                yield entry
+            assert_progress_inventory(database, before, snapshot(database), expected, tax)
+            observed.add(row["display_name"])
+
+        return apply_seed(session, context, dict(seed, commands=commands()), row)
+
+    monkeypatch.setattr(hub_cmds, "_load_seed", load_prefix)
+    monkeypatch.setattr(hub_cmds, "_apply_seed_history", observe_block)
+    client = bookflow.connect(data_root=str(root))
+    client.init()
+    client.demo.reset(include_reference=True)
+    assert observed == {company for company, _prefix in COMPANIES}
+
+
 @pytest.mark.parametrize("company,prefix", COMPANIES)
-def test_voided_progress_demos_net_to_zero_and_change_nothing_else(reference_client, company, prefix):
+def test_voided_progress_demos_net_to_zero_and_previews_preserve_financial_rows(reference_client, company, prefix):
     client, _ = reference_client
-    # What this package claims is about its own installments: each document nets to zero on
-    # every account it touched, and its gross postings are the two halves of a posting and its
-    # reversal. It used to open by asserting Checking, the trial total, the journal count, net
-    # income and total equity as literals -- a claim about the whole company, made here because
-    # a database happened to be open, and broken by every later seed addition. Those totals now
-    # live in one full-company oracle; a package proves its own postings and proves it changed
-    # nothing else.
+    # Independent installment gross/net arithmetic, followed by report/preview
+    # nonmutation. The separate boundary witness checks collateral seed effects.
     before = financial_snapshot(client, company)
     rows, _ = page_rows(client.report.general_ledger, company=company, date_from="2026-01-01", date_to="2026-12-31", limit=200)
     net, gross = defaultdict(int), defaultdict(int)
