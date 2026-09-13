@@ -32,6 +32,27 @@ def upgrade_to(db, revision, chain='company'):
     return db.raw.execute('SELECT version_num FROM alembic_version').fetchone()[0]
 
 
+def ddl_with_cash_flow_section(before):
+    """Expected DDL for these pre-co0039 fixtures after its exact additive change.
+
+    co0039 does not rebuild accounts, so it is absent from the rebuild inventory. Apply
+    its frozen ALTER to the captured definition rather than exempting the whole table.
+    This checks retained constraints/local columns as well as the newly added column.
+    """
+    import importlib
+    migration = importlib.import_module(
+        'bookflow.storage.company_migrations.versions.0039_account_cash_flow_section')
+    original = next(row for row in before if row[:2] == ('table', migration.TABLE))
+    with sqlite3.connect(':memory:') as expected:
+        expected.execute(original[3])
+        for statement in migration.DDL:
+            expected.execute(statement)
+        changed = expected.execute(
+            "SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE type='table' AND name=?",
+            (migration.TABLE,)).fetchone()
+    return (set(before) - {original}) | {changed}
+
+
 def table(raw,name,*,through_rowid=None,omit_columns=()):
     columns=[r[1] for r in raw.execute('PRAGMA table_xinfo('+quote(name)+')') if r[1] not in omit_columns]
     expressions=['rowid']

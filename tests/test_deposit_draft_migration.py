@@ -18,7 +18,8 @@ from bookflow.company.deposit_dependencies import RECONCILIATION
 from bookflow.storage.engine import open_database
 from bookflow.storage.migrate import HEADS,migrate_to_head,feature_admission
 from bookflow.core.errors import BookflowError
-from tests.payment_raw_evidence import preserved,table,attachments,upgrade_to
+from tests.payment_raw_evidence import preserved,table,attachments,upgrade_to,ddl_with_cash_flow_section
+from tests.test_bill_payment_migration import _rebuilt_since
 
 BASE='5fa513dd4bdb31517673e1510e7ddf2fc636c827'
 M=importlib.import_module('bookflow.storage.company_migrations.versions.0024_deposit_drafts')
@@ -122,15 +123,19 @@ def test_the_whole_chain_backs_up_what_it_started_from_and_keeps_local_objects(p
 
     This is the claim the scoped transition above cannot make, and the reason it is a separate
     test rather than more assertions in one: the backup is evidence of the point the upgrade
-    started from, so it only means co0023 while the upgrade starts at co0023. What survives to
-    the head is asserted about the local objects by name, not about every product table, because
-    later migrations rebuild product tables legitimately and this claim is not about them.
+    started from, so it only means co0023 while the upgrade starts at co0023. All preexisting
+    DDL survives verbatim except objects explicitly rebuilt/replaced along the later chain.
     """
     world=prepared(predecessor,tmp_path)
     with open_database(world['path'],writable=True) as db:
         assert migrate_to_head(db,'company',tmp_path/'backups')==('co0023',HEADS['company'])
         assert {n:preserved(db.raw,n,world['before'][n]) for n in world['names']}==world['before']
-        survivors={row[1]:row[3] for row in db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema')}
+        current=set(db.raw.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema'))
+        rebuilt=_rebuilt_since('co0023')
+        expected=ddl_with_cash_flow_section(world['ddl'])
+        assert {row for row in expected if row[1] not in rebuilt}<=current
+        assert {(r[0],r[1],r[2]) for r in world['ddl']}<={(r[0],r[1],r[2]) for r in current}
+        survivors={row[1]:row[3] for row in current}
         for name in LOCAL_OBJECTS:
             assert name in survivors, name
             assert survivors[name]==next(r[3] for r in world['ddl'] if r[1]==name), name
