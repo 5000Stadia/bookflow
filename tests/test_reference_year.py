@@ -37,6 +37,7 @@ def demo_runner(client, company, why, *, dry_run=False):
 
 from bookflow.core.errors import BookflowError
 from tests.conftest import as_user, make_actor
+from tests.demo_oracle import DEMO_ARCS, DEMO_POSITION, trial_total, undeclared_documents
 
 REFERENCE = 'Reference Plumbing Co'
 DEMO = 'Demo Plumbing Co'
@@ -248,7 +249,49 @@ def test_gross_paged_ledger_every_source_and_running_balance(reference_client, a
 # Ten journal entries the demo writes outright, plus the four journal-family documents its
 # buying month adds: a cheque, a card charge, a card payment and the count adjustment. Named
 # once so the next document that lands in this family moves one number, not three assertions.
-DEMO_JOURNALS = 10 + 4
+
+
+def assert_demo_position(c):
+    """What the demo company comes to, asserted in one place and derived where it can be.
+
+    `trial_balance` is checked against the balances rather than taken on its own: a trial total
+    is `sum(max(net_per_account, 0))`, so recomputing it from the position is what catches a
+    total that no set of balances could produce. The balances themselves are the stored
+    expectation a seed addition updates -- once, here.
+    """
+    rows, totals = page_rows(c.report.trial_balance, company=DEMO, date_to='2026-12-31', limit=200)
+    balances = {row['current_account_label']: row['signed_net']['minor_units'] for row in rows}
+    assert sum(balances.values()) == 0, 'the demo books do not balance'
+    assert totals['debit']['minor_units'] == totals['credit']['minor_units'] == trial_total(balances)
+    assert totals['debit']['minor_units'] == DEMO_POSITION['trial_balance']
+    for account in ('Checking', 'Accounts Receivable', 'Sales Tax Payable'):
+        assert balances[account] == DEMO_POSITION[account], account
+    assert c.account.show(company=DEMO, account='Checking')['balance']['minor_units'] == DEMO_POSITION['Checking']
+    assert c.journal.query(company=DEMO)['count'] == DEMO_POSITION['journal_entries']
+    statement = c.report.profit_and_loss(company=DEMO, date_from='2026-01-01', date_to='2026-12-31')
+    assert statement['totals']['net_income']['minor_units'] == DEMO_POSITION['net_income']
+    sheet = c.report.balance_sheet(company=DEMO, date_to='2026-12-31')
+    assert sheet['totals']['difference']['minor_units'] == 0
+    assert sheet['totals']['total_equity']['minor_units'] == DEMO_POSITION['total_equity']
+
+
+def test_the_whole_demo_company_is_what_one_oracle_says_it_is(reference_client):
+    c, _ = reference_client
+    assert_demo_position(c)
+
+
+def test_every_demo_posting_document_belongs_to_a_declared_arc(reference_client):
+    """An omitted or unexpected scenario fails loudly instead of averaging into a total.
+
+    A seed arc that posts money must name its document prefix in `DEMO_ARCS` in the same change.
+    Without this the only thing standing between a wrong new arc and a green suite is whether
+    somebody happened to update a literal in a package test -- which is exactly how the totals
+    this row removed came to be repaired three times in a day.
+    """
+    c, _ = reference_client
+    assert not undeclared_documents(c, DEMO, DEMO_ARCS), (
+        'these posting documents belong to no declared arc; add the prefix to DEMO_ARCS in the '
+        'change that seeds them: ' + ', '.join(undeclared_documents(c, DEMO, DEMO_ARCS)))
 
 
 def assert_balances(c):
@@ -268,13 +311,10 @@ def assert_balances(c):
         assert shown['balance']['currency'] == 'USD'
         assert shown['id'] != c.account.show(company=DEMO,account='Checking')['id']
     assert c.report.trial_balance(company=REFERENCE,date_to='2026-12-31')['totals']['debit']['minor_units'] == 8048639
-    # DEMO grew the buying half of its month: an order billed and paid, a cheque, a card charge,
-    # a card payment, a return credit and a count adjustment. The trial total carries their net
-    # effect, and Checking does not move at all because that arc funds itself from the demo's
-    # other bank account -- which is the assertion below still standing unchanged.
-    assert c.report.trial_balance(company=DEMO,date_to='2026-12-31')['totals']['debit']['minor_units'] == 708234 + 41120
-    assert c.account.show(company=DEMO,account='Checking')['balance']['minor_units'] == 624895
-    assert c.journal.query(company=DEMO)['count'] == DEMO_JOURNALS
+    # What DEMO comes to lives in `demo_oracle.DEMO_POSITION`, checked once by
+    # `test_the_whole_demo_company_is_what_one_oracle_says_it_is`. Repeating it here is how four
+    # package tests came to carry the same figures and break together.
+    assert_demo_position(c)
 
 
 def test_the_reference_depreciation_add_back_is_reported_in_operating(reference_client):
@@ -422,7 +462,9 @@ def test_partial_seed_failure_reports_committed_effects_and_rerun_recovers(refer
     assert error.details['incomplete_company_id'] == c.company.show(company=REFERENCE)['company_id']
     assert len(error.details['company_ids']) == 2 and error.details['request_id']
     assert c.account.show(company=REFERENCE,account='Checking')['balance']['minor_units'] == 1000000
-    assert c.account.show(company=DEMO,account='Checking')['balance']['minor_units'] == 624895
+    # DEMO is untouched by a reference-side failure. What untouched means is the one oracle's
+    # figure, not a copy of it kept here to go stale beside the original.
+    assert c.account.show(company=DEMO,account='Checking')['balance']['minor_units'] == DEMO_POSITION['Checking']
     monkeypatch.setattr(hub_cmds,'_load_seed',load)
     assert c.demo.reset(include_reference=True)['trashed_path']
     assert_balances(c)
@@ -449,7 +491,7 @@ def test_public_boolean_schema_defaults_and_first_default_reset(tmp_path, monkey
     result = c.demo.reset()
     assert result['trashed_path'] is result['reference_company_id'] is result['reference_display_name'] is None
     assert [r['display_name'] for r in c.company.list()['items']] == [DEMO]
-    assert c.journal.query(company=DEMO)['count'] == DEMO_JOURNALS
+    assert c.journal.query(company=DEMO)['count'] == DEMO_POSITION['journal_entries']
     help_result = subprocess.run([sys.executable,'-m','bookflow.adapters.cli.app','demo','reset','--help'],
         capture_output=True,text=True,env={**os.environ,'NO_COLOR':'1'})
     assert help_result.returncode == 0 and '--include-reference' in help_result.stdout

@@ -10,6 +10,7 @@ import pytest
 
 from bookflow import BookflowError
 from tests.test_reference_year import demo_runner, reference_client, reference_template  # noqa: F401
+from tests.demo_oracle import financial_snapshot, written_by
 from tests.test_service_sales_demo import COMPANIES
 
 
@@ -68,14 +69,6 @@ def work_counts(client, company, prefix):
         for name in ("work_revisions", "work_lines", "work_line_identities"):
             counts[name] = db.execute(f'SELECT count(*) FROM "{name}" WHERE document_id IN ({docs})', (like,)).fetchone()[0]
         counts["work_links"] = db.execute(f"SELECT count(*) FROM work_links WHERE source_document_id IN ({docs})", (like,)).fetchone()[0]
-        # The Row16 witness owns the pre-work journals and Row15 sales only.
-        # Newer namespaces have independent complete raw-row/prefix proofs.
-        prior_sales = "SELECT id FROM transactions WHERE type = 'journal_entry' OR number LIKE ?"
-        later = (prefix + '-SALE-%',)
-        counts['transactions'] = db.execute(f'SELECT count(*) FROM ({prior_sales})', later).fetchone()[0]
-        counts.update({name: db.execute(f'SELECT count(*) FROM "{name}" WHERE transaction_id IN ({prior_sales})',
-                       later).fetchone()[0]
-                       for name in ("transaction_revisions", "posting_batches", "posting_lines")})
         return counts
 
 
@@ -219,55 +212,72 @@ def test_seeded_work_chain_lineage_arithmetic_and_history(reference_client, comp
 
 
 @pytest.mark.parametrize("company,prefix", COMPANIES)
-def test_work_seeds_post_nothing_and_previews_change_nothing(reference_client, company, prefix):
+def test_work_seeds_post_nothing(reference_client, company, prefix):
+    """Asked of the work commands, not of the company they ran in.
+
+    This used to assert Checking, the trial-balance total, the journal count and net income as
+    literals, so every later seed addition broke it as though the work documents had started
+    posting money -- and each repair held only until the next one. Those totals were never
+    evidence for this claim anyway: they are a claim about the whole company, and this is a
+    claim about twenty-one commands.
+
+    The audit trail answers it exactly. Every financial row names the audit event that wrote
+    it, and every event names its command, so a posting made under another document's number,
+    in another namespace, or reversed a moment later, is still owned by the event that made it.
+    A namespace filter or a balance check misses all three.
+    """
     client, _ = reference_client
-    # The two tax-rounding examples a later integration added contribute 0.39 to receivables in
-    # both companies, of which 0.35 is income and 0.04 is sales tax payable. These oracles kept
-    # the pre-integration totals while the sibling progress-billing test was updated, so they
-    # failed as though the work seeds had posted money. Written as the old figure plus the named
-    # contribution rather than as the number the report happens to print today.
-    TAX_TRIAL, TAX_INCOME = 39, 35
-    # DEMO alone also gained the buying half of its month -- an order billed and paid, a cheque,
-    # a card charge, a card payment, a return credit and a count adjustment. Four of those are
-    # journal-family documents. REFERENCE has no such arc, which is why only one column moves.
-    BUYING_TRIAL, BUYING_INCOME, BUYING_JOURNALS = 41120, -31840, 4
-    checking, trial, journals, profit = (
-        (624895, 708195 + TAX_TRIAL + BUYING_TRIAL, 10 + BUYING_JOURNALS,
-         151095 + TAX_INCOME + BUYING_INCOME)
-        if prefix == "DEMO"
-        else (7267800, 8048600 + TAX_TRIAL, 36, 6457000 + TAX_INCOME))
-    assert client.account.show(account="Checking", company=company)["balance"]["minor_units"] == checking
-    # Accounts Receivable is the sum of what its customers owe, named rather than pinned to one
-    # opaque total: 128.00 commercial, 20.00 and -10.00 on the two payment jobs, and 0.33 + 0.06
-    # from the two tax-rounding examples. A later integration added those last two and this
-    # oracle kept the old 13800, so it failed as though the work documents had posted money --
-    # which is exactly the confusion a bare total invites. Both companies carry the same figure.
-    receivable = 12800 + 2000 - 1000 + 33 + 6
-    assert client.account.show(
-        account="Accounts Receivable", company=company)["balance"]["minor_units"] == receivable
-    totals = client.report.trial_balance(company=company, date_to="2026-12-31", limit=200)["totals"]
-    assert totals["debit"]["minor_units"] == totals["credit"]["minor_units"] == trial
-    statement = client.report.profit_and_loss(company=company, date_from="2026-01-01", date_to="2026-12-31")
-    assert statement["totals"]["net_income"]["minor_units"] == profit
-    customer = client.customer.show(customer="Commercial Example Customer", company=company)
-    assert customer["current_balance"]["minor_units"] == 12800
-    before = work_counts(client, company, prefix)
-    assert before["transactions"] == journals + 4
-    # This oracle counts journal_entry-type transactions, so of DEMO's eight new buying
-    # documents exactly four land here -- the cheque, the card charge, the card payment and the
-    # count adjustment; the order, bill, bill payment and vendor credit carry their own types.
-    # Each of the four is a simple two-sided entry, which is why lines move by twice as much.
-    assert (before["transaction_revisions"], before["posting_batches"], before["posting_lines"]) == (
-        (22 + BUYING_JOURNALS, 33 + BUYING_JOURNALS, 99 + 2 * BUYING_JOURNALS) if prefix == "DEMO"
-        else (45, 53, 132))
-    # Nine documents: PROP-1 (4 revisions), PROP-2, EST-1A, EST-1B (3), EST-2, EST-3, WO-1 (4), WO-2, WO-3.
-    assert before["work_documents"] == 9
-    assert before["work_revisions"] == 4 + 1 + 1 + 3 + 1 + 1 + 4 + 1 + 1
-    assert before["work_lines"] == 5 * (4 + 1 + 1 + 3 + 1 + 4 + 1) + 1 + 1
-    assert before["work_line_identities"] == 5 * 7 + 1 + 1
-    assert before["work_links"] == 6
+    nonposting = {f"{noun} {verb}" for noun in NOUNS for verb in (*SHARED_VERBS, OWN_VERB[noun])}
+    written = written_by(client, company, nonposting)
+    assert written["events"], "the work commands left no audit trail, so this proves nothing"
+    assert written["revisions"] == [] and written["batches"] == [] and written["lines"] == [], written
+
+
+@pytest.mark.parametrize("company,prefix", COMPANIES)
+def test_the_same_question_asked_of_a_command_that_posts_finds_its_postings(reference_client, company, prefix):
+    """What makes the empty answer above mean something.
+
+    A check that cannot fail proves nothing, and `written_by` returning nothing would look
+    identical whether the work commands posted nothing or the lookup was broken. So ask it about
+    a command that certainly did post, and require it to find the money.
+    """
+    client, _ = reference_client
+    written = written_by(client, company, {"invoice post"})
+    assert written["batches"] and written["lines"], written
+    assert any(debit or credit for *_, debit, credit in written["lines"])
+    # And it finds them by ownership, not by document number: the batches it returns belong to
+    # transactions whose numbers this test never mentions.
+    assert {row[1] for row in written["batches"]}
+
+
+@pytest.mark.parametrize("company,prefix", COMPANIES)
+def test_the_work_documents_the_seed_intends_are_there_and_only_those(reference_client, company, prefix):
+    """The other half: posting nothing would also be true of a seed that did nothing."""
+    client, _ = reference_client
+    counts = work_counts(client, company, prefix)
+    # Nine documents: PROP-1 (4 revisions), PROP-2, EST-1A, EST-1B (3), EST-2, EST-3,
+    # WO-1 (4), WO-2, WO-3.
+    assert counts["work_documents"] == 9
+    assert counts["work_revisions"] == 4 + 1 + 1 + 3 + 1 + 1 + 4 + 1 + 1
+    assert counts["work_lines"] == 5 * (4 + 1 + 1 + 3 + 1 + 4 + 1) + 1 + 1
+    assert counts["work_line_identities"] == 5 * 7 + 1 + 1
+    assert counts["work_links"] == 6
+
+
+@pytest.mark.parametrize("company,prefix", COMPANIES)
+def test_work_previews_change_nothing(reference_client, company, prefix):
+    """Snapshot what a preview promises not to touch, run it, compare.
+
+    Identities and amounts rather than balances, because a preview that posted and reversed
+    would net to zero and has to fail this. Later seed additions appear in both snapshots and
+    need no number updated anywhere.
+    """
+    client, _ = reference_client
+    before_financial = financial_snapshot(client, company)
+    before_work = work_counts(client, company, prefix)
     run = demo_runner(client, company, "Customer work demo test", dry_run=True)
     p = prefix + "-WORK-"
+    customer = client.customer.show(customer="Commercial Example Customer", company=company)
     order = client.run("work-order query", {"number": p + "WO-1"}, company=company)["items"][0]
     preview = run("work-order complete", work_order=order["id"], expected_version=4, actual_end="2026-09-14T16:30:00Z")
     assert not preview["changed"] and preview["status"] == "complete"
@@ -279,5 +289,6 @@ def test_work_seeds_post_nothing_and_previews_change_nothing(reference_client, c
                   lines=[dict(item="Commercial Example Service", quantity="2", estimated_unit_cost="4.00", markup_percent="25")])
     assert (preview["net_minor_units"], preview["tax_minor_units"]) == (1000, 80)
     assert preview["revision"]["custom_fields"][0]["value"] is True
-    assert work_counts(client, company, prefix) == before
+    assert financial_snapshot(client, company) == before_financial
+    assert work_counts(client, company, prefix) == before_work
     assert client.run("estimate query", {"number": p + "EST-3"}, company=company)["items"][0]["status"] == "draft"

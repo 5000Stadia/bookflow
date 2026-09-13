@@ -9,6 +9,7 @@ from math import lcm
 import pytest
 
 from bookflow import BookflowError
+from tests.demo_oracle import financial_snapshot
 from tests.test_reference_year import demo_runner, page_rows, reference_client, reference_template  # noqa: F401
 from tests.test_service_sales_demo import COMPANIES
 
@@ -179,28 +180,16 @@ def test_progress_chain_exact_installments_rebill_correction_and_lineage(referen
 
 
 @pytest.mark.parametrize("company,prefix", COMPANIES)
-def test_voided_progress_demos_leave_every_old_balance_and_zero_net_effect(reference_client, company, prefix):
+def test_voided_progress_demos_net_to_zero_and_change_nothing_else(reference_client, company, prefix):
     client, _ = reference_client
-    # DEMO's aggregates moved when the seed gained the buying half of its month -- an order
-    # billed and paid, a cheque, a card charge, a card payment, a return credit and a count
-    # adjustment. Recomputed from the report rather than nudged to fit, and each one checked
-    # against what the arc should do: the books still balance (debit == credit), the balance
-    # sheet's difference is still zero, Checking is untouched because that arc funds itself
-    # from the demo's other bank account, A/P settles to the 21.90 return credit still open,
-    # and stock ends at 22 valves valued 240.90 -- 24 ordered less the 2 the count wrote off,
-    # at the order's actual 10.95 rather than the item's standard cost.
-    checking, trial, journals, profit, equity = ((624895, 749354, 14, 119290, 619290) if prefix == "DEMO"
-                                                 else (7267800, 8048639, 36, 6457035, 7457035))
-    assert client.account.show(account="Checking", company=company)["balance"]["minor_units"] == checking
-    assert client.account.show(account="Accounts Receivable", company=company)["balance"]["minor_units"] == 13839
-    assert client.account.show(account="Sales Tax Payable", company=company)["balance"]["minor_units"] == 1604
-    totals = client.report.trial_balance(company=company, date_to="2026-12-31", limit=200)["totals"]
-    assert totals["debit"]["minor_units"] == totals["credit"]["minor_units"] == trial
-    statement = client.report.profit_and_loss(company=company, date_from="2026-01-01", date_to="2026-12-31")
-    sheet = client.report.balance_sheet(company=company, date_to="2026-12-31")
-    assert statement["totals"]["net_income"]["minor_units"] == profit
-    assert (sheet["totals"]["total_equity"]["minor_units"], sheet["totals"]["difference"]["minor_units"]) == (equity, 0)
-    assert client.journal.query(company=company, limit=200)["count"] == journals
+    # What this package claims is about its own installments: each document nets to zero on
+    # every account it touched, and its gross postings are the two halves of a posting and its
+    # reversal. It used to open by asserting Checking, the trial total, the journal count, net
+    # income and total equity as literals -- a claim about the whole company, made here because
+    # a database happened to be open, and broken by every later seed addition. Those totals now
+    # live in one full-company oracle; a package proves its own postings and proves it changed
+    # nothing else.
+    before = financial_snapshot(client, company)
     rows, _ = page_rows(client.report.general_ledger, company=company, date_from="2026-01-01", date_to="2026-12-31", limit=200)
     net, gross = defaultdict(int), defaultdict(int)
     p = prefix + "-PROG-"
@@ -221,3 +210,5 @@ def test_voided_progress_demos_leave_every_old_balance_and_zero_net_effect(refer
     assert preview["dry_run"] and [l["net_minor_units"] for l in preview["revision"]["lines"]] == [10000, even(99 * 25, 100), 25]
     assert client.run("estimate billing", {"estimate": estimate["id"]}, company=company)["remaining_net_minor_units"] == 40199
     assert client.customer.show(customer="Progress Example Customer", company=company)["current_balance"]["minor_units"] == 0
+    # Nothing this test did moved money, previews included.
+    assert financial_snapshot(client, company) == before
