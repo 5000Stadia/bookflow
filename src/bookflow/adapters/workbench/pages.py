@@ -251,9 +251,10 @@ def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
     """Project the authoritative editable object from a show result."""
     if noun == 'item-receipt':
         return dict(date=shown['date'], vendor=shown['profile']['vendor']['id'],
-            ap_account=shown['profile']['ap_account']['id'], memo=shown['memo'], reference=shown['reference'],
+            ap_account=shown['profile']['ap_account']['id'], memo=shown['memo'], reference=shown['reference'], shipping=shown['shipping']['amount'],
             items=[dict(line_id=line['line_id'], item=line['profile']['item']['id'],
-                quantity=line['quantity'], amount=line['amount']['amount'], description=line['description'],
+                quantity=line['quantity'], description=line['description'],
+                **({'unit_cost': Money(line['profile']['unit_cost_minor_units'], shown['total']['currency']).to_dict()['amount']} if line['profile']['unit_cost_minor_units'] is not None else {'amount': line['product_amount']['amount']}),
                 order_line_id=line.get('order_line_id')) for line in shown['items']])
     if noun == "custom-field":
         return {**shown, "scopes": [scope["record_type"] for scope in shown["scopes"]]}
@@ -1641,8 +1642,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             order = run(request, 'purchase-order show', {'purchase_order': shown['purchase_order_id']}, company_id)
             attempted['f:purchase_order_version'] = str(order['version'])
         if noun == 'bill' and shown and shown.get('revision', {}).get('receipts'):
-            for selection, line in zip(shown['revision']['receipts'], shown['revision']['items']):
-                receipt_source_labels[selection['receipt_line']] = line['line_snapshot']['item']['label']
+            for selection in shown['revision']['receipts']:
+                receipt_source_labels[selection['receipt_line']] = selection['item']['label']
         F.project_input_values(cmd.input_model, originals)
         meta = _noun_meta(noun)
         definition = meta.get("definition")

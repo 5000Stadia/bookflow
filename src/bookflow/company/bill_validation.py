@@ -61,6 +61,12 @@ def _item(line, facts):
             'the captured unit cost disagrees with the column')
     require(type(line['quantity_microunits']) is int and 0 < line['quantity_microunits'] <= INT64_MAX,
             'an item line has no positive quantity')
+    if facts.receipt_product_minor_units is not None:
+        product = amount(facts.receipt_product_minor_units)
+        freight = amount(facts.receipt_shipping_minor_units)
+        require(product + freight == line['amount_minor_units'], 'received product/shipping total differs')
+        if facts.receipt_product_unit_cost_minor_units is not None:
+            require(bills.extension(line['quantity_microunits'], facts.receipt_product_unit_cost_minor_units) == product, 'received product rate differs')
     if facts.amount_basis == 'unit_cost':
         require(line['unit_cost_minor_units'] is not None, 'a derived amount names no unit cost')
         amount(line['unit_cost_minor_units'])

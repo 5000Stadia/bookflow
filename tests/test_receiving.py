@@ -192,12 +192,13 @@ def test_persisted_middle_interval_release_reclaim_and_zero_bill(books):
     assert run('item-receipt show',dict(receipt=free['id']))['items'][0]['unbilled_quantity_microunits']==1000000
 
 
-def test_same_writer_claim_race_and_late_failure_leave_exact_state(books, monkeypatch):
+@pytest.mark.parametrize('shipping,final_total', [('0.00',4400),('10.00',4800)])
+def test_same_writer_claim_race_and_late_failure_leave_exact_state(books, monkeypatch, shipping, final_total):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
     from bookflow.company import receipt_billing
     run=books['run']; item=_inventory_part(books)
-    receipt=run('item-receipt post',dict(date='2017-01-05',vendor=books['vendor'],items=[dict(item=item,quantity='10',unit_cost='10.00')]),reason='Receive race stock')
+    receipt=run('item-receipt post',dict(date='2017-01-05',vendor=books['vendor'],shipping=shipping,items=[dict(item=item,quantity='10',unit_cost='10.00')]),reason='Receive race stock')
     raw=dict(date='2017-01-15',receipts=[dict(receipt_line=receipt['items'][0]['id'],expected_receipt_version=1,quantity='6')])
     barrier=Barrier(2)
     def compete(index):
@@ -238,7 +239,7 @@ def test_same_writer_claim_race_and_late_failure_leave_exact_state(books, monkey
             run('bill post',remaining,reason='Injected atomic rollback',idempotency_key='late-failure')
         assert exc.value.code=='E_INTERNAL'
     assert database(path(books))==before
-    assert run('bill post',remaining,reason='Injected atomic rollback',idempotency_key='late-failure')['total_minor_units']==4400
+    assert run('bill post',remaining,reason='Injected atomic rollback',idempotency_key='late-failure')['total_minor_units']==final_total
 
 
 def test_co46_populated_commercial_and_movement_history_is_preserved(tmp_path,monkeypatch):

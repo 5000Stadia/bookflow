@@ -229,3 +229,69 @@ def test_added_purchase_seed_examples_preserve_existing_rows_and_match_exact_sto
                          'Payment Example Bank': -1100, 'Business Credit Card': -2000, 'Accounts Payable': -6400}
     assert sum(v for v in nets.values() if v > 0) == 9500
     assert -sum(v for v in nets.values() if v < 0) == 9500
+
+
+def test_added_shipping_seed_executes_actual_commands_without_duplicate_stock(tmp_path, monkeypatch):
+    from bookflow.commands import hub_cmds
+    captures=('shipping_demo_item','shipping_demo_order','shipping_demo_receipt','shipping_demo_bill')
+    root=tmp_path/'shipping-seed-root'
+    monkeypatch.setenv('BOOKFLOW_DATA_ROOT',str(root))
+    monkeypatch.delenv('BOOKFLOW_COMPANY',raising=False)
+    load_seed,apply_seed=hub_cmds._load_seed,hub_cmds._apply_seed_history
+    evidence={}
+    def load(resource='seed.toml'):
+        seed=load_seed(resource);commands=seed['commands']
+        producers={e['capture']:i for i,e in enumerate(commands) if e.get('capture')}
+        start=producers[captures[0]]
+        assert tuple(e['capture'] for e in commands[start:])==captures
+        needed={i for i,e in enumerate(commands[:start]) if e['command']=='company update'}
+        def include(name):
+            index=producers[name]
+            if index in needed:return
+            needed.add(index)
+            for dependency in re.findall(r'\$\{([a-z][a-z0-9_]*)\.',str(commands[index])):include(dependency)
+        for name in (*CAPTURES,*captures):include(name)
+        assert len(needed)<start
+        return dict(seed,commands=[commands[i] for i in sorted(needed)])
+    def observe(session,context,seed,row):
+        dbpath=session.abs_path(row['path'])/'company.db'
+        def commands():
+            for entry in seed['commands']:
+                if entry.get('capture')==captures[0]:before=snapshot(dbpath)
+                if entry.get('capture')==captures[-1]:before_bill=snapshot(dbpath)
+                yield entry
+            after=snapshot(dbpath)
+            added={}
+            for table in TABLES:
+                assert all(after[table].get(key)==value for key,value in before[table].items()),table
+                added[table]=[r for k,r in after[table].items() if k not in before[table]]
+            assert before['inventory_movements'] and before['posting_lines']
+            assert len(added['transactions'])==len(added['transaction_revisions'])==len(added['posting_batches'])==2
+            assert len(added['posting_lines'])==len(added['posting_line_sources'])==4
+            assert after['inventory_movements']==before_bill['inventory_movements']
+            assert after['purchase_order_receipt_claims']==before_bill['purchase_order_receipt_claims']
+            movement,=added['inventory_movements']
+            line,=added['item_receipt_lines'];claim,=added['receipt_bill_claims']
+            assert (movement['quantity_microunits'],movement['value_minor_units'])==(3000000,3600)
+            assert line['movement_id']==movement['id'] and line['shipping_minor_units']==1200
+            assert (claim['receipt_line_id'],claim['start_microunits'],claim['end_microunits'],claim['original_minor_units'],claim['billed_minor_units'],claim['shipping_minor_units'])==(line['id'],0,2000000,2400,2400,800)
+            assert added['receipt_bill_adjustments']==[]
+            assert added['money_out_documents']==added['payment_components']==added['deposit_components']==[]
+            with sqlite3.connect(dbpath) as db:accounts=dict(db.execute('SELECT id,name FROM accounts'))
+            assert Counter((accounts[x['account_id']],x['debit_minor_units'],x['credit_minor_units']) for x in added['posting_lines'])==Counter([('Inventory Asset',3600,0),('Accounts Payable',0,3600),('Accounts Payable',2400,0),('Accounts Payable',0,2400)])
+            posting={x['id']:x for x in added['posting_lines']}
+            assert Counter(x['posting_line_id'] for x in added['posting_line_sources'])==Counter(posting.keys())
+            for source in added['posting_line_sources']:
+                leg=posting[source['posting_line_id']]
+                assert source['transaction_id']==leg['transaction_id']
+                assert source['amount_minor_units']==max(leg['debit_minor_units'],leg['credit_minor_units'])
+            evidence.update(company=row['id'],receipt=line['receipt_id'],order=added['purchase_orders'][0]['id'])
+        return apply_seed(session,context,dict(seed,commands=commands()),row)
+    monkeypatch.setattr(hub_cmds,'_load_seed',load)
+    monkeypatch.setattr(hub_cmds,'_apply_seed_history',observe)
+    client=bookflow.connect(data_root=str(root));client.init();client.demo.reset()
+    run=demo_runner(client,evidence['company'],'Inspect shipping demo')
+    receipt=run('item-receipt show',receipt=evidence['receipt'])
+    assert receipt['receipt_liability_current']['minor_units']==1200
+    assert receipt['items'][0]['unbilled_quantity_microunits']==1000000
+    assert run('purchase-order show',purchase_order=evidence['order'])['receiving'][0]['remaining_quantity_microunits']==2000000

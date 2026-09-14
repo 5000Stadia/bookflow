@@ -3,9 +3,9 @@ import json
 import sqlalchemy as sa
 from bookflow.company import bills, document_effects as effects, inventory_effects, journals, receiving, schema as c
 from bookflow.company.bill_facts import BillItemProfile
-from bookflow.company.bill_models import ReceiptBillingInput
+from bookflow.company.bill_models import ReceiptBillingInput, ReceiptBillingOutput
 from bookflow.company.journal_models import JournalVoidInput
-from bookflow.company.receiving_intervals import allocate, cumulative
+from bookflow.company.receiving_intervals import allocate, cumulative, component_span
 from bookflow.company.sales_models import money
 from bookflow.core import audit
 from bookflow.core.errors import BookflowError
@@ -34,9 +34,13 @@ def source(s, inp, operation, old_header, old_revision):
             line = prior_lines[line_id]
             receipt_line = effects.rows(s, c.item_receipt_lines, c.item_receipt_lines.c.id == claims[0]['receipt_line_id'])[0]
             header = receiving.resolve(s, receipt_line['receipt_id'])
+            freight = sum(c['shipping_minor_units'] for c in claims)
+            facts = json.loads(line['line_snapshot'])
+            rate = facts.get('receipt_product_unit_cost_minor_units') if freight else line['unit_cost_minor_units']
+            cost = {'unit_cost': {'minor_units': rate, 'currency': old_revision['currency']}} if rate is not None else {'amount': {'minor_units': line['amount_minor_units'] - freight, 'currency': old_revision['currency']}}
             selections.append(ReceiptBillingInput(receipt_line=receipt_line['id'], expected_receipt_version=header['version'],
                 quantity=format_quantity_micro_units(sum(claim['end_microunits'] - claim['start_microunits'] for claim in claims)),
-                amount={'minor_units': line['amount_minor_units'], 'currency': old_revision['currency']}))
+                **cost))
     items, sources, seen = [], [], set()
     vendor = ap = currency = None
     for index, selection in enumerate(selections):
@@ -70,7 +74,11 @@ def source(s, inp, operation, old_header, old_revision):
         if kept:
             old_spans = list(kept.values())[index]
             spans = [(x['start_microunits'], x['end_microunits'], x['original_minor_units']) for x in old_spans]
-        original = sum(span[2] for span in spans)
+        spans = [(a, b, *component_span(line['quantity_microunits'], line['value_minor_units'],
+                    line['shipping_minor_units'], a, b)) for a, b, *_ in spans]
+        original = sum(p + freight for _, _, p, freight in spans)
+        shipping = sum(freight for _, _, _, freight in spans)
+        product_original = original - shipping
         if selection.unit_cost is not None:
             rate = money(selection.unit_cost, currency).minor_units
             amount = bills.extension(qty, rate)
@@ -78,15 +86,19 @@ def source(s, inp, operation, old_header, old_revision):
             rate = None
             amount = money(selection.amount, currency).minor_units
         else:
-            rate, amount = None, original
+            rate, amount = None, product_original
         view = json.loads(line['snapshot'])
         facts = BillItemProfile.model_validate(view['profile']).model_copy(update={
             'quantity_microunits': qty, 'unit_cost_minor_units': rate,
             'amount_basis': 'unit_cost' if rate is not None else 'amount'})
+        if shipping:
+            facts = facts.model_copy(update=dict(amount_basis='amount', unit_cost_minor_units=None,
+                receipt_product_minor_units=amount, receipt_shipping_minor_units=shipping,
+                receipt_product_unit_cost_minor_units=rate))
         stable_id = prior_lines[list(kept)[index]]['line_id'] if kept else None
-        items.append(dict(line_id=stable_id, family='item', amount_minor_units=amount,
+        items.append(dict(line_id=stable_id, family='item', amount_minor_units=amount + shipping,
             memo=view['description'], profile=facts))
-        sources.append(dict(line=line, header=header, spans=spans, amount=amount, quantity=qty,
+        sources.append(dict(line=line, header=header, spans=spans, amount=amount + shipping, product_amount=amount, shipping=shipping, rate=rate, quantity=qty,
                             original=original, vendor_id=vendor))
     if getattr(inp, 'vendor', None) and bills.resolve_party(s.company, 'vendor', inp.vendor)['id'] != vendor:
         raise journals.invalid('vendor', 'must match selected receipts')
@@ -106,12 +118,12 @@ def attach(s, ctx, plan, received):
     repricing = []
     for source, item in zip(received['sources'], items):
         progress = 0
-        for start, end, original in source['spans']:
-            billed = cumulative(source['quantity'], source['amount'], progress + end - start) - cumulative(source['quantity'], source['amount'], progress)
+        for start, end, product, shipping in source['spans']:
+            billed = cumulative(source['quantity'], source['product_amount'], progress + end - start) - cumulative(source['quantity'], source['product_amount'], progress)
             progress += end - start
             claims.append(dict(id=new_id(), receipt_line_id=source['line']['id'], bill_id=header['id'],
                 bill_revision_id=revision['id'], bill_line_id=item['document_line_id'], start_microunits=start,
-                end_microunits=end, original_minor_units=original, billed_minor_units=billed, **provenance))
+                end_microunits=end, original_minor_units=product + shipping, billed_minor_units=billed + shipping, shipping_minor_units=shipping, **provenance))
         target = effects.rows(s, c.inventory_movements, c.inventory_movements.c.id == source['line']['movement_id'])[0]
         repricing.append((target, source['amount'] - source['original'], source['vendor_id']))
     # Price corrections from the superseded bill revision have exact inverses. All
@@ -143,7 +155,11 @@ def attach(s, ctx, plan, received):
         [line for inverse in inverses for line in inverse.data['pending']['posting_lines']],
         [batch for inverse in inverses for batch in inverse.data['pending']['posting_batches']])
     inventory_effects.check(s, stock, [line for inverse in inverses for line in inverse.data['pending']['posting_lines']])
-    plan.preview.revision.receipts = list(received['selections'])
+    plan.preview.revision.receipts = [ReceiptBillingOutput(receipt_line=x['line']['id'], bill_line_id=item['document_line_id'], item=json.loads(item['line_snapshot'])['item'],
+        expected_receipt_version=x['header']['version'], quantity=format_quantity_micro_units(x['quantity']),
+        **({'unit_cost': Money(x['rate'], revision['currency']).to_dict()} if x['rate'] is not None else {'amount': Money(x['product_amount'], revision['currency']).to_dict()}),
+        product_amount=Money(x['product_amount'], revision['currency']).to_dict(), shipping=Money(x['shipping'], revision['currency']).to_dict(),
+        total=Money(x['amount'], revision['currency']).to_dict()) for x, item in zip(received['sources'], items, strict=True)]
     received.update(claims=claims, releases=[dict(id=new_id(), claim_id=claim['id'], **provenance) for claim in received['prior']],
         stock=stock, inverses=inverses, provenance=provenance)
 
@@ -162,8 +178,13 @@ def validate(s, data, indexed, require):
         require(item['amount_minor_units'] == sum(claim['billed_minor_units'] for claim in claims), 'received bill value mapping differs')
         for claim in claims:
             q, v = source['line']['quantity_microunits'], source['line']['value_minor_units']
+            freight = source['line']['shipping_minor_units']
             # Integer half-up endpoint arithmetic, independently read from stored basis.
-            expected = (2*v*claim['end_microunits']+q)//(2*q) - (2*v*claim['start_microunits']+q)//(2*q)
+            def portion(value):
+                return (2*value*claim['end_microunits']+q)//(2*q) - (2*value*claim['start_microunits']+q)//(2*q)
+            expected = portion(v - freight) + portion(freight)
+            require(claim['shipping_minor_units'] == portion(freight), 'retained shipping interval changed')
+            require(claim['billed_minor_units'] >= claim['shipping_minor_units'], 'billed product became negative')
             require(expected == claim['original_minor_units'], 'original interval value changed')
 
 
@@ -226,7 +247,14 @@ def selections_for_revision(s, revision):
     for line_id, claims in grouped.items():
         line = effects.rows(s, c.item_receipt_lines, c.item_receipt_lines.c.id == claims[0]['receipt_line_id'])[0]
         header = receiving.resolve(s, line['receipt_id'])
-        found.append(ReceiptBillingInput(receipt_line=line['id'], expected_receipt_version=header['version'],
+        shipping = sum(x['shipping_minor_units'] for x in claims)
+        product = sum(x['billed_minor_units'] for x in claims) - shipping
+        captured = effects.rows(s, c.purchase_item_lines, c.purchase_item_lines.c.document_line_id == line_id)[0]
+        facts = json.loads(captured['line_snapshot'])
+        rate = facts.get('receipt_product_unit_cost_minor_units') if shipping else captured['unit_cost_minor_units']
+        found.append(ReceiptBillingOutput(receipt_line=line['id'], bill_line_id=line_id, item=facts['item'], expected_receipt_version=header['version'],
             quantity=format_quantity_micro_units(sum(x['end_microunits']-x['start_microunits'] for x in claims)),
-            amount=Money(sum(x['billed_minor_units'] for x in claims), revision['currency']).to_dict()))
+            **({'unit_cost': Money(rate, revision['currency']).to_dict()} if rate is not None else {'amount': Money(product, revision['currency']).to_dict()}),
+            product_amount=Money(product, revision['currency']).to_dict(), shipping=Money(shipping, revision['currency']).to_dict(),
+            total=Money(product + shipping, revision['currency']).to_dict()))
     return found

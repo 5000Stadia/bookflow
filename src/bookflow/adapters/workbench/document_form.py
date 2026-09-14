@@ -596,7 +596,7 @@ def layout(noun, leaves):
     matched = bill and by_path.get('receipts', {}).get('collection', {}).get('values')
     if matched:
         grids.append(_grid('receipts', 'Received goods', by_path['receipts'],
-            (('receipt_line', 'Received item'), ('quantity', 'Qty to bill'), ('unit_cost', 'Actual cost'), ('amount', 'Actual amount')), {}))
+            (('receipt_line', 'Received item'), ('quantity', 'Qty to bill'), ('unit_cost', 'Product cost'), ('amount', 'Product amount')), {}))
         placed.add('items')
     if not transfer:
         primary_lines = by_path.get(primary_path)
@@ -858,7 +858,7 @@ def context(noun, verb, leaves, originals, *, shown=None, result=None, preview=F
     return dict(layout(noun, leaves),
                 noun=noun, verb=verb, title=TITLES[noun],
                 heading=heading(noun, verb, originals),
-                help=('Bill goods already received. Matched item lines transfer receipt-owned Accounts Payable to this bill without receiving inventory again. Price differences correct the receipt date and affected sale costs.' if bill and any(l['path'] == 'receipts' and l.get('collection', {}).get('values') for l in leaves) else HELP[noun]), computed=figures, line_amount=line_amount,
+                help=('Bill goods already received. Matched item lines transfer receipt-owned Accounts Payable to this bill without receiving inventory again. Product costs exclude retained receipt shipping, which is included once in the total. Shipping belongs to the same receipt vendor. Product price differences correct the receipt date and affected sale costs.' if bill and any(l['path'] == 'receipts' and l.get('collection', {}).get('values') for l in leaves) else HELP[noun]), computed=figures, line_amount=line_amount,
                 totals=totals, totals_empty=empty,
                 reconciliation=reconciliation, reconciled=reconciled,
                 preview=preview, creating=verb in ('post', 'create'),

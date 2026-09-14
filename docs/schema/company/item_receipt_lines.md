@@ -15,6 +15,7 @@ Database: `company`.
 | `item_id` | VARCHAR(26) | no | — | — | — | items.id | item id |
 | `quantity_microunits` | BIGINT | no | — | — | — | — | quantity microunits |
 | `value_minor_units` | BIGINT | no | — | — | — | — | value minor units |
+| `shipping_minor_units` | BIGINT | no | — | — | — | — | Captured shipping included in received value; product value is the remainder. |
 | `snapshot` | TEXT | no | — | — | — | — | snapshot |
 | `created_at` | TEXT | no | — | — | — | — | created at |
 | `created_by` | VARCHAR(26) | no | — | — | — | — | created by |

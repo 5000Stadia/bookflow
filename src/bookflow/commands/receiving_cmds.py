@@ -11,8 +11,8 @@ def _write(verb, model):
     def planner(inp, ctx, s):
         return receiving.prepare(s, ctx, inp, verb)
     cmd = command('item-receipt ' + verb, scope='company',
-        description={'post': 'Receive inventory before a vendor bill. Items debit Inventory and credit receipt-owned Accounts Payable. Zero-value quantities are valid. Purchase-order selections require the displayed version and ordered line identities.',
-                     'update': 'Correct a receipt. Omitted items retain captured facts; metadata edits preserve stock and claim identities. Release linked bills before changing physical receipt facts.',
+        description={'post': 'Receive inventory before a vendor bill. Items debit Inventory and credit receipt-owned Accounts Payable. Product unit costs and amounts exclude shipping. Optional Shipping is charged by this vendor and spread by received quantity; product plus shipping posts once. Zero-value quantities are valid. Purchase-order selections require the displayed version and ordered line identities.',
+                     'update': 'Correct a receipt. Omitted items and shipping retain captured facts; enter zero to clear shipping; metadata edits preserve stock and claim identities. Release linked bills before changing physical receipt facts.',
                      'void': 'Void a receipt with a reason, reversing its exact stock and accounting and releasing its own physical order claims. Linked bills and insufficient historical stock refuse the whole change.'}[verb],
         input_model=model, output_model=ReceiptWriteOutput, writes={'company'},
         required_role='standard', capability='ledger.post', accepts_idempotency_key=True,
@@ -30,7 +30,7 @@ def _read(verb, model, output):
     def planner(inp, ctx, s):
         return Plan(receiving.page(s, inp, ctx) if verb == 'query' else getattr(receiving, verb)(s, inp))
     return command('item-receipt ' + verb, scope='company',
-        description='Read captured received goods, their physical identities and remaining unbilled quantities.',
+        description='Read captured received goods, their separately captured product/shipping amounts, physical identities and remaining unbilled quantities.',
         input_model=model, output_model=output, required_role='member', capability='ledger.read',
         positional=[] if verb == 'query' else ['receipt'], error_codes=['E_RECORD_NOT_FOUND', 'E_QUERY_STALE'])(planner)
 
