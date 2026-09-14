@@ -614,6 +614,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             request.state.workbench_company = result
         return result
 
+    Purchases.install_deletion(app, run=run, render=render, page_error=page_error)
+
     def annotations(company_id, noun, record_id, shown, role_view, cred):
         """Project target metadata and existing UI authority; commands own all data access."""
         if not company_id or not record_id:
@@ -1072,7 +1074,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 raw["projection"] = "summary"
             if request.query_params.get("cursor"):
                 raw["cursor"] = request.query_params["cursor"]
-        for field in ("query", "sort", "direction", "date_from", "date_to", "status", "from_currency", "customer", "vendor", "number", "title", "active", "minimum_net", "maximum_net", "due_from", "due_to", "supplier_reference"):
+        for field in ("query", "sort", "direction", "date_from", "date_to", "include_deleted", "status", "from_currency", "customer", "vendor", "number", "title", "active", "minimum_net", "maximum_net", "due_from", "due_to", "supplier_reference"):
             value = request.query_params.get(field)
             if value and field in cmd.input_model.model_fields:
                 # The same typed translator the generated form uses, so a flag arrives
@@ -1100,7 +1102,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             items = Credits.list_rows(noun, items)
         definition = meta.get("definition")
         columns = (list(Credits.COLUMNS[noun]) if noun in Credits.COLUMNS else
-                   ["number", "date", "memo", "total", "status"] if noun == "journal" else
+                   ["number", "date", "memo", "total", "status"] if noun in ("journal", "check", "card-charge") else
                    ["number", "date", "title", "customer_name", "total", "status"] if noun in Work.NOUNS else
                    ["number", "date", "customer_name", "due_date", "total", "status"] if noun in ('invoice', 'sales-receipt') else
                    # A statement charge has no terms and no due date, so the column an invoice
@@ -1171,6 +1173,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             return page_error(request, BookflowError("E_USAGE", message=f"`{noun}` has no show command"))
         show_selector = _record_selector(show, command_noun)
         raw = {show_selector: record_id} if show_selector else {}
+        if command_noun in Document.MONEY_OUT and 'include_deleted' in show.input_model.model_fields:
+            raw['include_deleted'] = request.query_params.get('include_deleted') == '1'
         try:
             # Ask the command whether it reads a revision rather than keeping a list of the
             # nouns that do: a document type added without its name here would silently lose
@@ -1244,6 +1248,32 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 verbs = [v for v in verbs if v.verb not in ('update', 'void')]
                 verbs += [registry.get(purchase_noun + ' ' + verb) for verb in ('update', 'void')
                     if _role_allows(registry.get(purchase_noun + ' ' + verb), role_view, hub_admin=cred.hub_admin)]
+
+        purchase_history = None
+        purchase_history_paging = None
+        if purchase_record:
+            if purchase_record.get('deletion'):
+                visible_record.update(status='deleted', deletion=purchase_record['deletion'])
+            # The owning effective permission output includes role/grant/deny; actual
+            # Delete preview additionally checks activation and any bound principal.
+            effective = run(request, 'membership effective', {'company':company_id}, None)
+            post_bits = [x for x in effective['permissions'] if x['requirement']=={'capability':'ledger.post','threshold':'standard'}]
+            verbs = [v for v in verbs if v.verb!='delete' and not (v.verb in ('post','update','void') and
+                (purchase_record.get('deletion') or (effective['mode']=='policy_v1' and not any(x['admitted'] for x in post_bits))))]
+            if Purchases.delete_allowed(lambda *a,**kw: run(request,*a,**kw), company_id, purchase_noun, purchase_record):
+                verbs.append(registry.get(purchase_noun+' delete'))
+            if request.query_params.get('history')=='1':
+                try:
+                    purchase_history = run(request,purchase_noun+' history',
+                        {purchase_noun.replace('-','_'):record_id,'include_deleted':True,
+                         'limit':F.query_value(registry.get(purchase_noun+' history').input_model,'limit',request.query_params.get('limit','50')),
+                         'cursor':request.query_params.get('cursor')},company_id)
+                except BookflowError as error:
+                    if error.code == 'E_QUERY_STALE':
+                        restart = request.url.path + '?' + urlencode([(k,v) for k,v in request.query_params.multi_items() if k not in Paging.CARRIED])
+                        return render('error.html',request,error=error.to_dict(),restart_url=restart)
+                    return page_error(request,error)
+                purchase_history_paging = Paging.controls(request.url.path,request.query_params,purchase_history['next_cursor'])
 
         definition = meta.get("definition")
         display_field = definition.display_field if definition is not None else meta.get("display_field")
@@ -1319,7 +1349,7 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       sale=Sales.detail_context(out, company_id) if command_noun in ('invoice', 'sales-receipt') else None,
                       bill=Bills.detail_context(out, company_id) if command_noun == 'bill' else None,
                       purchase=Purchases.detail_context(purchase_record) if purchase_record else None,
-                      purchase_noun=purchase_noun,
+                      purchase_noun=purchase_noun, purchase_history=purchase_history, purchase_history_paging=purchase_history_paging,
                       credit=Credits.detail_context(command_noun, out, company_id) if command_noun in Credits.NOUNS else None,
                       audit_undo=audit_undo, contact_copy=contact_copy, workspace=workspace,
                       annotations=annotation_context,
@@ -2038,7 +2068,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
             except BookflowError as error:
                 return page_error(request, error)
             if owned:
-                return RedirectResponse(f'/c/{company_id}/{owned[0]}/{owned[1]["id"]}/{verb}', status_code=303)
+                suffix='?include_deleted=1&history=1' if owned[1].get('deletion') else '/'+verb
+                return RedirectResponse(f'/c/{company_id}/{owned[0]}/{owned[1]["id"]}'+suffix, status_code=303)
         return form_page(request, company_id, noun, verb, record_id)
 
     def submit(request: Request, company_id: str | None, noun: str, verb: str, record_id: str | None, form: dict[str, str]):

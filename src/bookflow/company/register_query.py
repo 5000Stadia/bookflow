@@ -69,6 +69,7 @@ class RegisterQueryOutput(reports.Page):
 
 
 class _Cursor(reports.StrictModel):
+    hidden_balance: int = 0
     version: Literal[1] = 1
     account_id: str
     company_id: str
@@ -178,7 +179,25 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
         report_input = reports.GeneralLedgerInput(account=account['id'], date_from=inp.date_from,
             date_to=inp.date_to, basis=inp.basis, limit=inp.limit,
             cursor=previous.report_cursor if previous else None)
-        result = reports.general_ledger(report_input, s, principal_id=principal_id)
+        hidden_balance = previous.hidden_balance if previous else 0
+        while True:
+            result = reports.general_ledger(report_input, s, principal_id=principal_id)
+            deleted = set()
+            if sa.inspect(db.conn).has_table('purchase_deletions'):
+                deleted = set(db.conn.execute(sa.select(schema.purchase_deletions.c.transaction_id).where(
+                    schema.purchase_deletions.c.transaction_id.in_({row.transaction_id for row in result.rows if row.transaction_id}))).scalars())
+            visible = []
+            for row in result.rows:
+                if row.transaction_id in deleted:
+                    hidden_balance += row.debit.minor_units - row.credit.minor_units
+                else:
+                    visible.append(row.model_copy(update={'signed_balance': reports.money(
+                        row.signed_balance.minor_units - hidden_balance, currency)}))
+            result = result.model_copy(update={'rows': visible})
+            if visible or not result.next_cursor:
+                break
+            report_input = report_input.model_copy(update={'cursor': result.next_cursor})
+
         revision_ids = {row.revision_id for row in result.rows if row.revision_id is not None}
         summaries = _revision_summaries(db, revision_ids, account['id'], info)
         cheques = _check_numbers(db, {row.transaction_id for row in result.rows
@@ -220,7 +239,7 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
         next_cursor = None
         if result.next_cursor:
             next_cursor = _encode(_Cursor(account_id=account['id'], company_id=company,
-                query=query_hash, permissions=permissions, display=display, report_cursor=result.next_cursor), db)
+                query=query_hash, permissions=permissions, display=display, report_cursor=result.next_cursor, hidden_balance=hidden_balance), db)
         return RegisterQueryOutput(account=RegisterAccount(
                 id=account['id'], label=_label(account, info), name=account['name'], full_name=account['full_name'],
                 number=account['number'], type=account['type'], normal_balance=side,

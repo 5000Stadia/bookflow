@@ -1,9 +1,11 @@
 {% set document = purchase.document %}
 {% set funding = purchase.funding %}
+{% if record.deletion %}<section class="workspace-card" aria-label="Deleted purchase"><h2>Deleted purchase — retained history</h2><p>{{ record.deletion.reason }}</p><p>Deleted {{ record.deletion.created_at }} by {{ record.deletion.created_by_name or record.deletion.created_by }} via {{ record.deletion.created_via }}{% if record.deletion.principal_id %} · Principal {{ record.deletion.principal_name or record.deletion.principal_id }}{% endif %}.</p><p>Original details and check numbering remain reserved. This purchase cannot be edited or restored.</p></section>{% endif %}
 <section class="workspace-card document-detail" aria-label="Recorded purchase">
 <h2>{{ purchase.title }}{% if document.check_number %} {{ document.check_number }}{% endif %}</h2>
 <p>{{ purchase.revision.date }} · {{ document.amount.amount }} {{ document.currency }} · {{ record.status|capitalize }} · Revision {{ purchase.revision.revision_number }}</p>
 <p>{{ funding.account_snapshot.full_name or funding.account_snapshot.name }}{% if funding.party_name %} · Payee: {{ funding.party_name }}{% endif %}</p>
+{% if purchase.revision.memo %}<p>{{ purchase.revision.memo }}</p>{% endif %}
 {% if document.amount.minor_units == 0 %}<p>No payment was made.</p>{% endif %}
 <p>Items {{ document.item_total.amount }} + Expenses {{ document.expense_total.amount }} = {{ document.amount.amount }} {{ document.currency }}</p>
 {% if document['items'] %}

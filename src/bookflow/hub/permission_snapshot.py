@@ -56,6 +56,8 @@ def _parse(raw, field):
 
 
 def _decode(value, annotation, field, *, native=False):
+    if native and annotation is c.Catalog and c._validated_descriptor(value):
+        return value
     origin, args = get_origin(annotation), get_args(annotation)
     if origin in (Union, UnionType):
         for option in args:

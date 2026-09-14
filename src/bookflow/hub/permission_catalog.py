@@ -157,6 +157,8 @@ def _field_types(annotation):
 
 
 def _check(value, annotation, field='input'):
+    if annotation is Catalog and _validated_descriptor(value):
+        return
     origin, args = get_origin(annotation), get_args(annotation)
     if origin in (Union, UnionType):
         for option in args:
@@ -240,6 +242,13 @@ def _descriptor_key(value):
 
 _VALIDATED_DESCRIPTORS = OrderedDict()
 _DESCRIPTOR_LOCK = RLock()
+
+
+def _validated_descriptor(value):
+    """Only the same retained, fully validated immutable catalog can skip its shape walk."""
+    with _DESCRIPTOR_LOCK:
+        found = _VALIDATED_DESCRIPTORS.get(id(value))
+        return found is not None and found[0] is value
 
 
 def _normal_catalog(catalog):
@@ -331,6 +340,12 @@ def catalog_manifest(catalog: Catalog, standalone_names: tuple[str, ...] = ()) -
     _unique(standalone_names, lambda x:x, 'standalone_names')
     if set(standalone_names) & {x.name for x in c.commands}:
         _fail('invalid_catalog', 'standalone_names')
+    return _catalog_manifest(c, standalone_names)
+
+
+@lru_cache(maxsize=32)
+def _catalog_manifest(c, standalone_names):
+    # Both arguments have passed strict validation above; no mutable root state.
     raw = json.dumps(asdict(c), sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode()
     return CatalogManifest(c.version, tuple(x.name for x in c.commands), tuple(sorted(standalone_names)),
         tuple(x.name for x in c.capabilities), _requirements(c, True), _requirements(c),

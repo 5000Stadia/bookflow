@@ -22,7 +22,7 @@
 <label><input type="checkbox" name="allow_post" {% if values.allow_post %}checked{% endif %}>Allow posting, editing and voiding at the assigned role</label>
 <label><input type="checkbox" name="check_delete" {% if values.check_delete %}checked{% endif %}>Grant check deletion</label>
 <label><input type="checkbox" name="card_delete" {% if values.card_delete %}checked{% endif %}>Grant credit card charge deletion</label>
-</fieldset><p>Deletion requires at least Standard and permission to read. It does not require permission to post. These deletion permissions are saved, but deleting checks and card charges is not available yet. A deny at either company or organization wins. Reducing permissions may require connected agents to be authorized again.</p>
+</fieldset><p>Deletion requires at least Standard and permission to read. It does not require permission to post. Open a saved check or credit card charge to preview deletion when these grants are active. A deny at either company or organization wins. Reducing permissions may require connected agents to be authorized again.</p>
 <label>Reason<input name="reason" value="{{ values.reason or '' }}" maxlength="140"></label>
 <button name="action" value="preview">Preview permissions</button><button name="action" value="save">Save permissions</button>{% if values.expected_version|int > 0 %}<button name="action" value="revoke">Revoke this company membership</button>{% endif %}
 </form>{% endif %}{% endif %}

@@ -428,7 +428,7 @@
         $('register-period-totals').append(label + ' ', node('span', money(result.totals[key]), 'register-money'), key === 'closing' ? '' : ' · ');
       }
       $('register-metadata').textContent = `Period snapshot: ${metadata(result.metadata)} · ${result.metadata.currency} · ${result.metadata.basis} · report ${result.metadata.report_version} · schema ${result.metadata.schema_revision}`;
-      $('register-query-error').textContent = result.rows.length ? '' : 'No movements in this period.';
+      $('register-query-error').textContent = $('register-history').tBodies[0].rows.length || nextCursor ? '' : 'No visible movements in this period.';
     } catch (e) {
       if (epoch !== queryEpoch) return;
       if (more && e.code === 'E_QUERY_STALE') {

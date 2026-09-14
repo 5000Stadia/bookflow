@@ -269,8 +269,8 @@ for _noun, _selector, _account in (('check', 'check', 'Checking'),
         {'account': _account.strip('"'), 'date_from': '2026-01-01', 'date_to': '2026-12-31',
          'limit': 25})
     EXAMPLES[_noun + ' history'] = Example(
-        f'bookflow {_noun} history {ID} --limit 25 --company "Demo Plumbing Co" --json',
-        {_selector: ID, 'limit': 25})
+        f'bookflow {_noun} history {ID} --include-deleted --limit 25 --company "Demo Plumbing Co" --json',
+        {_selector: ID, 'limit': 25, 'include_deleted': True})
 
 EXAMPLES.update({
     'transfer show': Example(f'bookflow transfer show {ID} --company "Demo Plumbing Co" --json',

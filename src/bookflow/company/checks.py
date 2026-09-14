@@ -246,13 +246,38 @@ def _output(journal_output, summary):
 # ---------------------------------------------------------------- reads
 
 
+def _deletion(s, header, include_deleted):
+    from bookflow.company.check_models import PurchaseDeletionInfo
+    # Historical fixture coordinators still read before the additive migration.
+    if not sa.inspect(s.company.conn).has_table('purchase_deletions'):
+        return None
+    row = s.company.conn.execute(sa.select(c.purchase_deletions).where(
+        c.purchase_deletions.c.transaction_id == header['id'])).mappings().first()
+    if row is None:
+        return None
+    if not include_deleted:
+        raise BookflowError('E_RECORD_NOT_FOUND', details={'record_type': 'purchase', 'selector': header['id']})
+    from bookflow.company.info import principal_names
+    names = principal_names(s.company, {value for value in (row['created_by'], row['principal_id']) if value})
+    return PurchaseDeletionInfo(**{key: row[key] for key in PurchaseDeletionInfo.model_fields if key in row},
+        created_by_name=names.get(row['created_by']), principal_name=names.get(row['principal_id']))
+
+
+def _visible_summary(s, header, revision, include_deleted):
+    result = journals.summary(header, revision)
+    deletion = _deletion(s, header, include_deleted)
+    if deletion:
+        result.update(status='deleted', deletion=deletion)
+    return result
+
+
 def show(s, inp, noun):
     header = money_out.resolve(s, getattr(inp, SELECTOR[noun]), noun)
     requested = journals.revision(s, header, inp.revision_number)
     # The number this revision was written with, not the one the cheque carries today: a
     # correction that renumbered it must not rewrite what the earlier revision said.
     numbers = money_out.check_numbers_of(s, noun, [requested['id']])
-    return MoneyOutOutput(**journals.summary(header, requested),
+    return MoneyOutOutput(**_visible_summary(s, header, requested, inp.include_deleted),
                           revision=journals.revision_output(s, requested),
                           document=document(s, noun, header, money_out.lines(s, requested),
                                             numbers.get(requested['id'])))
@@ -293,6 +318,8 @@ def page(s, ctx, inp, noun):
         .outerjoin(profile, profile.c.revision_id == r.c.id))
         .where(m.c.kind == money_out.KIND[noun], captured('side') == 'credit',
             sa.func.json_extract(captured('account_snapshot'), '$.type') == FUNDING_TYPE[noun]))
+    if not inp.include_deleted and sa.inspect(s.company.conn).has_table('purchase_deletions'):
+        query = query.where(~sa.exists(sa.select(c.purchase_deletions.c.transaction_id).where(c.purchase_deletions.c.transaction_id == t.c.id)))
     if inp.date_from:
         query = query.where(r.c.date >= inp.date_from)
     if inp.date_to:
@@ -314,7 +341,7 @@ def page(s, ctx, inp, noun):
     grouped = money_out.lines_by_revision(s, [revision['id'] for _, revision in pairs])
     numbers = money_out.check_numbers_of(s, noun, [revision['id'] for _, revision in pairs])
     return MoneyOutPageOutput(items=[
-        MoneyOutSummaryOutput(**journals.summary(header, revision),
+        MoneyOutSummaryOutput(**_visible_summary(s, header, revision, inp.include_deleted),
                               document=document(s, noun, header, grouped[revision['id']],
                                                 numbers.get(revision['id'])))
         for header, revision in pairs], **shared)
@@ -322,6 +349,7 @@ def page(s, ctx, inp, noun):
 
 def history(s, ctx, inp, noun):
     header = money_out.resolve(s, getattr(inp, SELECTOR[noun]), noun)
+    deletion = _deletion(s, header, inp.include_deleted)
     found, shared, grouped = money_out.history_page(s, ctx, inp, noun, header)
     numbers = money_out.check_numbers_of(s, noun, [revision['id'] for revision in found])
     items = []
@@ -332,7 +360,7 @@ def history(s, ctx, inp, noun):
                                                    numbers.get(revision['id']))))
     return MoneyOutHistoryOutput(
         **{key: header[key] for key in ('id', 'version', 'current_revision_id', 'number', 'status')},
-        items=items, **shared)
+        **({'deletion': deletion} if deletion else {}), items=items, **shared).model_copy(update={'status': 'deleted'} if deletion else {})
 
 
 # ---------------------------------------------------------------- writes

@@ -9,7 +9,7 @@ from bookflow.core.money import Money
 def owning_record(run, company_id, transaction_id, revision_number=None):
     """Resolve only explicit purchase markers through the owning read commands."""
     for noun, selector in (('check', 'check'), ('card-charge', 'card_charge')):
-        raw = {selector: transaction_id}
+        raw = {selector: transaction_id, 'include_deleted': True}
         if revision_number is not None:
             raw['revision_number'] = revision_number
         try:
@@ -70,3 +70,72 @@ def detail_context(record):
                     if item['profile']['unit_cost_minor_units'] is not None else None)
                for item in document['items']],
         expenses=[line for line in record['revision']['lines'][1:] if line['line_id'] not in ids])
+
+
+def delete_allowed(run, company_id, noun, record):
+    """Ask the real command, including activation and bound-principal admission."""
+    if record.get('deletion'):
+        return False
+    try:
+        run(noun+' delete', {noun.replace('-','_'): record['id'], 'expected_version':record['version']},
+            company_id, headers={'X-Bookflow-Reason':'Preview purchase deletion'}, dry_run=True)
+        return True
+    except BookflowError as error:
+        # Business refusals belong on confirmation; they do not remove authority.
+        return error.code in ('E_PERIOD_CLOSED','E_RECONCILIATION_DEPENDENCY','E_DEPOSIT_DEPENDENCY','E_VALIDATION','E_VERSION_CONFLICT')
+
+
+def install_deletion(app, *, run, render, page_error):
+    from fastapi import Request
+    from fastapi.responses import RedirectResponse, Response
+    from bookflow.core.ids import new_id
+
+    def redirect(request,location):
+        if request.headers.get('hx-request','').lower()=='true':
+            return Response(status_code=200,headers={'HX-Redirect':location})
+        return RedirectResponse(location,status_code=303)
+
+    def routes(noun):
+        selector=noun.replace('-','_')
+        def display(request,company_id,record_id,values=None,result=None,error=None):
+            record=run(request,noun+' show',{selector:record_id,'include_deleted':True},company_id)
+            if record.get('deletion') and error is None:
+                return redirect(request,f'/c/{company_id}/{noun}/{record_id}?include_deleted=1')
+            if values is None and not delete_allowed(lambda *a,**kw:run(request,*a,**kw),company_id,noun,record):
+                raise BookflowError('E_PERMISSION')
+            values=values if values is not None else dict(expected_version=record['version'],operation_key=new_id(),reason='')
+            return render('purchase_delete.html',request,company_id=company_id,noun=noun,record=record,
+                purchase=detail_context(record),values=values,result=result,error=error,
+                status_code=409 if error and error['code']=='E_VERSION_CONFLICT' else 400 if error else 200)
+        def get(company_id:str,record_id:str,request:Request):
+            try:return display(request,company_id,record_id)
+            except BookflowError as error:return page_error(request,error,company_id=company_id)
+        async def post(company_id:str,record_id:str,request:Request):
+            values=dict(await request.form())
+            try:
+                action=values.get('action')
+                if action not in ('preview','delete','refresh'):
+                    raise BookflowError('E_VALIDATION',message='Choose Preview, Delete purchase or Reload current purchase.')
+                if action=='refresh':
+                    current=run(request,noun+' show',{selector:record_id,'include_deleted':True},company_id)
+                    values['expected_version']=current['version']
+                    values.pop('confirmed',None)
+                    return display(request,company_id,record_id,values)
+                if action=='delete' and values.get('confirmed')!='yes':
+                    raise BookflowError('E_VALIDATION',message='Confirm cancellation before deleting this purchase.')
+                try:version=int(values.get('expected_version',''))
+                except ValueError:raise BookflowError('E_VALIDATION',message='Reload the purchase to read its current version.') from None
+                result=run(request,noun+' delete',{selector:record_id,'expected_version':version,
+                    'operation_key':values.get('operation_key') or None},company_id,
+                    headers={'X-Bookflow-Reason':values.get('reason','')},dry_run=action=='preview')
+                if action=='delete':return redirect(request,f'/c/{company_id}/{noun}?deleted={record_id}')
+                return display(request,company_id,record_id,values,result=result)
+            except BookflowError as error:
+                try:return display(request,company_id,record_id,values,error=error.to_dict())
+                except BookflowError as refused:return page_error(request,refused,company_id=company_id)
+        def history(company_id:str,record_id:str):
+            return RedirectResponse(f'/c/{company_id}/{noun}/{record_id}?include_deleted=1&history=1',status_code=303)
+        app.add_api_route(f'/c/{{company_id}}/{noun}/{{record_id}}/delete',get,methods=['GET'])
+        app.add_api_route(f'/c/{{company_id}}/{noun}/{{record_id}}/delete',post,methods=['POST'])
+        app.add_api_route(f'/c/{{company_id}}/{noun}/{{record_id}}/history',history,methods=['GET'])
+    for noun in ('check','card-charge'):routes(noun)

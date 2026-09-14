@@ -186,11 +186,13 @@ class CardChargeVoidInput(_Input):
 
 
 class CheckShowInput(_Input):
+    include_deleted: bool = Field(default=False, description='Include retained deleted purchases and their deletion attribution; ordinary reads omit them.')
     check: _Selector
     revision_number: _Version | None = None
 
 
 class CardChargeShowInput(_Input):
+    include_deleted: bool = Field(default=False, description='Include retained deleted purchases and their deletion attribution; ordinary reads omit them.')
     card_charge: _Selector
     revision_number: _Version | None = None
 
@@ -201,6 +203,7 @@ class MoneyOutPageInput(_Input):
 
 
 class _MoneyOutQuery(MoneyOutPageInput):
+    include_deleted: bool = Field(default=False, description='Include retained deleted purchases and their deletion attribution; ordinary reads omit them.')
     date_from: _Date | None = None
     date_to: _Date | None = None
     status: Literal['posted', 'voided'] | None = None
@@ -233,10 +236,12 @@ class CardChargeQueryInput(_MoneyOutQuery):
 
 
 class CheckHistoryInput(MoneyOutPageInput):
+    include_deleted: bool = Field(default=False, description='Include retained deleted purchases and their deletion attribution; ordinary reads omit them.')
     check: _Selector
 
 
 class CardChargeHistoryInput(MoneyOutPageInput):
+    include_deleted: bool = Field(default=False, description='Include retained deleted purchases and their deletion attribution; ordinary reads omit them.')
     card_charge: _Selector
 
 
@@ -271,7 +276,21 @@ class MoneyOutSummary(_Input):
     check_number: str | None = None
 
 
+class PurchaseDeletionInfo(_Input):
+    created_by_name: str | None = None
+    principal_name: str | None = None
+    created_at: str
+    created_by: str
+    principal_id: str | None
+    created_via: str
+    reason: str
+    from_status: Literal['posted', 'voided']
+    cancellation_batch_id: str | None
+
+
 class MoneyOutOutput(JournalOutput):
+    status: Literal['posted', 'voided', 'deleted']
+    deletion: PurchaseDeletionInfo | None = Field(default=None, exclude_if=lambda v: v is None)
     document: MoneyOutSummary
 
 
@@ -280,6 +299,8 @@ class MoneyOutWriteOutput(JournalWriteOutput):
 
 
 class MoneyOutSummaryOutput(JournalSummaryOutput):
+    status: Literal['posted', 'voided', 'deleted']
+    deletion: PurchaseDeletionInfo | None = Field(default=None, exclude_if=lambda v: v is None)
     """One row of a money-out list: the journal header with the document's own footer."""
 
     document: MoneyOutSummary
@@ -300,11 +321,12 @@ class MoneyOutPageOutput(_Input):
 
 
 class MoneyOutHistoryOutput(_Input):
+    deletion: PurchaseDeletionInfo | None = Field(default=None, exclude_if=lambda v: v is None)
     id: str
     version: int
     current_revision_id: str
     number: str
-    status: Literal['posted', 'voided']
+    status: Literal['posted', 'voided', 'deleted']
     items: list[MoneyOutRevisionSummaryOutput]
     count: int
     has_more: bool

@@ -58,3 +58,23 @@ def test_current_conditional_resource_inventory_and_purchase_examples():
         cmd=registry.get(noun+' delete')
         assert cmd.explicit_grant_only and cmd.permanent_recovery
         assert cmd.input_model.model_validate(EXAMPLES[cmd.name].input).expected_version==1
+
+
+def test_manifest_and_native_shape_reuse_only_validated_immutable_descriptors():
+    from dataclasses import replace
+    import pytest
+    from bookflow.hub import permission_snapshot as snapshot
+    good=build.CATALOG
+    expected=c.catalog_manifest(good)
+    assert snapshot._decode(good,c.Catalog,'catalog',native=True) is good
+    assert c._check(good,c.Catalog) is None
+    assert c.catalog_manifest(replace(good))==expected
+    # True == 1 at Python equality must not let an unvalidated descriptor alias
+    # the cached valid manifest or the native shape check.
+    wrong=replace(good,commands=(replace(good.commands[0],available=1),*good.commands[1:]))
+    for check in (lambda:c.catalog_manifest(wrong),lambda:c._check(wrong,c.Catalog)):
+        with pytest.raises(c.PolicyInputError):check()
+    with pytest.raises(snapshot.SnapshotError):snapshot._decode(wrong,c.Catalog,'catalog',native=True)
+    changed=replace(good,commands=(replace(good.commands[0],available=False),*good.commands[1:]))
+    assert c.catalog_manifest(changed).descriptor_sha256!=expected.descriptor_sha256
+    with pytest.raises(c.PolicyInputError):c.catalog_manifest(good,["not-a-tuple"])

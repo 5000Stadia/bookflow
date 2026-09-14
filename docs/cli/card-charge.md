@@ -150,7 +150,7 @@ Page a credit card charge’s immutable revisions in revision-number order, each
 
 ### CLI
 
-`bookflow card-charge history 01ARZ3NDEKTSV4RRFFQ69G5FAV --limit 25 --company "Demo Plumbing Co" --json`
+`bookflow card-charge history 01ARZ3NDEKTSV4RRFFQ69G5FAV --include-deleted --limit 25 --company "Demo Plumbing Co" --json`
 
 ### Input
 
@@ -158,6 +158,7 @@ Page a credit card charge’s immutable revisions in revision-number order, each
 |---|---|---|---|---|---|---|
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `include_deleted` | `--include-deleted` | boolean | no | no | false | Include retained deleted purchases and their deletion attribution; ordinary reads omit them. |
 | `card_charge` | `CARD_CHARGE` | string | yes | no | — | minimum length 1 |
 
 ### Command and context options
@@ -186,11 +187,21 @@ Send the input object as JSON. Authentication may instead come from a browser se
 
 | JSON field | Type | Required | Nullable | Default | Description |
 |---|---|---|---|---|---|
+| `deletion` | object \| null | no | yes | null | — |
+| `deletion.created_by_name` | string \| null | no | yes | null | — |
+| `deletion.principal_name` | string \| null | no | yes | null | — |
+| `deletion.created_at` | string | yes | no | — | — |
+| `deletion.created_by` | string | yes | no | — | — |
+| `deletion.principal_id` | string \| null | yes | yes | — | — |
+| `deletion.created_via` | string | yes | no | — | — |
+| `deletion.reason` | string | yes | no | — | — |
+| `deletion.from_status` | literal["posted", "voided"] | yes | no | — | — |
+| `deletion.cancellation_batch_id` | string \| null | yes | yes | — | — |
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
 | `number` | string | yes | no | — | — |
-| `status` | literal["posted", "voided"] | yes | no | — | — |
+| `status` | literal["posted", "voided", "deleted"] | yes | no | — | — |
 | `items` | array[object] | yes | no | — | — |
 | `items[].id` | string | yes | no | — | — |
 | `items[].created_at` | string | yes | no | — | — |
@@ -824,6 +835,7 @@ Page credit card charges in accounting-date and stable-id order, oldest first or
 |---|---|---|---|---|---|---|
 | `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
 | `cursor` | `--cursor` | string \| null | no | yes | null | — |
+| `include_deleted` | `--include-deleted` | boolean | no | no | false | Include retained deleted purchases and their deletion attribution; ordinary reads omit them. |
 | `date_from` | `--date-from` | string \| null | no | yes | null | — |
 | `date_to` | `--date-to` | string \| null | no | yes | null | — |
 | `status` | `--status` | literal["posted", "voided"] \| null | no | yes | null | — |
@@ -872,7 +884,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].type` | literal["journal_entry"] | yes | no | — | — |
 | `items[].number` | string | yes | no | — | — |
 | `items[].current_revision_id` | string | yes | no | — | — |
-| `items[].status` | literal["posted", "voided"] | yes | no | — | — |
+| `items[].status` | literal["posted", "voided", "deleted"] | yes | no | — | — |
 | `items[].voided_at` | string \| null | yes | yes | — | — |
 | `items[].voided_by` | string \| null | yes | yes | — | — |
 | `items[].void_reason` | string \| null | yes | yes | — | — |
@@ -895,6 +907,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].debit_minor_units` | integer | yes | no | — | — |
 | `items[].credit_minor_units` | integer | yes | no | — | — |
 | `items[].currency` | string | yes | no | — | — |
+| `items[].deletion` | object \| null | no | yes | null | — |
+| `items[].deletion.created_by_name` | string \| null | no | yes | null | — |
+| `items[].deletion.principal_name` | string \| null | no | yes | null | — |
+| `items[].deletion.created_at` | string | yes | no | — | — |
+| `items[].deletion.created_by` | string | yes | no | — | — |
+| `items[].deletion.principal_id` | string \| null | yes | yes | — | — |
+| `items[].deletion.created_via` | string | yes | no | — | — |
+| `items[].deletion.reason` | string | yes | no | — | — |
+| `items[].deletion.from_status` | literal["posted", "voided"] | yes | no | — | — |
+| `items[].deletion.cancellation_batch_id` | string \| null | yes | yes | — | — |
 | `items[].document` | object | yes | no | — | — |
 | `items[].document.kind` | literal["check", "card_charge"] | yes | no | — | — |
 | `items[].document.account_id` | string | yes | no | — | — |
@@ -1022,6 +1044,7 @@ Show a credit card charge: its current or a selected earlier revision, the card 
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
+| `include_deleted` | `--include-deleted` | boolean | no | no | false | Include retained deleted purchases and their deletion attribution; ordinary reads omit them. |
 | `card_charge` | `CARD_CHARGE` | string | yes | no | — | minimum length 1 |
 | `revision_number` | `--revision-number` | integer \| null | no | yes | null | — |
 
@@ -1062,7 +1085,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `type` | literal["journal_entry"] | yes | no | — | — |
 | `number` | string | yes | no | — | — |
 | `current_revision_id` | string | yes | no | — | — |
-| `status` | literal["posted", "voided"] | yes | no | — | — |
+| `status` | literal["posted", "voided", "deleted"] | yes | no | — | — |
 | `voided_at` | string \| null | yes | yes | — | — |
 | `voided_by` | string \| null | yes | yes | — | — |
 | `void_reason` | string \| null | yes | yes | — | — |
@@ -1190,6 +1213,16 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].original_currency` | string \| null | yes | yes | — | — |
 | `revision.lines[].rate_used` | string \| null | yes | yes | — | — |
 | `revision.lines[].rate_source` | string \| null | yes | yes | — | — |
+| `deletion` | object \| null | no | yes | null | — |
+| `deletion.created_by_name` | string \| null | no | yes | null | — |
+| `deletion.principal_name` | string \| null | no | yes | null | — |
+| `deletion.created_at` | string | yes | no | — | — |
+| `deletion.created_by` | string | yes | no | — | — |
+| `deletion.principal_id` | string \| null | yes | yes | — | — |
+| `deletion.created_via` | string | yes | no | — | — |
+| `deletion.reason` | string | yes | no | — | — |
+| `deletion.from_status` | literal["posted", "voided"] | yes | no | — | — |
+| `deletion.cancellation_batch_id` | string \| null | yes | yes | — | — |
 | `document` | object | yes | no | — | — |
 | `document.kind` | literal["check", "card_charge"] | yes | no | — | — |
 | `document.account_id` | string | yes | no | — | — |
