@@ -20,7 +20,7 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, model_serializer, model_validator
 
 from bookflow.commands.common import CommonOut
-from bookflow.company.bill_facts import BillExpenseProfile, BillItemProfile, BillProfile
+from bookflow.company.bill_facts import BillExpenseProfile, BillItemProfile, BillProfile, Reference
 from bookflow.company.custom_fields import CustomFieldKindExpectations, CustomFieldValuePatch
 from bookflow.company.journal_custom_fields import SnapshotField
 from bookflow.company.journal_models import (
@@ -148,14 +148,22 @@ class ReceiptBillingInput(_Input):
     receipt_line: _Selector
     expected_receipt_version: _Version
     quantity: Quantity
-    unit_cost: str | SalesMoneyInput | None = None
-    amount: str | SalesMoneyInput | None = None
+    unit_cost: str | SalesMoneyInput | None = Field(default=None, description='Product unit cost only, excluding retained receipt shipping.')
+    amount: str | SalesMoneyInput | None = Field(default=None, description='Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value.')
 
     @model_validator(mode='after')
     def basis(self):
         if self.unit_cost is not None and self.amount is not None:
             raise ValueError('give unit_cost or amount, not both')
         return self
+
+class ReceiptBillingOutput(ReceiptBillingInput):
+    bill_line_id: str
+    item: Reference
+    shipping: MoneyOutput
+    product_amount: MoneyOutput
+    total: MoneyOutput
+
 
 
 class BillPostInput(_BillFields):
@@ -413,7 +421,7 @@ class BillRevisionSummaryOutput(CreatedOutput):
 
 
 class BillRevisionOutput(BillRevisionSummaryOutput):
-    receipts: list[ReceiptBillingInput] = Field(default_factory=list)
+    receipts: list[ReceiptBillingOutput] = Field(default_factory=list)
     issuer_snapshot: dict[str, str | None]
     custom_fields_snapshot: dict[str, SnapshotField]
     custom_fields: list[SnapshotField]

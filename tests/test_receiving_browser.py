@@ -1,4 +1,4 @@
-"""Received goods and linked bills through the generated desktop/phone GUI."""
+"""Received cost allocation and linked bills through the generated desktop/phone GUI."""
 import base64
 from pathlib import Path
 import pytest
@@ -25,18 +25,26 @@ def test_receive_from_po_then_bill_received_goods(register_browser, width):
     b.wait_for('!!document.querySelector("[data-collection-path=items] [data-collection-item]")')
     _fill(b,'f:date','2026-03-05')
     _fill(b,field(b,'items','quantity'),'6')
+    if width == 390:
+        _fill(b,'f:shipping','-0.01')
+        _act(b,'preview')
+        assert b.evaluate('document.getElementsByName("f:shipping")[0].value') == '-0.01'
+        assert b.evaluate('!!document.querySelector(".error")')
+    _fill(b,'f:shipping','12.00')
     _act(b,'preview')
     assert not b.evaluate('document.querySelector(".error")?.textContent')
     _click(b,'submit')
     b.wait_for('location.pathname.includes("/item-receipt/") && !location.pathname.endsWith("/post")')
     receipt_id=b.evaluate('location.pathname').rsplit('/',1)[-1]
     receipt=run('item-receipt.show',dict(receipt=receipt_id))
-    assert receipt['total']['minor_units']==6000
+    assert receipt['total']['minor_units']==7200
     assert receipt['items'][0]['quantity_microunits']==6000000
-    b.wait_for('!!document.querySelector("[aria-label=\\"Received goods\\"]")')
+    b.wait_for('!!document.querySelector("[aria-label=\\"Received cost allocation\\"]")')
     assert b.evaluate('getComputedStyle(document.querySelector(".receipt-lines td:nth-child(3)")).whiteSpace') == 'nowrap'
+    assert b.evaluate('document.querySelector(".receipt-lines td:first-child").getBoundingClientRect().width') >= 160
     b.navigate(f'{env.site.base_url}/c/{env.site.company_id}/item-receipt/{receipt_id}/update')
     b.wait_for('!!document.querySelector("[data-generated-form]")')
+    assert b.evaluate('document.getElementsByName("f:shipping")[0].value') == '12.00'
     _fill(b,'f:memo','Dock confirmation')
     _act(b,'preview')
     assert not b.evaluate('document.querySelector(".error")?.textContent')
@@ -62,7 +70,22 @@ def test_receive_from_po_then_bill_received_goods(register_browser, width):
     _click(b,'submit')
     b.wait_for('location.pathname.includes("/bill/") && !location.pathname.endsWith("/post")')
     bill=run('bill.show',dict(bill=b.evaluate('location.pathname').rsplit('/',1)[-1]))
-    assert bill['total_minor_units']==4400
+    assert bill['total_minor_units']==5200
     assert len(bill['revision']['receipts'])==1
     assert run('item-receipt.show',dict(receipt=receipt_id))['items'][0]['unbilled_quantity_microunits']==2000000
     assert run('purchase-order.show',dict(purchase_order=po['id']))['receiving'][0]['remaining_quantity_microunits']==4000000
+
+    b.navigate(f"{env.site.base_url}/c/{env.site.company_id}/bill/{bill['id']}/update")
+    b.wait_for('!!document.querySelector("[data-collection-path=receipts] [data-collection-item]")')
+    cost_name=field(b,'receipts','unit_cost')
+    assert b.evaluate('document.getElementsByName('+repr(cost_name)+')[0].value')=='11.00'
+    _fill(b,'f:memo','Keep product rate and shipping')
+    _act(b,'preview')
+    assert not b.evaluate('document.querySelector(".error")?.textContent')
+    _click(b,'submit')
+    b.wait_for('location.pathname.endsWith('+repr('/bill/'+bill['id'])+')')
+    corrected=run('bill.show',dict(bill=bill['id']))
+    assert corrected['total_minor_units']==5200
+    assert corrected['revision']['receipts'][0]['shipping']['minor_units']==800
+    b.evaluate("document.querySelector('[aria-label=\"Billed product and shipping\"]').scrollIntoView()")
+    (folder/f'linked-bill-saved-{width}.png').write_bytes(base64.b64decode(b.call('Page.captureScreenshot',{'captureBeyondViewport':True,'fromSurface':True})['data']))

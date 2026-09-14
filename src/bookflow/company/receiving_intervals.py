@@ -42,3 +42,9 @@ def allocate(quantity, value, occupied, requested):
         if not requested:
             break
     return result
+
+
+def component_span(quantity, total, shipping, start, end):
+    """Product and freight own their pennies independently on the same interval."""
+    return (interval_value(quantity, total - shipping, start, end),
+            interval_value(quantity, shipping, start, end))

@@ -25,11 +25,11 @@ def test_receiving_and_linked_bill_cross_all_four_actual_transports(books,tmp_pa
                 dbpath=next(matrix.roots[surface].rglob('company.db'))
                 po=await call('purchase-order post',dict(date='2017-01-01',vendor=vendor,
                     lines=[dict(item=item,quantity='10',rate='10.00')]))
-                raw=dict(date='2017-01-05',vendor=vendor,purchase_order=po['id'],purchase_order_version=po['version'],
+                raw=dict(date='2017-01-05',vendor=vendor,shipping='12.00',purchase_order=po['id'],purchase_order_version=po['version'],
                     items=[dict(item=item,order_line_id=po['revision']['lines'][0]['line_id'],quantity='6',unit_cost='10.00')])
                 before=database(dbpath)
                 preview=await call('item-receipt post',raw,dry_run=True)
-                assert preview['dry_run'] and preview['total']['minor_units']==6000, surface
+                assert preview['dry_run'] and preview['total']['minor_units']==7200, surface
                 assert database(dbpath)==before,surface
                 received=await call('item-receipt post',raw,idempotency_key='transport-receipt')
                 saved=database(dbpath)
@@ -48,19 +48,19 @@ def test_receiving_and_linked_bill_cross_all_four_actual_transports(books,tmp_pa
                 assert refused['code']=='E_WORK_DEPENDENCY',surface
                 assert database(dbpath)==before,surface
                 billraw=dict(date='2017-01-15',receipts=[selection])
-                assert (await call('bill post',billraw,dry_run=True))['total_minor_units']==4400
+                assert (await call('bill post',billraw,dry_run=True))['total_minor_units']==5200
                 assert database(dbpath)==before,surface
                 bill=await call('bill post',billraw,idempotency_key='transport-linked-bill')
-                assert bill['total_minor_units']==4400
+                assert bill['total_minor_units']==5200
                 assert bill['revision']['items'][0]['item_id']==item
                 assert bill['revision']['items'][0]['quantity_microunits']==4000000
                 saved=database(dbpath)
                 assert (await call('bill post',billraw,idempotency_key='transport-linked-bill'))['id']==bill['id']
                 assert database(dbpath)==saved,surface
                 with sqlite3.connect(dbpath) as db:
-                    assert db.execute('SELECT sum(quantity_microunits),sum(value_minor_units) FROM inventory_movements').fetchone()==(6000000,6400)
+                    assert db.execute('SELECT sum(quantity_microunits),sum(value_minor_units) FROM inventory_movements').fetchone()==(6000000,7600)
                     assert db.execute("SELECT count(*) FROM inventory_movements WHERE kind='receipt'").fetchone()==(1,)
-                    assert db.execute('SELECT sum(end_microunits-start_microunits),sum(original_minor_units),sum(billed_minor_units) FROM receipt_bill_claims').fetchone()==(4000000,4000,4400)
+                    assert db.execute('SELECT sum(end_microunits-start_microunits),sum(original_minor_units),sum(billed_minor_units),sum(shipping_minor_units) FROM receipt_bill_claims').fetchone()==(4000000,4800,5200,800)
                 await call('bill void',dict(bill=bill['id']))
                 current=await call('item-receipt show',dict(receipt=received['id']))
                 assert current['items'][0]['unbilled_quantity_microunits']==6000000

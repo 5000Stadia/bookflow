@@ -12,6 +12,7 @@ A bill written before the Items tab existed carries no ``item_total`` in its sna
 reads back as the zero it is -- it bought no items -- rather than as a missing fact.
 """
 from __future__ import annotations
+from pydantic import Field
 
 from typing import Literal
 
@@ -79,6 +80,10 @@ class BillItemProfile(StrictModel):
     # What the item's own master said its cost was when this line was written, kept whether or
     # not it was used, so a reader can see the line was entered off the standard or against it.
     standard_cost_minor_units: int | None = None
+    receipt_product_minor_units: int | None = Field(default=None, exclude_if=lambda v: v is None)
+    receipt_shipping_minor_units: int | None = Field(default=None, exclude_if=lambda v: v is None)
+    receipt_product_unit_cost_minor_units: int | None = Field(default=None, exclude_if=lambda v: v is None)
+
     class_id: Reference | None = None
     customer: Reference | None = None
     billable: bool = False

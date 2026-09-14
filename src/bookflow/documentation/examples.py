@@ -926,8 +926,8 @@ for _name, _payload in _RECONCILE_EXAMPLES.items():
 # Receiving uses the same registered commands in CLI, HTTP, Python and MCP.
 EXAMPLES.update({
     'item-receipt post': Example(
-        f'bookflow item-receipt post --vendor "Northside Supply" --date 2026-04-02 --items \'[{{"item":"{ID}","quantity":"6","unit_cost":"10.00"}}]\' --company "Demo Plumbing Co" --reason "Receive goods before bill" --json',
-        {'vendor': 'Northside Supply', 'date': '2026-04-02', 'items': [{'item': ID, 'quantity': '6', 'unit_cost': '10.00'}]}),
+        f'bookflow item-receipt post --vendor "Northside Supply" --date 2026-04-02 --shipping 12.00 --items \'[{{"item":"{ID}","quantity":"6","unit_cost":"10.00"}}]\' --company "Demo Plumbing Co" --reason "Receive goods before bill" --json',
+        {'vendor': 'Northside Supply', 'date': '2026-04-02', 'shipping': '12.00', 'items': [{'item': ID, 'quantity': '6', 'unit_cost': '10.00'}]}),
     'item-receipt show': Example(
         f'bookflow item-receipt show {ID} --company "Demo Plumbing Co" --json', {'receipt': ID}),
     'item-receipt query': Example(

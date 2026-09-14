@@ -4,7 +4,7 @@
 
 ## `item-receipt history`
 
-Read captured received goods, their physical identities and remaining unbilled quantities.
+Read captured received goods, their separately captured product/shipping amounts, physical identities and remaining unbilled quantities.
 
 | Contract | Value |
 |---|---|
@@ -113,6 +113,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].total.amount` | string | yes | no | — | — |
 | `items[].total.currency` | string | yes | no | — | — |
 | `items[].total.minor_units` | integer | yes | no | — | — |
+| `items[].product_total` | object | yes | no | — | — |
+| `items[].product_total.amount` | string | yes | no | — | — |
+| `items[].product_total.currency` | string | yes | no | — | — |
+| `items[].product_total.minor_units` | integer | yes | no | — | — |
+| `items[].shipping` | object | yes | no | — | — |
+| `items[].shipping.amount` | string | yes | no | — | — |
+| `items[].shipping.currency` | string | yes | no | — | — |
+| `items[].shipping.minor_units` | integer | yes | no | — | — |
 | `items[].receipt_liability_current` | object | yes | no | — | — |
 | `items[].receipt_liability_current.amount` | string | yes | no | — | — |
 | `items[].receipt_liability_current.currency` | string | yes | no | — | — |
@@ -127,6 +135,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].items[].amount.amount` | string | yes | no | — | — |
 | `items[].items[].amount.currency` | string | yes | no | — | — |
 | `items[].items[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].items[].product_amount` | object | yes | no | — | — |
+| `items[].items[].product_amount.amount` | string | yes | no | — | — |
+| `items[].items[].product_amount.currency` | string | yes | no | — | — |
+| `items[].items[].product_amount.minor_units` | integer | yes | no | — | — |
+| `items[].items[].shipping` | object | yes | no | — | — |
+| `items[].items[].shipping.amount` | string | yes | no | — | — |
+| `items[].items[].shipping.currency` | string | yes | no | — | — |
+| `items[].items[].shipping.minor_units` | integer | yes | no | — | — |
+| `items[].items[].product_per_unit` | string | yes | no | — | — |
+| `items[].items[].shipping_per_unit` | string | yes | no | — | — |
+| `items[].items[].total_per_unit` | string | yes | no | — | — |
 | `items[].items[].unbilled_quantity_microunits` | integer | yes | no | — | — |
 | `items[].items[].unbilled_value` | object | yes | no | — | — |
 | `items[].items[].unbilled_value.amount` | string | yes | no | — | — |
@@ -152,6 +171,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].items[].profile.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `items[].items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `items[].items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
+| `items[].items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].items[].profile.class_id` | object \| null | no | yes | null | — |
 | `items[].items[].profile.class_id.id` | string | yes | no | — | — |
 | `items[].items[].profile.class_id.label` | string | yes | no | — | — |
@@ -204,7 +226,7 @@ Example JSON output:
 
 ## `item-receipt post`
 
-Receive inventory before a vendor bill. Items debit Inventory and credit receipt-owned Accounts Payable. Zero-value quantities are valid. Purchase-order selections require the displayed version and ordered line identities.
+Receive inventory before a vendor bill. Items debit Inventory and credit receipt-owned Accounts Payable. Product unit costs and amounts exclude shipping. Optional Shipping is charged by this vendor and spread by received quantity; product plus shipping posts once. Zero-value quantities are valid. Purchase-order selections require the displayed version and ordered line identities.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -220,7 +242,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 
 ### CLI
 
-`bookflow item-receipt post --vendor "Northside Supply" --date 2026-04-02 --items '[{"item":"01ARZ3NDEKTSV4RRFFQ69G5FAV","quantity":"6","unit_cost":"10.00"}]' --company "Demo Plumbing Co" --reason "Receive goods before bill" --json`
+`bookflow item-receipt post --vendor "Northside Supply" --date 2026-04-02 --shipping 12.00 --items '[{"item":"01ARZ3NDEKTSV4RRFFQ69G5FAV","quantity":"6","unit_cost":"10.00"}]' --company "Demo Plumbing Co" --reason "Receive goods before bill" --json`
 
 ### Input
 
@@ -234,6 +256,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `memo` | `--memo` | string \| null | no | yes | null | — |
 | `purchase_order` | `--purchase-order` | string \| null | no | yes | null | — |
 | `purchase_order_version` | `--purchase-order-version` | integer \| null | no | yes | null | — |
+| `shipping` | `--shipping` | string \| object \| null | no | yes | null | Shipping charged by this receipt vendor, allocated only over received quantities. Product costs exclude shipping. Omit to retain on edits; enter 0 to clear. |
 | `items[].line_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `items[].item` | inside `--items` JSON array | string | yes | no | — | minimum length 1 |
 | `items[].description` | inside `--items` JSON array | string \| null | no | yes | null | — |
@@ -342,6 +365,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.amount` | string | yes | no | — | — |
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
+| `product_total` | object | yes | no | — | — |
+| `product_total.amount` | string | yes | no | — | — |
+| `product_total.currency` | string | yes | no | — | — |
+| `product_total.minor_units` | integer | yes | no | — | — |
+| `shipping` | object | yes | no | — | — |
+| `shipping.amount` | string | yes | no | — | — |
+| `shipping.currency` | string | yes | no | — | — |
+| `shipping.minor_units` | integer | yes | no | — | — |
 | `receipt_liability_current` | object | yes | no | — | — |
 | `receipt_liability_current.amount` | string | yes | no | — | — |
 | `receipt_liability_current.currency` | string | yes | no | — | — |
@@ -356,6 +387,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].amount.amount` | string | yes | no | — | — |
 | `items[].amount.currency` | string | yes | no | — | — |
 | `items[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].product_amount` | object | yes | no | — | — |
+| `items[].product_amount.amount` | string | yes | no | — | — |
+| `items[].product_amount.currency` | string | yes | no | — | — |
+| `items[].product_amount.minor_units` | integer | yes | no | — | — |
+| `items[].shipping` | object | yes | no | — | — |
+| `items[].shipping.amount` | string | yes | no | — | — |
+| `items[].shipping.currency` | string | yes | no | — | — |
+| `items[].shipping.minor_units` | integer | yes | no | — | — |
+| `items[].product_per_unit` | string | yes | no | — | — |
+| `items[].shipping_per_unit` | string | yes | no | — | — |
+| `items[].total_per_unit` | string | yes | no | — | — |
 | `items[].unbilled_quantity_microunits` | integer | yes | no | — | — |
 | `items[].unbilled_value` | object | yes | no | — | — |
 | `items[].unbilled_value.amount` | string | yes | no | — | — |
@@ -381,6 +423,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].profile.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.class_id` | object \| null | no | yes | null | — |
 | `items[].profile.class_id.id` | string | yes | no | — | — |
 | `items[].profile.class_id.label` | string | yes | no | — | — |
@@ -406,6 +451,11 @@ Example JSON output:
   "items": [],
   "memo": null,
   "number": "value",
+  "product_total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
   "profile": {
     "ap_account": {
       "full_name": "value",
@@ -444,6 +494,11 @@ Example JSON output:
   "reference": null,
   "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "revision_number": 1,
+  "shipping": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
   "status": "posted",
   "total": {
     "amount": "value",
@@ -498,7 +553,7 @@ Example JSON output:
 
 ## `item-receipt query`
 
-Read captured received goods, their physical identities and remaining unbilled quantities.
+Read captured received goods, their separately captured product/shipping amounts, physical identities and remaining unbilled quantities.
 
 | Contract | Value |
 |---|---|
@@ -611,6 +666,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].total.amount` | string | yes | no | — | — |
 | `items[].total.currency` | string | yes | no | — | — |
 | `items[].total.minor_units` | integer | yes | no | — | — |
+| `items[].product_total` | object | yes | no | — | — |
+| `items[].product_total.amount` | string | yes | no | — | — |
+| `items[].product_total.currency` | string | yes | no | — | — |
+| `items[].product_total.minor_units` | integer | yes | no | — | — |
+| `items[].shipping` | object | yes | no | — | — |
+| `items[].shipping.amount` | string | yes | no | — | — |
+| `items[].shipping.currency` | string | yes | no | — | — |
+| `items[].shipping.minor_units` | integer | yes | no | — | — |
 | `items[].receipt_liability_current` | object | yes | no | — | — |
 | `items[].receipt_liability_current.amount` | string | yes | no | — | — |
 | `items[].receipt_liability_current.currency` | string | yes | no | — | — |
@@ -625,6 +688,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].items[].amount.amount` | string | yes | no | — | — |
 | `items[].items[].amount.currency` | string | yes | no | — | — |
 | `items[].items[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].items[].product_amount` | object | yes | no | — | — |
+| `items[].items[].product_amount.amount` | string | yes | no | — | — |
+| `items[].items[].product_amount.currency` | string | yes | no | — | — |
+| `items[].items[].product_amount.minor_units` | integer | yes | no | — | — |
+| `items[].items[].shipping` | object | yes | no | — | — |
+| `items[].items[].shipping.amount` | string | yes | no | — | — |
+| `items[].items[].shipping.currency` | string | yes | no | — | — |
+| `items[].items[].shipping.minor_units` | integer | yes | no | — | — |
+| `items[].items[].product_per_unit` | string | yes | no | — | — |
+| `items[].items[].shipping_per_unit` | string | yes | no | — | — |
+| `items[].items[].total_per_unit` | string | yes | no | — | — |
 | `items[].items[].unbilled_quantity_microunits` | integer | yes | no | — | — |
 | `items[].items[].unbilled_value` | object | yes | no | — | — |
 | `items[].items[].unbilled_value.amount` | string | yes | no | — | — |
@@ -650,6 +724,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].items[].profile.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `items[].items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `items[].items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
+| `items[].items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].items[].profile.class_id` | object \| null | no | yes | null | — |
 | `items[].items[].profile.class_id.id` | string | yes | no | — | — |
 | `items[].items[].profile.class_id.label` | string | yes | no | — | — |
@@ -708,7 +785,7 @@ Example JSON output:
 
 ## `item-receipt show`
 
-Read captured received goods, their physical identities and remaining unbilled quantities.
+Read captured received goods, their separately captured product/shipping amounts, physical identities and remaining unbilled quantities.
 
 | Contract | Value |
 |---|---|
@@ -815,6 +892,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.amount` | string | yes | no | — | — |
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
+| `product_total` | object | yes | no | — | — |
+| `product_total.amount` | string | yes | no | — | — |
+| `product_total.currency` | string | yes | no | — | — |
+| `product_total.minor_units` | integer | yes | no | — | — |
+| `shipping` | object | yes | no | — | — |
+| `shipping.amount` | string | yes | no | — | — |
+| `shipping.currency` | string | yes | no | — | — |
+| `shipping.minor_units` | integer | yes | no | — | — |
 | `receipt_liability_current` | object | yes | no | — | — |
 | `receipt_liability_current.amount` | string | yes | no | — | — |
 | `receipt_liability_current.currency` | string | yes | no | — | — |
@@ -829,6 +914,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].amount.amount` | string | yes | no | — | — |
 | `items[].amount.currency` | string | yes | no | — | — |
 | `items[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].product_amount` | object | yes | no | — | — |
+| `items[].product_amount.amount` | string | yes | no | — | — |
+| `items[].product_amount.currency` | string | yes | no | — | — |
+| `items[].product_amount.minor_units` | integer | yes | no | — | — |
+| `items[].shipping` | object | yes | no | — | — |
+| `items[].shipping.amount` | string | yes | no | — | — |
+| `items[].shipping.currency` | string | yes | no | — | — |
+| `items[].shipping.minor_units` | integer | yes | no | — | — |
+| `items[].product_per_unit` | string | yes | no | — | — |
+| `items[].shipping_per_unit` | string | yes | no | — | — |
+| `items[].total_per_unit` | string | yes | no | — | — |
 | `items[].unbilled_quantity_microunits` | integer | yes | no | — | — |
 | `items[].unbilled_value` | object | yes | no | — | — |
 | `items[].unbilled_value.amount` | string | yes | no | — | — |
@@ -854,6 +950,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].profile.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.class_id` | object \| null | no | yes | null | — |
 | `items[].profile.class_id.id` | string | yes | no | — | — |
 | `items[].profile.class_id.label` | string | yes | no | — | — |
@@ -876,6 +975,11 @@ Example JSON output:
   "items": [],
   "memo": null,
   "number": "value",
+  "product_total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
   "profile": {
     "ap_account": {
       "full_name": "value",
@@ -914,6 +1018,11 @@ Example JSON output:
   "reference": null,
   "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "revision_number": 1,
+  "shipping": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
   "status": "posted",
   "total": {
     "amount": "value",
@@ -958,7 +1067,7 @@ Example JSON output:
 
 ## `item-receipt update`
 
-Correct a receipt. Omitted items retain captured facts; metadata edits preserve stock and claim identities. Release linked bills before changing physical receipt facts.
+Correct a receipt. Omitted items and shipping retain captured facts; enter zero to clear shipping; metadata edits preserve stock and claim identities. Release linked bills before changing physical receipt facts.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -987,6 +1096,7 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `ap_account` | `--ap-account` | string \| null | no | yes | null | — |
 | `reference` | `--reference` | string \| null | no | yes | null | — |
 | `memo` | `--memo` | string \| null | no | yes | null | — |
+| `shipping` | `--shipping` | string \| object \| null | no | yes | null | Shipping charged by this receipt vendor, allocated only over received quantities. Product costs exclude shipping. Omit to retain on edits; enter 0 to clear. |
 | `items[].line_id` | inside `--items` JSON array | string \| null | no | yes | null | — |
 | `items[].item` | inside `--items` JSON array | string | yes | no | — | minimum length 1 |
 | `items[].description` | inside `--items` JSON array | string \| null | no | yes | null | — |
@@ -1097,6 +1207,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.amount` | string | yes | no | — | — |
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
+| `product_total` | object | yes | no | — | — |
+| `product_total.amount` | string | yes | no | — | — |
+| `product_total.currency` | string | yes | no | — | — |
+| `product_total.minor_units` | integer | yes | no | — | — |
+| `shipping` | object | yes | no | — | — |
+| `shipping.amount` | string | yes | no | — | — |
+| `shipping.currency` | string | yes | no | — | — |
+| `shipping.minor_units` | integer | yes | no | — | — |
 | `receipt_liability_current` | object | yes | no | — | — |
 | `receipt_liability_current.amount` | string | yes | no | — | — |
 | `receipt_liability_current.currency` | string | yes | no | — | — |
@@ -1111,6 +1229,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].amount.amount` | string | yes | no | — | — |
 | `items[].amount.currency` | string | yes | no | — | — |
 | `items[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].product_amount` | object | yes | no | — | — |
+| `items[].product_amount.amount` | string | yes | no | — | — |
+| `items[].product_amount.currency` | string | yes | no | — | — |
+| `items[].product_amount.minor_units` | integer | yes | no | — | — |
+| `items[].shipping` | object | yes | no | — | — |
+| `items[].shipping.amount` | string | yes | no | — | — |
+| `items[].shipping.currency` | string | yes | no | — | — |
+| `items[].shipping.minor_units` | integer | yes | no | — | — |
+| `items[].product_per_unit` | string | yes | no | — | — |
+| `items[].shipping_per_unit` | string | yes | no | — | — |
+| `items[].total_per_unit` | string | yes | no | — | — |
 | `items[].unbilled_quantity_microunits` | integer | yes | no | — | — |
 | `items[].unbilled_value` | object | yes | no | — | — |
 | `items[].unbilled_value.amount` | string | yes | no | — | — |
@@ -1136,6 +1265,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].profile.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.class_id` | object \| null | no | yes | null | — |
 | `items[].profile.class_id.id` | string | yes | no | — | — |
 | `items[].profile.class_id.label` | string | yes | no | — | — |
@@ -1161,6 +1293,11 @@ Example JSON output:
   "items": [],
   "memo": null,
   "number": "value",
+  "product_total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
   "profile": {
     "ap_account": {
       "full_name": "value",
@@ -1199,6 +1336,11 @@ Example JSON output:
   "reference": null,
   "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "revision_number": 1,
+  "shipping": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
   "status": "posted",
   "total": {
     "amount": "value",
@@ -1374,6 +1516,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `total.amount` | string | yes | no | — | — |
 | `total.currency` | string | yes | no | — | — |
 | `total.minor_units` | integer | yes | no | — | — |
+| `product_total` | object | yes | no | — | — |
+| `product_total.amount` | string | yes | no | — | — |
+| `product_total.currency` | string | yes | no | — | — |
+| `product_total.minor_units` | integer | yes | no | — | — |
+| `shipping` | object | yes | no | — | — |
+| `shipping.amount` | string | yes | no | — | — |
+| `shipping.currency` | string | yes | no | — | — |
+| `shipping.minor_units` | integer | yes | no | — | — |
 | `receipt_liability_current` | object | yes | no | — | — |
 | `receipt_liability_current.amount` | string | yes | no | — | — |
 | `receipt_liability_current.currency` | string | yes | no | — | — |
@@ -1388,6 +1538,17 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].amount.amount` | string | yes | no | — | — |
 | `items[].amount.currency` | string | yes | no | — | — |
 | `items[].amount.minor_units` | integer | yes | no | — | — |
+| `items[].product_amount` | object | yes | no | — | — |
+| `items[].product_amount.amount` | string | yes | no | — | — |
+| `items[].product_amount.currency` | string | yes | no | — | — |
+| `items[].product_amount.minor_units` | integer | yes | no | — | — |
+| `items[].shipping` | object | yes | no | — | — |
+| `items[].shipping.amount` | string | yes | no | — | — |
+| `items[].shipping.currency` | string | yes | no | — | — |
+| `items[].shipping.minor_units` | integer | yes | no | — | — |
+| `items[].product_per_unit` | string | yes | no | — | — |
+| `items[].shipping_per_unit` | string | yes | no | — | — |
+| `items[].total_per_unit` | string | yes | no | — | — |
 | `items[].unbilled_quantity_microunits` | integer | yes | no | — | — |
 | `items[].unbilled_value` | object | yes | no | — | — |
 | `items[].unbilled_value.amount` | string | yes | no | — | — |
@@ -1413,6 +1574,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].profile.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `items[].profile.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
+| `items[].profile.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `items[].profile.class_id` | object \| null | no | yes | null | — |
 | `items[].profile.class_id.id` | string | yes | no | — | — |
 | `items[].profile.class_id.label` | string | yes | no | — | — |
@@ -1438,6 +1602,11 @@ Example JSON output:
   "items": [],
   "memo": null,
   "number": "value",
+  "product_total": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
   "profile": {
     "ap_account": {
       "full_name": "value",
@@ -1476,6 +1645,11 @@ Example JSON output:
   "reference": null,
   "revision_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "revision_number": 1,
+  "shipping": {
+    "amount": "value",
+    "currency": "USD",
+    "minor_units": 1
+  },
   "status": "posted",
   "total": {
     "amount": "value",

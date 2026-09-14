@@ -1,5 +1,8 @@
 """Own received goods, sharing captured purchases and the existing stock/GL writer."""
 import json
+from fractions import Fraction
+from bookflow.company.receiving_intervals import cumulative
+from bookflow.company.sales_models import money
 import sqlalchemy as sa
 from bookflow.company import bills, check_items, document_effects as effects, inventory, inventory_effects, journals, purchase_orders as orders, schema as c
 from bookflow.company.bill_facts import BillItemProfile, BillProfile
@@ -72,6 +75,11 @@ def output(s, header, rev, *, snapshot=None):
         claimed_value[key] = claimed_value.get(key, 0) + claim['original_minor_units']
     currency = data['profile']['currency']
     for line in lines:
+        shipping = line.setdefault('shipping', Money(0, currency).to_dict())['minor_units']
+        product = line['amount']['minor_units'] - shipping
+        line.setdefault('product_amount', Money(product, currency).to_dict())
+        for key, value in [('product', product), ('shipping', shipping), ('total', product + shipping)]:
+            line[key + '_per_unit'] = str(Fraction(value * 10000, line['quantity_microunits']))
         live = header['status'] != 'voided' and line['id'] in current_ids
         line['unbilled_quantity_microunits'] = line['quantity_microunits'] - claimed.get(line['id'], 0) if live else 0
         line['unbilled_value'] = Money(line['amount']['minor_units'] - claimed_value.get(line['id'], 0) if live else 0, currency).to_dict()
@@ -83,7 +91,9 @@ def output(s, header, rev, *, snapshot=None):
         transaction_id=header['transaction_id'], financial_revision_id=rev['financial_revision_id'],
         date=rev['date'], reference=data.get('reference'), memo=data.get('memo'),
         void_reason=data.get('void_reason'), purchase_order_id=data.get('purchase_order_id'),
-        profile=data['profile'], total=data['total'], receipt_liability_current=Money(liability, currency).to_dict(), items=lines)
+        profile=data['profile'], total=data['total'],
+        shipping=data.get('shipping', Money(0, currency).to_dict()),
+        product_total=Money(data['total']['minor_units'] - data.get('shipping', {}).get('minor_units', 0), currency).to_dict(), receipt_liability_current=Money(liability, currency).to_dict(), items=lines)
 
 
 def show(s, inp):
@@ -185,10 +195,15 @@ def prepare(s, ctx, inp, operation):
                     dict(input=inp, operation=operation, changed=False))
     date = getattr(inp, 'date', None) or (old_rev['date'] if old else None)
     previous_items = [] if saved is None else [dict(line_id=line['line_id'], family='item',
-        amount_minor_units=line['amount']['minor_units'], memo=line['description'],
+        amount_minor_units=line.get('product_amount', line['amount'])['minor_units'], memo=line['description'],
         profile=BillItemProfile.model_validate(line['profile']), order_line_id=line.get('order_line_id')) for line in saved['items']]
+    shipping = saved.get('shipping', {}).get('minor_units', 0) if saved else 0
+    if getattr(inp, 'shipping', None) is not None:
+        shipping = money(inp.shipping, saved['profile']['currency'] if saved else s.company_info_row['home_currency'], field='shipping').minor_units
+    elif 'shipping' in inp.model_fields_set:
+        raise journals.invalid('shipping', 'enter 0 or omit shipping; null is not a cost')
     metadata = old is not None and operation == 'update' and not any(
-        field in inp.model_fields_set for field in ('date', 'vendor', 'ap_account', 'items'))
+        field in inp.model_fields_set for field in ('date', 'vendor', 'ap_account', 'items')) and shipping == saved.get('shipping', {}).get('minor_units', 0)
     if operation == 'void' or metadata:
         profile = BillProfile.model_validate(saved['profile'])
         items = previous_items
@@ -212,7 +227,31 @@ def prepare(s, ctx, inp, operation):
         for item in items:
             if item['profile'].item_type not in inventory.TRACKED_TYPES:
                 raise journals.invalid('items', 'item receipts receive stock items; enter other costs on a bill')
-    profile = profile.model_copy(update={'item_total_minor_units': journals.checked_sum((i['amount_minor_units'] for i in items), 'items')})
+    product_total = journals.checked_sum((i['amount_minor_units'] for i in items), 'items')
+    total = journals.checked_sum((product_total, shipping), 'shipping')
+    profile = profile.model_copy(update={'item_total_minor_units': total})
+    quantities = sum(i['profile'].quantity_microunits for i in items)
+    position, landed_items = 0, []
+    for item in items:
+        end = position + item['profile'].quantity_microunits
+        allocated = cumulative(quantities, shipping, end) - cumulative(quantities, shipping, position)
+        position = end
+        item['shipping_minor_units'] = allocated
+        facts = item['profile']
+        if allocated:
+            facts = facts.model_copy(update=dict(amount_basis='amount', unit_cost_minor_units=None,
+                receipt_product_minor_units=item['amount_minor_units'], receipt_shipping_minor_units=allocated,
+                receipt_product_unit_cost_minor_units=facts.unit_cost_minor_units))
+        landed_items.append(dict(item, amount_minor_units=item['amount_minor_units'] + allocated, profile=facts))
+    if sum(i['shipping_minor_units'] for i in items) != shipping:
+        raise BookflowError('E_INTERNAL', details={'problem': 'receipt shipping does not conserve the header cost'})
+    boundary = 0
+    for item in items:
+        end = boundary + item['profile'].quantity_microunits
+        expected = (2 * shipping * end + quantities) // (2 * quantities) - (2 * shipping * boundary + quantities) // (2 * quantities)
+        if item['shipping_minor_units'] != expected:
+            raise BookflowError('E_INTERNAL', details={'problem': 'receipt shipping differs from captured quantity allocation'})
+        boundary = end
     currency = profile.currency
     old_line_ids = [line['id'] for line in saved['items']] if saved else []
     order_id = saved.get('purchase_order_id') if saved else getattr(inp, 'purchase_order', None)
@@ -240,12 +279,11 @@ def prepare(s, ctx, inp, operation):
             journal = journals.prepare(s, ctx, JournalVoidInput(journal=old['transaction_id']), 'void', owner='inventory', purchase_items=[])
             selected_items = []
         else:
-            total = journals.checked_sum((item['amount_minor_units'] for item in items), 'items')
             lines = []
             if total:
                 lines.append(JournalLineInput(account=profile.ap_account.id, side='credit',
                     amount=Money(total, currency).to_dict(), name_type='vendor', name_id=profile.vendor.id))
-            for item in items:
+            for item in landed_items:
                 if item['amount_minor_units']:
                     facts = item['profile']
                     lines.append(JournalLineInput(**({'line_id': item['line_id']} if item['line_id'] else {}), account=facts.account.id,
@@ -254,8 +292,8 @@ def prepare(s, ctx, inp, operation):
                         class_id=facts.class_id.id if facts.class_id else None, description=item['memo']))
             values = dict(date=date, memo=memo, lines=lines)
             typed = check_items.PurchaseUpdate(journal=old['transaction_id'], **values) if old else check_items.PurchasePost(**values)
-            journal = journals.prepare(s, ctx, typed, 'update' if old else 'post', owner='inventory', force_revision=bool(old), purchase_items=items)
-            selected_items = items
+            journal = journals.prepare(s, ctx, typed, 'update' if old else 'post', owner='inventory', force_revision=bool(old), purchase_items=landed_items)
+            selected_items = landed_items
         journal.data['purchase_funding'] = {'account_id': profile.ap_account.id}
         _, stock, _ = check_items.attach(s, journal, selected_items)
         header['transaction_id'] = journal.data['header']['id']
@@ -269,18 +307,23 @@ def prepare(s, ctx, inp, operation):
                 line = dict(id=envelope['id'], line_id=envelope['line_id'], movement_id=movement.values['id'],
                     quantity=format_quantity_micro_units(facts.quantity_microunits),
                     quantity_microunits=facts.quantity_microunits,
-                    amount=Money(item['amount_minor_units'], currency).to_dict(),
+                    amount=Money(item['amount_minor_units'] + item['shipping_minor_units'], currency).to_dict(),
+                    product_amount=Money(item['amount_minor_units'], currency).to_dict(),
+                    shipping=Money(item['shipping_minor_units'], currency).to_dict(),
                     unbilled_quantity_microunits=facts.quantity_microunits,
                     description=item['memo'], profile=facts.model_dump(), order_line_id=item.get('order_line_id'))
                 view_lines.append(line)
                 physical_rows.append(dict(id=line['id'], receipt_id=header['id'],
                     financial_revision_id=financial_revision, movement_id=line['movement_id'], item_id=facts.item.id,
-                    quantity_microunits=facts.quantity_microunits, value_minor_units=item['amount_minor_units'],
+                    quantity_microunits=facts.quantity_microunits, value_minor_units=item['amount_minor_units'] + item['shipping_minor_units'],
+                    shipping_minor_units=item['shipping_minor_units'],
                     snapshot=json.dumps(line, sort_keys=True), **provenance))
     else:
         financial_revision = old_rev['financial_revision_id']
     snapshot = dict(reference=reference, memo=memo, purchase_order_id=order_id,
-        profile=profile.model_dump(), total=Money(sum(item['amount_minor_units'] for item in items), currency).to_dict(), items=view_lines)
+        profile=profile.model_dump(), total=Money(total, currency).to_dict(), items=view_lines)
+    if shipping or (saved and 'shipping' in saved):
+        snapshot['shipping'] = Money(shipping, currency).to_dict()
     if operation == 'void':
         header['status'] = 'voided'
         snapshot['void_reason'] = ctx.reason.strip()

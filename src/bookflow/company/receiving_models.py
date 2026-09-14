@@ -1,7 +1,7 @@
 """Typed public receipt lifecycle and exact source selection."""
 from typing import Literal
 from pydantic import Field, model_validator
-from bookflow.company.bill_models import BillItemInput, BillProfile, BillItemProfile
+from bookflow.company.bill_models import BillItemInput, BillProfile, BillItemProfile, SalesMoneyInput
 from bookflow.company.journal_models import _Input, _Date, _Selector, _Version, _Number
 from bookflow.company.journal_outputs import JournalMoneyOutput
 from bookflow.core.models import WriteOutput
@@ -20,6 +20,7 @@ class ReceiptPostInput(_Input):
     memo: str | None = Field(default=None, max_length=2000)
     purchase_order: _Selector | None = None
     purchase_order_version: _Version | None = None
+    shipping: str | SalesMoneyInput | None = Field(default=None, description='Shipping charged by this receipt vendor, allocated only over received quantities. Product costs exclude shipping. Omit to retain on edits; enter 0 to clear.')
     items: list[ReceiptItemInput] = Field(min_length=1, max_length=100)
 
     @model_validator(mode='after')
@@ -39,13 +40,14 @@ class ReceiptUpdateInput(_Input):
     ap_account: _Selector | None = None
     reference: str | None = Field(default=None, max_length=128)
     memo: str | None = Field(default=None, max_length=2000)
+    shipping: str | SalesMoneyInput | None = Field(default=None, description='Shipping charged by this receipt vendor, allocated only over received quantities. Product costs exclude shipping. Omit to retain on edits; enter 0 to clear.')
     items: list[ReceiptItemInput] | None = Field(default=None, min_length=1, max_length=100)
     purchase_order_version: _Version | None = None
 
 
     @model_validator(mode='after')
     def required_values(self):
-        for field in ('date', 'vendor', 'ap_account', 'items'):
+        for field in ('date', 'vendor', 'ap_account', 'items', 'shipping'):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(field + ' cannot be null; omit it to retain captured facts')
         return self
@@ -82,6 +84,11 @@ class ReceiptLineOutput(_Input):
     quantity: str
     quantity_microunits: int
     amount: JournalMoneyOutput
+    product_amount: JournalMoneyOutput
+    shipping: JournalMoneyOutput
+    product_per_unit: str
+    shipping_per_unit: str
+    total_per_unit: str
     unbilled_quantity_microunits: int
     unbilled_value: JournalMoneyOutput
     order_line_id: str | None = None
@@ -107,6 +114,8 @@ class ReceiptOutput(_Input):
     purchase_order_id: str | None
     profile: BillProfile
     total: JournalMoneyOutput
+    product_total: JournalMoneyOutput
+    shipping: JournalMoneyOutput
     receipt_liability_current: JournalMoneyOutput
     items: list[ReceiptLineOutput]
 

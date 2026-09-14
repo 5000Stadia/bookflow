@@ -1,0 +1,7 @@
+<section aria-label="Received cost allocation">
+<p>Product {{ received.product_total.amount }} + Shipping {{ received.shipping.amount }} = Received value {{ received.total.amount }} {{ received.total.currency }}.</p>
+<p>Shipping is charged by this receipt vendor and spread only over received quantities. Undelivered goods remain on order.</p>
+<div class="table-wrap"><table class="receipt-lines"><thead><tr><th>Item</th><th>Received</th><th>Product</th><th>Shipping</th><th>Total value</th><th>Per unit ({{ received.total.currency }})</th><th>Unbilled quantity</th></tr></thead><tbody>
+{% for line in received['items'] %}<tr><td>{{ line.profile.item.label }}</td><td>{{ line.quantity }}</td><td>{{ line.product_amount.amount }}</td><td>{{ line.shipping.amount }}</td><td>{{ line.amount.amount }}</td><td>{{ line.product_per_unit }} product + {{ line.shipping_per_unit }} shipping = {{ line.total_per_unit }}</td><td>{{ line.unbilled_quantity_microunits / 1000000 }}</td></tr>{% endfor %}
+</tbody></table></div>
+</section>

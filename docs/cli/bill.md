@@ -502,7 +502,7 @@ Example JSON output:
 
 ## `bill post`
 
-Enter a vendor bill. Each entered line debits its own account and Accounts Payable is credited the total, so the bill stands open at that total until it is paid. `purchase_order` enters this bill from an order: the order fills in the vendor, the terms, the class, the memo and its own lines -- an ordered item becomes an item row and an ordered account line becomes an expense row. A header field supplied here wins over the order on its own. The two line grids are one answer: write either `expenses` or `items`, an empty one included, and the bill is exactly the lines written here, because a caller who writes a line is saying what arrived. To change one grid and keep the other, send both. The order is then closed and permanently recorded as consumed by this bill, so it can never be billed twice -- in full, even when this bill covers only part of what was ordered; there is no remaining quantity and no backorder. A withdrawn order is refused. Voiding the bill does not free the order again: enter the replacement bill outright. Alternatively, `receipts` selects immutable received-line IDs, current receipt versions and quantities. The bill date is explicit, including when receipt dates differ. Matched items transfer receipt-owned AP to this bill without receiving stock again. Give an actual unit_cost or amount to correct acquisition value at each receipt date and affected issue costs at their sale dates. Omit cost to transfer exact original interval value. The selected receipts must share vendor, AP account and currency; new items and a whole-order source cannot be combined with receipt selections. `terms` defaults to the vendor’s own terms and fixes `due_date`; give `due_date` to override it outright. `ap_account` is the Accounts Payable account the bill is owed from and defaults to the only active one when the company has exactly one. `supplier_reference` is the vendor’s own document number, kept as typed; another bill from the same vendor carrying the same reference is reported in `duplicate_references` and never refused. A bill has two grids and needs at least one row across them. `expenses` is up to 200 rows of account, amount, memo, optional customer or job, optional `billable` and optional class, saying what was bought against an account you name. `items` is up to 200 rows of item, optional `quantity` (default 1), optional `unit_cost` or `amount`, optional `description`, customer or job, `billable` and class, saying what was bought as a thing the company buys; an item row names no account because it debits the item’s own expense account. Give `unit_cost` and the amount is quantity times it; give `amount` and that is the amount; give neither and the item’s standard cost is used. Every row debits its own account and the bill's total is the sum of both grids. A row's own `class_id` is that row's class and a row without one takes the bill's `class_id`; set `class_mode` to `none` to leave one row unclassified even when the bill carries a class. `billable` marks a cost to pass on to the named customer later and requires one; naming a job without it simply attributes the cost. Every item kind the company buys can be bought here, and an inventory part also moves its quantity on hand and its cost -- an item row is the only row that can, because an expense row names no item.
+Enter a vendor bill. Each entered line debits its own account and Accounts Payable is credited the total, so the bill stands open at that total until it is paid. `purchase_order` enters this bill from an order: the order fills in the vendor, the terms, the class, the memo and its own lines -- an ordered item becomes an item row and an ordered account line becomes an expense row. A header field supplied here wins over the order on its own. The two line grids are one answer: write either `expenses` or `items`, an empty one included, and the bill is exactly the lines written here, because a caller who writes a line is saying what arrived. To change one grid and keep the other, send both. The order is then closed and permanently recorded as consumed by this bill, so it can never be billed twice -- in full, even when this bill covers only part of what was ordered; there is no remaining quantity and no backorder. A withdrawn order is refused. Voiding the bill does not free the order again: enter the replacement bill outright. Alternatively, `receipts` selects immutable received-line IDs, current receipt versions and quantities. The bill date is explicit, including when receipt dates differ. Matched items transfer receipt-owned AP to this bill without receiving stock again. Give a product-only unit_cost or amount, excluding retained receipt shipping, to correct acquisition value at each receipt date and affected issue costs at their sale dates. Omit cost to transfer exact original product and shipping interval values. Shipping from the same receipt vendor is retained exactly once, including when product cost is zero. The selected receipts must share vendor, AP account and currency; new items and a whole-order source cannot be combined with receipt selections. `terms` defaults to the vendor’s own terms and fixes `due_date`; give `due_date` to override it outright. `ap_account` is the Accounts Payable account the bill is owed from and defaults to the only active one when the company has exactly one. `supplier_reference` is the vendor’s own document number, kept as typed; another bill from the same vendor carrying the same reference is reported in `duplicate_references` and never refused. A bill has two grids and needs at least one row across them. `expenses` is up to 200 rows of account, amount, memo, optional customer or job, optional `billable` and optional class, saying what was bought against an account you name. `items` is up to 200 rows of item, optional `quantity` (default 1), optional `unit_cost` or `amount`, optional `description`, customer or job, `billable` and class, saying what was bought as a thing the company buys; an item row names no account because it debits the item’s own expense account. Give `unit_cost` and the amount is quantity times it; give `amount` and that is the amount; give neither and the item’s standard cost is used. Every row debits its own account and the bill's total is the sum of both grids. A row's own `class_id` is that row's class and a row without one takes the bill's `class_id`; set `class_mode` to `none` to leave one row unclassified even when the bill carries a class. `billable` marks a cost to pass on to the named customer later and requires one; naming a job without it simply attributes the cost. Every item kind the company buys can be bought here, and an inventory part also moves its quantity on hand and its cost -- an item row is the only row that can, because an expense row names no item.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -539,8 +539,8 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `receipts[].receipt_line` | inside `--receipts` JSON array | string | yes | no | — | minimum length 1 |
 | `receipts[].expected_receipt_version` | inside `--receipts` JSON array | integer | yes | no | — | minimum 1 |
 | `receipts[].quantity` | inside `--receipts` JSON array | string | yes | no | — | — |
-| `receipts[].unit_cost` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | — |
-| `receipts[].amount` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | — |
+| `receipts[].unit_cost` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `receipts[].amount` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
 | `expenses[].line_id` | inside `--expenses` JSON array | string \| null | no | yes | null | — |
 | `expenses[].account` | inside `--expenses` JSON array | string | yes | no | — | minimum length 1 |
 | `expenses[].amount` | inside `--expenses` JSON array | string \| object | yes | no | — | — |
@@ -731,8 +731,25 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.receipts[].receipt_line` | string | yes | no | — | — |
 | `revision.receipts[].expected_receipt_version` | integer | yes | no | — | — |
 | `revision.receipts[].quantity` | string | yes | no | — | — |
-| `revision.receipts[].unit_cost` | string \| object \| null | no | yes | null | — |
-| `revision.receipts[].amount` | string \| object \| null | no | yes | null | — |
+| `revision.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `revision.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
+| `revision.receipts[].bill_line_id` | string | yes | no | — | — |
+| `revision.receipts[].item` | object | yes | no | — | — |
+| `revision.receipts[].item.id` | string | yes | no | — | — |
+| `revision.receipts[].item.label` | string | yes | no | — | — |
+| `revision.receipts[].item.version` | integer | yes | no | — | — |
+| `revision.receipts[].shipping` | object | yes | no | — | — |
+| `revision.receipts[].shipping.amount` | string | yes | no | — | — |
+| `revision.receipts[].shipping.currency` | string | yes | no | — | — |
+| `revision.receipts[].shipping.minor_units` | integer | yes | no | — | — |
+| `revision.receipts[].product_amount` | object | yes | no | — | — |
+| `revision.receipts[].product_amount.amount` | string | yes | no | — | — |
+| `revision.receipts[].product_amount.currency` | string | yes | no | — | — |
+| `revision.receipts[].product_amount.minor_units` | integer | yes | no | — | — |
+| `revision.receipts[].total` | object | yes | no | — | — |
+| `revision.receipts[].total.amount` | string | yes | no | — | — |
+| `revision.receipts[].total.currency` | string | yes | no | — | — |
+| `revision.receipts[].total.minor_units` | integer | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -879,6 +896,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
@@ -1484,8 +1504,25 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.receipts[].receipt_line` | string | yes | no | — | — |
 | `revision.receipts[].expected_receipt_version` | integer | yes | no | — | — |
 | `revision.receipts[].quantity` | string | yes | no | — | — |
-| `revision.receipts[].unit_cost` | string \| object \| null | no | yes | null | — |
-| `revision.receipts[].amount` | string \| object \| null | no | yes | null | — |
+| `revision.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `revision.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
+| `revision.receipts[].bill_line_id` | string | yes | no | — | — |
+| `revision.receipts[].item` | object | yes | no | — | — |
+| `revision.receipts[].item.id` | string | yes | no | — | — |
+| `revision.receipts[].item.label` | string | yes | no | — | — |
+| `revision.receipts[].item.version` | integer | yes | no | — | — |
+| `revision.receipts[].shipping` | object | yes | no | — | — |
+| `revision.receipts[].shipping.amount` | string | yes | no | — | — |
+| `revision.receipts[].shipping.currency` | string | yes | no | — | — |
+| `revision.receipts[].shipping.minor_units` | integer | yes | no | — | — |
+| `revision.receipts[].product_amount` | object | yes | no | — | — |
+| `revision.receipts[].product_amount.amount` | string | yes | no | — | — |
+| `revision.receipts[].product_amount.currency` | string | yes | no | — | — |
+| `revision.receipts[].product_amount.minor_units` | integer | yes | no | — | — |
+| `revision.receipts[].total` | object | yes | no | — | — |
+| `revision.receipts[].total.amount` | string | yes | no | — | — |
+| `revision.receipts[].total.currency` | string | yes | no | — | — |
+| `revision.receipts[].total.minor_units` | integer | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -1632,6 +1669,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
@@ -1898,8 +1938,8 @@ A dry run previews the proposed result without saving it. Any proposed record ID
 | `receipts[].receipt_line` | inside `--receipts` JSON array | string | yes | no | — | minimum length 1 |
 | `receipts[].expected_receipt_version` | inside `--receipts` JSON array | integer | yes | no | — | minimum 1 |
 | `receipts[].quantity` | inside `--receipts` JSON array | string | yes | no | — | — |
-| `receipts[].unit_cost` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | — |
-| `receipts[].amount` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | — |
+| `receipts[].unit_cost` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `receipts[].amount` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
 | `bill` | `BILL` | string | yes | no | — | minimum length 1 |
 | `expected_version` | `--expected-version` | integer \| null | no | yes | null | — |
 | `date` | `--date` | string \| null | no | yes | null | — |
@@ -2095,8 +2135,25 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.receipts[].receipt_line` | string | yes | no | — | — |
 | `revision.receipts[].expected_receipt_version` | integer | yes | no | — | — |
 | `revision.receipts[].quantity` | string | yes | no | — | — |
-| `revision.receipts[].unit_cost` | string \| object \| null | no | yes | null | — |
-| `revision.receipts[].amount` | string \| object \| null | no | yes | null | — |
+| `revision.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `revision.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
+| `revision.receipts[].bill_line_id` | string | yes | no | — | — |
+| `revision.receipts[].item` | object | yes | no | — | — |
+| `revision.receipts[].item.id` | string | yes | no | — | — |
+| `revision.receipts[].item.label` | string | yes | no | — | — |
+| `revision.receipts[].item.version` | integer | yes | no | — | — |
+| `revision.receipts[].shipping` | object | yes | no | — | — |
+| `revision.receipts[].shipping.amount` | string | yes | no | — | — |
+| `revision.receipts[].shipping.currency` | string | yes | no | — | — |
+| `revision.receipts[].shipping.minor_units` | integer | yes | no | — | — |
+| `revision.receipts[].product_amount` | object | yes | no | — | — |
+| `revision.receipts[].product_amount.amount` | string | yes | no | — | — |
+| `revision.receipts[].product_amount.currency` | string | yes | no | — | — |
+| `revision.receipts[].product_amount.minor_units` | integer | yes | no | — | — |
+| `revision.receipts[].total` | object | yes | no | — | — |
+| `revision.receipts[].total.amount` | string | yes | no | — | — |
+| `revision.receipts[].total.currency` | string | yes | no | — | — |
+| `revision.receipts[].total.minor_units` | integer | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -2243,6 +2300,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |
@@ -2687,8 +2747,25 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.receipts[].receipt_line` | string | yes | no | — | — |
 | `revision.receipts[].expected_receipt_version` | integer | yes | no | — | — |
 | `revision.receipts[].quantity` | string | yes | no | — | — |
-| `revision.receipts[].unit_cost` | string \| object \| null | no | yes | null | — |
-| `revision.receipts[].amount` | string \| object \| null | no | yes | null | — |
+| `revision.receipts[].unit_cost` | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
+| `revision.receipts[].amount` | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
+| `revision.receipts[].bill_line_id` | string | yes | no | — | — |
+| `revision.receipts[].item` | object | yes | no | — | — |
+| `revision.receipts[].item.id` | string | yes | no | — | — |
+| `revision.receipts[].item.label` | string | yes | no | — | — |
+| `revision.receipts[].item.version` | integer | yes | no | — | — |
+| `revision.receipts[].shipping` | object | yes | no | — | — |
+| `revision.receipts[].shipping.amount` | string | yes | no | — | — |
+| `revision.receipts[].shipping.currency` | string | yes | no | — | — |
+| `revision.receipts[].shipping.minor_units` | integer | yes | no | — | — |
+| `revision.receipts[].product_amount` | object | yes | no | — | — |
+| `revision.receipts[].product_amount.amount` | string | yes | no | — | — |
+| `revision.receipts[].product_amount.currency` | string | yes | no | — | — |
+| `revision.receipts[].product_amount.minor_units` | integer | yes | no | — | — |
+| `revision.receipts[].total` | object | yes | no | — | — |
+| `revision.receipts[].total.amount` | string | yes | no | — | — |
+| `revision.receipts[].total.currency` | string | yes | no | — | — |
+| `revision.receipts[].total.minor_units` | integer | yes | no | — | — |
 | `revision.issuer_snapshot` | object[string, string \| null] | yes | no | — | — |
 | `revision.custom_fields_snapshot` | object[string, object] | yes | no | — | — |
 | `revision.custom_fields` | array[object] | yes | no | — | — |
@@ -2835,6 +2912,9 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.items[].line_snapshot.unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.amount_basis` | literal["unit_cost", "amount"] | no | no | "unit_cost" | — |
 | `revision.items[].line_snapshot.standard_cost_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_shipping_minor_units` | integer \| null | no | yes | null | — |
+| `revision.items[].line_snapshot.receipt_product_unit_cost_minor_units` | integer \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id` | object \| null | no | yes | null | — |
 | `revision.items[].line_snapshot.class_id.id` | string | yes | no | — | — |
 | `revision.items[].line_snapshot.class_id.label` | string | yes | no | — | — |

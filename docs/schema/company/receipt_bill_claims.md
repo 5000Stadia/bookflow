@@ -17,6 +17,7 @@ Database: `company`.
 | `end_microunits` | BIGINT | no | — | — | — | — | end microunits |
 | `original_minor_units` | BIGINT | no | — | — | — | — | original minor units |
 | `billed_minor_units` | BIGINT | no | — | — | — | — | billed minor units |
+| `shipping_minor_units` | BIGINT | no | — | — | — | — | Shipping retained by this exact interval, included in both original and billed totals. |
 | `created_at` | TEXT | no | — | — | — | — | created at |
 | `created_by` | VARCHAR(26) | no | — | — | — | — | created by |
 | `created_via` | TEXT | no | — | — | — | — | created via |

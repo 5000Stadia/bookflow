@@ -106,4 +106,5 @@ input[data-date] { min-width:0; max-width:100%; }
 
 /* Received quantities and money stay readable within the table's own scroller. */
 .receipt-lines { min-width: 34rem; }
+.receipt-lines th:first-child, .receipt-lines td:first-child { min-width: 10rem; }
 .receipt-lines th:not(:first-child), .receipt-lines td:not(:first-child) { white-space: nowrap; overflow-wrap: normal; word-break: normal; font-variant-numeric: tabular-nums; }

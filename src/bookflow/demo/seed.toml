@@ -2227,3 +2227,29 @@ input = { purchase_order = "${purchase_demo_order.id}" }
 command = "item-receipt show"
 capture = "purchase_demo_receipt_remaining"
 input = { receipt = "${purchase_demo_receipt.id}" }
+
+
+# Shipping belongs to received quantities and the same supplier bill, once.
+[[commands]]
+command = "item create"
+capture = "shipping_demo_item"
+input = { name = "Received Shipping Kit", type = "inventory_part", description = "Shipping kit", purchase_description = "Received shipping kit", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", price = "12.00", cost = "8.00" }
+reason = "Separate product and received shipping example"
+
+[[commands]]
+command = "purchase-order post"
+capture = "shipping_demo_order"
+input = { date = "2026-12-10", vendor = "${vendor.id}", lines = [{ item = "${shipping_demo_item.id}", quantity = "5", rate = "8.00" }] }
+reason = "Order five kits; only delivered units receive shipping"
+
+[[commands]]
+command = "item-receipt post"
+capture = "shipping_demo_receipt"
+input = { date = "2026-12-11", vendor = "${vendor.id}", purchase_order = "${shipping_demo_order.id}", purchase_order_version = "${shipping_demo_order.version}", shipping = "12.00", items = [{ item = "${shipping_demo_item.id}", order_line_id = "${shipping_demo_order.revision.lines.0.line_id}", quantity = "3", unit_cost = "8.00" }] }
+reason = "Receive three at eight plus twelve shipping; two stay on order"
+
+[[commands]]
+command = "bill post"
+capture = "shipping_demo_bill"
+input = { date = "2026-12-12", receipts = [{ receipt_line = "${shipping_demo_receipt.items.0.id}", expected_receipt_version = "${shipping_demo_receipt.version}", quantity = "2", unit_cost = "8.00" }] }
+reason = "Bill two products at eight plus their retained eight shipping; no second receipt"

@@ -5,9 +5,7 @@
 <p>Inventory received; vendor bill entered separately. This receipt is not a payment candidate.</p>
 {% if record.reference %}<p>Supplier reference: {{ record.reference }}</p>{% endif %}
 {% if record.memo %}<p>{{ record.memo }}</p>{% endif %}
-<div class="table-wrap"><table class="receipt-lines"><thead><tr><th>Item</th><th>Quantity received</th><th>Value</th><th>Unbilled quantity</th></tr></thead><tbody>
-{% for line in record['items'] %}<tr><td>{{ line.profile.item.label }}</td><td>{{ line.quantity }}</td><td>{{ line.amount.amount }}</td><td>{{ line.unbilled_quantity_microunits / 1000000 }}</td></tr>{% endfor %}
-</tbody></table></div>
+{% set received = record %}{% include 'receipt_costs.html' %}
 <p><a href="/c/{{ company_id }}/bill/post?receipt={{ record_id }}">Enter bill for received goods</a></p>
 <p><a href="{{ base }}/{{ record_id }}/history">Receipt history</a></p>
 </section>
