@@ -2173,3 +2173,57 @@ capture = "bank_deposit"
 reason = "Take the day's takings to the bank"
 input = { "operation_key" = "DEMO-BANK-DEPOSIT-1", "document" = { "mode" = "inline", "deposit_to" = "Checking", "date" = "2026-10-10", "memo" = "Friday takings", "sources" = [{ "source_type" = "sales_receipt", "source" = "${bank_receipt_first.id}", "expected_version" = "${bank_receipt_first.version}" }, { "source_type" = "sales_receipt", "source" = "${bank_receipt_second.id}", "expected_version" = "${bank_receipt_second.version}" }] } }
 
+
+# December service-kit restock: paid stock, a free customer sample, then a partial
+# delivery billed later. These are new examples; the earlier buying history stays.
+# Hand oracle: stock84.94 + COGS5.23 + expense4.83 = bank11 + card20 + AP64.
+[[commands]]
+command = "item create"
+capture = "purchase_demo_item"
+input = { name = "December Service Kit", type = "inventory_part", description = "Complimentary service-kit sample", purchase_description = "Service kits for December calls", sales_enabled = true, purchase_enabled = true, price = "0.00", cost = "10.00", income_account_id = "${income_account.id}", cogs_account_id = "${cogs_account.id}", asset_account_id = "${inventory_account.id}" }
+
+[[commands]]
+command = "check post"
+capture = "purchase_demo_check"
+input = { account = "${pay_bank.id}", date = "2026-12-01", number = "DEMO-KIT-CHECK", pay_to = { name_type = "vendor", name_id = "${backup_vendor.id}" }, amount = "11.00", memo = "December kits: half kit plus delivery expense", items = [{ item = "${purchase_demo_item.id}", quantity = "0.5", unit_cost = "12.34" }], expenses = [{ account = "${expense_account.id}", amount = "4.83", memo = "Delivery expense, not inventory cost" }] }
+reason = "Buy half a service kit and pay delivery by check"
+
+[[commands]]
+command = "card-charge post"
+capture = "purchase_demo_card"
+input = { account = "${register_card.id}", date = "2026-12-02", pay_to = { name_type = "vendor", name_id = "${backup_vendor.id}" }, amount = "20.00", memo = "December kits: two bought on the company card", items = [{ item = "${purchase_demo_item.id}", quantity = "2", unit_cost = "10.00" }] }
+reason = "Receive two service kits paid directly by card"
+
+[[commands]]
+command = "sales-receipt post"
+capture = "purchase_demo_free_sale"
+input = { date = "2026-12-03", number = "DEMO-KIT-FREE", customer = "${pay_customer.id}", deposit_to = "${pay_bank.id}", payment_method = "Cash", memo = "Complimentary half-kit sample; no money collected", lines = [{ item = "${purchase_demo_item.id}", quantity = "0.5", unit_price = "0.00" }] }
+reason = "Give a free half-kit sample while recording its actual inventory cost"
+
+[[commands]]
+command = "purchase-order post"
+capture = "purchase_demo_order"
+input = { vendor = "${vendor.id}", date = "2026-12-04", number = "DEMO-KIT-PO", memo = "Order ten December service kits; delivery may be partial", lines = [{ item = "${purchase_demo_item.id}", quantity = "10", rate = "10.00" }] }
+reason = "Order ten more service kits"
+
+[[commands]]
+command = "item-receipt post"
+capture = "purchase_demo_receipt"
+input = { vendor = "${vendor.id}", date = "2026-12-05", number = "DEMO-KIT-RECEIPT", purchase_order = "${purchase_demo_order.id}", purchase_order_version = "${purchase_demo_order.version}", memo = "Six kits arrived; four remain on order", items = [{ item = "${purchase_demo_item.id}", order_line_id = "${purchase_demo_order.revision.lines.0.line_id}", quantity = "6", unit_cost = "10.00" }] }
+reason = "Receive the first six kits before the vendor bill arrives"
+
+[[commands]]
+command = "bill post"
+capture = "purchase_demo_bill"
+input = { date = "2026-12-06", number = "DEMO-KIT-BILL", supplier_reference = "KIT-DEC-4", memo = "Bill four already received kits at the confirmed cost; two remain unbilled", receipts = [{ receipt_line = "${purchase_demo_receipt.items.0.id}", expected_receipt_version = "${purchase_demo_receipt.version}", quantity = "4", unit_cost = "11.00" }] }
+reason = "Match four received kits to the bill without receiving them again"
+
+[[commands]]
+command = "purchase-order show"
+capture = "purchase_demo_order_remaining"
+input = { purchase_order = "${purchase_demo_order.id}" }
+
+[[commands]]
+command = "item-receipt show"
+capture = "purchase_demo_receipt_remaining"
+input = { receipt = "${purchase_demo_receipt.id}" }
