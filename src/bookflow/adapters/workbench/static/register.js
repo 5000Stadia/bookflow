@@ -383,7 +383,9 @@
         const label = node('th', row.kind === 'opening' ? 'Period opening' : 'Period closing'); label.colSpan = 8;
         tr.append(label, node('td', money(row.running_balance), 'register-money'), node('td')); body.append(tr); continue;
       }
-      const document = {
+      const purchase = {check: {noun: 'check', label: 'Check'},
+        'card-charge': {noun: 'card-charge', label: 'Credit card charge'}}[row.purchase_noun];
+      const document = purchase || {
         journal_entry: {noun: 'journal', label: 'Journal'},
         invoice: {noun: 'invoice', label: 'Invoice'},
         sales_receipt: {noun: 'sales-receipt', label: 'Sales receipt'},
@@ -402,7 +404,7 @@
       const actions = node('td'), journal = encodeURIComponent(row.transaction_id);
       if (document) actions.append(link('History', `${base}/${document.noun}/${journal}?` + new URLSearchParams(row.revision_number ? {revision_number: row.revision_number} : {})));
       if (c.writable && row.transaction_type === 'journal_entry') {
-        actions.append(' ', link('Edit current', path + '?' + new URLSearchParams({edit: row.transaction_id})), ' ', link('Void current', `${base}/journal/${journal}/void`));
+        actions.append(' ', link('Edit current', purchase ? `${base}/${purchase.noun}/${journal}/update` : path + '?' + new URLSearchParams({edit: row.transaction_id})), ' ', link('Void current', `${base}/${purchase?.noun || 'journal'}/${journal}/void`));
       }
       tr.append(actions); body.append(tr);
     }

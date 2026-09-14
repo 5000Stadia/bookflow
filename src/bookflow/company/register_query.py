@@ -57,6 +57,7 @@ class RegisterRow(reports.GeneralLedgerRow):
     # about what number a cheque carries. Null on every other row, and on a cheque seen from
     # the other side of its own entry.
     check_number: str | None = None
+    purchase_noun: Literal['check', 'card-charge'] | None = None
 
 
 class RegisterQueryOutput(reports.Page):
@@ -182,6 +183,11 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
         summaries = _revision_summaries(db, revision_ids, account['id'], info)
         cheques = _check_numbers(db, {row.transaction_id for row in result.rows
                                       if row.transaction_id is not None}, account['id'])
+        markers = schema.money_out_documents
+        purchases = {row.transaction_id: {'check': 'check', 'card_charge': 'card-charge'}[row.kind]
+            for row in db.conn.execute(sa.select(markers.c.transaction_id, markers.c.kind).where(
+                markers.c.transaction_id.in_({row.transaction_id for row in result.rows if row.transaction_id}),
+                markers.c.kind.in_(('check', 'card_charge'))))}
         rows = []
         for row in result.rows:
             values = row.model_dump()
@@ -204,7 +210,8 @@ def query(inp: RegisterQueryInput, s, *, principal_id=None) -> RegisterQueryOutp
                 running_balance=reports.money(row.signed_balance.minor_units * normal_sign, currency),
                 revision_number=summary['revision_number'] if summary else None,
                 memo=memo, category_label=category, class_summary=class_label,
-                check_number=cheques.get(row.transaction_id)))
+                check_number=cheques.get(row.transaction_id),
+                purchase_noun=purchases.get(row.transaction_id)))
         net = db.raw.execute('SELECT bookflow_sum_int(debit_minor_units-credit_minor_units) FROM posting_lines WHERE account_id=?',
                              (account['id'],)).fetchone()[0]
         current = CurrentBalanceSnapshot(balance=reports.money(int(net or 0) * normal_sign, currency),

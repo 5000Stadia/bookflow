@@ -1,0 +1,22 @@
+{% set document = purchase.document %}
+{% set funding = purchase.revision.lines[0] %}
+<section class="workspace-card document-detail" aria-label="Recorded purchase">
+<h2>{{ purchase.title }}{% if document.check_number %} {{ document.check_number }}{% endif %}</h2>
+<p>{{ purchase.revision.date }} · {{ document.amount.amount }} {{ document.currency }} · {{ record.status|capitalize }} · Revision {{ purchase.revision.revision_number }}</p>
+<p>{{ funding.account_snapshot.full_name or funding.account_snapshot.name }}{% if funding.party_name %} · Payee: {{ funding.party_name }}{% endif %}</p>
+<p>Items {{ document.item_total.amount }} + Expenses {{ document.expense_total.amount }} = {{ document.amount.amount }} {{ document.currency }}</p>
+{% if document['items'] %}
+<section aria-label="Purchased items"><h3>Purchased items</h3>
+{% for item in purchase['items'] %}
+<div class="workspace-card" data-purchase-item>
+<strong>{{ item.profile.item.label }}</strong><p>{{ item.description or '' }}</p>
+<p>Quantity {{ item.quantity }} · Amount {{ item.amount.amount }} {{ item.amount.currency }}</p>
+<p>{% if item.unit_cost is not none %}Unit cost {{ item.unit_cost.amount }} {{ item.unit_cost.currency }}{% else %}Entered amount{% endif %}</p>
+{% if item.profile.customer %}<p>Customer/job: {{ item.profile.customer.label }} · {{ 'Billable' if item.profile.billable else 'Not billable' }}</p>{% endif %}
+{% if item.profile.class_id %}<p>Class: {{ item.profile.class_id.label }}</p>{% endif %}
+</div>
+{% endfor %}</section>{% endif %}
+{% if purchase.expenses %}<section aria-label="Purchase expenses"><h3>Expenses</h3>
+{% for line in purchase.expenses %}<p>{{ line.account_snapshot.full_name or line.account_snapshot.name }} · {{ line.amount.amount }} {{ line.amount.currency }}{% if line.description %} · {{ line.description }}{% endif %}{% if line.party_name %} · {{ line.party_name }}{% endif %}{% if line.class_name %} · {{ line.class_name }}{% endif %}</p>{% endfor %}
+</section>{% endif %}
+</section>

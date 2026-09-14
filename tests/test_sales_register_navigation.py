@@ -82,6 +82,13 @@ def test_sales_register_all_effects_and_journal_fences(client, document_type):
 def test_browser_sale_history_links_and_no_journal_actions(register_browser, document_type):
     env = register_browser
     run = lambda name, data: _command(env.browser, env.site, name.replace(' ', '.'), data)
+    # Retain the full account-balance assertion without pinning unrelated demo AR.
+    # Capture before our sale; its tax-exempt service adds exactly10.00, and its
+    # memo-only correction cannot change that amount.
+    accounts = run('account query', {'limit': 200})['items']
+    before = {row['id']: run('register query', dict(account=row['id'],
+        date_from='2026-01-01', date_to='2026-12-31'))['current_balance']['balance']['minor_units']
+        for row in accounts if row['type'] == 'accounts_receivable' or row['id'] == env.bank['id']}
     sale, control, income = _create(run, document_type, env.bank['id'])
     noun = document_type.replace('_', '-')
     run(noun + ' update', {document_type: sale['id'], 'expected_version': 1, 'memo': 'Corrected sale'})
@@ -91,7 +98,8 @@ def test_browser_sale_history_links_and_no_journal_actions(register_browser, doc
     # assertions to this document, while checking the complete account balance.
     selector = json.dumps(f'#register-history tr[data-kind=posting]:has(a[href^="/c/{env.site.company_id}/{noun}/{sale["id"]}?"])')
     env.browser.wait_for(f"document.querySelectorAll({selector}).length === 3")
-    expected_balance = '138.00' if document_type == 'invoice' else '10.00'
+    from bookflow.core.money import Money
+    expected_balance = Money(before[control] + 1000, 'USD').to_dict()['amount']
     assert expected_balance in env.browser.evaluate("document.querySelector('#register-current').textContent")
     rows = env.browser.evaluate("""Array.from(document.querySelectorAll(%s)).map(r => ({
         text: r.textContent, links: Array.from(r.querySelectorAll('a')).map(a => ({text:a.textContent, href:a.getAttribute('href')}))}))""" % selector)

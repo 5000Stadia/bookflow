@@ -82,6 +82,13 @@ def install(app: FastAPI, *, render, run, credential, page_error) -> None:
             edit = None
             if request.query_params.get("edit") and may_write:
                 journal = run(request, "journal show", {"journal": request.query_params["edit"]}, company_id)
+                from bookflow.adapters.workbench.purchases import owning_record
+                owned = owning_record(lambda name, raw, company: run(request, name, raw, company),
+                    company_id, journal['id'])
+                if owned:
+                    suffix = '/update' if journal['status'] == 'posted' else ''
+                    return RedirectResponse(f'/c/{company_id}/{owned[0]}/{journal["id"]}{suffix}',
+                        status_code=303, headers={'Cache-Control': 'no-store'})
                 edit = edit_projection(journal, account, lambda row: _reference_label("account", row, company))
                 if edit is None:
                     suffix = "/update" if journal["status"] == "posted" else ""

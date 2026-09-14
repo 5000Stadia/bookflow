@@ -27,6 +27,7 @@ from bookflow.adapters.workbench import inventory as Stock
 from bookflow.adapters.workbench import customer_statement as Statement
 from bookflow.adapters.workbench import transaction_detail as Detail
 from bookflow.adapters.workbench import missing_checks as MissingChecks
+from bookflow.adapters.workbench import purchases as Purchases
 from bookflow.adapters.workbench import sales as Sales
 from bookflow.adapters.workbench import work as Work
 from bookflow.adapters.workbench import billing as Billing
@@ -256,6 +257,8 @@ def _editable_values(noun: str, shown: dict[str, Any]) -> dict[str, Any]:
         return Sales.editable_values(shown)
     if noun == 'bill':
         return Bills.editable_values(shown)
+    if noun in Document.MONEY_OUT:
+        return Purchases.editable_values(shown)
     if noun == 'credit-memo':
         return Credits.editable_values(shown)
     if noun == "journal":
@@ -1217,18 +1220,19 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                     else:
                         audit_undo = {"eligible": True, "event_id": out["id"]}
         visible_record = {key: value for key, value in out.items() if key != "editing_by"}
+        purchase_record = out if command_noun in Document.MONEY_OUT else None
+        purchase_noun = command_noun if purchase_record else None
         if command_noun == 'journal' and company_id:
-            for purchase_noun, selector in (('check', 'check'), ('card-charge', 'card_charge')):
-                try:
-                    purchase = run(request, purchase_noun + ' show', {
-                        selector: out['id'], 'revision_number': out['revision']['revision_number']}, company_id)
-                except BookflowError as error:
-                    if error.code != 'E_RECORD_NOT_FOUND':
-                        raise
-                else:
-                    visible_record['purchase_items'] = purchase['document']['items']
-                    visible_record['purchase_noun'] = purchase_noun
-                    break
+            try:
+                owned = Purchases.owning_record(lambda name, raw, company: run(request, name, raw, company),
+                    company_id, out['id'], out['revision']['revision_number'])
+            except BookflowError as error:
+                return page_error(request, error)
+            if owned:
+                purchase_noun, purchase_record = owned
+                verbs = [v for v in verbs if v.verb not in ('update', 'void')]
+                verbs += [registry.get(purchase_noun + ' ' + verb) for verb in ('update', 'void')
+                    if _role_allows(registry.get(purchase_noun + ' ' + verb), role_view, hub_admin=cred.hub_admin)]
 
         definition = meta.get("definition")
         display_field = definition.display_field if definition is not None else meta.get("display_field")
@@ -1303,6 +1307,8 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                       document_nav=Nav.strip(lambda name, raw, company: run(request, name, raw, company), company_id, noun, out),
                       sale=Sales.detail_context(out, company_id) if command_noun in ('invoice', 'sales-receipt') else None,
                       bill=Bills.detail_context(out, company_id) if command_noun == 'bill' else None,
+                      purchase=Purchases.detail_context(purchase_record) if purchase_record else None,
+                      purchase_noun=purchase_noun,
                       credit=Credits.detail_context(command_noun, out, company_id) if command_noun in Credits.NOUNS else None,
                       audit_undo=audit_undo, contact_copy=contact_copy, workspace=workspace,
                       annotations=annotation_context,
@@ -1416,6 +1422,10 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
                 return page_error(request, error)
             originals = {'deposit': record_id, 'expected_version': shown['current']['version']}
         originals = originals or {}
+        if noun in Document.MONEY_OUT and verb == 'update' and attempted.get('originals'):
+            # Keep the baseline the person edited across preview/refusal/stale responses.
+            # A newer server revision must not become an implicit replacement payload.
+            originals = json.loads(attempted['originals'])
         if noun == 'deposit' and verb == 'post' and not attempted:
             attempted.update({'f:operation_key': 'WB-' + secrets.token_urlsafe(24), 'f:document.mode': 'inline'})
         if noun in ('reconcile', 'reconcile opening') and not attempted:
@@ -1980,6 +1990,14 @@ def mount_workbench(app: FastAPI, host, credential, make_context, run_command, s
         noun = Routing.noun(noun)
         if verb == "copy-contact":
             return contact_copy_page(request, company_id, noun, record_id)
+        if noun == 'journal' and verb in ('update', 'void'):
+            try:
+                owned = Purchases.owning_record(lambda name, raw, company: run(request, name, raw, company),
+                    company_id, record_id)
+            except BookflowError as error:
+                return page_error(request, error)
+            if owned:
+                return RedirectResponse(f'/c/{company_id}/{owned[0]}/{owned[1]["id"]}/{verb}', status_code=303)
         return form_page(request, company_id, noun, verb, record_id)
 
     def submit(request: Request, company_id: str | None, noun: str, verb: str, record_id: str | None, form: dict[str, str]):
