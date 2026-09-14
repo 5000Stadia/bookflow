@@ -214,3 +214,48 @@ def test_paid_bill_cannot_be_corrected_to_zero_and_ordinary_journal_stays_positi
     assert database(path)==before
     with pytest.raises(BookflowError): run('journal post',dict(date='2017-01-01',lines=[dict(account=books['bank'],side='debit',amount='0.00'),dict(account=books['income'],side='credit',amount='0.00')]),reason='Zero is not journal money')
     assert database(path)==before
+
+
+def test_zero_value_movement_refuses_a_real_posting_line_link(books):
+    """The value/link CHECK must reject zero-with-link, independently of triggers."""
+    from bookflow.core.ids import new_id
+
+    item = _inventory_part(books)
+    bill = books['run']('bill post', dict(vendor=books['vendor'], date='2017-01-01',
+        items=[dict(item=item, quantity='1', unit_cost='0.00')],
+        expenses=[dict(account=books['freight'], amount='1.00')]), reason='Free stock with a paid delivery expense')
+    path = Path(books['client'].company.show(company=books['company'])['path']) / 'company.db'
+    before = database(path)
+    with sqlite3.connect(path) as db:
+        db.execute('PRAGMA foreign_keys=ON')
+        db.row_factory = sqlite3.Row
+        assert list(db.execute('PRAGMA foreign_key_check')) == []
+        movement, = [dict(row) for row in db.execute(
+            'SELECT * FROM inventory_movements WHERE transaction_id=?', (bill['id'],))]
+        assert (movement['kind'], movement['quantity_microunits'], movement['value_minor_units'],
+                movement['posting_line_id']) == ('receipt', 1000000, 0, None)
+        # Reuse the genuine batch/revision/envelope of the valid free receipt. The
+        # posting-match trigger checks this owner even at zero, but its value/leg
+        # comparison applies only to nonzero movements. An existing unclaimed
+        # expense leg satisfies FK and posting-line uniqueness without a dummy GL row.
+        leg, = db.execute('''SELECT l.id FROM posting_lines l
+            WHERE l.transaction_id=? AND l.batch_id=? AND l.account_id=?
+              AND l.debit_minor_units=100 AND l.credit_minor_units=0
+              AND NOT EXISTS (SELECT 1 FROM inventory_movements m WHERE m.posting_line_id=l.id)''',
+            (bill['id'], movement['posting_batch_id'], books['freight'])).fetchall()
+        sequence = db.execute('SELECT max(sequence)+1 FROM inventory_movements').fetchone()[0]
+        bad = dict(movement, id=new_id(), sequence=sequence, posting_line_id=leg['id'])
+        assert bad['id'] != movement['id']
+        db.execute('SAVEPOINT zero_value_link_attempt')
+        try:
+            with pytest.raises(sqlite3.IntegrityError,
+                               match=r'^CHECK constraint failed: ck_inventory_movement_value_link$'):
+                db.execute('INSERT INTO inventory_movements (' + ','.join(bad) + ') VALUES (' +
+                           ','.join('?' for _ in bad) + ')', tuple(bad.values()))
+            assert db.execute('SELECT count(*) FROM inventory_movements WHERE id=?', (bad['id'],)).fetchone()[0] == 0
+        finally:
+            # Also clean up if a CHECK-removal mutation admits the adversarial row.
+            db.execute('ROLLBACK TO zero_value_link_attempt')
+            db.execute('RELEASE zero_value_link_attempt')
+        assert list(db.execute('PRAGMA foreign_key_check')) == []
+    assert database(path) == before
